@@ -251,3 +251,21 @@ def test_unreadable_world_file_raises_readable_error(tmp_path):
     with pytest.raises(ValueError, match="places.json"):
         store.save_places([])
     assert store.places_path.read_text(encoding="utf-8") == "{"
+
+
+@pytest.mark.parametrize("bad_id", ["../x", "", "Taelrik", "a/b", "a b"])
+def test_save_and_delete_culture_reject_unsafe_ids(tmp_path, bad_id):
+    store = WorldStore(tmp_path)
+    with pytest.raises(ValueError):
+        store.save_culture(make_culture(bad_id))
+    with pytest.raises(ValueError):
+        store.delete_culture(bad_id)
+    assert not (tmp_path / "x.json").exists()
+
+
+def test_atomic_write_is_utf8_with_mode_644(tmp_path):
+    path = tmp_path / "out.json"
+    atomic_write_json(path, {"name": "Ghûn"})
+    assert (path.stat().st_mode & 0o777) == 0o644
+    assert "Ghûn" in path.read_bytes().decode("utf-8")
+    assert json.loads(path.read_text(encoding="utf-8")) == {"name": "Ghûn"}

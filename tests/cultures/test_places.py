@@ -207,3 +207,63 @@ def test_set_share_keeps_one_and_scales_rest():
     shares = {cs.culture_id: cs.share for cs in place.cultures}
     assert shares == {"a": 80, "b": 12, "c": 8}
     assert sum(shares.values()) == 100
+
+
+@pytest.mark.parametrize("target", ["veldhaer", "quillister", "nowhere"])
+def test_delete_refuses_bad_move_target(places, target):
+    with pytest.raises(PlaceError):
+        delete_place(places, "veldhaer", move_children_to=target)
+
+
+def test_describe_mix_almost_all(cultures):
+    places = [
+        _place(
+            "p",
+            "Place",
+            "town",
+            cultures=[
+                CultureShare(culture_id="taelrik", share=96),
+                CultureShare(culture_id="elsiri", share=4),
+            ],
+        )
+    ]
+    text = describe_mix(places, cultures, "p")
+    assert "almost all Taelrik, a few Elsiri" in text
+    assert "10 in 10" not in text
+    assert "0 in 10" not in text
+
+
+def test_describe_mix_omits_cultures_rounding_to_zero(cultures):
+    places = [
+        _place(
+            "p",
+            "Place",
+            "town",
+            cultures=[
+                CultureShare(culture_id="taelrik", share=60),
+                CultureShare(culture_id="elsiri", share=37),
+                CultureShare(culture_id="vaskari", share=3),
+            ],
+        )
+    ]
+    text = describe_mix(places, cultures, "p")
+    assert "about 6 in 10 Taelrik and 4 in 10 Elsiri." in text
+    assert "Vaskari" not in text
+
+
+def test_describe_mix_inherited_pocket_gets_suffix(places, cultures):
+    text = describe_mix(places, cultures, "ilsara")
+    assert "about 9 in 10 Elsiri" in text
+    assert "Most also speak Taelrik, the language of The Taelrik Reach." in text
+
+
+def test_set_share_zero_on_empty_place_stays_empty():
+    empty = [_place("p", "Place", "town")]
+    updated = set_share(empty, "p", "taelrik", 0)
+    assert next(p for p in updated if p.id == "p").cultures == []
+
+    single = [
+        _place("q", "Place", "town", cultures=[CultureShare(culture_id="a", share=100)])
+    ]
+    updated = set_share(single, "q", "a", 0)
+    assert next(p for p in updated if p.id == "q").cultures == []

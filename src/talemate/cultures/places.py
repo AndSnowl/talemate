@@ -24,7 +24,7 @@ __all__ = [
 
 
 class PlaceError(ValueError):
-    """Raised for an unknown place id, or a reparent that would create a cycle."""
+    """Raised for an unknown place id, or a move that would create a cycle."""
 
 
 def _find(places: list[Place], place_id: str | None) -> Place | None:
@@ -133,19 +133,28 @@ def reparent(
     if new_parent_id is not None:
         if _find(places, new_parent_id) is None:
             raise PlaceError(f"unknown place: {new_parent_id}")
-
-        visited: set[str] = set()
-        current_id: str | None = new_parent_id
-        while current_id is not None and current_id not in visited:
-            if current_id == place_id:
-                raise PlaceError(
-                    f"cannot move {place_id} under its own descendant {new_parent_id}"
-                )
-            visited.add(current_id)
-            parent = _find(places, current_id)
-            current_id = parent.parent_id if parent else None
+        if _is_self_or_descendant(places, new_parent_id, place_id):
+            raise PlaceError(
+                f"cannot move {place_id} under its own descendant {new_parent_id}"
+            )
 
     return _replace(places, place_id, parent_id=new_parent_id)
+
+
+def _is_self_or_descendant(
+    places: list[Place], candidate_id: str, place_id: str
+) -> bool:
+    """Return whether `candidate_id` is `place_id` or one of its descendants."""
+
+    visited: set[str] = set()
+    current_id: str | None = candidate_id
+    while current_id is not None and current_id not in visited:
+        if current_id == place_id:
+            return True
+        visited.add(current_id)
+        parent = _find(places, current_id)
+        current_id = parent.parent_id if parent else None
+    return False
 
 
 def set_shares(
@@ -185,8 +194,9 @@ def set_share(
     proportionally (largest-remainder rounding) to fill the remainder; a
     culture new to the place is added at `share`. If the place has no
     other shares to scale, the single culture is set to 100 instead (there
-    is nothing to make up the remainder from). Marks the place
-    `set_by="owner"` and `unsure=False`.
+    is nothing to make up the remainder from), or, for a share of 0,
+    removed, leaving the place with no cultures of its own. Marks the
+    place `set_by="owner"` and `unsure=False`.
     """
 
     place = _find(places, place_id)
@@ -197,7 +207,9 @@ def set_share(
     others = [cs for cs in place.cultures if cs.culture_id != culture_id]
 
     if not others:
-        new_cultures = [CultureShare(culture_id=culture_id, share=100)]
+        new_cultures = (
+            [CultureShare(culture_id=culture_id, share=100)] if share > 0 else []
+        )
     else:
         remainder = 100 - share
         weight_sum = sum(cs.share for cs in others)
@@ -220,10 +232,23 @@ def set_share(
 def delete_place(
     places: list[Place], place_id: str, move_children_to: str | None
 ) -> list[Place]:
-    """Return `places` without `place_id`, re-parenting its children."""
+    """Return `places` without `place_id`, re-parenting its children.
+
+    Raises `PlaceError` if `move_children_to` is unknown, or is `place_id`
+    itself or one of its descendants (the children would be left pointing
+    at a deleted place, or in a cycle).
+    """
 
     if _find(places, place_id) is None:
         raise PlaceError(f"unknown place: {place_id}")
+    if move_children_to is not None:
+        if _find(places, move_children_to) is None:
+            raise PlaceError(f"unknown place: {move_children_to}")
+        if _is_self_or_descendant(places, move_children_to, place_id):
+            raise PlaceError(
+                f"cannot move the children of {place_id} into itself or one of "
+                f"its own descendants ({move_children_to})"
+            )
 
     result = []
     for place in places:
@@ -233,6 +258,14 @@ def delete_place(
             place = place.model_copy(update={"parent_id": move_children_to})
         result.append(place)
     return result
+
+
+def _join(items: list[str]) -> str:
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + ", and " + items[-1]
 
 
 def describe_mix(
@@ -247,8 +280,11 @@ def describe_mix(
     ordered = sorted(mix, key=lambda cs: -cs.share)
     own_dominant = ordered[0].culture_id
 
+    # Compare against the mix *around* the source of this place's mix, so a
+    # place that inherits from a pocket (a village in a region whose people
+    # differ from the country's) gets the suffix too, not just the pocket.
     suffix = ""
-    if source.id == place_id and source.parent_id is not None:
+    if source.parent_id is not None:
         parent_mix, parent_source = effective_mix(places, source.parent_id)
         if parent_mix and parent_source is not None:
             parent_dominant_share = max(parent_mix, key=lambda cs: cs.share)
@@ -269,17 +305,23 @@ def describe_mix(
             + suffix
         )
 
-    entries = []
-    for cs in ordered:
+    def name_of(cs: CultureShare) -> str:
         culture = cultures.get(cs.culture_id)
-        name = culture.name if culture is not None else cs.culture_id
-        entries.append(f"{round(cs.share / 10)} in 10 {name}")
-    entries[0] = f"about {entries[0]}"
+        return culture.name if culture is not None else cs.culture_id
 
-    if len(entries) == 2:
-        joined = f"{entries[0]} and {entries[1]}"
+    tenths = [(cs, round(cs.share / 10)) for cs in ordered]
+    shown = [(cs, tenth) for cs, tenth in tenths if tenth > 0]
+
+    if tenths[0][1] >= 10 or len(shown) <= 1:
+        # "10 in 10 X and 0 in 10 Y" reads wrong: the top culture is nearly
+        # everyone, so say that, and name the rest as "a few".
+        joined = f"almost all {name_of(ordered[0])}, a few " + _join(
+            [name_of(cs) for cs in ordered[1:]]
+        )
     else:
-        joined = ", ".join(entries[:-1]) + ", and " + entries[-1]
+        entries = [f"{tenth} in 10 {name_of(cs)}" for cs, tenth in shown]
+        entries[0] = f"about {entries[0]}"
+        joined = _join(entries)
 
     text = (
         f"New people here are drawn from the mix: {joined}. "

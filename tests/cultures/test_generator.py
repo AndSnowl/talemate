@@ -178,3 +178,15 @@ def test_fits_reject_rules_apply_per_generator():
     # Only B's pattern matches, and B's own reject rule vetoes it.
     assert fits(language, "Kata") is False
     assert fits(language, "Tara") is True
+
+
+def test_duplicate_generator_ids_rejected():
+    gen = GeneratorDef(id="g1", name="A", use="people", patterns=["CV"])
+    language = Language(
+        name="Dup",
+        level="naming",
+        categories={"C": "k", "V": "a"},
+        generators=[gen, gen.model_copy(update={"name": "B"})],
+    )
+    with pytest.raises(GeneratorError, match="duplicate"):
+        validate_language(language)

@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING
 import pydantic
 import structlog
 
-from .models import Culture, GlossaryEntry, GlossaryFile, Place, PlacesFile
+from .models import Culture, GlossaryEntry, GlossaryFile, Place, PlacesFile, slugify
 from .places import country_of, describe_mix, effective_mix
 
 if TYPE_CHECKING:
@@ -69,20 +69,22 @@ def world_dir_for_scene(scene: "Scene") -> Path | None:
 def atomic_write_json(path: Path, data: dict) -> None:
     """Write `data` as JSON to `path`, atomically.
 
-    Writes to a temp file in the same directory, flushes and fsyncs it, then
-    `os.replace`s it into place. On failure the original file (if any) is
-    left untouched, and the temp file is removed.
+    Writes UTF-8 to a temp file in the same directory, flushes and fsyncs
+    it, then `os.replace`s it into place with mode 0o644 (a temp file is
+    created 0o600, which would otherwise carry over). On failure the
+    original file (if any) is left untouched, and the temp file is removed.
     """
 
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_file = tempfile.NamedTemporaryFile(
-        mode="w", dir=path.parent, delete=False, suffix=".tmp"
+        mode="w", encoding="utf-8", dir=path.parent, delete=False, suffix=".tmp"
     )
     try:
         with tmp_file:
-            json.dump(data, tmp_file, indent=2)
+            json.dump(data, tmp_file, indent=2, ensure_ascii=False)
             tmp_file.flush()
             os.fsync(tmp_file.fileno())
+        os.chmod(tmp_file.name, 0o644)
         os.replace(tmp_file.name, path)
     finally:
         if os.path.exists(tmp_file.name):
@@ -114,7 +116,7 @@ class WorldStore:
 
         for file_path in sorted(self.cultures_dir.glob("*.json")):
             try:
-                data = json.loads(file_path.read_text())
+                data = json.loads(file_path.read_text(encoding="utf-8"))
                 culture = Culture.model_validate(data)
             except Exception:
                 log.warning(
@@ -126,11 +128,18 @@ class WorldStore:
 
         return cultures
 
+    def _culture_path(self, culture_id: str) -> Path:
+        # Ids reach here from websocket payloads: only an id that is
+        # already a slug may become a filename, so `../x` can't escape.
+        if not culture_id or slugify(culture_id) != culture_id:
+            raise ValueError(f"invalid culture id: {culture_id!r}")
+        return self.cultures_dir / f"{culture_id}.json"
+
     def save_culture(self, c: Culture) -> None:
-        atomic_write_json(self.cultures_dir / f"{c.id}.json", c.model_dump(mode="json"))
+        atomic_write_json(self._culture_path(c.id), c.model_dump(mode="json"))
 
     def delete_culture(self, culture_id: str) -> None:
-        path = self.cultures_dir / f"{culture_id}.json"
+        path = self._culture_path(culture_id)
         if path.exists():
             path.unlink()
 

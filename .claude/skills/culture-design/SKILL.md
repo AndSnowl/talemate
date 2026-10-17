@@ -55,9 +55,10 @@ Key points:
   mountain-clan name. Each `name` must match an existing glossary entry
   (in any culture); it's reported as a warning otherwise.
 - Re-importing an existing culture replaces its core fields but keeps
-  play `additions` and any glossary entry Talemate has marked
-  `reviewed` or edited by the owner — write the file as the full,
-  current design each time, don't try to diff it yourself.
+  play `additions`, never deletes a glossary entry or place, and keeps
+  Talemate's own copy of any glossary entry marked `reviewed` or edited
+  by the owner — write the file as the full, current design each time,
+  don't try to diff it yourself.
 
 The full schema is `src/talemate/cultures/culture.schema.json`, or get it
 fresh with `cli schema` (see Validating below).
@@ -114,12 +115,13 @@ later.
 
 If the owner hands you an exported `.culture.json` to extend, keep its
 `additions` and its existing `glossary` entries as given — add to them,
-don't drop anything. Re-import merges play `additions` automatically,
-but the glossary and the rest of the culture are replaced wholesale by
-what you write, so an entry you silently omit is gone from the import
-(Talemate itself still won't delete anything already `reviewed` or
-owner-edited — see "The file format" above — but don't rely on that as
-a reason to leave entries out).
+don't drop anything. Re-import never deletes anything already in
+Talemate: play `additions` are merged, and a glossary entry you omit is
+simply kept as Talemate has it (it just isn't updated from your file).
+The culture's core sections (description, customs, food, holidays,
+language, dictionary, phrases, generators, ...) are a different matter:
+those are replaced wholesale by what you write, so leaving something out
+of them removes it.
 
 ## Building the language
 

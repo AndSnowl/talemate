@@ -473,3 +473,19 @@ def test_preview_lists_additions_already_in_file(tmp_path):
     apply_import(store, fixture_raw(), today="2026-10-18")
     kept = store.load_cultures()["taelrik"].additions
     assert [a.id for a in kept] == ["a1", "a2", "a3", "a4", "a5"]
+
+
+def test_preview_name_clash_is_case_insensitive(tmp_path):
+    store = make_store(tmp_path)
+    store.save_culture(make_culture("river-folk", "TAELRIK"))
+    assert preview_import(store, fixture_raw()).name_clash == "river-folk"
+
+
+def test_duplicate_generator_ids_rejected_on_import(tmp_path):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    generators = raw["culture"]["language"]["generators"]
+    generators[1]["id"] = generators[0]["id"]
+
+    with pytest.raises(ImportFormatError, match="duplicate"):
+        preview_import(store, json.dumps(raw))

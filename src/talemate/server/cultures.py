@@ -105,6 +105,14 @@ class DeleteGlossaryEntryPayload(pydantic.BaseModel):
     entry_id: str
 
 
+MAX_ROLL_COUNT = 100
+
+
+def _require_text(value: str, what: str) -> None:
+    if not value.strip():
+        raise ValueError(f"{what} can't be empty")
+
+
 class RollPayload(pydantic.BaseModel):
     culture_id: str
     generator_id: str
@@ -114,6 +122,11 @@ class RollPayload(pydantic.BaseModel):
     # components can have a roll outstanding for the same generator at
     # once). Optional so other/older callers keep working.
     request_id: str | None = None
+
+    @pydantic.field_validator("count")
+    @classmethod
+    def _clamp_count(cls, value: int) -> int:
+        return max(1, min(MAX_ROLL_COUNT, value))
 
 
 class ImportContentPayload(pydantic.BaseModel):
@@ -208,6 +221,7 @@ class CulturesPlugin(Plugin):
         try:
             payload = SaveCulturePayload(**data)
             culture = Culture.model_validate(payload.culture)
+            _require_text(culture.name, "A culture's name")
             # Play additions and import provenance are owned by the copy on
             # disk (changed only through `addition` and imports), never by
             # a client payload, which may be a stale local copy.
@@ -255,6 +269,7 @@ class CulturesPlugin(Plugin):
             merged.update(payload.culture)
             merged["language"].update(payload.language)
             culture = Culture.model_validate(merged)
+            _require_text(culture.name, "A culture's name")
             generator.validate_language(culture.language)
             store.save_culture(culture)
         except ValueError as e:
@@ -350,6 +365,7 @@ class CulturesPlugin(Plugin):
             if creating:
                 place_data["id"] = new_id()
             incoming = Place.model_validate(place_data)
+            _require_text(incoming.name, "A place's name")
 
             places = store.load_places()
             if creating:
@@ -432,6 +448,7 @@ class CulturesPlugin(Plugin):
                 }
                 entry_data["status"] = "reviewed"
             entry = GlossaryEntry.model_validate(entry_data)
+            _require_text(entry.text, "A glossary entry's text")
 
             entries = store.load_glossary()
             if creating:
@@ -582,8 +599,12 @@ class CulturesPlugin(Plugin):
             return
 
         await self._send_world(store)
+        # The import writes to the shared world's own files, not the scene:
+        # like every other write here, it must not mark the scene unsaved
+        # or trigger an autosave.
         await self.signal_operation_done(
-            emit_status_message=f"Imported {culture.name} into {self._world_name()}"
+            signal_only=True,
+            emit_status_message=f"Imported {culture.name} into {self._world_name()}",
         )
 
     async def handle_export(self, data: dict):

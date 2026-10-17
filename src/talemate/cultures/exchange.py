@@ -300,7 +300,8 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
         (
             other.id
             for other in cultures.values()
-            if other.id != culture_id and other.name == file.culture.name
+            if other.id != culture_id
+            and other.name.strip().lower() == file.culture.name.strip().lower()
         ),
         None,
     )
@@ -561,4 +562,7 @@ def export_culture(store: WorldStore, culture_id: str) -> str:
 
 
 def write_schema(path: Path) -> None:
-    path.write_text(json.dumps(CultureFile.model_json_schema(), indent=2) + "\n")
+    path.write_text(
+        json.dumps(CultureFile.model_json_schema(), indent=2) + "\n",
+        encoding="utf-8",
+    )

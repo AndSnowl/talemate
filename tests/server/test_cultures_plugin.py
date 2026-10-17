@@ -580,3 +580,90 @@ async def test_get_world_skips_corrupt_entries(plugin):
     msg = last_message(plugin, "world")
     assert "error" not in msg["data"]
     assert [p["id"] for p in msg["data"]["places"]] == ["p1"]
+
+
+def test_roll_count_is_clamped():
+    from talemate.server.cultures import RollPayload
+
+    assert RollPayload(culture_id="c", generator_id="g", count=0).count == 1
+    assert RollPayload(culture_id="c", generator_id="g", count=-5).count == 1
+    assert RollPayload(culture_id="c", generator_id="g", count=5000).count == 100
+    assert RollPayload(culture_id="c", generator_id="g").count == 20
+
+
+@pytest.mark.asyncio
+async def test_import_apply_does_not_touch_scene_save_state(plugin, monkeypatch):
+    async def fail_save(*args, **kwargs):
+        raise AssertionError("import must not save the scene")
+
+    monkeypatch.setattr(plugin.scene, "save", fail_save)
+    monkeypatch.setattr(type(plugin.scene), "auto_save", property(lambda self: True))
+    plugin.scene.saved = True
+
+    await plugin.handle_import_apply({"content": fixture_raw()})
+
+    assert "error" not in last_message(plugin, "operation_done")
+    assert plugin.scene.saved is True
+
+
+@pytest.mark.asyncio
+async def test_save_culture_rejects_empty_name(plugin):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_addition())
+    payload = _culture_with_addition().model_dump(mode="json")
+    payload["name"] = "   "
+
+    await plugin.handle_save_culture({"culture": payload})
+
+    assert "name" in last_message(plugin)["error"]["message"]
+    assert store.load_cultures()["taelrik"].name == "Taelrik"
+
+
+@pytest.mark.asyncio
+async def test_patch_culture_rejects_empty_name(plugin):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_addition())
+
+    await plugin.handle_patch_culture(
+        {"culture_id": "taelrik", "culture": {"name": ""}}
+    )
+
+    assert "name" in last_message(plugin)["error"]["message"]
+    assert store.load_cultures()["taelrik"].name == "Taelrik"
+
+
+@pytest.mark.asyncio
+async def test_save_glossary_entry_rejects_empty_text(plugin):
+    await plugin.handle_save_glossary_entry(
+        {"entry": {"text": " ", "language": None, "kind": "word"}}
+    )
+
+    assert "text" in last_message(plugin)["error"]["message"]
+    assert plugin_store(plugin).load_glossary() == []
+
+
+@pytest.mark.asyncio
+async def test_save_place_rejects_empty_name(plugin):
+    await plugin.handle_save_place({"place": {"id": "", "name": "", "kind": "town"}})
+
+    assert "name" in last_message(plugin)["error"]["message"]
+    assert plugin_store(plugin).load_places() == []
+
+
+@pytest.mark.asyncio
+async def test_delete_place_refuses_move_into_descendant(plugin):
+    await plugin.handle_save_place(
+        {"place": {"id": "", "name": "A", "kind": "country"}}
+    )
+    a = last_message(plugin, "world")["data"]["places"][0]
+    await plugin.handle_save_place(
+        {"place": {"id": "", "name": "B", "kind": "city", "parent_id": a["id"]}}
+    )
+    b = next(
+        p for p in last_message(plugin, "world")["data"]["places"] if p["name"] == "B"
+    )
+
+    await plugin.handle_delete_place({"place_id": a["id"], "move_children_to": b["id"]})
+
+    assert "error" in last_message(plugin)
+    assert len(plugin_store(plugin).load_places()) == 2

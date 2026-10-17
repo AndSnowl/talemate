@@ -273,7 +273,12 @@ export default {
             this.removeMenu = false;
         },
         save() {
-            this.send('save_glossary_entry', { entry: this.local });
+            // The rendering fields start out as '' placeholders (one per
+            // other culture, see cloneEntry): don't store the empty ones.
+            const renderings = Object.fromEntries(
+                Object.entries(this.local.renderings || {}).filter(([, value]) => (value || '').trim()),
+            );
+            this.send('save_glossary_entry', { entry: { ...this.local, renderings } });
             this.clearLocalDirty();
         },
         review(status) {
