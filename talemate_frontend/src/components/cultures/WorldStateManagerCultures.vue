@@ -70,7 +70,6 @@ export default {
                 cultures: [],
                 places: [],
                 glossary: [],
-                counts: {},
             },
             selected: null,
             counts: {},
@@ -87,6 +86,14 @@ export default {
     },
     methods: {
         select(type, id) {
+            // Guard against reassigning an equivalent selection: the drawer
+            // echoes this back through its own `selected` watcher (see
+            // WorldStateManagerMenuCulturesTools.vue), and an unconditional
+            // reassignment here would hand back a new object every time,
+            // re-triggering that watcher (and this one) forever.
+            if (this.selected && this.selected.type === type && this.selected.id === id) {
+                return;
+            }
             this.selected = { type, id };
         },
 

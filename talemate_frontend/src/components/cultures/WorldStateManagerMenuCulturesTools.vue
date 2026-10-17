@@ -114,7 +114,16 @@ export default {
             immediate: true,
             deep: true,
             handler(sel) {
-                this.selected = sel ? [this.keyFor(sel)] : [];
+                const key = sel ? this.keyFor(sel) : null;
+                const currentKey = this.selected.length ? this.selected[0] : null;
+                // Skip the reassignment when nothing actually changed: `sel` is a
+                // fresh object/array on every emission, and reassigning `selected`
+                // unconditionally would re-trigger the watcher below, which calls
+                // back into `tool.select()` and would otherwise loop forever.
+                if (key === currentKey) {
+                    return;
+                }
+                this.selected = key ? [key] : [];
             },
         },
         selected(val) {
