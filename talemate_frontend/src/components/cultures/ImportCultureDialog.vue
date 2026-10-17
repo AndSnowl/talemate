@@ -84,6 +84,30 @@
                             </span>
                         </div>
 
+                        <div v-if="replacedSections.length || shareChanges.length" class="d-flex ga-2 align-start">
+                            <v-icon size="small" color="warning">mdi-file-replace-outline</v-icon>
+                            <div>
+                                <div>Will be replaced:</div>
+                                <ul class="ml-4">
+                                    <li v-if="replacedSections.length">{{ replacedSections.join(', ') }}</li>
+                                    <li v-for="change in shareChanges" :key="change">{{ change }}</li>
+                                </ul>
+                                <div class="text-caption text-muted">
+                                    Talemate's copy differs from the file. Export the culture first if you want to keep it.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="additionsInFile.length" class="d-flex ga-2 align-start">
+                            <v-icon size="small" color="amber">mdi-playlist-check</v-icon>
+                            <div>
+                                <div>Already in the file. Drop the addition after import?</div>
+                                <ul class="ml-4">
+                                    <li v-for="text in additionsInFile" :key="text">{{ text }}</li>
+                                </ul>
+                            </div>
+                        </div>
+
                         <div v-for="warning in preview.warnings" :key="warning" class="d-flex ga-2 align-start">
                             <v-icon size="small" color="muted">mdi-information-outline</v-icon>
                             <span>{{ warning }}</span>
@@ -157,6 +181,18 @@ export default {
             set(value) {
                 this.$emit('update:modelValue', value);
             },
+        },
+        replacedSections() {
+            const labels = {
+                syllable_notes: 'syllable notes',
+            };
+            return ((this.preview && this.preview.replaced_sections) || []).map(key => labels[key] || key);
+        },
+        shareChanges() {
+            return (this.preview && this.preview.share_changes) || [];
+        },
+        additionsInFile() {
+            return (this.preview && this.preview.additions_in_file) || [];
         },
         statEntries() {
             if (!this.preview) {

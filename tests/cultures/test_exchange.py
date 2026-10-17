@@ -389,3 +389,87 @@ def test_cli_validate_reports_bad_reject(tmp_path):
     assert result.returncode == 1
     assert "reject" in result.stderr
     assert "Traceback" not in result.stderr
+
+
+def test_preview_new_culture_replaces_nothing(tmp_path):
+    preview = preview_import(make_store(tmp_path), fixture_raw())
+    assert preview.replaced_sections == []
+    assert preview.share_changes == []
+    assert preview.additions_in_file == []
+
+
+def test_preview_lists_sections_the_import_replaces(tmp_path):
+    store = make_store(tmp_path)
+    apply_import(store, fixture_raw(), today="2026-10-17")
+    assert preview_import(store, fixture_raw()).replaced_sections == []
+
+    culture = store.load_cultures()["taelrik"]
+    culture = culture.model_copy(
+        update={
+            "description": "The owner's own description.",
+            "language": culture.language.model_copy(
+                update={"dictionary": culture.language.dictionary[:1]}
+            ),
+        }
+    )
+    store.save_culture(culture)
+
+    preview = preview_import(store, fixture_raw())
+    assert preview.replaced_sections == ["description", "dictionary"]
+
+
+def test_preview_lists_share_changes(tmp_path):
+    store = make_store(tmp_path)
+    store.save_places(
+        [
+            Place(
+                id="dhunmouth-1",
+                name="Dhunmouth",
+                kind="city",
+                cultures=[
+                    CultureShare(culture_id="taelrik", share=40),
+                    CultureShare(culture_id="elsiri", share=60),
+                ],
+            )
+        ]
+    )
+
+    preview = preview_import(store, fixture_raw())
+    assert preview.share_changes == ["Dhunmouth: Taelrik 40% → 55%"]
+
+
+def test_preview_lists_additions_already_in_file(tmp_path):
+    from talemate.cultures.models import PlayAddition
+
+    store = make_store(tmp_path)
+    apply_import(store, fixture_raw(), today="2026-10-17")
+    culture = store.load_cultures()["taelrik"]
+    culture = culture.model_copy(
+        update={
+            "additions": [
+                PlayAddition(
+                    id="a1",
+                    section="customs",
+                    text="  Oaths are sworn with  WET hands. ",
+                ),
+                PlayAddition(id="a2", section="food", text="smoked eel"),
+                PlayAddition(id="a3", section="holidays", text="Lantern Night"),
+                PlayAddition(id="a4", section="customs", text="Spit for luck."),
+                # In the file, but under a different section.
+                PlayAddition(id="a5", section="food", text="Lantern Night"),
+            ]
+        }
+    )
+    store.save_culture(culture)
+
+    preview = preview_import(store, fixture_raw())
+    assert preview.additions_in_file == [
+        "  Oaths are sworn with  WET hands. ",
+        "smoked eel",
+        "Lantern Night",
+    ]
+
+    # Apply never drops an addition by itself.
+    apply_import(store, fixture_raw(), today="2026-10-18")
+    kept = store.load_cultures()["taelrik"].additions
+    assert [a.id for a in kept] == ["a1", "a2", "a3", "a4", "a5"]

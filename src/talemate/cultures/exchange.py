@@ -38,6 +38,11 @@ Re-import rules (spec 9.2, and the controller's rulings for this task):
   child may be listed before its parent in the file.
 - Nothing already in Talemate — a glossary entry, a place, a play
   addition — is ever deleted by an import.
+- The preview lists what a re-import would overwrite: the core sections
+  whose content differs from Talemate's copy (`replaced_sections`), the
+  existing places whose share for this culture changes (`share_changes`),
+  and Talemate's play additions whose text the file now also carries in
+  the matching section (`additions_in_file`; never dropped automatically).
 - A generator whose patterns or reject rules don't parse (or nest too
   deeply), or a duplicate generator id, makes the whole file invalid
   (`ImportFormatError`), for both `preview_import` and `apply_import` — a
@@ -140,6 +145,32 @@ class ImportPreview(BaseModel):
     conflicts: list[str]
     name_clash: str | None
     warnings: list[str]
+    # Core sections whose content in Talemate differs from the file, which
+    # the import will replace (keys of `REPLACEABLE_SECTIONS`, in order).
+    replaced_sections: list[str] = Field(default_factory=list)
+    # Existing places where this culture's share will change, e.g.
+    # "Dhunmouth: Taelrik 40% → 55%".
+    share_changes: list[str] = Field(default_factory=list)
+    # Texts of Talemate's play additions that the file now also has in the
+    # matching core section (candidates to drop after importing).
+    additions_in_file: list[str] = Field(default_factory=list)
+
+
+# Core sections a re-import replaces, as (name, which model holds it).
+REPLACEABLE_SECTIONS: tuple[tuple[str, str], ...] = (
+    ("description", "culture"),
+    ("customs", "culture"),
+    ("food", "culture"),
+    ("holidays", "culture"),
+    ("color", "culture"),
+    ("sound", "language"),
+    ("categories", "language"),
+    ("syllable_notes", "language"),
+    ("generators", "language"),
+    ("dictionary", "language"),
+    ("phrases", "language"),
+    ("grammar", "language"),
+)
 
 
 # --------------------------------------------------------------------------
@@ -207,6 +238,45 @@ def _match_place(places: list[Place], name: str) -> Place | None:
     return None
 
 
+def _normalize_text(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def _replaced_sections(existing: Culture, incoming: Culture) -> list[str]:
+    replaced = []
+    for section, owner in REPLACEABLE_SECTIONS:
+        old = existing if owner == "culture" else existing.language
+        new = incoming if owner == "culture" else incoming.language
+        old_value = old.model_dump(mode="json")[section]
+        new_value = new.model_dump(mode="json")[section]
+        if old_value != new_value:
+            replaced.append(section)
+    return replaced
+
+
+def _additions_in_file(existing: Culture, incoming: Culture) -> list[str]:
+    """Texts of `existing`'s additions that `incoming`'s core sections contain."""
+
+    section_texts = {
+        "customs": incoming.customs,
+        "food": [incoming.food],
+        "holidays": [
+            text
+            for holiday in incoming.holidays
+            for text in (holiday.name, holiday.description)
+        ],
+    }
+    found = []
+    for addition in existing.additions:
+        needle = _normalize_text(addition.text)
+        if not needle:
+            continue
+        haystack = section_texts.get(addition.section, [])
+        if any(needle in _normalize_text(text) for text in haystack):
+            found.append(addition.text)
+    return found
+
+
 def _glossary_differs(existing: GlossaryEntry, file_entry: CultureFileGlossary) -> bool:
     return (
         existing.kind != file_entry.kind
@@ -235,6 +305,13 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
         None,
     )
 
+    existing_culture = cultures.get(culture_id)
+    replaced_sections: list[str] = []
+    additions_in_file: list[str] = []
+    if existing_culture is not None:
+        replaced_sections = _replaced_sections(existing_culture, file.culture)
+        additions_in_file = _additions_in_file(existing_culture, file.culture)
+
     counts = {
         "words": len(file.culture.language.dictionary),
         "phrases": len(file.culture.language.phrases),
@@ -262,11 +339,20 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
     places = store.load_places()
     places_existing: list[str] = []
     places_new: list[str] = []
+    share_changes: list[str] = []
     for file_place in file.places:
-        if _match_place(places, file_place.name) is not None:
-            places_existing.append(file_place.name)
-        else:
+        match = _match_place(places, file_place.name)
+        if match is None:
             places_new.append(file_place.name)
+            continue
+        places_existing.append(file_place.name)
+        old_share = next(
+            (cs.share for cs in match.cultures if cs.culture_id == culture_id), 0
+        )
+        if old_share != file_place.share:
+            share_changes.append(
+                f"{match.name}: {file.culture.name} {old_share}% → {file_place.share}%"
+            )
 
     warnings: list[str] = []
     for gen in file.culture.language.generators:
@@ -289,6 +375,9 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
         conflicts=conflicts,
         name_clash=name_clash,
         warnings=warnings,
+        replaced_sections=replaced_sections,
+        share_changes=share_changes,
+        additions_in_file=additions_in_file,
     )
 
 
