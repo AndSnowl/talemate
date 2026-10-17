@@ -1,0 +1,149 @@
+import json
+
+import pytest
+
+from talemate.cultures.models import (
+    Culture,
+    GlossaryEntry,
+    GlossaryOrigin,
+    Language,
+    Place,
+    PlayAddition,
+)
+from talemate.cultures.store import (
+    WorldStore,
+    atomic_write_json,
+    world_dir_for,
+    world_dir_for_scene,
+)
+from talemate.tale_mate import Scene
+
+
+def make_culture(culture_id: str = "taelrik", **addition_kwargs) -> Culture:
+    additions = []
+    if addition_kwargs:
+        additions.append(PlayAddition(id="a1", **addition_kwargs))
+    return Culture(
+        id=culture_id,
+        name="Taelrik",
+        language=Language(name="Taelrik", level="naming"),
+        additions=additions,
+    )
+
+
+def make_glossary_entry(
+    entry_id: str, language: str | None, status: str = "unreviewed"
+) -> GlossaryEntry:
+    return GlossaryEntry(
+        id=entry_id,
+        text="Something",
+        language=language,
+        kind="word",
+        origin=GlossaryOrigin(by="owner"),
+        status=status,
+    )
+
+
+def test_world_dir_for(tmp_path):
+    shared_context_path = tmp_path / "shared-context" / "grey-river.json"
+    assert world_dir_for(shared_context_path) == (
+        tmp_path / "shared-context" / "grey-river.world"
+    )
+
+
+def test_world_dir_for_scene_none_without_shared_context():
+    scene = Scene()
+    assert scene.shared_context is None
+    assert world_dir_for_scene(scene) is None
+
+
+def test_round_trip(tmp_path):
+    store = WorldStore(tmp_path)
+
+    culture = make_culture()
+    places = [Place(id="p1", name="Grey River", kind="town")]
+    glossary = [make_glossary_entry("g1", language="taelrik")]
+
+    store.save_culture(culture)
+    store.save_places(places)
+    store.save_glossary(glossary)
+
+    assert (tmp_path / "cultures" / "taelrik.json").exists()
+    assert (tmp_path / "places.json").exists()
+    assert (tmp_path / "glossary.json").exists()
+
+    loaded_cultures = store.load_cultures()
+    assert loaded_cultures == {"taelrik": culture}
+    assert store.load_places() == places
+    assert store.load_glossary() == glossary
+
+
+def test_missing_files_load_empty(tmp_path):
+    store = WorldStore(tmp_path)
+    assert store.load_cultures() == {}
+    assert store.load_places() == []
+    assert store.load_glossary() == []
+
+
+def test_bad_culture_file_skipped(tmp_path):
+    store = WorldStore(tmp_path)
+    good = make_culture(culture_id="good")
+    store.save_culture(good)
+
+    cultures_dir = tmp_path / "cultures"
+    cultures_dir.mkdir(parents=True, exist_ok=True)
+    (cultures_dir / "bad.json").write_text("{not json")
+
+    loaded = store.load_cultures()
+    assert loaded == {"good": good}
+
+
+def test_atomic_write_leaves_old_file_on_failure(tmp_path, monkeypatch):
+    path = tmp_path / "data.json"
+    atomic_write_json(path, {"value": 1})
+    assert json.loads(path.read_text()) == {"value": 1}
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(json, "dump", boom)
+
+    with pytest.raises(RuntimeError):
+        atomic_write_json(path, {"value": 2})
+
+    assert json.loads(path.read_text()) == {"value": 1}
+    leftover_tmp_files = list(tmp_path.glob("*.tmp"))
+    assert leftover_tmp_files == []
+
+
+def test_snapshot_counts(tmp_path):
+    store = WorldStore(tmp_path)
+
+    culture = make_culture(section="customs", text="A custom")
+    store.save_culture(culture)
+
+    places = [
+        Place(id="p1", name="Grey River", kind="town", unsure=True),
+        Place(id="p2", name="Stonehall", kind="city"),
+    ]
+    store.save_places(places)
+
+    glossary = [
+        make_glossary_entry("g1", language="taelrik", status="unreviewed"),
+        make_glossary_entry("g2", language="taelrik", status="unreviewed"),
+        make_glossary_entry("g3", language="taelrik", status="reviewed"),
+        make_glossary_entry("g4", language=None, status="unreviewed"),
+    ]
+    store.save_glossary(glossary)
+
+    snapshot = store.snapshot()
+
+    assert snapshot["counts"]["unreviewed_total"] == 5
+    assert snapshot["counts"]["unreviewed_by_culture"] == {"taelrik": 2}
+    assert snapshot["counts"]["unreviewed_unassigned"] == 1
+    assert snapshot["counts"]["unsure_places"] == 1
+    assert snapshot["counts"]["unreviewed_additions_by_culture"] == {"taelrik": 1}
+
+    assert snapshot["cultures"][0]["id"] == "taelrik"
+    assert snapshot["places"][0]["id"] == "p1"
+    assert snapshot["glossary"][0]["id"] == "g1"
