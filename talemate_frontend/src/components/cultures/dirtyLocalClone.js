@@ -49,7 +49,8 @@ export function dirtyLocalClone({ watchPath, source, identity, clone = (raw) => 
             [watchPath]: {
                 handler() {
                     const newIdentity = getIdentity(this);
-                    if (newIdentity !== this._localIdentity || !this.localDirty) {
+                    const identityChanged = newIdentity !== this._localIdentity;
+                    if (identityChanged || !this.localDirty) {
                         this._suppressLocalDirty = true;
                         this.local = clone(getSource(this), this);
                         this._localIdentity = newIdentity;
@@ -57,8 +58,11 @@ export function dirtyLocalClone({ watchPath, source, identity, clone = (raw) => 
                         this.$nextTick(() => {
                             this._suppressLocalDirty = false;
                         });
+                        // `identityChanged` is false for a same-item re-clone
+                        // (e.g. the `world` reply to our own save), so hooks can
+                        // keep per-item UI state such as an outstanding roll.
                         if (typeof this.onLocalReset === 'function') {
-                            this.onLocalReset(this.local);
+                            this.onLocalReset(this.local, identityChanged);
                         }
                         return;
                     }

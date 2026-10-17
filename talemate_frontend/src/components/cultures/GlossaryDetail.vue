@@ -261,7 +261,12 @@ export default {
         },
     },
     methods: {
-        onLocalReset() {
+        onLocalReset(local, identityChanged) {
+            // A same-entry re-clone (the reply to our own save) must not drop
+            // an outstanding "Roll new"; only a different entry starts fresh.
+            if (!identityChanged) {
+                return;
+            }
             this.rolledCandidates = [];
             this.pendingRollRequestId = null;
             this.pickMenu = false;

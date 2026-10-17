@@ -117,8 +117,16 @@ export default {
         }
     },
     methods: {
-        onLocalReset() {
+        onLocalReset(local, identityChanged) {
+            // Leaving a pattern field saves it, and the `world` reply
+            // re-clones this same culture: keep any roll in flight then
+            // (otherwise its reply is dropped and Roll silently does
+            // nothing). Only a different culture starts fresh.
+            if (!identityChanged) {
+                return;
+            }
             this.rolls = {};
+            this.rollErrors = {};
             this.pendingRequests = {};
         },
         save() {
