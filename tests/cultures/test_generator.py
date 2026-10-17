@@ -135,3 +135,46 @@ def test_deeply_nested_reject_raises_generator_error():
     language = _language_with(["CV"], reject=["(" * 5000 + "a" + ")" * 5000])
     with pytest.raises(GeneratorError):
         roll(language, "g1")
+
+
+def test_fits_accepts_multi_word_generator_output():
+    language = Language(
+        name="Two words",
+        level="naming",
+        categories={"C": "k t r", "V": "a e"},
+        generators=[
+            GeneratorDef(
+                id="full",
+                name="Full names",
+                use="people",
+                patterns=["CV CVC", "CV(C) of CVC", "CV (CV) CVC"],
+            )
+        ],
+    )
+    results = roll(language, "full", count=30, rng=random.Random(7))
+    assert results
+    for name in results:
+        assert fits(language, name), name
+    # Whitespace is normalised and case doesn't matter.
+    assert fits(language, "  ka   TEK ")
+    # A single word doesn't match a two-word pattern.
+    assert fits(language, "Ka") is False
+
+
+def test_fits_reject_rules_apply_per_generator():
+    language = Language(
+        name="Two generators",
+        level="naming",
+        categories={"C": "k t r", "V": "a e"},
+        generators=[
+            GeneratorDef(id="a", name="A", use="people", patterns=["CVC"]),
+            GeneratorDef(
+                id="b", name="B", use="places", patterns=["CVCV"], reject=["k"]
+            ),
+        ],
+    )
+    # Valid for A; B's reject rule must not veto it.
+    assert fits(language, "Kat") is True
+    # Only B's pattern matches, and B's own reject rule vetoes it.
+    assert fits(language, "Kata") is False
+    assert fits(language, "Tara") is True

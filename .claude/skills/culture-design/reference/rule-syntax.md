@@ -59,11 +59,12 @@ Applied to each candidate produced from a pattern:
 ## Checking whether a name "fits" (`cli sample`'s ✓/✗ marks)
 
 Every pattern of every generator is compiled into an anchored,
-case-insensitive regex. A name fits the language when, after
-lowercasing, every space-separated word of the name fully matches at
-least one compiled pattern, and no generator's `reject` regex matches
-it. A language with no generators always "fits" — nothing to check
-against.
+case-insensitive regex. A name fits the language when, with its
+whitespace collapsed to single spaces, the *whole* name matches a
+pattern of some generator and none of that same generator's `reject`
+regexes match it (a multi-word pattern such as `"CV CVC"` matches a
+two-word name; another generator's reject rules don't count). A
+language with no generators always "fits" — nothing to check against.
 
 Use this when hand-writing a name (a protagonist, a landmark) that
 should read as native to the culture: if it doesn't fit, either adjust

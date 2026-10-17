@@ -57,14 +57,18 @@ this syntax).
 - results are de-duplicated case-insensitively, and none of them may equal
   (case-insensitively) an entry of the caller-supplied `exclude` set.
 
+Rendered names have their whitespace collapsed to single spaces and
+stripped.
+
 **`fits`:** every pattern of every generator of the language is compiled
 into an anchored, case-insensitive regex: a category becomes an
 alternation of its options sorted longest-first (so a longer option such
 as ``th`` is tried before a prefix like ``t``), ``(...)`` becomes
 ``(?:...)?``, ``[a|b]`` becomes ``(?:a|b)``, and literal text is
-regex-escaped. A name fits the language when, after lowercasing, every
-space-separated word of the name fully matches at least one of those
-compiled patterns, and no generator's `reject` regex matches the (lowered)
+regex-escaped. A name fits the language when, with its whitespace
+normalised to single spaces, the *whole* name matches a pattern of some
+generator, and none of *that generator's own* `reject` regexes match it.
+Checks are per generator: another generator's reject rules never veto a
 name. A language with no generators has nothing to check against, so
 `fits` always returns `True` for it — such languages are never flagged as
 having a "foreign" name.
@@ -293,9 +297,29 @@ def _capitalize_words(name: str) -> str:
 # --------------------------------------------------------------------------
 
 
+# A whitespace run in a pattern's literal text. Names are matched with their
+# whitespace collapsed to single spaces (and stripped), so this matches one
+# space, or nothing where a space was already matched just before it or at
+# either end of the name: "CV (CV) CVC" without its optional group renders
+# "Ka  Tek", which is normalised to (and must match) "Ka Tek".
+_WHITESPACE_REGEX = "(?:(?<= )|^|$| )"
+
+
+def _literal_regex(text: str) -> str:
+    return "".join(
+        _WHITESPACE_REGEX if part.isspace() else re.escape(part)
+        for part in re.split(r"(\s+)", text)
+        if part
+    )
+
+
+def _normalize_whitespace(name: str) -> str:
+    return " ".join(name.split())
+
+
 def _to_regex(token: _Token, category_options: dict[str, list[str]]) -> str:
     if isinstance(token, _Literal):
-        return re.escape(token.text)
+        return _literal_regex(token.text)
     if isinstance(token, _Category):
         options = category_options[token.key]
         return "(?:" + "|".join(re.escape(option) for option in options) + ")"
@@ -324,8 +348,8 @@ class _CompiledLanguage:
         default_factory=dict
     )
     generator_reject: dict[str, list[re.Pattern]] = field(default_factory=dict)
-    fits_patterns: tuple[re.Pattern, ...] = ()
-    fits_rejects: tuple[re.Pattern, ...] = ()
+    # generator id -> anchored whole-name regexes, one per pattern
+    generator_fits: dict[str, list[re.Pattern]] = field(default_factory=dict)
 
 
 def _language_cache_key(language: Language) -> str:
@@ -388,8 +412,6 @@ def _compile_language(cache_key: str) -> _CompiledLanguage:
     }
 
     compiled = _CompiledLanguage(categories=categories)
-    fits_patterns: list[re.Pattern] = []
-    fits_rejects: list[re.Pattern] = []
 
     for gen in data["generators"]:
         if gen["id"] in compiled.generator_patterns:
@@ -400,13 +422,10 @@ def _compile_language(cache_key: str) -> _CompiledLanguage:
             )
         except GeneratorError as exc:
             raise GeneratorError(f"generator '{gen['name']}' ({gen['id']}): {exc}")
-        fits_patterns.extend(pattern_regexes)
+        compiled.generator_fits[gen["id"]] = pattern_regexes
         compiled.generator_patterns[gen["id"]] = parsed_patterns
         compiled.generator_reject[gen["id"]] = reject_regexes
-        fits_rejects.extend(reject_regexes)
 
-    compiled.fits_patterns = tuple(fits_patterns)
-    compiled.fits_rejects = tuple(fits_rejects)
     return compiled
 
 
@@ -450,7 +469,7 @@ def roll(
     while len(results) < count and attempts < max_attempts:
         attempts += 1
         tree = _weighted_choice(patterns, rng)
-        name = _render(tree, categories, rng)
+        name = _normalize_whitespace(_render(tree, categories, rng))
         if generator.capitalize:
             name = _capitalize_words(name)
 
@@ -487,17 +506,14 @@ def fits(language: Language, name: str) -> bool:
         return True
 
     compiled = _compile_language(_language_cache_key(language))
-    lowered = name.lower()
-
-    for reject in compiled.fits_rejects:
-        if reject.search(lowered):
-            return False
-
-    words = lowered.split()
-    if not words:
+    normalized = _normalize_whitespace(name.lower())
+    if not normalized:
         return False
 
-    for word in words:
-        if not any(pattern.match(word) for pattern in compiled.fits_patterns):
-            return False
-    return True
+    for generator_id, pattern_regexes in compiled.generator_fits.items():
+        if not any(pattern.match(normalized) for pattern in pattern_regexes):
+            continue
+        rejects = compiled.generator_reject[generator_id]
+        if not any(reject.search(normalized) for reject in rejects):
+            return True
+    return False
