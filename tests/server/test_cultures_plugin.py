@@ -376,3 +376,94 @@ async def test_export_returns_content(plugin):
     assert msg["data"]["filename"] == "taelrik.culture.json"
     parsed = CultureFile.model_validate_json(msg["data"]["content"])
     assert parsed.culture.id == "taelrik"
+
+
+def _culture_with_addition() -> Culture:
+    return Culture(
+        id="taelrik",
+        name="Taelrik",
+        description="River-folk.",
+        customs=["Pay the ford."],
+        language=Language(name="Taelrik", level="naming", sound="Clipped."),
+        additions=[PlayAddition(id="a1", section="customs", text="Spit for luck.")],
+        source_file="taelrik.culture.json",
+        imported_at="2026-10-17",
+    )
+
+
+@pytest.mark.asyncio
+async def test_save_culture_keeps_additions_and_source_from_disk(plugin):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_addition())
+
+    payload = _culture_with_addition().model_dump(mode="json")
+    payload["description"] = "Changed."
+    payload["additions"] = [
+        {"id": "stale", "section": "food", "text": "Stale addition."}
+    ]
+    payload["source_file"] = "other.culture.json"
+    payload["imported_at"] = "1999-01-01"
+
+    await plugin.handle_save_culture({"culture": payload})
+
+    saved = store.load_cultures()["taelrik"]
+    assert saved.description == "Changed."
+    assert [a.id for a in saved.additions] == ["a1"]
+    assert saved.source_file == "taelrik.culture.json"
+    assert saved.imported_at == "2026-10-17"
+
+
+@pytest.mark.asyncio
+async def test_patch_culture_touches_only_named_fields(plugin):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_addition())
+
+    await plugin.handle_patch_culture(
+        {
+            "culture_id": "taelrik",
+            "culture": {"customs": ["New custom."]},
+            "language": {"dictionary": [{"word": "dhaer", "meaning": "ford"}]},
+        }
+    )
+
+    saved = store.load_cultures()["taelrik"]
+    assert saved.customs == ["New custom."]
+    assert [d.word for d in saved.language.dictionary] == ["dhaer"]
+    # Everything not named in the patch is left as it was on disk.
+    assert saved.description == "River-folk."
+    assert saved.language.sound == "Clipped."
+    assert [a.id for a in saved.additions] == ["a1"]
+    assert saved.source_file == "taelrik.culture.json"
+    assert "world" == last_message(plugin)["action"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"culture": {"additions": []}},
+        {"culture": {"id": "other"}},
+        {"culture": {"language": {}}},
+        {"language": {"bogus": 1}},
+    ],
+)
+async def test_patch_culture_refuses_fields_it_does_not_own(plugin, patch):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_addition())
+
+    await plugin.handle_patch_culture({"culture_id": "taelrik", **patch})
+
+    done = last_message(plugin)
+    assert done["action"] == "operation_done"
+    assert "error" in done
+    assert store.load_cultures()["taelrik"] == _culture_with_addition()
+
+
+@pytest.mark.asyncio
+async def test_patch_culture_unknown_culture(plugin):
+    await plugin.handle_patch_culture(
+        {"culture_id": "nope", "culture": {"description": "x"}}
+    )
+    done = last_message(plugin)
+    assert done["action"] == "operation_done"
+    assert "unknown culture" in done["error"]["message"]

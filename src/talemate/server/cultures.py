@@ -22,7 +22,7 @@ import pydantic
 
 from talemate.cultures import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
-from talemate.cultures.models import Culture, GlossaryEntry, Place, new_id
+from talemate.cultures.models import Culture, GlossaryEntry, Language, Place, new_id
 from talemate.cultures.places import delete_place, reparent, set_share, set_shares
 from talemate.cultures.store import WorldStore, world_dir_for_scene
 from talemate.server.websocket_plugin import Plugin
@@ -32,6 +32,28 @@ __all__ = ["CulturesPlugin"]
 
 class SaveCulturePayload(pydantic.BaseModel):
     culture: dict
+
+
+class PatchCulturePayload(pydantic.BaseModel):
+    """Replace only the named fields of a stored culture.
+
+    Each frontend editor owns a few fields (the culture page owns
+    description/customs/food/holidays, the dictionary table owns
+    `language.dictionary`, ...) and sends only those, so a stale local copy
+    can never overwrite fields edited elsewhere, or the play additions.
+    """
+
+    culture_id: str
+    culture: dict = pydantic.Field(default_factory=dict)
+    language: dict = pydantic.Field(default_factory=dict)
+
+
+# Fields `patch_culture` may replace. Identity, play additions and import
+# provenance are never taken from a client payload.
+PATCHABLE_CULTURE_FIELDS = frozenset(
+    {"name", "color", "description", "customs", "food", "holidays"}
+)
+PATCHABLE_LANGUAGE_FIELDS = frozenset(Language.model_fields)
 
 
 class DeleteCulturePayload(pydantic.BaseModel):
@@ -139,6 +161,52 @@ class CulturesPlugin(Plugin):
         try:
             payload = SaveCulturePayload(**data)
             culture = Culture.model_validate(payload.culture)
+            # Play additions and import provenance are owned by the copy on
+            # disk (changed only through `addition` and imports), never by
+            # a client payload, which may be a stale local copy.
+            existing = store.load_cultures().get(culture.id) or Culture(
+                id=culture.id, name=culture.name, language=culture.language
+            )
+            culture = culture.model_copy(
+                update={
+                    "additions": existing.additions,
+                    "source_file": existing.source_file,
+                    "imported_at": existing.imported_at,
+                }
+            )
+            store.save_culture(culture)
+        except ValueError as e:
+            await self.signal_operation_failed(str(e))
+            return
+
+        await self._send_world(store)
+
+    async def handle_patch_culture(self, data: dict):
+        store = await self._require_store()
+        if store is None:
+            return
+
+        try:
+            payload = PatchCulturePayload(**data)
+            unknown = set(payload.culture) - PATCHABLE_CULTURE_FIELDS
+            if unknown:
+                raise ValueError(
+                    f"culture fields can't be patched: {', '.join(sorted(unknown))}"
+                )
+            unknown = set(payload.language) - PATCHABLE_LANGUAGE_FIELDS
+            if unknown:
+                raise ValueError(
+                    f"language fields can't be patched: {', '.join(sorted(unknown))}"
+                )
+
+            existing = store.load_cultures().get(payload.culture_id)
+            if existing is None:
+                raise ValueError(f"unknown culture: {payload.culture_id}")
+
+            merged = existing.model_dump(mode="json")
+            merged.update(payload.culture)
+            merged["language"].update(payload.language)
+            culture = Culture.model_validate(merged)
             store.save_culture(culture)
         except ValueError as e:
             await self.signal_operation_failed(str(e))

@@ -217,6 +217,15 @@ export default {
     mixins: [
         dirtyLocalClone({
             watchPath: 'culture',
+            // Only the fields this page edits: saves patch just these, so a
+            // stale copy never overwrites the language, the play additions or
+            // anything else edited elsewhere.
+            source: vm => ({
+                description: vm.culture.description,
+                customs: vm.culture.customs,
+                food: vm.culture.food,
+                holidays: vm.culture.holidays,
+            }),
             identity: vm => vm.culture && vm.culture.id,
         }),
     ],
@@ -272,7 +281,7 @@ export default {
             return edits;
         },
         save() {
-            this.send('save_culture', { culture: this.local });
+            this.send('patch_culture', { culture_id: this.culture.id, culture: this.local });
             this.clearLocalDirty();
         },
         addCustom() {

@@ -146,7 +146,13 @@ export default {
     mixins: [
         dirtyLocalClone({
             watchPath: 'culture',
-            source: vm => vm.culture.language,
+            // Only the language fields this page edits: saves patch just
+            // these, never the dictionary, phrases or generators.
+            source: vm => ({
+                sound: vm.culture.language.sound,
+                syllable_notes: vm.culture.language.syllable_notes,
+                grammar: vm.culture.language.grammar,
+            }),
             identity: vm => vm.culture && vm.culture.id,
         }),
     ],
@@ -188,9 +194,7 @@ export default {
     },
     methods: {
         save() {
-            const culture = JSON.parse(JSON.stringify(this.culture));
-            culture.language = this.local;
-            this.send('save_culture', { culture });
+            this.send('patch_culture', { culture_id: this.culture.id, language: this.local });
             this.clearLocalDirty();
         },
         addSyllableNote() {

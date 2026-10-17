@@ -120,6 +120,8 @@ export default {
     mixins: [
         dirtyLocalClone({
             watchPath: 'culture',
+            // Only `language.phrases`: saves patch just that field.
+            source: vm => ({ phrases: vm.culture.language.phrases }),
             identity: vm => vm.culture && vm.culture.id,
         }),
     ],
@@ -159,7 +161,7 @@ export default {
             return { id: null, category: '', original: '', translation: '', usage: '', breakdown: [] };
         },
         save() {
-            this.send('save_culture', { culture: this.local });
+            this.send('patch_culture', { culture_id: this.culture.id, language: { phrases: this.local.phrases } });
             this.clearLocalDirty();
         },
         openAdd() {

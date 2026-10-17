@@ -85,6 +85,8 @@ export default {
     mixins: [
         dirtyLocalClone({
             watchPath: 'culture',
+            // Only `language.generators`: saves patch just that field.
+            source: vm => ({ generators: vm.culture.language.generators }),
             identity: vm => vm.culture && vm.culture.id,
         }),
     ],
@@ -115,7 +117,7 @@ export default {
             this.pendingRequests = {};
         },
         save() {
-            this.send('save_culture', { culture: this.local });
+            this.send('patch_culture', { culture_id: this.culture.id, language: { generators: this.local.generators } });
             this.clearLocalDirty();
         },
         useIcon(use) {

@@ -83,6 +83,8 @@ export default {
     mixins: [
         dirtyLocalClone({
             watchPath: 'culture',
+            // Only `language.dictionary`: saves patch just that field.
+            source: vm => ({ dictionary: vm.culture.language.dictionary }),
             identity: vm => vm.culture && vm.culture.id,
         }),
     ],
@@ -111,7 +113,7 @@ export default {
     },
     methods: {
         save() {
-            this.send('save_culture', { culture: this.local });
+            this.send('patch_culture', { culture_id: this.culture.id, language: { dictionary: this.local.dictionary } });
             this.clearLocalDirty();
         },
         addWord() {

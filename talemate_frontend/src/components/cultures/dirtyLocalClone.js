@@ -1,7 +1,11 @@
 /**
  * Shared mixin for the cultures components that keep a locally-editable
  * clone of a server-sent object (`CultureOverview`, `LanguageOverview`,
- * `GlossaryDetail`, `DictionaryTable`, `GeneratorList`).
+ * `GlossaryDetail`, `DictionaryTable`, `GeneratorList`, `PhraseList`).
+ *
+ * The culture editors clone only the fields they own (`source`) and save
+ * them with `patch_culture`, so even a stale local copy can only ever
+ * write back its own fields.
  *
  * The problem this solves: every save of *anything* under a shared world
  * re-broadcasts the whole `world` payload, which refreshes the `culture` /
