@@ -34,9 +34,13 @@ Re-import rules (spec 9.2, and the controller's rulings for this task):
   the file's share exactly and scales the place's other shares to fill
   the remainder. An unmatched place is created new, under its matched
   parent (by name) or as a root, and given this culture's share the same
-  way.
+  way. New places are all created before any parent is resolved, so a
+  child may be listed before its parent in the file.
 - Nothing already in Talemate — a glossary entry, a place, a play
   addition — is ever deleted by an import.
+- A generator whose patterns don't parse makes the whole file invalid
+  (`ImportFormatError`), for both `preview_import` and `apply_import` — a
+  file like that must not be importable silently.
 """
 
 import json
@@ -45,7 +49,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .generator import roll
+from .generator import GeneratorError, roll
 from .models import (
     Culture,
     GlossaryEntry,
@@ -54,7 +58,7 @@ from .models import (
     new_id,
     slugify,
 )
-from .places import set_share
+from .places import reparent, set_share
 from .store import WorldStore
 
 __all__ = [
@@ -162,6 +166,14 @@ def _parse_and_resolve(raw: str) -> tuple[CultureFile, str]:
         raise ImportFormatError(
             "invalid culture file: culture has no usable id or name"
         )
+
+    for gen in file.culture.language.generators:
+        try:
+            roll(file.culture.language, gen.id, count=1)
+        except GeneratorError as exc:
+            raise ImportFormatError(
+                f"invalid culture file: generator '{gen.name}' ({gen.id}) is malformed: {exc}"
+            ) from exc
 
     return file, culture_id
 
@@ -363,26 +375,33 @@ def apply_import(store: WorldStore, raw: str, today: str) -> Culture:
             glossary = [rendered if e is target else e for e in glossary]
 
     places = store.load_places()
+    # Two passes, so a new place's parent may be another new place listed
+    # later in the file: create every new place first (parent unresolved),
+    # then resolve parents by name once all of them exist.
+    new_place_ids: list[tuple[CultureFilePlace, str]] = []
     for file_place in file.places:
         match = _match_place(places, file_place.name)
         if match is not None:
             places = set_share(places, match.id, culture_id, file_place.share)
             continue
 
-        parent_id = None
-        if file_place.parent is not None:
-            parent = _match_place(places, file_place.parent)
-            parent_id = parent.id if parent is not None else None
-
         new_place = Place(
             id=new_id(),
             name=file_place.name,
             kind=file_place.kind,
-            parent_id=parent_id,
+            parent_id=None,
             set_by="owner",
         )
         places = places + [new_place]
         places = set_share(places, new_place.id, culture_id, file_place.share)
+        new_place_ids.append((file_place, new_place.id))
+
+    for file_place, place_id in new_place_ids:
+        if file_place.parent is None:
+            continue
+        parent = _match_place(places, file_place.parent)
+        if parent is not None:
+            places = reparent(places, place_id, parent.id)
 
     store.save_culture(culture)
     store.save_glossary(glossary)

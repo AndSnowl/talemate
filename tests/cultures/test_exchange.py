@@ -135,7 +135,26 @@ def test_reimport_keeps_additions_and_reviewed_entries(tmp_path):
         status="reviewed",
     )
     culture = culture.model_copy(update={"additions": [kept_addition]})
+
+    # The owner also edits a dictionary entry directly in the store.
+    edited_dictionary = [
+        entry.model_copy(update={"meaning": "a changed meaning"})
+        if entry.word == "dhaer"
+        else entry
+        for entry in culture.language.dictionary
+    ]
+    culture = culture.model_copy(
+        update={
+            "language": culture.language.model_copy(
+                update={"dictionary": edited_dictionary}
+            )
+        }
+    )
     store.save_culture(culture)
+    assert (
+        store.load_cultures()["taelrik"].language.dictionary[0].meaning
+        == "a changed meaning"
+    )
 
     # The owner reviews Kethrun with an edited meaning.
     glossary = store.load_glossary()
@@ -285,6 +304,38 @@ def test_import_sanitises_culture_id(tmp_path):
     saved_path = cultures_dir / "evil.json"
     assert saved_path.exists()
     assert saved_path.resolve().parent == cultures_dir.resolve()
+
+
+def test_malformed_generator_pattern_rejected(tmp_path):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0]["patterns"] = ["C(V"]
+    malformed_raw = json.dumps(raw)
+
+    with pytest.raises(ImportFormatError, match="Given names"):
+        preview_import(store, malformed_raw)
+
+    with pytest.raises(ImportFormatError, match="Given names"):
+        apply_import(store, malformed_raw, today="2026-10-17")
+
+    # Nothing was written for the rejected file.
+    assert store.load_cultures() == {}
+
+
+def test_new_places_parent_resolved_regardless_of_order(tmp_path):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    # List the child place before its parent.
+    raw["places"] = list(reversed(raw["places"]))
+    reordered_raw = json.dumps(raw)
+
+    apply_import(store, reordered_raw, today="2026-10-17")
+
+    places = store.load_places()
+    by_name = {p.name: p for p in places}
+    reach = by_name["The Taelrik Reach"]
+    dhunmouth = by_name["Dhunmouth"]
+    assert dhunmouth.parent_id == reach.id
 
 
 def test_cli_validate_and_sample():
