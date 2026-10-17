@@ -23,6 +23,7 @@ from talemate.server import (
     assistant,
     character_importer,
     config,
+    cultures,
     devtools,
     quick_settings,
     scene_message as scene_message_plugin,
@@ -85,6 +86,7 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
                 self
             ),
             timeline.TimelinePlugin.router: timeline.TimelinePlugin(self),
+            cultures.CulturesPlugin.router: cultures.CulturesPlugin(self),
         }
 
         # unconveniently named function, this `connect` method is called
