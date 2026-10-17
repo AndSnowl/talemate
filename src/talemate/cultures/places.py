@@ -36,6 +36,15 @@ def _find(places: list[Place], place_id: str | None) -> Place | None:
     return None
 
 
+def _replace(places: list[Place], place_id: str, **updates) -> list[Place]:
+    """Return `places` with `place_id`'s fields updated to `updates`."""
+
+    return [
+        place.model_copy(update=updates) if place.id == place_id else place
+        for place in places
+    ]
+
+
 def _distribute(items: list[tuple[str, int]], total: int) -> list[tuple[str, int]]:
     """Split `total` across `items` proportional to their weights.
 
@@ -136,12 +145,7 @@ def reparent(
             parent = _find(places, current_id)
             current_id = parent.parent_id if parent else None
 
-    return [
-        place.model_copy(update={"parent_id": new_parent_id})
-        if place.id == place_id
-        else place
-        for place in places
-    ]
+    return _replace(places, place_id, parent_id=new_parent_id)
 
 
 def set_shares(
@@ -167,14 +171,9 @@ def set_shares(
     else:
         new_cultures = []
 
-    return [
-        place.model_copy(
-            update={"cultures": new_cultures, "set_by": "owner", "unsure": False}
-        )
-        if place.id == place_id
-        else place
-        for place in places
-    ]
+    return _replace(
+        places, place_id, cultures=new_cultures, set_by="owner", unsure=False
+    )
 
 
 def set_share(
@@ -213,14 +212,9 @@ def set_share(
         ]
         new_cultures = [cs for cs in new_cultures if cs.share > 0]
 
-    return [
-        place.model_copy(
-            update={"cultures": new_cultures, "set_by": "owner", "unsure": False}
-        )
-        if place.id == place_id
-        else place
-        for place in places
-    ]
+    return _replace(
+        places, place_id, cultures=new_cultures, set_by="owner", unsure=False
+    )
 
 
 def delete_place(
@@ -251,6 +245,20 @@ def describe_mix(
         return ""
 
     ordered = sorted(mix, key=lambda cs: -cs.share)
+    own_dominant = ordered[0].culture_id
+
+    suffix = ""
+    if source.id == place_id and source.parent_id is not None:
+        parent_mix, parent_source = effective_mix(places, source.parent_id)
+        if parent_mix and parent_source is not None:
+            parent_dominant_share = max(parent_mix, key=lambda cs: cs.share)
+            if parent_dominant_share.culture_id != own_dominant:
+                parent_culture = cultures.get(parent_dominant_share.culture_id)
+                if parent_culture is not None:
+                    suffix = (
+                        f" Most also speak {parent_culture.language.name}, "
+                        f"the language of {parent_source.name}."
+                    )
 
     if len(ordered) == 1:
         culture = cultures.get(ordered[0].culture_id)
@@ -258,6 +266,7 @@ def describe_mix(
             return ""
         return (
             f"New people here are {culture.name}, named from {culture.language.name}."
+            + suffix
         )
 
     entries = []
@@ -277,17 +286,4 @@ def describe_mix(
         "Each is named from their own culture's language."
     )
 
-    if source.id == place_id and source.parent_id is not None:
-        parent_mix, parent_source = effective_mix(places, source.parent_id)
-        if parent_mix and parent_source is not None:
-            own_dominant = ordered[0].culture_id
-            parent_dominant_share = max(parent_mix, key=lambda cs: cs.share)
-            if parent_dominant_share.culture_id != own_dominant:
-                parent_culture = cultures.get(parent_dominant_share.culture_id)
-                if parent_culture is not None:
-                    text += (
-                        f" Most also speak {parent_culture.language.name}, "
-                        f"the language of {parent_source.name}."
-                    )
-
-    return text
+    return text + suffix

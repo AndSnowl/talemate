@@ -147,6 +147,21 @@ def test_describe_mix_pocket(places, cultures):
     assert "Most also speak Taelrik, the language of The Taelrik Reach." in text
 
 
+def test_describe_mix_single_culture_pocket(places, cultures):
+    pocket = _place(
+        "elsvale",
+        "Elsvale",
+        "village",
+        parent_id="reach",
+        cultures=[CultureShare(culture_id="elsiri", share=100)],
+    )
+    text = describe_mix(places + [pocket], cultures, "elsvale")
+    assert text == (
+        "New people here are Elsiri, named from Elsiri. "
+        "Most also speak Taelrik, the language of The Taelrik Reach."
+    )
+
+
 def test_inputs_not_mutated(places):
     original_dhunmouth = next(p for p in places if p.id == "dhunmouth")
     original_shares = list(original_dhunmouth.cultures)
