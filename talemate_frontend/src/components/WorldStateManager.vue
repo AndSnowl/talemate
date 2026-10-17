@@ -1,7 +1,14 @@
 <template>
     <v-card variant="text">
         <v-tabs v-model="tab" color="secondary">
-            <v-tab v-for="tab in tabs" :disabled="tab.disabled" :key="tab.name" :text="tab.title" :prepend-icon="tab.icon" :value="tab.name">
+            <v-tab v-for="tabItem in tabs" :disabled="tabItem.disabled" :key="tabItem.name" :prepend-icon="tabItem.icon" :value="tabItem.name">
+                {{ tabItem.title }}
+                <v-badge
+                    v-if="tabItem.name === 'cultures' && culturesUnreviewed > 0"
+                    inline
+                    color="unsaved"
+                    :content="String(culturesUnreviewed)"
+                ></v-badge>
             </v-tab>
         </v-tabs>
 
@@ -124,8 +131,15 @@
             <!-- SUGGESTIONS -->
             <v-window-item value="suggestions">
                 <WorldStateManagerSuggestions
-                ref="suggestions" 
+                ref="suggestions"
                 />
+            </v-window-item>
+
+            <!-- CULTURES -->
+            <v-window-item value="cultures">
+                <WorldStateManagerCultures ref="cultures"
+                @world-state-manager-navigate="show"
+                @cultures-counts="(counts) => { culturesUnreviewed = counts.unreviewed_total || 0 }" />
             </v-window-item>
 
         </v-window>
@@ -144,6 +158,7 @@ import WorldStateManagerPins from './WorldStateManagerPins.vue';
 import WorldStateManagerScene from './WorldStateManagerScene.vue';
 import WorldStateManagerHistory from './WorldStateManagerHistory.vue';
 import WorldStateManagerSuggestions from './WorldStateManagerSuggestions.vue';
+import WorldStateManagerCultures from './cultures/WorldStateManagerCultures.vue';
 import GenerationOptions from './GenerationOptions.vue';
 import RequestInput from './RequestInput.vue';
 import { MAX_CONTENT_WIDTH } from '@/constants/layout';
@@ -159,6 +174,7 @@ export default {
         WorldStateManagerScene,
         WorldStateManagerHistory,
         WorldStateManagerSuggestions,
+        WorldStateManagerCultures,
         GenerationOptions,
         RequestInput,
     },
@@ -226,6 +242,11 @@ export default {
                     title: "Suggestions",
                     icon: "mdi-lightbulb-on"
                 },
+                {
+                    name: "cultures",
+                    title: "Cultures",
+                    icon: "mdi-account-group-outline"
+                },
             ],
             requireSceneSave: false,
             historyEnabled: false,
@@ -252,6 +273,7 @@ export default {
 
             // load writing style template
             loadWritingStyleTemplate: true,
+            culturesUnreviewed: 0,
             MAX_CONTENT_WIDTH,
         }
     },
@@ -305,6 +327,10 @@ export default {
             } else if(val === 'suggestions') {
                 this.$nextTick(() => {
                     this.$refs.suggestions.requestSuggestions()
+                });
+            } else if(val === 'cultures') {
+                this.$nextTick(() => {
+                    this.$refs.cultures.send('get_world')
                 });
             }
         },
@@ -383,6 +409,8 @@ export default {
                 tool = this.$refs.pins;
             } else if(tab === 'suggestions') {
                 tool = this.$refs.suggestions;
+            } else if(tab === 'cultures') {
+                tool = this.$refs.cultures;
             }
 
             if(tool) {
