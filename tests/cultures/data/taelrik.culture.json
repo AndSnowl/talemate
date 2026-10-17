@@ -1,0 +1,120 @@
+{
+  "format_version": 1,
+  "culture": {
+    "id": "taelrik",
+    "name": "Taelrik",
+    "color": "#FF8A65",
+    "description": "River-folk of the grey river valleys. Ferrymen, toll-keepers and bargemen; blunt, superstitious about water, generous to anyone who pays the ford its due.",
+    "language": {
+      "name": "Taelrik",
+      "level": "full",
+      "writable": true,
+      "sound": "River-folk speech: clipped and throaty, heavy on k, th and rolled r, with long open \"ae\" vowels. Spoken low and quickly; curses are spat, blessings are drawn out.",
+      "categories": {
+        "C": "k kh t th dh r rh v s n m l d",
+        "V": "a ae e o u i"
+      },
+      "syllable_notes": [
+        "No word starts with \"ng\" or ends in \"v\"",
+        "\"ae\" only in stressed syllables",
+        "Stress on the first syllable; an apostrophe marks a dropped vowel"
+      ],
+      "generators": [
+        {
+          "id": "given_male",
+          "name": "Given names (male)",
+          "use": "people",
+          "patterns": ["CVC[rin|rek|mar|l]", "CV(C)C[rin|rek]"],
+          "reject": ["^ng"],
+          "capitalize": true,
+          "min_length": 3,
+          "max_length": 12
+        },
+        {
+          "id": "family",
+          "name": "Family names",
+          "use": "people",
+          "patterns": ["CVC[varn|dask|thor|skev]", "C(V)CVC"],
+          "reject": [],
+          "capitalize": true,
+          "min_length": 3,
+          "max_length": 12
+        },
+        {
+          "id": "place_names",
+          "name": "Place names",
+          "use": "places",
+          "patterns": ["velC(V)(C)", "CVC[mouth|moor|dun|reth]"],
+          "reject": [],
+          "capitalize": true,
+          "min_length": 4,
+          "max_length": 16
+        }
+      ],
+      "grammar": "Subject–object–verb. Blessings use the wish mood (-a): ossa \"may it keep\". Plurals by doubling the last consonant: dhaer → dhaerr.",
+      "dictionary": [
+        {"word": "dhaer", "meaning": "ford, river crossing", "part": "noun"},
+        {"word": "vel", "meaning": "grey", "part": "adj."},
+        {"word": "ossa", "meaning": "may it keep (wish mood of oss-)", "part": "verb"},
+        {"word": "dhun", "meaning": "water, river", "part": "noun"}
+      ],
+      "phrases": [
+        {
+          "id": "saying-veldhaer",
+          "category": "saying",
+          "original": "Vel'dhaer ossa tae.",
+          "translation": "May the grey ford keep you.",
+          "breakdown": [["vel", "grey"], ["dhaer", "ford"], ["ossa", "may it keep"], ["tae", "you"]],
+          "usage": "Farewell among river-folk. Said slowly."
+        },
+        {
+          "id": "saying-toll",
+          "category": "saying",
+          "original": "Dhun sa'ver, kaeth sa'ver.",
+          "translation": "The river is watched; the high ground is watched.",
+          "breakdown": [["dhun", "river"], ["sa'ver", "is watched"], ["kaeth", "high ground"], ["sa'ver", "is watched"]],
+          "usage": "Old toll-house inscription: 'you are seen, pay your due.'"
+        },
+        {
+          "id": "curse-rot",
+          "category": "curse",
+          "original": "Rhok tal'dun!",
+          "translation": "Rot your roots!",
+          "breakdown": [["rhok", "rot"], ["tal", "your (scornful)"], ["dun", "roots"]],
+          "usage": "Common, coarse. Spat, not said."
+        },
+        {
+          "id": "curse-flood",
+          "category": "curse",
+          "original": "Dhaer tal'skev.",
+          "translation": "May your ford flood.",
+          "breakdown": [["dhaer", "ford"], ["tal", "your (scornful)"], ["skev", "flood"]],
+          "usage": "Serious. Not said lightly to a ferryman."
+        }
+      ]
+    },
+    "customs": [
+      "Every crossing ends with a coin dropped in the river: 'paying the ford'.",
+      "Doors face the water; a house that turns its back on the river is thought unlucky.",
+      "Oaths are sworn with wet hands."
+    ],
+    "food": "Smoked eel, black bread, river-cress, bitter reed beer. Oiled wool coats, wide leather belts with a toll purse; ferrymen go bare-armed in all weather.",
+    "holidays": [
+      {"name": "Low Water", "when": "end of the dry season", "description": "The river is thanked and the fords re-marked with fresh stakes."},
+      {"name": "Lantern Night", "when": "first frost", "description": "Paper lanterns floated downstream for the drowned."}
+    ],
+    "additions": []
+  },
+  "glossary": [
+    {"text": "Veldhaer", "kind": "place", "meaning": "grey ford"},
+    {"text": "Kethrun", "kind": "person", "meaning": "ford-born"},
+    {"text": "saervik", "kind": "thing", "meaning": "river-runner; a flat ferry boat"}
+  ],
+  "places": [
+    {"name": "The Taelrik Reach", "kind": "country", "parent": null, "share": 100},
+    {"name": "Dhunmouth", "kind": "city", "parent": "The Taelrik Reach", "share": 55}
+  ],
+  "foreign_renderings": [
+    {"name": "Kasrool", "rendering": "Khaz-Rull"}
+  ]
+}

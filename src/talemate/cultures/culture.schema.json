@@ -1,0 +1,490 @@
+{
+  "$defs": {
+    "Culture": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "color": {
+          "default": "#9E9E9E",
+          "title": "Color",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "language": {
+          "$ref": "#/$defs/Language"
+        },
+        "customs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Customs",
+          "type": "array"
+        },
+        "food": {
+          "default": "",
+          "title": "Food",
+          "type": "string"
+        },
+        "holidays": {
+          "items": {
+            "$ref": "#/$defs/Holiday"
+          },
+          "title": "Holidays",
+          "type": "array"
+        },
+        "additions": {
+          "items": {
+            "$ref": "#/$defs/PlayAddition"
+          },
+          "title": "Additions",
+          "type": "array"
+        },
+        "source_file": {
+          "default": "",
+          "title": "Source File",
+          "type": "string"
+        },
+        "imported_at": {
+          "default": "",
+          "title": "Imported At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "language"
+      ],
+      "title": "Culture",
+      "type": "object"
+    },
+    "CultureFileGlossary": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "person",
+            "place",
+            "thing",
+            "word"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "meaning": {
+          "default": "",
+          "title": "Meaning",
+          "type": "string"
+        },
+        "true_name": {
+          "default": "",
+          "title": "True Name",
+          "type": "string"
+        },
+        "renderings": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Renderings",
+          "type": "object"
+        }
+      },
+      "required": [
+        "text",
+        "kind"
+      ],
+      "title": "CultureFileGlossary",
+      "type": "object"
+    },
+    "CultureFilePlace": {
+      "description": "A place where this culture lives. `parent` is matched by name.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "country",
+            "region",
+            "city",
+            "town",
+            "village",
+            "building",
+            "poi",
+            "terrain"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent"
+        },
+        "share": {
+          "default": 100,
+          "title": "Share",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "CultureFilePlace",
+      "type": "object"
+    },
+    "DictionaryEntry": {
+      "properties": {
+        "word": {
+          "title": "Word",
+          "type": "string"
+        },
+        "meaning": {
+          "title": "Meaning",
+          "type": "string"
+        },
+        "part": {
+          "default": "",
+          "title": "Part",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "word",
+        "meaning"
+      ],
+      "title": "DictionaryEntry",
+      "type": "object"
+    },
+    "ForeignRendering": {
+      "description": "This culture's rendering of a name that belongs to another culture.",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "rendering": {
+          "title": "Rendering",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "rendering"
+      ],
+      "title": "ForeignRendering",
+      "type": "object"
+    },
+    "GeneratorDef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "use": {
+          "enum": [
+            "people",
+            "places",
+            "things"
+          ],
+          "title": "Use",
+          "type": "string"
+        },
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patterns",
+          "type": "array"
+        },
+        "reject": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reject",
+          "type": "array"
+        },
+        "capitalize": {
+          "default": true,
+          "title": "Capitalize",
+          "type": "boolean"
+        },
+        "min_length": {
+          "default": 2,
+          "title": "Min Length",
+          "type": "integer"
+        },
+        "max_length": {
+          "default": 24,
+          "title": "Max Length",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "use",
+        "patterns"
+      ],
+      "title": "GeneratorDef",
+      "type": "object"
+    },
+    "Holiday": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "when": {
+          "default": "",
+          "title": "When",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Holiday",
+      "type": "object"
+    },
+    "Language": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "description",
+            "naming",
+            "full"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "writable": {
+          "default": true,
+          "title": "Writable",
+          "type": "boolean"
+        },
+        "sound": {
+          "default": "",
+          "title": "Sound",
+          "type": "string"
+        },
+        "categories": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Categories",
+          "type": "object"
+        },
+        "syllable_notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Syllable Notes",
+          "type": "array"
+        },
+        "generators": {
+          "items": {
+            "$ref": "#/$defs/GeneratorDef"
+          },
+          "title": "Generators",
+          "type": "array"
+        },
+        "grammar": {
+          "default": "",
+          "title": "Grammar",
+          "type": "string"
+        },
+        "dictionary": {
+          "items": {
+            "$ref": "#/$defs/DictionaryEntry"
+          },
+          "title": "Dictionary",
+          "type": "array"
+        },
+        "phrases": {
+          "items": {
+            "$ref": "#/$defs/Phrase"
+          },
+          "title": "Phrases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "level"
+      ],
+      "title": "Language",
+      "type": "object"
+    },
+    "Phrase": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "original": {
+          "title": "Original",
+          "type": "string"
+        },
+        "translation": {
+          "title": "Translation",
+          "type": "string"
+        },
+        "breakdown": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Breakdown",
+          "type": "array"
+        },
+        "usage": {
+          "default": "",
+          "title": "Usage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "original",
+        "translation"
+      ],
+      "title": "Phrase",
+      "type": "object"
+    },
+    "PlayAddition": {
+      "description": "A candidate addition to scene play (customs, food, holidays).\n\nKeep sets `status` to `reviewed`; Edit changes the `text`.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "section": {
+          "enum": [
+            "customs",
+            "food",
+            "holidays"
+          ],
+          "title": "Section",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source": {
+          "default": "",
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "default": "unreviewed",
+          "enum": [
+            "unreviewed",
+            "reviewed"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "section",
+        "text"
+      ],
+      "title": "PlayAddition",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "format_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Format Version",
+      "type": "integer"
+    },
+    "culture": {
+      "$ref": "#/$defs/Culture"
+    },
+    "glossary": {
+      "items": {
+        "$ref": "#/$defs/CultureFileGlossary"
+      },
+      "title": "Glossary",
+      "type": "array"
+    },
+    "places": {
+      "items": {
+        "$ref": "#/$defs/CultureFilePlace"
+      },
+      "title": "Places",
+      "type": "array"
+    },
+    "foreign_renderings": {
+      "items": {
+        "$ref": "#/$defs/ForeignRendering"
+      },
+      "title": "Foreign Renderings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "culture"
+  ],
+  "title": "CultureFile",
+  "type": "object"
+}
