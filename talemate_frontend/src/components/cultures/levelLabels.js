@@ -29,3 +29,29 @@ export function originMeta(origin) {
     }
     return { label: 'you', icon: 'mdi-pencil' };
 }
+
+export const PLACE_KINDS = [
+    'country',
+    'region',
+    'city',
+    'town',
+    'village',
+    'building',
+    'poi',
+    'terrain',
+];
+
+const PLACE_KIND_LABELS = {
+    country: 'Country',
+    region: 'Region',
+    city: 'City',
+    town: 'Town',
+    village: 'Village',
+    building: 'Building',
+    poi: 'Point of interest',
+    terrain: 'Terrain',
+};
+
+export function placeKindLabel(kind) {
+    return PLACE_KIND_LABELS[kind] || kind;
+}

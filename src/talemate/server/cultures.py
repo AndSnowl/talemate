@@ -23,7 +23,7 @@ import pydantic
 from talemate.cultures import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
 from talemate.cultures.models import Culture, GlossaryEntry, Place, new_id
-from talemate.cultures.places import delete_place, reparent, set_shares
+from talemate.cultures.places import delete_place, reparent, set_share, set_shares
 from talemate.cultures.store import WorldStore, world_dir_for_scene
 from talemate.server.websocket_plugin import Plugin
 
@@ -45,8 +45,19 @@ class AdditionPayload(pydantic.BaseModel):
     text: str | None = None
 
 
+class SetSharePayload(pydantic.BaseModel):
+    culture_id: str
+    share: int
+
+
 class SavePlacePayload(pydantic.BaseModel):
     place: dict
+    # One-slider editing: keep this culture's share exactly and scale the
+    # place's other shares to fill the remainder (`places.set_share`),
+    # instead of replacing the whole list via `places.set_shares`. Set by
+    # the places-view slider, which sends on release with a single changed
+    # value rather than the full, already-renormalised mix.
+    set_share: SetSharePayload | None = None
 
 
 class DeletePlacePayload(pydantic.BaseModel):
@@ -254,7 +265,14 @@ class CulturesPlugin(Plugin):
 
                 if incoming.parent_id != existing.parent_id:
                     places = reparent(places, incoming.id, incoming.parent_id)
-                if incoming.cultures != existing.cultures:
+                if payload.set_share is not None:
+                    places = set_share(
+                        places,
+                        incoming.id,
+                        payload.set_share.culture_id,
+                        payload.set_share.share,
+                    )
+                elif incoming.cultures != existing.cultures:
                     places = set_shares(places, incoming.id, incoming.cultures)
 
             store.save_places(places)

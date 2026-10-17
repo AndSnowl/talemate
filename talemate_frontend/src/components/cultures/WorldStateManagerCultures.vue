@@ -15,15 +15,14 @@
                 :open-import="openImport"
                 @open-places="select('places')"
             />
-            <v-card v-else-if="selected && selected.type === 'places'" variant="tonal" class="pa-4">
-                <v-card-title>
-                    <v-icon class="mr-2">mdi-map-marker-radius-outline</v-icon>
-                    Places &amp; regions
-                </v-card-title>
-                <v-card-text class="text-muted">
-                    Place management is coming in a later update.
-                </v-card-text>
-            </v-card>
+            <PlacesView
+                v-else-if="selected && selected.type === 'places'"
+                :places="world.places || []"
+                :cultures="world.cultures || []"
+                :selected-id="placesSelectedId"
+                :send="send"
+                @select="placesSelectedId = $event"
+            ></PlacesView>
             <div v-else-if="selected && selected.type === 'unassigned'">
                 <v-card variant="tonal" class="pa-4 mb-3">
                     <v-card-title class="pa-0">
@@ -51,6 +50,8 @@
                 </v-card-text>
             </v-card>
         </template>
+
+        <ImportCultureDialog v-model="importDialogOpen" :send="send"></ImportCultureDialog>
     </div>
 </template>
 
@@ -58,6 +59,8 @@
 import CultureNoWorld from './CultureNoWorld.vue';
 import CulturePage from './CulturePage.vue';
 import GlossaryView from './GlossaryView.vue';
+import PlacesView from './PlacesView.vue';
+import ImportCultureDialog from './ImportCultureDialog.vue';
 import { MAX_CONTENT_WIDTH } from '@/constants/layout';
 
 export default {
@@ -66,6 +69,8 @@ export default {
         CultureNoWorld,
         CulturePage,
         GlossaryView,
+        PlacesView,
+        ImportCultureDialog,
     },
     inject: [
         'getWebsocket',
@@ -88,6 +93,8 @@ export default {
             selected: null,
             counts: {},
             unassignedSelectedId: null,
+            placesSelectedId: null,
+            importDialogOpen: false,
             MAX_CONTENT_WIDTH,
         }
     },
@@ -121,8 +128,7 @@ export default {
         },
 
         openImport() {
-            // Task 10 wires up the actual import dialog.
-            console.info('WorldStateManagerCultures: import dialog not implemented yet (Task 10)');
+            this.importDialogOpen = true;
         },
 
         shareState() {

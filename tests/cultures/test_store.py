@@ -4,6 +4,7 @@ import pytest
 
 from talemate.cultures.models import (
     Culture,
+    CultureShare,
     GlossaryEntry,
     GlossaryOrigin,
     Language,
@@ -147,3 +148,54 @@ def test_snapshot_counts(tmp_path):
     assert snapshot["cultures"][0]["id"] == "taelrik"
     assert snapshot["places"][0]["id"] == "p1"
     assert snapshot["glossary"][0]["id"] == "g1"
+
+
+def test_snapshot_includes_effective_mix(tmp_path):
+    store = WorldStore(tmp_path)
+
+    store.save_culture(
+        Culture(
+            id="taelrik",
+            name="Taelrik",
+            language=Language(name="Taelrik", level="naming"),
+        )
+    )
+    store.save_culture(
+        Culture(
+            id="elsiri",
+            name="Elsiri",
+            language=Language(name="Elsiri", level="naming"),
+        )
+    )
+
+    places = [
+        Place(
+            id="reach",
+            name="The Taelrik Reach",
+            kind="country",
+            cultures=[CultureShare(culture_id="taelrik", share=100)],
+        ),
+        Place(
+            id="birch",
+            name="Birch Coast",
+            kind="region",
+            parent_id="reach",
+            cultures=[
+                CultureShare(culture_id="elsiri", share=90),
+                CultureShare(culture_id="taelrik", share=10),
+            ],
+        ),
+        Place(id="ilsara", name="Ilsara", kind="village", parent_id="birch"),
+    ]
+    store.save_places(places)
+
+    snapshot = store.snapshot()
+
+    ilsara = next(p for p in snapshot["places"] if p["id"] == "ilsara")
+    assert ilsara["effective"]["source_id"] == "birch"
+    assert ilsara["effective"]["country_id"] == "reach"
+    assert {cs["culture_id"] for cs in ilsara["effective"]["mix"]} == {
+        "elsiri",
+        "taelrik",
+    }
+    assert "Elsiri" in ilsara["effective"]["description"]

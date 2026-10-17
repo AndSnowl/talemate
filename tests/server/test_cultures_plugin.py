@@ -177,6 +177,47 @@ async def test_save_place_rejects_cycle(plugin):
 
 
 @pytest.mark.asyncio
+async def test_save_place_set_share_keeps_value_and_scales_rest(plugin):
+    await plugin.handle_save_place(
+        {
+            "place": {
+                "id": "",
+                "name": "Dhunmouth",
+                "kind": "city",
+                "cultures": [
+                    {"culture_id": "taelrik", "share": 55},
+                    {"culture_id": "elsiri", "share": 30},
+                    {"culture_id": "vaskari", "share": 15},
+                ],
+            }
+        }
+    )
+    place = next(
+        p
+        for p in last_message(plugin, "world")["data"]["places"]
+        if p["name"] == "Dhunmouth"
+    )
+
+    await plugin.handle_save_place(
+        {
+            "place": {"id": place["id"], "name": "Dhunmouth", "kind": "city"},
+            "set_share": {"culture_id": "elsiri", "share": 50},
+        }
+    )
+
+    updated = next(
+        p
+        for p in last_message(plugin, "world")["data"]["places"]
+        if p["id"] == place["id"]
+    )
+    by_culture = {cs["culture_id"]: cs["share"] for cs in updated["cultures"]}
+    assert by_culture["elsiri"] == 50
+    assert sum(by_culture.values()) == 100
+    # taelrik:vaskari were 55:15 and are scaled proportionally to fill 50.
+    assert by_culture["taelrik"] > by_culture["vaskari"]
+
+
+@pytest.mark.asyncio
 async def test_save_glossary_entry_marks_owner_edit(plugin):
     store = plugin_store(plugin)
     store.save_glossary(

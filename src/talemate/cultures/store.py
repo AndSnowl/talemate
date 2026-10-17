@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from .models import Culture, GlossaryEntry, GlossaryFile, Place, PlacesFile
+from .places import country_of, describe_mix, effective_mix
 
 if TYPE_CHECKING:
     from talemate.tale_mate import Scene
@@ -160,6 +161,19 @@ class WorldStore:
 
         unsure_places = sum(1 for place in places if place.unsure)
 
+        place_dumps = []
+        for place in places:
+            mix, source = effective_mix(places, place.id)
+            country = country_of(places, place.id)
+            dump = place.model_dump(mode="json")
+            dump["effective"] = {
+                "mix": [cs.model_dump(mode="json") for cs in mix],
+                "source_id": source.id if source is not None else None,
+                "description": describe_mix(places, cultures, place.id),
+                "country_id": country.id if country is not None else None,
+            }
+            place_dumps.append(dump)
+
         unreviewed_additions_by_culture: dict[str, int] = {}
         for culture in cultures.values():
             count = sum(
@@ -177,7 +191,7 @@ class WorldStore:
 
         return {
             "cultures": [c.model_dump(mode="json") for c in cultures.values()],
-            "places": [p.model_dump(mode="json") for p in places],
+            "places": place_dumps,
             "glossary": [g.model_dump(mode="json") for g in glossary],
             "counts": {
                 "unreviewed_total": unreviewed_total,
