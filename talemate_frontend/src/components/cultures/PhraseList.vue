@@ -113,9 +113,16 @@
 
 <script>
 import { v4 as uuidv4 } from 'uuid';
+import { dirtyLocalClone } from './dirtyLocalClone';
 
 export default {
     name: 'PhraseList',
+    mixins: [
+        dirtyLocalClone({
+            watchPath: 'culture',
+            identity: vm => vm.culture && vm.culture.id,
+        }),
+    ],
     props: {
         culture: {
             type: Object,
@@ -128,7 +135,6 @@ export default {
     },
     data() {
         return {
-            local: this.cloneCulture(this.culture),
             dialog: false,
             editing: null,
             form: this.blankForm(),
@@ -148,20 +154,13 @@ export default {
             return groups;
         },
     },
-    watch: {
-        culture(newCulture) {
-            this.local = this.cloneCulture(newCulture);
-        },
-    },
     methods: {
-        cloneCulture(culture) {
-            return JSON.parse(JSON.stringify(culture));
-        },
         blankForm() {
             return { id: null, category: '', original: '', translation: '', usage: '', breakdown: [] };
         },
         save() {
             this.send('save_culture', { culture: this.local });
+            this.clearLocalDirty();
         },
         openAdd() {
             this.editing = null;

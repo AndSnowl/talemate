@@ -134,9 +134,19 @@
                                 {{ candidate }}
                             </v-chip>
                         </div>
-                        <v-btn size="small" variant="text" prepend-icon="mdi-dice-multiple-outline" :loading="rollPending" @click="rollNew()">
+                        <v-btn
+                            size="small"
+                            variant="text"
+                            prepend-icon="mdi-dice-multiple-outline"
+                            :loading="!!pendingRollRequestId"
+                            :disabled="!local.language"
+                            @click="rollNew()"
+                        >
                             Roll new
                         </v-btn>
+                        <div v-if="!local.language" class="text-caption text-muted mt-1">
+                            Assign a language before rolling new candidates.
+                        </div>
                     </v-card>
                 </v-menu>
 
@@ -162,10 +172,30 @@
 </template>
 
 <script>
+import { v4 as uuidv4 } from 'uuid';
 import { kindMeta } from './levelLabels';
+import { dirtyLocalClone } from './dirtyLocalClone';
+
+function cloneEntry(entry, vm) {
+    const local = JSON.parse(JSON.stringify(entry));
+    local.renderings = local.renderings || {};
+    for (const culture of vm.cultures) {
+        if (culture.id !== local.language && !(culture.id in local.renderings)) {
+            local.renderings[culture.id] = '';
+        }
+    }
+    return local;
+}
 
 export default {
     name: 'GlossaryDetail',
+    mixins: [
+        dirtyLocalClone({
+            watchPath: 'entry',
+            identity: vm => vm.entry && vm.entry.id,
+            clone: cloneEntry,
+        }),
+    ],
     inject: [
         'registerMessageHandler',
         'unregisterMessageHandler',
@@ -186,9 +216,8 @@ export default {
     },
     data() {
         return {
-            local: this.cloneEntry(this.entry),
             rolledCandidates: [],
-            rollPending: false,
+            pendingRollRequestId: null,
             pickMenu: false,
             removeMenu: false,
         }
@@ -231,28 +260,16 @@ export default {
             return pool;
         },
     },
-    watch: {
-        entry(newEntry) {
-            this.local = this.cloneEntry(newEntry);
+    methods: {
+        onLocalReset() {
             this.rolledCandidates = [];
-            this.rollPending = false;
+            this.pendingRollRequestId = null;
             this.pickMenu = false;
             this.removeMenu = false;
         },
-    },
-    methods: {
-        cloneEntry(entry) {
-            const local = JSON.parse(JSON.stringify(entry));
-            local.renderings = local.renderings || {};
-            for (const culture of this.cultures) {
-                if (culture.id !== local.language && !(culture.id in local.renderings)) {
-                    local.renderings[culture.id] = '';
-                }
-            }
-            return local;
-        },
         save() {
             this.send('save_glossary_entry', { entry: this.local });
+            this.clearLocalDirty();
         },
         review(status) {
             this.send('review_glossary_entry', { entry_id: this.local.id, status });
@@ -270,11 +287,18 @@ export default {
             this.pickMenu = false;
         },
         rollNew() {
-            this.rollPending = true;
+            if (!this.local.language) {
+                // The backend needs a culture_id to roll against; an entry
+                // with no language yet can't have "Pick another" rolling.
+                return;
+            }
+            const requestId = uuidv4();
+            this.pendingRollRequestId = requestId;
             this.send('roll', {
                 culture_id: this.local.language,
                 generator_id: this.local.origin.generator_id,
                 count: 20,
+                request_id: requestId,
             });
         },
         confirmRemove() {
@@ -285,10 +309,10 @@ export default {
             if (message.type !== 'cultures' || message.action !== 'rolled') {
                 return;
             }
-            if (!this.rollPending || message.data.generator_id !== this.local.origin.generator_id) {
+            if (!this.pendingRollRequestId || message.data.request_id !== this.pendingRollRequestId) {
                 return;
             }
-            this.rollPending = false;
+            this.pendingRollRequestId = null;
             this.rolledCandidates = message.data.names || [];
         },
     },

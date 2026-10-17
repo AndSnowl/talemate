@@ -6,7 +6,7 @@
                     <div class="d-flex align-center ga-2 mb-2">
                         <v-icon size="small" color="muted">{{ useIcon(gen.use) }}</v-icon>
                         <span class="text-body-1 flex-grow-1">{{ gen.name }}</span>
-                        <v-btn size="small" variant="tonal" prepend-icon="mdi-dice-multiple-outline" :loading="pending[gen.id]" @click="roll(gen)">
+                        <v-btn size="small" variant="tonal" prepend-icon="mdi-dice-multiple-outline" :loading="!!pendingRequests[gen.id]" @click="roll(gen)">
                             Roll
                         </v-btn>
                     </div>
@@ -77,8 +77,17 @@
 </template>
 
 <script>
+import { v4 as uuidv4 } from 'uuid';
+import { dirtyLocalClone } from './dirtyLocalClone';
+
 export default {
     name: 'GeneratorList',
+    mixins: [
+        dirtyLocalClone({
+            watchPath: 'culture',
+            identity: vm => vm.culture && vm.culture.id,
+        }),
+    ],
     inject: [
         'registerMessageHandler',
         'unregisterMessageHandler',
@@ -95,24 +104,19 @@ export default {
     },
     data() {
         return {
-            local: this.cloneCulture(this.culture),
             rolls: {},
-            pending: {},
+            // generator id -> the request_id of its outstanding roll, if any
+            pendingRequests: {},
         }
     },
-    watch: {
-        culture(newCulture) {
-            this.local = this.cloneCulture(newCulture);
-            this.rolls = {};
-            this.pending = {};
-        },
-    },
     methods: {
-        cloneCulture(culture) {
-            return JSON.parse(JSON.stringify(culture));
+        onLocalReset() {
+            this.rolls = {};
+            this.pendingRequests = {};
         },
         save() {
             this.send('save_culture', { culture: this.local });
+            this.clearLocalDirty();
         },
         useIcon(use) {
             return {
@@ -136,18 +140,25 @@ export default {
             this.save();
         },
         roll(gen) {
-            this.pending[gen.id] = true;
-            this.send('roll', { culture_id: this.culture.id, generator_id: gen.id, count: 20 });
+            const requestId = uuidv4();
+            this.pendingRequests[gen.id] = requestId;
+            this.send('roll', {
+                culture_id: this.culture.id,
+                generator_id: gen.id,
+                count: 20,
+                request_id: requestId,
+            });
         },
         handleMessage(message) {
             if (message.type !== 'cultures' || message.action !== 'rolled') {
                 return;
             }
             const generatorId = message.data.generator_id;
-            if (!this.pending[generatorId]) {
+            const pendingRequestId = this.pendingRequests[generatorId];
+            if (!pendingRequestId || message.data.request_id !== pendingRequestId) {
                 return;
             }
-            this.pending[generatorId] = false;
+            this.pendingRequests[generatorId] = null;
             this.rolls[generatorId] = (message.data.names || []).slice(0, 5);
         },
     },

@@ -139,8 +139,17 @@
 </template>
 
 <script>
+import { dirtyLocalClone } from './dirtyLocalClone';
+
 export default {
     name: 'LanguageOverview',
+    mixins: [
+        dirtyLocalClone({
+            watchPath: 'culture',
+            source: vm => vm.culture.language,
+            identity: vm => vm.culture && vm.culture.id,
+        }),
+    ],
     props: {
         culture: {
             type: Object,
@@ -158,11 +167,6 @@ export default {
             type: Function,
             required: true,
         },
-    },
-    data() {
-        return {
-            local: this.cloneLanguage(this.culture.language),
-        }
     },
     computed: {
         glossaryNameCount() {
@@ -182,19 +186,12 @@ export default {
             return this.glossary.filter(e => e.language === this.culture.id);
         },
     },
-    watch: {
-        culture(newCulture) {
-            this.local = this.cloneLanguage(newCulture.language);
-        },
-    },
     methods: {
-        cloneLanguage(language) {
-            return JSON.parse(JSON.stringify(language));
-        },
         save() {
             const culture = JSON.parse(JSON.stringify(this.culture));
             culture.language = this.local;
             this.send('save_culture', { culture });
+            this.clearLocalDirty();
         },
         addSyllableNote() {
             this.local.syllable_notes.push('');

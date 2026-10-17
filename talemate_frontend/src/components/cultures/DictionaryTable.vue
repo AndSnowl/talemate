@@ -76,8 +76,16 @@
 </template>
 
 <script>
+import { dirtyLocalClone } from './dirtyLocalClone';
+
 export default {
     name: 'DictionaryTable',
+    mixins: [
+        dirtyLocalClone({
+            watchPath: 'culture',
+            identity: vm => vm.culture && vm.culture.id,
+        }),
+    ],
     props: {
         culture: {
             type: Object,
@@ -90,7 +98,6 @@ export default {
     },
     data() {
         return {
-            local: this.cloneCulture(this.culture),
             search: '',
         }
     },
@@ -102,17 +109,10 @@ export default {
                 .filter(row => !q || `${row.word} ${row.meaning} ${row.part}`.toLowerCase().includes(q));
         },
     },
-    watch: {
-        culture(newCulture) {
-            this.local = this.cloneCulture(newCulture);
-        },
-    },
     methods: {
-        cloneCulture(culture) {
-            return JSON.parse(JSON.stringify(culture));
-        },
         save() {
             this.send('save_culture', { culture: this.local });
+            this.clearLocalDirty();
         },
         addWord() {
             this.local.dictionary.push({ word: '', meaning: '', part: '', notes: '' });

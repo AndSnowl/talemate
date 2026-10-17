@@ -71,6 +71,11 @@ class RollPayload(pydantic.BaseModel):
     culture_id: str
     generator_id: str
     count: int = 20
+    # Client-generated, echoed back unchanged in the `rolled` reply so the
+    # frontend can route the reply to whichever widget asked for it (several
+    # components can have a roll outstanding for the same generator at
+    # once). Optional so other/older callers keep working.
+    request_id: str | None = None
 
 
 class ImportContentPayload(pydantic.BaseModel):
@@ -388,7 +393,11 @@ class CulturesPlugin(Plugin):
             {
                 "type": self.router,
                 "action": "rolled",
-                "data": {"generator_id": payload.generator_id, "names": names},
+                "data": {
+                    "generator_id": payload.generator_id,
+                    "names": names,
+                    "request_id": payload.request_id,
+                },
             }
         )
 

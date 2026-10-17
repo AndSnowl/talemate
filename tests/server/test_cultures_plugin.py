@@ -222,12 +222,38 @@ async def test_roll_excludes_glossary_names(plugin, monkeypatch):
     monkeypatch.setattr("talemate.server.cultures.generator.roll", fake_roll)
 
     await plugin.handle_roll(
-        {"culture_id": "taelrik", "generator_id": "given_male", "count": 5}
+        {
+            "culture_id": "taelrik",
+            "generator_id": "given_male",
+            "count": 5,
+            "request_id": "req-123",
+        }
     )
 
     msg = last_message(plugin, "rolled")
     assert msg["data"]["generator_id"] == "given_male"
     assert msg["data"]["names"] == ["Brandnew"]
+    # The request id is echoed back unchanged, so the frontend can route the
+    # reply to whichever widget asked for it.
+    assert msg["data"]["request_id"] == "req-123"
+
+
+@pytest.mark.asyncio
+async def test_roll_request_id_defaults_to_none(plugin, monkeypatch):
+    """`request_id` is optional, so callers that don't send one keep working."""
+    await plugin.handle_import_apply({"content": fixture_raw()})
+
+    def fake_roll(language, generator_id, count=20, rng=None, exclude=frozenset()):
+        return ["Kethrun", "Brandnew"]
+
+    monkeypatch.setattr("talemate.server.cultures.generator.roll", fake_roll)
+
+    await plugin.handle_roll(
+        {"culture_id": "taelrik", "generator_id": "given_male", "count": 5}
+    )
+
+    msg = last_message(plugin, "rolled")
+    assert msg["data"]["request_id"] is None
 
 
 @pytest.mark.asyncio

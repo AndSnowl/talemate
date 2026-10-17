@@ -210,9 +210,16 @@
 
 <script>
 import { levelLabel as formatLevel } from './levelLabels';
+import { dirtyLocalClone } from './dirtyLocalClone';
 
 export default {
     name: 'CultureOverview',
+    mixins: [
+        dirtyLocalClone({
+            watchPath: 'culture',
+            identity: vm => vm.culture && vm.culture.id,
+        }),
+    ],
     props: {
         culture: {
             type: Object,
@@ -237,7 +244,6 @@ export default {
     ],
     data() {
         return {
-            local: this.cloneCulture(this.culture),
             additionEdits: this.initAdditionEdits(this.culture),
         }
     },
@@ -254,15 +260,9 @@ export default {
             return this.places.filter(p => (p.cultures || []).some(cs => cs.culture_id === this.culture.id));
         },
     },
-    watch: {
-        culture(newCulture) {
-            this.local = this.cloneCulture(newCulture);
-            this.additionEdits = this.initAdditionEdits(newCulture);
-        },
-    },
     methods: {
-        cloneCulture(culture) {
-            return JSON.parse(JSON.stringify(culture));
+        onLocalReset(newCulture) {
+            this.additionEdits = this.initAdditionEdits(newCulture);
         },
         initAdditionEdits(culture) {
             const edits = {};
@@ -273,6 +273,7 @@ export default {
         },
         save() {
             this.send('save_culture', { culture: this.local });
+            this.clearLocalDirty();
         },
         addCustom() {
             this.local.customs.push('');
