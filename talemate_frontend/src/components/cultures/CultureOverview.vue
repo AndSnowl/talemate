@@ -270,8 +270,10 @@ export default {
         },
     },
     methods: {
-        onLocalReset(newCulture) {
-            this.additionEdits = this.initAdditionEdits(newCulture);
+        onLocalReset() {
+            // `local` holds only this page's own fields; the additions are
+            // read from the culture prop itself.
+            this.additionEdits = this.initAdditionEdits(this.culture);
         },
         initAdditionEdits(culture) {
             const edits = {};

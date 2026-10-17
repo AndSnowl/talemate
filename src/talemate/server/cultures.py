@@ -7,10 +7,16 @@ Reply contract (task-6 brief, spec 9.2):
   "world_name": str, **store.snapshot()}}``. With no shared context linked
   to the scene, only ``{"available": False}`` is sent.
 - Errors are reported through ``signal_operation_failed`` without writing
-  anything. Roll and import errors also carry the request's ``request_id``
-  (``error.request_id``) so the widget that asked can clear its spinner. ``ImportFormatError``, ``PlaceError`` and ``GeneratorError`` are
-  all ``ValueError`` subclasses, and so is pydantic's ``ValidationError``,
-  so a single ``except ValueError`` catches all of them.
+  anything. ``ImportFormatError``, ``PlaceError``, ``GeneratorError`` and
+  ``WorldFileError`` are all ``ValueError`` subclasses, and so is
+  pydantic's ``ValidationError``, so a single ``except ValueError`` catches
+  all of them. Roll and import errors also carry the request's
+  ``request_id`` (``error.request_id``) so the widget that asked can clear
+  its spinner.
+- Culture edits from the frontend use ``patch_culture``, which replaces
+  only the fields it names; ``save_culture`` replaces a whole culture but
+  always keeps ``additions``, ``source_file`` and ``imported_at`` from
+  disk.
 - The store is re-opened from disk on every request, so edits made to the
   same shared world from another scene are never shadowed by a stale
   in-memory cache.

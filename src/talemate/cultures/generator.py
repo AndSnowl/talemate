@@ -421,7 +421,9 @@ def _compile_language(cache_key: str) -> _CompiledLanguage:
                 gen, category_keys, category_options
             )
         except GeneratorError as exc:
-            raise GeneratorError(f"generator '{gen['name']}' ({gen['id']}): {exc}")
+            raise GeneratorError(
+                f"generator '{gen['name']}' ({gen['id']}): {exc}"
+            ) from None
         compiled.generator_fits[gen["id"]] = pattern_regexes
         compiled.generator_patterns[gen["id"]] = parsed_patterns
         compiled.generator_reject[gen["id"]] = reject_regexes
