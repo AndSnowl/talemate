@@ -150,9 +150,6 @@ export default {
                 return this.modelValue;
             },
             set(value) {
-                if (!value) {
-                    this.resetState();
-                }
                 this.$emit('update:modelValue', value);
             },
         },
@@ -171,6 +168,24 @@ export default {
                 label: labels[key] || key,
                 value,
             }));
+        },
+    },
+    watch: {
+        // Covers both the dialog's own close() (sets modelValue false via
+        // localOpen) and it being opened programmatically by the parent
+        // (openImport(), from the drawer or "Re-import"), which only
+        // changes the `modelValue` prop and never goes through the
+        // `localOpen` setter above.
+        modelValue(value) {
+            if (value) {
+                // Opening fresh: don't carry over a stale error from
+                // whatever was last shown here, including one that turned
+                // out to belong to an unrelated request (see handleMessage's
+                // own `previewLoading || applying` gate).
+                this.error = null;
+            } else {
+                this.resetState();
+            }
         },
     },
     methods: {
@@ -223,6 +238,15 @@ export default {
                 this.preview = message.data;
             } else if (message.action === 'operation_done') {
                 if (message.error) {
+                    // This dialog is mounted for the lifetime of the page, so
+                    // without this guard it would also pick up unrelated
+                    // failures (a rejected save_place reparent, a failed
+                    // glossary save, ...) and show them as an import error.
+                    // Only accept one while we actually have a preview or
+                    // apply request of our own outstanding.
+                    if (!this.previewLoading && !this.applying) {
+                        return;
+                    }
                     this.previewLoading = false;
                     this.applying = false;
                     this.error = message.error.message;
