@@ -5,6 +5,11 @@
             @world-state-manager-navigate="(tab, sub1, sub2, sub3) => $emit('world-state-manager-navigate', tab, sub1, sub2, sub3)"
         />
         <template v-else>
+            <!-- The shared world is linked but one of its files can't be read:
+                 say so, rather than "no shared world" or "no cultures yet". -->
+            <v-alert v-if="world.error" type="error" variant="tonal" class="mb-3" icon="mdi-file-alert-outline">
+                {{ world.error }}
+            </v-alert>
             <CulturePage
                 v-if="selected && selected.type === 'culture' && selectedCulture"
                 :culture="selectedCulture"
@@ -44,7 +49,7 @@
                     @select="unassignedSelectedId = $event"
                 ></GlossaryView>
             </div>
-            <v-card v-else variant="tonal" class="pa-4">
+            <v-card v-else-if="!world.error" variant="tonal" class="pa-4">
                 <v-card-text class="text-muted text-center">
                     No cultures yet. Use <strong>Import culture</strong> in the drawer on the left to add one.
                 </v-card-text>

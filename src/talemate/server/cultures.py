@@ -167,14 +167,32 @@ class CulturesPlugin(Plugin):
         return self.scene.shared_context.filepath.stem
 
     async def _send_world(self, store: WorldStore | None) -> None:
+        """Send the `world` reply. Always replies, even if loading fails.
+
+        A world file that can't be read is reported as ``{"available":
+        True, "error": message}`` (with empty lists), so the tab shows the
+        problem instead of claiming no shared world is linked.
+        """
         if store is None:
             data = {"available": False}
         else:
-            data = {
-                "available": True,
-                "world_name": self._world_name(),
-                **store.snapshot(),
-            }
+            try:
+                data = {
+                    "available": True,
+                    "world_name": self._world_name(),
+                    **store.snapshot(),
+                }
+            except Exception as e:
+                log.exception("cultures: could not load the shared world")
+                data = {
+                    "available": True,
+                    "world_name": self._world_name(),
+                    "error": f"The shared world's files couldn't be loaded: {e}",
+                    "cultures": [],
+                    "places": [],
+                    "glossary": [],
+                    "counts": {},
+                }
         self.websocket_handler.queue_put(
             {"type": self.router, "action": "world", "data": data}
         )

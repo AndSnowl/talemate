@@ -199,3 +199,55 @@ def test_snapshot_includes_effective_mix(tmp_path):
         "taelrik",
     }
     assert "Elsiri" in ilsara["effective"]["description"]
+
+
+BAD_GLOSSARY_ENTRY = {"id": "bad-g", "text": 5, "kind": "nonsense"}
+BAD_PLACE_ENTRY = {"id": "bad-p", "name": "Nowhere", "kind": "continent"}
+
+
+def test_corrupt_glossary_entry_is_skipped_and_kept_on_save(tmp_path):
+    store = WorldStore(tmp_path)
+    store.save_glossary([make_glossary_entry("g1", language=None)])
+    data = json.loads(store.glossary_path.read_text(encoding="utf-8"))
+    data["entries"].append(BAD_GLOSSARY_ENTRY)
+    store.glossary_path.write_text(json.dumps(data), encoding="utf-8")
+
+    entries = store.load_glossary()
+    assert [e.id for e in entries] == ["g1"]
+    assert [g["id"] for g in store.snapshot()["glossary"]] == ["g1"]
+
+    store.save_glossary(entries + [make_glossary_entry("g2", language=None)])
+
+    saved = json.loads(store.glossary_path.read_text(encoding="utf-8"))["entries"]
+    assert [e["id"] for e in saved] == ["g1", "g2", "bad-g"]
+    assert saved[-1] == BAD_GLOSSARY_ENTRY
+
+
+def test_corrupt_place_entry_is_skipped_and_kept_on_save(tmp_path):
+    store = WorldStore(tmp_path)
+    store.save_places([Place(id="p1", name="Veldhaer", kind="town")])
+    data = json.loads(store.places_path.read_text(encoding="utf-8"))
+    data["places"].append(BAD_PLACE_ENTRY)
+    store.places_path.write_text(json.dumps(data), encoding="utf-8")
+
+    places = store.load_places()
+    assert [p.id for p in places] == ["p1"]
+    assert [p["id"] for p in store.snapshot()["places"]] == ["p1"]
+
+    store.save_places(places)
+
+    saved = json.loads(store.places_path.read_text(encoding="utf-8"))["places"]
+    assert saved[-1] == BAD_PLACE_ENTRY
+    assert [p["id"] for p in saved] == ["p1", "bad-p"]
+
+
+def test_unreadable_world_file_raises_readable_error(tmp_path):
+    store = WorldStore(tmp_path)
+    store.places_path.write_text("{", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="places.json"):
+        store.load_places()
+    # And it is never overwritten while it can't be read.
+    with pytest.raises(ValueError, match="places.json"):
+        store.save_places([])
+    assert store.places_path.read_text(encoding="utf-8") == "{"

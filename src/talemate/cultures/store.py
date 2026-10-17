@@ -10,6 +10,12 @@ sibling directory named after it (``<name>.json`` -> ``<name>.world/``):
 All writes are atomic: a temp file is written in the same directory, then
 ``os.replace`` moves it into place, so a crash mid-write never corrupts the
 existing file.
+
+``places.json`` and ``glossary.json`` are loaded entry by entry: an entry
+that doesn't validate is skipped (with a warning) instead of failing the
+whole file, and is written back unchanged on the next save, so a single bad
+hand-edit never loses data. A file that can't be read as JSON at all raises
+`WorldFileError`, and is never overwritten while it is in that state.
 """
 
 import json
@@ -18,6 +24,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pydantic
 import structlog
 
 from .models import Culture, GlossaryEntry, GlossaryFile, Place, PlacesFile
@@ -27,6 +34,7 @@ if TYPE_CHECKING:
     from talemate.tale_mate import Scene
 
 __all__ = [
+    "WorldFileError",
     "WorldStore",
     "atomic_write_json",
     "world_dir_for",
@@ -34,6 +42,10 @@ __all__ = [
 ]
 
 log = structlog.get_logger("talemate.cultures.store")
+
+
+class WorldFileError(ValueError):
+    """Raised for a world file that can't be read as JSON (or has the wrong shape)."""
 
 
 def world_dir_for(shared_context_path: str | Path) -> Path:
@@ -122,25 +134,70 @@ class WorldStore:
         if path.exists():
             path.unlink()
 
+    def _read_entries(
+        self, path: Path, key: str, model: type[pydantic.BaseModel]
+    ) -> tuple[list, list]:
+        """Return `(valid, invalid_raw)` entries of the list `key` in `path`."""
+
+        if not path.exists():
+            return [], []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise WorldFileError(f"{path.name} can't be read: {exc}") from exc
+
+        raw_entries = data.get(key, []) if isinstance(data, dict) else None
+        if not isinstance(raw_entries, list):
+            raise WorldFileError(f"{path.name} has no '{key}' list")
+
+        valid: list = []
+        invalid: list = []
+        for index, raw in enumerate(raw_entries):
+            try:
+                valid.append(model.model_validate(raw))
+            except pydantic.ValidationError as exc:
+                log.warning(
+                    "cultures.store: skipping invalid entry",
+                    path=str(path),
+                    index=index,
+                    error=str(exc),
+                )
+                invalid.append(raw)
+        return valid, invalid
+
+    def _write_entries(
+        self,
+        path: Path,
+        key: str,
+        model: type[pydantic.BaseModel],
+        file_data: dict,
+    ) -> None:
+        # Entries that didn't validate on load are kept, unchanged, after
+        # the valid ones (re-read now, so this works on a fresh store too).
+        _, invalid = self._read_entries(path, key, model)
+        file_data[key] = file_data[key] + invalid
+        atomic_write_json(path, file_data)
+
     def load_places(self) -> list[Place]:
-        if not self.places_path.exists():
-            return []
-        data = json.loads(self.places_path.read_text())
-        return PlacesFile.model_validate(data).places
+        return self._read_entries(self.places_path, "places", Place)[0]
 
     def save_places(self, places: list[Place]) -> None:
         places_file = PlacesFile(places=places)
-        atomic_write_json(self.places_path, places_file.model_dump(mode="json"))
+        self._write_entries(
+            self.places_path, "places", Place, places_file.model_dump(mode="json")
+        )
 
     def load_glossary(self) -> list[GlossaryEntry]:
-        if not self.glossary_path.exists():
-            return []
-        data = json.loads(self.glossary_path.read_text())
-        return GlossaryFile.model_validate(data).entries
+        return self._read_entries(self.glossary_path, "entries", GlossaryEntry)[0]
 
     def save_glossary(self, entries: list[GlossaryEntry]) -> None:
         glossary_file = GlossaryFile(entries=entries)
-        atomic_write_json(self.glossary_path, glossary_file.model_dump(mode="json"))
+        self._write_entries(
+            self.glossary_path,
+            "entries",
+            GlossaryEntry,
+            glossary_file.model_dump(mode="json"),
+        )
 
     def snapshot(self) -> dict:
         cultures = self.load_cultures()

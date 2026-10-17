@@ -543,3 +543,40 @@ async def test_import_preview_error_carries_request_id(plugin):
     done = last_message(plugin)
     assert done["action"] == "operation_done"
     assert done["error"]["request_id"] == "imp-1"
+
+
+@pytest.mark.asyncio
+async def test_get_world_reports_unreadable_file(plugin):
+    wd = world_dir_for_scene(plugin.scene)
+    wd.mkdir(parents=True)
+    (wd / "glossary.json").write_text("{", encoding="utf-8")
+
+    await plugin.handle_get_world({})
+
+    msg = last_message(plugin, "world")
+    assert msg["data"]["available"] is True
+    assert "glossary.json" in msg["data"]["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_world_skips_corrupt_entries(plugin):
+    store = plugin_store(plugin)
+    store.save_places([])
+    wd = world_dir_for_scene(plugin.scene)
+    (wd / "places.json").write_text(
+        json.dumps(
+            {
+                "places": [
+                    {"id": "p1", "name": "Veldhaer", "kind": "town"},
+                    {"id": "bad", "name": "Nowhere", "kind": "continent"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    await plugin.handle_get_world({})
+
+    msg = last_message(plugin, "world")
+    assert "error" not in msg["data"]
+    assert [p["id"] for p in msg["data"]["places"]] == ["p1"]
