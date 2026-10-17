@@ -15,7 +15,10 @@
                         <v-chip v-for="(name, i) in (rolls[gen.id] || [])" :key="i" size="small" class="font-italic text-highlight7">
                             {{ name }}
                         </v-chip>
-                        <span v-if="!(rolls[gen.id] || []).length" class="text-muted text-caption">
+                        <span v-if="rollErrors[gen.id]" class="text-error text-caption">
+                            {{ rollErrors[gen.id] }}
+                        </span>
+                        <span v-else-if="!(rolls[gen.id] || []).length" class="text-muted text-caption">
                             Click Roll to preview names.
                         </span>
                     </div>
@@ -109,6 +112,8 @@ export default {
             rolls: {},
             // generator id -> the request_id of its outstanding roll, if any
             pendingRequests: {},
+            // generator id -> the error message of its last failed roll
+            rollErrors: {},
         }
     },
     methods: {
@@ -144,6 +149,7 @@ export default {
         roll(gen) {
             const requestId = uuidv4();
             this.pendingRequests[gen.id] = requestId;
+            this.rollErrors[gen.id] = null;
             this.send('roll', {
                 culture_id: this.culture.id,
                 generator_id: gen.id,
@@ -152,7 +158,26 @@ export default {
             });
         },
         handleMessage(message) {
-            if (message.type !== 'cultures' || message.action !== 'rolled') {
+            if (message.type !== 'cultures') {
+                return;
+            }
+            if (message.action === 'operation_done') {
+                // A failed roll (e.g. a reject rule that isn't a valid
+                // regex) comes back as an error tagged with our request_id:
+                // stop that generator's spinner and show why.
+                const failedId = message.error && message.error.request_id;
+                if (!failedId) {
+                    return;
+                }
+                for (const [generatorId, requestId] of Object.entries(this.pendingRequests)) {
+                    if (requestId === failedId) {
+                        this.pendingRequests[generatorId] = null;
+                        this.rollErrors[generatorId] = message.error.message;
+                    }
+                }
+                return;
+            }
+            if (message.action !== 'rolled') {
                 return;
             }
             const generatorId = message.data.generator_id;

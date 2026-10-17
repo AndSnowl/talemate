@@ -115,6 +115,8 @@
 </template>
 
 <script>
+import { v4 as uuidv4 } from 'uuid';
+
 export default {
     name: 'ImportCultureDialog',
     inject: [
@@ -138,6 +140,9 @@ export default {
         return {
             selectedFile: null,
             pendingContent: null,
+            // request_id of our outstanding preview/apply, echoed back by
+            // the backend in an error reply
+            pendingRequestId: null,
             preview: null,
             error: null,
             previewLoading: false,
@@ -202,7 +207,8 @@ export default {
             const reader = new FileReader();
             reader.onload = () => {
                 this.pendingContent = reader.result;
-                this.send('import_preview', { content: this.pendingContent });
+                this.pendingRequestId = uuidv4();
+                this.send('import_preview', { content: this.pendingContent, request_id: this.pendingRequestId });
             };
             reader.onerror = () => {
                 this.previewLoading = false;
@@ -216,11 +222,13 @@ export default {
             }
             this.error = null;
             this.applying = true;
-            this.send('import_apply', { content: this.pendingContent });
+            this.pendingRequestId = uuidv4();
+            this.send('import_apply', { content: this.pendingContent, request_id: this.pendingRequestId });
         },
         resetState() {
             this.selectedFile = null;
             this.pendingContent = null;
+            this.pendingRequestId = null;
             this.preview = null;
             this.error = null;
             this.previewLoading = false;
@@ -245,6 +253,14 @@ export default {
                     // Only accept one while we actually have a preview or
                     // apply request of our own outstanding.
                     if (!this.previewLoading && !this.applying) {
+                        return;
+                    }
+                    // Import errors carry our request_id; an error tagged
+                    // with some other request (a failed roll) isn't ours.
+                    // Untagged errors are still accepted, so a failure the
+                    // backend couldn't tag never leaves the spinner running.
+                    const requestId = message.error.request_id;
+                    if (requestId && requestId !== this.pendingRequestId) {
                         return;
                     }
                     this.previewLoading = false;

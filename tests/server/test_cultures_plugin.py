@@ -15,6 +15,7 @@ import pytest
 from talemate.cultures.exchange import CultureFile
 from talemate.cultures.models import (
     Culture,
+    GeneratorDef,
     GlossaryEntry,
     GlossaryOrigin,
     Language,
@@ -467,3 +468,78 @@ async def test_patch_culture_unknown_culture(plugin):
     done = last_message(plugin)
     assert done["action"] == "operation_done"
     assert "unknown culture" in done["error"]["message"]
+
+
+def _culture_with_reject(reject: list[str]) -> Culture:
+    return Culture(
+        id="taelrik",
+        name="Taelrik",
+        language=Language(
+            name="Taelrik",
+            level="naming",
+            categories={"C": "k t", "V": "a e"},
+            generators=[
+                GeneratorDef(
+                    id="g1", name="Given", use="people", patterns=["CV"], reject=reject
+                )
+            ],
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_roll_with_bad_reject_fails_readably_with_request_id(plugin):
+    plugin_store(plugin).save_culture(_culture_with_reject(["["]))
+
+    await plugin.handle_roll(
+        {"culture_id": "taelrik", "generator_id": "g1", "request_id": "req-9"}
+    )
+
+    done = last_message(plugin)
+    assert done["action"] == "operation_done"
+    assert "reject" in done["error"]["message"]
+    assert done["error"]["request_id"] == "req-9"
+
+
+@pytest.mark.asyncio
+async def test_save_culture_refuses_invalid_generator(plugin):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_reject([]))
+
+    bad = _culture_with_reject(["["]).model_dump(mode="json")
+    await plugin.handle_save_culture({"culture": bad})
+
+    done = last_message(plugin)
+    assert done["action"] == "operation_done"
+    assert "reject" in done["error"]["message"]
+    assert store.load_cultures()["taelrik"].language.generators[0].reject == []
+
+
+@pytest.mark.asyncio
+async def test_patch_culture_refuses_invalid_generator(plugin):
+    store = plugin_store(plugin)
+    store.save_culture(_culture_with_reject([]))
+
+    generators = [{"id": "g1", "name": "Given", "use": "people", "patterns": ["C(V"]}]
+    await plugin.handle_patch_culture(
+        {"culture_id": "taelrik", "language": {"generators": generators}}
+    )
+
+    done = last_message(plugin)
+    assert done["action"] == "operation_done"
+    assert "error" in done
+    assert store.load_cultures()["taelrik"].language.generators[0].patterns == ["CV"]
+
+
+@pytest.mark.asyncio
+async def test_import_preview_error_carries_request_id(plugin):
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0]["reject"] = ["["]
+
+    await plugin.handle_import_preview(
+        {"content": json.dumps(raw), "request_id": "imp-1"}
+    )
+
+    done = last_message(plugin)
+    assert done["action"] == "operation_done"
+    assert done["error"]["request_id"] == "imp-1"

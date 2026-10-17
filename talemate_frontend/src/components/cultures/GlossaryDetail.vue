@@ -306,7 +306,17 @@ export default {
             this.send('delete_glossary_entry', { entry_id: this.local.id });
         },
         handleMessage(message) {
-            if (message.type !== 'cultures' || message.action !== 'rolled') {
+            if (message.type !== 'cultures') {
+                return;
+            }
+            if (message.action === 'operation_done') {
+                // Our roll failed: stop the "Roll new" spinner.
+                if (message.error && this.pendingRollRequestId && message.error.request_id === this.pendingRollRequestId) {
+                    this.pendingRollRequestId = null;
+                }
+                return;
+            }
+            if (message.action !== 'rolled') {
                 return;
             }
             if (!this.pendingRollRequestId || message.data.request_id !== this.pendingRollRequestId) {

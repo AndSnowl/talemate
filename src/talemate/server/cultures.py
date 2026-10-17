@@ -7,7 +7,8 @@ Reply contract (task-6 brief, spec 9.2):
   "world_name": str, **store.snapshot()}}``. With no shared context linked
   to the scene, only ``{"available": False}`` is sent.
 - Errors are reported through ``signal_operation_failed`` without writing
-  anything. ``ImportFormatError``, ``PlaceError`` and ``GeneratorError`` are
+  anything. Roll and import errors also carry the request's ``request_id``
+  (``error.request_id``) so the widget that asked can clear its spinner. ``ImportFormatError``, ``PlaceError`` and ``GeneratorError`` are
   all ``ValueError`` subclasses, and so is pydantic's ``ValidationError``,
   so a single ``except ValueError`` catches all of them.
 - The store is re-opened from disk on every request, so edits made to the
@@ -19,15 +20,19 @@ import datetime
 from typing import Literal
 
 import pydantic
+import structlog
 
 from talemate.cultures import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
 from talemate.cultures.models import Culture, GlossaryEntry, Language, Place, new_id
 from talemate.cultures.places import delete_place, reparent, set_share, set_shares
 from talemate.cultures.store import WorldStore, world_dir_for_scene
+from talemate.emit import emit
 from talemate.server.websocket_plugin import Plugin
 
 __all__ = ["CulturesPlugin"]
+
+log = structlog.get_logger("talemate.server.cultures")
 
 
 class SaveCulturePayload(pydantic.BaseModel):
@@ -113,6 +118,9 @@ class RollPayload(pydantic.BaseModel):
 
 class ImportContentPayload(pydantic.BaseModel):
     content: str
+    # Echoed back in an error reply, so the import dialog only clears its
+    # own spinner (see `RollPayload.request_id`).
+    request_id: str | None = None
 
 
 class ExportPayload(pydantic.BaseModel):
@@ -133,6 +141,27 @@ class CulturesPlugin(Plugin):
         if store is None:
             await self.signal_operation_failed("This scene has no shared world linked.")
         return store
+
+    async def _fail(self, message: str, request_id: str | None) -> None:
+        """Like `signal_operation_failed`, tagging the error with `request_id`.
+
+        Lets the widget that sent the request (a Roll button, the import
+        dialog) clear its own busy state on failure, not just on success.
+        """
+        self.websocket_handler.queue_put(
+            {
+                "type": self.router,
+                "action": "operation_done",
+                "error": {"message": message, "request_id": request_id},
+            }
+        )
+        emit("status", message=message, status="error")
+
+    async def _fail_unexpected(
+        self, action: str, exc: Exception, request_id: str | None
+    ) -> None:
+        log.exception("cultures: unexpected error", action=action)
+        await self._fail(f"Error during {action}: {exc}", request_id)
 
     def _world_name(self) -> str:
         return self.scene.shared_context.filepath.stem
@@ -174,6 +203,7 @@ class CulturesPlugin(Plugin):
                     "imported_at": existing.imported_at,
                 }
             )
+            generator.validate_language(culture.language)
             store.save_culture(culture)
         except ValueError as e:
             await self.signal_operation_failed(str(e))
@@ -207,6 +237,7 @@ class CulturesPlugin(Plugin):
             merged.update(payload.culture)
             merged["language"].update(payload.language)
             culture = Culture.model_validate(merged)
+            generator.validate_language(culture.language)
             store.save_culture(culture)
         except ValueError as e:
             await self.signal_operation_failed(str(e))
@@ -453,6 +484,7 @@ class CulturesPlugin(Plugin):
         if store is None:
             return
 
+        request_id = data.get("request_id")
         try:
             payload = RollPayload(**data)
             cultures = store.load_cultures()
@@ -472,7 +504,10 @@ class CulturesPlugin(Plugin):
             # glossary must never be offered as rolls).
             names = [name for name in names if name.lower() not in exclude]
         except ValueError as e:
-            await self.signal_operation_failed(str(e))
+            await self._fail(str(e), request_id)
+            return
+        except Exception as e:
+            await self._fail_unexpected("roll", e, request_id)
             return
 
         self.websocket_handler.queue_put(
@@ -492,11 +527,15 @@ class CulturesPlugin(Plugin):
         if store is None:
             return
 
+        request_id = data.get("request_id")
         try:
             payload = ImportContentPayload(**data)
             preview = preview_import(store, payload.content)
         except ValueError as e:
-            await self.signal_operation_failed(str(e))
+            await self._fail(str(e), request_id)
+            return
+        except Exception as e:
+            await self._fail_unexpected("import_preview", e, request_id)
             return
 
         self.websocket_handler.queue_put(
@@ -512,12 +551,16 @@ class CulturesPlugin(Plugin):
         if store is None:
             return
 
+        request_id = data.get("request_id")
         try:
             payload = ImportContentPayload(**data)
             today = datetime.date.today().isoformat()
             culture = apply_import(store, payload.content, today)
         except ValueError as e:
-            await self.signal_operation_failed(str(e))
+            await self._fail(str(e), request_id)
+            return
+        except Exception as e:
+            await self._fail_unexpected("import_apply", e, request_id)
             return
 
         await self._send_world(store)

@@ -13,24 +13,23 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from talemate.cultures.exchange import CultureFile
-from talemate.cultures.generator import GeneratorError, fits, roll
+from talemate.cultures.generator import GeneratorError, fits, roll, validate_language
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
     path = Path(args.file)
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         file = CultureFile.model_validate(data)
     except (OSError, json.JSONDecodeError, ValidationError) as exc:
         print(f"Invalid culture file: {exc}", file=sys.stderr)
         return 1
 
-    for gen in file.culture.language.generators:
-        try:
-            roll(file.culture.language, gen.id, count=1)
-        except GeneratorError as exc:
-            print(f"Invalid generator {gen.id!r}: {exc}", file=sys.stderr)
-            return 1
+    try:
+        validate_language(file.culture.language)
+    except GeneratorError as exc:
+        print(f"Invalid culture file: {exc}", file=sys.stderr)
+        return 1
 
     print(f"OK: {path}")
     return 0
@@ -38,7 +37,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def cmd_sample(args: argparse.Namespace) -> int:
     path = Path(args.file)
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding="utf-8"))
     file = CultureFile.model_validate(data)
     language = file.culture.language
 

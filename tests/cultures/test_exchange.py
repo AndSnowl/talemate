@@ -353,3 +353,39 @@ def test_cli_validate_and_sample():
     )
     assert result.returncode == 0, result.stderr
     assert "✓" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("reject", ["["]),
+        ("patterns", ["(" * 5000 + "CV" + ")" * 5000]),
+    ],
+)
+def test_bad_reject_or_deep_nesting_rejected_on_import(tmp_path, field, value):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0][field] = value
+    bad_raw = json.dumps(raw)
+
+    with pytest.raises(ImportFormatError):
+        preview_import(store, bad_raw)
+    with pytest.raises(ImportFormatError):
+        apply_import(store, bad_raw, today="2026-10-17")
+    assert store.load_cultures() == {}
+
+
+def test_cli_validate_reports_bad_reject(tmp_path):
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0]["reject"] = ["["]
+    bad_path = tmp_path / "bad.culture.json"
+    bad_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "talemate.cultures.cli", "validate", str(bad_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1
+    assert "reject" in result.stderr
+    assert "Traceback" not in result.stderr

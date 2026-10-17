@@ -32,6 +32,10 @@ without a suffix have weight 1. Options may be more than one letter long
   uppercase letters that are *not* defined categories — is literal text,
   copied through as-is.
 
+Groups may nest at most `MAX_NESTING` levels deep. A pattern that nests
+deeper, a reject rule that isn't a valid regex, or two generators sharing
+an id raise `GeneratorError` (see `validate_language`).
+
 **Pattern weight:** a whole pattern string may end in ``*n`` to weight it
 among a generator's other patterns when one pattern is picked to render
 (e.g. ``["CVC*3", "CV"]`` favours the first pattern 3:1). The ``*n`` suffix
@@ -82,7 +86,7 @@ from typing import Union
 
 from talemate.cultures.models import GeneratorDef, Language
 
-__all__ = ["GeneratorError", "parse_categories", "roll", "fits"]
+__all__ = ["GeneratorError", "parse_categories", "roll", "fits", "validate_language"]
 
 
 class GeneratorError(ValueError):
@@ -124,6 +128,11 @@ _Token = Union[_Literal, _Category, _Sequence, _Optional, _Choice]
 
 _WEIGHT_SUFFIX_RE = re.compile(r"^(.*)\*(\d+)$")
 
+# Deepest `(...)` / `[...]` nesting a pattern may use. Real patterns nest two
+# or three levels; the cap keeps a hostile or broken file from exhausting
+# the recursion limit in the parser, the renderer or `re`.
+MAX_NESTING = 32
+
 
 def _split_weight(text: str) -> tuple[str, int]:
     """Split a trailing ``*n`` weight suffix off `text`, default weight 1."""
@@ -162,6 +171,7 @@ class _PatternParser:
         self.pattern = pattern
         self.category_keys = category_keys
         self.pos = 0
+        self.depth = 0
 
     def parse(self) -> _Sequence:
         result = self._parse_sequence(stop_chars="")
@@ -172,6 +182,18 @@ class _PatternParser:
         return result
 
     def _parse_sequence(self, stop_chars: str) -> _Sequence:
+        self.depth += 1
+        try:
+            return self._parse_sequence_body(stop_chars)
+        finally:
+            self.depth -= 1
+
+    def _parse_sequence_body(self, stop_chars: str) -> _Sequence:
+        # The top-level sequence is depth 1, each group adds one.
+        if self.depth > MAX_NESTING + 1:
+            raise GeneratorError(
+                f"pattern nests deeper than {MAX_NESTING} levels: {self.pattern[:40]!r}..."
+            )
         items: list[_Token] = []
         literal_buf: list[str] = []
 
@@ -310,11 +332,49 @@ def _language_cache_key(language: Language) -> str:
     payload = {
         "categories": language.categories,
         "generators": [
-            {"id": gen.id, "patterns": gen.patterns, "reject": gen.reject}
+            {
+                "id": gen.id,
+                "name": gen.name,
+                "patterns": gen.patterns,
+                "reject": gen.reject,
+            }
             for gen in language.generators
         ],
     }
     return json.dumps(payload, sort_keys=True)
+
+
+def _compile_regex(pattern: str, what: str) -> re.Pattern:
+    """`re.compile` case-insensitively, raising `GeneratorError` on failure.
+
+    `re.error` isn't a `ValueError`, and a deeply nested expression raises
+    `RecursionError`, so both are turned into a readable `GeneratorError`.
+    """
+    try:
+        return re.compile(pattern, re.IGNORECASE)
+    except (re.error, RecursionError, OverflowError) as exc:
+        reason = exc if isinstance(exc, re.error) else "it nests too deeply"
+        raise GeneratorError(f"invalid {what} {pattern[:40]!r}: {reason}") from None
+
+
+def _compile_generator(
+    gen: dict,
+    category_keys: frozenset[str],
+    category_options: dict[str, list[str]],
+) -> tuple[list[tuple[_Sequence, int]], list[re.Pattern], list[re.Pattern]]:
+    parsed_patterns: list[tuple[_Sequence, int]] = []
+    pattern_regexes: list[re.Pattern] = []
+    for pattern_text in gen["patterns"]:
+        text, weight = _split_weight(pattern_text)
+        tree = _parse_pattern(text, category_keys)
+        parsed_patterns.append((tree, weight))
+        pattern_regexes.append(
+            _compile_regex(f"^{_to_regex(tree, category_options)}$", "pattern")
+        )
+    reject_regexes = [
+        _compile_regex(pattern, "reject rule") for pattern in gen.get("reject", [])
+    ]
+    return parsed_patterns, pattern_regexes, reject_regexes
 
 
 @functools.lru_cache(maxsize=256)
@@ -332,19 +392,16 @@ def _compile_language(cache_key: str) -> _CompiledLanguage:
     fits_rejects: list[re.Pattern] = []
 
     for gen in data["generators"]:
-        parsed_patterns: list[tuple[_Sequence, int]] = []
-        for pattern_text in gen["patterns"]:
-            text, weight = _split_weight(pattern_text)
-            tree = _parse_pattern(text, category_keys)
-            parsed_patterns.append((tree, weight))
-            fits_patterns.append(
-                re.compile(f"^{_to_regex(tree, category_options)}$", re.IGNORECASE)
+        if gen["id"] in compiled.generator_patterns:
+            raise GeneratorError(f"duplicate generator id: {gen['id']!r}")
+        try:
+            parsed_patterns, pattern_regexes, reject_regexes = _compile_generator(
+                gen, category_keys, category_options
             )
+        except GeneratorError as exc:
+            raise GeneratorError(f"generator '{gen['name']}' ({gen['id']}): {exc}")
+        fits_patterns.extend(pattern_regexes)
         compiled.generator_patterns[gen["id"]] = parsed_patterns
-
-        reject_regexes = [
-            re.compile(pattern, re.IGNORECASE) for pattern in gen.get("reject", [])
-        ]
         compiled.generator_reject[gen["id"]] = reject_regexes
         fits_rejects.extend(reject_regexes)
 
@@ -410,6 +467,14 @@ def roll(
         results.append(name)
 
     return results
+
+
+def validate_language(language: Language) -> None:
+    """Raise `GeneratorError` if any category, pattern or reject rule is bad.
+
+    Also rejects duplicate generator ids within the language.
+    """
+    _compile_language(_language_cache_key(language))
 
 
 def fits(language: Language, name: str) -> bool:

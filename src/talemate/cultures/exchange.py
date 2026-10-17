@@ -38,7 +38,8 @@ Re-import rules (spec 9.2, and the controller's rulings for this task):
   child may be listed before its parent in the file.
 - Nothing already in Talemate — a glossary entry, a place, a play
   addition — is ever deleted by an import.
-- A generator whose patterns don't parse makes the whole file invalid
+- A generator whose patterns or reject rules don't parse (or nest too
+  deeply), or a duplicate generator id, makes the whole file invalid
   (`ImportFormatError`), for both `preview_import` and `apply_import` — a
   file like that must not be importable silently.
 """
@@ -49,7 +50,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .generator import GeneratorError, roll
+from .generator import GeneratorError, roll, validate_language
 from .models import (
     Culture,
     GlossaryEntry,
@@ -167,13 +168,10 @@ def _parse_and_resolve(raw: str) -> tuple[CultureFile, str]:
             "invalid culture file: culture has no usable id or name"
         )
 
-    for gen in file.culture.language.generators:
-        try:
-            roll(file.culture.language, gen.id, count=1)
-        except GeneratorError as exc:
-            raise ImportFormatError(
-                f"invalid culture file: generator '{gen.name}' ({gen.id}) is malformed: {exc}"
-            ) from exc
+    try:
+        validate_language(file.culture.language)
+    except GeneratorError as exc:
+        raise ImportFormatError(f"invalid culture file: {exc}") from exc
 
     return file, culture_id
 

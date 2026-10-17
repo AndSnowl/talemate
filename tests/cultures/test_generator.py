@@ -4,7 +4,7 @@ import re
 import pytest
 
 from talemate.cultures.models import GeneratorDef, Language
-from talemate.cultures.generator import GeneratorError, fits, roll
+from talemate.cultures.generator import GeneratorError, fits, roll, validate_language
 
 
 @pytest.fixture
@@ -98,3 +98,40 @@ def test_fits_true_without_generators():
 def test_unknown_generator_raises(language: Language):
     with pytest.raises(GeneratorError):
         roll(language, "nope")
+
+
+def _language_with(patterns: list[str], reject: list[str] | None = None) -> Language:
+    return Language(
+        name="Test",
+        level="naming",
+        categories={"C": "k t", "V": "a e"},
+        generators=[
+            GeneratorDef(
+                id="g1",
+                name="Generator",
+                use="people",
+                patterns=patterns,
+                reject=reject or [],
+            )
+        ],
+    )
+
+
+def test_bad_reject_regex_raises_generator_error():
+    language = _language_with(["CV"], reject=["["])
+    with pytest.raises(GeneratorError, match="reject"):
+        roll(language, "g1")
+    with pytest.raises(GeneratorError):
+        validate_language(language)
+
+
+def test_deeply_nested_pattern_raises_generator_error():
+    language = _language_with(["(" * 5000 + "CV" + ")" * 5000])
+    with pytest.raises(GeneratorError, match="nest"):
+        roll(language, "g1")
+
+
+def test_deeply_nested_reject_raises_generator_error():
+    language = _language_with(["CV"], reject=["(" * 5000 + "a" + ")" * 5000])
+    with pytest.raises(GeneratorError):
+        roll(language, "g1")
