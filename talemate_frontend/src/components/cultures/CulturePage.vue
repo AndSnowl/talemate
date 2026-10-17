@@ -53,35 +53,35 @@
             </v-window-item>
 
             <v-window-item v-if="hasTab('glossary')" value="glossary">
-                <v-card variant="tonal" class="pa-4">
-                    <v-card-text class="text-muted">
-                        Glossary review is coming in a later update.
-                    </v-card-text>
-                </v-card>
+                <GlossaryView
+                    :entries="glossary"
+                    :cultures="cultures"
+                    :culture-id="culture.id"
+                    :selected-id="glossarySelectedId"
+                    :send="send"
+                    @select="glossarySelectedId = $event"
+                ></GlossaryView>
             </v-window-item>
 
             <v-window-item v-if="hasTab('dictionary')" value="dictionary">
-                <v-card variant="tonal" class="pa-4">
-                    <v-card-text class="text-muted">
-                        The dictionary is coming in a later update.
-                    </v-card-text>
-                </v-card>
+                <DictionaryTable
+                    :culture="culture"
+                    :send="send"
+                ></DictionaryTable>
             </v-window-item>
 
             <v-window-item v-if="hasTab('phrases')" value="phrases">
-                <v-card variant="tonal" class="pa-4">
-                    <v-card-text class="text-muted">
-                        Phrases are coming in a later update.
-                    </v-card-text>
-                </v-card>
+                <PhraseList
+                    :culture="culture"
+                    :send="send"
+                ></PhraseList>
             </v-window-item>
 
             <v-window-item v-if="hasTab('generators')" value="generators">
-                <v-card variant="tonal" class="pa-4">
-                    <v-card-text class="text-muted">
-                        Name generators are coming in a later update.
-                    </v-card-text>
-                </v-card>
+                <GeneratorList
+                    :culture="culture"
+                    :send="send"
+                ></GeneratorList>
             </v-window-item>
         </v-window>
     </div>
@@ -90,6 +90,10 @@
 <script>
 import CultureOverview from './CultureOverview.vue';
 import LanguageOverview from './LanguageOverview.vue';
+import GlossaryView from './GlossaryView.vue';
+import DictionaryTable from './DictionaryTable.vue';
+import PhraseList from './PhraseList.vue';
+import GeneratorList from './GeneratorList.vue';
 import { levelLabel as formatLevel } from './levelLabels';
 
 export default {
@@ -97,6 +101,10 @@ export default {
     components: {
         CultureOverview,
         LanguageOverview,
+        GlossaryView,
+        DictionaryTable,
+        PhraseList,
+        GeneratorList,
     },
     props: {
         culture: {
@@ -130,6 +138,7 @@ export default {
     data() {
         return {
             subTab: 'culture',
+            glossarySelectedId: null,
         }
     },
     computed: {

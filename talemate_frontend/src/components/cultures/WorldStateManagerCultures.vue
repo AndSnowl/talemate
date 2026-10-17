@@ -24,15 +24,27 @@
                     Place management is coming in a later update.
                 </v-card-text>
             </v-card>
-            <v-card v-else-if="selected && selected.type === 'unassigned'" variant="tonal" class="pa-4">
-                <v-card-title>
-                    <v-icon class="mr-2">mdi-help-circle-outline</v-icon>
-                    Unassigned names
-                </v-card-title>
-                <v-card-text class="text-muted">
-                    Reviewing unassigned names is coming in a later update.
-                </v-card-text>
-            </v-card>
+            <div v-else-if="selected && selected.type === 'unassigned'">
+                <v-card variant="tonal" class="pa-4 mb-3">
+                    <v-card-title class="pa-0">
+                        <v-icon class="mr-2">mdi-help-circle-outline</v-icon>
+                        Unassigned names
+                    </v-card-title>
+                    <v-card-text class="text-muted pa-0 mt-2">
+                        Names the AI invented when no language fitted. They're kept here so they stay the same in
+                        later stories. When you design a language for them, assign each one: keep it as it is, or
+                        give it a proper name in the new language.
+                    </v-card-text>
+                </v-card>
+                <GlossaryView
+                    :entries="world.glossary || []"
+                    :cultures="world.cultures || []"
+                    :culture-id="null"
+                    :selected-id="unassignedSelectedId"
+                    :send="send"
+                    @select="unassignedSelectedId = $event"
+                ></GlossaryView>
+            </div>
             <v-card v-else variant="tonal" class="pa-4">
                 <v-card-text class="text-muted text-center">
                     No cultures yet. Use <strong>Import culture</strong> in the drawer on the left to add one.
@@ -45,6 +57,7 @@
 <script>
 import CultureNoWorld from './CultureNoWorld.vue';
 import CulturePage from './CulturePage.vue';
+import GlossaryView from './GlossaryView.vue';
 import { MAX_CONTENT_WIDTH } from '@/constants/layout';
 
 export default {
@@ -52,6 +65,7 @@ export default {
     components: {
         CultureNoWorld,
         CulturePage,
+        GlossaryView,
     },
     inject: [
         'getWebsocket',
@@ -73,6 +87,7 @@ export default {
             },
             selected: null,
             counts: {},
+            unassignedSelectedId: null,
             MAX_CONTENT_WIDTH,
         }
     },
