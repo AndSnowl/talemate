@@ -1,0 +1,42 @@
+from talemate.cultures.words import (
+    COMMON_WORDS,
+    clean_name,
+    is_proper_item_name,
+    looks_like_name,
+    mid_sentence_occurrence,
+)
+
+
+def test_clean_name_and_looks_like_name():
+    assert clean_name("“Tovrin’s”") == "Tovrin"
+    assert clean_name("Brannoch.") == "Brannoch"
+
+    assert looks_like_name("Tovrin") is True
+    assert looks_like_name("Hadrik Tolvar") is True
+    assert looks_like_name("Ilsa of the Birches") is True
+
+    assert looks_like_name("the ferryman") is False
+    assert looks_like_name("Innkeeper") is False
+    assert looks_like_name("a rusty lantern") is False
+    assert looks_like_name("Grey Gull") is False
+    assert looks_like_name("") is False
+
+
+def test_mid_sentence_occurrence():
+    assert mid_sentence_occurrence("Grey Gull", "They boarded the Grey Gull at dawn.")
+    assert not mid_sentence_occurrence("Grey Gull", "Grey Gull sails tonight.")
+    assert not mid_sentence_occurrence("Grey Gull", "He said. Grey Gull…")
+
+
+def test_is_proper_item_name():
+    assert is_proper_item_name("Grey Gull", ["the Grey Gull"])
+    assert is_proper_item_name("Saervik", ["He drew Saervik from its sheath."])
+
+    assert not is_proper_item_name("lantern", ["lifted the lantern"])
+    assert not is_proper_item_name("Lantern", ["lifted the Lantern"])
+    assert not is_proper_item_name("Rusty Sword", ["held a rusty sword"])
+
+
+def test_common_words_loaded():
+    assert {"innkeeper", "lantern", "the"} <= COMMON_WORDS
+    assert len(COMMON_WORDS) >= 1000

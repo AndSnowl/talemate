@@ -1,6 +1,6 @@
 import pytest
 
-from talemate.cultures.models import Culture, CultureShare, Language, Place
+from talemate.cultures.models import CultureShare, Place
 from talemate.cultures.places import (
     PlaceError,
     country_of,
@@ -12,76 +12,18 @@ from talemate.cultures.places import (
     set_shares,
 )
 
-
-def _place(id, name, kind, parent_id=None, cultures=None) -> Place:
-    return Place(
-        id=id,
-        name=name,
-        kind=kind,
-        parent_id=parent_id,
-        cultures=cultures or [],
-    )
+from ._fixtures import build_cultures, build_places
+from ._fixtures import place as _place
 
 
 @pytest.fixture
 def places() -> list[Place]:
-    return [
-        _place(
-            "reach",
-            "The Taelrik Reach",
-            "country",
-            cultures=[CultureShare(culture_id="taelrik", share=100)],
-        ),
-        _place("veldhaer", "Veldhaer", "town", parent_id="reach"),
-        _place("quillister", "Quillister House", "building", parent_id="veldhaer"),
-        _place(
-            "dhunmouth",
-            "Dhunmouth",
-            "city",
-            parent_id="reach",
-            cultures=[
-                CultureShare(culture_id="taelrik", share=55),
-                CultureShare(culture_id="elsiri", share=30),
-                CultureShare(culture_id="vaskari", share=15),
-            ],
-        ),
-        _place(
-            "birch",
-            "Birch Coast",
-            "region",
-            parent_id="reach",
-            cultures=[
-                CultureShare(culture_id="elsiri", share=90),
-                CultureShare(culture_id="taelrik", share=10),
-            ],
-        ),
-        _place("ilsara", "Ilsara", "village", parent_id="birch"),
-        _place(
-            "khaz",
-            "Khaz-Rull",
-            "terrain",
-            cultures=[CultureShare(culture_id="ghun", share=100)],
-        ),
-    ]
-
-
-def _culture(id, name, language_name) -> Culture:
-    return Culture(
-        id=id,
-        name=name,
-        language=Language(name=language_name, level="naming"),
-    )
+    return build_places()
 
 
 @pytest.fixture
-def cultures() -> dict[str, Culture]:
-    by_id = [
-        _culture("taelrik", "Taelrik", "Taelrik"),
-        _culture("elsiri", "Elsiri", "Elsiri"),
-        _culture("vaskari", "Vaskari", "Vaskari"),
-        _culture("ghun", "Hollow Choir", "Ghûn"),
-    ]
-    return {c.id: c for c in by_id}
+def cultures() -> dict:
+    return build_cultures()
 
 
 def test_inherits_from_nearest_ancestor(places):
