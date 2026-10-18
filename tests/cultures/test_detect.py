@@ -385,3 +385,62 @@ def test_parse_places_reply_skip():
     # skipped: not a place; Oakford: unanswered, dropped this round
     assert [p.name for p in found] == ["Kesterholm"]
     assert skipped == ["Old Hessa"]
+
+
+def test_descriptive_place_phrases_are_not_places():
+    places = build_places()
+    # a preposition opens a description of a spot
+    assert new_place_names(None, ["Behind The Net-Racks"], places, []) == []
+    # a head of common words joined to a known place
+    assert new_place_names(None, ["Fish Market In Ilsara"], places, []) == []
+    assert new_place_names(None, ["The Fish Market In Ilsara"], places, []) == []
+    assert new_place_names(None, ["The Docks Of The Dhunmouth"], places, []) == []
+    # ... but not to an unknown place, and not a head that is a name
+    assert new_place_names(None, ["Fish Market In Kesterholm"], places, []) == [
+        "Fish Market In Kesterholm"
+    ]
+    assert new_place_names(None, ["Kethvar Hall At Veldhaer"], places, []) == [
+        "Kethvar Hall At Veldhaer"
+    ]
+
+
+def test_generic_building_word_matches_known_place():
+    places = build_places()  # has "Quillister House"
+    for name in ("The Quillister", "Quillister", "The Quillister Inn"):
+        assert new_place_names(None, [name], places, []) == [], name
+    assert new_place_names("A room at the Quillister Inn", [], places, []) == []
+    # a different place with a generic word is still new
+    assert new_place_names(None, ["The Kethvar Inn"], places, []) == ["The Kethvar Inn"]
+
+
+def test_insult_is_not_a_thing():
+    messages = [
+        NarratorMessage(
+            message="He spat at the Stupid Bitch and tied up beside the Grey Gull."
+        )
+    ]
+    findings = find(items=["The Stupid Bitch", "Grey Gull"], messages=messages)
+    assert [f.text for f in findings] == ["Grey Gull"]
+
+
+def test_doesnt_fit_only_for_non_english_places_and_things():
+    messages = [
+        NarratorMessage(
+            message="They tied up beside the Grey Gull and the Zorbax Wind."
+        )
+    ]
+    findings = find(
+        characters=["Marigold"],
+        items=["The Grey Gull", "Zorbax Wind"],
+        places_found=[("Fish Market", "veldhaer"), ("Zorbax Hollow", "quillister")],
+        messages=messages,
+    )
+    by_text = {f.text: f for f in findings}
+    # a person is always checked
+    assert by_text["Marigold"].doesnt_fit is True
+    # plain English place/thing names are common-tongue names
+    assert by_text["The Grey Gull"].doesnt_fit is False
+    assert by_text["Fish Market"].doesnt_fit is False
+    # a non-English word still has to fit
+    assert by_text["Zorbax Wind"].doesnt_fit is True
+    assert by_text["Zorbax Hollow"].doesnt_fit is True

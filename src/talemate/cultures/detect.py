@@ -28,9 +28,12 @@ from talemate.cultures.scene_context import SceneCultures
 from talemate.cultures.words import (
     _CONNECTORS,
     _LEADING_STOP_WORDS,
+    _is_common_word,
     _strip_possessive,
+    all_common_words,
     clean_name,
     first_mention,
+    is_insult_phrase,
     is_proper_item_name,
     looks_like_name,
 )
@@ -72,6 +75,21 @@ _PERSON_TITLES = {
     "sister", "aunt", "uncle", "granny", "gran", "grandfather", "grandmother",
     "elder", "widow", "goodwife", "goodman", "auntie", "cousin",
 }  # fmt: skip
+
+# A place candidate opening with one of these is a description of where
+# something is ("Behind The Net-Racks"), not a place's name.
+_DESCRIPTIVE_OPENERS = {
+    "behind", "in", "at", "on", "near", "under", "beside", "by", "outside",
+    "inside",
+}  # fmt: skip
+
+# Joins a generic head to a place in a descriptive phrase ("Fish Market In
+# Ilsara", "The Docks Of The Dhunmouth").
+_PLACE_JOINER = re.compile(r"\s+(?:in|at|of\s+the)\s+", re.IGNORECASE)
+
+# Generic building words a place name may carry or drop ("Quillister
+# House", "The Quillister", "The Quillister Inn" are one place).
+_GENERIC_PLACE_WORDS = {"inn", "house", "tavern", "hall"}
 
 # The second field of an infer-places line that means "not a place".
 _SKIP_ANSWERS = {"skip", "skipped", "not a place"}
@@ -216,7 +234,9 @@ def new_place_names(
         )
     candidates.extend(_with_article(key, looks_like_name) for key in snapshot_places)
 
-    known = {name_key(place.name) for place in places}
+    place_keys = {name_key(place.name) for place in places}
+    place_keys |= {_without_generic(key) for key in place_keys}
+    known = set(place_keys)
     known |= {name_key(name) for name in character_names}
     people = {_without_titles(_name_words(name)) for name in person_names}
     people.discard(())
@@ -226,11 +246,46 @@ def new_place_names(
         if not name:
             continue
         key = name_key(name)
-        if not key or key in known or _names_a_person(name, people):
+        if (
+            not key
+            or key in known
+            or _without_generic(key) in place_keys
+            or _names_a_person(name, people)
+            or _is_descriptive_place(name, place_keys)
+        ):
             continue
         known.add(key)
         result.append(name)
     return result
+
+
+def _without_generic(key: str) -> str:
+    """A place key without a trailing generic building word ("quillister
+    inn" -> "quillister"); unchanged when nothing would be left."""
+
+    words = key.split()
+    if len(words) > 1 and words[-1] in _GENERIC_PLACE_WORDS:
+        return " ".join(words[:-1])
+    return key
+
+
+def _is_descriptive_place(name: str, place_keys: set[str]) -> bool:
+    """Whether a place candidate describes a spot rather than naming a
+    place: it opens with a preposition ("Behind The Net-Racks"), or joins
+    a head of common words to a known place ("Fish Market In Ilsara")."""
+
+    words = name.split()
+    if words and words[0].lower() in _DESCRIPTIVE_OPENERS:
+        return True
+    parts = _PLACE_JOINER.split(name, maxsplit=1)
+    if len(parts) != 2:
+        return False
+    head, tail = parts
+    head_words = [word for word in head.split() if word.lower() != "the"]
+    if not head_words or not all(_is_common_word(word) for word in head_words):
+        return False
+    tail_key = name_key(tail)
+    return tail_key in place_keys or _without_generic(tail_key) in place_keys
 
 
 def _capitalised_name(text: str) -> bool:
@@ -296,8 +351,11 @@ def find_new_names(
                 text=text,
                 kind=kind,
                 culture_id=culture_id,
+                # a place or thing named in plain English words ("The Grey
+                # Gull") is a common-tongue name, not a misfit
                 doesnt_fit=(
                     culture_id is not None
+                    and (kind == "person" or not all_common_words(text))
                     and not name_fits(cultures[culture_id].language, text)
                 ),
                 first_used=first_used(text),
@@ -337,7 +395,12 @@ def find_new_names(
     thing_culture = _dominant(scene.mix, cultures)
 
     def proper_item(text: str) -> bool:
-        return _capitalised_name(text) and is_proper_item_name(text, texts)
+        # an insult in common words ("The Stupid Bitch") is no item's name
+        return (
+            _capitalised_name(text)
+            and not is_insult_phrase(text)
+            and is_proper_item_name(text, texts)
+        )
 
     for key in items:
         text = _with_article(key, proper_item)

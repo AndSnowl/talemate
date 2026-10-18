@@ -85,6 +85,7 @@ barracks
 barrel
 bartender
 basket
+bastard
 bathhouse
 battered
 bay
@@ -119,6 +120,7 @@ big
 birch
 biscuit
 bishop
+bitch
 bitter
 black
 blacksmith
@@ -127,6 +129,7 @@ blanket
 blessing
 blight
 blood
+bloody
 blossom
 blue
 blunt
@@ -322,6 +325,7 @@ crypt
 crystal
 cup
 cupboard
+cur
 curious
 current
 curse
@@ -332,6 +336,8 @@ cushion
 cyan
 dagger
 dale
+damn
+damned
 dance
 dark
 daughter
@@ -363,6 +369,7 @@ dockhand
 does
 dog
 doing
+dolt
 donkey
 door
 doorman
@@ -449,6 +456,7 @@ fierce
 fifty
 figure
 file
+filthy
 finger
 finish
 fire
@@ -563,6 +571,7 @@ had
 hail
 hair
 halberd
+halfwit
 hall
 hammer
 hand
@@ -633,8 +642,10 @@ hut
 i
 ice
 idea
+idiot
 idle
 if
+imbecile
 impatient
 in
 indigo
@@ -792,6 +803,7 @@ moor
 mop
 more
 morning
+moron
 moss
 most
 moth
@@ -841,6 +853,7 @@ notary
 note
 nun
 nurse
+oaf
 oak
 oar
 oasis
@@ -946,6 +959,7 @@ pot
 potion
 potter
 pouch
+poxy
 prairie
 previous
 priest
@@ -1052,6 +1066,7 @@ school
 scout
 scribe
 scroll
+scum
 scythe
 sea
 seal
@@ -1123,6 +1138,7 @@ snare
 snow
 so
 sob
+sodding
 soft
 soil
 soldier
@@ -1176,6 +1192,7 @@ stew
 steward
 still
 stingy
+stinking
 stirrup
 stomach
 stone
@@ -1208,6 +1225,7 @@ suspicious
 swamp
 sweat
 sweet
+swine
 sword
 symbol
 table
@@ -1319,6 +1337,7 @@ uneasy
 up
 urchin
 us
+useless
 vagrant
 valley
 vault
@@ -1386,6 +1405,7 @@ whistle
 white
 who
 whom
+whore
 whose
 why
 wide
@@ -1416,9 +1436,12 @@ work
 workshop
 worm
 worn
+worthless
 would
 wound
 wreck
+wretch
+wretched
 wrist
 yarn
 year

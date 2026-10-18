@@ -78,3 +78,16 @@ def test_is_proper_item_name():
 def test_common_words_loaded():
     assert {"innkeeper", "lantern", "the"} <= COMMON_WORDS
     assert len(COMMON_WORDS) >= 1000
+
+
+def test_all_common_words_and_insults():
+    from talemate.cultures.words import all_common_words, is_insult_phrase
+
+    assert all_common_words("The Grey Gull")
+    assert all_common_words("Fish Market")
+    assert not all_common_words("The Quillister")
+    assert not all_common_words("The")
+    assert is_insult_phrase("The Stupid Bitch")
+    assert is_insult_phrase("Bloody Fool")
+    assert not is_insult_phrase("The Grey Gull")
+    assert not is_insult_phrase("Stupid Kethvar")

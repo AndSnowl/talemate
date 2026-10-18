@@ -13,6 +13,8 @@ from importlib import resources
 
 __all__ = [
     "COMMON_WORDS",
+    "all_common_words",
+    "is_insult_phrase",
     "clean_name",
     "looks_like_name",
     "mid_sentence_occurrence",
@@ -176,6 +178,44 @@ def _is_single_word_description(word: str) -> bool:
     return any(
         candidate in COMMON_WORDS and candidate in _ROLE_WORDS
         for candidate in _plural_candidates(normalised)
+    )
+
+
+# Insults and abusive adjectives (all also in `COMMON_WORDS`): a phrase of
+# common words with one of these in it is abuse ("The Stupid Bitch"), not
+# a name, while one without is still a plain common-tongue name ("The Grey
+# Gull").
+_INSULT_WORDS: frozenset[str] = frozenset(
+    "stupid bitch bastard fool idiot damn damned bloody wretch wretched filthy "
+    "useless worthless stinking sodding poxy cur swine oaf dolt halfwit "
+    "imbecile moron scum whore".split()
+)
+
+
+def _name_words(text: str) -> list[str]:
+    """`text`'s words without a leading article and without connectors."""
+
+    words = clean_name(text).split()
+    while words and words[0].lower() in _LEADING_STOP_WORDS:
+        words = words[1:]
+    return [word for word in words if word.lower() not in _CONNECTORS]
+
+
+def all_common_words(text: str) -> bool:
+    """Whether every word of `text`, leaving out a leading article and
+    connectors, is a common English word (possessive and simple plural
+    allowed): "The Grey Gull", "Fish Market". False for no words."""
+
+    words = _name_words(text)
+    return bool(words) and all(_is_common_word(word) for word in words)
+
+
+def is_insult_phrase(text: str) -> bool:
+    """Whether `text` is all common words and includes an insult ("The
+    Stupid Bitch"): a description, never a name."""
+
+    return all_common_words(text) and any(
+        _strip_possessive(word.lower()) in _INSULT_WORDS for word in _name_words(text)
     )
 
 
