@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,27 @@ def _git(repo: Path, *args: str) -> None:
             "GIT_COMMITTER_EMAIL": "t@example.com",
         },
     )
+
+
+@pytest.fixture()
+def tiny_checkout(tmp_path, monkeypatch):
+    """Make ``start`` copy a tiny temp git repo instead of the live checkout."""
+    repo = tmp_path / "checkout"
+    (repo / "talemate_frontend").mkdir(parents=True)
+    _git(repo, "init", "-q")
+    (repo / "talemate_frontend" / "package.json").write_text("{}\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-q", "-m", "init")
+    real_copy_tree = talemate_app.copy_tree
+    copies = []
+
+    def copy_tiny(src, dest):
+        assert Path(src) == talemate_app.REPO_ROOT
+        copies.append(dest)
+        return real_copy_tree(repo, dest)
+
+    monkeypatch.setattr(talemate_app, "copy_tree", copy_tiny)
+    return copies
 
 
 def _pid_alive(pid: int) -> bool:
@@ -75,6 +97,31 @@ def test_copy_includes_uncommitted_and_untracked_files_but_not_ignored(tmp_path)
     assert "sub/untracked.txt" in copied
     assert "config.yaml" not in copied
     assert "gone.txt" not in copied
+
+
+def test_copy_skips_file_deleted_before_its_copy(tmp_path, monkeypatch):
+    # Something else (an mkdocs build writing site/, say) deletes a file
+    # after git listed it and after the existence check, just before copy2.
+    src = tmp_path / "src"
+    src.mkdir()
+    _git(src, "init", "-q")
+    (src / "keep.txt").write_text("keep\n")
+    (src / "site").mkdir()
+    (src / "site" / "vanishing.html").write_text("<p>soon gone</p>\n")
+    real_copy2 = talemate_app.shutil.copy2
+
+    def racing_copy2(source, target, **kwargs):
+        if Path(source).name == "vanishing.html":
+            Path(source).unlink()
+        return real_copy2(source, target, **kwargs)
+
+    monkeypatch.setattr(talemate_app.shutil, "copy2", racing_copy2)
+    dest = tmp_path / "dest"
+    copied = talemate_app.copy_tree(src, dest)
+
+    assert copied == ["keep.txt"]
+    assert (dest / "keep.txt").read_text() == "keep\n"
+    assert not (dest / "site" / "vanishing.html").exists()
 
 
 def test_copy_symlinks_venv_and_node_modules(tmp_path):
@@ -219,7 +266,9 @@ def test_explicit_busy_port_errors_fast(tmp_path, monkeypatch):
         assert time.monotonic() - began < 5
 
 
-def test_start_reports_backend_crash_with_log_tail(tmp_path, monkeypatch):
+def test_start_reports_backend_crash_with_log_tail(
+    tmp_path, monkeypatch, tiny_checkout
+):
     monkeypatch.setattr(
         talemate_app,
         "backend_command",
@@ -255,10 +304,93 @@ def test_start_reports_backend_crash_with_log_tail(tmp_path, monkeypatch):
     with pytest.raises(talemate_app.AppStartError, match="boom"):
         talemate_app.start(root=root, timeout=60)
     assert not (root / ".talemate-app.json").exists()
+    assert tiny_checkout == [root.resolve()]  # never the live checkout
     assert len(launched) == 2
     frontend = launched[1]
     assert str(root.resolve() / "talemate_frontend") in frontend.args
     assert not _pid_alive(frontend.pid)
+
+
+class _LowestFreePortSocket:
+    """A stand-in socket whose bind(0) hands out the lowest port not held.
+
+    Like a kernel that reuses a port as soon as its socket closes: two
+    auto-picks that don't overlap get the same port.
+    """
+
+    held: set = set()
+
+    def __init__(self, *args):
+        self.port = None
+
+    def setsockopt(self, *args):
+        pass
+
+    def bind(self, address):
+        port = address[1]
+        if port == 0:
+            port = min(p for p in range(50001, 50010) if p not in self.held)
+        if port in self.held:
+            raise OSError("in use")
+        self.held.add(port)
+        self.port = port
+
+    def getsockname(self):
+        return ("127.0.0.1", self.port)
+
+    def close(self):
+        self.held.discard(self.port)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def test_auto_picked_ports_in_one_start_are_distinct(
+    tmp_path, monkeypatch, tiny_checkout
+):
+    _LowestFreePortSocket.held = set()
+    fake_socket = types.SimpleNamespace(
+        socket=_LowestFreePortSocket,
+        SOL_SOCKET=socket.SOL_SOCKET,
+        SO_REUSEADDR=socket.SO_REUSEADDR,
+    )
+    monkeypatch.setattr(talemate_app, "socket", fake_socket)
+    monkeypatch.setattr(
+        talemate_app, "_launch", lambda cmd, cwd, env, log: types.SimpleNamespace(pid=0)
+    )
+    monkeypatch.setattr(talemate_app, "_wait_ready", lambda info, procs, timeout: None)
+
+    info = talemate_app.start(root=tmp_path / "root")
+
+    assert info.backend_port != info.frontend_port
+    assert _LowestFreePortSocket.held == set()  # both released again
+
+
+def test_start_ai_refused_without_opt_in(tmp_path, monkeypatch):
+    monkeypatch.delenv("TALEMATE_AI_TESTS", raising=False)
+    monkeypatch.setattr(talemate_app, "backend_command", _never_run)
+    monkeypatch.setattr(talemate_app, "frontend_command", _never_run)
+    root = tmp_path / "root"
+    with pytest.raises(talemate_app.AppStartError) as excinfo:
+        talemate_app.start(root=root, ai=True)
+    assert str(excinfo.value) == (
+        "AI runs need TALEMATE_AI_TESTS=1 — ask the owner first"
+    )
+    assert not root.exists()  # refused before anything was copied
+
+
+def test_cli_start_ai_refused_without_opt_in(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("TALEMATE_AI_TESTS", raising=False)
+    monkeypatch.setattr(talemate_app, "backend_command", _never_run)
+    monkeypatch.setattr(talemate_app, "frontend_command", _never_run)
+    code = talemate_app.main(["start", "--ai", "--root", str(tmp_path / "root")])
+    assert code == 1
+    assert "AI runs need TALEMATE_AI_TESTS=1 — ask the owner first" in (
+        capsys.readouterr().err
+    )
 
 
 def test_port_free_after_closed_connection_in_time_wait():
@@ -285,6 +417,15 @@ def test_backend_env_keeps_writes_in_root(tmp_path):
     assert env["PYTHONPYCACHEPREFIX"] == str(tmp_path / "pycache")
     assert env["NLTK_DATA"] == str(tmp_path / "nltk_data")
     assert "VIRTUAL_ENV" not in env
+
+
+def test_backend_env_never_uses_the_os_keyring(tmp_path, monkeypatch):
+    # The names src/talemate/util/encryption.py reads.
+    monkeypatch.delenv("TALEMATE_DISABLE_KEYRING", raising=False)
+    monkeypatch.setenv("TALEMATE_ENCRYPTION_KEY_DIR", "/owner/secrets")
+    env = talemate_app.backend_env(tmp_path)
+    assert env["TALEMATE_DISABLE_KEYRING"] == "1"
+    assert env["TALEMATE_ENCRYPTION_KEY_DIR"] == str(tmp_path / "secrets")
 
 
 def test_backend_env_puts_ffmpeg_libs_on_library_path(tmp_path, monkeypatch):

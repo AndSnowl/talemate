@@ -21,14 +21,20 @@ Everything below runs on a Guix machine, from the talemate repo root.
 
 ```bash
 guix shell -m manifest.scm -- uv sync --extra dev
-cd talemate_frontend
-guix shell -m manifest.scm -- npx --yes corepack@0.34.0 pnpm install
-cd ..
+guix shell -m manifest.scm -- sh -c 'cd talemate_frontend && npx --yes corepack@0.34.0 pnpm install'
 ```
 
+Both run from the repo root, where `manifest.scm` is. The `cd` happens
+inside the shell because Corepack picks the pnpm version from the
+`packageManager` field of the `package.json` in the *current* directory.
+Run as `pnpm --dir talemate_frontend` from the root, it would miss that
+field and use Corepack's own default pnpm instead of the pinned one (here,
+a newer pnpm that `corepack@0.34.0` fails to start).
+
 `manifest.scm` (repo root) pins the tools these commands need: `uv`,
-`python@3.11`, `node`, `ruff`, `ungoogled-chromium`, `nss-certs` and
-`font-dejavu`. Every command on this page runs inside
+`python@3.11`, `node`, `ruff`, `ungoogled-chromium`, `nss-certs`,
+`font-dejavu` and `ffmpeg` (the memory agent's embeddings load FFmpeg's
+libraries; without it no scene loads). Every command on this page runs inside
 `guix shell -m manifest.scm -- ...`.
 
 ## Starting, checking and stopping the local app
@@ -53,7 +59,12 @@ guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/talemate_app.p
 - `start` refuses to start over a live run in the same root — run `stop`
   first.
 - `--ai` configures a single KoboldCpp client — see the opt-in rule above
-  before ever passing it.
+  before ever passing it. `start --ai` refuses with "AI runs need
+  TALEMATE_AI_TESTS=1 — ask the owner first" unless `TALEMATE_AI_TESTS=1`
+  is set, so only an owner-approved run can start one.
+- The run never touches the OS keyring: the backend runs with
+  `TALEMATE_DISABLE_KEYRING=1`, and its encryption key is a file in
+  `<root>/secrets`.
 - `status` prints the running instance's URLs and PIDs, or exits non-zero
   with `not running`.
 - `stop` stops exactly what `start` started (SIGTERM to each child's
@@ -104,7 +115,9 @@ TALEMATE_AI_TESTS=1 guix shell -m manifest.scm -- uv run --no-sync pytest tests/
 ```
 
 Without `TALEMATE_AI_TESTS=1` every test here is skipped — no network call
-is made just by collecting or running them.
+is made just by collecting or running them. With it exported, a run that
+doesn't select `-m ai` (a plain `pytest`, say) still makes no call: the
+header's model-name probe only runs when `-m ai` is given.
 
 ## Owner's koboldcpp and the AI opt-in
 
@@ -132,14 +145,23 @@ the browser's console log):
 
 ```bash
 guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/look.py \
-    URL [--click SELECTOR]... [--fill SELECTOR=TEXT]... [--wait SELECTOR] \
-    --shot OUT.png [--console OUT.txt]
+    URL [--click SELECTOR]... [--fill SELECTOR TEXT]... [--wait SELECTOR] \
+    --shot OUT.png [--console OUT.txt] [--timeout S] [--width W] [--height H]
 ```
 
 `--click`, `--fill` and `--wait` run in the order given, after the page has
-loaded; `--fill` takes `SELECTOR=TEXT`. Selectors are Playwright selectors
-(CSS, `text=...`, `role=button[name="..."]`, ...). Point `URL` at the
-`frontend` address a `start`/`status` call printed.
+loaded. `--fill` takes the selector and the text as two separate arguments,
+for example `--fill 'role=textbox[name="Title"]' 'My scene'`. Selectors are
+Playwright selectors (CSS, `text=...`, `role=button[name="..."]`, ...).
+Point `URL` at the `frontend` address a `start`/`status` call printed.
+
+- `--timeout S`: how long each step waits for its element, in seconds
+  (default 30).
+- `--width W`, `--height H`: the browser viewport, in pixels (default
+  1280 x 900). The screenshot is full page, so it can be taller.
+
+The screenshot (and the console log) is saved even when a step fails or
+times out, so you can see where it stuck.
 
 ## Failure artifacts
 
@@ -152,9 +174,10 @@ screenshot and the tail of that run's backend log are saved to:
   backend.log.tail
 ```
 
-One timestamp folder per test session. An AI run also writes
-`.test-artifacts/<YYYYmmdd-HHMMSS>/model.txt`, the koboldcpp model name it
-used. `.test-artifacts/` is gitignored — nothing under it is ever
+One timestamp folder per test session. An AI run also writes, in that
+folder, `model.txt` (the koboldcpp model name it used) and, at the end of
+the session, `results.txt`: the model name and the passed, failed and
+skipped counts. Neither is written when the AI group was skipped. `.test-artifacts/` is gitignored — nothing under it is ever
 committed.
 
 ## Known environment facts

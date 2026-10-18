@@ -43,7 +43,7 @@ This note goes with the foundation plan (`2026-10-17-cultures-foundation.md`) an
 17. Delete a place that has children. You're asked where the children go, and they move there. (automated: tests/e2e/cultures/test_places.py)
 
 **Shared world and the skill**
-18. Open two scenes that share the same world in two browser tabs. Edit in one, then edit in the other. Neither tab undoes the other's changes. (automated: tests/e2e/cultures/test_two_tabs.py)
+18. Open two scenes that share the same world in two browser tabs. Edit in one, then edit in the other. Neither tab undoes the other's changes. (automated: tests/e2e/cultures/test_two_tabs.py; the automated version uses two connections one after the other, because Talemate allows one active frontend at a time)
 19. Design a small culture with the `culture-design` skill. Import it, export it, re-import it, and check nothing you made is lost. (manual: needs a Claude Code session)
 
 ## Known gaps left for later plans

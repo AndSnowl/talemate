@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -61,20 +62,54 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.ai)
 
 
+def _ai_selected(config) -> bool:
+    """True if ``-m`` selects the ``ai`` marker (names it, not negated)."""
+    markexpr = config.option.markexpr or ""
+    if re.search(r"\bnot\s+ai\b", markexpr):
+        return False
+    return re.search(r"\bai\b", markexpr) is not None
+
+
 def pytest_report_header(config):
-    """Print the koboldcpp model name -- only when the opt-in is set.
+    """Print the koboldcpp model name -- only for an opted-in AI run.
 
     This hook runs before collection, long before any fixture, so it can't
     read ``ai_app``'s result; it does its own (gated) probe instead. Never
-    calls koboldcpp when TALEMATE_AI_TESTS isn't "1", same as the fixture.
+    calls koboldcpp unless TALEMATE_AI_TESTS is "1" *and* ``-m`` selects
+    ``ai``: a plain ``pytest`` run with the variable exported stays offline.
     """
-    if os.environ.get("TALEMATE_AI_TESTS") != "1":
+    if os.environ.get("TALEMATE_AI_TESTS") != "1" or not _ai_selected(config):
         return None
     url = koboldcpp_url()
     model = koboldcpp_model(url)
     if model is None:
         return f"koboldcpp: unreachable at {url}"
     return f"koboldcpp model: {model}"
+
+
+# Set by ``ai_app`` once the AI group really runs (opted in, koboldcpp up);
+# ``pytest_sessionfinish`` writes results.txt only then.
+_ai_run: dict = {}
+_outcomes = {"passed": 0, "failed": 0, "skipped": 0}
+
+
+def pytest_runtest_logreport(report):
+    """Count outcomes of the tests here (conftest hooks only see tests/ai)."""
+    if report.passed and report.when == "call":
+        _outcomes["passed"] += 1
+    elif report.failed:
+        _outcomes["failed"] += 1  # a failing setup or teardown counts too
+    elif report.skipped:
+        _outcomes["skipped"] += 1
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Record the run's counts with the model name, next to model.txt."""
+    if not _ai_run:
+        return
+    lines = [f"model: {_ai_run['model']}"]
+    lines += [f"{name}: {count}" for name, count in _outcomes.items()]
+    (_ai_run["out_dir"] / "results.txt").write_text("\n".join(lines) + "\n")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -99,6 +134,7 @@ def ai_app(_require_ai_tests_opt_in, tmp_path_factory):
     out_dir = ARTIFACTS_DIR / _stamp()
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "model.txt").write_text(model + "\n")
+    _ai_run.update(out_dir=out_dir, model=model)
 
     info = talemate_app.start(root=tmp_path_factory.mktemp("ai-app"), ai=True)
     try:

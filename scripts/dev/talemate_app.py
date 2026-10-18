@@ -29,7 +29,8 @@ when ``CLAUDE_SCRATCHPAD`` is set). The run's state lives in
 root: call ``stop`` first. A stale state file whose processes are gone is
 cleaned up. A root that is non-empty and was not made by this runner is never
 wiped. ``--ai`` configures a single KoboldCpp client at
-``$TALEMATE_TEST_KOBOLDCPP_URL`` (default ``http://192.168.0.5:5001``).
+``$TALEMATE_TEST_KOBOLDCPP_URL`` (default ``http://192.168.0.5:5001``), and
+is refused unless ``TALEMATE_AI_TESTS=1`` is set: ask the owner first.
 
 Each child runs in its own process group. ``stop`` sends SIGTERM to the group,
 then SIGKILL after 10 s, and only signals PIDs whose ``/proc/<pid>/cmdline``
@@ -64,6 +65,7 @@ ROOT_MARKER = ".talemate-app-root"
 DEFAULT_KOBOLDCPP_URL = "http://192.168.0.5:5001"
 STOP_GRACE_SECONDS = 10
 LOG_TAIL_LINES = 40
+AI_GATE_MESSAGE = "AI runs need TALEMATE_AI_TESTS=1 — ask the owner first"
 
 
 class AppStartError(RuntimeError):
@@ -178,8 +180,11 @@ def copy_tree(src: Path, dest: Path) -> list[str]:
         if not os.path.lexists(source) or (source.is_dir() and not source.is_symlink()):
             continue  # gone, or a submodule directory
         target = dest / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target, follow_symlinks=False)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target, follow_symlinks=False)
+        except (FileNotFoundError, NotADirectoryError):
+            continue  # deleted meanwhile (e.g. by a build writing site/)
         copied.append(rel)
 
     if (src / ".venv").exists():
@@ -292,14 +297,29 @@ def _port_free(port: int) -> bool:
     return True
 
 
-def _pick_port(explicit: int | None, name: str) -> int:
-    if explicit is not None:
-        if not _port_free(explicit):
-            raise AppStartError(f"{name} port {explicit} is already in use")
-        return explicit
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+def _pick_ports(backend: int | None, frontend: int | None) -> tuple[int, int]:
+    """Return (backend, frontend) ports: the explicit ones if free, else new.
+
+    Auto-picked ports keep their socket bound until both are chosen, so the
+    two picks can never return the same port.
+    """
+    held: list[socket.socket] = []
+    try:
+        ports = []
+        for explicit, name in ((backend, "backend"), (frontend, "frontend")):
+            if explicit is not None:
+                if not _port_free(explicit):
+                    raise AppStartError(f"{name} port {explicit} is already in use")
+                ports.append(explicit)
+                continue
+            sock = socket.socket()
+            held.append(sock)
+            sock.bind(("127.0.0.1", 0))
+            ports.append(sock.getsockname()[1])
+        return ports[0], ports[1]
+    finally:
+        for sock in held:
+            sock.close()
 
 
 def _tail(path: Path, lines: int = LOG_TAIL_LINES) -> str:
@@ -401,6 +421,9 @@ def backend_env(root: Path) -> dict:
     # .venv is a symlink into the checkout; keep bytecode caches out of it.
     env["PYTHONPYCACHEPREFIX"] = str(root / "pycache")
     env["NLTK_DATA"] = str(root / "nltk_data")  # keep downloads in root
+    # Never the owner's OS keyring: the run's encryption key is a file in root.
+    env["TALEMATE_DISABLE_KEYRING"] = "1"
+    env["TALEMATE_ENCRYPTION_KEY_DIR"] = str(root / "secrets")
     # The memory agent's embeddings import torchcodec, which dlopens FFmpeg's
     # shared libraries. On Guix those are only found via LD_LIBRARY_PATH;
     # take them from the ffmpeg on PATH (manifest.scm provides one).
@@ -446,6 +469,8 @@ def start(
     timeout: float = 180,
 ) -> AppInfo:
     """Copy the tree into ``root``, start backend + frontend, wait until ready."""
+    if ai and os.environ.get("TALEMATE_AI_TESTS") != "1":
+        raise AppStartError(AI_GATE_MESSAGE)
     root = _resolve_root(root)
     live = status(root)
     if live is not None:
@@ -453,8 +478,7 @@ def start(
             f"a run is already live in {root} (backend pid {live.backend_pid}, "
             f"frontend pid {live.frontend_pid}); stop it first"
         )
-    bp = _pick_port(backend_port, "backend")
-    fp = _pick_port(frontend_port, "frontend")
+    bp, fp = _pick_ports(backend_port, frontend_port)
 
     _prepare_root(root)
     copy_tree(REPO_ROOT, root)

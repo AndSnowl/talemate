@@ -3,15 +3,18 @@
 Usage (from the talemate repo root, inside the Guix dev shell)::
 
     guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/look.py \\
-        URL [--click SELECTOR]... [--fill SELECTOR=TEXT]... [--wait SELECTOR] \\
-        --shot OUT.png [--console OUT.txt]
+        URL [--click SELECTOR]... [--fill SELECTOR TEXT]... [--wait SELECTOR] \\
+        --shot OUT.png [--console OUT.txt] [--timeout S] [--width W] [--height H]
 
 ``--click``, ``--fill`` and ``--wait`` run in the order given, after the page
-has loaded. Each waits up to ``--timeout`` seconds for its element.
-``--wait`` waits until SELECTOR is visible. Selectors are Playwright selectors
-(CSS, ``text=...``, ``role=button[name="..."]``, ...). The screenshot is full
-page. ``--console`` writes every console message, one per line, as
-``[type] text (url:line)``.
+has loaded. Each waits up to ``--timeout`` seconds (default 30) for its
+element. ``--fill`` takes the selector and the text as two arguments, so a
+selector may itself contain ``=``. ``--wait`` waits until SELECTOR is visible.
+Selectors are Playwright selectors (CSS, ``text=...``,
+``role=button[name="..."]``, ...). The screenshot is full page, at a
+``--width`` x ``--height`` viewport (default 1280x900), and is taken even when
+a step fails, so a timed-out step still leaves a picture. ``--console`` writes
+every console message, one per line, as ``[type] text (url:line)``.
 """
 
 from __future__ import annotations
@@ -28,8 +31,8 @@ class _Step(argparse.Action):
 
     def __call__(self, parser, namespace, value, option_string=None):
         kind = option_string.lstrip("-")
-        if kind == "fill" and "=" not in value:
-            parser.error(f"--fill needs SELECTOR=TEXT, got {value!r}")
+        if kind == "fill":
+            value = tuple(value)  # (selector, text)
         namespace.steps.append((kind, value))
 
 
@@ -37,8 +40,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("url")
     parser.set_defaults(steps=[])
-    for flag in ("--click", "--fill", "--wait"):
+    for flag in ("--click", "--wait"):
         parser.add_argument(flag, action=_Step, metavar="SELECTOR", default=None)
+    parser.add_argument(
+        "--fill", action=_Step, nargs=2, metavar=("SELECTOR", "TEXT"), default=None
+    )
     parser.add_argument("--shot", required=True, type=Path, metavar="OUT.png")
     parser.add_argument("--console", type=Path, metavar="OUT.txt")
     parser.add_argument("--timeout", type=float, default=30.0, help="per step, s")
@@ -69,17 +75,20 @@ def run(args: argparse.Namespace) -> None:
             page.set_default_timeout(timeout_ms)
             page.on("console", lambda msg: console.append(_format_console(msg)))
             page.on("pageerror", lambda exc: console.append(f"[pageerror] {exc}"))
-            page.goto(args.url, wait_until="load")
-            for kind, value in args.steps:
-                if kind == "click":
-                    page.locator(value).first.click()
-                elif kind == "fill":
-                    selector, text = value.split("=", 1)
-                    page.locator(selector).first.fill(text)
-                else:
-                    page.locator(value).first.wait_for(state="visible")
-            args.shot.parent.mkdir(parents=True, exist_ok=True)
-            page.screenshot(path=str(args.shot), full_page=True)
+            try:
+                page.goto(args.url, wait_until="load")
+                for kind, value in args.steps:
+                    if kind == "click":
+                        page.locator(value).first.click()
+                    elif kind == "fill":
+                        selector, text = value
+                        page.locator(selector).first.fill(text)
+                    else:
+                        page.locator(value).first.wait_for(state="visible")
+            finally:
+                # Even after a failed step: the picture shows where it stuck.
+                args.shot.parent.mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(args.shot), full_page=True)
         finally:
             if args.console:
                 args.console.parent.mkdir(parents=True, exist_ok=True)
