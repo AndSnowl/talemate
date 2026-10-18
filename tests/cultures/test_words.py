@@ -37,15 +37,27 @@ def test_looks_like_name_treats_role_labels_as_descriptions():
 
 
 def test_looks_like_name_plain_plural_nouns_stay_names():
-    # a bare plural of an ordinary (non-role) noun is still a name: only
-    # a person/role word's plural or possessive is a description
+    # a bare plural of an ordinary (non-role) noun, that isn't itself a
+    # common word, is still a name: only a person/role word's plural or
+    # possessive is a description
     assert looks_like_name("Rivers") is True
     assert looks_like_name("Hawks") is True
-    assert looks_like_name("Woods") is True
     assert looks_like_name("Fields") is True
 
     # but a multi-word phrase still normalises generically
     assert looks_like_name("River Folk") is False
+
+
+def test_looks_like_name_single_common_word_is_description():
+    # R14: a single word that is itself (unnormalised) a common word is a
+    # description, even when it isn't a person/role word
+    assert looks_like_name("Lantern") is False
+    assert looks_like_name("Ferryman") is False
+    assert looks_like_name("River") is False
+    assert looks_like_name("Tower") is False
+    # "woods" is a literal common_words.txt entry on its own (not reached
+    # via plural stripping of "wood"), so it's a description too
+    assert looks_like_name("Woods") is False
 
 
 def test_mid_sentence_occurrence():

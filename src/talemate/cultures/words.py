@@ -107,11 +107,12 @@ def _is_common_word(word: str) -> bool:
     )
 
 
-# Person/role words: the only common words whose plural or possessive
-# normalisation makes a *single-word* phrase a description ("Bargemen",
-# "Fishwives", "Guards"). An ordinary noun's plural or possessive stays a
-# name on its own ("Rivers", "Hawks", "Woods", "Fields") — only a
-# multi-word phrase normalises those generically ("River Folk").
+# Person/role words: when a single-word phrase isn't itself a common
+# word, only a plural or possessive stem that's one of these makes it a
+# description ("Bargemen", "Fishwives", "Guards"). A bare plural of an
+# ordinary, non-role noun that isn't itself a common word stays a name
+# ("Rivers", "Hawks", "Fields") — only a multi-word phrase normalises
+# those generically ("River Folk").
 _ROLE_WORDS: frozenset[str] = frozenset(
     {
         "guard",
@@ -155,13 +156,23 @@ _ROLE_WORDS: frozenset[str] = frozenset(
 )
 
 
-def _is_role_common_word(word: str) -> bool:
-    """Whether some possessive/plural-normalised form of `word` is both a
-    common word and a person/role word. Used only for a single-word
-    phrase, so a bare plural of an ordinary noun ("Rivers", "Woods")
-    isn't mistaken for a description."""
+def _is_single_word_description(word: str) -> bool:
+    """Whether a single-word phrase (`word`) is a description (R14):
 
-    normalised = _strip_possessive(word.lower())
+    1. the word itself, with no normalisation, is a common word
+       ("Lantern", "Ferryman", "River", "Tower", "Woods" — the last is a
+       literal `COMMON_WORDS` entry on its own, unrelated to plurals); or
+    2. otherwise, some possessive/plural-normalised stem is both a common
+       word and a person/role word ("Guards", "Bargemen", "Fishwives").
+
+    A bare plural of an ordinary (non-role) noun that isn't itself a
+    common word stays a name ("Rivers", "Hawks", "Fields")."""
+
+    lower = word.lower()
+    if lower in COMMON_WORDS:
+        return True
+
+    normalised = _strip_possessive(lower)
     return any(
         candidate in COMMON_WORDS and candidate in _ROLE_WORDS
         for candidate in _plural_candidates(normalised)
@@ -206,10 +217,12 @@ def looks_like_name(text: str) -> bool:
         return False
 
     if len(non_connector_words) == 1:
-        # a single word: only a person/role word's plural or possessive
-        # makes it a description ("Guards", "Bargemen"); an ordinary
-        # noun's plural stays a name ("Rivers", "Woods")
-        if _is_role_common_word(non_connector_words[0]):
+        # a single word: a direct common-word hit is a description
+        # ("Lantern", "Ferryman", "River", "Tower", "Woods"); otherwise
+        # only a person/role word's plural or possessive is a
+        # description ("Guards", "Bargemen") — an ordinary noun's plural
+        # that isn't itself a common word stays a name ("Rivers", "Hawks")
+        if _is_single_word_description(non_connector_words[0]):
             return False
     elif all(_is_common_word(word) for word in non_connector_words):
         return False
