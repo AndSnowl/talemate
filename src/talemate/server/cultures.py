@@ -260,16 +260,22 @@ class CulturesPlugin(Plugin):
         characters.sort(key=lambda c: c["name"])
         return characters
 
-    def _with_character_counts(self, counts: dict) -> dict:
+    def _with_character_counts(
+        self, counts: dict, characters: list[dict] | None = None
+    ) -> dict:
         """Fold scene characters' unsure, AI-set cultures into `counts`.
 
         Adds `unsure_characters` and folds it into `unreviewed_total`, so
         the Cultures tab badge counts characters awaiting review too, not
-        just glossary/place/addition entries.
+        just glossary/place/addition entries. `characters` lets a caller
+        that already has `_characters()`'s result pass it in, instead of
+        this computing it again.
         """
+        if characters is None:
+            characters = self._characters()
         unsure_characters = sum(
             1
-            for character in self._characters()
+            for character in characters
             if character["culture"]
             and character["culture"]["set_by"] == "ai"
             and character["culture"]["unsure"]
@@ -282,10 +288,14 @@ class CulturesPlugin(Plugin):
 
     def _present_cultures(self) -> list[Culture]:
         """Return the cultures present in the scene right now, for the
-        lexicon. `[]` when the Culture agent is unavailable, disabled, tied
-        to a different scene, or has no usable shared world loaded."""
-        agent = instance.get_agent("culture")
-        if agent is None or agent.scene is not self.scene:
+        lexicon. `[]` when there's no Culture agent instantiated, it's
+        disabled, it's tied to a different scene, or it has no usable
+        shared world loaded."""
+        try:
+            agent = instance.get_agent("culture")
+        except KeyError:
+            return []
+        if agent.scene is not self.scene:
             return []
         world = agent.load_world()
         if world is None:
@@ -307,8 +317,7 @@ class CulturesPlugin(Plugin):
 
     async def _send_counts(self, store: WorldStore | None) -> None:
         """Send the `counts` reply on its own, so the Cultures tab badge
-        (and the places tab's unreviewed-count display) can update without
-        waiting for the (heavier) `world` reply."""
+        can update without waiting for the (heavier) `world` reply."""
         counts: dict = {}
         if store is not None:
             try:
@@ -379,7 +388,7 @@ class CulturesPlugin(Plugin):
             try:
                 snapshot = store.snapshot()
                 characters = self._characters()
-                counts = self._with_character_counts(snapshot["counts"])
+                counts = self._with_character_counts(snapshot["counts"], characters)
                 data = {
                     "available": True,
                     "world_name": self._world_name(),

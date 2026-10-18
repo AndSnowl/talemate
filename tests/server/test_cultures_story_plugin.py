@@ -1,4 +1,4 @@
-"""Tests for the cultures plugin's `counts`/`story` pushes (plan 3 / task 3).
+"""Tests for the cultures plugin's `counts`/`story` pushes.
 
 Reuses the Culture agent test setup (`tests/test_culture_agent.py`): a real
 `MockScene` with every agent bootstrapped onto it, the Taelrik fixture
@@ -99,8 +99,8 @@ async def test_get_story_has_lexicon_names_and_counts(plugin, world):
     counts = _by_action(plugin, "counts")
     story = _by_action(plugin, "story")
 
-    # Kethrun's unsure, AI-set culture must be folded into `unreviewed_total`
-    # exactly like `_send_world` does, not left as the raw store count.
+    # Kethrun's unsure, AI-set culture must be folded into `unreviewed_total`,
+    # exactly like `_send_world`'s own counts, not left as the raw store count.
     assert counts["data"]["unreviewed_total"] == world.counts()["unreviewed_total"] + 1
 
     lexicon_texts = {entry["text"] for entry in story["data"]["lexicon"]}
@@ -134,6 +134,23 @@ async def test_lexicon_empty_when_agent_disabled_or_other_scene(plugin, world, a
     assert story["data"]["lexicon"] == []
 
 
+@pytest.mark.asyncio
+async def test_lexicon_empty_when_agent_not_instantiated(plugin, world, monkeypatch):
+    """`instance.get_agent` raises `KeyError` for an agent that was never
+    instantiated — `_present_cultures` must treat that the same as "no
+    agent available" (only `lexicon` drops out; names/characters/places
+    still push)."""
+    monkeypatch.delitem(instance.AGENTS, "culture")
+
+    await plugin.handle_get_story({})
+
+    story = _by_action(plugin, "story")
+    assert story["data"]["available"] is True
+    assert "error" not in story["data"]
+    assert story["data"]["lexicon"] == []
+    assert story["data"]["names"]
+
+
 def test_scene_cultures_remember_false(scene, world, agent):
     loaded = agent.load_world()
     assert loaded is not None
@@ -159,19 +176,25 @@ async def test_world_reply_sends_counts_story_then_world(plugin, world):
 
 
 @pytest.mark.asyncio
-async def test_agent_events_push_story(plugin, world):
+@pytest.mark.parametrize("kind", ["snapshot_processed", "name_chosen"])
+async def test_agent_events_push_story(plugin, world, kind):
     world_dir = str(world.root)
     plugin.websocket_handler.messages.clear()
 
     await plugin.on_cultures_event(
-        CulturesEvent(kind="snapshot_processed", world_dir=world_dir, changed=False)
+        CulturesEvent(kind=kind, world_dir=world_dir, changed=False)
     )
     assert [m["action"] for m in plugin.websocket_handler.messages] == [
         "story",
-        "snapshot_processed",
+        kind,
     ]
 
+
+@pytest.mark.asyncio
+async def test_context_injected_event_does_not_push_story(plugin, world):
+    world_dir = str(world.root)
     plugin.websocket_handler.messages.clear()
+
     await plugin.on_cultures_event(
         CulturesEvent(kind="context_injected", world_dir=world_dir, changed=False)
     )

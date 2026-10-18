@@ -1,4 +1,4 @@
-"""Story data for the Cultures-in-the-story feature (plan 3 / task 2).
+"""Story data for the Cultures-in-the-story feature.
 
 Turns the shared world's glossary, characters and places into the small,
 scene-scoped shapes the frontend needs to show name chips, character
@@ -168,7 +168,7 @@ def _character_info(
     return CharacterInfo(
         name=character.name,
         culture_id=culture_id,
-        culture_name=culture.name if culture is not None else None,
+        culture_name=_culture_name(cultures, culture_id),
         color=culture.color if culture is not None else None,
         set_by=culture_data.set_by,
         unsure=culture_data.unsure,

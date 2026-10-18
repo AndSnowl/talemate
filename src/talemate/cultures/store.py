@@ -208,13 +208,15 @@ class WorldStore:
             glossary_file.model_dump(mode="json"),
         )
 
-    def counts(self) -> dict:
-        """Unreviewed/unsure counts across the glossary, places and
-        cultures' play additions. Same keys as `snapshot()["counts"]`."""
-
-        cultures = self.load_cultures()
-        places = self.load_places()
-        glossary = self.load_glossary()
+    def _counts(
+        self,
+        cultures: dict[str, Culture],
+        places: list[Place],
+        glossary: list[GlossaryEntry],
+    ) -> dict:
+        """`counts()`'s computation, over already-loaded data, so a caller
+        that has already loaded cultures/places/glossary (`snapshot()`)
+        doesn't have to read the world files a second time."""
 
         unreviewed_by_culture: dict[str, int] = {}
         unreviewed_unassigned = 0
@@ -253,6 +255,14 @@ class WorldStore:
             "unreviewed_additions_by_culture": unreviewed_additions_by_culture,
         }
 
+    def counts(self) -> dict:
+        """Unreviewed/unsure counts across the glossary, places and
+        cultures' play additions. Same keys as `snapshot()["counts"]`."""
+
+        return self._counts(
+            self.load_cultures(), self.load_places(), self.load_glossary()
+        )
+
     def snapshot(self) -> dict:
         cultures = self.load_cultures()
         places = self.load_places()
@@ -275,5 +285,5 @@ class WorldStore:
             "cultures": [c.model_dump(mode="json") for c in cultures.values()],
             "places": place_dumps,
             "glossary": [g.model_dump(mode="json") for g in glossary],
-            "counts": self.counts(),
+            "counts": self._counts(cultures, places, glossary),
         }

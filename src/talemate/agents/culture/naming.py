@@ -130,7 +130,7 @@ def _location_preposition_before(words: list[str]) -> bool:
 
 def _names_mid_sentence(name: str, content: str) -> bool:
     """Whether `name`'s mid-sentence occurrence in `content` is the
-    content naming the character (Task 0): explicit framing ("named",
+    content naming the character: explicit framing ("named",
     "called", "known as", "name is", "name's") always counts; a location
     preposition right before it, or `name` itself reading as a place
     (`ends_with_place_word`), means it's a place mention instead.

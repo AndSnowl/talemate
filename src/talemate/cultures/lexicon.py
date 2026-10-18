@@ -170,9 +170,12 @@ def build_scene_lexicon(
                 )
             )
 
-        dictionary_by_word = {
-            entry.word.lower(): entry for entry in culture.language.dictionary
-        }
+        # First entry for a given word wins (matches this function's own
+        # dedupe-by-text rule), rather than the last one silently
+        # overriding it.
+        dictionary_by_word: dict = {}
+        for dict_entry in culture.language.dictionary:
+            dictionary_by_word.setdefault(dict_entry.word.lower(), dict_entry)
 
         for entry in glossary:
             if entry.language != culture.id:
@@ -184,13 +187,14 @@ def build_scene_lexicon(
             if not can_highlight(entry.text):
                 continue
 
+            dict_entry = dictionary_by_word.get(entry.text.lower())
             translation = entry.meaning
-            usage = ""
-            if not translation:
-                dict_entry = dictionary_by_word.get(entry.text.lower())
-                if dict_entry is not None:
-                    translation = dict_entry.meaning
-                    usage = dict_entry.notes
+            if not translation and dict_entry is not None:
+                translation = dict_entry.meaning
+            # `usage` always comes from the matching dictionary entry's
+            # notes when one exists, even when the glossary entry already
+            # has its own `meaning` (Ruling R6).
+            usage = dict_entry.notes if dict_entry is not None else ""
 
             add(
                 LexiconEntry(

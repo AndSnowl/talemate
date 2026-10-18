@@ -1,4 +1,4 @@
-"""Tests for the scene story data builder (plan 3 / task 2)."""
+"""Tests for the scene story data builder."""
 
 from pathlib import Path
 

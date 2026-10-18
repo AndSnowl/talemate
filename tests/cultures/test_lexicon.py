@@ -1,4 +1,4 @@
-"""Tests for the scene lexicon builder (plan 3 / task 1)."""
+"""Tests for the scene lexicon builder."""
 
 from pathlib import Path
 
@@ -11,6 +11,7 @@ from talemate.cultures.lexicon import (
 )
 from talemate.cultures.models import (
     Culture,
+    DictionaryEntry,
     GlossaryEntry,
     GlossaryOrigin,
     Language,
@@ -201,11 +202,55 @@ def test_lexicon_dictionary_meaning_and_dedupe():
     dhaer = next(e for e in lexicon if e.id == "glossary:g-dhaer")
     assert dhaer.translation == "ford, river crossing"
 
-    # the phrase (added first) wins the dedupe; the glossary duplicate of
-    # the exact same text is dropped.
+    # the glossary duplicate would qualify as its own highlight candidate
+    # on its own merits...
+    assert can_highlight("rhok tal’dun") is True
+    # ...but the phrase (added first, same culture) wins the dedupe, so the
+    # glossary duplicate of the exact same text never shows up as a second
+    # entry.
     matching = [e for e in lexicon if e.text.lower().startswith("rhok tal")]
     assert len(matching) == 1
     assert matching[0].id == "phrase:taelrik:curse-rot"
+
+
+def test_lexicon_usage_always_from_matching_dictionary_entry():
+    """Ruling R6: `usage` comes from the matching dictionary entry's
+    `notes` whenever one exists, even when the glossary entry already has
+    its own `meaning` (only `translation` prefers the glossary's own
+    `meaning` over the dictionary's)."""
+
+    language = Language(
+        name="Taelrik Variant",
+        level="naming",
+        dictionary=[
+            DictionaryEntry(word="dhaer", meaning="ford", notes="formal register"),
+        ],
+    )
+    culture = Culture(id="taelrik2", name="Taelrik Variant", language=language)
+
+    entry = GlossaryEntry(
+        id="g-dhaer2",
+        text="dhaer",
+        language="taelrik2",
+        kind="word",
+        meaning="a specific crossing near the mill",
+        origin=GlossaryOrigin(by="owner"),
+    )
+
+    [lexicon_entry] = build_scene_lexicon([culture], [entry])
+    assert lexicon_entry.translation == "a specific crossing near the mill"
+    assert lexicon_entry.usage == "formal register"
+
+
+def _letters_suffix(i: int) -> str:
+    """A 4-letter, lowercase, digit-free suffix unique per `i` (base-26)."""
+
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    chars = []
+    for _ in range(4):
+        chars.append(alphabet[i % 26])
+        i //= 26
+    return "".join(chars)
 
 
 def test_lexicon_cap():
@@ -215,7 +260,7 @@ def test_lexicon_cap():
     glossary = [
         GlossaryEntry(
             id=f"g-{i}",
-            text=f"zorquelin{i}",
+            text=f"zorquelin{_letters_suffix(i)}",
             language="many",
             kind="word",
             origin=GlossaryOrigin(by="owner"),

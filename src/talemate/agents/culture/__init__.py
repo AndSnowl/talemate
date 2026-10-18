@@ -214,9 +214,9 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
     ) -> SceneCultures:
         """Resolve the scene's place and present cultures.
 
-        `remember=False` (the websocket plugin's read-only lookups, Task 3)
-        skips `set_scene_states`, so a single poll for the present cultures
-        never perturbs the place the agent's own hooks fall back to.
+        `remember=False` (used for a read-only poll of the present cultures,
+        such as the cultures websocket plugin's) skips `set_scene_states`,
+        so it never perturbs the place the agent's own hooks fall back to.
         """
         world_state = self.scene.world_state
         resolved = resolve_scene_cultures(
