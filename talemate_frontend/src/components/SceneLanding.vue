@@ -50,7 +50,7 @@
                             />
                             <v-icon size="48" color="primary" class="mb-2">mdi-tray-arrow-down</v-icon>
                             <div class="text-body-2">Drop a file here or click to browse</div>
-                            <div class="text-caption text-grey mt-1">
+                            <div class="text-caption text-muted mt-1">
                                 Talemate scenes (.json, .zip) and character cards (.png, .webp, .json)
                             </div>
                         </div>
@@ -63,7 +63,7 @@
                         Create new scene
                     </v-card-title>
                     <v-card-text>
-                        <p class="text-caption text-grey mb-3">Start a blank scene and build it out in the world editor.</p>
+                        <p class="text-caption text-muted mb-3">Start a blank scene and build it out in the world editor.</p>
                         <v-btn
                             variant="tonal"
                             block
@@ -474,7 +474,7 @@ export default {
 }
 
 .dropzone {
-    border: 2px dashed rgba(179, 157, 219, 0.4);
+    border: 2px dashed rgba(var(--v-theme-primary), 0.4);
     border-radius: 8px;
     padding: 32px 16px;
     text-align: center;
@@ -484,8 +484,8 @@ export default {
 
 .dropzone:hover,
 .dropzone-active {
-    border-color: rgb(179, 157, 219);
-    background-color: rgba(179, 157, 219, 0.08);
+    border-color: rgb(var(--v-theme-primary));
+    background-color: rgba(var(--v-theme-primary), 0.08);
 }
 
 .dropzone-disabled {
@@ -494,7 +494,7 @@ export default {
 }
 
 .dropzone-disabled:hover {
-    border-color: rgba(179, 157, 219, 0.4);
+    border-color: rgba(var(--v-theme-primary), 0.4);
     background-color: transparent;
 }
 </style>

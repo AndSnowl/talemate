@@ -128,24 +128,11 @@ const PENDING = new Set([
     'src/components/AgentModal.vue',
     'src/components/AIAgent.vue',
     'src/components/AIClient.vue',
-    'src/components/AppConfigAppearanceScene.vue',
-    'src/components/AppConfigPresetsEmbeddings.vue',
-    'src/components/AppConfigPresetsInference.vue',
-    'src/components/AppConfigPresetsSystemPrompts.vue',
-    'src/components/AppSettingsApiKeys.vue',
-    'src/components/AppSettingsEnvVariables.vue',
-    'src/components/AppSettingsMenu.vue',
-    'src/components/AppSettingsPageHeader.vue',
-    'src/components/AppSettingsStringList.vue',
-    'src/components/AppSettings.vue',
     'src/components/AssetView.vue',
-    'src/components/AudioQueue.vue',
     'src/components/CharacterCardImport.vue',
     'src/components/CharacterCreator.vue',
-    'src/components/CharacterMessage.vue',
     'src/components/ClientModal.vue',
     'src/components/ConfigWidgetWeights.vue',
-    'src/components/ContextInvestigationMessage.vue',
     'src/components/ContextualGenerateFromTopic.vue',
     'src/components/ContextualGenerate.vue',
     'src/components/CoverBBoxEditor.vue',
@@ -171,13 +158,7 @@ const PENDING = new Set([
     'src/components/DirectorConsoleChatMessageMarkdown.vue',
     'src/components/DirectorConsoleChatsToolbar.vue',
     'src/components/DirectorConsoleMessage.vue',
-    'src/components/DirectorMessage.vue',
     'src/components/DynamicAgentRegistry.vue',
-    'src/components/EntityTooltip.vue',
-    'src/components/IntroRecentScenes.vue',
-    'src/components/MessageAssetImage.vue',
-    'src/components/MessageToolbar.vue',
-    'src/components/NarratorMessage.vue',
     'src/components/NodeEditorLog.vue',
     'src/components/NodeEditor.vue',
     'src/components/prompts/ActiveTab.vue',
@@ -191,22 +172,14 @@ const PENDING = new Set([
     'src/components/prompts/TemplateSourceSelect.vue',
     'src/components/prompts/TemplateTree.vue',
     'src/components/QuickCreateStateReinforcement.vue',
-    'src/components/SceneBrowser.vue',
     'src/components/SceneContextReviewInline.vue',
-    'src/components/SceneLanding.vue',
-    'src/components/SceneMessages.vue',
     'src/components/SceneOverrideToggle.vue',
-    'src/components/SceneTimeline.vue',
-    'src/components/SceneTools.vue',
     'src/components/SpiceAppliedNotification.vue',
-    'src/components/TalemateApp.vue',
     'src/components/TemplatesMenu.vue',
     'src/components/Templates.vue',
     'src/components/TemplateWritingStyle.vue',
-    'src/components/TimePassageMessage.vue',
     'src/components/UxElementTextInput.vue',
     'src/components/UxField.vue',
-    'src/components/VersionMismatchAlert.vue',
     'src/components/VisualAssetBadge.vue',
     'src/components/VisualAssetGrid.vue',
     'src/components/VisualImageView.vue',
@@ -219,7 +192,6 @@ const PENDING = new Set([
     'src/components/VisualReferenceImages.vue',
     'src/components/VoiceLibraryCharacterManager.vue',
     'src/components/VoiceLibrary.vue',
-    'src/components/WhatsNew.vue',
     'src/components/WorldStateManagerCharacterActor.vue',
     'src/components/WorldStateManagerCharacterAttributes.vue',
     'src/components/WorldStateManagerCharacterDetails.vue',
@@ -243,7 +215,6 @@ const PENDING = new Set([
     'src/components/WorldStateManagerWorldEntries.vue',
     'src/components/WorldStateManagerWorldStates.vue',
     'src/components/WorldStateManagerWorld.vue',
-    'src/components/WorldState.vue',
     'src/utils/litegraphUtils.js',
     'src/utils/recentNodes.js',
     'src/utils/sceneMessageRenderer.js',
@@ -271,6 +242,24 @@ const ALLOW = new Set([
     // overlay drawn over an arbitrary image, so they must stay light under
     // every theme, not follow it.
     'src/components/AssetView.vue:<v-icon color="white">',
+    // MessageAssetImage.vue's loading-overlay scrim dims an arbitrary,
+    // not-yet-loaded asset image for the spinner's contrast — same
+    // reasoning as the AssetView nav icons above.
+    'src/components/MessageAssetImage.vue:scrim="rgba(0, 0, 0, 0.9)"',
+    // CharacterMessage.vue's always-on text-shadow is kept pixel-identical
+    // to SceneMessages.vue's scene-backdrop message shadow (see the
+    // "align it with the backdrop shadow" comment there) so every message
+    // type stays legible over an arbitrary backdrop image regardless of
+    // theme.
+    'src/components/CharacterMessage.vue:text-shadow: 2px 2px 4px #000000;',
+    // SceneMessages.vue: the scene-backdrop message panel's text-shadow
+    // must stay dark so message text of every colour stays legible over an
+    // arbitrary backdrop image, whatever the active theme.
+    'src/components/SceneMessages.vue:text-shadow: 1px 1px 2px #000000, 0 0 6px rgba(0, 0, 0, 0.85);',
+    // SceneMessages.vue: the backdrop-indicator marker sits over the same
+    // arbitrary backdrop image, so its drop-shadow must stay dark under
+    // every theme for the same reason as the message panel shadow above.
+    'src/components/SceneMessages.vue:filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9));',
 ]);
 
 function isAllowed(relPath, line) {

@@ -13,7 +13,7 @@
             </thead>
             <tbody>
                 <template v-for="(styleConfig, typ) in config" :key="typ">
-                    <tr v-if="typ.endsWith('_messages') || ['quotes', 'parentheses', 'brackets', 'emphasis', 'entities'].includes(typ)" :style="colorPickerTarget === typ ? 'background-color: rgba(128, 128, 128, 0.1);' : ''">
+                    <tr v-if="typ.endsWith('_messages') || ['quotes', 'parentheses', 'brackets', 'emphasis', 'entities'].includes(typ)" :style="colorPickerTarget === typ ? 'background-color: rgba(var(--v-theme-accent), 0.12);' : ''">
                         <td style="padding: 4px 12px;">
                             <div class="d-flex align-center">
                                 <div class="text-caption font-weight-medium">{{ typLabelMap[typ] || typ }}</div>
@@ -284,7 +284,9 @@ export default {
     data() {
         return {
             colorPicker: null,
-            color: "#000000",
+            // Placeholder until openColorPicker() sets it to the real
+            // target colour; the picker stays disabled until then.
+            color: null,
             colorPickerTarget: null,
             paletteKeys: PALETTE_KEYS,
             typLabelMap: {

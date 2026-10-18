@@ -34,8 +34,8 @@
         <v-textarea
           ref="textarea"
           v-model="editing_text"
-          color="indigo-lighten-4"
-          bg-color="black"
+          color="context_investigation"
+          bg-color="surface-variant"
           auto-grow
           :hint="autocompleteInfoMessage(autocompleting) + ', Shift+Enter for newline'"
           :loading="autocompleting"
@@ -335,12 +335,12 @@ export default {
 
 .close-button {
   opacity: 0.4;
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgb(var(--v-theme-muted)) !important;
   transition: opacity 0.2s ease;
 }
 
 .close-button:hover {
   opacity: 1;
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
 }
 </style>

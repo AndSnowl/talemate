@@ -9,7 +9,7 @@
         </v-btn>
       </template>
       <span v-if="!editing">{{ text }}</span>
-      <v-chip v-if="hovered && !editing" size="x-small" color="grey-lighten-1" variant="text" class="ml-2">
+      <v-chip v-if="hovered && !editing" size="x-small" color="muted" variant="text" class="ml-2">
         <v-icon>mdi-pencil</v-icon>
         {{ uxLocked || appBusy ? 'Editing locked' : 'Double-click to edit.' }}
       </v-chip>
@@ -85,12 +85,12 @@ export default {
 <style scoped>
 .close-button {
   opacity: 0.4;
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgb(var(--v-theme-muted)) !important;
   transition: opacity 0.2s ease;
 }
 
 .close-button:hover {
   opacity: 1;
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
 }
 </style>

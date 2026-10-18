@@ -435,7 +435,7 @@ export default {
 }
 
 .character-text {
-  color: #E0E0E0;
+  color: rgb(var(--v-theme-on-surface));
 }
 
 .character-text :deep(.scene-paragraph) {
@@ -481,11 +481,11 @@ export default {
 
 .close-button {
   opacity: 0.4;
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: rgb(var(--v-theme-muted)) !important;
   transition: opacity 0.2s ease;
 }
 
 .close-button:hover {
   opacity: 1;
-  color: rgba(255, 255, 255, 0.9) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
 }</style>

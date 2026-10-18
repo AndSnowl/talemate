@@ -42,7 +42,7 @@
       <v-spacer></v-spacer>
       <AudioQueue ref="audioQueue" @message-audio-played="onMessageAudioPlayed" />
       <v-divider class="ml-2 mr-2" vertical></v-divider>
-      <span v-if="version !== null" class="text-grey text-caption">v{{ version }}</span>
+      <span v-if="version !== null" class="text-muted text-caption">v{{ version }}</span>
       <span v-if="!ready">
         <v-icon icon="mdi-application-cog"></v-icon>
         <span class="ml-1">Configuration required</span>
@@ -108,7 +108,7 @@
 
       <v-tooltip text="Clients / Agents" location="top">
         <template v-slot:activator="{ props }">
-          <v-app-bar-nav-icon @click="toggleNavigation('settings')" v-if="!ready" v-bind="props" color="red-darken-1"><v-icon>mdi-application-cog</v-icon></v-app-bar-nav-icon>
+          <v-app-bar-nav-icon @click="toggleNavigation('settings')" v-if="!ready" v-bind="props" color="danger"><v-icon>mdi-application-cog</v-icon></v-app-bar-nav-icon>
           <v-app-bar-nav-icon @click="toggleNavigation('settings')" v-else v-bind="props"><v-icon>mdi-application-cog</v-icon></v-app-bar-nav-icon>
         </template>
       </v-tooltip>
@@ -123,7 +123,7 @@
       <v-navigation-drawer :model-value="sceneDrawer && tab !== 'home'" @update:model-value="sceneDrawer = $event" app :width="leftDrawerWidth">
         <v-alert v-if="!connected" type="error" variant="tonal">
           Not connected to Talemate backend
-          <p class="text-body-2" color="white">
+          <p class="text-body-2" color="on-surface">
             Make sure the backend process is running.
           </p>
         </v-alert>
@@ -183,7 +183,7 @@
       <v-navigation-drawer v-model="drawer" app location="right" width="350" disable-resize-watcher>
         <v-alert v-if="!connected" type="error" variant="tonal">
           Not connected to Talemate backend
-          <p class="text-body-2" color="white">
+          <p class="text-body-2" color="on-surface">
             Make sure the backend process is running.
           </p>
         </v-alert>
@@ -423,7 +423,7 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-snackbar v-model="errorNotification" color="red-darken-1" :timeout="3000">
+    <v-snackbar v-model="errorNotification" color="danger" :timeout="3000">
         {{ errorMessage }}
     </v-snackbar>
   </v-app>
@@ -1999,10 +1999,7 @@ export default {
 
 <style scoped>
 .backdrop {
-  background-image: url('/src/assets/logo-13.1-backdrop.png');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 512px 512px;
+  background-color: rgb(var(--v-theme-background));
 }
 
 .backdrop-active {
