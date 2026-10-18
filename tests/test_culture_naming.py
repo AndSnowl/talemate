@@ -414,3 +414,78 @@ async def test_end_to_end_through_persist_character(
     assert agent.on_before_name_character in (
         async_signals.get("agent.creator.before_name_character").receivers
     )
+
+
+@pytest.mark.asyncio
+async def test_lowercase_description_mentioned_in_scene_still_named(
+    scene, world, agent, monkeypatch
+):
+    calls = install_picker(monkeypatch, pick_index(0))
+    scene.history.append(NarratorMessage(message="'Pay up,' said the ferryman."))
+
+    emission = ferryman()
+    await agent.on_before_name_character(emission)
+
+    assert len(calls) == 1
+    assert emission.chosen_name == calls[0]["vars"]["candidates"][0]
+
+
+@pytest.mark.asyncio
+async def test_culture_instruction_skips_empty_parts(scene, world, agent, monkeypatch):
+    culture = world.load_cultures()["taelrik"]
+    culture.description = ""
+    culture.language.sound = ""
+    world.save_culture(culture)
+    install_picker(monkeypatch, pick_index(0))
+
+    emission = ferryman()
+    await agent.on_before_name_character(emission)
+
+    content = emission.dynamic_instructions[0].content
+    assert content == f"{emission.chosen_name} is Taelrik. Their language is Taelrik."
+    assert "  " not in content
+    assert not content.rstrip().endswith(",")
+
+
+@pytest.mark.asyncio
+async def test_pending_kept_when_glossary_save_fails(scene, world, agent, monkeypatch):
+    install_picker(monkeypatch, pick_index(0))
+
+    def fail(self, entries):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(WorldStore, "save_glossary", fail)
+    emission = ferryman()
+    await agent.on_before_name_character(emission)
+
+    assert emission.chosen_name
+    assert agent._pending[emission.chosen_name.lower()].culture_id == "taelrik"
+
+
+def test_pick_name_template_renders(scene, world):
+    culture = world.load_cultures()["taelrik"]
+    vars = {
+        "scene": scene,
+        "max_tokens": 4096,
+        "candidates": ["Tovrin", "Kaeth"],
+        "culture": culture,
+        "language": culture.language,
+        "character_hint": "the ferryman",
+        "content": "a gruff old man",
+        "description": "",
+        "recent_text": "The river is high.",
+        "place": "Veldhaer",
+        "decensor": False,
+    }
+    text = Prompt.get("culture.pick-name", vars).render()
+
+    assert "Requested as: the ferryman" in text
+    assert "Place: Veldhaer" in text
+    assert "best fits this character's role, age and gender" in text
+    assert "Tovrin, Kaeth" in text
+    assert 'long open "ae" vowels.' in text
+
+    culture.language.sound = ""
+    vars["language"] = culture.language
+    text = Prompt.get("culture.pick-name", vars).render()
+    assert "sounds like" not in text

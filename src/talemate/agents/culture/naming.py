@@ -38,6 +38,7 @@ from talemate.cultures.naming import (
 )
 from talemate.cultures.signals import guarded, send_event
 from talemate.cultures.words import (
+    _LEADING_STOP_WORDS,
     clean_name,
     first_mention,
     looks_like_name,
@@ -86,6 +87,23 @@ def _first_sentence(text: str) -> str:
     return _SENTENCE_END.split(text, maxsplit=1)[0]
 
 
+def _culture_instruction(name: str, culture: Culture) -> str:
+    """`"{name} is {culture}. {description} Their language, {language},
+    {sound}"`, from the non-empty parts only."""
+
+    language = culture.language
+    parts = [f"{name} is {culture.name}."]
+    description = _first_sentence(culture.description)
+    if description:
+        parts.append(description)
+    sound = _first_sentence(language.sound)
+    if sound:
+        parts.append(f"Their language, {language.name}, {sound}")
+    elif language.name:
+        parts.append(f"Their language is {language.name}.")
+    return " ".join(parts)
+
+
 def _decision_key(emission: "CharacterNamingEmission") -> tuple[str, str]:
     return (emission.name.strip().lower(), emission.content.strip())
 
@@ -124,6 +142,16 @@ class CultureNamingMixin:
         while len(self._pending) > MAX_PENDING:
             self._pending.pop(next(iter(self._pending)))
 
+    def _place_label(self) -> str:
+        """The matched place's name, else the scene's free-text location."""
+        place_id = self.get_scene_state("current_place_id")
+        world = self.load_world() if place_id else None
+        if world is not None:
+            for place in world.places:
+                if place.id == place_id:
+                    return place.name
+        return self.scene.world_state.location or ""
+
     def _story_label(self) -> str:
         return self.scene.title or self.scene.name or ""
 
@@ -132,6 +160,14 @@ class CultureNamingMixin:
             return False
         if looks_like_name(name):
             return True
+        # a lowercase description ("the ferryman") is not a name, however
+        # often the scene mentions it: only a capitalised hint ("the Rook")
+        # can be a name in use
+        words = name.split()
+        while words and words[0].lower() in _LEADING_STOP_WORDS:
+            words = words[1:]
+        if not any(word[:1].isupper() for word in words):
+            return False
         return any(
             mid_sentence_occurrence(name, str(getattr(message, "message", "") or ""))
             for message in self.scene.history
@@ -206,12 +242,7 @@ class CultureNamingMixin:
         instructions = [
             DynamicInstruction(
                 title="Culture",
-                content=(
-                    f"{name} is {culture.name}. "
-                    f"{_first_sentence(culture.description)} "
-                    f"Their language, {language.name}, "
-                    f"{_first_sentence(language.sound)}"
-                ).strip(),
+                content=_culture_instruction(name, culture),
             )
         ]
         request = "; ".join(
@@ -231,6 +262,17 @@ class CultureNamingMixin:
         emission.dynamic_instructions.extend(instructions)
         self._remember_naming_decision(key, name, instructions)
 
+        # before the save, so a disk error there doesn't lose it
+        self._remember_pending(
+            name,
+            CharacterCulture(
+                culture_id=culture.id,
+                set_by="ai",
+                unsure=guess.unsure,
+                reason=guess.reason,
+            ),
+        )
+
         # R2: re-load right before the save, no await in between
         entries = world.store.load_glossary()
         if not any(entry.text.lower() == name.lower() for entry in entries):
@@ -249,16 +291,6 @@ class CultureNamingMixin:
                 )
             )
             world.store.save_glossary(entries)
-
-        self._remember_pending(
-            name,
-            CharacterCulture(
-                culture_id=culture.id,
-                set_by="ai",
-                unsure=guess.unsure,
-                reason=guess.reason,
-            ),
-        )
 
         await send_event(
             "name_chosen",
@@ -304,6 +336,7 @@ class CultureNamingMixin:
                     "content": emission.content,
                     "description": emission.description,
                     "recent_text": self.recent_text(3),
+                    "place": self._place_label(),
                 },
                 response_spec=PICK_NAME_SPEC,
             )

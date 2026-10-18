@@ -4,9 +4,16 @@ Extractors:
   - why: AnchorExtractor("<WHY>", "</WHY>")
 -#}
 <|SECTION:TASK|>
-You name a new character in the culture {{ culture.name }}, whose language sounds like {{ language.sound }}
-
-Character hint: {{ character_hint or "(none)" }}
+You name a new character in the culture {{ culture.name }}.
+{% if language.sound -%}
+Their language sounds like this: {{ language.sound }}{% if language.sound.rstrip()[-1:] not in ".!?" %}.{% endif %}
+{% endif -%}
+{% if place -%}
+Place: {{ place }}
+{% endif -%}
+{% if character_hint -%}
+Requested as: {{ character_hint }}
+{% endif -%}
 {% if content -%}
 Content: {{ content }}
 {% endif -%}
@@ -18,6 +25,7 @@ The last lines of the scene:
 {{ recent_text }}
 {% endif %}
 Choose exactly one name from this list, spelled as given: {{ candidates|join(', ') }}.
+Pick the candidate that best fits this character's role, age and gender, and the scene.
 
 Answer with <NAME>name</NAME> and then <WHY>one short sentence</WHY>.
 <|CLOSE_SECTION|>
