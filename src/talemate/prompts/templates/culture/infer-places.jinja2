@@ -1,0 +1,40 @@
+{#-
+Extractors:
+  - places: AnchorExtractor("<PLACES>", "</PLACES>")
+-#}
+<|SECTION:TASK|>
+New place names came up in the scene. Put each one into the world's map of places.
+
+Known places:
+{% for place in known_places -%}
+- {{ place }}
+{% else -%}
+- none yet
+{% endfor %}
+Cultures and where they live:
+{% for culture in cultures -%}
+- {{ culture.name }}{% if culture.places %}: {{ culture.places|join(', ') }}{% endif %}
+{% endfor %}
+{% if current_place -%}
+The scene is in: {{ current_place }}
+{% endif -%}
+{% if recent_text %}
+The last lines of the scene:
+{{ recent_text }}
+{% endif %}
+New place names: {{ names|join(', ') }}
+
+Write exactly one line per new place name, in this format:
+Name | kind | parent | cultures | sure or unsure
+
+- kind: one of {{ kinds|join(', ') }}.
+- parent: the known place or new place it lies in, spelled as given, or none.
+- cultures: inherit if its people are like its parent's, else culture names with shares adding up to 100, like "{{ example_shares }}".
+- sure or unsure: unsure when the scene doesn't make it clear.
+
+Example line:
+Oakford | village | {{ example_parent }} | inherit | sure
+
+Answer only with the lines, inside <PLACES></PLACES>.
+<|CLOSE_SECTION|>
+{{ set_prepared_response("<PLACES>\n") }}

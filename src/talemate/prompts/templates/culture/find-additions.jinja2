@@ -1,0 +1,34 @@
+{#-
+Extractors:
+  - additions: AnchorExtractor("<ADDITIONS>", "</ADDITIONS>")
+-#}
+<|SECTION:TASK|>
+Read the scene lines below and find new facts about the cultures present.
+
+Cultures present, and what is already known about them:
+{% for culture in cultures %}
+{{ culture.name }}
+{% for custom in culture.customs -%}
+- custom: {{ custom }}
+{% endfor -%}
+{% if culture.food -%}
+- food: {{ culture.food }}
+{% endif -%}
+{% if culture.holidays -%}
+- holidays: {{ culture.holidays|join(', ') }}
+{% endif -%}
+{% if not (culture.customs or culture.food or culture.holidays) -%}
+- nothing known yet
+{% endif -%}
+{% endfor %}
+Scene lines:
+{{ text }}
+
+Only facts that are new and lasting about how a whole culture lives (a custom, a dish, a holiday). Not one person's habits, not events. If none, answer NONE.
+
+Write at most 3 lines, each in this format:
+Culture | customs or food or holidays | one short sentence
+
+Answer inside <ADDITIONS></ADDITIONS>.
+<|CLOSE_SECTION|>
+{{ set_prepared_response("<ADDITIONS>\n") }}
