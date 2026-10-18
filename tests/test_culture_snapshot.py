@@ -158,6 +158,34 @@ async def test_snapshot_adds_names_places_and_event(
 
 
 @pytest.mark.asyncio
+async def test_snapshot_role_labels_skip_glossary(
+    scene, world, agent, monkeypatch, events
+):
+    # a live run recorded "Innkeeper's Boy" and "Bargemen" (world-state role
+    # keys, not names) as persons; they must be skipped
+    calls = install_replies(monkeypatch, {ADDITIONS: "NONE"})
+    set_snapshot(
+        scene,
+        "A room at Quillister House in Veldhaer",
+        characters=["Innkeeper's Boy", "Bargemen", "Brannoch"],
+    )
+    narrate(scene, "Brannoch waited while Bargemen hauled crates past the door.")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    assert PLACES not in templates(calls)
+    texts = {e.text for e in world.load_glossary()}
+    assert "Brannoch" in texts
+    assert "Innkeeper's Boy" not in texts
+    assert "Bargemen" not in texts
+    [event] = processed(events)
+    new_names = {n["text"] for n in event.data["new_names"]}
+    assert "Brannoch" in new_names
+    assert "Innkeeper's Boy" not in new_names
+    assert "Bargemen" not in new_names
+
+
+@pytest.mark.asyncio
 async def test_no_place_call_without_new_places(
     scene, world, agent, monkeypatch, events
 ):

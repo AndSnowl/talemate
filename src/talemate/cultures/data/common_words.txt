@@ -73,9 +73,11 @@ bandit
 banner
 bard
 bargain
+bargeman
 bark
 barkeep
 barley
+barman
 barn
 baron
 baroness
@@ -199,6 +201,7 @@ carpenter
 carpet
 carriage
 cart
+carter
 cask
 castle
 cat
@@ -219,6 +222,7 @@ chain
 chair
 chamberlain
 chandelier
+chandler
 chapel
 charcoal
 charm
@@ -303,6 +307,7 @@ crate
 cream
 creek
 crimson
+crone
 crooked
 crossbow
 crossing
@@ -334,6 +339,7 @@ dawn
 day
 deal
 debt
+deckhand
 deep
 deer
 dell
@@ -372,6 +378,7 @@ drizzle
 drop
 droplet
 drought
+drover
 druid
 drum
 dry
@@ -431,6 +438,7 @@ feast
 fee
 fen
 fence
+ferryhand
 ferryman
 festival
 fetter
@@ -447,6 +455,7 @@ fire
 first
 fish
 fisherman
+fishwife
 five
 flag
 flame
@@ -671,6 +680,7 @@ knee
 knife
 knight
 labor
+lad
 ladder
 lady
 lake
@@ -678,6 +688,7 @@ lamp
 lance
 lantern
 large
+lass
 last
 latch
 laugh
@@ -739,6 +750,7 @@ marsh
 mason
 mast
 master
+matron
 mattress
 may
 me
@@ -854,6 +866,7 @@ orchard
 ordinary
 orphan
 orphanage
+ostler
 other
 otter
 our
@@ -1140,6 +1153,7 @@ square
 squire
 squirrel
 stable
+stablehand
 stableman
 stadium
 staff
@@ -1260,6 +1274,7 @@ toe
 toil
 token
 toll
+tollkeeper
 tomb
 tongs
 tongue
@@ -1301,6 +1316,7 @@ under
 undertaker
 uneasy
 up
+urchin
 us
 vagrant
 valley

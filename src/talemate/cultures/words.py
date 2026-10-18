@@ -67,6 +67,46 @@ _TRAILING_PUNCT = ".,;:!?"
 _SENTENCE_ENDERS = {".", "!", "?", ":", '"', "“", "”", "‘", "'"}
 
 
+def _strip_possessive(word: str) -> str:
+    """Strip a trailing possessive (`'s`, `’s`, or a bare trailing `'`)
+    from a single (already lowercased) `word`."""
+
+    if word.endswith("'s") or word.endswith("’s"):
+        return word[:-2]
+    if word.endswith("'") or word.endswith("’"):
+        return word[:-1]
+    return word
+
+
+def _plural_candidates(word: str) -> list[str]:
+    """Candidate singular forms for a plural-looking `word` (already
+    lowercased, possessive stripped): always includes `word` itself."""
+
+    candidates = [word]
+    if word.endswith("ies") and len(word) > 3:
+        candidates.append(word[:-3] + "y")
+    if word.endswith("ves") and len(word) > 3:
+        candidates.append(word[:-3] + "fe")
+        candidates.append(word[:-3] + "f")
+    if word.endswith("men") and len(word) > 3:
+        candidates.append(word[:-3] + "man")
+    if word.endswith("es") and len(word) > 2:
+        candidates.append(word[:-2])
+    if word.endswith("s") and len(word) > 1:
+        candidates.append(word[:-1])
+    return candidates
+
+
+def _is_common_word(word: str) -> bool:
+    """Whether `word` is a common word once a trailing possessive and a
+    simple plural ending are normalised away."""
+
+    normalised = _strip_possessive(word.lower())
+    return any(
+        candidate in COMMON_WORDS for candidate in _plural_candidates(normalised)
+    )
+
+
 def clean_name(text: str) -> str:
     """Strip whitespace, quotes, trailing punctuation and a possessive `'s`."""
 
@@ -104,7 +144,7 @@ def looks_like_name(text: str) -> bool:
     if not non_connector_words:
         return False
 
-    if all(word.lower() in COMMON_WORDS for word in non_connector_words):
+    if all(_is_common_word(word) for word in non_connector_words):
         return False
 
     return True

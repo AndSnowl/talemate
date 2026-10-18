@@ -22,6 +22,20 @@ def test_clean_name_and_looks_like_name():
     assert looks_like_name("") is False
 
 
+def test_looks_like_name_treats_role_labels_as_descriptions():
+    # possessive + plural role labels are descriptions, not names
+    assert looks_like_name("Innkeeper's Boy") is False
+    assert looks_like_name("Bargemen") is False
+    assert looks_like_name("Fishwives") is False
+    assert looks_like_name("Stable Hands") is False
+    assert looks_like_name("Guards") is False
+
+    # real names keep working, including a possessive one
+    assert looks_like_name("Tovrin") is True
+    assert looks_like_name("Dhurhith") is True
+    assert looks_like_name("Kethrun's") is True
+
+
 def test_mid_sentence_occurrence():
     assert mid_sentence_occurrence("Grey Gull", "They boarded the Grey Gull at dawn.")
     assert not mid_sentence_occurrence("Grey Gull", "Grey Gull sails tonight.")
