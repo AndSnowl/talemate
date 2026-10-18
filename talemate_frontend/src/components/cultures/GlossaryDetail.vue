@@ -1,5 +1,5 @@
 <template>
-    <v-card variant="tonal" class="pa-4">
+    <v-card variant="tonal" class="pa-4" data-testid="glossary-detail">
         <v-card-title class="d-flex align-center ga-2 flex-wrap pa-0 mb-2">
             <span v-if="local.status === 'unreviewed'" class="unrev-dot"></span>
             <span class="text-h6 font-weight-regular">{{ local.text }}</span>
