@@ -282,9 +282,7 @@ export function handleVerticalSnapGroup(group, canvas) {
  */
 export function handleDuplicateGroup(group, canvas) {
     const new_title = group.title;
-    // Prefer the raw (pre-theme-remap) colour so the duplicate's saved
-    // colour matches what was actually stored, not the rendered tint.
-    const new_color = group.rawColor ?? group.color;
+    const new_color = group.color;
     // Define a default height or consider calculating based on content if needed
     const defaultHeight = 300;
     const new_size = [group.size[0], defaultHeight];
@@ -312,7 +310,6 @@ export function handleDuplicateGroup(group, canvas) {
        const new_group = new LiteGraph.LGraphGroup();
        new_group.title = new_title;
        new_group.color = new_color;
-       new_group.rawColor = new_color;
        new_group.size = new_size;
        new_group.pos = new_pos;
        canvas.graph.add(new_group);

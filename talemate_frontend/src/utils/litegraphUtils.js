@@ -5,9 +5,9 @@ import { trackRecentNodes } from './recentNodes.js';
 import { handleFitGroupToNodes, handleDuplicateGroup, handleVerticalSnapGroup, handleCreateGroupFromSelectedNodes } from './groupInteractions.js';
 import { handleWatchNodeShortcut, handleSetStateNodeShortcut, handleStageNodeShortcut } from './graphConnectionUtil.js';
 import { isPrimaryModifier } from './keyboardModifiers.js';
-import { nodeColors } from '@/theme/dataColors';
-import { currentTheme } from '@/theme/store';
-import { ACCENT_KEYS } from '@/theme/palette';
+import { nodeColors } from '../theme/dataColors.js';
+import { currentTheme } from '../theme/store.js';
+import { ACCENT_KEYS } from '../theme/palette.js';
 
 const UNRESOLVED = "<class 'talemate.game.engine.nodes.core.UNRESOLVED'>";
 
@@ -53,9 +53,20 @@ if (!LGraphCanvas.node_colors) {
     LGraphCanvas.node_colors = {};
 }
 
+// Legacy LiteGraph swatch names (not in ACCENT_KEYS) mapped onto the accent
+// they read closest to, so "Create Group from Selection"'s presets (see
+// recentNodes.js) and the "Change Color" menu stay theme-consistent too.
+const LEGACY_SWATCH_ALIASES = {
+    pale_blue: 'blue',
+    cyan: 'teal',
+    brown: 'orange',
+    purple: 'magenta',
+};
+
 /**
  * Rebuilds the LiteGraph "Change Color" swatch palette
- * (`LGraphCanvas.node_colors`), one entry per accent key, from the current
+ * (`LGraphCanvas.node_colors`), one entry per accent key plus the legacy
+ * swatch names LiteGraph/our own menus still reference, from the current
  * theme's palette. Call again whenever `currentTheme` changes (see
  * NodeEditor.vue's theme watcher) so the editor's colour picker stays
  * theme-consistent.
@@ -71,6 +82,16 @@ export function rebuildThemeNodeColors(resolved = currentTheme.value) {
             groupcolor: accentHex,
         };
     }
+    for (const [legacyKey, accentKey] of Object.entries(LEGACY_SWATCH_ALIASES)) {
+        LGraphCanvas.node_colors[legacyKey] = LGraphCanvas.node_colors[accentKey];
+    }
+    // "black" has no accent counterpart — the neutral pair `nodeColors`
+    // itself falls back to for an unsaturated/no-colour value.
+    LGraphCanvas.node_colors.black = {
+        color: palette.base2,
+        bgcolor: palette.base1,
+        groupcolor: palette.base2,
+    };
 }
 
 /**
@@ -84,11 +105,15 @@ export function applyThemeToCanvas(canvas, resolved = currentTheme.value) {
 }
 
 /**
- * Re-derives every node's/group's `.color`/`.bgcolor` render fields from
- * their raw stored colour (node definition style, ModuleStyle properties,
- * or a group's `rawColor`) under the given theme, without touching the
- * stored data itself or reloading the graph. Call whenever `currentTheme`
- * changes so already-loaded nodes follow along.
+ * Re-derives every node's `.color`/`.bgcolor` render fields from its raw
+ * stored colour (node definition style, or ModuleStyle properties) under
+ * the given theme, without touching the stored data itself or reloading
+ * the graph. Call whenever `currentTheme` changes so already-loaded nodes
+ * follow along.
+ *
+ * Groups don't need this: `drawGroups` (below) re-tints `group.color` —
+ * the single source of truth for a group's raw colour — live on every
+ * draw, so they already follow theme changes once the canvas redraws.
  */
 export function reapplyNodeColors(graph, resolved = currentTheme.value) {
     if (!graph) return;
@@ -111,15 +136,63 @@ export function reapplyNodeColors(graph, resolved = currentTheme.value) {
             }
         }
     }
-
-    for (const group of graph._groups || []) {
-        if (group.rawColor) {
-            group.color = nodeColors(group.rawColor, resolved).title;
-        }
-    }
 }
 
 rebuildThemeNodeColors();
+
+// A group's `.color` is always the raw, saved/exported value (whatever set
+// it last: JSON load, LiteGraph's own "Change Color"/"No color" menu,
+// duplication, or "Create Group from Selection" — see createGraphFromJSON,
+// groupInteractions.js and recentNodes.js, none of which tint it). The
+// theme's tint is applied only here, at draw time, so it's impossible for
+// a remapped colour to leak back into saved data, and a group drawn right
+// after creation looks identical to the same group after a reload.
+// Replaces LiteGraph's own `LGraphCanvas.prototype.drawGroups` (see
+// node_modules/litegraph.js/build/litegraph.js) rather than wrapping it,
+// since the colour is the only thing that needs to change.
+LGraphCanvas.prototype.drawGroups = function (canvas, ctx) {
+    if (!this.graph) {
+        return;
+    }
+
+    const groups = this.graph._groups;
+
+    ctx.save();
+    ctx.globalAlpha = 0.5 * this.editor_alpha;
+
+    for (let i = 0; i < groups.length; ++i) {
+        const group = groups[i];
+
+        if (!LiteGraph.overlapBounding(this.visible_area, group._bounding)) {
+            continue; // out of the visible area
+        }
+
+        const tint = nodeColors(group.color).title;
+        ctx.fillStyle = tint;
+        ctx.strokeStyle = tint;
+        const pos = group._pos;
+        const size = group._size;
+        ctx.globalAlpha = 0.25 * this.editor_alpha;
+        ctx.beginPath();
+        ctx.rect(pos[0] + 0.5, pos[1] + 0.5, size[0], size[1]);
+        ctx.fill();
+        ctx.globalAlpha = this.editor_alpha;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(pos[0] + size[0], pos[1] + size[1]);
+        ctx.lineTo(pos[0] + size[0] - 10, pos[1] + size[1]);
+        ctx.lineTo(pos[0] + size[0], pos[1] + size[1] - 10);
+        ctx.fill();
+
+        const font_size = group.font_size || LiteGraph.DEFAULT_GROUP_FONT_SIZE;
+        ctx.font = font_size + "px Arial";
+        ctx.textAlign = "left";
+        ctx.fillText(group.title, pos[0] + 4, pos[1] + font_size);
+    }
+
+    ctx.restore();
+};
 
 // Define style presets array (mutable to allow session-only additions)
 let stylePresets = [
@@ -191,10 +264,13 @@ function applyStylePreset(node, preset) {
     
     // Update actual node appearance (remapped onto the current theme; the
     // stored node_color/title_color above stay the raw preset values).
+    // Title comes from title_color and body from node_color, same as
+    // every other application site (constructor, widget setters,
+    // createGraphFromJSON) — keeps a node's body colour the same before
+    // and after a reload.
     if (node.type === "util/ModuleStyle") {
-        const styled = nodeColors(preset.title_color);
-        node.color = styled.title;
-        node.bgcolor = styled.body;
+        node.color = nodeColors(preset.title_color).title;
+        node.bgcolor = nodeColors(preset.node_color).body;
         node.titleIcon = preset.icon;
     }
     
@@ -1456,12 +1532,9 @@ export function createGraphFromJSON(graphData) {
         node.size = [group.width, group.height];
         node.title = group.title;
         node.font_size = group.font_size;
-        // `node.color` is both the live render field AND what
-        // exportGraph.js serializes back out, so the raw saved value is
-        // kept separately (`rawColor`, read by exportGraph.js) and the
-        // remapped colour is only ever used for drawing.
-        node.rawColor = group.color;
-        node.color = nodeColors(group.color).title;
+        // Raw/saved value — `drawGroups` (above) tints it for display at
+        // draw time; nothing here remaps it.
+        node.color = group.color;
         node.inherited = group.inherited || false;
 
         if(node.inherited) {

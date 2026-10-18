@@ -10,6 +10,13 @@ import { ALL_ROLES, TEXT_ROLES } from '../src/theme/roles.js';
 import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/presets.js';
 import { resolveTheme, toVuetifyColors, themeFromConfig } from '../src/theme/engine.js';
 import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
+import { LGraph, LGraphGroup } from 'litegraph.js';
+import { convertGraphToJSON } from '../src/utils/exportGraph.js';
+// Importing this for its side effects (rebuildThemeNodeColors() at module
+// load, and the LGraphCanvas.prototype.drawGroups override) proves the
+// litegraph utilities module itself is importable outside Vite (no `@/`
+// aliases left unresolved) — see Task 4 fix round 1, finding 1.
+import '../src/utils/litegraphUtils.js';
 
 let passed = 0;
 const failures = [];
@@ -172,6 +179,51 @@ check('node_colors_follow_theme', () => {
     assert.notDeepEqual(nordColors, gruvboxColors);
     assert.ok(isHex(nordColors.title) && isHex(nordColors.body));
     assert.ok(isHex(gruvboxColors.title) && isHex(gruvboxColors.body));
+});
+
+// Pins the name-hash fallback to a concrete value (not just "stable across
+// two calls") so a change to the hash or to ACCENT_KEYS's order is caught.
+check('character_key_hash_is_pinned', () => {
+    assert.equal(characterPaletteKey(null, 'Marta'), 'magenta');
+});
+
+// A single-word Vuetify family name with a shade suffix (as opposed to the
+// two-word `deep-purple-lighten-3` case already covered above).
+check('to_hex_single_word_family_with_shade', () => {
+    assert.equal(toHex('red-lighten-3'), '#ef9a9a');
+});
+
+// Fix round 1, finding 1/2: a group's `.color` must be the single source
+// of truth for its raw/exported colour. LiteGraph's own "Change Color"
+// menu (node_modules/litegraph.js/build/litegraph.js's
+// LGraphCanvas.onMenuNodeColors) and "Create Group from Selection"
+// (recentNodes.js/groupInteractions.js) both just assign `group.color`
+// directly (or `delete` it for "No color") — never anything else — so if
+// litegraphUtils.js's theme remap ever stashes the raw value somewhere
+// other than `.color` itself (as a prior version of this fix did, in a
+// `rawColor` field), a colour picked after the group was created/loaded
+// would silently fail to round-trip through export.
+check('group_color_is_raw_single_source_of_truth', () => {
+    const graph = new LGraph();
+    const group = new LGraphGroup();
+    group.pos = [0, 0];
+    group.size = [200, 100];
+    graph.add(group);
+
+    // Simulates picking a colour from LiteGraph's "Change Color" menu
+    // after the group already exists.
+    group.color = '#ff00ff';
+    let exported = convertGraphToJSON(graph);
+    assert.equal(exported.groups[0].color, '#ff00ff');
+
+    // Simulates "No color" (LGraphCanvas.onMenuNodeColors's
+    // `delete node.color`).
+    delete group.color;
+    exported = convertGraphToJSON(graph);
+    assert.ok(
+        !exported.groups[0].color,
+        `expected no stored colour after "No color", got ${exported.groups[0].color}`,
+    );
 });
 
 if (failures.length > 0) {

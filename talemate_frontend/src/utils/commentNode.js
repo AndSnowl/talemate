@@ -1,5 +1,5 @@
 import { LiteGraph } from 'litegraph.js';
-import { currentTheme } from '@/theme/store';
+import { currentTheme } from '../theme/store.js';
 
 function hexToRgba(hex, alpha) {
     const n = hex.replace('#', '');
