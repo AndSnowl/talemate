@@ -32,6 +32,7 @@ class SceneCultures:
     mix_source: Place | None
     description: str
     cultures: list[Culture] = field(default_factory=list)
+    ancestor_ids: list[str] = field(default_factory=list)
 
 
 def _whole_word_in(candidate: str, text: str) -> bool:
@@ -58,6 +59,21 @@ def _ancestor_depth(by_id: dict[str, Place], place_id: str) -> int:
         place = by_id.get(current_id)
         current_id = place.parent_id if place is not None else None
     return depth
+
+
+def _ancestor_ids(by_id: dict[str, Place], place_id: str) -> list[str]:
+    """Return `place_id` followed by every ancestor up to the root, in order."""
+
+    ids: list[str] = [place_id]
+    visited: set[str] = {place_id}
+    place = by_id.get(place_id)
+    current_id = place.parent_id if place is not None else None
+    while current_id is not None and current_id not in visited:
+        ids.append(current_id)
+        visited.add(current_id)
+        place = by_id.get(current_id)
+        current_id = place.parent_id if place is not None else None
+    return ids
 
 
 def match_place(
@@ -114,9 +130,12 @@ def resolve_scene_cultures(
     if place is not None:
         mix, mix_source = effective_mix(places, place.id)
         description = describe_mix(places, cultures, place.id)
+        by_id = {p.id: p for p in places}
+        ancestor_ids = _ancestor_ids(by_id, place.id)
     else:
         mix, mix_source = [], None
         description = ""
+        ancestor_ids = []
 
     ordered_ids: list[str] = []
     seen: set[str] = set()
@@ -145,4 +164,5 @@ def resolve_scene_cultures(
         mix_source=mix_source,
         description=description,
         cultures=[cultures[culture_id] for culture_id in ordered_ids],
+        ancestor_ids=ancestor_ids,
     )

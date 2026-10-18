@@ -413,11 +413,10 @@ def _build_names_in_use_part(
 ) -> list[str]:
     character_names = {character.name for character in characters}
 
-    place_ids: set[str] = set()
-    if scene.place is not None:
-        place_ids.add(scene.place.id)
-    if scene.mix_source is not None:
-        place_ids.add(scene.mix_source.id)
+    # `scene.place`'s id plus every ancestor up to the root, so a place
+    # between the matched place and the one that supplied the culture mix
+    # (which may have no cultures of its own) is still covered.
+    place_ids: set[str] = set(scene.ancestor_ids)
 
     entries: list[GlossaryEntry] = []
     for entry in glossary:

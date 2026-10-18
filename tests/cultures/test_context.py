@@ -306,3 +306,43 @@ def test_language_traits_patterns():
     )
     traits = language_traits(travelled, cultures)
     assert traits == []
+
+
+def test_names_in_use_includes_intermediate_ancestor():
+    # Quillister House (building) -> Veldhaer (town, no cultures of its
+    # own) -> The Taelrik Reach (country, where the mix actually comes
+    # from). Veldhaer is an ancestor with no mix of its own, sitting
+    # between the matched place and the mix's source.
+    cultures = build_test_cultures()
+    places = build_places()
+    scene = resolve_scene_cultures(
+        cultures,
+        places,
+        location="Quillister House",
+        snapshot_places=[],
+        characters=[],
+    )
+    assert scene.place.id == "quillister"
+    assert scene.mix_source.id == "reach"
+    assert "veldhaer" in scene.ancestor_ids
+
+    entry = GlossaryEntry(
+        id="g-ancestor",
+        text="Veldhaer",
+        language="taelrik",
+        kind="place",
+        place_id="veldhaer",
+        origin=GlossaryOrigin(by="owner"),
+    )
+
+    section = build_culture_section(
+        scene=scene,
+        cultures=cultures,
+        glossary=[entry],
+        characters=[],
+        recent_text="",
+        budget=400,
+        rng=random.Random(8),
+    )
+
+    assert "Veldhaer (place)" in section.text
