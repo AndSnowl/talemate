@@ -21,6 +21,8 @@ RESULT_PREFIX = "SEED_RESULT "
 SCENE_TITLE_TIMEOUT_MS = 60_000
 
 
+# Same import-by-path as conftest._load_script, duplicated because conftest
+# imports this module (importing conftest from here would be circular).
 def _load_talemate_app():
     if "talemate_app" in sys.modules:
         return sys.modules["talemate_app"]
@@ -177,15 +179,23 @@ _BACKEND_SOCKET_JS = """
 """
 
 
-def dismiss_onboarding(page) -> None:
-    """Close the first-run "Welcome to Talemate" wizard.
+def dismiss_onboarding(page, timeout_ms: float = 60_000) -> None:
+    """Close the first-run "Welcome to Talemate" wizard, if it opens.
 
-    The app shows it whenever no AI client is configured (as in a run
-    started without ``--ai``), and only remembers the dismissal per page.
+    The app opens it when its config has no AI client (a run started
+    without ``--ai``), and remembers a dismissal only per page. With a
+    client configured it never opens. The app bar alone can't tell those
+    apart (it shows before the config arrives), so wait for whichever comes
+    first: the wizard's Skip button, or a configured client listed in the
+    Clients drawer (``data-testid="ai-client"``), which means the config has
+    a client and the wizard won't open.
     """
     skip = page.get_by_role("button", name="Skip setup for now")
-    skip.click(timeout=60_000)
-    skip.wait_for(state="hidden", timeout=10_000)
+    client = page.get_by_test_id("ai-client")
+    skip.or_(client).first.wait_for(state="visible", timeout=timeout_ms)
+    if skip.is_visible():
+        skip.click()
+        skip.wait_for(state="hidden", timeout=10_000)
 
 
 def open_scene(page, scene_path: Path) -> None:

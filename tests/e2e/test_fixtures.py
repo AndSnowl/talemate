@@ -6,7 +6,7 @@ from pathlib import Path
 
 # tests/ has no __init__.py, so pytest imports this package as `e2e`.
 from e2e import conftest as e2e_conftest
-from e2e.seed import open_scene, seed_world
+from e2e.seed import dismiss_onboarding, open_scene, seed_world
 
 pytest_plugins = ["pytester"]
 
@@ -111,3 +111,28 @@ def test_failure_hook_saves_artifacts_for_failing_test(pytester, tmp_path):
     result.assert_outcomes(passed=1, failed=1)
     shots = list(artifacts.glob("*/*/screenshot.png"))
     assert [p.parent.name for p in shots] == ["test_boom"]
+
+
+def test_dismiss_onboarding_without_dialog(tmp_path, browser_page, monkeypatch):
+    """With a client configured the wizard never opens; dismiss_onboarding
+    must notice that the app is ready instead of waiting for the dialog."""
+    import socket
+    import time
+
+    # A client pointing at a closed local port: configured, never reachable.
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        closed_port = sock.getsockname()[1]
+    monkeypatch.setenv("TALEMATE_TEST_KOBOLDCPP_URL", f"http://127.0.0.1:{closed_port}")
+    info = e2e_conftest.talemate_app.start(root=tmp_path / "app", ai=True)
+    try:
+        browser_page.goto(info.frontend_url)
+        started = time.monotonic()
+        dismiss_onboarding(browser_page)
+        assert time.monotonic() - started < 30
+        assert not browser_page.get_by_role(
+            "button", name="Skip setup for now"
+        ).is_visible()
+        browser_page.locator(APP_BAR).wait_for(state="visible", timeout=10_000)
+    finally:
+        e2e_conftest.talemate_app.stop(info.root)

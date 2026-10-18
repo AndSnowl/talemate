@@ -36,6 +36,7 @@ ARTIFACTS_DIR = REPO_ROOT / ".test-artifacts"
 LOG_TAIL_LINES = 200
 
 
+# seed._load_talemate_app repeats this; seed can't import conftest (circular).
 def _load_script(name: str):
     """Import scripts/dev/<name>.py once, under the module name ``name``."""
     if name in sys.modules:
@@ -112,7 +113,7 @@ def page(app, browser_page):
 
     browser_page.on("console", on_console)
     browser_page.goto(app.frontend_url)
-    # The session app has no AI client, so the onboarding wizard always opens.
+    # Skips the onboarding wizard if it opens (it does when no AI client).
     dismiss_onboarding(browser_page)
     return browser_page
 

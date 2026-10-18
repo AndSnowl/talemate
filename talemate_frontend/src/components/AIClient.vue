@@ -11,7 +11,7 @@
   <div v-if="isConnected()">
     <div v-for="(client, index) in state.clients" :key="index">
       <v-list density="compact" v-if="client.status !== 'disabled' || !hideDisabled">
-        <v-list-item>
+        <v-list-item data-testid="ai-client">
           <v-list-item-title>
             <v-progress-circular v-if="client.status === 'busy'" indeterminate="disable-shrink" color="primary"
               size="14"></v-progress-circular>
