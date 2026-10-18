@@ -74,8 +74,23 @@ check('word_boundary', () => {
     const saervikMention = { name: 'word:saervik', kind: FOREIGN_KIND, subkind: 'word', phrases: ['saervik'] };
     const mentions = [saervikMention, ...foreignMentions([curse])];
     const parser = new SceneTextParser();
-    const html = parser.parse("saerviking roams the hills. Rhokbert tal'dunny arrives.", { mentions });
-    assert.ok(!html.includes('scene-foreign'), html);
+
+    // Inside a longer word, at either end, nothing is highlighted.
+    for (const text of [
+        'saerviking roams the hills.',
+        'xsaervik roams the hills.',
+        "Rhok tal'dunny arrives.",
+        "xRhok tal'dun arrives.",
+    ]) {
+        const html = parser.parse(text, { mentions });
+        assert.ok(!html.includes('scene-foreign'), `${text} -> ${html}`);
+    }
+
+    // The same text standing alone is highlighted, so the cases above can fail.
+    for (const text of ['saervik roams the hills.', "Rhok tal'dun arrives."]) {
+        const html = parser.parse(text, { mentions });
+        assert.ok(html.includes('scene-foreign'), `${text} -> ${html}`);
+    }
 });
 
 check('word_boundary_unicode', () => {
