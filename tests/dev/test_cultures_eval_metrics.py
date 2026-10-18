@@ -326,3 +326,18 @@ def test_render_only_rewrites_reports_from_raw_results(tmp_path):
     markdown = (tmp_path / "report.md").read_text()
     assert "## Latency added per creation" in markdown
     assert "(n=1)" in markdown
+
+
+def test_narration_name_use_ignores_contractions_and_i(taelrik):
+    result = metrics.narration_name_use(
+        prompt="",
+        response=(
+            "Hadrik said, and then I'll go, and I'm sure, and so I said that "
+            "We're done, They've left, I'd stay, Don't move, That's it, and "
+            "then Zorblax's boat sank."
+        ),
+        spares=[],
+        language=taelrik,
+    )
+    # only the invented name counts, through its possessive
+    assert result["new_names"] == ["Zorblax"]

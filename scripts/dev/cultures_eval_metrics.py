@@ -75,6 +75,12 @@ _CALENDAR_WORDS = frozenset(
 
 # A capitalised word, allowing inner apostrophes and hyphens ("Vel'dhaer").
 _CAPITALISED = re.compile(r"\b[A-Z][\w'’-]*")
+
+# An English contraction ending ("I'll", "I'm", "We're", "They've", "I'd",
+# "Don't"). A trailing 's is a possessive as often as a contraction, so it's
+# left to `clean_name`, which drops it: "That's" is then the common word
+# "That", while an invented name's possessive still counts.
+_CONTRACTION = re.compile(r"['’](?:ll|m|re|ve|d|t)$", re.IGNORECASE)
 _QUOTES = str.maketrans(
     {
         "’": "'",
@@ -209,18 +215,23 @@ def narration_name_use(prompt: str, response: str, spares: list[str], language) 
 
     New names are capitalised words found mid-sentence in ``response``
     (`mid_sentence_occurrence`) that don't appear in ``prompt`` (whole
-    word, any case), aren't in `COMMON_WORDS` (nor a weekday or month) and
-    aren't a spare. Each one
+    word, any case), aren't in `COMMON_WORDS` (nor a weekday or month),
+    aren't a spare, and aren't the pronoun "I" or a contraction ("I'll",
+    "I'm", "We're", "They've", "I'd", "Don't"). Each one
     counts as fitting when it fits ``language`` (a `Language`, a dict, or a
     list of either: fitting any of them counts).
     """
     spare_keys = {spare.lower() for spare in spares}
     new_names: list[str] = []
     for match in _CAPITALISED.finditer(response or ""):
+        if _CONTRACTION.search(match.group(0).rstrip("-'’")):
+            continue
         word = clean_name(match.group(0)).strip("-'’")
         if not word or not word[:1].isupper():
             continue
         key = word.lower()
+        if key == "i":
+            continue
         if key in COMMON_WORDS or key in _CALENDAR_WORDS or key in spare_keys:
             continue
         if word in new_names:
