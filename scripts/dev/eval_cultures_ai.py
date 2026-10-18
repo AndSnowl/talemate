@@ -97,6 +97,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="scenarios to run (default: all three)",
     )
     parser.add_argument(
+        "--render-only",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help=(
+            "don't run anything: reload DIR/report.json, recompute the summary "
+            "with the current metrics code and rewrite DIR/report.json and "
+            "DIR/report.md (no app, no model, no TALEMATE_AI_TESTS needed)"
+        ),
+    )
+    parser.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -159,13 +170,24 @@ class Report:
                 "traceback": traceback.format_exc(),
             }
             markdown = f"# Cultures AI evaluation\n\nThe summary failed: {exc}\n"
-        _write_atomic(
-            self.out_dir / "report.json",
-            json.dumps(
-                {**self.results, "summary": summary}, indent=2, ensure_ascii=False
-            ),
-        )
-        _write_atomic(self.out_dir / "report.md", markdown)
+        # a failed write (disk full, a bad value) is logged; the run goes on
+        # and the next step's write tries again
+        try:
+            _write_atomic(
+                self.out_dir / "report.json",
+                json.dumps(
+                    {**self.results, "summary": summary},
+                    indent=2,
+                    ensure_ascii=False,
+                    default=str,
+                ),
+            )
+        except Exception as exc:
+            log(f"  could not write report.json: {type(exc).__name__}: {exc}")
+        try:
+            _write_atomic(self.out_dir / "report.md", markdown)
+        except Exception as exc:
+            log(f"  could not write report.md: {type(exc).__name__}: {exc}")
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -473,8 +495,24 @@ def ensure_app(info, root: Path):
     return talemate_app.start(root=root, ai=True)
 
 
+def render_only(out_dir: Path) -> int:
+    """Re-render ``out_dir``'s report from its raw results; start nothing."""
+    path = out_dir / "report.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(f"cannot read {path}: {exc}", file=sys.stderr)
+        return 1
+    data.pop("summary", None)
+    Report(out_dir, data).write()
+    print(f"re-rendered {out_dir / 'report.md'}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.render_only is not None:
+        return render_only(args.render_only.resolve())
     if os.environ.get("TALEMATE_AI_TESTS") != "1":
         print(talemate_app.AI_GATE_MESSAGE, file=sys.stderr)
         return 2
@@ -535,7 +573,11 @@ def main(argv: list[str] | None = None) -> int:
                         progress.step()
                     continue
                 log(f"{key} run {run}/{args.runs}: start")
-                run_scenario(report, info, key, run, args, progress)
+                try:
+                    run_scenario(report, info, key, run, args, progress)
+                except Exception as exc:  # backstop: never lose the other runs
+                    report.error(key, run, "scenario run", exc)
+                    report.write()
         results["finished"] = _now()
     except KeyboardInterrupt:
         log("interrupted; writing what was done so far")

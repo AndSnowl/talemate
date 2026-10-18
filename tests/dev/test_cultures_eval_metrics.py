@@ -6,6 +6,8 @@ from the AI fixture cultures in tests/ai/data/.
 
 import importlib.util
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -297,3 +299,30 @@ def test_summarise_empty_results_renders():
     }
     text = metrics.render_markdown(metrics.summarise(results), "m")
     assert "boom" in text
+
+
+def test_render_only_rewrites_reports_from_raw_results(tmp_path):
+    """``eval_cultures_ai.py --render-only DIR`` re-renders, starting nothing."""
+    stale = {**_results(), "summary": {"stale": True}}
+    (tmp_path / "report.json").write_text(json.dumps(stale))
+    env = {k: v for k, v in os.environ.items() if k != "TALEMATE_AI_TESTS"}
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(_REPO_ROOT / "scripts" / "dev" / "eval_cultures_ai.py"),
+            "--render-only",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr
+    report = json.loads((tmp_path / "report.json").read_text())
+    assert "stale" not in report["summary"]
+    assert report["summary"]["scenarios"]["taelrik_town"]["naming"]["npcs"] == 1
+    assert report["scenarios"] == stale["scenarios"]  # raw results kept
+    markdown = (tmp_path / "report.md").read_text()
+    assert "## Latency added per creation" in markdown
+    assert "(n=1)" in markdown

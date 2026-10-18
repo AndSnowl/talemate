@@ -354,12 +354,17 @@ def _latency(npcs: list[dict]) -> dict:
         for npc in npcs
         if (npc.get("event") or {}).get("generator_id")
     ]
+    pick_s = [
+        npc.get("pick_prompt_s") for npc in npcs if npc.get("pick_prompt_s") is not None
+    ]
     return {
         "creations": len(npcs),
         "mean_culture_prompt_s": _mean(prompt_s),
         "p90_culture_prompt_s": _p90(prompt_s),
-        "mean_pick_prompt_s": _mean(npc.get("pick_prompt_s") for npc in npcs),
+        "mean_pick_prompt_s": _mean(pick_s),
+        "pick_n": len(pick_s),
         "mean_hook_ms": _mean(hook_ms),
+        "hook_n": len([ms for ms in hook_ms if ms is not None]),
         "mean_persist_s": _mean(npc.get("wall_s") for npc in npcs),
     }
 
@@ -787,7 +792,9 @@ def render_markdown(summary: dict, model: str) -> str:
         "Hadrik curses in Taelrik, and the prompt gives the narrator his "
         "exact Taelrik curses. The rate is the narrations that contain at "
         "least one of those curses word for word, out of the narrations "
-        "where Hadrik appears. Sayings are counted over all narrations, for "
+        "where Hadrik appears. Case, the kind of quote marks and a curse's "
+        'own end punctuation are ignored, so "Rhok tal’dun," counts for '
+        '"Rhok tal\'dun!". Sayings are counted over all narrations, for '
         "information.",
         "",
     ]
@@ -854,8 +861,13 @@ def render_markdown(summary: dict, model: str) -> str:
         "during the creation (the name pick, plus any place or custom check "
         'a background snapshot ran at the same time); "name pick" is the '
         'name-pick call alone. "Hook time" is the whole naming step as '
-        "the agent measured it. The full creation time includes the "
-        "creator's own model calls, which happen with or without cultures.",
+        'the agent measured it. "p90" is the time that 9 out of 10 '
+        "creations stayed under, so it shows the slow cases the mean hides. "
+        "The name pick and the hook time only exist for creations where the "
+        "agent picked a name from a generator, so those two columns give "
+        "their own count (n), which can be smaller than the creations "
+        "count. The full creation time includes the creator's own model "
+        "calls, which happen with or without cultures.",
         "",
     ]
     out += _table(
@@ -864,8 +876,8 @@ def render_markdown(summary: dict, model: str) -> str:
             "Creations",
             "Culture model time (mean)",
             "Culture model time (p90)",
-            "Name pick (mean)",
-            "Hook time (mean)",
+            "Name pick (mean, n)",
+            "Hook time (mean, n)",
             "Full creation (mean)",
         ],
         [
@@ -874,14 +886,16 @@ def render_markdown(summary: dict, model: str) -> str:
                 b["latency"]["creations"],
                 _num(b["latency"]["mean_culture_prompt_s"], 1, " s"),
                 _num(b["latency"]["p90_culture_prompt_s"], 1, " s"),
-                _num(b["latency"]["mean_pick_prompt_s"], 1, " s"),
+                _num(b["latency"]["mean_pick_prompt_s"], 1, " s")
+                + f" (n={b['latency']['pick_n']})",
                 _num(
                     None
                     if b["latency"]["mean_hook_ms"] is None
                     else b["latency"]["mean_hook_ms"] / 1000,
                     1,
                     " s",
-                ),
+                )
+                + f" (n={b['latency']['hook_n']})",
                 _num(b["latency"]["mean_persist_s"], 1, " s"),
             ]
             for label, b in _rows(summary)
