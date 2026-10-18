@@ -141,7 +141,7 @@ _ROLE_WORDS: frozenset[str] = frozenset(
         "servant",
         "slave",
         "worker",
-        # added in task 8b for role/occupation labels common in snapshots
+        # role/occupation labels common in snapshots
         "barman",
         "carter",
         "chandler",
@@ -160,7 +160,7 @@ _ROLE_WORDS: frozenset[str] = frozenset(
 )
 
 
-# Geographic/building words (Task 0): a capitalised run ending in one of
+# Geographic/building words: a capitalised run ending in one of
 # these ("Lowmarsh Docks", "Kesterholm Port") reads as a place, not a
 # person's name, even when it isn't yet a known place in the world.
 _PLACE_WORDS: tuple[str, ...] = (

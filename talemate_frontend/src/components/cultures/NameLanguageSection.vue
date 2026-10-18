@@ -29,9 +29,10 @@
             >
                 {{ section.language ? section.language.name : 'none yet' }}
             </v-chip>
-            <span v-if="section.language && section.meaning">&ldquo;{{ section.meaning }}&rdquo;</span>
+            <span v-if="section.language && section.meaning" data-testid="name-meaning">&ldquo;{{ section.meaning }}&rdquo;</span>
             <span v-else-if="section.language" class="note">no meaning recorded</span>
             <span v-else class="note">{{ section.languageNote }}</span>
+            <span v-if="!section.language && section.meaning" data-testid="name-meaning">&ldquo;{{ section.meaning }}&rdquo;</span>
         </div>
 
         <div v-if="section.culture" class="row" data-testid="name-culture-row">

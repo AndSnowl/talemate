@@ -88,7 +88,7 @@ PICK_NAME_SPEC = ResponseSpec(
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
-# Task 0: prepositions that mean a capitalised run right after them is a
+# Prepositions that mean a capitalised run right after them is a
 # place mention ("a ferryman from Kesterholm"), not the content naming the
 # character — even when that place isn't yet known to the world.
 _LOCATION_PREPOSITIONS = {
@@ -215,8 +215,8 @@ def record_kept_name(
 
     Shared by `on_after_persist_character` and `_snapshot_character_cultures`
     so a kept name reaches the glossary whichever one sets the culture
-    first. R2: the glossary is re-loaded right before the save, no await in
-    between. Returns whether an entry was written.
+    first. The glossary is re-loaded right before the save, with no await in
+    between, so a concurrent write isn't lost. Returns whether an entry was written.
     """
 
     entries = world.store.load_glossary()
@@ -459,7 +459,8 @@ class CultureNamingMixin:
             ),
         )
 
-        # R2: re-load right before the save, no await in between
+        # re-load right before the save, with no await in between, so a
+        # concurrent write isn't lost
         entries = world.store.load_glossary()
         if not any(entry.text.lower() == name.lower() for entry in entries):
             entries.append(

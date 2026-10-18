@@ -52,7 +52,7 @@ export function matchVariants(text) {
     return variants;
 }
 
-// Turn the scene's foreign-word lexicon (Task 1-3's `story.lexicon`) into
+// Turn the scene's foreign-word lexicon (the `story` push's `lexicon`) into
 // renderer mentions. Entries with no matchable variants are dropped.
 export function foreignMentions(lexicon) {
     const mentions = [];
@@ -80,11 +80,19 @@ export function nameKey(text) {
     return s;
 }
 
-// Index `story.names` (Task 3's `NameInfo[]`) by every text a story
+// Index `story.names` (`NameInfo[]`) by every text a story
 // mention might carry: the name's own text, each culture rendering's
 // text, and the character name it belongs to (when any). The first entry
 // to claim a key wins.
+//
+// Memoised by the `names` array itself: every chip and open bubble asks
+// for the index, and an unchanged story push keeps the same array.
+const nameIndexCache = new WeakMap();
+
 export function buildNameIndex(names) {
+    if (Array.isArray(names) && nameIndexCache.has(names)) {
+        return nameIndexCache.get(names);
+    }
     const index = new Map();
     const addKey = (key, info) => {
         if (!key) return;
@@ -97,6 +105,7 @@ export function buildNameIndex(names) {
         }
         addKey(nameKey(info.character_name), info);
     }
+    if (Array.isArray(names)) nameIndexCache.set(names, index);
     return index;
 }
 
@@ -133,7 +142,7 @@ function stripLeadingThe(key) {
     return key.startsWith('the ') ? key.slice(4) : key;
 }
 
-// Find the `CharacterInfo` (Task 2's shape) for `entityName`, whatever its
+// Find the `CharacterInfo` for `entityName`, whatever its
 // culture state — characterChip needs to see an uncultured/owner-cleared
 // character too, unlike `findCharacterInfo` below.
 function findCharacterInfoAny(characters, entityName) {
@@ -141,7 +150,7 @@ function findCharacterInfoAny(characters, entityName) {
     return (characters || []).find((c) => nameKey(c.name) === key) ?? null;
 }
 
-// Find the `CharacterInfo` (Task 2's shape) for `entityName`, but only
+// Find the `CharacterInfo` for `entityName`, but only
 // when it has a culture assigned — an uncultured character gets no
 // culture section at all.
 function findCharacterInfo(characters, entityName) {
@@ -149,7 +158,7 @@ function findCharacterInfo(characters, entityName) {
     return character && character.culture_id != null ? character : null;
 }
 
-// Find the `PlaceInfo` (Task 2's shape) for `entityName`, matching by
+// Find the `PlaceInfo` for `entityName`, matching by
 // `nameKey` and, failing that, with a leading "the " dropped from either
 // side.
 function findPlaceInfo(places, entityName) {
@@ -431,7 +440,7 @@ export function placeChip(story, name) {
     if (!base) return null;
 
     const unreviewed = Boolean((place && place.unsure) || (info && info.status === 'unreviewed'));
-    // R8: the glossary entry is the target only when *it* is unreviewed
+    // The glossary entry is the target only when *it* is unreviewed
     // (mirroring `characterChip`) — an unsure *place* with an already
     // reviewed name still targets the place, not a reviewed entry with
     // nothing left to review.

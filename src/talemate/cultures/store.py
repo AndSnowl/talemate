@@ -264,9 +264,18 @@ class WorldStore:
         )
 
     def snapshot(self) -> dict:
-        cultures = self.load_cultures()
-        places = self.load_places()
-        glossary = self.load_glossary()
+        return self._snapshot(
+            self.load_cultures(), self.load_places(), self.load_glossary()
+        )
+
+    def _snapshot(
+        self,
+        cultures: dict[str, Culture],
+        places: list[Place],
+        glossary: list[GlossaryEntry],
+    ) -> dict:
+        """`snapshot()`'s computation, over already-loaded data, so a caller
+        sending several replies from the same files reads them once."""
 
         place_dumps = []
         for place in places:

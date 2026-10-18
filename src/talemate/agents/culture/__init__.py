@@ -1,13 +1,13 @@
 """The Culture agent.
 
-Brings a shared world's cultures (plan 1: `talemate.cultures`) into play:
+Brings a shared world's cultures (`talemate.cultures`) into play:
 
 - injects the "Cultures and names" prompt section into narrator and
   conversation prompts (built from files and rules only, no model call)
 - pre-supplies culture-appropriate names when the creator is about to
-  invent one (`naming.py`, Task 7)
+  invent one (`naming.py`)
 - records new places and names after a world-state snapshot
-  (`snapshot.py`, Task 8)
+  (`snapshot.py`)
 
 A scene with no shared world, or a world with no cultures, is left exactly
 as before: no section, no naming, no detection and no scene state. Every
@@ -44,7 +44,8 @@ __all__ = ["CultureAgent", "LoadedWorld"]
 log = structlog.get_logger("talemate.agents.culture")
 
 # At most this many offered spare names are remembered in scene state
-# (oldest dropped), so Task 8 can tell a reused spare from a free invention.
+# (oldest dropped), so the snapshot step can tell a reused spare from a free
+# invention.
 MAX_OFFERED_SPARES = 60
 
 _RECENT_MESSAGE_TYPES = ("narrator", "character", "context_investigation")

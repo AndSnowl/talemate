@@ -1,7 +1,6 @@
 """E2E: foreign-word highlights in the story, the unreviewed-name dot, and
-the app-level World Editor badge (plan 3, task 5).
-
-See .superpowers/sdd/2026-10-18-cultures-story/task-5-brief.md.
+the app-level World Editor badge, the story bubbles, the review jumps and
+the World panel chips.
 """
 
 from __future__ import annotations
@@ -86,7 +85,7 @@ M2 = (
     "swung from the tal post near Quillister House."
 )
 
-# Pulled out of `_seed_story` (task 7) so `test_review_jump_to_missing_entry_is_harmless`
+# Pulled out of `_seed_story` so `test_review_jump_to_missing_entry_is_harmless`
 # can re-place the same seed minus one entry, without the frontend being told
 # (no `review_glossary_entry`/`get_story` push accompanies a direct `place_glossary` call).
 _SEED_GLOSSARY_ENTRIES = [
@@ -164,7 +163,7 @@ _SEED_GLOSSARY_ENTRIES = [
 
 
 def _seed_story(app, project, **overrides):
-    """Seed a world matching task 5's brief: Veldhaer, Kethrun, two cultures
+    """Seed a story world: Veldhaer, Kethrun, two cultures
     (Taelrik, Ghûn), four places and seven fixed-id glossary entries.
 
     `unreviewed_total` ends up `2` (`g-kethrun`, `g-quillister`).
@@ -469,6 +468,42 @@ def test_no_world_no_highlights_or_badge(app, page):
 
     assert page.locator(".scene-foreign").count() == 0
     assert page.get_by_test_id("app-tab-badge-world").count() == 0
+
+    for error in page.console_errors:
+        assert "TypeError" not in error
+        assert "cultures" not in error
+
+
+def test_switch_to_world_less_scene_clears_highlights_and_badge(app, page):
+    """Switching from a world scene (highlights, badge, an open foreign
+    bubble) to a scene with no shared world leaves none of them behind."""
+    world = _seed_story(app, "story-switch-world")
+    plain_path = seed_scene_without_world(
+        app.root,
+        project="story-switch-plain",
+        messages=[{"text": M1}],
+    )
+
+    _watch_cultures_story_frames(page)
+    open_scene(page, world.scene_path)
+
+    curse_span = page.locator(".scene-foreign", has_text="Rhok tal’dun")
+    curse_span.first.wait_for(state="visible", timeout=30_000)
+    page.get_by_test_id("app-tab-badge-world").wait_for(state="visible", timeout=30_000)
+    curse_span.first.click()
+    card = page.get_by_test_id("foreign-word-card")
+    card.wait_for(state="visible", timeout=15_000)
+
+    page.evaluate("() => { window.__e2eCulturesStoryFrames = []; }")
+    open_scene(page, plain_path)
+    page.get_by_text("Khaz-Rull wore its collar of cloud").wait_for(
+        state="visible", timeout=30_000
+    )
+    _wait_for_cultures_story_frame(page)
+
+    assert page.locator(".scene-foreign").count() == 0
+    assert page.get_by_test_id("app-tab-badge-world").count() == 0
+    card.wait_for(state="hidden", timeout=15_000)
 
     for error in page.console_errors:
         assert "TypeError" not in error

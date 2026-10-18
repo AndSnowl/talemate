@@ -55,7 +55,8 @@ def world(scene, tmp_path) -> WorldStore:
     scene.world_state.location = LOCATION
 
     # An unsure, AI-set character culture, so a test can tell whether
-    # `_send_counts` actually folds it into `unreviewed_total` (Ruling R1).
+    # `_send_counts` actually folds it into `unreviewed_total`, as the
+    # `world` reply's counts do.
     scene.character_data["Kethrun"] = Character(
         name="Kethrun",
         description="",
@@ -216,3 +217,42 @@ async def test_story_errors_reported_not_raised(plugin, world):
     assert counts["data"] == {}
     assert story["data"]["error"]
     assert story["data"]["lexicon"] == []
+
+
+@pytest.mark.asyncio
+async def test_world_reply_reads_the_world_files_once(plugin, world, monkeypatch):
+    """`counts`, `story` and `world` are built from one read of each file."""
+    store = plugin._store()
+    reads = {"cultures": 0, "places": 0, "glossary": 0}
+    for name in reads:
+        original = getattr(store, f"load_{name}")
+
+        def counted(original=original, name=name):
+            reads[name] += 1
+            return original()
+
+        monkeypatch.setattr(store, f"load_{name}", counted)
+    monkeypatch.setattr(plugin, "_store", lambda: store)
+    plugin.websocket_handler.messages.clear()
+
+    await plugin.handle_get_world({})
+
+    assert reads == {"cultures": 1, "places": 1, "glossary": 1}
+    actions = [m["action"] for m in plugin.websocket_handler.messages]
+    assert actions == ["counts", "story", "world"]
+    world_data = _by_action(plugin, "world")["data"]
+    assert world_data["counts"] == _by_action(plugin, "counts")["data"]
+    assert world_data["glossary"]
+    assert _by_action(plugin, "story")["data"]["lexicon"]
+
+
+@pytest.mark.asyncio
+async def test_world_reply_errors_reported_not_raised(plugin, world):
+    world.glossary_path.write_text("{", encoding="utf-8")
+    plugin.websocket_handler.messages.clear()
+
+    await plugin.handle_get_world({})
+
+    assert _by_action(plugin, "counts")["data"] == {}
+    assert _by_action(plugin, "story")["data"]["error"]
+    assert _by_action(plugin, "world")["data"]["error"]

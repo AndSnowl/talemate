@@ -214,7 +214,7 @@ def test_lexicon_dictionary_meaning_and_dedupe():
 
 
 def test_lexicon_usage_always_from_matching_dictionary_entry():
-    """Ruling R6: `usage` comes from the matching dictionary entry's
+    """`usage` comes from the matching dictionary entry's
     `notes` whenever one exists, even when the glossary entry already has
     its own `meaning` (only `translation` prefers the glossary's own
     `meaning` over the dictionary's)."""

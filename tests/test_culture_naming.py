@@ -1,4 +1,4 @@
-"""Tests for culture-aware character naming (plan 2 / task 7): the Culture
+"""Tests for culture-aware character naming: the Culture
 agent's pre-naming hook (culture guess, generator roll, one model pick),
 the glossary record it leaves, and the after-persist step that sets the
 new character's culture.
@@ -381,7 +381,7 @@ def snapshot_emission(scene) -> WorldStateSnapshotEmission:
 async def test_snapshot_culture_first_then_persist_still_glossaries_kept_name(
     scene, world, agent, monkeypatch
 ):
-    # task 8c: a background snapshot can set the character's culture before
+    # a background snapshot can set the character's culture before
     # after-persist runs; the kept name must still reach the glossary
     install_picker(monkeypatch, lambda vars: ("", {}))
     scene.world_state.location = "A room at Quillister House in Veldhaer"
@@ -652,7 +652,7 @@ async def test_known_place_or_culture_in_content_still_named(
 async def test_unknown_place_in_content_does_not_block_naming(
     scene, world, agent, monkeypatch
 ):
-    """Task 0: an unrecognised place mention ("from Kesterholm", "at the
+    """An unrecognised place mention ("from Kesterholm", "at the
     Lowmarsh Docks") isn't mistaken for the content naming the character,
     so culture naming still rolls a candidate."""
     calls = install_picker(monkeypatch, pick_index(0))
@@ -672,7 +672,7 @@ async def test_unknown_place_in_content_does_not_block_naming(
 async def test_explicit_naming_still_wins_over_an_unknown_place(
     scene, world, agent, monkeypatch
 ):
-    """Task 0 rule 3: explicit naming phrases ("called Varn") still keep
+    """Explicit naming phrases ("called Varn") still keep
     the content's own name, even when another unknown place is mentioned
     right next to it."""
     calls = install_picker(monkeypatch, pick_index(0))

@@ -197,7 +197,7 @@ def build_scene_lexicon(
                 translation = dict_entry.meaning
             # `usage` always comes from the matching dictionary entry's
             # notes when one exists, even when the glossary entry already
-            # has its own `meaning` (Ruling R6).
+            # has its own `meaning`.
             usage = dict_entry.notes if dict_entry is not None else ""
 
             add(

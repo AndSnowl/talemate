@@ -141,7 +141,7 @@ check('overlap', () => {
     };
     const foreign = foreignMentions([dhunPhrase]);
 
-    // R2: combineMentions(names, foreign) — names first, so a name wins on
+    // combineMentions(names, foreign) — names first, so a name wins on
     // equal text (checked below), and a future argument-order swap fails
     // this assertion first.
     const combined = combineMentions([dhunEntity], foreign);
@@ -205,8 +205,12 @@ check('name_key_and_index', () => {
         renderings: [{ culture_id: 'taelrik', culture_name: 'Taelrik', text: 'Khaz-Rull' }],
         character_name: null,
     };
-    const index = buildNameIndex([khazRull]);
+    const names = [khazRull];
+    const index = buildNameIndex(names);
     assert.equal(index.get(nameKey('Khaz-Rull')), khazRull);
+    // Memoised by the array: the same array gives the same index.
+    assert.equal(buildNameIndex(names), index);
+    assert.notEqual(buildNameIndex([khazRull]), index);
 });
 
 check('compile_cache', () => {
@@ -317,8 +321,8 @@ check('find_lexicon_entry', () => {
     assert.equal(findLexiconEntry({}, 'nope'), null);
 });
 
-// Fixtures: task 5's seed (tests/e2e/cultures/test_story.py's _seed_story),
-// shaped as Task 2's NameInfo/CharacterInfo/PlaceInfo dumps.
+// Fixtures: the e2e story seed (tests/e2e/cultures/test_story.py's
+// _seed_story), shaped as the `story` push's NameInfo/CharacterInfo/PlaceInfo.
 const kethrunInfo = {
     id: 'g-kethrun',
     text: 'Kethrun',
@@ -489,7 +493,7 @@ check('name_section_none', () => {
     assert.equal(section, null);
 });
 
-// Fixture: a small `world` payload (Task 7's resolveReviewTarget input),
+// Fixture: a small `world` payload (resolveReviewTarget's input),
 // shaped like the Cultures tab's `world` message. `g-orphan`'s culture
 // isn't in `cultures` (deleted since the target was captured).
 const reviewWorld = {
@@ -557,8 +561,8 @@ check('resolve_missing_target', () => {
     assert.equal(resolveReviewTarget(reviewWorld, { type: 'glossary', entry_id: 'g-orphan' }), null);
 });
 
-// Fixtures: task 8's `characterChip`/`placeChip` (World panel chips),
-// built on top of task 5's `storyFixture`/`kethrunInfo`/`kethrunCharacter`/
+// Fixtures: `characterChip`/`placeChip` (World panel chips), built on
+// top of `storyFixture`/`kethrunInfo`/`kethrunCharacter`/
 // `veldhaerPlace`/`quillisterInfo`.
 const borinCharacter = {
     name: 'Borin',
@@ -623,7 +627,7 @@ const quillisterPlace = {
     set_by: 'owner',
     unsure: false,
 };
-// R8 (fix round 1): an unsure place whose *name* is already reviewed —
+// An unsure place whose *name* is already reviewed —
 // the dot still targets the place, not a reviewed glossary entry with
 // nothing left to review.
 const rivermootInfo = {
@@ -703,7 +707,7 @@ check('place_chip', () => {
     assert.equal(unknownPlace.unreviewed, true);
     assert.deepEqual(unknownPlace.target, { type: 'glossary', entry_id: 'g-quillister' });
 
-    // R8: unsure (place.unsure), but the name itself is already reviewed —
+    // Unsure (place.unsure), but the name itself is already reviewed —
     // the dot must target the place, not the reviewed glossary entry.
     const rivermoot = placeChip(chipStory, 'Rivermoot');
     assert.equal(rivermoot.unreviewed, true);

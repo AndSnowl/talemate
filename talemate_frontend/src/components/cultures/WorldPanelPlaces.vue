@@ -21,7 +21,7 @@
 <script>
 import CultureChip from './CultureChip.vue';
 
-// The World panel's "places" section (Task 8): one row per
+// The World panel's "places" section: one row per
 // `world_state.places` entry, each with its culture chip and the
 // place's snapshot text — the same expansion-panel shape as the
 // characters/objects sections above it in WorldState.vue.

@@ -27,7 +27,7 @@ import { culturesStory } from './culturesStory.js';
 import { characterChip, placeChip } from './storyLexicon.js';
 
 // A small culture label for a character's or a place's own title row in
-// the World panel (Task 8): "Taelrik", "No culture", "No language" or
+// the World panel: "Taelrik", "No culture", "No language" or
 // "{top culture} +{n}", with a clickable "not reviewed yet" dot when the
 // name or the culture assignment behind it hasn't been reviewed.
 export default {

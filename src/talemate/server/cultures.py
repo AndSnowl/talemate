@@ -23,7 +23,7 @@ Reply contract (task-6 brief, spec 9.2):
 """
 
 import datetime
-from typing import Literal
+from typing import Literal, NamedTuple
 
 import pydantic
 import structlog
@@ -51,6 +51,14 @@ from talemate.server.websocket_plugin import Plugin
 __all__ = ["CulturesPlugin"]
 
 log = structlog.get_logger("talemate.server.cultures")
+
+
+class WorldFiles(NamedTuple):
+    """A shared world's cultures, places and glossary, read once."""
+
+    cultures: dict[str, Culture]
+    places: list[Place]
+    glossary: list[GlossaryEntry]
 
 
 class SaveCulturePayload(pydantic.BaseModel):
@@ -315,13 +323,37 @@ class CulturesPlugin(Plugin):
         )
         return scene_name_keys(names)
 
-    async def _send_counts(self, store: WorldStore | None) -> None:
+    def _load_world_files(self, store: WorldStore) -> WorldFiles | None:
+        """Read the world's cultures, places and glossary once, for a caller
+        sending several replies from them. `None` when they can't be read;
+        each reply then loads and reports its own error."""
+        try:
+            return WorldFiles(
+                cultures=store.load_cultures(),
+                places=store.load_places(),
+                glossary=store.load_glossary(),
+            )
+        except Exception:
+            log.exception("cultures: could not load the shared world")
+            return None
+
+    async def _send_counts(
+        self,
+        store: WorldStore | None,
+        files: WorldFiles | None = None,
+        characters: list[dict] | None = None,
+    ) -> None:
         """Send the `counts` reply on its own, so the Cultures tab badge
         can update without waiting for the (heavier) `world` reply."""
         counts: dict = {}
         if store is not None:
             try:
-                counts = self._with_character_counts(store.counts())
+                raw = (
+                    store._counts(files.cultures, files.places, files.glossary)
+                    if files is not None
+                    else store.counts()
+                )
+                counts = self._with_character_counts(raw, characters)
             except Exception:
                 log.exception("cultures: could not compute counts")
                 counts = {}
@@ -329,7 +361,9 @@ class CulturesPlugin(Plugin):
             {"type": self.router, "action": "counts", "data": counts}
         )
 
-    async def _send_story(self, store: WorldStore | None) -> None:
+    async def _send_story(
+        self, store: WorldStore | None, files: WorldFiles | None = None
+    ) -> None:
         """Send the `story` reply: the scene's foreign-word lexicon, scoped
         names, characters and places. Never raises; a build error is
         reported as ``{"available": True, "error": ...}`` with empty lists,
@@ -338,9 +372,17 @@ class CulturesPlugin(Plugin):
             data = {"available": False}
         else:
             try:
-                cultures = store.load_cultures()
-                places = store.load_places()
-                glossary = store.load_glossary()
+                if files is None:
+                    files = WorldFiles(
+                        cultures=store.load_cultures(),
+                        places=store.load_places(),
+                        glossary=store.load_glossary(),
+                    )
+                cultures, places, glossary = (
+                    files.cultures,
+                    files.places,
+                    files.glossary,
+                )
                 lexicon = build_scene_lexicon(self._present_cultures(), glossary)
                 story = build_story(
                     cultures=cultures,
@@ -379,15 +421,26 @@ class CulturesPlugin(Plugin):
         True, "error": message}`` (with empty lists), so the tab shows the
         problem instead of claiming no shared world is linked.
         """
-        await self._send_counts(store)
-        await self._send_story(store)
+        files = self._load_world_files(store) if store is not None else None
+        try:
+            characters = self._characters()
+        except Exception:
+            log.exception("cultures: could not list the scene's characters")
+            characters = None
+        await self._send_counts(store, files, characters)
+        await self._send_story(store, files)
 
         if store is None:
             data = {"available": False}
         else:
             try:
-                snapshot = store.snapshot()
-                characters = self._characters()
+                snapshot = (
+                    store._snapshot(files.cultures, files.places, files.glossary)
+                    if files is not None
+                    else store.snapshot()
+                )
+                if characters is None:
+                    characters = self._characters()
                 counts = self._with_character_counts(snapshot["counts"], characters)
                 data = {
                     "available": True,

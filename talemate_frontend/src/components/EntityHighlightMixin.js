@@ -71,6 +71,13 @@ export default {
         };
     },
 
+    created() {
+        // The story object is replaced only when a new scene starts loading
+        // (pushes update it in place), so an open bubble showing the old
+        // scene's foreign word or name data is closed then.
+        this.$watch(() => culturesStory.story, () => this.closeEntityTooltip());
+    },
+
     mounted() {
         document.addEventListener('click', this.onDocumentClickForTooltip);
     },
