@@ -43,3 +43,4 @@ legacy-state-reinforcements.yaml
 CLAUDE.md
 docs/update-progress
 talemate_frontend/eslint.config.cjs
+.test-artifacts/
