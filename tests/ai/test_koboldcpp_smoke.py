@@ -15,6 +15,12 @@ from e2e.seed import dismiss_onboarding, open_scene, seed_world
 # class) in the status slot. Busy renders a spinner instead, warning an
 # orange dot, error a red one, disabled a power button -- none of those
 # match this selector, so waiting for it rules all of them out at once.
+#
+# This same icon/color scheme is reused verbatim by AIAgent.vue for every
+# configured agent's own status dot, so it must be scoped to the client's
+# own row (data-testid="ai-client") -- unscoped, it also matches every
+# ready agent's dot (a real failure hit this: 11 matches, 1 client + 10
+# agents, a Playwright strict-mode violation).
 CONNECTED_DOT = ".mdi-checkbox-blank-circle.text-green"
 # SceneTools.vue's narrator menu button (SceneToolsNarrator.vue): an
 # icon-only v-btn with no accessible name, so it's found by its icon class
@@ -46,8 +52,10 @@ def test_client_connects_and_narrator_generates(ai_app, browser_page):
     open_scene(page, world.scene_path)
 
     # The client connects: its row in the Clients drawer shows the green
-    # "idle" dot, not busy/warning/error/disabled.
-    page.locator(CONNECTED_DOT).wait_for(state="visible", timeout=60_000)
+    # "idle" dot, not busy/warning/error/disabled. Scoped to the client's
+    # own row -- see CONNECTED_DOT's comment.
+    ai_client = page.get_by_test_id("ai-client")
+    ai_client.locator(CONNECTED_DOT).wait_for(state="visible", timeout=60_000)
 
     # The narrator menu's actions are disabled while the app isn't ready
     # (SceneTools.vue: `:disabled="appBusy || !appReady"`) -- wait for that
