@@ -84,6 +84,30 @@ def test_seed_world_with_messages_location_and_characters(app):
     assert "Offstage Wren" not in scene_data["active_characters"]
 
 
+def test_seed_world_state_with_anchor_ids(app):
+    world = seed_world(
+        app.root,
+        project="e2e-seed-world-state",
+        messages=[{"text": "First."}, {"text": "Second."}],
+        world_state={
+            "characters": {
+                "Kethrun": {
+                    "snapshot": "The ferryman.",
+                    "emotion": "irritable",
+                    "mentions": ["Kethrun"],
+                }
+            }
+        },
+    )
+
+    scene_data = json.loads(world.scene_path.read_text())
+    history_ids = [m["id"] for m in scene_data["history"]]
+
+    assert history_ids
+    assert scene_data["world_state"]["anchor_message_ids"] == history_ids
+    assert scene_data["world_state"]["characters"]["Kethrun"]["mentions"] == ["Kethrun"]
+
+
 def test_place_places_and_glossary(app):
     world = seed_world(app.root, project="e2e-seed-places-glossary")
 

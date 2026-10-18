@@ -54,6 +54,7 @@ from talemate.cultures.store import world_dir_for
 from talemate.scene_message import NarratorMessage
 from talemate.shared_context import SharedContext
 from talemate.tale_mate import Scene
+from talemate.world_state import WorldState
 
 
 async def main(spec):
@@ -64,11 +65,14 @@ async def main(spec):
     scene.filename = spec["project"] + ".json"
     scene.intro = spec.get("intro") or ""
 
-    if spec.get("location"):
-        scene.world_state.location = spec["location"]
-
     for message in spec.get("messages") or []:
         scene.history.append(NarratorMessage(message=message["text"]))
+
+    ws = dict(spec.get("world_state") or {})
+    ws.setdefault("anchor_message_ids", [m.id for m in scene.history])
+    if spec.get("location") is not None:
+        ws.setdefault("location", spec["location"])
+    scene.world_state = WorldState(**ws)
 
     # Inline, rather than tests._director_test_helpers.add_character_to_scene:
     # that module isn't importable here (this script runs under the
@@ -201,6 +205,7 @@ def seed_world(
     location: str | None = None,
     messages: list[dict] = (),
     characters: list[dict] = (),
+    world_state: dict | None = None,
 ) -> SeededWorld:
     """Create a minimal scene in ``<root>/scenes/<project>/`` linked to a Shared World.
 
@@ -210,6 +215,11 @@ def seed_world(
     bool=False}``: active ones are added via a real ``Actor``/``Player``
     (``commit_to_memory=False``), inactive ones go only into
     ``scene.character_data``.
+
+    ``world_state`` is passed straight to ``WorldState(**world_state)`` (so
+    it can carry ``characters``, ``places``, etc.), with
+    ``anchor_message_ids`` defaulted to every seeded message's id when the
+    dict doesn't already set it.
     """
     result = _run_in_copy(
         root,
@@ -222,6 +232,7 @@ def seed_world(
             "location": location,
             "messages": list(messages),
             "characters": list(characters),
+            "world_state": world_state,
         },
     )
     return SeededWorld(
@@ -231,10 +242,24 @@ def seed_world(
     )
 
 
-def seed_scene_without_world(root: Path, project: str = "e2e-plain") -> Path:
+def seed_scene_without_world(
+    root: Path,
+    project: str = "e2e-plain",
+    *,
+    messages: list[dict] = (),
+    world_state: dict | None = None,
+) -> Path:
     """Create a minimal scene in ``<root>/scenes/<project>/`` with no shared context."""
     result = _run_in_copy(
-        root, _SCENE_SCRIPT, {"project": project, "title": project, "context": None}
+        root,
+        _SCENE_SCRIPT,
+        {
+            "project": project,
+            "title": project,
+            "context": None,
+            "messages": list(messages),
+            "world_state": world_state,
+        },
     )
     return Path(result["scene_path"])
 

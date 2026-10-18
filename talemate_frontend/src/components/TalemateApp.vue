@@ -71,6 +71,7 @@
         <v-tab v-for="tab in availableTabs" :key="tab" :value="tab.value" @click.stop="onTabClick(tab)">
           <v-icon class="mr-1">{{ tab.icon() }}</v-icon>
           {{ tab.title() }}
+          <v-badge v-if="tab.badge && tab.badge() > 0" inline color="unsaved" :content="String(tab.badge())" :data-testid="'app-tab-badge-' + tab.value" />
           <span v-if="tab.alert && tab.alert()" class="ml-1 d-inline-flex">
             <v-tooltip v-if="tab.alertTooltip" activator="parent" location="top">{{ tab.alertTooltip() }}</v-tooltip>
             <v-icon size="x-small" color="warning">mdi-alert</v-icon>
@@ -487,6 +488,7 @@ import { effectiveActionEnabled } from '@/constants/sceneAgentSettings';
 import { isVisualAgentReady, isImageEditAvailable, isImageCreateAvailable } from '@/constants/visual';
 import { createSceneAssetsRequester } from './VisualAssetsMixin.js';
 import AutocompleteMixin from './AutocompleteMixin.js';
+import { culturesStory, ingestCulturesMessage, requestReview } from '@/components/cultures/culturesStory.js';
 
 export default {
   components: {
@@ -554,16 +556,17 @@ export default {
           },
           value: 'main'
         },
-        { 
+        {
           title: () => { return 'World Editor' },
           condition: () => { return this.sceneActive },
           icon: () => { return 'mdi-earth-box' },
-          click: () => { 
+          badge: () => { return culturesStory.counts.unreviewed_total || 0 },
+          click: () => {
             this.$nextTick(() => {
               this.onOpenWorldStateManager();
             });
           },
-          value: 'world' 
+          value: 'world'
         },
         {
           title: () => { return 'Mods' },
@@ -969,6 +972,11 @@ export default {
       autocompleteInfoMessage: (active) => this.autocompleteInfoMessage(active),
       toLabel: (value) => this.toLabel(value),
       openWorldStateManager: this.onOpenWorldStateManager,
+      openCulturesReview: (target) => {
+        requestReview(target);
+        this.$refs.sceneMessages?.closeEntityTooltip?.();
+        this.onOpenWorldStateManager('cultures');
+      },
       requestTemplates: () => this.requestWorldStateTemplates(),
       beginUxInteraction: (uxId) => this.beginUxInteraction(uxId),
       endUxInteraction: (uxId) => this.endUxInteraction(uxId),
@@ -1120,6 +1128,8 @@ export default {
 
     handleMessage(event) {
       const data = JSON.parse(event.data);
+
+      ingestCulturesMessage(data, (p) => this.websocket?.send(JSON.stringify(p)));
 
       this.messageHandlers.forEach(handler => handler(data));
 

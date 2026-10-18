@@ -138,8 +138,7 @@
             <!-- CULTURES -->
             <v-window-item value="cultures">
                 <WorldStateManagerCultures ref="cultures"
-                @world-state-manager-navigate="show"
-                @cultures-counts="(counts) => { culturesUnreviewed = counts.unreviewed_total || 0 }" />
+                @world-state-manager-navigate="show" />
             </v-window-item>
 
         </v-window>
@@ -162,6 +161,7 @@ import WorldStateManagerCultures from './cultures/WorldStateManagerCultures.vue'
 import GenerationOptions from './GenerationOptions.vue';
 import RequestInput from './RequestInput.vue';
 import { MAX_CONTENT_WIDTH } from '@/constants/layout';
+import { culturesStory } from './cultures/culturesStory.js';
 
 
 export default {
@@ -179,6 +179,9 @@ export default {
         RequestInput,
     },
     computed: {
+        culturesUnreviewed() {
+            return culturesStory.counts.unreviewed_total || 0;
+        },
         characterStateReinforcementsList() {
             let list = [];
             for (let reinforcement in this.characterDetails.reinforcements) {
@@ -273,7 +276,6 @@ export default {
 
             // load writing style template
             loadWritingStyleTemplate: true,
-            culturesUnreviewed: 0,
             MAX_CONTENT_WIDTH,
         }
     },
