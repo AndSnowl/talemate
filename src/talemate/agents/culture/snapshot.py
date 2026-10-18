@@ -64,6 +64,10 @@ log = structlog.get_logger("talemate.agents.culture.snapshot")
 # At most this many of the new messages are read for play additions.
 ADDITIONS_MESSAGE_LIMIT = 8
 
+# At most this many names the place call skipped (not places) are
+# remembered in scene state, so they aren't proposed again (oldest dropped).
+MAX_SKIPPED_PLACES = 60
+
 _NARRATIVE_TYPES = ("narrator", "character", "context_investigation")
 
 INFER_PLACES_SPEC = ResponseSpec(
@@ -185,11 +189,20 @@ class CultureSnapshotMixin:
         """Infer and save new places. Returns `(added, all places)`."""
 
         snapshot_names = [clean_name(name) for name in world_state.characters]
+        skipped = list(self.get_scene_state("skipped_places") or [])
+        persons = [
+            text
+            for entry in world.glossary
+            if entry.kind == "person"
+            for text in (entry.text, entry.character_name)
+            if text
+        ]
         names = new_place_names(
             world_state.location,
             list(world_state.places.keys()),
             world.places,
-            list(self.scene.all_character_names) + snapshot_names,
+            list(self.scene.all_character_names) + snapshot_names + skipped,
+            person_names=list(self.scene.all_character_names) + persons,
         )
         if not world.cultures or not names:
             return [], list(world.places)
@@ -363,8 +376,10 @@ class CultureSnapshotMixin:
     async def infer_places(
         self, names: list[str], world: "LoadedWorld", sc: SceneCultures
     ) -> list[Place]:
-        """One model call placing `names` in the world. On a failed call
-        every name is placed under the current place, inheriting, unsure."""
+        """One model call placing `names` in the world. A name the model
+        skips (not a place) is remembered in scene state and not proposed
+        again; a name it doesn't answer, or every name on a failed call, is
+        dropped this round."""
 
         by_id = {place.id: place for place in world.places}
         culture_places = []
@@ -388,9 +403,15 @@ class CultureSnapshotMixin:
             example_shares = f"{example_cultures[0]} 100" if example_cultures else ""
 
         def parse(text: str) -> list[Place]:
-            return parse_places_reply(
-                text, names, world.places, world.cultures, sc.place
+            skipped: list[str] = []
+            inferred = parse_places_reply(
+                text, names, world.places, world.cultures, sc.place, skipped=skipped
             )
+            if skipped:
+                remembered = list(self.get_scene_state("skipped_places") or [])
+                remembered += [name for name in skipped if name not in remembered]
+                self.set_scene_states(skipped_places=remembered[-MAX_SKIPPED_PLACES:])
+            return inferred
 
         try:
             response, extracted = await Prompt.request(

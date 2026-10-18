@@ -210,12 +210,8 @@ def test_parse_places_reply():
     assert place.set_by == "ai"
     assert place.unsure is True
 
-    [place] = parse_places_reply("", ["Kesterholm"], places, cultures, current)
-    assert place.name == "Kesterholm"
-    assert place.parent_id == "veldhaer"
-    assert place.cultures == []
-    assert place.set_by == "ai"
-    assert place.unsure is True
+    # an unanswered name is dropped this round, never made a poi
+    assert parse_places_reply("", ["Kesterholm"], places, cultures, current) == []
 
     # lines for names not asked about are ignored; ids are new
     found = parse_places_reply(
@@ -333,3 +329,59 @@ def test_messy_replies_parse():
     assert addition.section == "customs"
     assert addition.text == "Ferrymen spit over the rail."
     assert parse_additions_reply("NONE.", [cultures["taelrik"]], "s") == []
+
+
+def test_person_names_in_location_are_not_places():
+    places = build_places()
+    assert (
+        new_place_names(
+            "Old Hessa's stall on the Dhunmouth docks",
+            [],
+            places,
+            [],
+            person_names=["Hessa"],
+        )
+        == []
+    )
+    assert (
+        new_place_names(
+            "Captain Varn's cabin aboard the Grey Gull",
+            ["Captain Varn's cabin"],
+            places,
+            [],
+            person_names=["Varn"],
+        )
+        == []
+    )
+    # a known person with the title in their name, and a candidate that
+    # ends with a known person's name
+    assert (
+        new_place_names("Captain Varn's cabin", [], places, [], ["Captain Varn"]) == []
+    )
+    assert new_place_names("Mother Hessa's hut", [], places, [], ["Hessa"]) == []
+    # without the person known, the name is still proposed (the model may
+    # skip it); unrelated places are kept
+    assert new_place_names("Old Hessa's stall", [], places, []) == ["Old Hessa"]
+    assert new_place_names(
+        "Old Hessa's stall in Kesterholm", [], places, [], person_names=["Hessa"]
+    ) == ["Kesterholm"]
+
+
+def test_parse_places_reply_skip():
+    places = build_places()
+    cultures = world_cultures()
+    current = next(p for p in places if p.id == "veldhaer")
+    skipped: list[str] = []
+
+    found = parse_places_reply(
+        "Old Hessa | skip\nKesterholm | village | Birch Coast | inherit | sure",
+        ["Old Hessa", "Kesterholm", "Oakford"],
+        places,
+        cultures,
+        current,
+        skipped=skipped,
+    )
+
+    # skipped: not a place; Oakford: unanswered, dropped this round
+    assert [p.name for p in found] == ["Kesterholm"]
+    assert skipped == ["Old Hessa"]

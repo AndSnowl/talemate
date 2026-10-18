@@ -12,7 +12,13 @@ import pytest
 import talemate.instance as instance
 from talemate.agents.world_state.snapshot import WorldStateSnapshotEmission
 from talemate.cultures.exchange import apply_import
-from talemate.cultures.models import CharacterCulture, Culture, Language
+from talemate.cultures.models import (
+    CharacterCulture,
+    Culture,
+    GlossaryEntry,
+    GlossaryOrigin,
+    Language,
+)
 from talemate.cultures.store import WorldStore, world_dir_for_scene
 from talemate.prompts.base import Prompt
 from talemate.scene_message import NarratorMessage
@@ -330,12 +336,14 @@ async def test_place_call_failure_keeps_other_steps(
 
     await agent.on_snapshot_after(snapshot_emission(scene))
 
-    # a failed call still records the place, unsure, under the current place
-    [kesterholm] = [p for p in world.load_places() if p.name == "Kesterholm"]
-    assert kesterholm.unsure is True
-    assert kesterholm.parent_id == "birch"
+    # a failed call creates no place: the name is proposed again later
+    assert "Kesterholm" not in {p.name for p in world.load_places()}
     assert "Brannoch" in {e.text for e in world.load_glossary()}
     assert len(processed(events)) == 1
+
+    install_replies(monkeypatch, {PLACES: KESTERHOLM_LINE, ADDITIONS: "NONE"})
+    await agent.on_snapshot_after(snapshot_emission(scene))
+    assert "Kesterholm" in {p.name for p in world.load_places()}
 
 
 @pytest.mark.asyncio
@@ -414,3 +422,55 @@ async def test_reused_spare_sets_its_culture(scene, world, agent, monkeypatch):
     assert entry.origin.by == "ai"
     assert entry.origin.generator_id == "given"
     assert entry.origin.candidates == []
+
+
+@pytest.mark.asyncio
+async def test_person_in_location_is_not_a_place(
+    scene, world, agent, monkeypatch, events
+):
+    calls = install_replies(monkeypatch, {ADDITIONS: "NONE"})
+    await add_character_to_scene(scene, "Hessa")
+    entries = world.load_glossary()
+    entries.append(
+        GlossaryEntry(
+            id="varn",
+            text="Varn",
+            language="taelrik",
+            kind="person",
+            origin=GlossaryOrigin(by="owner"),
+        )
+    )
+    world.save_glossary(entries)
+
+    set_snapshot(scene, "Old Hessa's stall on the Dhunmouth docks")
+    await agent.on_snapshot_after(snapshot_emission(scene))
+    set_snapshot(scene, "Captain Varn's cabin aboard the Grey Gull")
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    assert PLACES not in templates(calls)
+    names = {p.name for p in world.load_places()}
+    assert "Old Hessa" not in names
+    assert "Captain Varn" not in names
+
+
+@pytest.mark.asyncio
+async def test_skipped_name_is_not_a_place_and_not_asked_again(
+    scene, world, agent, monkeypatch, events
+):
+    calls = install_replies(
+        monkeypatch,
+        {PLACES: "Old Hessa | skip\n" + KESTERHOLM_LINE, ADDITIONS: "NONE"},
+    )
+    set_snapshot(scene, "Old Hessa's stall in Kesterholm")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    assert calls[0]["vars"]["names"] == ["Old Hessa", "Kesterholm"]
+    names = {p.name for p in world.load_places()}
+    assert "Kesterholm" in names
+    assert "Old Hessa" not in names
+    assert processed(events)[0].data["new_places"] == ["Kesterholm"]
+
+    # the skipped name isn't proposed again
+    await agent.on_snapshot_after(snapshot_emission(scene))
+    assert templates(calls).count(PLACES) == 1

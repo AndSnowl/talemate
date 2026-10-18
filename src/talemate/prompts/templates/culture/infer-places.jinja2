@@ -24,13 +24,16 @@ The last lines of the scene:
 {% endif %}
 New place names: {{ names|join(', ') }}
 
-Write exactly one line per new place name, in this format:
+Write exactly one line per name, in this format:
 Name | kind | parent | cultures | sure or unsure
 
 - kind: one of {{ kinds|join(', ') }}.
 - parent: the known place or new place it lies in, spelled as given, or none.
 - cultures: inherit if its people are like its parent's, else culture names with shares adding up to 100, like "{{ example_shares }}".
 - sure or unsure: unsure when the scene doesn't make it clear.
+
+If a name is not a place (a person, or a thing such as a stall or a ship), write this line for it instead:
+Name | skip
 
 Example line:
 Oakford | village | {{ example_parent }} | inherit | sure

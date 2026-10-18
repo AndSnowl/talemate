@@ -28,6 +28,7 @@ from talemate.cultures.scene_context import SceneCultures
 from talemate.cultures.words import (
     _CONNECTORS,
     _LEADING_STOP_WORDS,
+    _strip_possessive,
     clean_name,
     first_mention,
     is_proper_item_name,
@@ -61,6 +62,19 @@ _LEADING_PREPOSITIONS = {
     "behind", "beyond", "from", "to", "into", "within", "around", "along",
     "across", "over", "above", "below", "off",
 }  # fmt: skip
+
+# Titles and forms of address that lead a person's name ("Old Hessa",
+# "Captain Varn"); dropped before a place candidate is compared with the
+# people the scene knows.
+_PERSON_TITLES = {
+    "old", "young", "little", "captain", "mother", "father", "master",
+    "mistress", "lord", "lady", "sir", "dame", "madam", "mister", "brother",
+    "sister", "aunt", "uncle", "granny", "gran", "grandfather", "grandmother",
+    "elder", "widow", "goodwife", "goodman", "auntie", "cousin",
+}  # fmt: skip
+
+# The second field of an infer-places line that means "not a place".
+_SKIP_ANSWERS = {"skip", "skipped", "not a place"}
 
 
 @dataclass
@@ -153,13 +167,47 @@ def location_place_name(location: str | None) -> str | None:
     return None
 
 
+def _name_words(text: str) -> tuple[str, ...]:
+    """`name_key(text)`'s words, each without a possessive."""
+    return tuple(_strip_possessive(word) for word in name_key(text).split())
+
+
+def _without_titles(words: tuple[str, ...]) -> tuple[str, ...]:
+    """`words` without leading titles ("old", "captain"), never emptied."""
+    while len(words) > 1 and words[0] in _PERSON_TITLES:
+        words = words[1:]
+    return words
+
+
+def _names_a_person(name: str, people: set[tuple[str, ...]]) -> bool:
+    """Whether a place candidate is really one of `people` (title-stripped
+    word tuples): "Old Hessa" for Hessa, "Captain Varn" for Varn, or any
+    candidate ending with a known person's name."""
+
+    words = _name_words(name)
+    if _without_titles(words) in people:
+        return True
+    return any(
+        len(words) >= len(person) and words[-len(person) :] == person
+        for person in people
+    )
+
+
 def new_place_names(
     location: str | None,
     snapshot_places: list[str],
     places: list[Place],
     character_names: list[str],
+    person_names: list[str] = (),
 ) -> list[str]:
-    """Place names in the snapshot that the world doesn't know yet."""
+    """Place names in the snapshot that the world doesn't know yet.
+
+    `character_names` are never places (exact match). `person_names` (the
+    scene's characters and the glossary's persons) also rule out a
+    candidate that, without leading titles and a possessive, is one of
+    them, or that ends with one of their names: "Old Hessa's stall" is
+    Hessa's, not a place called "Old Hessa".
+    """
 
     candidates: list[str | None] = []
     if location:
@@ -170,13 +218,15 @@ def new_place_names(
 
     known = {name_key(place.name) for place in places}
     known |= {name_key(name) for name in character_names}
+    people = {_without_titles(_name_words(name)) for name in person_names}
+    people.discard(())
 
     result: list[str] = []
     for name in candidates:
         if not name:
             continue
         key = name_key(name)
-        if not key or key in known:
+        if not key or key in known or _names_a_person(name, people):
             continue
         known.add(key)
         result.append(name)
@@ -375,12 +425,14 @@ def parse_places_reply(
     places: list[Place],
     cultures: dict[str, Culture],
     current_place: Place | None,
+    skipped: list[str] | None = None,
 ) -> list[Place]:
-    """Turn the infer-places reply into new places, one per name.
+    """Turn the infer-places reply into new places, at most one per name.
 
     Line format: `Name | kind | parent name or none | Culture share,
-    Culture share or inherit | sure|unsure`. A name with no (usable) line
-    is placed under the current place, inheriting, unsure.
+    Culture share or inherit | sure|unsure`, or `Name | skip` for a name
+    that isn't a place (appended to `skipped` when given). A name with no
+    line is dropped this round; a later snapshot may propose it again.
     """
 
     wanted = {name_key(name): name for name in names}
@@ -393,6 +445,11 @@ def parse_places_reply(
             continue
         name = wanted.get(name_key(parts[0]))
         if name is None or name_key(name) in parsed:
+            continue
+        if parts[1].lower() in _SKIP_ANSWERS:
+            parsed[name_key(name)] = None
+            if skipped is not None:
+                skipped.append(name)
             continue
         parts += [""] * (5 - len(parts))
         kind_text, parent_text, shares_text, sure_text = parts[1:5]
@@ -415,22 +472,13 @@ def parse_places_reply(
             "unsure": unsure,
         }
 
-    ids = {name_key(name): new_id() for name in names}
+    ids = {name_key(name): new_id() for name in names if parsed.get(name_key(name))}
     result: list[Place] = []
     for name in names:
         key = name_key(name)
         info = parsed.get(key)
         if info is None:
-            result.append(
-                Place(
-                    id=ids[key],
-                    name=name,
-                    kind="poi",
-                    parent_id=default_parent,
-                    set_by="ai",
-                    unsure=True,
-                )
-            )
+            # skipped, or not answered
             continue
 
         unsure = info["unsure"]
