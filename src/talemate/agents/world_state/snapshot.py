@@ -5,6 +5,7 @@ import time
 import traceback
 from typing import Any, TYPE_CHECKING
 
+import pydantic
 import structlog
 
 import talemate.emit.async_signals
@@ -26,6 +27,7 @@ from talemate.agents.base import (
     AgentAction,
     AgentActionConfig,
     AgentActionConditional,
+    AgentEmission,
     set_processing,
 )
 
@@ -33,6 +35,19 @@ if TYPE_CHECKING:
     from talemate.world_state import WorldState
 
 log = structlog.get_logger("talemate.agents.world_state")
+
+talemate.emit.async_signals.register("world_state.snapshot.after")
+
+
+class WorldStateSnapshotEmission(AgentEmission):
+    """Sent at the end of a successful `apply_snapshot_update` (after the
+    merge and `world_state.emit()`), so a listener (the Culture agent) can
+    react to the fresh snapshot. Not sent after a cancel, an error, or an
+    empty response. A no-op with no receiver connected."""
+
+    world_state: Any
+    anchor_message_ids: list = pydantic.Field(default_factory=list)
+
 
 # Message types skipped while `request_world_state` walks scene.history
 # collecting focus lines. Every focus message ends up in `anchor_message_ids`
@@ -565,6 +580,14 @@ class WorldStateSnapshotMixin:
         world_state.anchor_message_ids = list(response.anchor_message_ids)
 
         world_state.emit()
+
+        await talemate.emit.async_signals.get("world_state.snapshot.after").send(
+            WorldStateSnapshotEmission(
+                agent=self,
+                world_state=world_state,
+                anchor_message_ids=list(world_state.anchor_message_ids),
+            )
+        )
 
     @set_processing
     async def examine_entity(

@@ -123,6 +123,7 @@ def format_attribute_instructions(specs: list[AttributeInstructionSpec]) -> str:
 async_signals.register(
     "agent.creator.dialogue_examples.before",
     "agent.creator.dialogue_examples.after",
+    "agent.creator.before_name_character",
 )
 
 
@@ -134,6 +135,21 @@ class DialogueExamplesEmission(AgentEmission):
         default_factory=list
     )
     dialogue_examples: list[str] = pydantic.Field(default_factory=list)
+
+
+class CharacterNamingEmission(AgentEmission):
+    """Sent before the creator invents a name for a new character, giving a
+    listener (the Culture agent) the chance to pre-supply a culture-
+    appropriate one instead. A no-op with no receiver connected: `name` is
+    then generated as before."""
+
+    name: str = ""
+    content: str = ""
+    description: str = ""
+    chosen_name: str | None = None
+    dynamic_instructions: list[DynamicInstruction] = pydantic.Field(
+        default_factory=list
+    )
 
 
 class CharacterGenerationResult(pydantic.BaseModel):
@@ -445,6 +461,22 @@ class CharacterCreatorMixin:
         )
         return response
 
+    async def _pre_name_character(
+        self,
+        name: str,
+        content: str,
+        description: str,
+    ) -> CharacterNamingEmission:
+        """Send the pre-naming signal and return the emission. A listener
+        (the Culture agent) may set `chosen_name` to pre-supply a name, and
+        add `dynamic_instructions` to carry along with it. A no-op with no
+        receiver connected."""
+        emission = CharacterNamingEmission(
+            agent=self, name=name, content=content, description=description
+        )
+        await async_signals.get("agent.creator.before_name_character").send(emission)
+        return emission
+
     @set_processing
     async def determine_character_name(
         self,
@@ -452,7 +484,13 @@ class CharacterCreatorMixin:
         allowed_names: list[str] = None,
         group: bool = False,
         instructions: str = "",
+        culture_hook: bool = True,
     ) -> str:
+        if culture_hook and not group and not allowed_names:
+            emission = await self._pre_name_character(character_name, instructions, "")
+            if emission.chosen_name:
+                return emission.chosen_name
+
         response, extracted = await Prompt.request(
             "creator.determine-character-name",
             self.client,
@@ -886,6 +924,25 @@ class CharacterCreatorMixin:
             else self.cc_fill_misses
         )
 
+        # pre-naming hook: when a name is being generated, give a listener
+        # (the Culture agent) the chance to pre-supply one before the LLM
+        # invents it. A no-op with no receiver connected.
+        chosen_name = None
+        if "name" in request.aspects:
+            naming_emission = await self._pre_name_character(
+                request.name, request.content, request.description
+            )
+            if naming_emission.chosen_name:
+                chosen_name = naming_emission.chosen_name
+                request = request.model_copy(
+                    update={
+                        "name": chosen_name,
+                        "aspects": [a for a in request.aspects if a != "name"],
+                        "dynamic_instructions": (request.dynamic_instructions or [])
+                        + naming_emission.dynamic_instructions,
+                    }
+                )
+
         one_shot = [a for a in request.aspects if unified and a in consolidate]
 
         result = CharacterGenerationResult()
@@ -976,6 +1033,9 @@ class CharacterCreatorMixin:
                 max_examples=request.max_examples,
             )
 
+        if chosen_name:
+            result.name = chosen_name
+
         log.debug(
             "generate_character_aspects",
             requested=request.aspects,
@@ -995,7 +1055,7 @@ class CharacterCreatorMixin:
         working_character: Character,
     ) -> None:
         result.name = await self.determine_character_name(
-            request.name, instructions=request.content
+            request.name, instructions=request.content, culture_hook=False
         )
         working_character.name = result.name
 
