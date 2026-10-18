@@ -150,6 +150,29 @@ def test_snapshot_counts(tmp_path):
     assert snapshot["glossary"][0]["id"] == "g1"
 
 
+def test_counts_matches_snapshot(tmp_path):
+    store = WorldStore(tmp_path)
+
+    culture = make_culture(section="customs", text="A custom")
+    store.save_culture(culture)
+
+    places = [
+        Place(id="p1", name="Grey River", kind="town", unsure=True),
+        Place(id="p2", name="Stonehall", kind="city"),
+    ]
+    store.save_places(places)
+
+    glossary = [
+        make_glossary_entry("g1", language="taelrik", status="unreviewed"),
+        make_glossary_entry("g2", language="taelrik", status="unreviewed"),
+        make_glossary_entry("g3", language="taelrik", status="reviewed"),
+        make_glossary_entry("g4", language=None, status="unreviewed"),
+    ]
+    store.save_glossary(glossary)
+
+    assert store.counts() == store.snapshot()["counts"]
+
+
 def test_snapshot_includes_effective_mix(tmp_path):
     store = WorldStore(tmp_path)
 

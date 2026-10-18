@@ -208,7 +208,10 @@ class WorldStore:
             glossary_file.model_dump(mode="json"),
         )
 
-    def snapshot(self) -> dict:
+    def counts(self) -> dict:
+        """Unreviewed/unsure counts across the glossary, places and
+        cultures' play additions. Same keys as `snapshot()["counts"]`."""
+
         cultures = self.load_cultures()
         places = self.load_places()
         glossary = self.load_glossary()
@@ -227,19 +230,6 @@ class WorldStore:
 
         unsure_places = sum(1 for place in places if place.unsure)
 
-        place_dumps = []
-        for place in places:
-            mix, source = effective_mix(places, place.id)
-            country = country_of(places, place.id)
-            dump = place.model_dump(mode="json")
-            dump["effective"] = {
-                "mix": [cs.model_dump(mode="json") for cs in mix],
-                "source_id": source.id if source is not None else None,
-                "description": describe_mix(places, cultures, place.id),
-                "country_id": country.id if country is not None else None,
-            }
-            place_dumps.append(dump)
-
         unreviewed_additions_by_culture: dict[str, int] = {}
         for culture in cultures.values():
             count = sum(
@@ -256,14 +246,34 @@ class WorldStore:
         )
 
         return {
+            "unreviewed_total": unreviewed_total,
+            "unreviewed_by_culture": unreviewed_by_culture,
+            "unreviewed_unassigned": unreviewed_unassigned,
+            "unsure_places": unsure_places,
+            "unreviewed_additions_by_culture": unreviewed_additions_by_culture,
+        }
+
+    def snapshot(self) -> dict:
+        cultures = self.load_cultures()
+        places = self.load_places()
+        glossary = self.load_glossary()
+
+        place_dumps = []
+        for place in places:
+            mix, source = effective_mix(places, place.id)
+            country = country_of(places, place.id)
+            dump = place.model_dump(mode="json")
+            dump["effective"] = {
+                "mix": [cs.model_dump(mode="json") for cs in mix],
+                "source_id": source.id if source is not None else None,
+                "description": describe_mix(places, cultures, place.id),
+                "country_id": country.id if country is not None else None,
+            }
+            place_dumps.append(dump)
+
+        return {
             "cultures": [c.model_dump(mode="json") for c in cultures.values()],
             "places": place_dumps,
             "glossary": [g.model_dump(mode="json") for g in glossary],
-            "counts": {
-                "unreviewed_total": unreviewed_total,
-                "unreviewed_by_culture": unreviewed_by_culture,
-                "unreviewed_unassigned": unreviewed_unassigned,
-                "unsure_places": unsure_places,
-                "unreviewed_additions_by_culture": unreviewed_additions_by_culture,
-            },
+            "counts": self.counts(),
         }
