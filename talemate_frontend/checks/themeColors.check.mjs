@@ -26,6 +26,28 @@ const THEME_DIR = path.join(SRC_DIR, 'theme');
 // brief's regex, used verbatim).
 const VUETIFY_COLOR_RE = /(?:color="|bg-|text-)(?:grey|blue-grey|black|white|red|pink|purple|deep-purple|indigo|blue|light-blue|cyan|teal|green|light-green|lime|yellow|amber|orange|deep-orange|brown)(?:-(?:lighten|darken|accent)-\d)?\b/;
 
+// Fix round 1: VUETIFY_COLOR_RE only catches a colour name sitting literally
+// next to `color="`/`bg-`/`text-`, so it misses one reached through a
+// binding or plain JS: `:color="active ? 'primary' : 'grey'"`,
+// `:color="item.color || 'grey'"`, `color: 'grey'`, `:class="['bg-grey-darken-4']"`.
+// Second rule (controller ruling): a quoted string literal that is *exactly*
+// a Vuetify colour-scale name (same hue list, optional
+// `-(lighten|darken|accent)-N`), or `bg-`/`text-` of one, fails when the
+// same line also contains a colour context token (`color`, `Color`, `bg`,
+// `class`, or `text-`) — so `status: 'green'` (no such token on the line)
+// and a bare role name like `'primary'` (not in the hue list at all) don't
+// false-positive.
+const QUOTED_COLOR_LITERAL_RE = /(['"`])(?:bg-|text-)?(?:grey|blue-grey|black|white|red|pink|purple|deep-purple|indigo|blue|light-blue|cyan|teal|green|light-green|lime|yellow|amber|orange|deep-orange|brown)(?:-(?:lighten|darken|accent)-\d)?\1/;
+
+function hasColorContextToken(line) {
+    return line.includes('color') || line.includes('Color') || line.includes('bg')
+        || line.includes('class') || line.includes('text-');
+}
+
+function lineHasQuotedColorLiteral(line) {
+    return hasColorContextToken(line) && QUOTED_COLOR_LITERAL_RE.test(line);
+}
+
 // A raw hex colour, or an rgb()/rgba() call with a literal first argument
 // (as opposed to `rgb(var(--v-theme-accent))`, whose argument starts with
 // `v`, not a digit, and so never matches `\s*\d`).
@@ -90,6 +112,7 @@ function lineHasRawColor(line, inStyleBlock) {
 
 export function lineFails(line, inStyleBlock = false) {
     if (VUETIFY_COLOR_RE.test(line)) return true;
+    if (lineHasQuotedColorLiteral(line)) return true;
     return lineHasRawColor(line, inStyleBlock);
 }
 
@@ -132,11 +155,13 @@ const PENDING = new Set([
     'src/components/cultures/GlossaryDetail.vue',
     'src/components/cultures/GlossaryView.vue',
     'src/components/cultures/ImportCultureDialog.vue',
+    'src/components/cultures/levelLabels.js',
     'src/components/cultures/NameLanguageSection.vue',
     'src/components/cultures/PeopleView.vue',
     'src/components/cultures/PhraseList.vue',
     'src/components/cultures/PlaceDetail.vue',
     'src/components/cultures/PlacesView.vue',
+    'src/components/cultures/storyLexicon.js',
     'src/components/cultures/WorldStateManagerMenuCulturesTools.vue',
     'src/components/DebugToolGameState.vue',
     'src/components/DebugToolMemoryRequestLog.vue',
@@ -144,6 +169,8 @@ const PENDING = new Set([
     'src/components/DefaultCharacter.vue',
     'src/components/DirectorConsoleChatMessageAssetView.vue',
     'src/components/DirectorConsoleChatMessageMarkdown.vue',
+    'src/components/DirectorConsoleChatsToolbar.vue',
+    'src/components/DirectorConsoleMessage.vue',
     'src/components/DirectorMessage.vue',
     'src/components/DynamicAgentRegistry.vue',
     'src/components/EntityTooltip.vue',
@@ -168,6 +195,7 @@ const PENDING = new Set([
     'src/components/SceneContextReviewInline.vue',
     'src/components/SceneLanding.vue',
     'src/components/SceneMessages.vue',
+    'src/components/SceneOverrideToggle.vue',
     'src/components/SceneTimeline.vue',
     'src/components/SceneTools.vue',
     'src/components/SpiceAppliedNotification.vue',
@@ -189,6 +217,7 @@ const PENDING = new Set([
     'src/components/VisualLibrary.vue',
     'src/components/VisualQueue.vue',
     'src/components/VisualReferenceImages.vue',
+    'src/components/VoiceLibraryCharacterManager.vue',
     'src/components/VoiceLibrary.vue',
     'src/components/WhatsNew.vue',
     'src/components/WorldStateManagerCharacterActor.vue',
@@ -375,6 +404,41 @@ check('css_id_selector_is_not_a_failure', () => {
 // as long as it's inside a <style> block with a colon before the hex.
 check('css_declaration_without_color_in_key_true_positive', () => {
     assert.ok(lineFails('  border: 1px solid #cccccc;', true));
+});
+
+// Fix round 1: a Vuetify colour name reached through a ternary/binding or
+// plain JS, not sitting literally next to `color="`/`bg-`/`text-`. The
+// three real forms the controller named, plus the two extra forms from the
+// ruling.
+check('quoted_color_literal_in_ternary_binding_true_positive', () => {
+    assert.ok(lineFails(`:color="active ? 'primary' : 'grey'"`));
+});
+
+check('quoted_color_literal_in_conditional_binding_true_positive', () => {
+    assert.ok(lineFails(`:color="message.subtype === 'function_call' ? 'orange' : 'info'"`));
+});
+
+check('quoted_color_literal_in_fallback_binding_true_positive', () => {
+    assert.ok(lineFails(`:color="item.color || 'grey'"`));
+});
+
+check('quoted_color_literal_object_property_true_positive', () => {
+    assert.ok(lineFails("color: 'grey-darken-2',"));
+});
+
+check('quoted_color_literal_in_class_array_true_positive', () => {
+    assert.ok(lineFails(`:class="['bg-grey-darken-4']"`));
+});
+
+// False positives: a quoted colour-shaped word with no colour context token
+// on the line, and a bona fide theme role name (not in the Vuetify hue list
+// at all).
+check('quoted_literal_without_color_context_is_not_a_failure', () => {
+    assert.ok(!lineFails("status: 'green',"));
+});
+
+check('quoted_role_name_is_not_a_failure', () => {
+    assert.ok(!lineFails(":color=\"'primary'\""));
 });
 
 // The sweep itself: every file under src/ (outside src/theme/, PENDING and
