@@ -133,16 +133,20 @@ function stripLeadingThe(key) {
     return key.startsWith('the ') ? key.slice(4) : key;
 }
 
+// Find the `CharacterInfo` (Task 2's shape) for `entityName`, whatever its
+// culture state — characterChip needs to see an uncultured/owner-cleared
+// character too, unlike `findCharacterInfo` below.
+function findCharacterInfoAny(characters, entityName) {
+    const key = nameKey(entityName);
+    return (characters || []).find((c) => nameKey(c.name) === key) ?? null;
+}
+
 // Find the `CharacterInfo` (Task 2's shape) for `entityName`, but only
 // when it has a culture assigned — an uncultured character gets no
 // culture section at all.
 function findCharacterInfo(characters, entityName) {
-    const key = nameKey(entityName);
-    return (
-        (characters || []).find(
-            (c) => nameKey(c.name) === key && c.culture_id != null,
-        ) ?? null
-    );
+    const character = findCharacterInfoAny(characters, entityName);
+    return character && character.culture_id != null ? character : null;
 }
 
 // Find the `PlaceInfo` (Task 2's shape) for `entityName`, matching by
@@ -334,4 +338,86 @@ export function resolveReviewTarget(world, target) {
     }
 
     return null;
+}
+
+// Build a character's/place's "no culture yet" chip (rules 3-5 of
+// `characterChip`, shared by `placeChip` for its own no-mix fallback):
+// the glossary `NameInfo`'s own culture when it has one, else "No
+// language" when `info` exists but carries none, else `null` (no chip at
+// all).
+function infoOnlyChip(info) {
+    if (info && info.culture_name) {
+        return { label: info.culture_name, color: info.color };
+    }
+    if (info && !info.language_name) {
+        return { label: 'No language', color: 'grey' };
+    }
+    return null;
+}
+
+// Build the `CultureChip`'s model for a scene character: what the
+// character's own culture assignment (`CharacterInfo`) says, falling
+// back to what's known about its *name*'s culture (`NameInfo`) when the
+// character has none of its own. `null` when there's nothing to show.
+export function characterChip(story, name) {
+    if (!story || !name) return null;
+
+    const index = buildNameIndex(story.names);
+    const info = index.get(nameKey(name)) ?? null;
+    const character = findCharacterInfoAny(story.characters, name);
+
+    let base = null;
+    if (character && character.culture_id) {
+        base = { label: character.culture_name, color: character.color };
+    } else if (character && character.set_by === 'owner') {
+        base = { label: 'No culture', color: 'grey' };
+    } else {
+        base = infoOnlyChip(info);
+    }
+    if (!base) return null;
+
+    const unreviewed = Boolean(
+        (info && info.status === 'unreviewed')
+        || (character && character.set_by === 'ai' && character.unsure),
+    );
+
+    let target = null;
+    if (info && info.status === 'unreviewed') {
+        target = { type: 'glossary', entry_id: info.id };
+    } else if (character && character.set_by === 'ai' && character.unsure) {
+        target = { type: 'people', character_name: character.name };
+    }
+
+    return { ...base, unreviewed, target };
+}
+
+// Build the `CultureChip`'s model for a place: its effective culture mix
+// (one name, or "{top} +{n-1}" in the top culture's colour) when it has
+// one, falling back to the same rules `characterChip` uses when a
+// character has no culture of its own. `null` when there's nothing to
+// show.
+export function placeChip(story, name) {
+    if (!story || !name) return null;
+
+    const index = buildNameIndex(story.names);
+    const info = index.get(nameKey(name)) ?? null;
+    const place = findPlaceInfo(story.places, name);
+    const mix = place && Array.isArray(place.mix) ? place.mix : [];
+
+    let base = null;
+    if (mix.length === 1) {
+        base = { label: mix[0].culture_name, color: mix[0].color };
+    } else if (mix.length > 1) {
+        base = { label: `${mix[0].culture_name} +${mix.length - 1}`, color: mix[0].color };
+    } else {
+        base = infoOnlyChip(info);
+    }
+    if (!base) return null;
+
+    const unreviewed = Boolean((place && place.unsure) || (info && info.status === 'unreviewed'));
+    const target = info
+        ? { type: 'glossary', entry_id: info.id }
+        : (place ? { type: 'place', place_id: place.id } : null);
+
+    return { ...base, unreviewed, target };
 }

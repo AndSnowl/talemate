@@ -38,6 +38,7 @@
                         {{ name }}
                         <!-- <v-chip v-if="character.emotion !== null && character.emotion !== ''" label size="x-small" variant="outlined" class="ml-1">{{ character.emotion }}</v-chip> -->
                         <span class="text-caption ml-1 text-muted">{{ character.emotion }}</span>
+                        <CultureChip kind="character" :name="name" class="ml-1" />
                         <template v-slot:actions>
                             <v-icon v-if="characterSuggestions(name)" color="highlight5" class="mr-1">mdi-lightbulb-on</v-icon>
                             <div v-else-if="getCharacterAvatar(name)" class="character-avatar-square mr-1">
@@ -118,7 +119,10 @@
             </v-expansion-panels>
 
         </div>
-        <div ref="objectsContainer">   
+
+        <WorldPanelPlaces :places="places" />
+
+        <div ref="objectsContainer">
 
             <v-expansion-panels density="compact" v-for="(obj,name) in items" :key="name">
                 <v-expansion-panel rounded="0" density="compact">
@@ -233,15 +237,22 @@ import {
     isKnownSceneCharacter,
 } from '@/utils/entityActions';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
+import CultureChip from './cultures/CultureChip.vue';
+import WorldPanelPlaces from './cultures/WorldPanelPlaces.vue';
 
 export default {
     name: 'WorldState',
     mixins: [VisualAssetsMixin],
+    components: {
+        CultureChip,
+        WorldPanelPlaces,
+    },
     data() {
         return {
             characters: {},
             suggestions: [],
             items: {},
+            places: {},
             location: null,
             requesting: false,
             sceneTime: null,
@@ -514,6 +525,7 @@ export default {
                 this.characters = data.data.characters;
                 this.suggestions = data.data.suggestions;
                 this.items = data.data.items;
+                this.places = data.data.places || {};
                 this.location = data.data.location;
                 this.requesting = (data.status==="requested")
                 console.log("WorldState.vue: world_state", data.data);

@@ -18,6 +18,8 @@ import {
     applyCulturesMessage,
     nameSection,
     resolveReviewTarget,
+    characterChip,
+    placeChip,
 } from '../src/components/cultures/storyLexicon.js';
 import { SceneTextParser, compileEntityMentions } from '../src/utils/sceneMessageRenderer.js';
 
@@ -412,6 +414,119 @@ check('resolve_missing_target', () => {
     assert.equal(resolveReviewTarget(reviewWorld, { type: 'bogus' }), null);
     // The entry exists, but its culture is gone.
     assert.equal(resolveReviewTarget(reviewWorld, { type: 'glossary', entry_id: 'g-orphan' }), null);
+});
+
+// Fixtures: task 8's `characterChip`/`placeChip` (World panel chips),
+// built on top of task 5's `storyFixture`/`kethrunInfo`/`kethrunCharacter`/
+// `veldhaerPlace`/`quillisterInfo`.
+const borinCharacter = {
+    name: 'Borin',
+    culture_id: null,
+    culture_name: null,
+    color: null,
+    set_by: 'owner',
+    unsure: false,
+    reason: '',
+};
+const dessaInfo = {
+    id: 'g-dessa',
+    text: 'Dessa',
+    kind: 'person',
+    status: 'reviewed',
+    culture_id: 'taelrik',
+    culture_name: 'Taelrik',
+    language_name: 'Taelrik',
+    color: '#FF8A65',
+    writable: true,
+    meaning: '',
+    true_name: '',
+    renderings: [],
+    origin_by: 'import',
+    generator_name: null,
+    doesnt_fit: false,
+    character_name: 'Dessa',
+    place_id: null,
+};
+const dessaCharacter = {
+    name: 'Dessa',
+    culture_id: 'taelrik',
+    culture_name: 'Taelrik',
+    color: '#FF8A65',
+    set_by: 'ai',
+    unsure: true,
+    reason: 'guessed from her accent',
+};
+const dhunmouthPlace = {
+    id: 'dhunmouth',
+    name: 'Dhunmouth',
+    kind: 'town',
+    own: true,
+    source_name: null,
+    mix: [
+        { culture_id: 'taelrik', culture_name: 'Taelrik', color: '#FF8A65', share: 50 },
+        { culture_id: 'ghun', culture_name: 'Ghûn', color: '#B0BEC5', share: 30 },
+        { culture_id: 'sund', culture_name: 'Sund', color: '#80CBC4', share: 20 },
+    ],
+    set_by: 'owner',
+    unsure: false,
+};
+const quillisterPlace = {
+    id: 'quillister',
+    name: 'Quillister House',
+    kind: 'building',
+    own: false,
+    source_name: 'Veldhaer',
+    mix: [
+        { culture_id: 'taelrik', culture_name: 'Taelrik', color: '#FF8A65', share: 100 },
+    ],
+    set_by: 'owner',
+    unsure: false,
+};
+const chipStory = {
+    names: [kethrunInfo, dessaInfo, quillisterInfo],
+    characters: [kethrunCharacter, borinCharacter, dessaCharacter],
+    places: [veldhaerPlace, dhunmouthPlace, quillisterPlace],
+};
+
+check('character_chip', () => {
+    const kethrun = characterChip(chipStory, 'Kethrun');
+    assert.equal(kethrun.label, 'Taelrik');
+    assert.equal(kethrun.unreviewed, true);
+    assert.deepEqual(kethrun.target, { type: 'glossary', entry_id: 'g-kethrun' });
+
+    const borin = characterChip(chipStory, 'Borin');
+    assert.equal(borin.label, 'No culture');
+    assert.equal(borin.unreviewed, false);
+
+    // Dessa's culture is set by the AI, unsure — but her *name* is a
+    // reviewed glossary entry, so the dot targets her people-view row,
+    // not a glossary entry.
+    const dessa = characterChip(chipStory, 'Dessa');
+    assert.equal(dessa.unreviewed, true);
+    assert.deepEqual(dessa.target, { type: 'people', character_name: 'Dessa' });
+
+    assert.equal(characterChip(chipStory, 'Nobody'), null);
+});
+
+check('place_chip', () => {
+    const veldhaer = placeChip(chipStory, 'Veldhaer');
+    assert.equal(veldhaer.label, 'Taelrik');
+    assert.equal(veldhaer.unreviewed, false);
+
+    const dhunmouth = placeChip(chipStory, 'Dhunmouth');
+    assert.equal(dhunmouth.label, 'Taelrik +2');
+
+    // A place record of its own, but no mix of its own — the mix it
+    // carries (and the chip reads) is Veldhaer's, inherited.
+    const quillisterHouse = placeChip(chipStory, 'Quillister House');
+    assert.equal(quillisterHouse.label, 'Taelrik');
+
+    // No place record at all for this name — only the unassigned,
+    // unreviewed glossary entry `storyFixture` already carries for it.
+    const unknownPlace = placeChip(storyFixture, 'Quillister House');
+    assert.equal(unknownPlace.label, 'No language');
+    assert.equal(unknownPlace.unreviewed, true);
+    assert.deepEqual(unknownPlace.target, { type: 'glossary', entry_id: 'g-quillister' });
 });
 
 if (failures.length > 0) {

@@ -604,3 +604,53 @@ def test_review_jump_to_missing_entry_is_harmless(app, page):
     assert "saervik" in selected_row.inner_text()
 
 
+def test_world_panel_character_chip_and_dot(app, page):
+    world = _seed_story(app, "story-panel-character-chip")
+    open_scene(page, world.scene_path)
+
+    chip = page.locator('[data-chip-for="character:Kethrun"]')
+    chip.wait_for(state="visible", timeout=30_000)
+    assert "Taelrik" in chip.inner_text()
+
+    panel_title = page.locator(".v-expansion-panel-title", has_text="Kethrun").first
+    assert panel_title.get_attribute("aria-expanded") == "false"
+
+    dot = chip.locator(".culture-review-dot")
+    dot.wait_for(state="visible", timeout=5_000)
+    dot.click()
+
+    page.locator(".glossary-row-selected", has_text="Kethrun").wait_for(
+        state="visible", timeout=15_000
+    )
+
+    # The click opened the Cultures tab (a separate top-level tab), not an
+    # accordion toggle on the character's own row.
+    assert panel_title.get_attribute("aria-expanded") == "false"
+
+
+def test_world_panel_place_chips(app, page):
+    world = _seed_story(app, "story-panel-place-chips")
+    open_scene(page, world.scene_path)
+
+    veldhaer_chip = page.locator('[data-chip-for="place:Veldhaer"]')
+    veldhaer_chip.wait_for(state="visible", timeout=30_000)
+    assert "Taelrik" in veldhaer_chip.inner_text()
+
+    khaz_chip = page.locator('[data-chip-for="place:Khaz-Rull"]')
+    khaz_chip.wait_for(state="visible", timeout=15_000)
+    assert "Ghûn" in khaz_chip.inner_text()
+
+    quillister_chip = page.locator('[data-chip-for="place:Quillister House"]')
+    quillister_chip.wait_for(state="visible", timeout=15_000)
+    assert "Taelrik" in quillister_chip.inner_text()
+
+    dot = quillister_chip.locator(".culture-review-dot")
+    dot.wait_for(state="visible", timeout=5_000)
+    dot.click()
+
+    unassigned_card = page.get_by_text("Unassigned names").first
+    unassigned_card.wait_for(state="visible", timeout=15_000)
+
+    selected_row = page.locator(".glossary-row-selected")
+    selected_row.wait_for(state="visible", timeout=15_000)
+    assert "Quillister House" in selected_row.inner_text()
