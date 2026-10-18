@@ -487,6 +487,8 @@ class CharacterCreatorMixin:
         culture_hook: bool = True,
     ) -> str:
         if culture_hook and not group and not allowed_names:
+            # only the name is returned here: there's no later prompt on this
+            # path to carry `emission.dynamic_instructions` into
             emission = await self._pre_name_character(character_name, instructions, "")
             if emission.chosen_name:
                 return emission.chosen_name

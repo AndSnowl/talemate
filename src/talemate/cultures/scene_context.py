@@ -33,6 +33,8 @@ class SceneCultures:
     description: str
     cultures: list[Culture] = field(default_factory=list)
     ancestor_ids: list[str] = field(default_factory=list)
+    # one culture id per scene character with a (known) culture, in order
+    character_culture_ids: list[str] = field(default_factory=list)
 
 
 def _whole_word_in(candidate: str, text: str) -> bool:
@@ -147,6 +149,7 @@ def resolve_scene_cultures(
             ordered_ids.append(culture_share.culture_id)
             seen.add(culture_share.culture_id)
 
+    character_culture_ids: list[str] = []
     for character in characters:
         character_culture = getattr(character, "culture", None)
         culture_id = (
@@ -154,7 +157,10 @@ def resolve_scene_cultures(
             if character_culture is not None
             else None
         )
-        if culture_id and culture_id in cultures and culture_id not in seen:
+        if not culture_id or culture_id not in cultures:
+            continue
+        character_culture_ids.append(culture_id)
+        if culture_id not in seen:
             ordered_ids.append(culture_id)
             seen.add(culture_id)
 
@@ -165,4 +171,5 @@ def resolve_scene_cultures(
         description=description,
         cultures=[cultures[culture_id] for culture_id in ordered_ids],
         ancestor_ids=ancestor_ids,
+        character_culture_ids=character_culture_ids,
     )

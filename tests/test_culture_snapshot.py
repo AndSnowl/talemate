@@ -18,6 +18,7 @@ from talemate.cultures.models import (
     GlossaryEntry,
     GlossaryOrigin,
     Language,
+    Place,
 )
 from talemate.cultures.store import WorldStore, world_dir_for_scene
 from talemate.prompts.base import Prompt
@@ -501,3 +502,62 @@ async def test_stale_additions_checkpoint_after_reload(
     assert templates(calls).count(ADDITIONS) == 1
     assert "spat over the rail" in calls[-1]["vars"]["text"]
     assert "Rain hammered" not in calls[-1]["vars"]["text"]
+
+
+def _owner_adds_during_await(world, name: str, reply: str):
+    """A place reply that, while "the model answers", has the owner add
+    `name` in the Cultures tab."""
+
+    def answer(vars):
+        places = world.load_places()
+        places.append(Place(id="owner-k", name=name, kind="town", parent_id="birch"))
+        world.save_places(places)
+        return reply
+
+    return answer
+
+
+@pytest.mark.asyncio
+async def test_owner_place_added_during_place_call_survives(
+    scene, world, agent, monkeypatch, events
+):
+    install_replies(
+        monkeypatch,
+        {
+            PLACES: _owner_adds_during_await(world, "Kesterholm", KESTERHOLM_LINE),
+            ADDITIONS: "NONE",
+        },
+    )
+    set_snapshot(scene, "Kesterholm, on the Birch Coast")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    [kesterholm] = [p for p in world.load_places() if p.name == "Kesterholm"]
+    assert kesterholm.id == "owner-k"
+    assert kesterholm.kind == "town"
+    assert kesterholm.set_by == "owner"
+    assert processed(events)[0].data["new_places"] == []
+
+
+@pytest.mark.asyncio
+async def test_last_moment_place_dedupe_ignores_the(
+    scene, world, agent, monkeypatch, events
+):
+    install_replies(
+        monkeypatch,
+        {
+            PLACES: _owner_adds_during_await(
+                world,
+                "Kesterholm",
+                "The Kesterholm | village | Birch Coast | inherit | sure",
+            ),
+            ADDITIONS: "NONE",
+        },
+    )
+    set_snapshot(scene, "The Kesterholm, on the Birch Coast")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    names = [p.name for p in world.load_places()]
+    assert "Kesterholm" in names
+    assert "The Kesterholm" not in names

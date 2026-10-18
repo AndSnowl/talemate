@@ -128,6 +128,7 @@ async def test_description_name_gets_generator_pick(
     assert emission.dynamic_instructions[0].content.startswith(
         f"{emission.chosen_name} is Taelrik. River-folk of the grey river valleys."
     )
+    assert "Their language is Taelrik: " in emission.dynamic_instructions[0].content
     # the original descriptive request is restated so the role survives
     assert any(
         "the ferryman" in i.content and "a gruff old man" in i.content
@@ -645,3 +646,30 @@ async def test_known_place_or_culture_in_content_still_named(
     await agent.on_before_name_character(emission)
     assert len(calls) == 2
     assert emission.chosen_name == calls[1]["vars"]["candidates"][0]
+
+
+@pytest.mark.asyncio
+async def test_overlapping_creations_keep_their_own_decisions(
+    scene, world, agent, monkeypatch
+):
+    calls = install_picker(monkeypatch, pick_index(0))
+    first = ferryman("a gruff old man")
+    second = ferryman("a young deckhand")
+    await agent.on_before_name_character(first)
+    await agent.on_before_name_character(second)
+    assert len(calls) == 2
+    assert first.chosen_name != second.chosen_name
+
+    # the first creation is saved while the second is still in flight
+    await agent.on_after_persist_character(
+        PersistCharacterEmission(
+            agent=instance.get_agent("director"),
+            character=Character(name=first.chosen_name),
+        )
+    )
+
+    # the second creation's retry still gets its own name, without a roll
+    retry = ferryman("a young deckhand")
+    await agent.on_before_name_character(retry)
+    assert retry.chosen_name == second.chosen_name
+    assert len(calls) == 2

@@ -17,7 +17,7 @@ from __future__ import annotations
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import Callable, Iterable
 
 from talemate.cultures.models import Culture, GlossaryEntry, Phrase
 from talemate.cultures.naming import choose_generator, roll_candidates
@@ -122,6 +122,16 @@ def _first_sentence(text: str) -> str:
     if match:
         return match.group(0).strip()
     return stripped
+
+
+# The verb written in a trait line, by stem: "Hadrik curses in Taelrik",
+# never "Hadrik swearing in Taelrik".
+_TRAIT_LINE_VERBS: dict[str | None, str] = {
+    "curse": "curses",
+    "saying": "speaks",
+    "greet": "greets",
+    None: "speaks",
+}
 
 
 def _verb_stem(verb: str) -> str | None:
@@ -333,7 +343,8 @@ def _build_traits_part(
             continue
 
         phrases = pick_phrases(culture, trait.stem, limit=3)
-        line = f"{character.name} {trait.verb} in {culture.language.name}."
+        verb = _TRAIT_LINE_VERBS.get(trait.stem, "speaks")
+        line = f"{character.name} {verb} in {culture.language.name}."
         if phrases:
             phrase_text = "; ".join(
                 f"“{phrase.original}” ({phrase.translation})" for phrase in phrases
@@ -349,8 +360,10 @@ def _build_spares_part(
     cultures: dict[str, Culture],
     glossary: list[GlossaryEntry],
     rng: random.Random,
+    exclude_names: Iterable[str] = (),
 ) -> tuple[list[str], list[SpareName]]:
     exclude = {entry.text.lower() for entry in glossary}
+    exclude |= {name.lower() for name in exclude_names if name}
 
     shares = sorted(scene.mix, key=lambda share: -share.share)
     qualifying = [share for share in shares if share.share >= 25][:2]
@@ -457,22 +470,34 @@ def _top_customs(customs: list[str], recent_text: str, limit: int = 2) -> list[s
     return [custom for _, _, custom in scored[:limit]]
 
 
+def _culture_note(culture: Culture) -> str:
+    """`"{culture}: {description} Their language is {language}: {sound}"`,
+    or `"... Their language is {language}."` without a sound."""
+
+    parts = [f"{culture.name}:"]
+    description = _first_sentence(culture.description)
+    if description:
+        parts.append(description)
+    sound = _first_sentence(culture.language.sound)
+    if sound:
+        parts.append(f"Their language is {culture.language.name}: {sound}")
+    elif culture.language.name:
+        parts.append(f"Their language is {culture.language.name}.")
+    return " ".join(parts)
+
+
 def _build_notes_part(scene: SceneCultures, recent_text: str) -> list[str]:
     lines: list[str] = []
     recent_lower = recent_text.lower()
 
     for culture in scene.cultures:
-        description = _first_sentence(culture.description)
-        sound = _first_sentence(culture.language.sound)
-        lines.append(
-            f"{culture.name}: {description} Their language, {culture.language.name}, {sound}"
-        )
+        lines.append(_culture_note(culture))
 
         for custom in _top_customs(culture.customs, recent_text):
-            lines.append(custom)
+            lines.append(f"- {culture.name}: {custom}")
 
         if culture.food and _FOOD_WORDS_RE.search(recent_text):
-            lines.append(culture.food)
+            lines.append(f"- {culture.name}: {culture.food}")
 
         for holiday in culture.holidays:
             name_hit = bool(holiday.name) and holiday.name.lower() in recent_lower
@@ -521,8 +546,13 @@ def build_culture_section(
     budget: int,
     rng: random.Random,
     count_tokens=count_tokens,
+    exclude_names: Iterable[str] = (),
 ) -> CultureSection:
-    """Build the "Cultures and names" prompt section text, trimmed to `budget`."""
+    """Build the "Cultures and names" prompt section text, trimmed to `budget`.
+
+    Spare names never repeat a glossary text or any of `exclude_names`
+    (the scene's character names and the world's place names).
+    """
 
     if not scene.cultures:
         return CultureSection("", 0, [])
@@ -535,7 +565,9 @@ def build_culture_section(
         place_text = _cut_to_budget_by_words(place_text, budget, count_tokens)
     lines.append(place_text)
 
-    spares_part, spare_candidates = _build_spares_part(scene, cultures, glossary, rng)
+    spares_part, spare_candidates = _build_spares_part(
+        scene, cultures, glossary, rng, exclude_names
+    )
 
     for part_lines in (
         _build_unwritable_part(scene, glossary),

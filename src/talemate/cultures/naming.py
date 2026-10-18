@@ -73,12 +73,15 @@ def _weighted_pick(mix, rng: random.Random):
 
 def _guess_from_characters(scene: SceneCultures) -> CultureGuess:
     """Rules 3 and 4 of `guess_culture`: the most common culture among the
-    character cultures in `scene.cultures`, or `None` if there are none."""
+    scene's characters (counted per character, the first one seen wins a
+    tie), or `None` if there are none."""
 
     if not scene.cultures:
         return CultureGuess(None, True, "no culture here")
 
-    counts = Counter(culture.id for culture in scene.cultures)
+    counts = Counter(
+        scene.character_culture_ids or [culture.id for culture in scene.cultures]
+    )
     culture_id, _ = counts.most_common(1)[0]
     return CultureGuess(culture_id, True, "from the people around them")
 

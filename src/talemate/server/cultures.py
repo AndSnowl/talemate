@@ -730,6 +730,11 @@ class CulturesPlugin(Plugin):
             character = self.scene.character_data.get(payload.character_name)
             if character is None:
                 raise ValueError(f"unknown character: {payload.character_name}")
+            if (
+                payload.culture_id is not None
+                and payload.culture_id not in store.load_cultures()
+            ):
+                raise ValueError(f"unknown culture: {payload.culture_id}")
             character.culture = CharacterCulture(
                 culture_id=payload.culture_id, set_by="owner", unsure=False
             )

@@ -274,6 +274,8 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
             recent_text=self.recent_text(),
             budget=self.context_budget,
             rng=self.rng,
+            exclude_names=list(self.scene.all_character_names)
+            + [place.name for place in world.places],
         )
         if not section.text:
             return

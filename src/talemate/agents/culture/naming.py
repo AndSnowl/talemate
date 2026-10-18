@@ -73,7 +73,7 @@ MAX_PENDING = 20
 # flow retries `determine_character_name` when the one-shot missed the
 # name). A decision is remembered this long (seconds), keyed by the
 # requested name and content, so the second call neither rolls nor asks the
-# model again. Saving a character clears the remembered decisions.
+# model again. Saving a character forgets the decision that named it.
 NAMING_DECISION_TTL = 120.0
 MAX_NAMING_DECISIONS = 20
 
@@ -95,7 +95,7 @@ def _first_sentence(text: str) -> str:
 
 
 def _culture_instruction(name: str, culture: Culture) -> str:
-    """`"{name} is {culture}. {description} Their language, {language},
+    """`"{name} is {culture}. {description} Their language is {language}:
     {sound}"`, from the non-empty parts only."""
 
     language = culture.language
@@ -105,7 +105,7 @@ def _culture_instruction(name: str, culture: Culture) -> str:
         parts.append(description)
     sound = _first_sentence(language.sound)
     if sound:
-        parts.append(f"Their language, {language.name}, {sound}")
+        parts.append(f"Their language is {language.name}: {sound}")
     elif language.name:
         parts.append(f"Their language is {language.name}.")
     return " ".join(parts)
@@ -178,6 +178,18 @@ class CultureNamingMixin:
         store[key] = (time.monotonic(), name, list(instructions))
         while len(store) > MAX_NAMING_DECISIONS:
             store.pop(next(iter(store)))
+
+    def _forget_naming_decision(self, name: str) -> None:
+        """Drop the decisions that named `name`, or that kept it as the
+        requested name."""
+        store = self._naming_decision_store()
+        lowered = name.strip().lower()
+        for key in [
+            key
+            for key, (_, chosen, _) in store.items()
+            if key[0] == lowered or (chosen and chosen.lower() == lowered)
+        ]:
+            store.pop(key)
 
     def _remember_pending(self, name: str, culture: CharacterCulture) -> None:
         key = name.lower()
@@ -441,8 +453,9 @@ class CultureNamingMixin:
         agent didn't pick."""
 
         character = emission.character
-        # the creation is finished: forget the pre-naming decisions
-        self._naming_decision_store().clear()
+        # this creation is finished: forget its pre-naming decision only, so
+        # another creation still in flight keeps its own
+        self._forget_naming_decision(character.name)
 
         if character.culture is not None and character.culture.set_by == "owner":
             return

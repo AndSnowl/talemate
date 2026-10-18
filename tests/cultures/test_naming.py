@@ -200,3 +200,25 @@ def test_match_candidate_variants():
     assert match_candidate("I pick Kethrun because…", candidates) == "Kethrun"
     assert match_candidate("", candidates) is None
     assert match_candidate("Marigold", candidates) is None
+
+
+def test_guess_from_characters_counts_each_character():
+    cultures = cultures_with(load_taelrik_culture())
+    characters = [
+        Character(name="Mira", culture=CharacterCulture(culture_id="elsiri")),
+        Character(name="Hadrik", culture=CharacterCulture(culture_id="taelrik")),
+        Character(name="Tovrin", culture=CharacterCulture(culture_id="taelrik")),
+    ]
+    scene = resolve_scene_cultures(
+        cultures,
+        build_places(),
+        location="nowhere mapped",
+        snapshot_places=[],
+        characters=characters,
+    )
+
+    # Elsiri comes first, but two of the three people are Taelrik
+    assert [c.id for c in scene.cultures] == ["elsiri", "taelrik"]
+    guess = guess_culture(cultures, scene, "a visitor", random.Random(2))
+    assert guess.culture_id == "taelrik"
+    assert guess.reason == "from the people around them"

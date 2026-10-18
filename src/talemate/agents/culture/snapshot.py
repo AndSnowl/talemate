@@ -212,11 +212,11 @@ class CultureSnapshotMixin:
         # R2: re-load right before the save, no await in between; only add
         # places the world still doesn't have (existing ones are final)
         fresh = world.store.load_places()
-        taken = {place.name.lower() for place in fresh}
+        taken = {name_key(place.name) for place in fresh}
         added: list[Place] = []
         for place in inferred:
-            if place.name.lower() not in taken:
-                taken.add(place.name.lower())
+            if name_key(place.name) not in taken:
+                taken.add(name_key(place.name))
                 added.append(place)
         if not added:
             return [], fresh

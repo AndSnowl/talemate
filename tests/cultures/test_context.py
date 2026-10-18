@@ -346,3 +346,66 @@ def test_names_in_use_includes_intermediate_ancestor():
     )
 
     assert "Veldhaer (place)" in section.text
+
+
+def _section(scene, cultures, seed, **kwargs):
+    defaults = dict(
+        scene=scene,
+        cultures=cultures,
+        glossary=[],
+        characters=[],
+        recent_text="",
+        budget=400,
+        rng=random.Random(seed),
+    )
+    defaults.update(kwargs)
+    return build_culture_section(**defaults)
+
+
+def test_spares_exclude_character_and_place_names():
+    cultures = build_test_cultures()
+    scene = scene_at("Veldhaer", cultures)
+    first = _section(scene, cultures, 5)
+    rolled = [spare.text for spare in first.spares]
+    assert len(rolled) >= 2
+
+    # the same seed would roll these again
+    again = _section(scene, cultures, 5, exclude_names=[rolled[0].upper(), rolled[1]])
+    texts = {spare.text for spare in again.spares}
+    assert rolled[0] not in texts
+    assert rolled[1] not in texts
+
+
+def test_culture_note_grammar_and_prefixed_lines():
+    cultures = build_test_cultures()
+    scene = scene_at("Dhunmouth", cultures)
+    section = _section(scene, cultures, 6, recent_text="They sat down to supper.")
+
+    assert (
+        "Elsiri: Coast-folk of the Birch shore. Their language is Elsiri: Elsiri "
+        "speech: soft sibilants and long vowels, almost sung." in section.text
+    )
+    assert "Their language, " not in section.text
+    assert "- Elsiri: Guests are offered salt before bread." in section.text
+    assert "- Elsiri: Grilled fish, seaweed bread." in section.text
+    assert f"- Taelrik: {cultures['taelrik'].food}" in section.text
+
+    cultures["elsiri"].language.sound = ""
+    section = _section(scene, cultures, 6)
+    assert "Their language is Elsiri." in section.text
+
+
+def test_trait_line_uses_a_fixed_verb():
+    cultures = build_test_cultures()
+    scene = scene_at("Veldhaer", cultures)
+    characters = [
+        Character(name="Hadrik", description="Swearing in Taelrik is his habit."),
+        Character(name="Mira", description="She greets everyone in Elsiri."),
+    ]
+    section = _section(scene, cultures, 7, characters=characters)
+    assert "Hadrik curses in Taelrik." in section.text
+    assert "Mira greets in Elsiri." in section.text
+
+    pray = Character(name="Orla", description="She prays in Taelrik at dusk.")
+    section = _section(scene, cultures, 7, characters=[pray])
+    assert "Orla speaks in Taelrik." in section.text

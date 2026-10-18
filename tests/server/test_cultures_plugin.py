@@ -899,3 +899,22 @@ async def test_set_character_culture_unknown_name_fails(plugin):
     done = plugin.websocket_handler.messages[-1]
     assert done["action"] == "operation_done"
     assert "error" in done
+
+
+@pytest.mark.asyncio
+async def test_set_character_culture_unknown_culture_fails(plugin):
+    character = _add_character(
+        plugin,
+        "Kethrun",
+        culture=CharacterCulture(culture_id="taelrik", unsure=True, set_by="ai"),
+    )
+
+    await plugin.handle_set_character_culture(
+        {"character_name": "Kethrun", "culture_id": "atlantean"}
+    )
+
+    done = plugin.websocket_handler.messages[-1]
+    assert done["action"] == "operation_done"
+    assert "unknown culture" in done["error"]["message"]
+    assert character.culture.culture_id == "taelrik"
+    assert character.culture.set_by == "ai"
