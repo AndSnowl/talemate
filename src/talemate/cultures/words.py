@@ -107,6 +107,67 @@ def _is_common_word(word: str) -> bool:
     )
 
 
+# Person/role words: the only common words whose plural or possessive
+# normalisation makes a *single-word* phrase a description ("Bargemen",
+# "Fishwives", "Guards"). An ordinary noun's plural or possessive stays a
+# name on its own ("Rivers", "Hawks", "Woods", "Fields") — only a
+# multi-word phrase normalises those generically ("River Folk").
+_ROLE_WORDS: frozenset[str] = frozenset(
+    {
+        "guard",
+        "man",
+        "woman",
+        "boy",
+        "girl",
+        "hand",
+        "folk",
+        "innkeeper",
+        "bargeman",
+        "fishwife",
+        "watchman",
+        "sailor",
+        "soldier",
+        "merchant",
+        "farmer",
+        "child",
+        "elder",
+        "priest",
+        "monk",
+        "servant",
+        "slave",
+        "worker",
+        # added in task 8b for role/occupation labels common in snapshots
+        "barman",
+        "carter",
+        "chandler",
+        "crone",
+        "deckhand",
+        "drover",
+        "ferryhand",
+        "lad",
+        "lass",
+        "matron",
+        "ostler",
+        "stablehand",
+        "tollkeeper",
+        "urchin",
+    }
+)
+
+
+def _is_role_common_word(word: str) -> bool:
+    """Whether some possessive/plural-normalised form of `word` is both a
+    common word and a person/role word. Used only for a single-word
+    phrase, so a bare plural of an ordinary noun ("Rivers", "Woods")
+    isn't mistaken for a description."""
+
+    normalised = _strip_possessive(word.lower())
+    return any(
+        candidate in COMMON_WORDS and candidate in _ROLE_WORDS
+        for candidate in _plural_candidates(normalised)
+    )
+
+
 def clean_name(text: str) -> str:
     """Strip whitespace, quotes, trailing punctuation and a possessive `'s`."""
 
@@ -144,7 +205,13 @@ def looks_like_name(text: str) -> bool:
     if not non_connector_words:
         return False
 
-    if all(_is_common_word(word) for word in non_connector_words):
+    if len(non_connector_words) == 1:
+        # a single word: only a person/role word's plural or possessive
+        # makes it a description ("Guards", "Bargemen"); an ordinary
+        # noun's plural stays a name ("Rivers", "Woods")
+        if _is_role_common_word(non_connector_words[0]):
+            return False
+    elif all(_is_common_word(word) for word in non_connector_words):
         return False
 
     return True

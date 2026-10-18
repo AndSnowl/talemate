@@ -36,6 +36,18 @@ def test_looks_like_name_treats_role_labels_as_descriptions():
     assert looks_like_name("Kethrun's") is True
 
 
+def test_looks_like_name_plain_plural_nouns_stay_names():
+    # a bare plural of an ordinary (non-role) noun is still a name: only
+    # a person/role word's plural or possessive is a description
+    assert looks_like_name("Rivers") is True
+    assert looks_like_name("Hawks") is True
+    assert looks_like_name("Woods") is True
+    assert looks_like_name("Fields") is True
+
+    # but a multi-word phrase still normalises generically
+    assert looks_like_name("River Folk") is False
+
+
 def test_mid_sentence_occurrence():
     assert mid_sentence_occurrence("Grey Gull", "They boarded the Grey Gull at dawn.")
     assert not mid_sentence_occurrence("Grey Gull", "Grey Gull sails tonight.")

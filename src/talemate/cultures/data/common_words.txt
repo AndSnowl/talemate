@@ -471,6 +471,7 @@ flour
 flute
 fly
 fog
+folk
 fool
 foolish
 foot
