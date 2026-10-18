@@ -28,6 +28,12 @@
                 :send="send"
                 @select="placesSelectedId = $event"
             ></PlacesView>
+            <PeopleView
+                v-else-if="selected && selected.type === 'people'"
+                :characters="world.characters || []"
+                :cultures="world.cultures || []"
+                :send="send"
+            ></PeopleView>
             <div v-else-if="selected && selected.type === 'unassigned'">
                 <v-card variant="tonal" class="pa-4 mb-3">
                     <v-card-title class="pa-0">
@@ -65,6 +71,7 @@ import CultureNoWorld from './CultureNoWorld.vue';
 import CulturePage from './CulturePage.vue';
 import GlossaryView from './GlossaryView.vue';
 import PlacesView from './PlacesView.vue';
+import PeopleView from './PeopleView.vue';
 import ImportCultureDialog from './ImportCultureDialog.vue';
 import { MAX_CONTENT_WIDTH } from '@/constants/layout';
 
@@ -75,6 +82,7 @@ export default {
         CulturePage,
         GlossaryView,
         PlacesView,
+        PeopleView,
         ImportCultureDialog,
     },
     inject: [
@@ -94,6 +102,7 @@ export default {
                 cultures: [],
                 places: [],
                 glossary: [],
+                characters: [],
             },
             selected: null,
             counts: {},

@@ -48,7 +48,10 @@ _SCENE_SCRIPT = """
 import asyncio, json, sys
 from pathlib import Path
 
+import talemate.instance as instance
+from talemate.character import Character
 from talemate.cultures.store import world_dir_for
+from talemate.scene_message import NarratorMessage
 from talemate.shared_context import SharedContext
 from talemate.tale_mate import Scene
 
@@ -59,6 +62,47 @@ async def main(spec):
     scene.title = spec["title"]
     scene.project_name = spec["project"]
     scene.filename = spec["project"] + ".json"
+    scene.intro = spec.get("intro") or ""
+
+    if spec.get("location"):
+        scene.world_state.location = spec["location"]
+
+    for message in spec.get("messages") or []:
+        scene.history.append(NarratorMessage(message=message["text"]))
+
+    # Inline, rather than tests._director_test_helpers.add_character_to_scene:
+    # that module isn't importable here (this script runs under the
+    # isolated copy's own PYTHONPATH, which has no tests/ on it).
+    # `Scene.add_actor` always looks up the memory agent (even when
+    # `commit_to_memory=False` it only skips *using* it), and a config save
+    # right after also probes every registered agent's status, so a
+    # placeholder with just enough surface is registered in this bare
+    # subprocess, which never starts the real agent manager.
+    if any(item.get("active", True) for item in spec.get("characters") or []):
+        class _PlaceholderMemoryAgent:
+            async def emit_status(self):
+                return None
+
+        instance.AGENTS.setdefault("memory", _PlaceholderMemoryAgent())
+
+    for item in spec.get("characters") or []:
+        character = Character(
+            name=item["name"],
+            description=item.get("description", ""),
+            base_attributes={},
+            details={},
+            color="#fff",
+            shared=item.get("shared", False),
+            culture=item.get("culture"),
+        )
+        if item.get("active", True):
+            actor = scene.Actor(character, None)
+            await scene.add_actor(actor, commit_to_memory=False)
+            if character.name not in scene.active_characters:
+                scene.active_characters.append(character.name)
+        else:
+            scene.character_data[character.name] = character
+
     result = {}
     if spec["context"]:
         shared_dir = Path(scene.shared_context_dir)
@@ -74,6 +118,35 @@ async def main(spec):
 
 
 asyncio.run(main(json.loads(sys.argv[1])))
+"""
+
+_PLACES_GLOSSARY_SCRIPT = """
+import json, sys
+from pathlib import Path
+
+from talemate.cultures.models import GlossaryEntry, Place, new_id
+from talemate.cultures.store import WorldStore
+
+spec = json.loads(sys.argv[1])
+store = WorldStore(Path(spec["world_dir"]))
+
+if spec.get("places") is not None:
+    places = []
+    for raw in spec["places"]:
+        data = dict(raw)
+        data.setdefault("id", new_id())
+        places.append(Place.model_validate(data))
+    store.save_places(places)
+
+if spec.get("entries") is not None:
+    entries = []
+    for raw in spec["entries"]:
+        data = dict(raw)
+        data.setdefault("id", new_id())
+        entries.append(GlossaryEntry.model_validate(data))
+    store.save_glossary(entries)
+
+print(RESULT_PREFIX + json.dumps({}))
 """
 
 _CULTURE_SCRIPT = """
@@ -120,11 +193,36 @@ def _root_from_world(world_dir: Path) -> Path:
 
 
 def seed_world(
-    root: Path, project: str = "e2e-world", context: str = "world"
+    root: Path,
+    project: str = "e2e-world",
+    context: str = "world",
+    *,
+    intro: str = "",
+    location: str | None = None,
+    messages: list[dict] = (),
+    characters: list[dict] = (),
 ) -> SeededWorld:
-    """Create a minimal scene in ``<root>/scenes/<project>/`` linked to a Shared World."""
+    """Create a minimal scene in ``<root>/scenes/<project>/`` linked to a Shared World.
+
+    ``messages`` items are ``{"text": str}``, appended as ``NarratorMessage``s
+    to the scene's history. ``characters`` items are ``{"name",
+    "description"="", "culture": dict|None, "active": bool=True, "shared":
+    bool=False}``: active ones are added via a real ``Actor``/``Player``
+    (``commit_to_memory=False``), inactive ones go only into
+    ``scene.character_data``.
+    """
     result = _run_in_copy(
-        root, _SCENE_SCRIPT, {"project": project, "title": project, "context": context}
+        root,
+        _SCENE_SCRIPT,
+        {
+            "project": project,
+            "title": project,
+            "context": context,
+            "intro": intro,
+            "location": location,
+            "messages": list(messages),
+            "characters": list(characters),
+        },
     )
     return SeededWorld(
         scene_path=Path(result["scene_path"]),
@@ -151,6 +249,24 @@ def place_culture(world: SeededWorld, culture_file: Path) -> None:
             "culture_file": str(Path(culture_file).resolve()),
             "today": date.today().isoformat(),
         },
+    )
+
+
+def place_places(world: SeededWorld, places: list[dict]) -> None:
+    """Validate and save ``places`` (dicts) via `WorldStore.save_places`."""
+    _run_in_copy(
+        _root_from_world(world.world_dir),
+        _PLACES_GLOSSARY_SCRIPT,
+        {"world_dir": str(world.world_dir), "places": list(places)},
+    )
+
+
+def place_glossary(world: SeededWorld, entries: list[dict]) -> None:
+    """Validate and save ``entries`` (dicts) via `WorldStore.save_glossary`."""
+    _run_in_copy(
+        _root_from_world(world.world_dir),
+        _PLACES_GLOSSARY_SCRIPT,
+        {"world_dir": str(world.world_dir), "entries": list(entries)},
     )
 
 
@@ -219,4 +335,17 @@ def open_scene(page, scene_path: Path) -> None:
     )
     page.locator("header.v-app-bar .v-tab", has_text=title).wait_for(
         state="visible", timeout=SCENE_TITLE_TIMEOUT_MS
+    )
+
+
+def send_backend(page, payload: dict) -> None:
+    """Send ``payload`` on the page's backend socket, the way the app itself does.
+
+    Needs a page with a scene already open (``open_scene``), on the same
+    backend connection the app's own UI sends on.
+    """
+    page.wait_for_function(f"!!({_BACKEND_SOCKET_JS})()", timeout=60_000)
+    page.evaluate(
+        f"(data) => ({_BACKEND_SOCKET_JS})().send(JSON.stringify(data))",
+        payload,
     )

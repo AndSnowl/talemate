@@ -251,9 +251,46 @@ export default {
         'open-language',
         'open-places',
     ],
+    watch: {
+        // Dedicated to the play additions, independent of the mixin's own
+        // `culture` watcher (which only re-clones `local` -- description,
+        // customs, food, holidays -- and skips everything, additions
+        // included, while the owner has an unsaved edit in one of those).
+        // Addition-box edits never touch `local`, so this must run on every
+        // broadcast regardless of that dirty flag, or a brand new addition
+        // arriving while the owner is mid-edit elsewhere would never get its
+        // box populated (the known "empty edit box" gap).
+        'culture.additions': {
+            deep: true,
+            handler(additions) {
+                const seen = new Set();
+                for (const addition of (additions || [])) {
+                    seen.add(addition.id);
+                    const base = this.additionBase[addition.id];
+                    const untouched = this.additionEdits[addition.id] === undefined
+                        || this.additionEdits[addition.id] === base;
+                    if (untouched) {
+                        this.additionEdits[addition.id] = addition.text;
+                    }
+                    this.additionBase[addition.id] = addition.text;
+                }
+                for (const id of Object.keys(this.additionEdits)) {
+                    if (!seen.has(id)) {
+                        delete this.additionEdits[id];
+                        delete this.additionBase[id];
+                    }
+                }
+            },
+        },
+    },
     data() {
         return {
             additionEdits: this.initAdditionEdits(this.culture),
+            // The last server text seen for each addition id: lets the
+            // `culture.additions` watcher tell "untouched since the last
+            // broadcast" (safe to refresh) apart from "the owner is mid-edit"
+            // (must be left alone), addition by addition.
+            additionBase: this.initAdditionEdits(this.culture),
         }
     },
     computed: {
@@ -270,10 +307,19 @@ export default {
         },
     },
     methods: {
-        onLocalReset() {
-            // `local` holds only this page's own fields; the additions are
-            // read from the culture prop itself.
+        onLocalReset(local, identityChanged) {
+            // A same-identity re-clone (the reply to our own save, or any
+            // other edit under this shared world) is handled entirely by the
+            // `culture.additions` watcher above, which preserves whatever
+            // addition box the owner is mid-editing. Only an actual culture
+            // switch starts additions fresh here -- nothing of the old
+            // culture's edits is worth keeping once a different one is
+            // selected.
+            if (!identityChanged) {
+                return;
+            }
             this.additionEdits = this.initAdditionEdits(this.culture);
+            this.additionBase = this.initAdditionEdits(this.culture);
         },
         initAdditionEdits(culture) {
             const edits = {};

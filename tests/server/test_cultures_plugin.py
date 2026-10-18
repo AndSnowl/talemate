@@ -13,8 +13,10 @@ from pathlib import Path
 import pytest
 
 import talemate.emit.async_signals as async_signals
+from talemate.character import Character
 from talemate.cultures.exchange import CultureFile
 from talemate.cultures.models import (
+    CharacterCulture,
     Culture,
     GeneratorDef,
     GlossaryEntry,
@@ -781,3 +783,103 @@ async def test_event_forwarding_reraises_cancel_and_swallows_errors(
     monkeypatch.setattr(plugin, "_send_world", boom)
     await plugin.on_cultures_event(event)  # logged, not raised
     assert plugin.websocket_handler.messages == []
+
+
+# ---------------------------------------------------------------------------
+# People review (plan 2 / task 9)
+# ---------------------------------------------------------------------------
+
+
+def _add_character(plugin, name, *, culture=None, is_player=False, active=True):
+    character = Character(
+        name=name,
+        description="",
+        is_player=is_player,
+        base_attributes={},
+        details={},
+        color="#fff",
+        culture=culture,
+    )
+    plugin.scene.character_data[name] = character
+    if active and name not in plugin.scene.active_characters:
+        plugin.scene.active_characters.append(name)
+    return character
+
+
+@pytest.mark.asyncio
+async def test_world_lists_characters_and_unsure_count(plugin):
+    _add_character(
+        plugin,
+        "Kethrun",
+        culture=CharacterCulture(culture_id="taelrik", unsure=True, reason="speech"),
+    )
+
+    await plugin.handle_get_world({})
+
+    msg = last_message(plugin, "world")
+    characters = msg["data"]["characters"]
+    assert [c["name"] for c in characters] == ["Kethrun"]
+    assert characters[0]["culture"]["culture_id"] == "taelrik"
+    assert characters[0]["is_player"] is False
+    assert characters[0]["active"] is True
+    assert characters[0]["shared"] is False
+    assert msg["data"]["counts"]["unsure_characters"] == 1
+    assert msg["data"]["counts"]["unreviewed_total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_set_character_culture_marks_owner(plugin):
+    _add_character(
+        plugin,
+        "Kethrun",
+        culture=CharacterCulture(culture_id="taelrik", unsure=True, set_by="ai"),
+    )
+
+    await plugin.handle_set_character_culture(
+        {"character_name": "Kethrun", "culture_id": None}
+    )
+
+    done = last_message(plugin, "operation_done")
+    assert "error" not in done
+
+    world_msg = last_message(plugin, "world")
+    character = next(
+        c for c in world_msg["data"]["characters"] if c["name"] == "Kethrun"
+    )
+    assert character["culture"]["culture_id"] is None
+    assert character["culture"]["set_by"] == "owner"
+    assert character["culture"]["unsure"] is False
+
+
+@pytest.mark.asyncio
+async def test_review_character_culture_clears_unsure(plugin):
+    _add_character(
+        plugin,
+        "Kethrun",
+        culture=CharacterCulture(culture_id="taelrik", unsure=True, set_by="ai"),
+    )
+
+    await plugin.handle_review_character_culture({"character_name": "Kethrun"})
+
+    done = last_message(plugin, "operation_done")
+    assert "error" not in done
+
+    world_msg = last_message(plugin, "world")
+    character = next(
+        c for c in world_msg["data"]["characters"] if c["name"] == "Kethrun"
+    )
+    assert character["culture"]["unsure"] is False
+    assert character["culture"]["set_by"] == "ai"
+    assert character["culture"]["culture_id"] == "taelrik"
+    assert world_msg["data"]["counts"]["unsure_characters"] == 0
+
+
+@pytest.mark.asyncio
+async def test_set_character_culture_unknown_name_fails(plugin):
+    await plugin.handle_set_character_culture(
+        {"character_name": "Nobody", "culture_id": "taelrik"}
+    )
+
+    done = plugin.websocket_handler.messages[-1]
+    assert done["action"] == "operation_done"
+    assert "error" in done

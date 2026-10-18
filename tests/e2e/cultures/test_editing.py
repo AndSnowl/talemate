@@ -5,11 +5,9 @@ See docs/superpowers/plans/2026-10-17-cultures-foundation-followups.md,
 "Manual checks" 6, 7, 10.
 """
 
-import json
-import uuid
-
 from e2e.cultures._ui import (
     CULTURE_FILE,
+    _add_addition,
     open_world_editor_cultures as _open_world_editor_cultures,
     wait_for_json,
 )
@@ -35,23 +33,6 @@ def _wait_for_culture(
     """
     path = world_dir / "cultures" / f"{CULTURE_ID}.json"
     return wait_for_json(path, predicate, timeout=timeout, message=message)
-
-
-def _add_addition(world, section: str, text: str) -> str:
-    culture_path = world.world_dir / "cultures" / f"{CULTURE_ID}.json"
-    data = json.loads(culture_path.read_text(encoding="utf-8"))
-    addition_id = uuid.uuid4().hex[:12]
-    data["additions"].append(
-        {
-            "id": addition_id,
-            "section": section,
-            "text": text,
-            "source": "",
-            "status": "unreviewed",
-        }
-    )
-    culture_path.write_text(json.dumps(data), encoding="utf-8")
-    return addition_id
 
 
 def test_runbook_6_culture_and_language_edits_survive_reload(app, page):

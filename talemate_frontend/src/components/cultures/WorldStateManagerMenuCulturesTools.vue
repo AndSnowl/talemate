@@ -53,6 +53,17 @@
                 ></v-badge>
             </template>
         </v-list-item>
+        <v-list-item value="people" prepend-icon="mdi-account-group-outline">
+            <v-list-item-title>People</v-list-item-title>
+            <template v-slot:append>
+                <v-badge
+                    v-if="unsureCharacters > 0"
+                    inline
+                    color="unsaved"
+                    :content="String(unsureCharacters)"
+                ></v-badge>
+            </template>
+        </v-list-item>
 
         <v-divider class="my-2"></v-divider>
         <v-list-subheader color="grey">Not yet in a language</v-list-subheader>
@@ -102,6 +113,9 @@ export default {
         unsurePlaces() {
             return this.counts.unsure_places || 0;
         },
+        unsureCharacters() {
+            return this.counts.unsure_characters || 0;
+        },
         unreviewedUnassigned() {
             return this.counts.unreviewed_unassigned || 0;
         },
@@ -133,6 +147,8 @@ export default {
             const key = val[0];
             if (key === 'places') {
                 this.tool.select('places');
+            } else if (key === 'people') {
+                this.tool.select('people');
             } else if (key === 'unassigned') {
                 this.tool.select('unassigned');
             } else if (typeof key === 'string' && key.startsWith('culture:')) {

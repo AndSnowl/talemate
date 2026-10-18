@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import time
+import uuid
 from pathlib import Path
 
 APP_BAR = "header.v-app-bar"
@@ -18,6 +19,32 @@ APP_BAR = "header.v-app-bar"
 CULTURE_FILE = (
     Path(__file__).resolve().parents[2] / "cultures" / "data" / "taelrik.culture.json"
 )
+
+# Matches CULTURE_FILE's id (the fixture every test here imports).
+CULTURE_ID = "taelrik"
+
+
+def _add_addition(world, section: str, text: str) -> str:
+    """Write a new play addition straight into the culture file on disk.
+
+    Simulates the Culture agent's own write (which the tests don't trigger
+    for real), so the UI's reaction to an addition arriving can be checked
+    without a model call.
+    """
+    culture_path = world.world_dir / "cultures" / f"{CULTURE_ID}.json"
+    data = json.loads(culture_path.read_text(encoding="utf-8"))
+    addition_id = uuid.uuid4().hex[:12]
+    data["additions"].append(
+        {
+            "id": addition_id,
+            "section": section,
+            "text": text,
+            "source": "",
+            "status": "unreviewed",
+        }
+    )
+    culture_path.write_text(json.dumps(data), encoding="utf-8")
+    return addition_id
 
 
 def wait_until(predicate, timeout: float = 10.0, message: str = "") -> None:

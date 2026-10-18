@@ -30,7 +30,14 @@ import structlog
 
 from talemate.cultures import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
-from talemate.cultures.models import Culture, GlossaryEntry, Language, Place, new_id
+from talemate.cultures.models import (
+    CharacterCulture,
+    Culture,
+    GlossaryEntry,
+    Language,
+    Place,
+    new_id,
+)
 from talemate.cultures.places import delete_place, reparent, set_share, set_shares
 from talemate.cultures.signals import CulturesEvent, guarded
 from talemate.cultures.store import WorldStore, world_dir_for_scene
@@ -148,6 +155,15 @@ class ExportPayload(pydantic.BaseModel):
     culture_id: str
 
 
+class SetCharacterCulturePayload(pydantic.BaseModel):
+    character_name: str
+    culture_id: str | None = None
+
+
+class ReviewCharacterCulturePayload(pydantic.BaseModel):
+    character_name: str
+
+
 class CulturesPlugin(Plugin):
     router = "cultures"
 
@@ -214,6 +230,27 @@ class CulturesPlugin(Plugin):
     def _world_name(self) -> str:
         return self.scene.shared_context.filepath.stem
 
+    def _characters(self) -> list[dict]:
+        """One entry per `scene.character_data`, sorted by name.
+
+        Characters live on the scene, not the shared world's own files, so
+        this reads `self.scene` directly rather than going through `store`.
+        """
+        characters = [
+            {
+                "name": character.name,
+                "is_player": character.is_player,
+                "active": character.name in self.scene.active_characters,
+                "shared": character.shared,
+                "culture": character.culture.model_dump(mode="json")
+                if character.culture
+                else None,
+            }
+            for character in self.scene.character_data.values()
+        ]
+        characters.sort(key=lambda c: c["name"])
+        return characters
+
     async def _send_world(self, store: WorldStore | None) -> None:
         """Send the `world` reply. Always replies, even if loading fails.
 
@@ -225,10 +262,25 @@ class CulturesPlugin(Plugin):
             data = {"available": False}
         else:
             try:
+                snapshot = store.snapshot()
+                characters = self._characters()
+                unsure_characters = sum(
+                    1
+                    for character in characters
+                    if character["culture"] and character["culture"]["unsure"]
+                )
+                counts = {
+                    **snapshot["counts"],
+                    "unsure_characters": unsure_characters,
+                    "unreviewed_total": snapshot["counts"]["unreviewed_total"]
+                    + unsure_characters,
+                }
                 data = {
                     "available": True,
                     "world_name": self._world_name(),
-                    **store.snapshot(),
+                    **snapshot,
+                    "counts": counts,
+                    "characters": characters,
                 }
             except Exception as e:
                 log.exception("cultures: could not load the shared world")
@@ -240,6 +292,7 @@ class CulturesPlugin(Plugin):
                     "places": [],
                     "glossary": [],
                     "counts": {},
+                    "characters": [],
                 }
         self.websocket_handler.queue_put(
             {"type": self.router, "action": "world", "data": data}
@@ -664,3 +717,44 @@ class CulturesPlugin(Plugin):
                 },
             }
         )
+
+    async def handle_set_character_culture(self, data: dict):
+        store = await self._require_store()
+        if store is None:
+            return
+
+        try:
+            payload = SetCharacterCulturePayload(**data)
+            character = self.scene.character_data.get(payload.character_name)
+            if character is None:
+                raise ValueError(f"unknown character: {payload.character_name}")
+            character.culture = CharacterCulture(
+                culture_id=payload.culture_id, set_by="owner", unsure=False
+            )
+        except ValueError as e:
+            await self.signal_operation_failed(str(e))
+            return
+
+        await self._send_world(store)
+        await self.signal_operation_done()
+
+    async def handle_review_character_culture(self, data: dict):
+        store = await self._require_store()
+        if store is None:
+            return
+
+        try:
+            payload = ReviewCharacterCulturePayload(**data)
+            character = self.scene.character_data.get(payload.character_name)
+            if character is None:
+                raise ValueError(f"unknown character: {payload.character_name}")
+            if character.culture is not None:
+                character.culture = character.culture.model_copy(
+                    update={"unsure": False}
+                )
+        except ValueError as e:
+            await self.signal_operation_failed(str(e))
+            return
+
+        await self._send_world(store)
+        await self.signal_operation_done()

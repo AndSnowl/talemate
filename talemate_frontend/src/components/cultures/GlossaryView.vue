@@ -68,6 +68,12 @@
                                 <span :class="{ 'text-highlight7 font-italic': entry.kind === 'thing' || entry.kind === 'word' }">
                                     {{ entry.text }}
                                 </span>
+                                <v-icon
+                                    v-if="entry.doesnt_fit"
+                                    color="warning"
+                                    size="x-small"
+                                    class="ml-1"
+                                >mdi-alert-outline</v-icon>
                             </td>
                             <td>
                                 <v-chip size="x-small" label :color="kindMeta(entry.kind).color" variant="tonal" :prepend-icon="kindMeta(entry.kind).icon">

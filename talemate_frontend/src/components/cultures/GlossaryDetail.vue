@@ -9,6 +9,16 @@
         </v-card-title>
 
         <v-card-text class="pa-0">
+            <v-alert
+                v-if="local.doesnt_fit && selectedCultureObj"
+                type="warning"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+            >
+                Doesn't fit {{ selectedCultureObj.name }}: it doesn't follow the language's sound rules.
+            </v-alert>
+
             <div class="origin-box text-body-2 mb-3 pa-3">
                 <template v-if="local.origin.by === 'ai'">
                     <v-icon size="small" class="mr-1">mdi-robot-outline</v-icon>
@@ -25,6 +35,10 @@
                             {{ candidate }}
                         </v-chip>
                     </div>
+                </template>
+                <template v-else-if="local.origin.by === 'ai_free' && local.language">
+                    <v-icon size="small" class="mr-1">mdi-robot-outline</v-icon>
+                    Not picked from a generator. It was already in the story, or was typed in.
                 </template>
                 <template v-else-if="local.origin.by === 'ai_free'">
                     <v-icon size="small" class="mr-1">mdi-robot-outline</v-icon>

@@ -6,7 +6,13 @@ from pathlib import Path
 
 # tests/ has no __init__.py, so pytest imports this package as `e2e`.
 from e2e import conftest as e2e_conftest
-from e2e.seed import dismiss_onboarding, open_scene, seed_world
+from e2e.seed import (
+    dismiss_onboarding,
+    open_scene,
+    place_glossary,
+    place_places,
+    seed_world,
+)
 
 pytest_plugins = ["pytester"]
 
@@ -37,6 +43,71 @@ def test_seeded_world_opens_with_cultures_tab(app, page):
     # the absence check below isn't passing just because nothing rendered yet.
     page.get_by_text("No cultures yet.").wait_for(state="visible", timeout=30_000)
     assert page.get_by_text("Link this scene to a Shared World").count() == 0
+
+
+def test_seed_world_with_messages_location_and_characters(app):
+    world = seed_world(
+        app.root,
+        project="e2e-seed-extras",
+        intro="An opening note.",
+        location="The riverside market.",
+        messages=[{"text": "A heron watches from the reeds."}],
+        characters=[
+            {
+                "name": "Kethrun",
+                "description": "A river trader.",
+                "culture": {"culture_id": "taelrik", "unsure": True},
+            },
+            {
+                "name": "Offstage Wren",
+                "active": False,
+            },
+        ],
+    )
+
+    scene_data = json.loads(world.scene_path.read_text())
+
+    assert scene_data["intro"] == "An opening note."
+    assert scene_data["world_state"]["location"] == "The riverside market."
+    assert [m["message"] for m in scene_data["history"]] == [
+        "A heron watches from the reeds."
+    ]
+
+    assert "Kethrun" in scene_data["character_data"]
+    assert scene_data["character_data"]["Kethrun"]["culture"]["culture_id"] == (
+        "taelrik"
+    )
+    assert scene_data["character_data"]["Kethrun"]["culture"]["unsure"] is True
+    assert "Kethrun" in scene_data["active_characters"]
+
+    assert "Offstage Wren" in scene_data["character_data"]
+    assert "Offstage Wren" not in scene_data["active_characters"]
+
+
+def test_place_places_and_glossary(app):
+    world = seed_world(app.root, project="e2e-seed-places-glossary")
+
+    place_places(
+        world,
+        [{"name": "Dhunmouth", "kind": "city"}],
+    )
+    place_glossary(
+        world,
+        [
+            {
+                "text": "Marigold",
+                "language": None,
+                "kind": "person",
+                "origin": {"by": "owner"},
+            }
+        ],
+    )
+
+    places_data = json.loads((world.world_dir / "places.json").read_text())
+    assert [p["name"] for p in places_data["places"]] == ["Dhunmouth"]
+
+    glossary_data = json.loads((world.world_dir / "glossary.json").read_text())
+    assert [e["text"] for e in glossary_data["entries"]] == ["Marigold"]
 
 
 def test_failure_artifacts_written(page, tmp_path):
