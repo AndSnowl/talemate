@@ -369,12 +369,12 @@ export default {
 }
 
 .origin-box {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--v-theme-on-surface), 0.04);
     border-radius: 4px;
 }
 
 .actions-row {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgb(var(--v-theme-border));
 }
 
 .rendering-label {

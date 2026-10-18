@@ -235,7 +235,7 @@ export default {
 
 <style scoped>
 .phrase-row {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgb(var(--v-theme-border));
 }
 
 .phrase-row:last-child {

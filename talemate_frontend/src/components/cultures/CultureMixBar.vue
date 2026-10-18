@@ -14,6 +14,9 @@
 </template>
 
 <script>
+import { dataColor } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
+
 export default {
     name: 'CultureMixBar',
     props: {
@@ -36,7 +39,8 @@ export default {
         },
         colorFor(cultureId) {
             const culture = this.cultureFor(cultureId);
-            return culture ? culture.color : '#9E9E9E';
+            if (!culture) return currentTheme.value.colors.muted;
+            return dataColor(culture.color) || culture.color;
         },
         nameFor(cultureId) {
             const culture = this.cultureFor(cultureId);
@@ -50,7 +54,7 @@ export default {
 .mix-bar {
     display: flex;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--v-theme-on-surface), 0.08);
     min-width: 60px;
 }
 

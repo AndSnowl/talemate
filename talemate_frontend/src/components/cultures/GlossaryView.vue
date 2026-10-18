@@ -42,7 +42,7 @@
         <v-row>
             <v-col cols="12" md="7">
                 <div v-if="visibleEntries.length === 0" class="text-center text-muted pa-8">
-                    <v-icon size="32" color="green">mdi-check-circle-outline</v-icon>
+                    <v-icon size="32" color="success">mdi-check-circle-outline</v-icon>
                     <div class="mt-2">Nothing here.</div>
                 </div>
                 <v-table v-else density="compact">
@@ -252,10 +252,10 @@ export default {
 }
 
 .glossary-row:hover {
-    background: rgba(255, 255, 255, 0.035);
+    background: rgba(var(--v-theme-on-surface), 0.035);
 }
 
 .glossary-row-selected {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--v-theme-on-surface), 0.07);
 }
 </style>

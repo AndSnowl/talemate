@@ -211,6 +211,8 @@
 <script>
 import { levelLabel as formatLevel } from './levelLabels';
 import { dirtyLocalClone } from './dirtyLocalClone';
+import { dataColor } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 
 export default {
     name: 'CultureOverview',
@@ -348,7 +350,8 @@ export default {
         },
         colorFor(cultureId) {
             const found = this.cultures.find(c => c.id === cultureId);
-            return found ? found.color : '#9E9E9E';
+            if (!found) return currentTheme.value.colors.muted;
+            return dataColor(found.color) || found.color;
         },
         shareFor(place) {
             const cs = (place.cultures || []).find(cs => cs.culture_id === this.culture.id);
@@ -381,7 +384,7 @@ export default {
     height: 6px;
     border-radius: 3px;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .mix-bar span {
@@ -391,10 +394,10 @@ export default {
 
 .addition-box {
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .addition-unreviewed {
-    background: rgba(255, 213, 79, 0.12);
+    background: rgba(var(--v-theme-warning), 0.12);
 }
 </style>

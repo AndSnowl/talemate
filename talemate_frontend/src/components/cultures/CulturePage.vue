@@ -2,7 +2,7 @@
     <div>
         <v-card class="mb-2">
             <v-card-text class="d-flex align-center flex-wrap ga-2">
-                <span class="culture-swatch mr-1" :style="{ backgroundColor: culture.color }"></span>
+                <span class="culture-swatch mr-1" :style="{ backgroundColor: swatchColor }"></span>
                 <span class="text-h6 font-weight-regular mr-2">{{ culture.name }}</span>
                 <v-chip size="x-small" label color="primary" variant="tonal" prepend-icon="mdi-translate">
                     Speaks {{ culture.language.name }} · {{ levelLabel }}
@@ -96,6 +96,7 @@ import DictionaryTable from './DictionaryTable.vue';
 import PhraseList from './PhraseList.vue';
 import GeneratorList from './GeneratorList.vue';
 import { levelLabel as formatLevel } from './levelLabels';
+import { dataColor } from '@/theme/dataColors';
 
 export default {
     name: 'CulturePage',
@@ -156,6 +157,12 @@ export default {
     computed: {
         levelLabel() {
             return formatLevel(this.culture.language.level);
+        },
+        // The culture's own stored colour is data: remap it onto the
+        // theme's accent palette at render time (never rewrite the stored
+        // value) — see theme/dataColors.js.
+        swatchColor() {
+            return dataColor(this.culture.color) || this.culture.color;
         },
         subTabs() {
             const tabs = [

@@ -1,7 +1,7 @@
 <template>
     <div class="people-view">
         <div v-if="characters.length === 0" class="text-center text-muted pa-8">
-            <v-icon size="32" color="green">mdi-check-circle-outline</v-icon>
+            <v-icon size="32" color="success">mdi-check-circle-outline</v-icon>
             <div class="mt-2">No characters in this scene yet.</div>
         </div>
         <v-table v-else density="compact">

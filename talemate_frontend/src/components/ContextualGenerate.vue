@@ -11,30 +11,30 @@
             </v-card-title>
             <v-card-text>
 
-                <v-alert density="compact" v-if="character" icon="mdi-account" variant="text" color="grey">
-                    {{ character }}    
+                <v-alert density="compact" v-if="character" icon="mdi-account" variant="text" color="muted">
+                    {{ character }}
                 </v-alert>
 
-                <v-alert density="compact" icon="mdi-text-box" variant="text" color="grey">
+                <v-alert density="compact" icon="mdi-text-box" variant="text" color="muted">
                     {{ contextTypeLabel }}
                 </v-alert>
 
-                <v-alert v-if="generationOptions.writing_style" density="compact" icon="mdi-script-text" variant="text" color="grey">
+                <v-alert v-if="generationOptions.writing_style" density="compact" icon="mdi-script-text" variant="text" color="muted">
                     Writing Style: {{ generationOptions.writing_style.name }}
                 </v-alert>
 
-                <v-alert v-if="generationOptions.spices && generationOptions.spices.spices.length > 0" density="compact" icon="mdi-chili-mild" variant="text" color="grey">
+                <v-alert v-if="generationOptions.spices && generationOptions.spices.spices.length > 0" density="compact" icon="mdi-chili-mild" variant="text" color="muted">
                     Spice collection: {{ generationOptions.spices.name }}
                 </v-alert>
 
-                <v-alert v-if="effectiveLength" density="compact" icon="mdi-text-box-outline" variant="text" color="grey">
+                <v-alert v-if="effectiveLength" density="compact" icon="mdi-text-box-outline" variant="text" color="muted">
                     Length: {{ effectiveLength }} tokens
                 </v-alert>
 
-                <v-alert dense icon="mdi-pencil" variant="text" color="grey" v-if="original && withOriginal">
+                <v-alert dense icon="mdi-pencil" variant="text" color="muted" v-if="original && withOriginal">
                    <div class="original-overflow">
-                     <span class="text-grey-lighten-2">[Rewriting]</span> {{ original }}
-                    
+                     <span class="text-muted">[Rewriting]</span> {{ original }}
+
                    </div>
                 </v-alert>
 

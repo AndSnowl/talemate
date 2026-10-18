@@ -1,6 +1,6 @@
 <template>
     <v-list density="compact" slim selectable color="primary" v-model:selected="selected">
-        <v-list-subheader color="grey">
+        <v-list-subheader color="muted">
             <v-icon color="primary" class="mr-1">mdi-lightbulb-on</v-icon>
             Proposals
         </v-list-subheader>

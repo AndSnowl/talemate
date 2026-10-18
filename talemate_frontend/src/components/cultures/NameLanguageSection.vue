@@ -25,7 +25,7 @@
                 size="x-small"
                 label
                 :variant="section.language ? 'outlined' : 'tonal'"
-                :color="section.language ? undefined : 'grey'"
+                :color="section.language ? undefined : 'muted'"
             >
                 {{ section.language ? section.language.name : 'none yet' }}
             </v-chip>
@@ -106,7 +106,7 @@ export default {
 
 <style scoped>
 .name-language-section {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgb(var(--v-theme-border));
     padding-top: 8px;
     margin-top: 4px;
     display: flex;

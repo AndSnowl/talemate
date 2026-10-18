@@ -216,7 +216,7 @@ export default {
 }
 
 .empty-hint {
-    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border: 1px dashed rgb(var(--v-theme-border));
     border-radius: 6px;
 }
 </style>

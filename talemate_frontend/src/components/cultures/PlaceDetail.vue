@@ -2,7 +2,7 @@
     <v-card variant="tonal" class="pa-4">
         <v-card-title class="d-flex align-center ga-2 flex-wrap pa-0 mb-2">
             <span class="text-h6 font-weight-regular">{{ local.name }}</span>
-            <v-chip size="x-small" label color="teal" variant="tonal" prepend-icon="mdi-map-marker">
+            <v-chip size="x-small" label color="pal-teal" variant="tonal" prepend-icon="mdi-map-marker">
                 {{ kindLabel(local.kind) }}
             </v-chip>
         </v-card-title>
@@ -179,6 +179,8 @@
 <script>
 import { dirtyLocalClone } from './dirtyLocalClone';
 import { PLACE_KINDS, placeKindLabel } from './levelLabels';
+import { dataColor } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 
 export default {
     name: 'PlaceDetail',
@@ -305,7 +307,8 @@ export default {
         },
         cultureColor(cultureId) {
             const culture = this.cultureFor(cultureId);
-            return culture ? culture.color : '#9E9E9E';
+            if (!culture) return currentTheme.value.colors.muted;
+            return dataColor(culture.color) || culture.color;
         },
         chipStyle(cultureId) {
             const color = this.cultureColor(cultureId);
@@ -398,18 +401,18 @@ export default {
 }
 
 .origin-box, .meaning-box {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--v-theme-on-surface), 0.04);
     border-radius: 4px;
 }
 
 .empty-hint {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px dashed rgba(255, 255, 255, 0.3);
+    background: rgba(var(--v-theme-on-surface), 0.03);
+    border: 1px dashed rgb(var(--v-theme-border));
     border-radius: 6px;
     color: rgb(var(--v-theme-muted));
 }
 
 .actions-row {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgb(var(--v-theme-border));
 }
 </style>
