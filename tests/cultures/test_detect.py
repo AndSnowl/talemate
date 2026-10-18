@@ -19,6 +19,7 @@ from talemate.cultures.models import (
     Culture,
     GlossaryEntry,
     GlossaryOrigin,
+    Place,
 )
 from talemate.cultures.scene_context import resolve_scene_cultures
 from talemate.scene_message import NarratorMessage
@@ -70,6 +71,10 @@ def entry(text: str, kind: str = "person") -> GlossaryEntry:
         kind=kind,
         origin=GlossaryOrigin(by="owner"),
     )
+
+
+def place_named(name: str) -> Place:
+    return Place(id=name.lower(), name=name, kind="building", parent_id="veldhaer")
 
 
 def test_new_place_names():
@@ -247,3 +252,75 @@ def test_parse_additions_reply_limit():
         for word in ("one", "two", "three", "four")
     )
     assert len(parse_additions_reply(reply, [taelrik], "s")) == 3
+
+
+def test_the_names_inn_and_ship():
+    places = build_places()
+    assert new_place_names(
+        "A room at The Dhaer's Rest in Veldhaer", ["The Dhaer's Rest"], places, []
+    ) == ["The Dhaer's Rest"]
+    # known without the article: not new
+    known = places + [place_named("Dhaer's Rest")]
+    assert new_place_names("At The Dhaer's Rest", [], known, []) == []
+
+    messages = [NarratorMessage(message="They tied up beside the Grey Gull.")]
+    [ship] = find(items=["the Grey Gull"], messages=messages)
+    assert ship.kind == "thing"
+    assert ship.text == "The Grey Gull"
+    assert (
+        find(
+            items=["the Grey Gull"],
+            messages=messages,
+            glossary=[entry("Grey Gull", "thing")],
+        )
+        == []
+    )
+    # a lowercase description after "the" is still not a name
+    assert find(items=["the rusty lantern"], messages=messages) == []
+
+
+def test_reused_spare_takes_its_culture():
+    # Veldhaer is Taelrik, and the name fits Taelrik, but it was offered as Elsiri
+    [finding] = find(
+        characters=["Tovrin"],
+        offered_spares={"tovrin": {"culture_id": "elsiri", "generator_id": "given"}},
+    )
+    assert finding.culture_id == "elsiri"
+    assert finding.origin.by == "ai"
+
+
+def test_place_keys_are_not_persons():
+    findings = find(
+        characters=["Veldhaer", "The Birch Coast", "Kesterholm", "Tovrin"],
+        places_found=[("Kesterholm", "k1")],
+    )
+    assert [(f.text, f.kind) for f in findings] == [
+        ("Tovrin", "person"),
+        ("Kesterholm", "place"),
+    ]
+
+
+def test_messy_replies_parse():
+    places = build_places()
+    cultures = world_cultures()
+    current = next(p for p in places if p.id == "veldhaer")
+    [place] = parse_places_reply(
+        "Sure! Here you go:\n1. **Kesterholm** | Village | The Birch Coast | inherit | Sure.\n",
+        ["Kesterholm"],
+        places,
+        cultures,
+        current,
+    )
+    assert place.kind == "village"
+    assert place.parent_id == "birch"
+    assert place.unsure is False
+
+    [(culture_id, addition)] = parse_additions_reply(
+        "- **Taelrik** | Customs | Ferrymen spit over the rail.\nNONE.",
+        [cultures["taelrik"]],
+        "s",
+    )
+    assert culture_id == "taelrik"
+    assert addition.section == "customs"
+    assert addition.text == "Ferrymen spit over the rail."
+    assert parse_additions_reply("NONE.", [cultures["taelrik"]], "s") == []

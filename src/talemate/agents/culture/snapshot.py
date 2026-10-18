@@ -30,6 +30,8 @@ from talemate.agents.base import set_processing
 from talemate.cultures.detect import (
     PLACE_KINDS,
     find_new_names,
+    location_place_name,
+    name_key,
     new_place_names,
     parse_additions_reply,
     parse_places_reply,
@@ -41,7 +43,7 @@ from talemate.cultures.models import (
     PlayAddition,
     new_id,
 )
-from talemate.cultures.naming import guess_culture_for_name
+from talemate.cultures.naming import CultureGuess, guess_culture_for_name
 from talemate.cultures.scene_context import SceneCultures
 from talemate.cultures.signals import guarded, send_event
 from talemate.cultures.words import clean_name
@@ -136,12 +138,18 @@ class CultureSnapshotMixin:
             additions = []
             log.exception("culture: snapshot additions step failed")
 
-        # 6. event
+        # 6. event: the scene's place is the one just created when the
+        # location names it first ("Kesterholm, on the Birch Coast")
+        place_name = sc.place.name if sc.place is not None else None
+        first_key = name_key(location_place_name(world_state.location) or "")
+        for place in new_places:
+            if first_key and name_key(place.name) == first_key:
+                place_name = place.name
         await send_event(
             "snapshot_processed",
             world.world_dir,
             {
-                "place": sc.place.name if sc.place is not None else None,
+                "place": place_name,
                 "new_places": [place.name for place in new_places],
                 "new_names": [
                     {
@@ -263,10 +271,18 @@ class CultureSnapshotMixin:
         culture, owner-set or not, is left alone)."""
 
         cultures_set = []
+        offered = self.get_scene_state("offered_spares") or {}
         for character in self.scene.characters:
             if character.culture is not None:
                 continue
-            guess = guess_culture_for_name(world.cultures, sc, character.name)
+            spare = offered.get(character.name.lower()) or {}
+            if spare.get("culture_id") in world.cultures:
+                # R11: a reused spare is of its generator's culture
+                guess = CultureGuess(
+                    spare["culture_id"], False, "a spare name of this culture"
+                )
+            else:
+                guess = guess_culture_for_name(world.cultures, sc, character.name)
             if guess.culture_id not in world.cultures:
                 continue
             character.culture = CharacterCulture(

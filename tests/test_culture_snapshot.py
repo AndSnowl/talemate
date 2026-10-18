@@ -141,7 +141,8 @@ async def test_snapshot_adds_names_places_and_event(
 
     [event] = processed(events)
     assert event.changed is True
-    assert event.data["place"] == "Birch Coast"
+    # the location names the place just created first
+    assert event.data["place"] == "Kesterholm"
     assert event.data["new_places"] == ["Kesterholm"]
     new_names = {n["text"]: n for n in event.data["new_names"]}
     assert {"Brannoch", "Grey Gull", "Kesterholm"} <= set(new_names)
@@ -161,7 +162,9 @@ async def test_no_place_call_without_new_places(
     scene, world, agent, monkeypatch, events
 ):
     calls = install_replies(monkeypatch, {ADDITIONS: "NONE"})
-    set_snapshot(scene, "The Quillister inn in Veldhaer", characters=["Brannoch"])
+    set_snapshot(
+        scene, "A room at Quillister House in Veldhaer", characters=["Brannoch"]
+    )
     narrate(scene, "Brannoch waited by the door.")
 
     await agent.on_snapshot_after(snapshot_emission(scene))
@@ -180,7 +183,7 @@ async def test_additions_once_per_new_messages(
         monkeypatch,
         {ADDITIONS: "Taelrik | customs | Ferrymen spit over the rail before landing."},
     )
-    set_snapshot(scene, "The Quillister inn in Veldhaer")
+    set_snapshot(scene, "A room at Quillister House in Veldhaer")
     narrate(scene, "The ferryman spat over the rail before landing, as they all do.")
 
     await agent.on_snapshot_after(snapshot_emission(scene))
@@ -247,7 +250,7 @@ async def test_scene_characters_without_culture_get_ai_guess(
 ):
     install_replies(monkeypatch, {ADDITIONS: "NONE"})
     character = await add_character_to_scene(scene, "Tovrin")
-    set_snapshot(scene, "The Quillister inn in Veldhaer", characters=["Tovrin"])
+    set_snapshot(scene, "A room at Quillister House in Veldhaer", characters=["Tovrin"])
 
     await agent.on_snapshot_after(snapshot_emission(scene))
 
@@ -273,7 +276,9 @@ async def test_handler_errors_are_swallowed(scene, world, agent, monkeypatch, ev
 
     monkeypatch.setattr(WorldStore, "save_glossary", broken_save)
     character = await add_character_to_scene(scene, "Tovrin")
-    set_snapshot(scene, "The Quillister inn in Veldhaer", characters=["Brannoch"])
+    set_snapshot(
+        scene, "A room at Quillister House in Veldhaer", characters=["Brannoch"]
+    )
     narrate(scene, "Brannoch waited by the door.")
 
     assert await agent.on_snapshot_after(snapshot_emission(scene)) is None
@@ -334,3 +339,50 @@ async def test_templates_render_with_agent_vars(scene, world, agent, monkeypatch
     assert "- holidays: Low Water, Lantern Night" in text
     assert "Brannoch mended a net at Kesterholm." in text
     assert prompt.prepared_response.startswith("<ADDITIONS>")
+
+
+@pytest.mark.asyncio
+async def test_inn_named_with_the_is_recorded(scene, world, agent, monkeypatch, events):
+    # the model drops the article; the place keeps the name as written
+    calls = install_replies(
+        monkeypatch,
+        {
+            PLACES: "**Dhaer's Rest** | Building | Veldhaer | inherit | Sure.",
+            ADDITIONS: "NONE",
+        },
+    )
+    set_snapshot(scene, "A room at The Dhaer's Rest in Veldhaer")
+    narrate(scene, "The common room of the Dhaer's Rest was full.")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    assert calls[0]["vars"]["names"] == ["The Dhaer's Rest"]
+    [inn] = [p for p in world.load_places() if p.name == "The Dhaer's Rest"]
+    assert inn.kind == "building"
+    assert inn.parent_id == "veldhaer"
+    assert inn.unsure is False
+    by_text = {e.text: e for e in world.load_glossary()}
+    assert by_text["The Dhaer's Rest"].place_id == inn.id
+    assert processed(events)[0].data["place"] == "The Dhaer's Rest"
+
+
+@pytest.mark.asyncio
+async def test_reused_spare_sets_its_culture(scene, world, agent, monkeypatch):
+    install_replies(monkeypatch, {ADDITIONS: "NONE"})
+    agent.set_scene_states(
+        offered_spares={"tovrin": {"culture_id": "elsiri", "generator_id": "given"}}
+    )
+    character = await add_character_to_scene(scene, "Tovrin")
+    set_snapshot(scene, "A room at Quillister House in Veldhaer", characters=["Tovrin"])
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    # Veldhaer is Taelrik and the name fits Taelrik, but it was offered as Elsiri
+    assert character.culture.culture_id == "elsiri"
+    assert character.culture.set_by == "ai"
+    assert character.culture.unsure is False
+    [entry] = [e for e in world.load_glossary() if e.text == "Tovrin"]
+    assert entry.language == "elsiri"
+    assert entry.origin.by == "ai"
+    assert entry.origin.generator_id == "given"
+    assert entry.origin.candidates == []

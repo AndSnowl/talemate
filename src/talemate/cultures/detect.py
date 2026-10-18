@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "NameFinding",
+    "name_key",
+    "location_place_name",
     "new_place_names",
     "find_new_names",
     "parse_places_reply",
@@ -73,11 +75,40 @@ class NameFinding:
     origin: GlossaryOrigin
 
 
-def _place_name_keys(place: Place) -> set[str]:
-    keys = {place.name.lower()}
-    if place.name.startswith("The "):
-        keys.add(place.name[4:].lower())
-    return keys
+def _strip_markup(text: str) -> str:
+    """Drop markdown emphasis (`**Name**`, `_Name_`) from a reply field."""
+    return text.replace("*", "").strip().strip("_").strip()
+
+
+def _field(text: str) -> str:
+    """A short reply field: markup and trailing punctuation removed."""
+    return _strip_markup(text).rstrip(".,;:!?").strip()
+
+
+def name_key(text: str) -> str:
+    """Case-insensitive match key for a name: cleaned, without markup and
+    without a leading "the" ("The Dhaer's Rest" and "Dhaer's Rest" match)."""
+
+    key = clean_name(_strip_markup(text)).lower()
+    if key.startswith("the "):
+        key = key[4:].strip()
+    return key
+
+
+def _with_article(text: str, check) -> str | None:
+    """`text`, cleaned, when `check` accepts it; or, for a leading "the"
+    followed by a remainder `check` accepts, `"The " + remainder` (inns,
+    ships and taverns are named like this). `None` otherwise."""
+
+    cleaned = clean_name(text)
+    if check(cleaned):
+        return cleaned
+    words = cleaned.split()
+    if len(words) > 1 and words[0].lower() == "the":
+        rest = " ".join(words[1:])
+        if check(rest):
+            return f"The {rest}"
+    return None
 
 
 def _capitalised_runs(text: str) -> list[str]:
@@ -112,6 +143,16 @@ def _capitalised_runs(text: str) -> list[str]:
     return result
 
 
+def location_place_name(location: str | None) -> str | None:
+    """The first place-like name in a location text, or `None`."""
+
+    for run in _capitalised_runs(location or ""):
+        name = _with_article(run, looks_like_name)
+        if name:
+            return name
+    return None
+
+
 def new_place_names(
     location: str | None,
     snapshot_places: list[str],
@@ -120,27 +161,22 @@ def new_place_names(
 ) -> list[str]:
     """Place names in the snapshot that the world doesn't know yet."""
 
-    candidates: list[str] = []
+    candidates: list[str | None] = []
     if location:
         candidates.extend(
-            clean_name(run)
-            for run in _capitalised_runs(location)
-            if looks_like_name(run)
+            _with_article(run, looks_like_name) for run in _capitalised_runs(location)
         )
-    for key in snapshot_places:
-        cleaned = clean_name(key)
-        if looks_like_name(cleaned):
-            candidates.append(cleaned)
+    candidates.extend(_with_article(key, looks_like_name) for key in snapshot_places)
 
-    known: set[str] = set()
-    for place in places:
-        known |= _place_name_keys(place)
-    known |= {name.lower() for name in character_names}
+    known = {name_key(place.name) for place in places}
+    known |= {name_key(name) for name in character_names}
 
     result: list[str] = []
     for name in candidates:
-        key = name.lower()
-        if not name or key in known:
+        if not name:
+            continue
+        key = name_key(name)
+        if not key or key in known:
             continue
         known.add(key)
         result.append(name)
@@ -189,7 +225,9 @@ def find_new_names(
     scene's mix.
     """
 
-    known = {entry.text.lower() for entry in glossary}
+    known = {name_key(entry.text) for entry in glossary}
+    place_keys = {name_key(place.name) for place in places or []}
+    place_keys |= {name_key(name) for name, _ in places_found}
     texts = [str(getattr(message, "message", "") or "") for message in messages]
     findings: list[NameFinding] = []
 
@@ -198,11 +236,11 @@ def find_new_names(
         return f"{story}, message {mention.id}" if mention is not None else story
 
     def add(text, kind, culture_id, origin, character_name=None, place_id=None):
-        if not text or text.lower() in known:
+        if not text or name_key(text) in known:
             return
         if culture_id not in cultures:
             culture_id = None
-        known.add(text.lower())
+        known.add(name_key(text))
         findings.append(
             NameFinding(
                 text=text,
@@ -222,15 +260,20 @@ def find_new_names(
     # persons
     for key in characters:
         text = clean_name(key)
-        if not looks_like_name(text):
+        if not looks_like_name(text) or name_key(text) in place_keys:
+            # a place the snapshot listed among the characters isn't a person
             continue
         character = scene_characters.get(text)
         own = getattr(character, "culture", None) if character is not None else None
-        if own is not None and own.culture_id in cultures:
+        spare = offered_spares.get(text.lower())
+        spare_culture = spare.get("culture_id") if spare is not None else None
+        if spare_culture in cultures:
+            # R11: a reused spare is in the language of its generator
+            culture_id = spare_culture
+        elif own is not None and own.culture_id in cultures:
             culture_id = own.culture_id
         else:
             culture_id = guess_culture_for_name(cultures, scene, text).culture_id
-        spare = offered_spares.get(text.lower())
         if spare is not None:
             # R6: the offered batch isn't kept, so no candidates
             origin = GlossaryOrigin(
@@ -242,9 +285,13 @@ def find_new_names(
 
     # things
     thing_culture = _dominant(scene.mix, cultures)
+
+    def proper_item(text: str) -> bool:
+        return _capitalised_name(text) and is_proper_item_name(text, texts)
+
     for key in items:
-        text = clean_name(key)
-        if not _capitalised_name(text) or not is_proper_item_name(text, texts):
+        text = _with_article(key, proper_item)
+        if not text:
             continue
         add(text, "thing", thing_culture, GlossaryOrigin(by="ai_free"))
 
@@ -278,15 +325,15 @@ def _reply_lines(text: str) -> list[str]:
 
 
 def _find_place(places: list[Place], name: str) -> Place | None:
-    key = clean_name(name).lower()
+    key = name_key(name)
     for place in places:
-        if key in _place_name_keys(place):
+        if name_key(place.name) == key:
             return place
     return None
 
 
 def _find_culture(cultures, name: str) -> Culture | None:
-    key = name.strip().lower()
+    key = _field(name).lower()
     for culture in cultures:
         if key in (
             culture.name.lower(),
@@ -336,20 +383,20 @@ def parse_places_reply(
     is placed under the current place, inheriting, unsure.
     """
 
-    wanted = {name.lower(): name for name in names}
+    wanted = {name_key(name): name for name in names}
     default_parent = current_place.id if current_place is not None else None
     parsed: dict[str, dict] = {}
 
     for line in _reply_lines(text):
-        parts = [part.strip() for part in line.split("|")]
+        parts = [_field(part) for part in line.split("|")]
         if len(parts) < 2:
             continue
-        name = wanted.get(clean_name(parts[0]).lower())
-        if name is None or name.lower() in parsed:
+        name = wanted.get(name_key(parts[0]))
+        if name is None or name_key(name) in parsed:
             continue
         parts += [""] * (5 - len(parts))
         kind_text, parent_text, shares_text, sure_text = parts[1:5]
-        unsure = sure_text.lower() != "sure"
+        unsure = sure_text.strip(".! ").lower() != "sure"
 
         kind = kind_text.lower()
         if kind not in PLACE_KINDS:
@@ -360,7 +407,7 @@ def parse_places_reply(
             shares, off = _parse_shares(shares_text, cultures)
             unsure = unsure or off
 
-        parsed[name.lower()] = {
+        parsed[name_key(name)] = {
             "name": name,
             "kind": kind,
             "parent": parent_text,
@@ -368,10 +415,10 @@ def parse_places_reply(
             "unsure": unsure,
         }
 
-    ids = {name.lower(): new_id() for name in names}
+    ids = {name_key(name): new_id() for name in names}
     result: list[Place] = []
     for name in names:
-        key = name.lower()
+        key = name_key(name)
         info = parsed.get(key)
         if info is None:
             result.append(
@@ -388,7 +435,7 @@ def parse_places_reply(
 
         unsure = info["unsure"]
         parent_text = info["parent"]
-        parent_key = clean_name(parent_text).lower()
+        parent_key = name_key(parent_text)
         if parent_key == "none":
             parent_id = None
         elif parent_key in ids and parent_key != key:
@@ -442,14 +489,14 @@ def parse_additions_reply(
 
     result: list[tuple[str, PlayAddition]] = []
     for line in _reply_lines(text):
-        if line.strip().upper() == "NONE":
+        if _field(line).upper() == "NONE":
             continue
-        parts = [part.strip() for part in line.split("|", 2)]
+        parts = line.split("|", 2)
         if len(parts) < 3:
             continue
         culture = _find_culture(cultures_present, parts[0])
-        section = _section(parts[1])
-        addition_text = parts[2]
+        section = _section(_field(parts[1]))
+        addition_text = _strip_markup(parts[2])
         normalised = _normalise(addition_text)
         if culture is None or section is None or not normalised:
             continue
