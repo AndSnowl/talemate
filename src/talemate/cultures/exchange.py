@@ -29,13 +29,18 @@ Re-import rules (spec 9.2, and the controller's rulings for this task):
 - A foreign rendering sets `renderings[this culture id]` on whatever
   glossary entry (in any culture) has that name; a name that isn't found
   is reported as a warning instead.
-- A file place matching an existing place's name (case-insensitively) has
-  this culture's share merged onto it with `places.set_share`, which keeps
-  the file's share exactly and scales the place's other shares to fill
-  the remainder. An unmatched place is created new, under its matched
-  parent (by name) or as a root, and given this culture's share the same
-  way. New places are all created before any parent is resolved, so a
-  child may be listed before its parent in the file.
+- A file place matching an existing place's name (case-insensitively): if
+  this culture already has a share there, a re-import never moves it —
+  the file's value is ignored (a mismatch is a preview warning, not a
+  change). If it has no share there yet, `places.set_share` gives it the
+  file's share exactly and scales the place's other shares to fill the
+  remainder; if no other culture has a share there, it becomes 100%
+  regardless of the file's value, since shares must sum to 100 (also a
+  preview warning when that value isn't already 100). An unmatched place
+  is created new, under its matched parent (by name) or as a root, and
+  given this culture's share the same way (also sole, so also 100%). New
+  places are all created before any parent is resolved, so a child may be
+  listed before its parent in the file.
 - Nothing already in Talemate — a glossary entry, a place, a play
   addition — is ever deleted by an import.
 - The preview lists what a re-import would overwrite: the core sections
@@ -238,6 +243,50 @@ def _match_place(places: list[Place], name: str) -> Place | None:
     return None
 
 
+def _place_share_update(
+    current_share: int | None,
+    has_other_cultures: bool,
+    culture_name: str,
+    place_name: str,
+    file_share: int,
+) -> tuple[bool, int, str | None]:
+    """Decide what an import does to one culture's share at a place.
+
+    `current_share` is this culture's existing share there (`None` if it
+    has none yet there); `has_other_cultures` says whether any other
+    culture already has a share there. Returns `(apply, resulting_share,
+    warning)`:
+
+    - `apply`: whether to call `set_share` with `file_share` at all. A
+      culture that already has a share here keeps it exactly — a
+      re-import never moves an existing share, however much the file's
+      value differs.
+    - `resulting_share`: the share this culture ends up with once applied
+      — 100, not `file_share`, when it is the only culture at the place
+      (shares must sum to 100). Used for the preview's change text; it is
+      meaningless when `apply` is `False`.
+    - `warning`: a preview note, or `None`.
+    """
+
+    if current_share is not None:
+        warning = None
+        if file_share != current_share:
+            warning = (
+                f"{place_name}: keeping {culture_name} at {current_share}% "
+                f"(file says {file_share}%) — adjust it in Places & regions"
+            )
+        return False, current_share, warning
+
+    resulting_share = file_share if has_other_cultures else 100
+    warning = None
+    if not has_other_cultures and file_share != 100:
+        warning = (
+            f"{place_name}: {culture_name} is the only culture here, so it "
+            f"will be 100% (file says {file_share}%)"
+        )
+    return True, resulting_share, warning
+
+
 def _normalize_text(text: str) -> str:
     return " ".join(text.lower().split())
 
@@ -321,6 +370,8 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
         "places": len(file.places),
     }
 
+    warnings: list[str] = []
+
     glossary = store.load_glossary()
     claimed_unassigned: list[str] = []
     conflicts: list[str] = []
@@ -345,17 +396,27 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
         match = _match_place(places, file_place.name)
         if match is None:
             places_new.append(file_place.name)
+            _, _, warning = _place_share_update(
+                None, False, file.culture.name, file_place.name, file_place.share
+            )
+            if warning is not None:
+                warnings.append(warning)
             continue
         places_existing.append(file_place.name)
-        old_share = next(
-            (cs.share for cs in match.cultures if cs.culture_id == culture_id), 0
+        current_share = next(
+            (cs.share for cs in match.cultures if cs.culture_id == culture_id), None
         )
-        if old_share != file_place.share:
+        has_others = any(cs.culture_id != culture_id for cs in match.cultures)
+        apply, resulting_share, warning = _place_share_update(
+            current_share, has_others, file.culture.name, match.name, file_place.share
+        )
+        if warning is not None:
+            warnings.append(warning)
+        if apply:
             share_changes.append(
-                f"{match.name}: {file.culture.name} {old_share}% → {file_place.share}%"
+                f"{match.name}: {file.culture.name} 0% → {resulting_share}%"
             )
 
-    warnings: list[str] = []
     for gen in file.culture.language.generators:
         rolled = roll(file.culture.language, gen.id, count=5)
         if not rolled:
@@ -470,7 +531,20 @@ def apply_import(store: WorldStore, raw: str, today: str) -> Culture:
     for file_place in file.places:
         match = _match_place(places, file_place.name)
         if match is not None:
-            places = set_share(places, match.id, culture_id, file_place.share)
+            current_share = next(
+                (cs.share for cs in match.cultures if cs.culture_id == culture_id),
+                None,
+            )
+            has_others = any(cs.culture_id != culture_id for cs in match.cultures)
+            apply, _, _ = _place_share_update(
+                current_share,
+                has_others,
+                file.culture.name,
+                match.name,
+                file_place.share,
+            )
+            if apply:
+                places = set_share(places, match.id, culture_id, file_place.share)
             continue
 
         new_place = Place(

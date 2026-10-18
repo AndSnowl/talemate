@@ -20,13 +20,19 @@ from talemate.cultures.models import (
     Language,
     Place,
 )
+from talemate.cultures.places import set_share
 from talemate.cultures.store import WorldStore
 
 FIXTURE_PATH = Path(__file__).parent / "data" / "taelrik.culture.json"
+VASKARI_PATH = Path(__file__).parent / "data" / "vaskari.culture.json"
 
 
 def fixture_raw() -> str:
     return FIXTURE_PATH.read_text()
+
+
+def vaskari_raw() -> str:
+    return VASKARI_PATH.read_text()
 
 
 def make_store(tmp_path) -> WorldStore:
@@ -205,7 +211,13 @@ def test_foreign_rendering_applied(tmp_path):
     )
 
     preview = preview_import(store, fixture_raw())
-    assert preview.warnings == []
+    # The only warning here is the new sole-culture one (Dhunmouth is a
+    # brand-new place and Taelrik is alone there); the foreign rendering
+    # itself raises none, since "Kasrool" is already in the glossary.
+    assert preview.warnings == [
+        "Dhunmouth: Taelrik is the only culture here, so it will be 100% "
+        "(file says 55%)"
+    ]
 
     apply_import(store, fixture_raw(), today="2026-10-17")
 
@@ -419,6 +431,9 @@ def test_preview_lists_sections_the_import_replaces(tmp_path):
 
 
 def test_preview_lists_share_changes(tmp_path):
+    # Taelrik has no share at Dhunmouth yet (only elsiri does), so this is a
+    # real new share, not a re-import moving an existing one (see
+    # test_reimport_different_share_keeps_current_and_warns for that case).
     store = make_store(tmp_path)
     store.save_places(
         [
@@ -426,16 +441,13 @@ def test_preview_lists_share_changes(tmp_path):
                 id="dhunmouth-1",
                 name="Dhunmouth",
                 kind="city",
-                cultures=[
-                    CultureShare(culture_id="taelrik", share=40),
-                    CultureShare(culture_id="elsiri", share=60),
-                ],
+                cultures=[CultureShare(culture_id="elsiri", share=100)],
             )
         ]
     )
 
     preview = preview_import(store, fixture_raw())
-    assert preview.share_changes == ["Dhunmouth: Taelrik 40% → 55%"]
+    assert preview.share_changes == ["Dhunmouth: Taelrik 0% → 55%"]
 
 
 def test_preview_lists_additions_already_in_file(tmp_path):
@@ -489,3 +501,119 @@ def test_duplicate_generator_ids_rejected_on_import(tmp_path):
 
     with pytest.raises(ImportFormatError, match="duplicate"):
         preview_import(store, json.dumps(raw))
+
+
+def _shares_snapshot(store: WorldStore) -> dict[str, dict[str, int]]:
+    return {
+        p.name: {cs.culture_id: cs.share for cs in p.cultures}
+        for p in store.load_places()
+    }
+
+
+def test_reimport_unchanged_file_is_idempotent(tmp_path):
+    store = make_store(tmp_path)
+    apply_import(store, fixture_raw(), today="2026-10-17")
+    apply_import(store, vaskari_raw(), today="2026-10-17")
+
+    before = _shares_snapshot(store)
+
+    preview_t = preview_import(store, fixture_raw())
+    assert preview_t.share_changes == []
+    apply_import(store, fixture_raw(), today="2026-10-18")
+    assert _shares_snapshot(store) == before
+
+    preview_v = preview_import(store, vaskari_raw())
+    assert preview_v.share_changes == []
+    apply_import(store, vaskari_raw(), today="2026-10-18")
+    assert _shares_snapshot(store) == before
+
+
+def test_import_order_independent_for_new_shares(tmp_path):
+    store_tv = make_store(tmp_path / "tv")
+    apply_import(store_tv, fixture_raw(), today="2026-10-17")
+    apply_import(store_tv, vaskari_raw(), today="2026-10-17")
+
+    store_vt = make_store(tmp_path / "vt")
+    apply_import(store_vt, vaskari_raw(), today="2026-10-17")
+    apply_import(store_vt, fixture_raw(), today="2026-10-17")
+
+    def dhunmouth_shares(store: WorldStore) -> dict[str, int]:
+        dhunmouth = next(p for p in store.load_places() if p.name == "Dhunmouth")
+        return {cs.culture_id: cs.share for cs in dhunmouth.cultures}
+
+    # Taelrik imported first claims Dhunmouth alone (forced to 100%); then
+    # Vaskari's file share (15%) is new there, so it scales Taelrik down to
+    # fill the rest.
+    assert dhunmouth_shares(store_tv) == {"taelrik": 85, "vaskari": 15}
+    # Vaskari imported first claims Dhunmouth alone (forced to 100%); then
+    # Taelrik's file share (55%) is new there, so it scales Vaskari down to
+    # fill the rest. Import order changes the final mix.
+    assert dhunmouth_shares(store_vt) == {"vaskari": 45, "taelrik": 55}
+
+    # The weaker property the rule guarantees regardless of order:
+    # re-importing either file unchanged afterwards changes nothing.
+    for store in (store_tv, store_vt):
+        before = dhunmouth_shares(store)
+
+        assert preview_import(store, fixture_raw()).share_changes == []
+        apply_import(store, fixture_raw(), today="2026-10-18")
+        assert dhunmouth_shares(store) == before
+
+        assert preview_import(store, vaskari_raw()).share_changes == []
+        apply_import(store, vaskari_raw(), today="2026-10-18")
+        assert dhunmouth_shares(store) == before
+
+
+def test_sole_culture_warns_when_file_share_not_100(tmp_path):
+    store = make_store(tmp_path)
+    preview = preview_import(store, vaskari_raw())
+
+    assert (
+        "Dhunmouth: Vaskari is the only culture here, so it will be 100% "
+        "(file says 15%)" in preview.warnings
+    )
+    assert (
+        "Zhomara: Vaskari is the only culture here, so it will be 100% "
+        "(file says 95%)" in preview.warnings
+    )
+    assert (
+        "Lashimi: Vaskari is the only culture here, so it will be 100% "
+        "(file says 70%)" in preview.warnings
+    )
+    # These are brand-new places, so there is nothing to report as a
+    # share_change (that field is only for existing places).
+    assert preview.share_changes == []
+
+    apply_import(store, vaskari_raw(), today="2026-10-17")
+    by_name = {p.name: p for p in store.load_places()}
+    for name in ("Dhunmouth", "Zhomara", "Lashimi"):
+        shares = {cs.culture_id: cs.share for cs in by_name[name].cultures}
+        assert shares == {"vaskari": 100}
+
+
+def test_reimport_different_share_keeps_current_and_warns(tmp_path):
+    store = make_store(tmp_path)
+    apply_import(store, fixture_raw(), today="2026-10-17")
+
+    # The owner mixes in another culture by hand, leaving Taelrik's share
+    # (70%) different from the file's (55%).
+    places = store.load_places()
+    dhunmouth = next(p for p in places if p.name == "Dhunmouth")
+    places = set_share(places, dhunmouth.id, "elsiri", 30)
+    store.save_places(places)
+
+    dhunmouth = next(p for p in store.load_places() if p.name == "Dhunmouth")
+    shares = {cs.culture_id: cs.share for cs in dhunmouth.cultures}
+    assert shares == {"taelrik": 70, "elsiri": 30}
+
+    preview = preview_import(store, fixture_raw())
+    assert preview.share_changes == []
+    assert (
+        "Dhunmouth: keeping Taelrik at 70% (file says 55%) — adjust it in "
+        "Places & regions" in preview.warnings
+    )
+
+    apply_import(store, fixture_raw(), today="2026-10-18")
+    dhunmouth = next(p for p in store.load_places() if p.name == "Dhunmouth")
+    shares = {cs.culture_id: cs.share for cs in dhunmouth.cultures}
+    assert shares == {"taelrik": 70, "elsiri": 30}
