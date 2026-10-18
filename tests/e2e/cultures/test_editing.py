@@ -7,13 +7,12 @@ See docs/superpowers/plans/2026-10-17-cultures-foundation-followups.md,
 
 from e2e.cultures._ui import (
     CULTURE_FILE,
+    CULTURE_ID,
     _add_addition,
     open_world_editor_cultures as _open_world_editor_cultures,
     wait_for_json,
 )
 from e2e.seed import dismiss_onboarding, open_scene, place_culture, seed_world
-
-CULTURE_ID = "taelrik"
 
 
 def _reload_and_reopen(page, scene_path):

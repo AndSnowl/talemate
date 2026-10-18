@@ -267,7 +267,9 @@ class CulturesPlugin(Plugin):
                 unsure_characters = sum(
                     1
                     for character in characters
-                    if character["culture"] and character["culture"]["unsure"]
+                    if character["culture"]
+                    and character["culture"]["set_by"] == "ai"
+                    and character["culture"]["unsure"]
                 )
                 counts = {
                     **snapshot["counts"],

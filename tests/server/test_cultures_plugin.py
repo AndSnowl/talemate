@@ -828,6 +828,22 @@ async def test_world_lists_characters_and_unsure_count(plugin):
 
 
 @pytest.mark.asyncio
+async def test_unsure_characters_count_excludes_owner_set(plugin):
+    # `unsure` on an owner-set culture (set_by="owner") is not an AI
+    # guess awaiting review, so it must not be counted or badged.
+    _add_character(
+        plugin,
+        "Kethrun",
+        culture=CharacterCulture(culture_id="taelrik", set_by="owner", unsure=True),
+    )
+
+    await plugin.handle_get_world({})
+
+    msg = last_message(plugin, "world")
+    assert msg["data"]["counts"]["unsure_characters"] == 0
+
+
+@pytest.mark.asyncio
 async def test_set_character_culture_marks_owner(plugin):
     _add_character(
         plugin,
