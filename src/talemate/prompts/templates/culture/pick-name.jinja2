@@ -1,0 +1,24 @@
+{#-
+Extractors:
+  - name: AnchorExtractor("<NAME>", "</NAME>")
+  - why: AnchorExtractor("<WHY>", "</WHY>")
+-#}
+<|SECTION:TASK|>
+You name a new character in the culture {{ culture.name }}, whose language sounds like {{ language.sound }}
+
+Character hint: {{ character_hint or "(none)" }}
+{% if content -%}
+Content: {{ content }}
+{% endif -%}
+{% if description -%}
+Description: {{ description }}
+{% endif %}
+{% if recent_text -%}
+The last lines of the scene:
+{{ recent_text }}
+{% endif %}
+Choose exactly one name from this list, spelled as given: {{ candidates|join(', ') }}.
+
+Answer with <NAME>name</NAME> and then <WHY>one short sentence</WHY>.
+<|CLOSE_SECTION|>
+{{ set_prepared_response("<NAME>") }}
