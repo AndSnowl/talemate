@@ -624,6 +624,7 @@ hoe
 hold
 hollow
 holy
+home
 honest
 honey
 hook
