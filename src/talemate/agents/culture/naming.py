@@ -40,11 +40,11 @@ from talemate.cultures.naming import (
 from talemate.cultures.signals import guarded, send_event
 from talemate.cultures.words import (
     _LEADING_STOP_WORDS,
-    _SENTENCE_ENDERS,
     clean_name,
     ends_with_place_word,
     first_mention,
     looks_like_name,
+    mid_sentence_matches,
     mid_sentence_occurrence,
 )
 from talemate.exceptions import GenerationCancelled
@@ -133,15 +133,13 @@ def _names_mid_sentence(name: str, content: str) -> bool:
     content naming the character (Task 0): explicit framing ("named",
     "called", "known as", "name is", "name's") always counts; a location
     preposition right before it, or `name` itself reading as a place
-    (`ends_with_place_word`), means it's a place mention instead."""
+    (`ends_with_place_word`), means it's a place mention instead.
 
-    pattern = re.compile(r"\b" + re.escape(name) + r"\b")
-    for match in pattern.finditer(content):
-        preceding_text = content[: match.start()].rstrip(" ")
-        if not preceding_text or preceding_text.endswith("\n"):
-            continue
-        if preceding_text[-1] in _SENTENCE_ENDERS:
-            continue
+    Reuses `mid_sentence_matches` (`cultures.words`) for the
+    preceding-text/sentence-boundary check shared with
+    `mid_sentence_occurrence`, rather than re-implementing it here."""
+
+    for preceding_text in mid_sentence_matches(name, content):
         words = _WORD.findall(preceding_text)
         if _explicit_naming_before(words):
             return True

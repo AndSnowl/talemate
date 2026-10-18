@@ -18,6 +18,7 @@ __all__ = [
     "clean_name",
     "looks_like_name",
     "mid_sentence_occurrence",
+    "mid_sentence_matches",
     "is_proper_item_name",
     "first_mention",
     "ends_with_place_word",
@@ -298,12 +299,15 @@ def looks_like_name(text: str) -> bool:
     return True
 
 
-def mid_sentence_occurrence(name: str, text: str) -> bool:
-    """Return whether `name` occurs mid-sentence (exact case) in `text`.
+def mid_sentence_matches(name: str, text: str):
+    """Yield the text preceding each mid-sentence (exact case) occurrence
+    of `name` in `text`, in order.
 
     An occurrence counts only when the text preceding it, with trailing
     spaces stripped, is non-empty and doesn't end in a sentence-ending
-    character or a newline.
+    character or a newline. Shared by `mid_sentence_occurrence` and by the
+    Culture agent's naming rules, which also need to look at what comes
+    right before a match.
     """
 
     pattern = re.compile(r"\b" + re.escape(name) + r"\b")
@@ -315,6 +319,13 @@ def mid_sentence_occurrence(name: str, text: str) -> bool:
             continue
         if preceding[-1] in _SENTENCE_ENDERS:
             continue
+        yield preceding
+
+
+def mid_sentence_occurrence(name: str, text: str) -> bool:
+    """Return whether `name` occurs mid-sentence (exact case) in `text`."""
+
+    for _ in mid_sentence_matches(name, text):
         return True
     return False
 
