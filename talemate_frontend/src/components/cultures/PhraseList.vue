@@ -7,7 +7,12 @@
                         {{ group.category }}
                     </v-card-title>
                     <v-card-text class="pa-0">
-                        <div v-for="phrase in group.items" :key="phrase.id" class="phrase-row py-2">
+                        <div
+                            v-for="phrase in group.items"
+                            :key="phrase.id"
+                            class="phrase-row py-2"
+                            :class="{ 'phrase-focus': phrase.id === focusId }"
+                        >
                             <div class="d-flex align-start ga-1">
                                 <div class="flex-grow-1">
                                     <div class="font-italic text-highlight7">{{ phrase.original }}</div>
@@ -134,6 +139,10 @@ export default {
             type: Function,
             required: true,
         },
+        focusId: {
+            type: String,
+            default: null,
+        },
     },
     data() {
         return {
@@ -141,6 +150,18 @@ export default {
             editing: null,
             form: this.blankForm(),
         }
+    },
+    watch: {
+        focusId: {
+            immediate: true,
+            handler(id) {
+                if (!id) return;
+                this.$nextTick(() => {
+                    const el = this.$el.querySelector('.phrase-focus');
+                    if (el) el.scrollIntoView({ block: 'center' });
+                });
+            },
+        },
     },
     computed: {
         groupedPhrases() {
@@ -219,5 +240,10 @@ export default {
 
 .phrase-row:last-child {
     border-bottom: 0;
+}
+
+.phrase-focus {
+    border-left: 3px solid rgb(var(--v-theme-highlight7));
+    padding-left: 8px;
 }
 </style>

@@ -74,6 +74,7 @@
                 <PhraseList
                     :culture="culture"
                     :send="send"
+                    :focus-id="focus ? focus.phraseId : null"
                 ></PhraseList>
             </v-window-item>
 
@@ -131,6 +132,10 @@ export default {
             type: Function,
             required: true,
         },
+        focus: {
+            type: Object,
+            default: null,
+        },
     },
     emits: [
         'open-places',
@@ -175,6 +180,18 @@ export default {
             handler() {
                 if (!this.subTabs.some(t => t.name === this.subTab)) {
                     this.subTab = 'culture';
+                }
+            },
+        },
+        focus: {
+            immediate: true,
+            handler(focus) {
+                if (!focus) return;
+                if (focus.subTab && this.hasTab(focus.subTab)) {
+                    this.subTab = focus.subTab;
+                }
+                if (focus.glossaryId !== undefined) {
+                    this.glossarySelectedId = focus.glossaryId;
                 }
             },
         },

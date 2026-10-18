@@ -17,6 +17,7 @@ import {
     findLexiconEntry,
     applyCulturesMessage,
     nameSection,
+    resolveReviewTarget,
 } from '../src/components/cultures/storyLexicon.js';
 import { SceneTextParser, compileEntityMentions } from '../src/utils/sceneMessageRenderer.js';
 
@@ -343,6 +344,74 @@ check('name_section_unassigned', () => {
 check('name_section_none', () => {
     const section = nameSection(storyFixture, { name: 'A Rusty Lantern', kind: 'item' });
     assert.equal(section, null);
+});
+
+// Fixture: a small `world` payload (Task 7's resolveReviewTarget input),
+// shaped like the Cultures tab's `world` message. `g-orphan`'s culture
+// isn't in `cultures` (deleted since the target was captured).
+const reviewWorld = {
+    cultures: [
+        {
+            id: 'taelrik',
+            name: 'Taelrik',
+            language: {
+                phrases: [
+                    { id: 'curse-rot', original: "Rhok tal'dun!" },
+                ],
+            },
+        },
+        { id: 'ghun', name: 'Ghûn', language: { phrases: [] } },
+    ],
+    glossary: [
+        { id: 'g-kethrun', language: 'taelrik', text: 'Kethrun' },
+        { id: 'g-quillister', language: null, text: 'Quillister House' },
+        { id: 'g-orphan', language: 'deleted-culture', text: 'Orphan' },
+    ],
+    places: [
+        { id: 'veldhaer', name: 'Veldhaer' },
+    ],
+    characters: [
+        { name: 'Kethrun' },
+    ],
+};
+
+check('resolve_targets', () => {
+    assert.deepEqual(
+        resolveReviewTarget(reviewWorld, { type: 'glossary', entry_id: 'g-kethrun' }),
+        { type: 'culture', id: 'taelrik', focus: { subTab: 'glossary', glossaryId: 'g-kethrun' } },
+    );
+    assert.deepEqual(
+        resolveReviewTarget(reviewWorld, { type: 'glossary', entry_id: 'g-quillister' }),
+        { type: 'unassigned', focus: { glossaryId: 'g-quillister' } },
+    );
+    assert.deepEqual(
+        resolveReviewTarget(reviewWorld, { type: 'phrase', culture_id: 'taelrik', phrase_id: 'curse-rot' }),
+        { type: 'culture', id: 'taelrik', focus: { subTab: 'phrases', phraseId: 'curse-rot' } },
+    );
+    assert.deepEqual(
+        resolveReviewTarget(reviewWorld, { type: 'place', place_id: 'veldhaer' }),
+        { type: 'places', focus: { placeId: 'veldhaer' } },
+    );
+    assert.deepEqual(
+        resolveReviewTarget(reviewWorld, { type: 'people', character_name: 'Kethrun' }),
+        { type: 'people', focus: { characterName: 'Kethrun' } },
+    );
+});
+
+check('resolve_missing_target', () => {
+    assert.equal(resolveReviewTarget(reviewWorld, { type: 'glossary', entry_id: 'gone' }), null);
+    assert.equal(
+        resolveReviewTarget(reviewWorld, { type: 'phrase', culture_id: 'taelrik', phrase_id: 'gone' }),
+        null,
+    );
+    assert.equal(resolveReviewTarget(reviewWorld, { type: 'place', place_id: 'gone' }), null);
+    assert.equal(
+        resolveReviewTarget(reviewWorld, { type: 'people', character_name: 'Nobody' }),
+        null,
+    );
+    assert.equal(resolveReviewTarget(reviewWorld, { type: 'bogus' }), null);
+    // The entry exists, but its culture is gone.
+    assert.equal(resolveReviewTarget(reviewWorld, { type: 'glossary', entry_id: 'g-orphan' }), null);
 });
 
 if (failures.length > 0) {

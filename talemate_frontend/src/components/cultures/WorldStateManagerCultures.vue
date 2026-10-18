@@ -18,6 +18,7 @@
                 :glossary="world.glossary || []"
                 :send="send"
                 :open-import="openImport"
+                :focus="cultureFocus"
                 @open-places="select('places')"
             />
             <PlacesView
@@ -33,6 +34,7 @@
                 :characters="world.characters || []"
                 :cultures="world.cultures || []"
                 :send="send"
+                :focus-name="peopleFocusName"
             ></PeopleView>
             <div v-else-if="selected && selected.type === 'unassigned'">
                 <v-card variant="tonal" class="pa-4 mb-3">
@@ -74,6 +76,8 @@ import PlacesView from './PlacesView.vue';
 import PeopleView from './PeopleView.vue';
 import ImportCultureDialog from './ImportCultureDialog.vue';
 import { MAX_CONTENT_WIDTH } from '@/constants/layout';
+import { culturesStory, takePendingReview } from './culturesStory.js';
+import { resolveReviewTarget } from './storyLexicon.js';
 
 export default {
     name: 'WorldStateManagerCultures',
@@ -107,6 +111,8 @@ export default {
             counts: {},
             unassignedSelectedId: null,
             placesSelectedId: null,
+            cultureFocus: null,
+            peopleFocusName: null,
             importDialogOpen: false,
             MAX_CONTENT_WIDTH,
         }
@@ -117,6 +123,18 @@ export default {
                 return null;
             }
             return (this.world.cultures || []).find(c => c.id === this.selected.id) || null;
+        },
+        reviewSeq() {
+            return culturesStory.reviewSeq;
+        },
+    },
+    watch: {
+        reviewSeq() {
+            // A review button was clicked while this tab was already
+            // mounted (the tab-switch watcher in WorldStateManager.vue
+            // only fires on an actual tab change): refresh so
+            // `applyPendingReview` resolves against current data.
+            this.send('get_world');
         },
     },
     methods: {
@@ -170,6 +188,31 @@ export default {
             this.selected = cultures.length ? { type: 'culture', id: cultures[0].id } : null;
         },
 
+        applyPendingReview() {
+            const t = takePendingReview();
+            if (!t) return;
+            const r = resolveReviewTarget(this.world, t);
+            if (!r) return;
+
+            this.select(r.type, r.id);
+
+            if (r.type === 'unassigned') {
+                this.unassignedSelectedId = r.focus.glossaryId;
+            } else if (r.type === 'places') {
+                this.placesSelectedId = r.focus.placeId;
+            } else if (r.type === 'people') {
+                this.peopleFocusName = r.focus.characterName;
+            } else if (r.type === 'culture') {
+                // A fresh object (and `seq`) every time, even when it's the
+                // same culture/sub-tab/id as before — `select()` only
+                // reassigns `this.selected` on an actual change, but
+                // CulturePage's `focus` watcher needs to fire regardless
+                // (see `test_open_in_culture_phrase_and_word`, which jumps
+                // within the same culture twice).
+                this.cultureFocus = { ...r.focus, seq: Date.now() };
+            }
+        },
+
         downloadExport(data) {
             const blob = new Blob([data.content], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -191,6 +234,7 @@ export default {
                 this.world = message.data;
                 this.counts = message.data.counts || {};
                 this.ensureSelection();
+                this.applyPendingReview();
             } else if (message.action === 'exported') {
                 this.downloadExport(message.data);
             }

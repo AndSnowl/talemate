@@ -14,7 +14,12 @@
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="character in characters" :key="character.name" class="people-row">
+                <tr
+                    v-for="character in characters"
+                    :key="character.name"
+                    class="people-row"
+                    :class="{ 'people-row-focus': character.name === focusName }"
+                >
                     <td>
                         <span v-if="isUnsure(character)" class="unsure-dot mr-1"></span>
                         {{ character.name }}
@@ -69,6 +74,22 @@ export default {
             type: Function,
             required: true,
         },
+        focusName: {
+            type: String,
+            default: null,
+        },
+    },
+    watch: {
+        focusName: {
+            immediate: true,
+            handler(name) {
+                if (!name) return;
+                this.$nextTick(() => {
+                    const el = this.$el.querySelector('.people-row-focus');
+                    if (el) el.scrollIntoView({ block: 'center' });
+                });
+            },
+        },
     },
     computed: {
         cultureOptions() {
@@ -117,5 +138,9 @@ export default {
     border-radius: 50%;
     background: rgb(var(--v-theme-unsaved));
     vertical-align: middle;
+}
+
+.people-row-focus {
+    background: rgba(var(--v-theme-highlight7), 0.12);
 }
 </style>

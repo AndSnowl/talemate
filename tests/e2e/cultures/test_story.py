@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from e2e.cultures._ui import (
+    APP_BAR,
     CULTURE_FILE,
     open_world_editor,
     wait_until,
@@ -84,6 +85,82 @@ M2 = (
     "“Rhok tal’dun!” Kethrun muttered at the knot. A lantern "
     "swung from the tal post near Quillister House."
 )
+
+# Pulled out of `_seed_story` (task 7) so `test_review_jump_to_missing_entry_is_harmless`
+# can re-place the same seed minus one entry, without the frontend being told
+# (no `review_glossary_entry`/`get_story` push accompanies a direct `place_glossary` call).
+_SEED_GLOSSARY_ENTRIES = [
+    {
+        "id": "g-kethrun",
+        "text": "Kethrun",
+        "language": "taelrik",
+        "kind": "person",
+        "meaning": "ford-born",
+        "status": "unreviewed",
+        "origin": {
+            "by": "ai",
+            "generator_id": "given_male",
+            "candidates": ["Kethrun", "Tovrin"],
+        },
+        "character_name": "Kethrun",
+    },
+    {
+        "id": "g-veldhaer",
+        "text": "Veldhaer",
+        "language": "taelrik",
+        "kind": "place",
+        "meaning": "grey ford",
+        "status": "reviewed",
+        "origin": {"by": "import"},
+        "place_id": "veldhaer",
+    },
+    {
+        "id": "g-saervik",
+        "text": "saervik",
+        "language": "taelrik",
+        "kind": "thing",
+        "meaning": "river-runner; a flat ferry boat",
+        "status": "reviewed",
+        "origin": {"by": "import"},
+    },
+    {
+        "id": "g-lantern",
+        "text": "Lantern",
+        "language": "taelrik",
+        "kind": "word",
+        "meaning": "a lamp",
+        "status": "reviewed",
+        "origin": {"by": "owner"},
+    },
+    {
+        "id": "g-tal",
+        "text": "tal",
+        "language": "taelrik",
+        "kind": "word",
+        "meaning": "your (scornful)",
+        "status": "reviewed",
+        "origin": {"by": "owner"},
+    },
+    {
+        "id": "g-quillister",
+        "text": "Quillister House",
+        "language": None,
+        "kind": "place",
+        "status": "unreviewed",
+        "origin": {"by": "ai_free"},
+    },
+    {
+        "id": "g-khaz",
+        "text": "Khaz-Rull",
+        "language": "ghun",
+        "kind": "place",
+        "true_name": "three falling hums ending in a tongue-click",
+        "renderings": {"taelrik": "Khaz-Rull"},
+        "status": "reviewed",
+        "origin": {"by": "import"},
+        "place_id": "khaz",
+    },
+]
 
 
 def _seed_story(app, project, **overrides):
@@ -167,81 +244,7 @@ def _seed_story(app, project, **overrides):
         ],
     )
 
-    place_glossary(
-        world,
-        [
-            {
-                "id": "g-kethrun",
-                "text": "Kethrun",
-                "language": "taelrik",
-                "kind": "person",
-                "meaning": "ford-born",
-                "status": "unreviewed",
-                "origin": {
-                    "by": "ai",
-                    "generator_id": "given_male",
-                    "candidates": ["Kethrun", "Tovrin"],
-                },
-                "character_name": "Kethrun",
-            },
-            {
-                "id": "g-veldhaer",
-                "text": "Veldhaer",
-                "language": "taelrik",
-                "kind": "place",
-                "meaning": "grey ford",
-                "status": "reviewed",
-                "origin": {"by": "import"},
-                "place_id": "veldhaer",
-            },
-            {
-                "id": "g-saervik",
-                "text": "saervik",
-                "language": "taelrik",
-                "kind": "thing",
-                "meaning": "river-runner; a flat ferry boat",
-                "status": "reviewed",
-                "origin": {"by": "import"},
-            },
-            {
-                "id": "g-lantern",
-                "text": "Lantern",
-                "language": "taelrik",
-                "kind": "word",
-                "meaning": "a lamp",
-                "status": "reviewed",
-                "origin": {"by": "owner"},
-            },
-            {
-                "id": "g-tal",
-                "text": "tal",
-                "language": "taelrik",
-                "kind": "word",
-                "meaning": "your (scornful)",
-                "status": "reviewed",
-                "origin": {"by": "owner"},
-            },
-            {
-                "id": "g-quillister",
-                "text": "Quillister House",
-                "language": None,
-                "kind": "place",
-                "status": "unreviewed",
-                "origin": {"by": "ai_free"},
-            },
-            {
-                "id": "g-khaz",
-                "text": "Khaz-Rull",
-                "language": "ghun",
-                "kind": "place",
-                "true_name": "three falling hums ending in a tongue-click",
-                "renderings": {"taelrik": "Khaz-Rull"},
-                "status": "reviewed",
-                "origin": {"by": "import"},
-                "place_id": "khaz",
-            },
-        ],
-    )
+    place_glossary(world, _SEED_GLOSSARY_ENTRIES)
 
     return world
 
@@ -467,3 +470,137 @@ def test_no_world_no_highlights_or_badge(app, page):
     for error in page.console_errors:
         assert "TypeError" not in error
         assert "cultures" not in error
+
+
+def test_review_button_opens_glossary_entry(app, page):
+    world = _seed_story(app, "story-review-glossary")
+    open_scene(page, world.scene_path)
+
+    kethrun = page.locator('.scene-entity[data-entity-name="Kethrun"]')
+    kethrun.first.wait_for(state="visible", timeout=30_000)
+    kethrun.first.click()
+
+    page.get_by_test_id("name-review-button").click()
+
+    cultures_tab = page.locator(".v-tab", has_text="Cultures")
+    cultures_tab.wait_for(state="visible", timeout=15_000)
+
+    selected_row = page.locator(".glossary-row-selected")
+    selected_row.wait_for(state="visible", timeout=15_000)
+    assert "Kethrun" in selected_row.inner_text()
+
+
+def test_review_unassigned_name(app, page):
+    world = _seed_story(app, "story-review-unassigned")
+    open_scene(page, world.scene_path)
+
+    quillister = page.locator('.scene-entity[data-entity-name="Quillister House"]')
+    quillister.first.wait_for(state="visible", timeout=30_000)
+    quillister.first.click()
+
+    page.get_by_test_id("name-review-button").click()
+
+    unassigned_card = page.get_by_text("Unassigned names").first
+    unassigned_card.wait_for(state="visible", timeout=15_000)
+
+    selected_row = page.locator(".glossary-row-selected")
+    selected_row.wait_for(state="visible", timeout=15_000)
+    assert "Quillister House" in selected_row.inner_text()
+
+
+def test_open_in_culture_phrase_and_word(app, page):
+    world = _seed_story(app, "story-open-in-culture")
+    open_scene(page, world.scene_path)
+
+    curse_span = page.locator(".scene-foreign", has_text="Rhok tal’dun")
+    curse_span.first.wait_for(state="visible", timeout=30_000)
+    curse_span.first.click()
+
+    curse_card = page.get_by_test_id("foreign-word-card")
+    curse_card.wait_for(state="visible", timeout=15_000)
+    curse_card.get_by_role("button", name="Open in Taelrik").click()
+
+    phrase_focus = page.locator(".phrase-focus")
+    phrase_focus.wait_for(state="visible", timeout=15_000)
+    assert "Rhok tal'dun!" in phrase_focus.inner_text()
+
+    # Back on the scene tab (always first among the app bar's tabs while a
+    # scene is active, whatever the scene's own title is).
+    page.locator(f"{APP_BAR} .v-tab").first.click()
+
+    saervik_span = page.locator(".scene-foreign", has_text="saervik")
+    saervik_span.first.wait_for(state="visible", timeout=30_000)
+    saervik_span.first.click()
+
+    word_card = page.get_by_test_id("foreign-word-card")
+    word_card.wait_for(state="visible", timeout=15_000)
+    word_card.get_by_role("button", name="Open in Taelrik").click()
+
+    selected_row = page.locator(".glossary-row-selected")
+    selected_row.wait_for(state="visible", timeout=15_000)
+    assert "saervik" in selected_row.inner_text()
+
+    all_filter_chip = page.locator(".v-chip", has_text="All (").first
+    assert "v-chip--variant-flat" in (all_filter_chip.get_attribute("class") or "")
+
+
+def test_change_culture_opens_people(app, page):
+    world = _seed_story(app, "story-change-culture-people")
+    open_scene(page, world.scene_path)
+
+    kethrun = page.locator('.scene-entity[data-entity-name="Kethrun"]')
+    kethrun.first.wait_for(state="visible", timeout=30_000)
+    kethrun.first.click()
+
+    culture_row = page.get_by_test_id("name-culture-row")
+    culture_row.wait_for(state="visible", timeout=15_000)
+    culture_row.get_by_role("button", name="Change").click()
+
+    focus_row = page.locator(".people-row-focus")
+    focus_row.wait_for(state="visible", timeout=15_000)
+    assert "Kethrun" in focus_row.inner_text()
+
+
+def test_review_jump_to_missing_entry_is_harmless(app, page):
+    world = _seed_story(app, "story-review-missing-entry")
+    open_scene(page, world.scene_path)
+
+    kethrun = page.locator('.scene-entity[data-entity-name="Kethrun"]')
+    kethrun.first.wait_for(state="visible", timeout=30_000)
+    kethrun.first.click()
+
+    review_button = page.get_by_test_id("name-review-button")
+    review_button.wait_for(state="visible", timeout=15_000)
+
+    # Remove g-kethrun on disk only — no push accompanies a direct
+    # `place_glossary` call, so the still-open bubble and its Review
+    # button stay exactly as they were.
+    remaining = [e for e in _SEED_GLOSSARY_ENTRIES if e["id"] != "g-kethrun"]
+    place_glossary(world, remaining)
+
+    review_button.click()
+
+    # No culture got selected by the (failed) jump, so the Cultures tab
+    # falls back to its own default: the first culture's own page.
+    page.locator(".culture-overview").wait_for(state="visible", timeout=30_000)
+
+    for error in page.console_errors:
+        assert "TypeError" not in error
+        assert "cultures" not in error
+
+    # No stale pending target is left over: a later, valid jump still works.
+    page.locator(f"{APP_BAR} .v-tab").first.click()
+
+    saervik_span = page.locator(".scene-foreign", has_text="saervik")
+    saervik_span.first.wait_for(state="visible", timeout=30_000)
+    saervik_span.first.click()
+
+    word_card = page.get_by_test_id("foreign-word-card")
+    word_card.wait_for(state="visible", timeout=15_000)
+    word_card.get_by_role("button", name="Open in Taelrik").click()
+
+    selected_row = page.locator(".glossary-row-selected")
+    selected_row.wait_for(state="visible", timeout=15_000)
+    assert "saervik" in selected_row.inner_text()
+
+

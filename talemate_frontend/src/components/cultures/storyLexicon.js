@@ -281,3 +281,57 @@ export function applyCulturesMessage(state, data) {
 
     return null;
 }
+
+// Resolve a review `target` (one of the `{type, ...}` shapes carried by a
+// `NameLanguageSection`/`ForeignWordCard` button, or a lexicon entry's
+// own `target`) against the Cultures tab's own `world` payload, into
+// where `WorldStateManagerCultures` should navigate — or `null` when the
+// thing it points at is gone (deleted since the target was captured, or
+// an unrecognised shape).
+//
+// `focus` fields are camelCase (the Cultures UI's own convention), even
+// though the target's own fields (and `world`'s) are snake_case.
+export function resolveReviewTarget(world, target) {
+    if (!world || !target) return null;
+
+    if (target.type === 'glossary') {
+        const entry = (world.glossary || []).find((e) => e.id === target.entry_id);
+        if (!entry) return null;
+        if (entry.language === null) {
+            return { type: 'unassigned', focus: { glossaryId: entry.id } };
+        }
+        const cultureExists = (world.cultures || []).some((c) => c.id === entry.language);
+        if (!cultureExists) return null;
+        return {
+            type: 'culture',
+            id: entry.language,
+            focus: { subTab: 'glossary', glossaryId: entry.id },
+        };
+    }
+
+    if (target.type === 'phrase') {
+        const culture = (world.cultures || []).find((c) => c.id === target.culture_id);
+        if (!culture) return null;
+        const phrase = (culture.language?.phrases || []).find((p) => p.id === target.phrase_id);
+        if (!phrase) return null;
+        return {
+            type: 'culture',
+            id: culture.id,
+            focus: { subTab: 'phrases', phraseId: phrase.id },
+        };
+    }
+
+    if (target.type === 'place') {
+        const place = (world.places || []).find((p) => p.id === target.place_id);
+        if (!place) return null;
+        return { type: 'places', focus: { placeId: place.id } };
+    }
+
+    if (target.type === 'people') {
+        const character = (world.characters || []).find((c) => c.name === target.character_name);
+        if (!character) return null;
+        return { type: 'people', focus: { characterName: character.name } };
+    }
+
+    return null;
+}

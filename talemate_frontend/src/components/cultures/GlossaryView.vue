@@ -143,7 +143,13 @@ export default {
         return {
             activeFilter: 'unreviewed',
             search: '',
-            localSelectedId: this.selectedId,
+            // Left null even when `selectedId` already carries a review
+            // jump's target: the `selectedId` watcher below (immediate)
+            // is what applies it, so it can also flip the filter/search
+            // when the target isn't visible under the default filter —
+            // presetting it here would make that watcher's "differs from
+            // localSelectedId" check a no-op on a fresh mount.
+            localSelectedId: null,
         }
     },
     computed: {
@@ -200,6 +206,25 @@ export default {
         },
         localSelectedId(id) {
             this.$emit('select', id);
+        },
+        // Immediate: a review jump sets `selectedId` before this component
+        // ever mounts (CulturePage's `focus` watcher runs first), so the
+        // very first evaluation — not just later prop changes — has to
+        // apply it. `null` (no pending jump) is left alone: the
+        // `visibleEntries` watcher above already owns the default pick.
+        selectedId: {
+            immediate: true,
+            handler(id) {
+                if (id == null || id === this.localSelectedId) return;
+                if (!this.visibleEntries.some(e => e.id === id)) {
+                    // Jumping to a reviewed/filtered-out entry: show it by
+                    // switching to the unfiltered view first, rather than
+                    // silently selecting a row that isn't on screen.
+                    this.activeFilter = 'all';
+                    this.search = '';
+                }
+                this.localSelectedId = id;
+            },
         },
     },
     methods: {
