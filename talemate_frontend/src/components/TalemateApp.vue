@@ -556,17 +556,17 @@ export default {
           },
           value: 'main'
         },
-        {
+        { 
           title: () => { return 'World Editor' },
           condition: () => { return this.sceneActive },
           icon: () => { return 'mdi-earth-box' },
           badge: () => { return culturesStory.counts.unreviewed_total || 0 },
-          click: () => {
+          click: () => { 
             this.$nextTick(() => {
               this.onOpenWorldStateManager();
             });
           },
-          value: 'world'
+          value: 'world' 
         },
         {
           title: () => { return 'Mods' },

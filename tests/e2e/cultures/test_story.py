@@ -10,7 +10,6 @@ from pathlib import Path
 
 from e2e.cultures._ui import (
     CULTURE_FILE,
-    open_cultures_tab,
     open_world_editor,
     wait_until,
 )
@@ -25,6 +24,55 @@ from e2e.seed import (
 )
 
 GHUN_CULTURE_FILE = Path(__file__).resolve().parent / "data" / "ghun.culture.json"
+
+# Mirrors e2e.seed._BACKEND_SOCKET_JS: the app's own backend socket (open,
+# not vite's HMR socket), already live by the time a test runs (installed
+# by seed.SOCKET_HOOK_JS before the page's own code runs).
+_BACKEND_SOCKET_JS = (
+    "() => (window.__e2eSockets || []).filter("
+    "(s) => s.readyState === WebSocket.OPEN && s.protocol !== 'vite-hmr'"
+    ").pop()"
+)
+
+
+def _watch_cultures_story_frames(page) -> None:
+    """Start recording every `{"type":"cultures","action":"story"}` frame
+    the backend socket receives into `window.__e2eCulturesStoryFrames`.
+
+    Must be called before `open_scene` (which reuses the same socket): the
+    story reply for "no shared world" produces no visible DOM change (no
+    highlights, no badge), so a test asserting their *absence* needs a
+    positive sign the reply actually arrived and was processed — otherwise
+    it can pass before the cultures plugin has said anything at all.
+    """
+    page.wait_for_function(f"!!({_BACKEND_SOCKET_JS})()", timeout=30_000)
+    page.evaluate(
+        f"""() => {{
+            window.__e2eCulturesStoryFrames = [];
+            const sock = ({_BACKEND_SOCKET_JS})();
+            sock.addEventListener('message', (event) => {{
+                try {{
+                    const data = JSON.parse(event.data);
+                    if (data && data.type === 'cultures' && data.action === 'story') {{
+                        window.__e2eCulturesStoryFrames.push(data);
+                    }}
+                }} catch (e) {{ /* not JSON, or not a cultures frame */ }}
+            }});
+        }}"""
+    )
+
+
+def _wait_for_cultures_story_frame(page, timeout: float = 15.0) -> None:
+    """Block until `_watch_cultures_story_frames` has recorded at least one
+    `story` frame, then give Vue's reactive render queue a brief settle."""
+    wait_until(
+        lambda: page.evaluate("() => (window.__e2eCulturesStoryFrames || []).length")
+        > 0,
+        timeout=timeout,
+        message="a cultures 'story' websocket frame to arrive",
+    )
+    page.wait_for_timeout(250)
+
 
 M1 = (
     "The saervik ground against the shingle at Veldhaer, and Kethrun spat "
@@ -257,10 +305,15 @@ def test_app_badge_before_cultures_tab_opened(app, page):
         message="app World Editor badge to drop to 1",
     )
 
+    # Open the World Editor only — its tab bar renders every sub-tab's
+    # header eagerly, so the Cultures tab's badge should already read "1"
+    # here without ever clicking into the Cultures tab (which would mount
+    # WorldStateManagerCultures and could otherwise mask a regression to
+    # the old per-tab counts mechanism).
     open_world_editor(page)
-    open_cultures_tab(page)
 
     cultures_tab = page.locator(".v-tab", has_text="Cultures")
+    cultures_tab.wait_for(state="visible", timeout=15_000)
     cultures_badge = cultures_tab.locator(".v-badge")
     cultures_badge.wait_for(state="visible", timeout=15_000)
     assert cultures_badge.inner_text().strip() == "1"
@@ -288,11 +341,13 @@ def test_no_world_no_highlights_or_badge(app, page):
         },
     )
 
+    _watch_cultures_story_frames(page)
     open_scene(page, scene_path)
 
     page.get_by_text("Khaz-Rull wore its collar of cloud").wait_for(
         state="visible", timeout=30_000
     )
+    _wait_for_cultures_story_frame(page)
 
     assert page.locator(".scene-foreign").count() == 0
     assert page.get_by_test_id("app-tab-badge-world").count() == 0

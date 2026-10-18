@@ -92,7 +92,6 @@ export default {
     ],
     emits: [
         'world-state-manager-navigate',
-        'cultures-counts',
     ],
     data() {
         return {
@@ -191,7 +190,6 @@ export default {
             if (message.action === 'world') {
                 this.world = message.data;
                 this.counts = message.data.counts || {};
-                this.$emit('cultures-counts', this.counts);
                 this.ensureSelection();
             } else if (message.action === 'exported') {
                 this.downloadExport(message.data);

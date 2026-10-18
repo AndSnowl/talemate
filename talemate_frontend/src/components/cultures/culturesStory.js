@@ -15,10 +15,18 @@ export const culturesStory = reactive(emptyStoryState());
 // Fold one `cultures`/`system` websocket message into `culturesStory`, and
 // `send` the follow-up payload `applyCulturesMessage` returns, if any
 // (e.g. a `get_story` request after the scene finishes loading).
+//
+// `handleMessage` is the app's only websocket dispatcher, so this can never
+// throw out to it — an unexpected payload shape is logged and swallowed
+// instead of breaking every other message handler on the same event.
 export function ingestCulturesMessage(data, send) {
-    const payload = applyCulturesMessage(culturesStory, data);
-    if (payload) {
-        send(payload);
+    try {
+        const payload = applyCulturesMessage(culturesStory, data);
+        if (payload) {
+            send(payload);
+        }
+    } catch (e) {
+        console.error('ingestCulturesMessage failed', e);
     }
 }
 
