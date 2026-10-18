@@ -124,7 +124,14 @@ def test_dismiss_onboarding_without_dialog(tmp_path, browser_page, monkeypatch):
         sock.bind(("127.0.0.1", 0))
         closed_port = sock.getsockname()[1]
     monkeypatch.setenv("TALEMATE_TEST_KOBOLDCPP_URL", f"http://127.0.0.1:{closed_port}")
-    info = e2e_conftest.talemate_app.start(root=tmp_path / "app", ai=True)
+    # Not an AI run (start(ai=True) needs the owner's opt-in): a plain run
+    # whose config gets the KoboldCpp client anyway, at the closed port.
+    app_mod = e2e_conftest.talemate_app
+    real_render_config = app_mod.render_config
+    monkeypatch.setattr(
+        app_mod, "render_config", lambda ai, url: real_render_config(True, url)
+    )
+    info = app_mod.start(root=tmp_path / "app")
     try:
         browser_page.goto(info.frontend_url)
         started = time.monotonic()
