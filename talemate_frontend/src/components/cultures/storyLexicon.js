@@ -332,7 +332,8 @@ export function resolveReviewTarget(world, target) {
     }
 
     if (target.type === 'people') {
-        const character = (world.characters || []).find((c) => c.name === target.character_name);
+        const key = nameKey(target.character_name);
+        const character = (world.characters || []).find((c) => nameKey(c.name) === key);
         if (!character) return null;
         return { type: 'people', focus: { characterName: character.name } };
     }
@@ -415,7 +416,11 @@ export function placeChip(story, name) {
     if (!base) return null;
 
     const unreviewed = Boolean((place && place.unsure) || (info && info.status === 'unreviewed'));
-    const target = info
+    // R8: the glossary entry is the target only when *it* is unreviewed
+    // (mirroring `characterChip`) — an unsure *place* with an already
+    // reviewed name still targets the place, not a reviewed entry with
+    // nothing left to review.
+    const target = (info && info.status === 'unreviewed')
         ? { type: 'glossary', entry_id: info.id }
         : (place ? { type: 'place', place_id: place.id } : null);
 

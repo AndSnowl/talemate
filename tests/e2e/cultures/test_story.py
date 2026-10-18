@@ -473,7 +473,7 @@ def test_no_world_no_highlights_or_badge(app, page):
 
 
 def test_review_button_opens_glossary_entry(app, page):
-    world = _seed_story(app, "story-review-glossary")
+    world = _seed_story(app, "story-kethrun-review")
     open_scene(page, world.scene_path)
 
     kethrun = page.locator('.scene-entity[data-entity-name="Kethrun"]')
@@ -484,6 +484,11 @@ def test_review_button_opens_glossary_entry(app, page):
 
     cultures_tab = page.locator(".v-tab", has_text="Cultures")
     cultures_tab.wait_for(state="visible", timeout=15_000)
+    assert cultures_tab.get_attribute("aria-selected") == "true"
+
+    glossary_sub_tab = page.locator(".v-tab", has_text="Glossary")
+    glossary_sub_tab.wait_for(state="visible", timeout=15_000)
+    assert glossary_sub_tab.get_attribute("aria-selected") == "true"
 
     selected_row = page.locator(".glossary-row-selected")
     selected_row.wait_for(state="visible", timeout=15_000)
@@ -654,3 +659,35 @@ def test_world_panel_place_chips(app, page):
     selected_row = page.locator(".glossary-row-selected")
     selected_row.wait_for(state="visible", timeout=15_000)
     assert "Quillister House" in selected_row.inner_text()
+
+
+def test_culture_focus_does_not_leak_to_a_later_culture(app, page):
+    """Fix round 1 (review Important 1): a glossary jump's `cultureFocus`
+    must not survive past its own CulturePage — otherwise an unrelated,
+    later visit to a *different* culture (after a detour through Places)
+    would open on the stale sub-tab, with a selected id that isn't even
+    that culture's own.
+    """
+    world = _seed_story(app, "story-focus-no-leak")
+    open_scene(page, world.scene_path)
+
+    kethrun = page.locator('.scene-entity[data-entity-name="Kethrun"]')
+    kethrun.first.wait_for(state="visible", timeout=30_000)
+    kethrun.first.click()
+
+    page.get_by_test_id("name-review-button").click()
+    page.locator(".glossary-row-selected", has_text="Kethrun").wait_for(
+        state="visible", timeout=15_000
+    )
+
+    # Unrelated navigation within the Cultures tab: Places, then a
+    # different culture (Ghûn, not Taelrik).
+    page.get_by_role("option", name="Places & regions").click()
+    page.locator(".place-row").first.wait_for(state="visible", timeout=15_000)
+
+    page.get_by_role("option", name="Ghûn").click()
+
+    # Ghûn must open on its own default sub-tab (Culture) — not Taelrik's
+    # stale `focus` (Glossary, with an id that belongs to Taelrik).
+    page.locator(".culture-overview").wait_for(state="visible", timeout=15_000)
+    assert page.locator(".glossary-row-selected").count() == 0

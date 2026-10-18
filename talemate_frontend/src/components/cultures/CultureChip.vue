@@ -13,8 +13,11 @@
             v-if="chip.unreviewed"
             class="culture-review-dot"
             role="button"
+            tabindex="0"
             title="Not reviewed yet"
             @click.stop="openCulturesReview(chip.target)"
+            @keydown.enter.stop.prevent="openCulturesReview(chip.target)"
+            @keydown.space.stop.prevent="openCulturesReview(chip.target)"
         ></span>
     </v-chip>
 </template>

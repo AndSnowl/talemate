@@ -482,10 +482,44 @@ const quillisterPlace = {
     set_by: 'owner',
     unsure: false,
 };
+// R8 (fix round 1): an unsure place whose *name* is already reviewed —
+// the dot still targets the place, not a reviewed glossary entry with
+// nothing left to review.
+const rivermootInfo = {
+    id: 'g-rivermoot',
+    text: 'Rivermoot',
+    kind: 'place',
+    status: 'reviewed',
+    culture_id: 'taelrik',
+    culture_name: 'Taelrik',
+    language_name: 'Taelrik',
+    color: '#FF8A65',
+    writable: true,
+    meaning: '',
+    true_name: '',
+    renderings: [],
+    origin_by: 'import',
+    generator_name: null,
+    doesnt_fit: false,
+    character_name: null,
+    place_id: 'rivermoot',
+};
+const rivermootPlace = {
+    id: 'rivermoot',
+    name: 'Rivermoot',
+    kind: 'village',
+    own: true,
+    source_name: null,
+    mix: [
+        { culture_id: 'taelrik', culture_name: 'Taelrik', color: '#FF8A65', share: 100 },
+    ],
+    set_by: 'ai',
+    unsure: true,
+};
 const chipStory = {
-    names: [kethrunInfo, dessaInfo, quillisterInfo],
+    names: [kethrunInfo, dessaInfo, quillisterInfo, rivermootInfo],
     characters: [kethrunCharacter, borinCharacter, dessaCharacter],
-    places: [veldhaerPlace, dhunmouthPlace, quillisterPlace],
+    places: [veldhaerPlace, dhunmouthPlace, quillisterPlace, rivermootPlace],
 };
 
 check('character_chip', () => {
@@ -527,6 +561,12 @@ check('place_chip', () => {
     assert.equal(unknownPlace.label, 'No language');
     assert.equal(unknownPlace.unreviewed, true);
     assert.deepEqual(unknownPlace.target, { type: 'glossary', entry_id: 'g-quillister' });
+
+    // R8: unsure (place.unsure), but the name itself is already reviewed —
+    // the dot must target the place, not the reviewed glossary entry.
+    const rivermoot = placeChip(chipStory, 'Rivermoot');
+    assert.equal(rivermoot.unreviewed, true);
+    assert.deepEqual(rivermoot.target, { type: 'place', place_id: 'rivermoot' });
 });
 
 if (failures.length > 0) {

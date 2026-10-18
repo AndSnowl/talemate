@@ -18,7 +18,7 @@
                     v-for="character in characters"
                     :key="character.name"
                     class="people-row"
-                    :class="{ 'people-row-focus': character.name === focusName }"
+                    :class="{ 'people-row-focus': character.name === localFocusName }"
                 >
                     <td>
                         <span v-if="isUnsure(character)" class="unsure-dot mr-1"></span>
@@ -79,15 +79,33 @@ export default {
             default: null,
         },
     },
+    emits: [
+        'focus-applied',
+    ],
+    data() {
+        return {
+            // Copied from `focusName` below rather than read live: the
+            // parent clears `focusName` right after `focus-applied` (so a
+            // later, unrelated visit doesn't re-highlight a stale row),
+            // which would otherwise erase this row's highlight the moment
+            // it appeared, since the class binding would lose its match.
+            localFocusName: null,
+        }
+    },
     watch: {
         focusName: {
             immediate: true,
             handler(name) {
                 if (!name) return;
+                this.localFocusName = name;
                 this.$nextTick(() => {
                     const el = this.$el.querySelector('.people-row-focus');
                     if (el) el.scrollIntoView({ block: 'center' });
                 });
+                // Tell the parent this jump has been applied, so it clears
+                // its own `peopleFocusName` — otherwise it would stay
+                // highlighted on every later, unrelated visit to this view.
+                this.$emit('focus-applied');
             },
         },
     },

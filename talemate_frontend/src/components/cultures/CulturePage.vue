@@ -74,7 +74,7 @@
                 <PhraseList
                     :culture="culture"
                     :send="send"
-                    :focus-id="focus ? focus.phraseId : null"
+                    :focus-id="phraseFocusId"
                 ></PhraseList>
             </v-window-item>
 
@@ -139,11 +139,18 @@ export default {
     },
     emits: [
         'open-places',
+        'focus-applied',
     ],
     data() {
         return {
             subTab: 'culture',
             glossarySelectedId: null,
+            // Copied from `focus.phraseId` below rather than read live off
+            // `focus` in the template: the parent clears `focus` right
+            // after `focus-applied` (so a later, unrelated remount doesn't
+            // replay it), which would otherwise erase `PhraseList`'s own
+            // highlight/scroll the moment it appeared.
+            phraseFocusId: null,
         }
     },
     computed: {
@@ -193,6 +200,15 @@ export default {
                 if (focus.glossaryId !== undefined) {
                     this.glossarySelectedId = focus.glossaryId;
                 }
+                if (focus.phraseId !== undefined) {
+                    this.phraseFocusId = focus.phraseId;
+                }
+                // Tell the parent this jump has been applied, so it clears
+                // its own `cultureFocus` — otherwise this same (stale)
+                // `focus` would be re-applied to whichever culture gets
+                // opened next, on any later remount of this component
+                // (leaving to Places/People/Unassigned and back).
+                this.$emit('focus-applied');
             },
         },
     },

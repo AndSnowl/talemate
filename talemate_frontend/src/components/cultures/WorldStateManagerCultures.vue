@@ -20,6 +20,7 @@
                 :open-import="openImport"
                 :focus="cultureFocus"
                 @open-places="select('places')"
+                @focus-applied="cultureFocus = null"
             />
             <PlacesView
                 v-else-if="selected && selected.type === 'places'"
@@ -35,6 +36,7 @@
                 :cultures="world.cultures || []"
                 :send="send"
                 :focus-name="peopleFocusName"
+                @focus-applied="peopleFocusName = null"
             ></PeopleView>
             <div v-else-if="selected && selected.type === 'unassigned'">
                 <v-card variant="tonal" class="pa-4 mb-3">
