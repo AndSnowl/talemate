@@ -50,6 +50,8 @@
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import AutocompleteRedoChip from './AutocompleteRedoChip.vue';
 import { createAutocompleteField } from '@/utils/autocompleteField';
+import { characterPaletteKey } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 
 const INPUT_HISTORY_MAX = 10;
 
@@ -239,7 +241,10 @@ export default {
     actAsColor() {
       if (this.actAs === '$narrator') return 'narrator';
       const name = this.actAs || this.playerCharacterName;
-      return name ? this.characterColors?.[name] : null;
+      if (!name) return null;
+      const stored = this.characterColors?.[name] ?? null;
+      const palette = currentTheme.value.palette;
+      return palette[characterPaletteKey(stored, name)];
     },
     // The floating textarea label — prefix-mode label if one is active, else
     // the speaker name for dialogue prompts, the server's message text for

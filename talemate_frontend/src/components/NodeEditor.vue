@@ -309,8 +309,10 @@
 </template>
 
 <script>
+import { watch } from 'vue';
 import { LGraphCanvas, LiteGraph } from 'litegraph.js';
-import { initializeGraphFromJSON, normalizeHexColor } from '@/utils/litegraphUtils'
+import { initializeGraphFromJSON, normalizeHexColor, rebuildThemeNodeColors, applyThemeToCanvas, reapplyNodeColors } from '@/utils/litegraphUtils'
+import { currentTheme } from '@/theme/store';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { convertGraphToJSON, convertSelectedGraphToJSON } from '@/utils/exportGraph.js'
 //import '@/utils/litegraphSearchBox'
@@ -709,6 +711,7 @@ export default {
                 this.canvas.showShowNodePanel = function(){};
                 this.canvas.align_to_grid = true;
                 this.canvas.container = this.$refs.outer_container;
+                applyThemeToCanvas(this.canvas, currentTheme.value);
             }
 
             this.canvas.read_only = this.editingLockedModule;
@@ -1103,6 +1106,19 @@ export default {
     mounted() {
         this.onResize();
         this.registerMessageHandler(this.handleMessage);
+
+        // Rebuild the litegraph colour swatches/background whenever the
+        // theme changes (live preview included), and redraw any open
+        // nodes/groups so their remapped colours follow along.
+        rebuildThemeNodeColors(currentTheme.value);
+        watch(currentTheme, (resolved) => {
+            rebuildThemeNodeColors(resolved);
+            applyThemeToCanvas(this.canvas, resolved);
+            reapplyNodeColors(this.graph, resolved);
+            if (this.canvas) {
+                this.canvas.setDirty(true, true);
+            }
+        });
 
         // Load debug menu state from local storage if available
         const savedDebugOptions = localStorage.getItem('talemate_debug_options');

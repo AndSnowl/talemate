@@ -299,7 +299,7 @@
                 </template>
             </v-tooltip>
             <div v-if="message.type === 'character' || message.type === 'processing_input'"
-                :class="`message ${message.type}`" :id="`message-${message.id}`" :style="{ borderColor: message.color }">
+                :class="`message ${message.type}`" :id="`message-${message.id}`" :style="{ borderColor: characterBorderColor(message) }">
                 <div class="character-message">
                     <CharacterMessage :character="message.character" :text="message.text" :color="message.color" :message_id="message.id" :uxLocked="uxLocked" :appBusy="appBusy" :ttsAvailable="ttsAvailable" :ttsBusy="ttsBusy" :isLastMessage="index === messages.length - 1" :editorRevisionsEnabled="editorRevisionsEnabled" :editorRevisionMethod="editorRevisionMethod" :rev="message.rev || 0" :scene-rev="scene?.data?.rev || 0" :appearanceConfig="appearanceConfig" :scene="scene" :asset_id="message.asset_id" :asset_type="message.asset_type" :disable_avatar_fallback="message.disable_avatar_fallback || false" :revisionsCount="(message.revisions && message.revisions.length) || 0" :revisionIndex="message.revision_index || 0" :revisionSource="revisionCurrentSource(message)" :revisionReason="revisionCurrentReason(message)" :revisionBusy="message.regenerating || false" :entityMentions="getEntityMentionsForMessage(message.id)" @navigate-revision="(dir) => navigateRevision(message.id, dir)" />
                 </div>
@@ -328,7 +328,7 @@
                 <SystemMessage 
                     :message="message.text" 
                     :message-id="message.id"
-                    :color="message.meta.color" 
+                    :color="systemMessageColor(message.meta.color)"
                     :icon="message.meta.icon" 
                     :title="message.meta.title" 
                     :display="message.meta.display" 
@@ -409,6 +409,8 @@ import { effectiveActionEnabled } from '@/constants/sceneAgentSettings';
 import { isVisualAgentReady, VIS_TYPE } from '@/constants/visual';
 import { isKnownSceneCharacter } from '@/utils/entityActions';
 import { parseCharacterMessage } from '@/utils/characterMessage.js';
+import { characterPaletteKey, dataColor } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 import { primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { base64ToObjectUrl } from '@/utils/objectUrl.js';
 import {
@@ -748,6 +750,22 @@ export default {
 
         getMessageColor(typ) {
             return resolveMessageColor(this.appearanceConfig, typ);
+        },
+
+        // The stored `message.color` is a raw backend value (often the
+        // default "#fff"); remap it onto the current theme's accent
+        // palette at render time. See theme/dataColors.js.
+        characterBorderColor(message) {
+            const palette = currentTheme.value.palette;
+            return palette[characterPaletteKey(message.color, message.character)];
+        },
+
+        // Non-character data colours (system message `meta.color`, etc.)
+        // route through dataColor; fall back to the raw value so Vuetify
+        // colour/role names (e.g. "info") keep working when dataColor
+        // can't resolve them.
+        systemMessageColor(rawColor) {
+            return dataColor(rawColor) || rawColor;
         },
 
         getMessageTypeHidden(typ) {

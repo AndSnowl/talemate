@@ -5,10 +5,11 @@
 import assert from 'node:assert/strict';
 
 import { isHex, normalizeHex, mix, contrastRatio } from '../src/theme/colorMath.js';
-import { PALETTE_KEYS } from '../src/theme/palette.js';
+import { PALETTE_KEYS, ACCENT_KEYS } from '../src/theme/palette.js';
 import { ALL_ROLES, TEXT_ROLES } from '../src/theme/roles.js';
 import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/presets.js';
 import { resolveTheme, toVuetifyColors, themeFromConfig } from '../src/theme/engine.js';
+import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
 
 let passed = 0;
 const failures = [];
@@ -131,6 +132,46 @@ check('config_custom_fills_missing_from_base', () => {
     assert.equal(resolved.palette.orange, '#aa5500');
     assert.equal(resolved.palette.bg, getPreset('nord').palette.bg);
     assert.equal(resolved.name, 'Mine');
+});
+
+check('to_hex_forms', () => {
+    assert.equal(toHex('#FFF'), '#ffffff');
+    assert.equal(toHex('deep-purple-lighten-3'), '#b39ddb');
+    assert.equal(toHex('nonsense'), null);
+});
+
+check('character_key_white_uses_name_hash', () => {
+    const fromWhite = characterPaletteKey('#fff', 'Marta');
+    assert.ok(ACCENT_KEYS.includes(fromWhite), `${fromWhite} is not an accent key`);
+    assert.equal(characterPaletteKey(null, 'Marta'), fromWhite);
+    assert.equal(characterPaletteKey('#FFFFFF', 'Marta'), fromWhite);
+});
+
+check('character_key_stable', () => {
+    assert.equal(
+        characterPaletteKey('nonsense', 'Ilsa Varn'),
+        characterPaletteKey('nonsense', 'Ilsa Varn'),
+    );
+});
+
+check('character_key_from_vuetify_name', () => {
+    const gruvboxDark = resolveTheme(getPreset('gruvbox-dark'));
+    assert.equal(characterPaletteKey('red-lighten-3', 'x', gruvboxDark), 'red');
+});
+
+check('data_color_grey_is_muted', () => {
+    const r = resolveTheme(getPreset(DEFAULT_PRESET_ID));
+    assert.equal(dataColor('#9e9e9e', r), r.colors.muted);
+});
+
+check('node_colors_follow_theme', () => {
+    const gruvboxDark = resolveTheme(getPreset('gruvbox-dark'));
+    const nord = resolveTheme(getPreset('nord'));
+    const nordColors = nodeColors('#572e44', nord);
+    const gruvboxColors = nodeColors('#572e44', gruvboxDark);
+    assert.notDeepEqual(nordColors, gruvboxColors);
+    assert.ok(isHex(nordColors.title) && isHex(nordColors.body));
+    assert.ok(isHex(gruvboxColors.title) && isHex(gruvboxColors.body));
 });
 
 if (failures.length > 0) {

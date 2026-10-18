@@ -1,5 +1,5 @@
 <template>
-  <v-alert variant="text" :color="color" elevation="0" density="compact" :style="{ opacity: revisionBusy ? 0.65 : 1, transition: 'opacity 0.2s ease' }" @mouseover="hovered=true" @mouseleave="hovered=false">
+  <v-alert variant="text" :color="resolvedColor" elevation="0" density="compact" :style="{ opacity: revisionBusy ? 0.65 : 1, transition: 'opacity 0.2s ease' }" @mouseover="hovered=true" @mouseleave="hovered=false">
     <template v-slot:close>
       <v-btn size="small" icon variant="text" class="close-button" @click="deleteMessage" :disabled="uxLocked">
         <v-icon>mdi-close</v-icon>
@@ -27,7 +27,7 @@
         :message_content="text"
         :message_id="message_id"
       />
-      <span class="character-name-chip" :style="{ color: color }">
+      <span class="character-name-chip" :style="{ color: resolvedColor }">
         {{ character }}
       </span>
       <div class="character-content" :class="{ 'position-relative': editing, 'character-content--editing': editing }">
@@ -37,7 +37,7 @@
           v-model="editing_text"
           variant="outlined"
           class="text-normal"
-          :color="color"
+          :color="resolvedColor"
 
           auto-grow
 
@@ -101,6 +101,8 @@ import { insertNewlineAtCursor } from '@/utils/textAreaUtils';
 import { isPrimaryModifier } from '@/utils/keyboardModifiers';
 import { spliceContinuation } from '@/utils/messageContinuation';
 import { createAutocompleteField } from '@/utils/autocompleteField';
+import { characterPaletteKey } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 import MessageAssetImage from './MessageAssetImage.vue';
 import MessageAssetMixin from './MessageAssetMixin.js';
 import RevisionNav from './RevisionNav.vue';
@@ -221,6 +223,13 @@ export default {
     'getMessageStyle',
   ],
   computed: {
+    // The stored `color` prop is remapped onto the current theme's accent
+    // palette at render time (never written back to the prop/stored
+    // data). See theme/dataColors.js's characterPaletteKey.
+    resolvedColor() {
+      const palette = currentTheme.value.palette;
+      return palette[characterPaletteKey(this.color, this.character)];
+    },
     parser() {
       const sceneConfig = this.appearanceConfig?.scene || {};
       const actorStyles = sceneConfig.actor_messages || sceneConfig.character_messages || {};

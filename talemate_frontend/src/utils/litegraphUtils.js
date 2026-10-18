@@ -5,6 +5,9 @@ import { trackRecentNodes } from './recentNodes.js';
 import { handleFitGroupToNodes, handleDuplicateGroup, handleVerticalSnapGroup, handleCreateGroupFromSelectedNodes } from './groupInteractions.js';
 import { handleWatchNodeShortcut, handleSetStateNodeShortcut, handleStageNodeShortcut } from './graphConnectionUtil.js';
 import { isPrimaryModifier } from './keyboardModifiers.js';
+import { nodeColors } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
+import { ACCENT_KEYS } from '@/theme/palette';
 
 const UNRESOLVED = "<class 'talemate.game.engine.nodes.core.UNRESOLVED'>";
 
@@ -50,12 +53,73 @@ if (!LGraphCanvas.node_colors) {
     LGraphCanvas.node_colors = {};
 }
 
-// Add or extend color definitions for groups
-LGraphCanvas.node_colors.teal = {
-    color: "#00796B",      // teal darken-3 (for title/border)
-    bgcolor: "#004D40",    // teal darken-4 (for background - very dark)
-    groupcolor: "#00796B"  // teal darken-4 (for group color - very dark)
-};
+/**
+ * Rebuilds the LiteGraph "Change Color" swatch palette
+ * (`LGraphCanvas.node_colors`), one entry per accent key, from the current
+ * theme's palette. Call again whenever `currentTheme` changes (see
+ * NodeEditor.vue's theme watcher) so the editor's colour picker stays
+ * theme-consistent.
+ */
+export function rebuildThemeNodeColors(resolved = currentTheme.value) {
+    const palette = resolved.palette;
+    for (const key of ACCENT_KEYS) {
+        const accentHex = palette[key];
+        const { title, body } = nodeColors(accentHex, resolved);
+        LGraphCanvas.node_colors[key] = {
+            color: title,
+            bgcolor: body,
+            groupcolor: accentHex,
+        };
+    }
+}
+
+/**
+ * Applies the current theme's background to a litegraph canvas instance.
+ * Call again whenever `currentTheme` changes.
+ */
+export function applyThemeToCanvas(canvas, resolved = currentTheme.value) {
+    if (!canvas) return;
+    canvas.clear_background_color = resolved.palette['bg-alt'];
+    canvas.setDirty(true, true);
+}
+
+/**
+ * Re-derives every node's/group's `.color`/`.bgcolor` render fields from
+ * their raw stored colour (node definition style, ModuleStyle properties,
+ * or a group's `rawColor`) under the given theme, without touching the
+ * stored data itself or reloading the graph. Call whenever `currentTheme`
+ * changes so already-loaded nodes follow along.
+ */
+export function reapplyNodeColors(graph, resolved = currentTheme.value) {
+    if (!graph) return;
+
+    for (const node of graph._nodes || []) {
+        if (node.type === 'util/ModuleStyle') {
+            if (node.properties?.title_color) {
+                node.color = nodeColors(node.properties.title_color, resolved).title;
+            }
+            if (node.properties?.node_color) {
+                node.bgcolor = nodeColors(node.properties.node_color, resolved).body;
+            }
+        } else if (node._definition?.style) {
+            const style = node._definition.style;
+            if (style.title_color) {
+                node.color = nodeColors(style.title_color, resolved).title;
+            }
+            if (style.node_color) {
+                node.bgcolor = nodeColors(style.node_color, resolved).body;
+            }
+        }
+    }
+
+    for (const group of graph._groups || []) {
+        if (group.rawColor) {
+            group.color = nodeColors(group.rawColor, resolved).title;
+        }
+    }
+}
+
+rebuildThemeNodeColors();
 
 // Define style presets array (mutable to allow session-only additions)
 let stylePresets = [
@@ -125,10 +189,12 @@ function applyStylePreset(node, preset) {
         });
     }
     
-    // Update actual node appearance
+    // Update actual node appearance (remapped onto the current theme; the
+    // stored node_color/title_color above stay the raw preset values).
     if (node.type === "util/ModuleStyle") {
-        node.color = preset.title_color;
-        node.bgcolor = preset.node_color;
+        const styled = nodeColors(preset.title_color);
+        node.color = styled.title;
+        node.bgcolor = styled.body;
         node.titleIcon = preset.icon;
     }
     
@@ -462,11 +528,13 @@ function createNodeClass(nodeDefinition) {
                 let setter = (v) => { 
                     this.properties[key] = v; 
                     // Automatically update node appearance for ModuleStyle node
+                    // (remapped onto the current theme; the stored property
+                    // above stays the raw value).
                     if (this.type === "util/ModuleStyle") {
                         if (key === "title_color") {
-                            this.color = v;
+                            this.color = nodeColors(v).title;
                         } else if (key === "node_color") {
-                            this.bgcolor = v;
+                            this.bgcolor = nodeColors(v).body;
                         } else if (key === "icon") {
                             this.titleIcon = v;
                         }
@@ -586,8 +654,8 @@ function createNodeClass(nodeDefinition) {
         this.titleIcon = "F09DE"; // circle
 
         if(nodeDefinition.style) {
-            this.color = nodeDefinition.style.title_color;
-            this.bgcolor = nodeDefinition.style.node_color;
+            this.color = nodeColors(nodeDefinition.style.title_color).title;
+            this.bgcolor = nodeColors(nodeDefinition.style.node_color).body;
             // Store the icon if provided
             if(nodeDefinition.style.icon) {
                 this.titleIcon = nodeDefinition.style.icon;
@@ -615,12 +683,13 @@ function createNodeClass(nodeDefinition) {
         
         // Special initialization for ModuleStyle node
         if (this.type === "util/ModuleStyle") {
-            // Set initial colors from properties if they exist
+            // Set initial colors from properties if they exist (remapped
+            // onto the current theme; the stored properties stay raw).
             if (this.properties.title_color) {
-                this.color = this.properties.title_color;
+                this.color = nodeColors(this.properties.title_color).title;
             }
             if (this.properties.node_color) {
-                this.bgcolor = this.properties.node_color;
+                this.bgcolor = nodeColors(this.properties.node_color).body;
             }
             if (this.properties.icon) {
                 this.titleIcon = this.properties.icon;
@@ -839,11 +908,13 @@ function createNodeClass(nodeDefinition) {
                 set: function(v) { 
                     this.properties[key] = v; 
                     // Also update node appearance for ModuleStyle
+                    // (remapped onto the current theme; the stored property
+                    // above stays the raw value).
                     if (this.type === "util/ModuleStyle") {
                         if (key === "title_color") {
-                            this.color = v;
+                            this.color = nodeColors(v).title;
                         } else if (key === "node_color") {
-                            this.bgcolor = v;
+                            this.bgcolor = nodeColors(v).body;
                         } else if (key === "icon") {
                             this.titleIcon = v;
                         }
@@ -1273,13 +1344,15 @@ export function createGraphFromJSON(graphData) {
                     });
                 }
 
-                // Special handling for ModuleStyle nodes - apply colors directly to node appearance
+                // Special handling for ModuleStyle nodes - apply colors directly to node
+                // appearance (remapped onto the current theme; node.properties above
+                // keeps the raw, saved/exported values).
                 if (node.type === "util/ModuleStyle") {
                     if (nodeData.properties.title_color) {
-                        node.color = nodeData.properties.title_color;
+                        node.color = nodeColors(nodeData.properties.title_color).title;
                     }
                     if (nodeData.properties.node_color) {
-                        node.bgcolor = nodeData.properties.node_color;
+                        node.bgcolor = nodeColors(nodeData.properties.node_color).body;
                     }
                     if (nodeData.properties.icon) {
                         node.titleIcon = nodeData.properties.icon;
@@ -1383,7 +1456,12 @@ export function createGraphFromJSON(graphData) {
         node.size = [group.width, group.height];
         node.title = group.title;
         node.font_size = group.font_size;
-        node.color = group.color;
+        // `node.color` is both the live render field AND what
+        // exportGraph.js serializes back out, so the raw saved value is
+        // kept separately (`rawColor`, read by exportGraph.js) and the
+        // remapped colour is only ever used for drawing.
+        node.rawColor = group.color;
+        node.color = nodeColors(group.color).title;
         node.inherited = group.inherited || false;
 
         if(node.inherited) {

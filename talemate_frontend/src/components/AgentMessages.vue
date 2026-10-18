@@ -12,7 +12,7 @@
                 <v-list density="compact" slim :max-height="dialogMaxHeight" class="overflow-y-auto">
                     <v-list-item v-for="message in messages" :key="message.id">
                         <v-list-item-title>
-                            <span :class="'text-' + message.data.color">{{ message.data.header }}</span>
+                            <span :class="dataColor(message.data.color) ? '' : ('text-' + message.data.color)" :style="{ color: dataColor(message.data.color) || undefined }">{{ message.data.header }}</span>
                             <v-chip class="ml-2" v-for="(value, key) in message.meta" :key="key" size="x-small" variant="tonal" label>
                                 <span class="mr-2">{{ key }}</span> {{ value }}
                             </v-chip>
@@ -50,6 +50,7 @@
     </v-dialog>
 </template>
 <script>
+import { dataColor } from '@/theme/dataColors';
 
 export default {
     name: "AgentMessages",
@@ -96,6 +97,7 @@ export default {
         }
     },
     methods: {
+        dataColor,
         openDialog() {
             this.dialog = true
         },

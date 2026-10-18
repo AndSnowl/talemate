@@ -117,3 +117,8 @@ export function hueOf(hex) {
 export function saturationOf(hex) {
     return hexToHsl(hex).s;
 }
+
+/** HSL lightness of a hex colour (0..1). */
+export function lightnessOf(hex) {
+    return hexToHsl(hex).l;
+}

@@ -114,7 +114,11 @@ export function convertGraphToJSON(graph) {
 
         groups.push({
             title: group.title,
-            color: group.color,
+            // `rawColor` (set in litegraphUtils.js's createGraphFromJSON)
+            // is the saved value before the theme's render-time remap;
+            // fall back to `.color` for a group created at runtime
+            // (never remapped, so it's already raw).
+            color: group.rawColor ?? group.color,
             x: parseInt(group.pos[0]),
             y: parseInt(group.pos[1]),
             width: parseInt(group.size[0]),
