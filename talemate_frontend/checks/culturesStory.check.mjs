@@ -78,6 +78,45 @@ check('word_boundary', () => {
     assert.ok(!html.includes('scene-foreign'), html);
 });
 
+check('word_boundary_unicode', () => {
+    const word = (id, text) => ({ id, text, kind: 'word' });
+    const parser = new SceneTextParser();
+    const highlights = (entries, text) => parser
+        .parse(text, { mentions: foreignMentions(entries) })
+        .includes('scene-foreign');
+
+    const dhune = [word('word:dhune', 'Dhuné')];
+    assert.ok(!highlights(dhune, 'They crossed into Dhunéra at dusk.'));
+    assert.ok(highlights(dhune, 'Dhuné, they called it.'));
+
+    const aerin = [word('word:aerin', 'Ærin')];
+    assert.ok(!highlights(aerin, 'The Ærinvar woke.'));
+    assert.ok(!highlights(aerin, 'The vÆrin woke.'));
+    assert.ok(highlights(aerin, 'The Ærin woke.'));
+
+    const veld = [word('word:veld', 'Veld')];
+    assert.ok(!highlights(veld, 'The Veldé woke.'));
+    assert.ok(!highlights(veld, 'The éVeld woke.'));
+
+    // Apostrophes and hyphens inside a name still match (and still compile
+    // under the `u` flag).
+    const names = [
+        { name: "Kel'dor", kind: 'character', phrases: ["Kel'dor", 'Kel’dor'] },
+        { name: 'Khaz-Rull', kind: 'place', phrases: ['Khaz-Rull'] },
+    ];
+    const html = parser.parse("Kel’dor rode for Khaz-Rull, and Kel'dor's horse tired.", { mentions: names });
+    assert.ok(html.includes('data-entity-name="Kel\'dor"'), html);
+    assert.ok(html.includes('data-entity-name="Khaz-Rull"'), html);
+    assert.ok(!parser.parse('Khaz-Rullan stands.', { mentions: names }).includes('scene-entity'));
+
+    // Every regex syntax character in a phrase is escaped validly for the
+    // `u` flag, and the phrase matches literally.
+    const odd = [{ name: 'odd', kind: 'item', phrases: ['a.b*c+d?e^f$g{h}i(j)k|l[m]n\\o-p/q\'r'] }];
+    const compiled = compileEntityMentions(odd);
+    assert.ok(compiled.startRegex.flags.includes('u'));
+    assert.ok(parser.parse('See a.b*c+d?e^f$g{h}i(j)k|l[m]n\\o-p/q\'r here.', { mentions: odd }).includes('scene-entity'));
+});
+
 check('overlap', () => {
     const dhunEntity = { name: 'Dhun', kind: 'place', phrases: ['Dhun'] };
     const dhunPhrase = {

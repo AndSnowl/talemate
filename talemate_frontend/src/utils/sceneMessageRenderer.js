@@ -45,6 +45,8 @@ const DEFAULTS = {
 }
 
 // Escape a string for use inside a regex literal.
+// Only syntax characters are escaped, so the result is also valid under the
+// `u` flag, which rejects identity escapes such as `\-` or `\'`.
 function escapeRegex(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -70,6 +72,18 @@ function escapeHtmlText(s) {
 // renderer re-parsing the same message (or re-parsing on every render
 // tick) doesn't recompile the same regex and lookup table every time.
 const entityMentionsCache = new WeakMap();
+
+// Word boundaries for entity phrases, Unicode-aware (used with the `u` flag)
+// so "Dhuné" never matches inside "Dhunéra"; `\b` only knows ASCII. A phrase
+// edge that is a letter, digit or underscore must not touch another one; an
+// edge that is punctuation has no constraint. Written around the whole
+// alternation, as "the edge isn't a word character, or its neighbour isn't",
+// which is the same per-phrase rule.
+const WORD_CHAR = '[\\p{L}\\p{N}_]';
+const PHRASE_START = `(?:(?!${WORD_CHAR})|(?<!${WORD_CHAR}))`;
+const PHRASE_END = `(?:(?<!${WORD_CHAR})|(?!${WORD_CHAR}))`;
+const STARTS_WITH_WORD_CHAR = new RegExp(`^${WORD_CHAR}`, 'u');
+const ENDS_WITH_WORD_CHAR = new RegExp(`${WORD_CHAR}$`, 'u');
 
 // Compile an entity-mentions list into the lookup structures used by the
 // scene-entity tokenizer extension. Returns null when the list is empty.
@@ -108,14 +122,11 @@ export function compileEntityMentions(mentions) {
     // Longer phrases first so "blast door" wins over "door".
     flat.sort((a, b) => b.phrase.length - a.phrase.length);
 
-    const alternatives = flat
-        .map(({ phrase }) => {
-            const escaped = escapeRegex(phrase);
-            const leading = /^\w/.test(phrase) ? '\\b' : '';
-            const trailing = /\w$/.test(phrase) ? '\\b' : '';
-            return `${leading}${escaped}${trailing}`;
-        })
-        .join('|');
+    // The alternation holds plain escaped phrases only. V8 keeps a big
+    // literal alternation fast; per-phrase lookarounds inside it make the
+    // regex seconds slower per re-render once a lexicon has a few hundred
+    // entries.
+    const alternatives = flat.map(({ phrase }) => escapeRegex(phrase)).join('|');
 
     const phraseToEntity = {};
     for (const { key, entity } of flat) {
@@ -128,8 +139,8 @@ export function compileEntityMentions(mentions) {
     }
 
     const compiled = {
-        startRegex: new RegExp(`(?:${alternatives})`, 'i'),
-        matchRegex: new RegExp(`^(?:${alternatives})`, 'i'),
+        startRegex: new RegExp(`${PHRASE_START}(?:${alternatives})${PHRASE_END}`, 'iu'),
+        matchRegex: new RegExp(`^${PHRASE_START}(?:${alternatives})${PHRASE_END}`, 'iu'),
         phraseToEntity,
     };
     entityMentionsCache.set(mentions, compiled);
@@ -273,12 +284,19 @@ export class SceneTextParser {
                     if (!compiled) return undefined;
                     return src.match(compiled.startRegex)?.index;
                 },
-                tokenizer(src) {
+                tokenizer(src, tokens) {
                     const compiled = self._entityMentions;
                     if (!compiled) return;
                     const match = src.match(compiled.matchRegex);
                     if (!match) return;
                     const phrase = match[0];
+                    // marked looks for a start index one character in, so
+                    // `src` can begin mid-word; the leading boundary is then
+                    // checked against the text token before it.
+                    const before = tokens?.[tokens.length - 1]?.raw;
+                    if (before && ENDS_WITH_WORD_CHAR.test(before) && STARTS_WITH_WORD_CHAR.test(phrase)) {
+                        return;
+                    }
                     const entity = compiled.phraseToEntity[phrase.toLowerCase()];
                     if (!entity) return;
                     return {
