@@ -32,7 +32,11 @@ One culture is one `CultureFile` JSON object:
 ```
 
 `culture` is the full culture (see `reference/example.culture.json` for a
-complete, valid example — read it before writing your first file).
+complete, valid example — read it before writing your first file; its
+`Kethrun` glossary entry is a deliberately irregular legacy name that
+predates Taelrik's current patterns and doesn't fit its generators —
+that's intentional, not a bug to copy. A new native name you add should
+fit).
 Key points:
 
 - `culture.language.level` is exactly one of `description`, `naming`,
@@ -50,10 +54,28 @@ Key points:
   An unmatched place is created new, under its `parent` (also matched
   by name) or as a root if `parent` is null or doesn't match anything
   yet. A child may be listed before its parent.
+- Places aren't glossary entries — a `places` entry only sets the
+  place's name/kind/parent/share. It has no `renderings` map and can't
+  be a `foreign_renderings` target. If a neighbouring culture should be
+  able to render this place's name (e.g. how river-folk say a
+  mountain-clan city), add a separate `glossary` entry for it too, with
+  `kind: "place"`.
+- `share` math on import: if, after this import, this culture is the
+  only one with a share at a place (new or existing), it's set to 100%
+  regardless of what `share` says in the file — don't be surprised when
+  a lone culture's share isn't what you wrote. If this culture already
+  has a share at a place from an earlier import, re-importing never
+  moves it, even if the file's `share` differs; the owner adjusts mixed
+  places afterwards in World Editor → Places & regions. Only a place
+  where another culture already has a share and this culture doesn't
+  yet gets the file's `share` applied as given.
 - `foreign_renderings` is how *this* culture's speakers render a name
   that belongs to *another* culture — e.g. how river-folk say a
   mountain-clan name. Each `name` must match an existing glossary entry
-  (in any culture); it's reported as a warning otherwise.
+  (in any culture) *at import time*; if the target culture hasn't been
+  imported yet, the entry is silently dropped rather than held for
+  later — when designing several cultures together, import the one a
+  name belongs to before the culture that renders it.
 - Re-importing an existing culture replaces its core fields but keeps
   play `additions`, never deletes a glossary entry or place, and keeps
   Talemate's own copy of any glossary entry marked `reviewed` or edited
@@ -71,7 +93,20 @@ Ask one question at a time. Don't front-load a questionnaire.
    scattered diaspora? Where do they live, and what's the feel (blunt
    river-ferrymen, secretive mountain miners, courtly merchants)? This
    drives `description`, `customs`, `food`, `holidays`.
-2. **Language level.** Ask which of the three they want, explaining
+2. **Where it lives, and shares.** Where does this culture sit in the
+   place hierarchy (country/region/city/town/.../`parent`)? If it
+   shares a place with a culture already in Talemate, ask roughly what
+   share of that place is theirs — it's only a starting point, since
+   shares behave specially on import (see `share` math below) and the
+   owner can fine-tune them afterwards in Places & regions.
+3. **Generators and seed names.** Which generators does the owner
+   actually need — given names, family names, place names, whatever
+   `people`/`places`/`things` the story calls for? Ask whether any
+   names are already in play (an "Unassigned names" list entry, a name
+   already used in a scene) that should be claimed as this culture's
+   rather than invented fresh. Ask for a `color` (a hex value) for the
+   World Editor's culture swatch.
+4. **Language level.** Ask which of the three they want, explaining
    briefly:
    - `description` — prose about the language only (`sound`,
      `syllable_notes`); no categories, no generators, nothing to roll.
@@ -80,12 +115,18 @@ Ask one question at a time. Don't front-load a questionnaire.
    - `full` — `naming`, plus `grammar`, a small `dictionary`, and
      `phrases` (a handful of sayings, curses, greetings with
      word-by-word `breakdown`s).
-3. **Existing world context.** Ask for the world folder path
+5. **Existing world context.** Ask for the world folder path
    (`scenes/<project>/shared-context/<name>.world/`) or for exported
    `.culture.json` files of neighbouring cultures. Read them before
    designing the language — see below.
-4. **Writable or not.** Ask whether this culture's own people can write
+6. **Writable or not.** Ask whether this culture's own people can write
    it, or whether it's only ever heard and rendered by others.
+
+If the owner wants several cultures for the same world, design and
+import them one at a time, in dependency order: import a culture before
+any other culture's `foreign_renderings` targets one of its names (see
+above), and before you need to read its glossary for seed names or
+existing renderings.
 
 ## Reading existing context
 
@@ -103,13 +144,19 @@ place hierarchy. Use this to:
 
 **Unwritable language.** Set `culture.language.writable: false`. Each
 glossary entry for this culture gets `true_name` — the name in the
-culture's own (unwritten) tongue — while `text` is the name as it's
-actually used in play (commonly a neighbour's rendering, or a simple
-phonetic approximation). If you've read a neighbouring culture's file
-and know how its speakers would render this name, set that directly in
-the entry's own `renderings` map (keyed by that culture's id) rather
-than waiting on that neighbour to add a `foreign_renderings` entry
-later.
+culture's own (unwritten) tongue, written as a bracketed description of
+the sound, since there's no script for it, e.g.
+`⟨two low hums, one click⟩` — while `text` is the name as it's actually
+used in play (commonly a neighbour's rendering, or a simple phonetic
+approximation). If a neighbour already has a rendering for this name —
+in play already, or in that neighbour's own glossary/`renderings` —
+reuse that rendering's text exactly as this entry's `text` rather than
+inventing a second phonetic approximation for the same name. If you've
+read a neighbouring culture's file and know how its speakers *would*
+render this name but haven't seen that rendering fixed yet, set it
+directly in the entry's own `renderings` map (keyed by that culture's
+id) rather than waiting on that neighbour to add a `foreign_renderings`
+entry later.
 
 ## Extending an exported culture
 
@@ -144,26 +191,54 @@ of them removes it.
 ## Validating and sampling
 
 Before handing the file over, always run both commands from the repo
-root:
+root, through the manifest:
 
 ```
-uv run python -m talemate.cultures.cli validate <file>
-uv run python -m talemate.cultures.cli sample <file>
+guix shell -m manifest.scm -- uv run --no-sync python -m talemate.cultures.cli validate <file>
+guix shell -m manifest.scm -- uv run --no-sync python -m talemate.cultures.cli sample <file>
 ```
 
 `validate` exits 0 and prints `OK: <file>` for a well-formed file, or
-prints the error and exits 1 — fix and re-run. `sample` rolls names
-from every generator (10 by default; pass `--generator <id>` or
-`--count <n>` to narrow it) and marks each with ✓/✗ for whether it
-"fits" the language's own patterns (see `reference/rule-syntax.md`).
+prints the error and exits 1 — fix and re-run. It also prints a
+`WARNING:` line for every likely mistake it finds (an unknown field, a
+description-only language with unused generators, a glossary entry
+that doesn't fit its own generators, an undefined category letter —
+see below). None of these block the import, but read them.
+
+`sample` rolls names from every generator (10 by default; pass
+`--generator <id>` or `--count <n>` to narrow it) and marks each with
+✓/✗ for whether it "fits" the language's own patterns (see
+`reference/rule-syntax.md`). That mark is almost always ✓ — a
+generator's own output fits its own patterns by construction — so it
+says nothing about quality. Read the names themselves: do they sound
+distinct from their neighbours, pronounceable, not accidentally funny?
+
+Watch for an uppercase letter sitting in the middle of a rolled name
+(e.g. `ZaXa`): any letter in a pattern that isn't one of the language's
+own `categories` keys is written through literally, so a typo'd
+category reads as a stray capital in every name it touches. `validate`
+now warns about every such letter. If you meant a category, fix the
+pattern or add the category. If you meant the capital literally — a
+literal word fragment such as `"The CVC"` in an inn-name generator, or
+a capital inside a choice literal like `[a|B]` — the warning is
+expected and fine; it can't tell intent apart from a typo, so it flags
+every capital outside `categories` either way. Leave it.
+
+Also check the rolled names against every neighbouring culture's
+language, not just this one's own — a name that also "fits" a
+neighbour's patterns will read as native to both. Aim for about 0%
+overlap. There's no CLI command for this; a one-liner is enough:
+
+```python
+from talemate.cultures.generator import roll, fits
+names = roll(my_language, "given_male", count=50)
+print(sum(fits(neighbour_language, n) for n in names), "/", len(names))
+```
 
 Show the owner the sample output. If names feel off, revise
 `categories`/`patterns` and re-roll — don't just hand-pick good-looking
 samples and move on, since the generator keeps producing names during
 play.
-
-On a Guix machine, wrap both commands:
-`guix shell uv node python@3.11 -- uv run --no-sync python -m talemate.cultures.cli validate <file>`.
 
 ## Finishing up
 

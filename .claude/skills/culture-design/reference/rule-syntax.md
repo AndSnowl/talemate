@@ -37,6 +37,18 @@ A generator's `patterns` are read left to right. Each token is one of:
 Example: `"CVC[rin|rek|mar|l]"` renders a consonant, a vowel, a
 consonant, then one of `rin`/`rek`/`mar`/`l`.
 
+**Careful with capitals.** Any uppercase letter that isn't one of
+`categories`' keys is still legal — it's copied through as literal text
+— but it's the most common typo in a hand-written pattern: a category
+meant to be `C` but typed `X` silently renders as a stray capital `X`
+in every name that pattern produces. `cli validate` warns about every
+such letter (`'<X>' in pattern '<p>' is not a category, so it is
+written literally`). The warning fires the same way for a capital you
+meant literally — a literal word fragment such as `"The CVC"` in an
+inn-name generator, or the `B` in a choice literal like `[a|B]` — it
+can't tell a typo from an intentional literal, so expect and ignore the
+warning whenever the capital is there on purpose.
+
 ## Pattern weight
 
 A whole pattern string may end in `*n` to weight it among a generator's
@@ -70,3 +82,11 @@ Use this when hand-writing a name (a protagonist, a landmark) that
 should read as native to the culture: if it doesn't fit, either adjust
 the name or treat it as a foreign name and add a `foreign_renderings`
 entry instead.
+
+Because `fits` only checks a name against a language's *own*
+generators, `cli sample`'s ✓ mark on a name it just rolled from that
+same language is close to a tautology — it will almost always be ✓, so
+it says nothing about quality. `fits` is far more useful pointed at a
+*different* language: roll names from the one you're building and
+check them against each neighbour's `fits` to see whether the two
+read as distinct (aim for close to none fitting the neighbour).
