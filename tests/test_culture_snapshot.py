@@ -474,3 +474,30 @@ async def test_skipped_name_is_not_a_place_and_not_asked_again(
     # the skipped name isn't proposed again
     await agent.on_snapshot_after(snapshot_emission(scene))
     assert templates(calls).count(PLACES) == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_additions_checkpoint_after_reload(
+    scene, world, agent, monkeypatch, events
+):
+    # a reloaded scene renumbers its messages from 1, so a saved checkpoint
+    # can be past the newest id; detection must not stop
+    calls = install_replies(
+        monkeypatch,
+        {ADDITIONS: "Taelrik | customs | Ferrymen spit over the rail before landing."},
+    )
+    set_snapshot(scene, "A room at Quillister House in Veldhaer")
+    narrate(scene, "The ferry was late again.")
+    narrate(scene, "Rain hammered the river.")
+    agent.set_scene_states(additions_checked_id=500)
+
+    # what was loaded counts as checked
+    await agent.on_snapshot_after(snapshot_emission(scene))
+    assert ADDITIONS not in templates(calls)
+
+    narrate(scene, "The ferryman spat over the rail before landing.")
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    assert templates(calls).count(ADDITIONS) == 1
+    assert "spat over the rail" in calls[-1]["vars"]["text"]
+    assert "Rain hammered" not in calls[-1]["vars"]["text"]

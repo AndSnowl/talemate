@@ -329,6 +329,13 @@ class CultureSnapshotMixin:
         if not sc.cultures:
             return []
         checked = self.get_scene_state("additions_checked_id", -1)
+        newest_loaded = max((m.id for m in self.scene.history), default=0)
+        if checked > newest_loaded:
+            # message ids are renumbered from 1 when a scene loads, so a
+            # checkpoint past the newest id is stale: everything already
+            # loaded counts as checked
+            self.set_scene_states(additions_checked_id=newest_loaded)
+            return []
         new_messages = [m for m in self.scene.history if m.id > checked]
         if not new_messages:
             return []
