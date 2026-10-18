@@ -15,7 +15,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
 
-from talemate.cultures.generator import GeneratorError, fits, roll
+from talemate.cultures.generator import GeneratorError, name_fits, roll
 from talemate.cultures.models import Culture, GeneratorDef, Language
 from talemate.cultures.scene_context import SceneCultures
 from talemate.cultures.words import clean_name
@@ -117,7 +117,7 @@ def guess_culture_for_name(
     """
 
     candidates = [culture for culture in scene.cultures if culture.language.generators]
-    fitting = [culture for culture in candidates if fits(culture.language, name)]
+    fitting = [culture for culture in candidates if name_fits(culture.language, name)]
 
     if len(fitting) == 1:
         return CultureGuess(fitting[0].id, False, "fits its language")

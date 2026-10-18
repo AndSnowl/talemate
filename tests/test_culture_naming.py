@@ -323,6 +323,21 @@ async def test_after_persist_existing_name_recorded_with_fit_flag(
 
 
 @pytest.mark.asyncio
+async def test_after_persist_multi_word_kept_name_fits(scene, world, agent):
+    # "Khusrek" (given) and "Thriv" (family) each fit Taelrik
+    character = Character(name="Khusrek Thriv")
+    await agent.on_after_persist_character(
+        PersistCharacterEmission(
+            agent=instance.get_agent("director"), character=character
+        )
+    )
+
+    [entry] = ai_entries(world)
+    assert entry.text == "Khusrek Thriv"
+    assert entry.doesnt_fit is False
+
+
+@pytest.mark.asyncio
 async def test_after_persist_first_used_from_first_mention(scene, world, agent):
     scene.history.append(NarratorMessage(message="Nothing happens.", id=4))
     scene.history.append(NarratorMessage(message="Then Marigold walks in.", id=5))

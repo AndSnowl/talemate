@@ -4,7 +4,13 @@ import re
 import pytest
 
 from talemate.cultures.models import GeneratorDef, Language
-from talemate.cultures.generator import GeneratorError, fits, roll, validate_language
+from talemate.cultures.generator import (
+    GeneratorError,
+    fits,
+    name_fits,
+    roll,
+    validate_language,
+)
 
 
 @pytest.fixture
@@ -190,3 +196,44 @@ def test_duplicate_generator_ids_rejected():
     )
     with pytest.raises(GeneratorError, match="duplicate"):
         validate_language(language)
+
+
+@pytest.fixture
+def two_part_language() -> Language:
+    """Given names and family names from separate generators."""
+    return Language(
+        name="Two",
+        level="naming",
+        categories={"C": "k kh t th s r v", "V": "a e i u"},
+        generators=[
+            GeneratorDef(
+                id="given", name="Given", use="people", patterns=["CVC[rek|rin]"]
+            ),
+            GeneratorDef(id="family", name="Family", use="people", patterns=["CCVC"]),
+        ],
+    )
+
+
+def test_name_fits_given_plus_family_name(two_part_language: Language):
+    assert fits(two_part_language, "Khusrek")
+    assert fits(two_part_language, "Thriv")
+    # the whole name matches neither generator on its own
+    assert not fits(two_part_language, "Khusrek Thriv")
+    assert name_fits(two_part_language, "Khusrek Thriv")
+
+
+def test_name_fits_the_and_connectors(two_part_language: Language):
+    assert name_fits(two_part_language, "The Khusrek")
+    assert name_fits(two_part_language, "Khusrek of the Thriv")
+    assert not name_fits(two_part_language, "The")
+
+
+def test_name_fits_mixed_real_and_foreign_name(two_part_language: Language):
+    assert not name_fits(two_part_language, "Khusrek Smith")
+    assert not name_fits(two_part_language, "The Smith")
+
+
+def test_name_fits_single_word_matches_fits(two_part_language: Language):
+    for word in ("Khusrek", "Thriv", "Smith", "", "  khusrek "):
+        assert name_fits(two_part_language, word) == fits(two_part_language, word)
+    assert name_fits(Language(name="None", level="naming"), "Any Old Name") is True

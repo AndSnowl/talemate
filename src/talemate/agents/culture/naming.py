@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from talemate.agents.base import DynamicInstruction, set_processing
-from talemate.cultures.generator import fits
+from talemate.cultures.generator import name_fits
 from talemate.cultures.models import (
     CharacterCulture,
     Culture,
@@ -144,7 +144,7 @@ def record_kept_name(
             first_used=first_used,
             status="unreviewed",
             character_name=name,
-            doesnt_fit=culture is not None and not fits(culture.language, name),
+            doesnt_fit=culture is not None and not name_fits(culture.language, name),
         )
     )
     world.store.save_glossary(entries)

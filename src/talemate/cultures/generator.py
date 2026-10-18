@@ -96,6 +96,7 @@ __all__ = [
     "pattern_letters",
     "roll",
     "fits",
+    "name_fits",
     "validate_language",
 ]
 
@@ -540,3 +541,31 @@ def fits(language: Language, name: str) -> bool:
         if not any(reject.search(normalized) for reject in rejects):
             return True
     return False
+
+
+# Words skipped when a multi-word name is checked word by word: a leading
+# article and the connectors that join name parts ("Ilsa of the Birches",
+# "Anne de la Croix").
+_NAME_CONNECTORS = frozenset(
+    {"the", "of", "and", "de", "du", "da", "di", "van", "von", "al", "el", "la", "le"}
+)
+
+
+def name_fits(language: Language, text: str) -> bool:
+    """Return whether a (possibly multi-word) name fits `language`.
+
+    A single word behaves exactly as `fits`. A multi-word name fits when it
+    fits as a whole, or when every word, leaving out a leading "The" and
+    connector words, fits some generator of the language: a given name plus
+    a family name ("Khusrek Thriv") fits, as does "The X" when X fits, but a
+    name mixing a fitting word with a foreign one doesn't.
+    """
+    words = _normalize_whitespace(text).split()
+    if len(words) <= 1:
+        return fits(language, text)
+    if fits(language, text):
+        return True
+    words = [word for word in words if word.lower() not in _NAME_CONNECTORS]
+    if not words:
+        return False
+    return all(fits(language, word) for word in words)

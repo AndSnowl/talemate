@@ -60,7 +60,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .generator import GeneratorError, fits, pattern_letters, roll, validate_language
+from .generator import (
+    GeneratorError,
+    name_fits,
+    pattern_letters,
+    roll,
+    validate_language,
+)
 from .models import (
     Culture,
     GeneratorDef,
@@ -449,7 +455,7 @@ def lint_culture_file(raw: dict, file: CultureFile) -> list[str]:
         for entry in file.glossary:
             if entry.kind not in ("person", "place"):
                 continue
-            if not fits(language, entry.text):
+            if not name_fits(language, entry.text):
                 warnings.append(
                     f"Glossary '{entry.text}' in {language.name} doesn't "
                     "fit its own generators"

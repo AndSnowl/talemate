@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, get_args
 
-from talemate.cultures.generator import fits
+from talemate.cultures.generator import name_fits
 from talemate.cultures.models import (
     Culture,
     CultureShare,
@@ -248,7 +248,7 @@ def find_new_names(
                 culture_id=culture_id,
                 doesnt_fit=(
                     culture_id is not None
-                    and not fits(cultures[culture_id].language, text)
+                    and not name_fits(cultures[culture_id].language, text)
                 ),
                 first_used=first_used(text),
                 character_name=character_name,

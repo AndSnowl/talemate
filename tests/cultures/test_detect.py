@@ -148,6 +148,15 @@ def test_doesnt_fit_flag():
     assert marigold.doesnt_fit is True
 
 
+def test_multi_word_person_name_fits_word_by_word():
+    # given name (CVC+rek) and family name (C(V)CVC) each fit Taelrik
+    by_text = {
+        f.text: f for f in find(characters=["Khusrek Thriv", "Khusrek Marigold"])
+    }
+    assert by_text["Khusrek Thriv"].doesnt_fit is False
+    assert by_text["Khusrek Marigold"].doesnt_fit is True
+
+
 def test_person_keeps_own_culture_and_places_get_place_culture():
     character = Character(
         name="Brannoch",

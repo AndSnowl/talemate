@@ -623,6 +623,26 @@ def test_lint_warns_about_glossary_entry_that_doesnt_fit(tmp_path):
     assert not any("Whatever" in w for w in preview.warnings)
 
 
+def test_lint_multi_word_glossary_name_fits_word_by_word(tmp_path):
+    store = make_store(tmp_path)
+    raw = _minimal_raw(
+        glossary=[
+            {"text": "Kat Tek", "kind": "person"},
+            {"text": "The Kat", "kind": "place"},
+            {"text": "Kat Smith", "kind": "person"},
+        ]
+    )
+
+    preview = preview_import(store, json.dumps(raw))
+
+    assert not any("'Kat Tek'" in w for w in preview.warnings)
+    assert not any("'The Kat'" in w for w in preview.warnings)
+    assert (
+        "Glossary 'Kat Smith' in Mini doesn't fit its own generators"
+        in preview.warnings
+    )
+
+
 def test_lint_taelrik_fixture_known_warnings(tmp_path):
     """The Taelrik fixture itself trips one lint rule: "Kethrun" (a
     glossary entry of kind "person") doesn't fit its own language's
