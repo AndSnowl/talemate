@@ -1,0 +1,12 @@
+# Client config the local test runner (scripts/dev/talemate_app.py) adds on
+# top of config.example.yaml when started with --ai. Without --ai the run has
+# no clients at all.
+#
+# api_url is replaced at render time with $TALEMATE_TEST_KOBOLDCPP_URL
+# (default http://192.168.0.5:5001).
+clients:
+  KoboldCpp:
+    type: koboldcpp
+    name: KoboldCpp
+    api_url: http://192.168.0.5:5001
+    max_token_length: 16384

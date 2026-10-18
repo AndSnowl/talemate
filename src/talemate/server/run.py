@@ -18,7 +18,7 @@ import websockets
 
 import talemate.config  # noqa: F401
 from talemate.version import VERSION
-from talemate.path import LOGS_DIR
+from talemate.path import LOGS_DIR, TALEMATE_ROOT
 from talemate.environ import env_port, env_str
 
 print("Initialization time", time.perf_counter() - t_import_start)
@@ -182,6 +182,7 @@ def run_server(args):
     import talemate.instance
     from talemate.server.api import websocket_endpoint
 
+    log.info("talemate root", path=str(TALEMATE_ROOT))
     config = talemate.config.cleanup()
 
     if config.game.world_state.templates.state_reinforcement:
