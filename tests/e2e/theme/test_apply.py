@@ -9,9 +9,12 @@ waits for exactly that).
 
 from e2e.seed import dismiss_onboarding, send_backend
 
-# The app's own backend socket (open, not vite's HMR socket) — mirrors
-# e2e.seed._BACKEND_SOCKET_JS (duplicated here because that one is private to
-# seed.py; see tests/e2e/cultures/test_story.py for the same pattern).
+# The app's own backend socket (open, not vite's HMR socket) — the same
+# lookup as e2e.seed._BACKEND_SOCKET_JS (duplicated here because that one is
+# private to seed.py; see tests/e2e/cultures/test_story.py for another copy).
+# Unlike those two, this is a bare JS *expression*, not a `() => ...` arrow
+# function — it's always inlined directly (``{_BACKEND_SOCKET_JS}``), never
+# called with a trailing `()`.
 _BACKEND_SOCKET_JS = (
     "(window.__e2eSockets || []).filter("
     "(s) => s.readyState === WebSocket.OPEN && s.protocol !== 'vite-hmr'"
