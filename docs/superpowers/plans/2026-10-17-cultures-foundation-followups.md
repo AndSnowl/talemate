@@ -5,46 +5,46 @@ This note goes with the foundation plan (`2026-10-17-cultures-foundation.md`) an
 ## Manual checks to run in the browser
 
 **Setup**
-1. Open the World Editor. The **Cultures** tab is right after Suggestions.
-2. Open a scene with no Shared World. The tab shows the "link a Shared World" prompt, and its button opens Scene → Shared World.
+1. Open the World Editor. The **Cultures** tab is right after Suggestions. (automated: tests/e2e/cultures/test_tab_and_import.py)
+2. Open a scene with no Shared World. The tab shows the "link a Shared World" prompt, and its button opens Scene → Shared World. (automated: tests/e2e/cultures/test_tab_and_import.py)
 
 **Import and re-import**
-3. Link a Shared World, then import `tests/cultures/data/taelrik.culture.json` with **Import culture**.
+3. Link a Shared World, then import `tests/cultures/data/taelrik.culture.json` with **Import culture**. (automated: tests/e2e/cultures/test_tab_and_import.py)
    - The preview counts match the file.
    - After import, the culture appears in the drawer.
-4. Re-import the same file.
+4. Re-import the same file. (automated: tests/e2e/cultures/test_tab_and_import.py)
    - The dialog says "Updating".
    - It lists anything you edited in Talemate under "Will be replaced".
-5. Import a broken `.json`. A red alert shows the error, and the dialog stays open.
+5. Import a broken `.json`. A red alert shows the error, and the dialog stays open. (automated: tests/e2e/cultures/test_tab_and_import.py)
 
 **Culture and Language tabs**
-6. Edit text on the Culture and Language tabs, leave each field, and reload the scene. The edits are still there.
-7. Click **Keep** or **Drop** on a play addition, then edit a custom. The Keep or Drop is not undone.
+6. Edit text on the Culture and Language tabs, leave each field, and reload the scene. The edits are still there. (automated: tests/e2e/cultures/test_editing.py)
+7. Click **Keep** or **Drop** on a play addition, then edit a custom. The Keep or Drop is not undone. (automated: tests/e2e/cultures/test_editing.py)
 
 **Glossary, dictionary and phrases**
-8. On the Glossary tab:
+8. On the Glossary tab: (automated: tests/e2e/cultures/test_glossary.py)
    - The filter counts are correct.
    - **Looks right** moves an entry to Reviewed and selects the next unreviewed one.
    - Changing an entry's language to "No language yet" moves it to **Unassigned names**.
-9. Open **Pick another** on an entry the AI named and click "Roll new". The new candidates appear only in that menu.
-10. On the Dictionary tab, edit a word and leave the field. On the Phrases tab, add, edit and delete a phrase. Reload the scene: all the changes are still there.
+9. Open **Pick another** on an entry the AI named and click "Roll new". The new candidates appear only in that menu. (automated: tests/e2e/cultures/test_glossary.py)
+10. On the Dictionary tab, edit a word and leave the field. On the Phrases tab, add, edit and delete a phrase. Reload the scene: all the changes are still there. (automated: tests/e2e/cultures/test_editing.py)
 
 **Generators**
-11. On the Generators tab, click **Roll** on two cards. Each card shows only its own names.
-12. Edit a pattern, then click **Roll** straight away. You get names back.
-13. Type an invalid reject rule, e.g. `[`. You see a readable error, and nothing hangs.
+11. On the Generators tab, click **Roll** on two cards. Each card shows only its own names. (automated: tests/e2e/cultures/test_generators.py)
+12. Edit a pattern, then click **Roll** straight away. You get names back. (automated: tests/e2e/cultures/test_generators.py)
+13. Type an invalid reject rule, e.g. `[`. You see a readable error, and nothing hangs. (automated: tests/e2e/cultures/test_generators.py)
 
 **Places & regions**
-14. Build this tree: The Taelrik Reach (country) → Birch Coast (region, Elsiri 90 / Taelrik 10) → Ilsara (village).
+14. Build this tree: The Taelrik Reach (country) → Birch Coast (region, Elsiri 90 / Taelrik 10) → Ilsara (village). (automated: tests/e2e/cultures/test_places.py)
     - Birch Coast reads "about 9 in 10 Elsiri… Most also speak Taelrik, the language of The Taelrik Reach."
     - Ilsara inherits the same mix and the same sentence.
-15. Drag a culture-share slider and release it. The shares add back up to 100.
-16. Try to set The Taelrik Reach's parent to Ilsara. Ilsara isn't offered.
-17. Delete a place that has children. You're asked where the children go, and they move there.
+15. Drag a culture-share slider and release it. The shares add back up to 100. (automated: tests/e2e/cultures/test_places.py)
+16. Try to set The Taelrik Reach's parent to Ilsara. Ilsara isn't offered. (automated: tests/e2e/cultures/test_places.py)
+17. Delete a place that has children. You're asked where the children go, and they move there. (automated: tests/e2e/cultures/test_places.py)
 
 **Shared world and the skill**
-18. Open two scenes that share the same world in two browser tabs. Edit in one, then edit in the other. Neither tab undoes the other's changes.
-19. Design a small culture with the `culture-design` skill. Import it, export it, re-import it, and check nothing you made is lost.
+18. Open two scenes that share the same world in two browser tabs. Edit in one, then edit in the other. Neither tab undoes the other's changes. (automated: tests/e2e/cultures/test_two_tabs.py)
+19. Design a small culture with the `culture-design` skill. Import it, export it, re-import it, and check nothing you made is lost. (manual: needs a Claude Code session)
 
 ## Known gaps left for later plans
 

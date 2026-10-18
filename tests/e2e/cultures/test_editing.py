@@ -6,26 +6,16 @@ See docs/superpowers/plans/2026-10-17-cultures-foundation-followups.md,
 """
 
 import json
-import time
 import uuid
-from pathlib import Path
 
+from e2e.cultures._ui import (
+    CULTURE_FILE,
+    open_world_editor_cultures as _open_world_editor_cultures,
+    wait_for_json,
+)
 from e2e.seed import dismiss_onboarding, open_scene, place_culture, seed_world
 
-APP_BAR = "header.v-app-bar"
-CULTURE_FILE = (
-    Path(__file__).resolve().parents[2] / "cultures" / "data" / "taelrik.culture.json"
-)
 CULTURE_ID = "taelrik"
-
-
-def _open_world_editor_cultures(page):
-    page.locator(f"{APP_BAR} .v-tab", has_text="World Editor").click()
-    cultures_tab = page.locator(".v-tab", has_text="Cultures")
-    cultures_tab.wait_for(state="visible", timeout=30_000)
-    cultures_tab.click()
-    # The single imported culture auto-selects; wait for its (default) page.
-    page.locator(".culture-overview").wait_for(state="visible", timeout=30_000)
 
 
 def _reload_and_reopen(page, scene_path):
@@ -44,19 +34,7 @@ def _wait_for_culture(
     save, so this is the condition to wait on instead of a fixed sleep.
     """
     path = world_dir / "cultures" / f"{CULTURE_ID}.json"
-    deadline = time.monotonic() + timeout
-    last = None
-    while time.monotonic() < deadline:
-        if path.exists():
-            try:
-                last = json.loads(path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
-                last = None
-            else:
-                if predicate(last):
-                    return last
-        time.sleep(0.1)
-    raise AssertionError(f"timed out waiting for {path} ({message})\nlast seen: {last}")
+    return wait_for_json(path, predicate, timeout=timeout, message=message)
 
 
 def _add_addition(world, section: str, text: str) -> str:

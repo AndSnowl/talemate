@@ -7,16 +7,16 @@ See docs/superpowers/plans/2026-10-17-cultures-foundation-followups.md,
 """
 
 import json
-import time
 import uuid
-from pathlib import Path
 
+from e2e.cultures._ui import (
+    CULTURE_FILE,
+    open_cultures_tab as _open_cultures_tab,
+    open_world_editor as _open_world_editor,
+    wait_until,
+)
 from e2e.seed import open_scene, place_culture, seed_world
 
-APP_BAR = "header.v-app-bar"
-CULTURE_FILE = (
-    Path(__file__).resolve().parents[2] / "cultures" / "data" / "taelrik.culture.json"
-)
 CULTURE_ID = "taelrik"
 
 
@@ -59,24 +59,13 @@ def _seed_glossary_entries(world, entries) -> None:
 
 
 def _open_cultures_glossary_tab(page):
-    page.locator(f"{APP_BAR} .v-tab", has_text="World Editor").click()
-    cultures_tab = page.locator(".v-tab", has_text="Cultures")
-    cultures_tab.wait_for(state="visible", timeout=30_000)
-    cultures_tab.click()
+    _open_world_editor(page)
+    _open_cultures_tab(page)
     # Not exact=True: the Glossary tab carries an unreviewed-count badge
     # ("Glossary 1"), so its accessible name isn't exactly "Glossary".
     glossary_tab = page.get_by_role("tab", name="Glossary")
     glossary_tab.wait_for(state="visible", timeout=30_000)
     glossary_tab.click()
-
-
-def _wait_until(predicate, timeout: float = 10.0, message: str = "") -> None:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if predicate():
-            return
-        time.sleep(0.1)
-    raise AssertionError(f"timed out waiting: {message}")
 
 
 def test_runbook_8_glossary_filters_review_and_unassign(app, page):
@@ -179,7 +168,7 @@ def test_runbook_9_pick_another_rolls_only_in_that_menu(app, page):
     assert initial_count == 3
 
     menu.get_by_role("button", name="Roll new").click()
-    _wait_until(
+    wait_until(
         lambda: chips.count() > initial_count,
         timeout=15.0,
         message="rolled candidates never appeared in Dorel's menu",

@@ -4,26 +4,15 @@ See docs/superpowers/plans/2026-10-17-cultures-foundation-followups.md,
 "Manual checks" 1-5.
 """
 
-import json
-import time
 from pathlib import Path
 
-from e2e.seed import open_scene, place_culture, seed_scene_without_world, seed_world
-
-APP_BAR = "header.v-app-bar"
-CULTURE_FILE = (
-    Path(__file__).resolve().parents[2] / "cultures" / "data" / "taelrik.culture.json"
+from e2e.cultures._ui import (
+    CULTURE_FILE,
+    open_cultures_tab as _open_cultures_tab,
+    open_world_editor as _open_world_editor,
+    wait_for_json,
 )
-
-
-def _open_world_editor(page):
-    page.locator(f"{APP_BAR} .v-tab", has_text="World Editor").click()
-
-
-def _open_cultures_tab(page):
-    cultures_tab = page.locator(".v-tab", has_text="Cultures")
-    cultures_tab.wait_for(state="visible", timeout=30_000)
-    cultures_tab.click()
+from e2e.seed import open_scene, place_culture, seed_scene_without_world, seed_world
 
 
 def _import_dialog(page):
@@ -146,15 +135,11 @@ def test_runbook_4_reimport_shows_updating_and_will_be_replaced(app, page):
     # Wait for the edit to actually reach disk before re-importing, so the
     # preview's diff is never computed against the old description.
     culture_path = world.world_dir / "cultures" / "taelrik.json"
-    deadline = time.monotonic() + 15.0
-    while time.monotonic() < deadline:
-        if culture_path.exists():
-            data = json.loads(culture_path.read_text(encoding="utf-8"))
-            if "Edited in Talemate" in data.get("description", ""):
-                break
-        time.sleep(0.1)
-    else:
-        raise AssertionError(f"description edit never reached {culture_path}")
+    wait_for_json(
+        culture_path,
+        lambda c: "Edited in Talemate" in c.get("description", ""),
+        message="description edit never reached disk",
+    )
 
     dialog = _open_import_dialog(page)
     _upload(dialog, CULTURE_FILE)
