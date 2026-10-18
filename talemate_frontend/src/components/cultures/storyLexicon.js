@@ -250,6 +250,21 @@ export function nameSection(story, entity) {
     };
 }
 
+// Update `story` in place from `next`, field by field, keeping a field's
+// old value when its content is unchanged. Most pushes change nothing, and
+// a kept `lexicon`/`names` array keeps every derived mentions list (and
+// the renderer's compiled regex, cached by array) the same, so the scene
+// isn't re-rendered for nothing.
+function mergeStory(story, next) {
+    for (const key of Object.keys(story)) {
+        if (!(key in next)) delete story[key];
+    }
+    for (const [key, value] of Object.entries(next)) {
+        if (key in story && JSON.stringify(story[key]) === JSON.stringify(value)) continue;
+        story[key] = value;
+    }
+}
+
 // Fold one `cultures`/`system` websocket message into `state` (mutated in
 // place). Returns a message to send back (e.g. a `get_story` request), or
 // null when there's nothing to send.
@@ -279,7 +294,7 @@ export function applyCulturesMessage(state, data) {
     }
 
     if (data.type === 'cultures' && data.action === 'story') {
-        state.story = { ...emptyStoryState().story, ...data.data };
+        mergeStory(state.story, { ...emptyStoryState().story, ...data.data });
         return null;
     }
 

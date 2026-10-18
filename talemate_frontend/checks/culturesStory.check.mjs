@@ -421,6 +421,42 @@ const storyFixture = {
     places: [veldhaerPlace],
 };
 
+check('story_push_keeps_identity_when_unchanged', () => {
+    const s = emptyStoryState();
+    const push = (data) => applyCulturesMessage(s, { type: 'cultures', action: 'story', data });
+    const payload = () => JSON.parse(JSON.stringify({
+        available: true,
+        lexicon: [curse],
+        names: [kethrunInfo],
+        characters: [kethrunCharacter],
+        places: [veldhaerPlace],
+    }));
+
+    push(payload());
+    const { lexicon, names, characters, places } = s.story;
+
+    push(payload());
+    assert.equal(s.story.lexicon, lexicon);
+    assert.equal(s.story.names, names);
+    assert.equal(s.story.characters, characters);
+    assert.equal(s.story.places, places);
+
+    const changed = payload();
+    changed.lexicon[0].translation = 'may your roots wither';
+    push(changed);
+    assert.notEqual(s.story.lexicon, lexicon);
+    assert.equal(s.story.lexicon[0].translation, 'may your roots wither');
+    assert.equal(s.story.names, names);
+
+    // A field the new push leaves out goes back to its empty value, and one
+    // only the old push had (an error) is dropped.
+    push({ available: true, error: 'boom', lexicon: [], names: [], characters: [], places: [] });
+    assert.equal(s.story.error, 'boom');
+    push({ available: true, lexicon: [curse] });
+    assert.ok(!('error' in s.story));
+    assert.deepEqual(s.story.names, []);
+});
+
 check('name_section_character', () => {
     const section = nameSection(storyFixture, { name: 'Kethrun', kind: 'character' });
     assert.equal(section.culture.note, 'Worked out by the AI · picked from the Veldhaer mix');
