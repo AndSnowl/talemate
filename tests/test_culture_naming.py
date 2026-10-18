@@ -592,3 +592,56 @@ def test_pick_name_template_renders(scene, world):
     vars["language"] = culture.language
     text = Prompt.get("culture.pick-name", vars).render()
     assert "sounds like" not in text
+
+
+def requested(content: str) -> CharacterNamingEmission:
+    return CharacterNamingEmission(
+        agent=instance.get_agent("creator"), name="", content=content
+    )
+
+
+@pytest.mark.asyncio
+async def test_name_in_content_is_kept(scene, world, agent, monkeypatch, events):
+    calls = install_picker(monkeypatch, pick_index(0))
+
+    emission = requested("a baker named Bob Harl")
+    await agent.on_before_name_character(emission)
+
+    assert emission.chosen_name is None
+    assert emission.dynamic_instructions == []
+    assert calls == []
+    assert ai_entries(world) == []
+
+    # the decision is remembered: a second hook for the creation agrees
+    again = requested("a baker named Bob Harl")
+    await agent.on_before_name_character(again)
+    assert again.chosen_name is None
+    assert calls == []
+
+    # the creator's own name is recorded on persist, as a kept name
+    character = Character(name="Bob Harl")
+    await agent.on_after_persist_character(
+        PersistCharacterEmission(
+            agent=instance.get_agent("director"), character=character
+        )
+    )
+    [entry] = ai_entries(world)
+    assert entry.text == "Bob Harl"
+    assert entry.origin.by == "ai_free"
+
+
+@pytest.mark.asyncio
+async def test_known_place_or_culture_in_content_still_named(
+    scene, world, agent, monkeypatch
+):
+    calls = install_picker(monkeypatch, pick_index(0))
+
+    emission = requested("a baker who works in Veldhaer")
+    await agent.on_before_name_character(emission)
+    assert len(calls) == 1
+    assert emission.chosen_name == calls[0]["vars"]["candidates"][0]
+
+    emission = requested("a gruff Taelrik Ferryman from the Taelrik Reach")
+    await agent.on_before_name_character(emission)
+    assert len(calls) == 2
+    assert emission.chosen_name == calls[1]["vars"]["candidates"][0]

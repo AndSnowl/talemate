@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from talemate.agents.base import DynamicInstruction, set_processing
+from talemate.cultures.detect import _capitalised_runs, name_key
 from talemate.cultures.generator import name_fits
 from talemate.cultures.models import (
     CharacterCulture,
@@ -216,6 +217,33 @@ class CultureNamingMixin:
             for message in self.scene.history
         )
 
+    def _content_names_someone(self, content: str, world: "LoadedWorld") -> bool:
+        """Whether the request's content gives the character a name ("a
+        baker named Bob Harl"): a capitalised run mid-sentence that looks
+        like a name and isn't a scene character, glossary entry, place or
+        culture/language name ("a baker who works in Veldhaer")."""
+
+        content = content or ""
+        known = {name_key(name) for name in self.scene.all_character_names}
+        known |= {name_key(entry.text) for entry in world.glossary}
+        known |= {name_key(place.name) for place in world.places}
+        culture_words = set()
+        for culture in world.cultures.values():
+            culture_words |= {culture.name.lower(), culture.language.name.lower()}
+        known |= culture_words
+
+        for run in _capitalised_runs(content):
+            name = clean_name(run)
+            if not name or name_key(name) in known:
+                continue
+            # "a Taelrik Ferryman": the culture word isn't part of a name
+            rest = " ".join(w for w in name.split() if w.lower() not in culture_words)
+            if not rest or not looks_like_name(rest) or name_key(rest) in known:
+                continue
+            if mid_sentence_occurrence(name, content):
+                return True
+        return False
+
     @guarded
     async def on_before_name_character(
         self, emission: "CharacterNamingEmission"
@@ -243,6 +271,13 @@ class CultureNamingMixin:
 
         # 1. existing names are kept
         if self._is_existing_name(clean_name(emission.name)):
+            return
+
+        # a name given in the content is kept too: no name is supplied, and
+        # the decision is remembered, so the creator's own name is recorded
+        # on persist like any kept name
+        if self._content_names_someone(emission.content, world):
+            self._remember_naming_decision(key, None, [])
             return
 
         # from here on the decision (even "no name") is remembered, so a
