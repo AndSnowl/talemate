@@ -214,20 +214,71 @@ check('compile_cache', () => {
     assert.equal(compileEntityMentions(arr), compileEntityMentions(arr));
 });
 
+// The scene lexicon's cap, `MAX_LEXICON_ENTRIES` in
+// src/talemate/cultures/lexicon.py (tests/dev/test_frontend_checks.py keeps
+// the two in step).
+const LEXICON_CAP = 600;
+
+// A lexicon of `n` varied invented words, like a real culture's: three
+// syllables each, one entry in five a two-word phrase.
+function variedLexicon(n) {
+    const syllables = ['ka', 'dhu', 'vel', 'tor', 'sae', 'rho', 'mir', 'ith',
+        'gha', 'lun', 'bre', 'ost', 'fen', 'quo', 'zar', 'eth'];
+    const word = (k) => syllables[k % 16]
+        + syllables[Math.floor(k / 16) % 16]
+        + syllables[Math.floor(k / 256) % 16];
+    const entries = [];
+    const seen = new Set();
+    for (let i = 0; entries.length < n; i++) {
+        let text = word(i * 7 + 3);
+        if (i % 5 === 0) text += ` ${word(i * 13 + 5)}`;
+        if (seen.has(text)) continue;
+        seen.add(text);
+        entries.push({ id: `word:perf:${i}`, text, kind: 'word' });
+    }
+    return entries;
+}
+
+// About 1,800 characters of ordinary prose with a few lexicon words in it.
+function storyMessage(lexicon, seed) {
+    const prose = 'The rain had not stopped since morning, and the road into the valley '
+        + 'was little more than a ribbon of mud. She pulled her hood lower and watched '
+        + 'the lanterns of the inn swing in the wind, counting the riders who passed '
+        + 'beneath them. Somewhere behind the stables a dog barked twice and fell silent. ';
+    const sentences = [];
+    let length = 0;
+    for (let i = 0; length < 1800; i++) {
+        const foreign = lexicon[(seed * 31 + i * 17) % lexicon.length].text;
+        const sentence = i % 3 === 0 ? `"${foreign}," the old man muttered. ${prose}` : prose;
+        sentences.push(sentence);
+        length += sentence.length;
+    }
+    return sentences.join('').slice(0, 1800);
+}
+
+// Rendering 200 story messages stays within budget at the cap, and well
+// past it: the renderer's regex once fell off a cliff (seconds per
+// re-render) somewhere past 1,000 entries.
+const PERF_BUDGET_MS = 500;
+
 check('perf', () => {
-    const many = [];
-    for (let i = 0; i < 1500; i++) {
-        many.push({ id: `word:zq${i}vek`, text: `zq${i}vek`, kind: 'word' });
+    for (const size of [LEXICON_CAP, LEXICON_CAP * 2.5]) {
+        const lexicon = variedLexicon(size);
+        const mentions = foreignMentions(lexicon);
+        const messages = Array.from({ length: 200 }, (_, i) => storyMessage(lexicon, i));
+        const parser = new SceneTextParser();
+        // Warm up, so the budget measures rendering rather than compiling.
+        parser.parse(messages[0], { mentions });
+        const start = Date.now();
+        let highlighted = 0;
+        for (const text of messages) {
+            const html = parser.parse(text, { mentions });
+            if (html.includes('class="scene-foreign"')) highlighted += 1;
+        }
+        const elapsed = Date.now() - start;
+        assert.equal(highlighted, messages.length, 'every message should carry a highlight');
+        assert.ok(elapsed < PERF_BUDGET_MS, `200 messages at ${size} entries took ${elapsed}ms`);
     }
-    const mentions = foreignMentions(many);
-    const parser = new SceneTextParser();
-    const text = 'The quick brown fox jumps over the lazy dog near the old stone bridge while the river hums softly and the wind sighs through the pines above the quiet, winding path that leads down toward the village gates where the watchmen'.slice(0, 400);
-    const start = Date.now();
-    for (let i = 0; i < 200; i++) {
-        parser.parse(text, { mentions });
-    }
-    const elapsed = Date.now() - start;
-    assert.ok(elapsed < 5000, `perf took ${elapsed}ms`);
 });
 
 check('ingest_resets_on_scene_loading', () => {

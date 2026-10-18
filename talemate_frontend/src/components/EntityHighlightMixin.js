@@ -92,13 +92,22 @@ export default {
         },
 
         // Name mentions (world-state entities, flagged unreviewed where the
-        // glossary says so) followed by foreign mentions — names first, so
-        // a name wins over a foreign entry with the same text.
+        // glossary says so).
+        culturesNameMentions() {
+            return markUnreviewed(this.worldStateMentions, this.culturesNameIndex);
+        },
+
+        // Name mentions followed by foreign mentions — names first, so a
+        // name wins over a foreign entry with the same text.
         culturesAnchorMentions() {
-            return combineMentions(
-                markUnreviewed(this.worldStateMentions, this.culturesNameIndex),
-                this.culturesForeignMentions,
-            );
+            return combineMentions(this.culturesNameMentions, this.culturesForeignMentions);
+        },
+
+        // False when the Appearance toggle hides entity highlights. The
+        // renderer would print foreign words as plain text anyway, so they
+        // aren't matched at all and cost nothing.
+        culturesHighlightsShown() {
+            return this.appearanceConfig?.scene?.entities?.show !== false;
         },
     },
 
@@ -106,11 +115,18 @@ export default {
         // Return the entity-mention list to feed to the SceneTextParser for
         // this message — an anchor message (part of the latest world-state
         // snapshot's focus span) gets names and foreign words; every other
-        // message still gets foreign-word highlights. Falls back to the
+        // message still gets foreign-word highlights. With highlights
+        // switched off, foreign words are left out. Falls back to the
         // shared empty sentinel so the prop reference stays stable across
         // re-renders when there's nothing to highlight.
         getEntityMentionsForMessage(messageId) {
-            if (this.worldStateAnchorIds.has(messageId)) {
+            const anchor = this.worldStateAnchorIds.has(messageId);
+            if (!this.culturesHighlightsShown) {
+                return anchor && this.culturesNameMentions.length
+                    ? this.culturesNameMentions
+                    : NO_ENTITY_MENTIONS;
+            }
+            if (anchor) {
                 return this.culturesAnchorMentions.length
                     ? this.culturesAnchorMentions
                     : NO_ENTITY_MENTIONS;

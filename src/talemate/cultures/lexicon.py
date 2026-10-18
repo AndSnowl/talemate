@@ -29,9 +29,13 @@ __all__ = [
 
 # A single-word highlight candidate needs at least this many letters
 # (apostrophes and hyphens don't count), and a scene's lexicon is capped at
-# this many entries so a glossary-heavy world can't bloat every story push.
+# this many entries. The frontend matches every entry through one regex on
+# every story message, and past roughly 1,000 alternatives that regex gets
+# dramatically slower (seconds per re-render), so the cap stays well below
+# that, with room left for name mentions. Phrases come first, so a big
+# world loses glossary words from the tail, never its curses or sayings.
 MIN_WORD_LETTERS = 4
-MAX_LEXICON_ENTRIES = 1500
+MAX_LEXICON_ENTRIES = 600
 
 # A run of letters, which may contain an inner apostrophe (straight or
 # curly) or hyphen joining more letters ("tal'dun", "co-op").
