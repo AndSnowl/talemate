@@ -32,7 +32,9 @@ from talemate.cultures import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
 from talemate.cultures.models import Culture, GlossaryEntry, Language, Place, new_id
 from talemate.cultures.places import delete_place, reparent, set_share, set_shares
+from talemate.cultures.signals import CulturesEvent
 from talemate.cultures.store import WorldStore, world_dir_for_scene
+import talemate.emit.async_signals as async_signals
 from talemate.emit import emit
 from talemate.server.websocket_plugin import Plugin
 
@@ -148,6 +150,34 @@ class ExportPayload(pydantic.BaseModel):
 
 class CulturesPlugin(Plugin):
     router = "cultures"
+
+    def connect(self):
+        async_signals.get("cultures.event").connect(self.on_cultures_event)
+
+    def disconnect(self):
+        async_signals.get("cultures.event").disconnect(self.on_cultures_event)
+
+    async def on_cultures_event(self, event: CulturesEvent) -> None:
+        """Forward a Culture agent event to the open Cultures tab.
+
+        Only events for this scene's world are forwarded. When the agent
+        wrote world files (`changed`), the whole world is re-sent first.
+        Never raises: the sender is the agent, mid-generation.
+        """
+        try:
+            scene = self.scene
+            if scene is None:
+                return
+            world_dir = world_dir_for_scene(scene)
+            if world_dir is None or str(world_dir) != event.world_dir:
+                return
+            if event.changed:
+                await self._send_world(self._store())
+            self.websocket_handler.queue_put(
+                {"type": self.router, "action": event.kind, "data": event.data}
+            )
+        except Exception:
+            log.exception("cultures: could not forward event", kind=event.kind)
 
     def _store(self) -> WorldStore | None:
         world_dir = world_dir_for_scene(self.scene)

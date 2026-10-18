@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+import talemate.emit.async_signals as async_signals
 from talemate.cultures.exchange import CultureFile
 from talemate.cultures.models import (
     Culture,
@@ -21,6 +22,7 @@ from talemate.cultures.models import (
     Language,
     PlayAddition,
 )
+from talemate.cultures.signals import CulturesEvent, send_event
 from talemate.cultures.store import WorldStore, world_dir_for_scene
 from talemate.server.cultures import CulturesPlugin
 from talemate.shared_context import SharedContext
@@ -72,7 +74,9 @@ def scene_with_world(isolated_scene):
 @pytest.fixture
 def plugin(scene_with_world):
     handler = _MockWebsocketHandler(scene=scene_with_world)
-    return CulturesPlugin(handler)
+    plug = CulturesPlugin(handler)
+    yield plug
+    plug.disconnect()
 
 
 def last_message(plugin: CulturesPlugin, action: str | None = None) -> dict:
@@ -667,3 +671,86 @@ async def test_delete_place_refuses_move_into_descendant(plugin):
 
     assert "error" in last_message(plugin)
     assert len(plugin_store(plugin).load_places()) == 2
+
+
+# ---------------------------------------------------------------------------
+# cultures.event forwarding (plan 2 / task 6)
+# ---------------------------------------------------------------------------
+
+
+def test_plugin_connects_and_disconnects_event(scene_with_world):
+    signal = async_signals.get("cultures.event")
+    plug = CulturesPlugin(_MockWebsocketHandler(scene=scene_with_world))
+    assert plug.on_cultures_event in signal.receivers
+
+    plug.disconnect()
+    assert plug.on_cultures_event not in signal.receivers
+
+
+@pytest.mark.asyncio
+async def test_event_for_this_world_pushes_world_and_forwards(plugin):
+    await plugin.handle_import_apply({"content": fixture_raw()})
+    plugin.websocket_handler.messages.clear()
+
+    await plugin.on_cultures_event(
+        CulturesEvent(
+            kind="snapshot_processed",
+            world_dir=str(world_dir_for_scene(plugin.scene)),
+            data={"x": 1},
+            changed=True,
+        )
+    )
+
+    messages = plugin.websocket_handler.messages
+    assert [m["action"] for m in messages] == ["world", "snapshot_processed"]
+    assert [c["name"] for c in messages[0]["data"]["cultures"]] == ["Taelrik"]
+    assert messages[1] == {
+        "type": "cultures",
+        "action": "snapshot_processed",
+        "data": {"x": 1},
+    }
+
+
+@pytest.mark.asyncio
+async def test_event_unchanged_only_forwards(plugin):
+    await send_event(
+        "context_injected",
+        world_dir_for_scene(plugin.scene),
+        {"agent": "narrator", "text": "t", "tokens": 1, "spares": []},
+    )
+
+    assert plugin.websocket_handler.messages == [
+        {
+            "type": "cultures",
+            "action": "context_injected",
+            "data": {"agent": "narrator", "text": "t", "tokens": 1, "spares": []},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_event_for_other_world_ignored(plugin, tmp_path):
+    await plugin.on_cultures_event(
+        CulturesEvent(
+            kind="name_chosen",
+            world_dir=str(tmp_path / "elsewhere.world"),
+            data={"x": 1},
+            changed=True,
+        )
+    )
+
+    assert plugin.websocket_handler.messages == []
+
+
+@pytest.mark.asyncio
+async def test_event_without_shared_context_ignored(isolated_scene, tmp_path):
+    plug = CulturesPlugin(_MockWebsocketHandler(scene=isolated_scene))
+    try:
+        await plug.on_cultures_event(
+            CulturesEvent(
+                kind="name_chosen", world_dir=str(tmp_path / "w.world"), changed=True
+            )
+        )
+        assert plug.websocket_handler.messages == []
+    finally:
+        plug.disconnect()
