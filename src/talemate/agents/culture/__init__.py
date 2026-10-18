@@ -209,7 +209,15 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
             log.exception("culture: could not load the shared world")
             return None
 
-    def scene_cultures(self, world: LoadedWorld) -> SceneCultures:
+    def scene_cultures(
+        self, world: LoadedWorld, remember: bool = True
+    ) -> SceneCultures:
+        """Resolve the scene's place and present cultures.
+
+        `remember=False` (the websocket plugin's read-only lookups, Task 3)
+        skips `set_scene_states`, so a single poll for the present cultures
+        never perturbs the place the agent's own hooks fall back to.
+        """
         world_state = self.scene.world_state
         resolved = resolve_scene_cultures(
             world.cultures,
@@ -219,7 +227,7 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
             list(self.scene.characters),
             fallback_place_id=self.get_scene_state("current_place_id"),
         )
-        if resolved.place is not None:
+        if remember and resolved.place is not None:
             self.set_scene_states(current_place_id=resolved.place.id)
         return resolved
 

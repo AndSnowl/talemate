@@ -103,7 +103,9 @@ async def test_no_shared_context_reports_unavailable(isolated_scene):
     await plug.handle_get_world({})
 
     assert handler.messages == [
-        {"type": "cultures", "action": "world", "data": {"available": False}}
+        {"type": "cultures", "action": "counts", "data": {}},
+        {"type": "cultures", "action": "story", "data": {"available": False}},
+        {"type": "cultures", "action": "world", "data": {"available": False}},
     ]
 
 
@@ -704,9 +706,14 @@ async def test_event_for_this_world_pushes_world_and_forwards(plugin):
     )
 
     messages = plugin.websocket_handler.messages
-    assert [m["action"] for m in messages] == ["world", "snapshot_processed"]
-    assert [c["name"] for c in messages[0]["data"]["cultures"]] == ["Taelrik"]
-    assert messages[1] == {
+    assert [m["action"] for m in messages] == [
+        "counts",
+        "story",
+        "world",
+        "snapshot_processed",
+    ]
+    assert [c["name"] for c in messages[2]["data"]["cultures"]] == ["Taelrik"]
+    assert messages[3] == {
         "type": "cultures",
         "action": "snapshot_processed",
         "data": {"x": 1},

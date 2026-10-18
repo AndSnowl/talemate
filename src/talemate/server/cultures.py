@@ -28,8 +28,10 @@ from typing import Literal
 import pydantic
 import structlog
 
+import talemate.instance as instance
 from talemate.cultures import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
+from talemate.cultures.lexicon import build_scene_lexicon
 from talemate.cultures.models import (
     CharacterCulture,
     Culture,
@@ -41,6 +43,7 @@ from talemate.cultures.models import (
 from talemate.cultures.places import delete_place, reparent, set_share, set_shares
 from talemate.cultures.signals import CulturesEvent, guarded
 from talemate.cultures.store import WorldStore, world_dir_for_scene
+from talemate.cultures.story import build_story, scene_name_keys
 import talemate.emit.async_signals as async_signals
 from talemate.emit import emit
 from talemate.server.websocket_plugin import Plugin
@@ -178,9 +181,13 @@ class CulturesPlugin(Plugin):
         """Forward a Culture agent event to the open Cultures tab.
 
         Only events for this scene's world are forwarded. When the agent
-        wrote world files (`changed`), the whole world is re-sent first.
-        `guarded`: the sender is the agent, mid-generation, so errors are
-        logged, never raised (`GenerationCancelled` still propagates).
+        wrote world files (`changed`), the whole world is re-sent first
+        (which already includes `counts` and `story`). Otherwise, a
+        `name_chosen` or `snapshot_processed` event still re-sends `story`
+        on its own, since it may have changed which names/places are in
+        scope even when nothing was written to disk. `guarded`: the sender
+        is the agent, mid-generation, so errors are logged, never raised
+        (`GenerationCancelled` still propagates).
         """
         scene = self.scene
         if scene is None:
@@ -190,6 +197,8 @@ class CulturesPlugin(Plugin):
             return
         if event.changed:
             await self._send_world(self._store())
+        elif event.kind in ("name_chosen", "snapshot_processed"):
+            await self._send_story(self._store())
         self.websocket_handler.queue_put(
             {"type": self.router, "action": event.kind, "data": event.data}
         )
@@ -251,32 +260,126 @@ class CulturesPlugin(Plugin):
         characters.sort(key=lambda c: c["name"])
         return characters
 
+    def _with_character_counts(self, counts: dict) -> dict:
+        """Fold scene characters' unsure, AI-set cultures into `counts`.
+
+        Adds `unsure_characters` and folds it into `unreviewed_total`, so
+        the Cultures tab badge counts characters awaiting review too, not
+        just glossary/place/addition entries.
+        """
+        unsure_characters = sum(
+            1
+            for character in self._characters()
+            if character["culture"]
+            and character["culture"]["set_by"] == "ai"
+            and character["culture"]["unsure"]
+        )
+        return {
+            **counts,
+            "unsure_characters": unsure_characters,
+            "unreviewed_total": counts["unreviewed_total"] + unsure_characters,
+        }
+
+    def _present_cultures(self) -> list[Culture]:
+        """Return the cultures present in the scene right now, for the
+        lexicon. `[]` when the Culture agent is unavailable, disabled, tied
+        to a different scene, or has no usable shared world loaded."""
+        agent = instance.get_agent("culture")
+        if agent is None or agent.scene is not self.scene:
+            return []
+        world = agent.load_world()
+        if world is None:
+            return []
+        return agent.scene_cultures(world, remember=False).cultures
+
+    def _scene_names(self) -> set[str]:
+        """Return the cleaned, lowercased names the current scene actually
+        mentions: known characters, items, places, and scene character
+        data."""
+        scene = self.scene
+        names = (
+            list(scene.world_state.characters.keys())
+            + list(scene.world_state.items.keys())
+            + list(scene.world_state.places.keys())
+            + list(scene.character_data.keys())
+        )
+        return scene_name_keys(names)
+
+    async def _send_counts(self, store: WorldStore | None) -> None:
+        """Send the `counts` reply on its own, so the Cultures tab badge
+        (and the places tab's unreviewed-count display) can update without
+        waiting for the (heavier) `world` reply."""
+        counts: dict = {}
+        if store is not None:
+            try:
+                counts = self._with_character_counts(store.counts())
+            except Exception:
+                log.exception("cultures: could not compute counts")
+                counts = {}
+        self.websocket_handler.queue_put(
+            {"type": self.router, "action": "counts", "data": counts}
+        )
+
+    async def _send_story(self, store: WorldStore | None) -> None:
+        """Send the `story` reply: the scene's foreign-word lexicon, scoped
+        names, characters and places. Never raises; a build error is
+        reported as ``{"available": True, "error": ...}`` with empty lists,
+        same shape as `_send_world`'s error reply."""
+        if store is None:
+            data = {"available": False}
+        else:
+            try:
+                cultures = store.load_cultures()
+                places = store.load_places()
+                glossary = store.load_glossary()
+                lexicon = build_scene_lexicon(self._present_cultures(), glossary)
+                story = build_story(
+                    cultures=cultures,
+                    places=places,
+                    glossary=glossary,
+                    characters=list(self.scene.character_data.values()),
+                    scene_names=self._scene_names(),
+                )
+                data = {
+                    "available": True,
+                    "world_name": self._world_name(),
+                    "lexicon": [entry.model_dump(mode="json") for entry in lexicon],
+                    **story,
+                }
+            except Exception as e:
+                log.exception("cultures: could not build the story payload")
+                data = {
+                    "available": True,
+                    "world_name": self._world_name(),
+                    "error": f"The scene's story data couldn't be built: {e}",
+                    "lexicon": [],
+                    "names": [],
+                    "characters": [],
+                    "places": [],
+                }
+        self.websocket_handler.queue_put(
+            {"type": self.router, "action": "story", "data": data}
+        )
+
     async def _send_world(self, store: WorldStore | None) -> None:
-        """Send the `world` reply. Always replies, even if loading fails.
+        """Send the `counts`, `story` and `world` replies, in that order, so
+        `world` (the heaviest of the three) stays last. Always replies,
+        even if loading fails.
 
         A world file that can't be read is reported as ``{"available":
         True, "error": message}`` (with empty lists), so the tab shows the
         problem instead of claiming no shared world is linked.
         """
+        await self._send_counts(store)
+        await self._send_story(store)
+
         if store is None:
             data = {"available": False}
         else:
             try:
                 snapshot = store.snapshot()
                 characters = self._characters()
-                unsure_characters = sum(
-                    1
-                    for character in characters
-                    if character["culture"]
-                    and character["culture"]["set_by"] == "ai"
-                    and character["culture"]["unsure"]
-                )
-                counts = {
-                    **snapshot["counts"],
-                    "unsure_characters": unsure_characters,
-                    "unreviewed_total": snapshot["counts"]["unreviewed_total"]
-                    + unsure_characters,
-                }
+                counts = self._with_character_counts(snapshot["counts"])
                 data = {
                     "available": True,
                     "world_name": self._world_name(),
@@ -302,6 +405,14 @@ class CulturesPlugin(Plugin):
 
     async def handle_get_world(self, data: dict):
         await self._send_world(self._store())
+
+    async def handle_get_story(self, data: dict):
+        """Send `counts` then `story` on their own, without the (heavier)
+        `world` reply: used on scene load, before the Cultures tab has
+        necessarily ever been opened."""
+        store = self._store()
+        await self._send_counts(store)
+        await self._send_story(store)
 
     async def handle_save_culture(self, data: dict):
         store = await self._require_store()
