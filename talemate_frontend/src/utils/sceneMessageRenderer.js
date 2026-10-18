@@ -37,6 +37,11 @@ const DEFAULTS = {
         italic: false,
         bold: true,
     },
+    foreign: {
+        color: 'rgb(var(--v-theme-highlight7))',
+        italic: true,
+        bold: false,
+    },
 }
 
 // Escape a string for use inside a regex literal.
@@ -61,17 +66,28 @@ function escapeHtmlText(s) {
         .replace(/>/g, '&gt;');
 }
 
+// Memoises compileEntityMentions by the mentions array identity, so a
+// renderer re-parsing the same message (or re-parsing on every render
+// tick) doesn't recompile the same regex and lookup table every time.
+const entityMentionsCache = new WeakMap();
+
 // Compile an entity-mentions list into the lookup structures used by the
 // scene-entity tokenizer extension. Returns null when the list is empty.
+// Memoised in a module-level WeakMap keyed by the `mentions` array itself,
+// so the same array reference always returns the same compiled object.
 //
-// mentions: [{ name, kind, phrases: [string, ...] }, ...]
+// mentions: [{ name, kind, subkind, unreviewed, phrases: [string, ...] }, ...]
 //
 // Returned object:
 //   - startRegex: matches the first phrase occurrence anywhere in `src`
 //   - matchRegex: matches a phrase only at the start of `src`
-//   - phraseToEntity: lowercase-phrase → { name, kind }
-function compileEntityMentions(mentions) {
+//   - phraseToEntity: lowercase-phrase → { name, kind, subkind, unreviewed }
+export function compileEntityMentions(mentions) {
     if (!mentions || mentions.length === 0) return null;
+
+    if (entityMentionsCache.has(mentions)) {
+        return entityMentionsCache.get(mentions);
+    }
 
     const flat = [];
     const seen = new Set();
@@ -103,14 +119,21 @@ function compileEntityMentions(mentions) {
 
     const phraseToEntity = {};
     for (const { key, entity } of flat) {
-        phraseToEntity[key] = { name: entity.name, kind: entity.kind };
+        phraseToEntity[key] = {
+            name: entity.name,
+            kind: entity.kind,
+            subkind: entity.subkind || null,
+            unreviewed: !!entity.unreviewed,
+        };
     }
 
-    return {
+    const compiled = {
         startRegex: new RegExp(`(?:${alternatives})`, 'i'),
         matchRegex: new RegExp(`^(?:${alternatives})`, 'i'),
         phraseToEntity,
     };
+    entityMentionsCache.set(mentions, compiled);
+    return compiled;
 }
 
 export class SceneTextParser {
@@ -156,6 +179,7 @@ export class SceneTextParser {
             brackets: merge('brackets', { className: 'scene-brackets' }, { color: DEFAULTS.brackets.color, bold: DEFAULTS.brackets.bold, italic: DEFAULTS.brackets.italic }, true),
             entities: merge('entities', { className: 'scene-entity' }, { color: DEFAULTS.entities.color, bold: DEFAULTS.entities.bold, italic: DEFAULTS.entities.italic }, true),
             prefix:   merge('prefix',   { className: 'scene-prefix' },   { color: DEFAULTS.prefix.color,  bold: true, italic: false }),
+            foreign: merge('foreign', { className: 'scene-foreign' }, { color: DEFAULTS.foreign.color, bold: false, italic: true }),
             default: merge('default', { className: 'scene-default' }, { color: defaultColor, bold: false, italic: false }),
         };
         
@@ -263,12 +287,15 @@ export class SceneTextParser {
                         text: phrase,
                         entityName: entity.name,
                         entityKind: entity.kind,
+                        entitySubkind: entity.subkind,
+                        entityUnreviewed: entity.unreviewed,
                     };
                 },
                 renderer(token) {
                     const styles = self.config.entities;
                     const text = escapeHtmlText(token.text);
-                    // Appearance toggle disables highlights — emit plain text.
+                    // Appearance toggle disables highlights — emit plain
+                    // text, for both the name and the foreign kind.
                     if (styles && styles.show === false) {
                         return text;
                     }
@@ -283,10 +310,22 @@ export class SceneTextParser {
                         return text;
                     }
                     self._entitiesSeenInParse.add(seenKey);
+
+                    if (token.entityKind === 'foreign') {
+                        const foreignStyles = self.config.foreign;
+                        const id = escapeHtmlAttr(token.entityName);
+                        const kind = escapeHtmlAttr(token.entitySubkind || '');
+                        const styleStr = self.buildStyleString(foreignStyles);
+                        return `<span class="scene-foreign" data-foreign-id="${id}" data-foreign-kind="${kind}" style="${styleStr}">${text}</span>`;
+                    }
+
                     const name = escapeHtmlAttr(token.entityName);
                     const kind = escapeHtmlAttr(token.entityKind);
                     const styleStr = self.buildStyleString(styles);
-                    return `<span class="scene-entity" data-entity-name="${name}" data-entity-kind="${kind}" style="${styleStr}">${text}</span>`;
+                    const unreviewedAttr = token.entityUnreviewed
+                        ? ' data-entity-unreviewed="true"'
+                        : '';
+                    return `<span class="scene-entity" data-entity-name="${name}" data-entity-kind="${kind}" style="${styleStr}"${unreviewedAttr}>${text}</span>`;
                 },
             }
         ];

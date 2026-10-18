@@ -91,6 +91,21 @@ currently has 141 pre-existing failures, all from missing NLTK
 `test_tts_util`, `test_editor_revision`) — judge a run by "no new
 failures", not by a clean suite.
 
+### Frontend logic checks
+
+Pure JS logic (no Vue, no browser) that's fast enough to check with plain
+node instead of a full Vitest/Jest setup — see
+`talemate_frontend/checks/*.check.mjs`. Run directly:
+
+```bash
+guix shell -m manifest.scm -- sh -c 'cd talemate_frontend && node checks/culturesStory.check.mjs'
+```
+
+The plain suite also runs it, via `tests/dev/test_frontend_checks.py`,
+which shells out to the same command and skips when `node` or the
+frontend's installed dependencies (`talemate_frontend/node_modules`)
+aren't available.
+
 ### Browser (`e2e`) group
 
 ```bash
