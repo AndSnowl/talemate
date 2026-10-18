@@ -11,79 +11,90 @@
         @update:model-value="onMenuUpdate"
     >
         <v-card density="compact" class="entity-tooltip-card">
-            <v-card-item class="pb-1">
-                <div class="d-flex align-center flex-wrap ga-2">
-                    <span class="text-subtitle-2 entity-tooltip-name">{{ entity?.name }}</span>
-                    <v-chip
-                        v-if="entity?.kind"
-                        size="x-small"
-                        label
-                        variant="tonal"
-                        :color="kindColor"
-                        :prepend-icon="kindIcon"
-                        class="text-caption"
-                    >
-                        {{ entity.kind }}
-                    </v-chip>
-                    <v-chip
-                        v-if="entity?.emotion"
-                        size="x-small"
-                        label
-                        variant="outlined"
-                        color="grey-lighten-1"
-                        class="text-caption"
-                    >
-                        {{ entity.emotion }}
-                    </v-chip>
-                </div>
-            </v-card-item>
-            <v-card-text v-if="entity?.snapshot" class="text-body-2 entity-tooltip-snapshot">
-                {{ entity.snapshot }}
-            </v-card-text>
-            <v-card-text v-else class="text-caption text-muted">
-                No description available.
-            </v-card-text>
-            <v-card-actions class="pb-0 my-0 justify-space-between ga-1 flex-wrap">
-                <div class="d-flex ga-1 flex-wrap">
+            <ForeignWordCard
+                v-if="entity?.kind === 'foreign'"
+                :entry="entity.foreign"
+                @configure-highlights="onConfigureHighlights"
+            />
+            <template v-else>
+                <v-card-item class="pb-1">
+                    <div class="d-flex align-center flex-wrap ga-2">
+                        <span class="text-subtitle-2 entity-tooltip-name">{{ entity?.name }}</span>
+                        <v-chip
+                            v-if="entity?.kind"
+                            size="x-small"
+                            label
+                            variant="tonal"
+                            :color="kindColor"
+                            :prepend-icon="kindIcon"
+                            class="text-caption"
+                        >
+                            {{ entity.kind }}
+                        </v-chip>
+                        <v-chip
+                            v-if="entity?.emotion"
+                            size="x-small"
+                            label
+                            variant="outlined"
+                            color="grey-lighten-1"
+                            class="text-caption"
+                        >
+                            {{ entity.emotion }}
+                        </v-chip>
+                    </div>
+                </v-card-item>
+                <v-card-text v-if="entity?.snapshot" class="text-body-2 entity-tooltip-snapshot">
+                    {{ entity.snapshot }}
+                </v-card-text>
+                <v-card-text v-else class="text-caption text-muted">
+                    No description available.
+                </v-card-text>
+                <NameLanguageSection :entity="entity" />
+                <v-card-actions class="pb-0 my-0 justify-space-between ga-1 flex-wrap">
+                    <div class="d-flex ga-1 flex-wrap">
+                        <v-btn
+                            v-if="entity"
+                            size="small"
+                            variant="tonal"
+                            color="primary"
+                            prepend-icon="mdi-eye"
+                            class="entity-tooltip-action-btn"
+                            @click="onLookAt"
+                        >
+                            Look at
+                        </v-btn>
+                        <v-btn
+                            v-if="entity?.snapshot && !(entity?.kind === 'character' && entity?.isKnownCharacter)"
+                            size="small"
+                            variant="tonal"
+                            color="primary"
+                            prepend-icon="mdi-plus"
+                            class="entity-tooltip-action-btn"
+                            @click="onExamine"
+                        >
+                            Add Detail
+                        </v-btn>
+                    </div>
+                    <v-spacer />
                     <v-btn
-                        v-if="entity"
-                        size="small"
-                        variant="tonal"
-                        color="primary"
-                        prepend-icon="mdi-eye"
-                        class="entity-tooltip-action-btn"
-                        @click="onLookAt"
+                        size="x-small"
+                        variant="text"
+                        color="muted"
+                        prepend-icon="mdi-cog-outline"
+                        @click="onConfigureHighlights"
                     >
-                        Look at
+                        Configure highlights
                     </v-btn>
-                    <v-btn
-                        v-if="entity?.snapshot && !(entity?.kind === 'character' && entity?.isKnownCharacter)"
-                        size="small"
-                        variant="tonal"
-                        color="primary"
-                        prepend-icon="mdi-plus"
-                        class="entity-tooltip-action-btn"
-                        @click="onExamine"
-                    >
-                        Add Detail
-                    </v-btn>
-                </div>
-                <v-spacer />
-                <v-btn
-                    size="x-small"
-                    variant="text"
-                    color="muted"
-                    prepend-icon="mdi-cog-outline"
-                    @click="onConfigureHighlights"
-                >
-                    Configure highlights
-                </v-btn>
-            </v-card-actions>
+                </v-card-actions>
+            </template>
         </v-card>
     </v-menu>
 </template>
 
 <script>
+import ForeignWordCard from './cultures/ForeignWordCard.vue';
+import NameLanguageSection from './cultures/NameLanguageSection.vue';
+
 const KIND_META = {
     character: { color: 'primary',     icon: 'mdi-account' },
     item:      { color: 'amber',       icon: 'mdi-cube' },
@@ -92,6 +103,7 @@ const KIND_META = {
 
 export default {
     name: 'EntityTooltip',
+    components: { ForeignWordCard, NameLanguageSection },
     props: {
         modelValue: { type: Boolean, default: false },
         activator: { type: [Object, String, null], default: null },

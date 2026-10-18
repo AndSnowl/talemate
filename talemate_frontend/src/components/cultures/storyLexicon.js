@@ -126,6 +126,126 @@ export function findLexiconEntry(story, id) {
     return story.lexicon.find((entry) => entry.id === id) ?? null;
 }
 
+// A key's leading "the " (as `nameKey` would leave it, already lowercase),
+// stripped — so a place can be matched whether or not the entity's own
+// text and the place's stored name agree on carrying one.
+function stripLeadingThe(key) {
+    return key.startsWith('the ') ? key.slice(4) : key;
+}
+
+// Find the `CharacterInfo` (Task 2's shape) for `entityName`, but only
+// when it has a culture assigned — an uncultured character gets no
+// culture section at all.
+function findCharacterInfo(characters, entityName) {
+    const key = nameKey(entityName);
+    return (
+        (characters || []).find(
+            (c) => nameKey(c.name) === key && c.culture_id != null,
+        ) ?? null
+    );
+}
+
+// Find the `PlaceInfo` (Task 2's shape) for `entityName`, matching by
+// `nameKey` and, failing that, with a leading "the " dropped from either
+// side.
+function findPlaceInfo(places, entityName) {
+    const key = nameKey(entityName);
+    const stripped = stripLeadingThe(key);
+    for (const place of places || []) {
+        const placeKey = nameKey(place.name);
+        if (placeKey === key || stripLeadingThe(placeKey) === stripped) {
+            return place;
+        }
+    }
+    return null;
+}
+
+// Build the culture note shared by characters and places: "Worked out by
+// the AI" (plus " · {reason}" when there is one) for `set_by: 'ai'`, "Set
+// by you" for `set_by: 'owner'`, plus " · not sure" when `unsure`.
+function cultureNote({ set_by: setBy, unsure, reason }) {
+    let note = setBy === 'owner'
+        ? 'Set by you'
+        : (reason ? `Worked out by the AI · ${reason}` : 'Worked out by the AI');
+    if (unsure) note += ' · not sure';
+    return note;
+}
+
+// Build the review-note text for an unreviewed `NameInfo`: "Added by the
+// AI, not reviewed yet." for an `ai`/`ai_free` origin, else "Not reviewed
+// yet.", plus " Picked from {generator_name}." when that's known.
+function reviewNote(info) {
+    const base = (info.origin_by === 'ai' || info.origin_by === 'ai_free')
+        ? 'Added by the AI, not reviewed yet.'
+        : 'Not reviewed yet.';
+    return info.generator_name ? `${base} Picked from ${info.generator_name}.` : base;
+}
+
+// Build the `NameLanguageSection`'s model for `entity` (`{name, kind}`,
+// `kind` one of `character`/`item`/`place`): the glossary `NameInfo`
+// looked up by name, plus — for a character or a place — what's known
+// about its culture. `null` when there's neither.
+export function nameSection(story, entity) {
+    if (!story || !entity) return null;
+
+    const index = buildNameIndex(story.names);
+    const info = index.get(nameKey(entity.name)) ?? null;
+
+    let culture = null;
+    if (entity.kind === 'character') {
+        const character = findCharacterInfo(story.characters, entity.name);
+        if (character) {
+            culture = {
+                chips: [{ name: character.culture_name, color: character.color, share: null }],
+                note: cultureNote(character),
+                changeTarget: { type: 'people', character_name: character.name },
+            };
+        }
+    } else if (entity.kind === 'place') {
+        const place = findPlaceInfo(story.places, entity.name);
+        if (place && Array.isArray(place.mix) && place.mix.length > 0) {
+            culture = {
+                chips: place.mix.map((cs) => ({ name: cs.culture_name, color: cs.color, share: cs.share })),
+                note: place.own
+                    ? cultureNote(place)
+                    : `From ${place.source_name}`,
+                changeTarget: { type: 'place', place_id: place.id },
+            };
+        }
+    }
+
+    if (!info && !culture) return null;
+
+    const language = info && info.language_name
+        ? { name: info.language_name, color: info.color }
+        : null;
+    const languageNote = language
+        ? null
+        : (info?.origin_by === 'ai_free' ? 'invented freely by the AI' : 'no language yet');
+
+    const trueName = info && info.writable === false && info.true_name
+        ? {
+            language_name: info.language_name,
+            text: info.true_name,
+            renderings: info.renderings,
+        }
+        : null;
+
+    const review = info && info.status === 'unreviewed'
+        ? { note: reviewNote(info), target: { type: 'glossary', entry_id: info.id } }
+        : null;
+
+    return {
+        info,
+        language,
+        languageNote,
+        meaning: info ? info.meaning : '',
+        trueName,
+        culture,
+        review,
+    };
+}
+
 // Fold one `cultures`/`system` websocket message into `state` (mutated in
 // place). Returns a message to send back (e.g. a `get_story` request), or
 // null when there's nothing to send.

@@ -16,6 +16,7 @@ import {
     combineMentions,
     findLexiconEntry,
     applyCulturesMessage,
+    nameSection,
 } from '../src/components/cultures/storyLexicon.js';
 import { SceneTextParser, compileEntityMentions } from '../src/utils/sceneMessageRenderer.js';
 
@@ -206,6 +207,142 @@ check('find_lexicon_entry', () => {
     assert.equal(findLexiconEntry(story, curse.id), curse);
     assert.equal(findLexiconEntry(story, 'nope'), null);
     assert.equal(findLexiconEntry({}, 'nope'), null);
+});
+
+// Fixtures: task 5's seed (tests/e2e/cultures/test_story.py's _seed_story),
+// shaped as Task 2's NameInfo/CharacterInfo/PlaceInfo dumps.
+const kethrunInfo = {
+    id: 'g-kethrun',
+    text: 'Kethrun',
+    kind: 'person',
+    status: 'unreviewed',
+    culture_id: 'taelrik',
+    culture_name: 'Taelrik',
+    language_name: 'Taelrik',
+    color: '#FF8A65',
+    writable: true,
+    meaning: 'ford-born',
+    true_name: '',
+    renderings: [],
+    origin_by: 'ai',
+    generator_name: 'Given names (male)',
+    doesnt_fit: false,
+    character_name: 'Kethrun',
+    place_id: null,
+};
+const kethrunCharacter = {
+    name: 'Kethrun',
+    culture_id: 'taelrik',
+    culture_name: 'Taelrik',
+    color: '#FF8A65',
+    set_by: 'ai',
+    unsure: false,
+    reason: 'picked from the Veldhaer mix',
+};
+const veldhaerInfo = {
+    id: 'g-veldhaer',
+    text: 'Veldhaer',
+    kind: 'place',
+    status: 'reviewed',
+    culture_id: 'taelrik',
+    culture_name: 'Taelrik',
+    language_name: 'Taelrik',
+    color: '#FF8A65',
+    writable: true,
+    meaning: 'grey ford',
+    true_name: '',
+    renderings: [],
+    origin_by: 'import',
+    generator_name: null,
+    doesnt_fit: false,
+    character_name: null,
+    place_id: 'veldhaer',
+};
+const veldhaerPlace = {
+    id: 'veldhaer',
+    name: 'Veldhaer',
+    kind: 'town',
+    own: false,
+    source_name: 'The Taelrik Reach',
+    mix: [{ culture_id: 'taelrik', culture_name: 'Taelrik', color: '#FF8A65', share: 100 }],
+    set_by: 'ai',
+    unsure: false,
+};
+const khazRullInfo = {
+    id: 'g-khaz',
+    text: 'Khaz-Rull',
+    kind: 'place',
+    status: 'reviewed',
+    culture_id: 'ghun',
+    culture_name: 'Ghûn',
+    language_name: 'Ghûn',
+    color: '#B0BEC5',
+    writable: false,
+    meaning: '',
+    true_name: 'three falling hums ending in a tongue-click',
+    renderings: [{ culture_id: 'taelrik', culture_name: 'Taelrik', text: 'Khaz-Rull' }],
+    origin_by: 'import',
+    generator_name: null,
+    doesnt_fit: false,
+    character_name: null,
+    place_id: 'khaz',
+};
+const quillisterInfo = {
+    id: 'g-quillister',
+    text: 'Quillister House',
+    kind: 'place',
+    status: 'unreviewed',
+    culture_id: null,
+    culture_name: null,
+    language_name: null,
+    color: null,
+    writable: true,
+    meaning: '',
+    true_name: '',
+    renderings: [],
+    origin_by: 'ai_free',
+    generator_name: null,
+    doesnt_fit: false,
+    character_name: null,
+    place_id: 'quillister',
+};
+
+const storyFixture = {
+    names: [kethrunInfo, veldhaerInfo, khazRullInfo, quillisterInfo],
+    characters: [kethrunCharacter],
+    places: [veldhaerPlace],
+};
+
+check('name_section_character', () => {
+    const section = nameSection(storyFixture, { name: 'Kethrun', kind: 'character' });
+    assert.equal(section.culture.note, 'Worked out by the AI · picked from the Veldhaer mix');
+    assert.equal(section.review.note, 'Added by the AI, not reviewed yet. Picked from Given names (male).');
+    assert.deepEqual(section.review.target, { type: 'glossary', entry_id: 'g-kethrun' });
+});
+
+check('name_section_place_inherited', () => {
+    const section = nameSection(storyFixture, { name: 'Veldhaer', kind: 'place' });
+    assert.equal(section.culture.note, 'From The Taelrik Reach');
+    assert.deepEqual(section.culture.chips, [{ name: 'Taelrik', color: '#FF8A65', share: 100 }]);
+    assert.equal(section.review, null);
+});
+
+check('name_section_unwritable', () => {
+    const section = nameSection(storyFixture, { name: 'Khaz-Rull', kind: 'place' });
+    assert.equal(section.trueName.text, 'three falling hums ending in a tongue-click');
+    assert.equal(section.trueName.renderings[0].text, 'Khaz-Rull');
+});
+
+check('name_section_unassigned', () => {
+    const section = nameSection(storyFixture, { name: 'Quillister House', kind: 'place' });
+    assert.equal(section.language, null);
+    assert.equal(section.languageNote, 'invented freely by the AI');
+    assert.equal(section.review.note, 'Added by the AI, not reviewed yet.');
+});
+
+check('name_section_none', () => {
+    const section = nameSection(storyFixture, { name: 'A Rusty Lantern', kind: 'item' });
+    assert.equal(section, null);
 });
 
 if (failures.length > 0) {

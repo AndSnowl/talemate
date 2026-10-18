@@ -319,6 +319,118 @@ def test_app_badge_before_cultures_tab_opened(app, page):
     assert cultures_badge.inner_text().strip() == "1"
 
 
+def test_foreign_bubble_curse(app, page):
+    world = _seed_story(app, "story-foreign-bubble-curse")
+    open_scene(page, world.scene_path)
+
+    curse_span = page.locator(".scene-foreign", has_text="Rhok tal’dun")
+    curse_span.first.wait_for(state="visible", timeout=30_000)
+    curse_span.first.click()
+
+    card = page.get_by_test_id("foreign-word-card")
+    card.wait_for(state="visible", timeout=15_000)
+    card_text = card.inner_text()
+    assert "curse" in card_text
+    assert "Taelrik" in card_text
+
+    translation = card.get_by_test_id("foreign-translation")
+    assert translation.inner_text().strip() == "Rot your roots!"
+
+    breakdown_text = card.get_by_test_id("foreign-breakdown").inner_text()
+    assert "rhok" in breakdown_text and "rot" in breakdown_text
+    assert "dun" in breakdown_text and "roots" in breakdown_text
+
+    assert "Common, coarse. Spat, not said." in card_text
+
+    card.get_by_role("button", name="Open in Taelrik").wait_for(
+        state="visible", timeout=5_000
+    )
+
+
+def test_foreign_bubble_word_has_no_breakdown(app, page):
+    world = _seed_story(app, "story-foreign-bubble-word")
+    open_scene(page, world.scene_path)
+
+    word_span = page.locator(".scene-foreign", has_text="saervik")
+    word_span.first.wait_for(state="visible", timeout=30_000)
+    word_span.first.click()
+
+    card = page.get_by_test_id("foreign-word-card")
+    card.wait_for(state="visible", timeout=15_000)
+
+    translation = card.get_by_test_id("foreign-translation")
+    assert translation.inner_text().strip() == "river-runner; a flat ferry boat"
+    assert "word" in card.inner_text()
+    assert card.get_by_test_id("foreign-breakdown").count() == 0
+
+
+def test_name_bubble_language_section(app, page):
+    world = _seed_story(app, "story-name-bubble-language")
+    open_scene(page, world.scene_path)
+
+    kethrun = page.locator('.scene-entity[data-entity-name="Kethrun"]')
+    kethrun.first.wait_for(state="visible", timeout=30_000)
+    kethrun.first.click()
+
+    snapshot = page.locator(".entity-tooltip-snapshot")
+    snapshot.wait_for(state="visible", timeout=15_000)
+    assert "The ferryman." in snapshot.inner_text()
+
+    section = page.get_by_test_id("name-language-section")
+    section.wait_for(state="visible", timeout=15_000)
+    section_text = section.inner_text()
+    assert "Taelrik" in section_text
+    assert "“ford-born”" in section_text
+
+    culture_row = page.get_by_test_id("name-culture-row")
+    assert "Worked out by the AI · picked from the Veldhaer mix" in culture_row.inner_text()
+
+    review_note = page.get_by_test_id("name-unreviewed-note")
+    assert "Picked from Given names (male)." in review_note.inner_text()
+
+    page.get_by_test_id("name-review-button").wait_for(state="visible", timeout=5_000)
+
+
+def test_unwritable_name_bubble(app, page):
+    world = _seed_story(app, "story-unwritable-name-bubble")
+    open_scene(page, world.scene_path)
+
+    khaz_rull = page.locator('.scene-entity[data-entity-name="Khaz-Rull"]')
+    khaz_rull.first.wait_for(state="visible", timeout=30_000)
+    khaz_rull.first.click()
+
+    true_name = page.get_by_test_id("name-true-name")
+    true_name.wait_for(state="visible", timeout=15_000)
+    true_name_text = true_name.inner_text()
+    assert "three falling hums ending in a tongue-click" in true_name_text
+    # The rendering row's culture-name label is uppercased by CSS
+    # (the mockup's `.langline .k` style), so match case-insensitively.
+    assert "taelrik" in true_name_text.lower()
+    assert "Khaz-Rull" in true_name_text
+
+
+def test_place_bubble_inherited_culture(app, page):
+    world = _seed_story(app, "story-place-bubble-inherited")
+
+    # Veldhaer's place chip comes from `world_state` (independent of the
+    # cultures `story` reply), so a race could let the absence check below
+    # pass before the cultures plugin has said anything at all — watch for
+    # the frame and wait for it before asserting an absence.
+    _watch_cultures_story_frames(page)
+    open_scene(page, world.scene_path)
+    _wait_for_cultures_story_frame(page)
+
+    veldhaer = page.locator('.scene-entity[data-entity-name="Veldhaer"]')
+    veldhaer.first.wait_for(state="visible", timeout=30_000)
+    veldhaer.first.click()
+
+    culture_row = page.get_by_test_id("name-culture-row")
+    culture_row.wait_for(state="visible", timeout=15_000)
+    assert "From The Taelrik Reach" in culture_row.inner_text()
+
+    assert page.get_by_test_id("name-unreviewed-note").count() == 0
+
+
 def test_no_world_no_highlights_or_badge(app, page):
     scene_path = seed_scene_without_world(
         app.root,
