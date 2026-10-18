@@ -212,3 +212,57 @@ async def test_handler_errors_are_swallowed(scene, world, agent, monkeypatch):
     await agent.on_inject_instructions(emission)
 
     assert emission.dynamic_instructions == []
+
+
+def _spy_loads(monkeypatch) -> dict:
+    calls = {"cultures": 0, "places": 0, "glossary": 0}
+    for name in calls:
+        original = getattr(WorldStore, f"load_{name}")
+
+        def spy(self, _original=original, _name=name):
+            calls[_name] += 1
+            return _original(self)
+
+        monkeypatch.setattr(WorldStore, f"load_{name}", spy)
+    return calls
+
+
+def test_load_world_cached_while_files_unchanged(scene, world, agent, monkeypatch):
+    calls = _spy_loads(monkeypatch)
+
+    first = agent.load_world()
+    second = agent.load_world()
+
+    assert first is not None and second is not None
+    assert calls == {"cultures": 1, "places": 1, "glossary": 1}
+    assert second.cultures.keys() == first.cultures.keys()
+    # callers get their own containers, so mutating one can't poison the cache
+    second.glossary.append("x")
+    assert "x" not in agent.load_world().glossary
+
+
+def test_load_world_cache_invalidated_by_glossary_change(
+    scene, world, agent, monkeypatch
+):
+    calls = _spy_loads(monkeypatch)
+    before = agent.load_world()
+
+    # a write (as from the Cultures tab) changes size and mtime
+    world.save_glossary(before.glossary[:-1])
+    after = agent.load_world()
+    assert calls["glossary"] == 2
+    assert len(after.glossary) == len(before.glossary) - 1
+
+    # a bare touch with a new mtime also invalidates
+    import os
+
+    stat = world.glossary_path.stat()
+    os.utime(world.glossary_path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
+    agent.load_world()
+    assert calls["glossary"] == 3
+
+
+def test_load_world_cache_invalidated_by_corrupt_culture(scene, world, agent):
+    assert agent.load_world() is not None
+    (world.cultures_dir / "taelrik.json").write_text("{")
+    assert agent.load_world() is None

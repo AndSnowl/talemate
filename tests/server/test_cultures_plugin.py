@@ -754,3 +754,30 @@ async def test_event_without_shared_context_ignored(isolated_scene, tmp_path):
         assert plug.websocket_handler.messages == []
     finally:
         plug.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_event_forwarding_reraises_cancel_and_swallows_errors(
+    plugin, monkeypatch
+):
+    from talemate.exceptions import GenerationCancelled
+
+    event = CulturesEvent(
+        kind="snapshot_processed",
+        world_dir=str(world_dir_for_scene(plugin.scene)),
+        changed=True,
+    )
+
+    async def cancel(store):
+        raise GenerationCancelled()
+
+    monkeypatch.setattr(plugin, "_send_world", cancel)
+    with pytest.raises(GenerationCancelled):
+        await plugin.on_cultures_event(event)
+
+    async def boom(store):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(plugin, "_send_world", boom)
+    await plugin.on_cultures_event(event)  # logged, not raised
+    assert plugin.websocket_handler.messages == []

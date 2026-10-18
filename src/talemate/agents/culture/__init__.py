@@ -16,6 +16,7 @@ signal handler is `guarded`, so nothing here can break play.
 
 from __future__ import annotations
 
+import dataclasses
 import random
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +48,24 @@ log = structlog.get_logger("talemate.agents.culture")
 MAX_OFFERED_SPARES = 60
 
 _RECENT_MESSAGE_TYPES = ("narrator", "character", "context_investigation")
+
+
+def _world_files_signature(store: WorldStore) -> tuple:
+    """(path, mtime_ns, size) of every file `load_world` reads; a missing
+    file is (path, None, None)."""
+
+    paths = [store.places_path, store.glossary_path]
+    if store.cultures_dir.exists():
+        paths.extend(sorted(store.cultures_dir.glob("*.json")))
+    signature = []
+    for path in paths:
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            signature.append((str(path), None, None))
+        else:
+            signature.append((str(path), stat.st_mtime_ns, stat.st_size))
+    return tuple(signature)
 
 
 @dataclass
@@ -119,6 +138,8 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
         self.actions = CultureAgent.init_actions()
         self.rng = random.Random()
         self._pending: dict[str, CharacterCulture] = {}
+        # ((world_dir, files signature), LoadedWorld | None), see load_world
+        self._world_cache: tuple[tuple, LoadedWorld | None] | None = None
 
     @property
     def enabled(self):
@@ -143,6 +164,13 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
 
         `None` when the agent is disabled, the scene has no shared context,
         the world has no (readable) cultures, or loading fails (logged).
+
+        The parsed world is cached per world dir and reused while every
+        world file's (path, mtime_ns, size) is unchanged, so narrator and
+        actor turns don't re-parse a growing glossary each time. Any write
+        on disk (the agent's own, or the Cultures tab's) invalidates it.
+        Callers get fresh containers but shared model objects: treat the
+        models as read-only and re-load from the store before saving.
         """
         if not self.enabled or getattr(self, "scene", None) is None:
             return None
@@ -151,17 +179,33 @@ class CultureAgent(CultureNamingMixin, CultureSnapshotMixin, Agent):
             if world_dir is None:
                 return None
             store = WorldStore(world_dir)
-            cultures = store.load_cultures()
-            if not cultures:
+            key = (str(world_dir), _world_files_signature(store))
+            if self._world_cache is not None and self._world_cache[0] == key:
+                cached = self._world_cache[1]
+            else:
+                cultures = store.load_cultures()
+                cached = (
+                    LoadedWorld(
+                        store=store,
+                        world_dir=world_dir,
+                        cultures=cultures,
+                        places=store.load_places(),
+                        glossary=store.load_glossary(),
+                    )
+                    if cultures
+                    else None
+                )
+                self._world_cache = (key, cached)
+            if cached is None:
                 return None
-            return LoadedWorld(
-                store=store,
-                world_dir=world_dir,
-                cultures=cultures,
-                places=store.load_places(),
-                glossary=store.load_glossary(),
+            return dataclasses.replace(
+                cached,
+                cultures=dict(cached.cultures),
+                places=list(cached.places),
+                glossary=list(cached.glossary),
             )
         except Exception:
+            self._world_cache = None
             log.exception("culture: could not load the shared world")
             return None
 
