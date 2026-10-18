@@ -62,6 +62,27 @@ def test_theme_checks():
     )
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not on PATH")
+@pytest.mark.skipif(
+    not _frontend_deps_installed(),
+    reason="talemate_frontend/node_modules/marked is missing (pnpm install)",
+)
+def test_theme_colors_check():
+    result = subprocess.run(
+        ["node", "checks/themeColors.check.mjs"],
+        cwd=_FRONTEND_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    )
+    assert "ok " in result.stdout, (
+        f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    )
+
+
 def test_perf_check_uses_the_lexicon_cap():
     """The node perf check renders at the backend's lexicon cap, so lowering
     or raising the cap without the check would leave the budget unproven."""

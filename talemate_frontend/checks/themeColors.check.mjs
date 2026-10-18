@@ -1,0 +1,399 @@
+// Node-only sweep guard: walks talemate_frontend/src/**/*.{vue,js} (excluding
+// src/theme/, the pure theme engine itself) and fails on hard-coded colours
+// Vuetify colour-scale names (`color="grey-darken-3"`, `bg-red`, `text-white`,
+// ...) or raw hex/rgba() values that the theme system (src/theme/) should be
+// providing instead, via a role (`rgb(var(--v-theme-<role>))`) or the
+// palette. No Vue, no test framework — run directly with
+// `node checks/themeColors.check.mjs` (see tests/dev/test_frontend_checks.py
+// for the pytest wrapper).
+//
+// Two escape hatches, both opt-in and deliberately small:
+//   - PENDING: files not yet swept. Tasks 7-8 delete entries as they clean
+//     each file; Task 8 leaves this empty.
+//   - ALLOW: permanent exceptions, one `path:line-substring` per ruling,
+//     each with a one-line comment saying why.
+
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const SRC_DIR = path.resolve('src');
+const THEME_DIR = path.join(SRC_DIR, 'theme');
+
+// --- Matchers ---------------------------------------------------------
+
+// A Vuetify colour-scale name in a `color=`/`bg-`/`text-` position (task
+// brief's regex, used verbatim).
+const VUETIFY_COLOR_RE = /(?:color="|bg-|text-)(?:grey|blue-grey|black|white|red|pink|purple|deep-purple|indigo|blue|light-blue|cyan|teal|green|light-green|lime|yellow|amber|orange|deep-orange|brown)(?:-(?:lighten|darken|accent)-\d)?\b/;
+
+// A raw hex colour, or an rgb()/rgba() call with a literal first argument
+// (as opposed to `rgb(var(--v-theme-accent))`, whose argument starts with
+// `v`, not a digit, and so never matches `\s*\d`).
+const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
+const RGBA_LITERAL_RE = /rgba?\(\s*\d/;
+
+// The key (CSS property, HTML/Vue attribute, or JS object property) that
+// must precede a hex value, with optional `:`/`=` and quoting, for that hex
+// to count as a colour rather than an anchor/id/comment/etc.
+const COLOR_KEY_RE = /([A-Za-z_$][\w$-]*)\s*[:=]\s*["']?["']?$/;
+
+function isColorKey(key) {
+    const k = key.toLowerCase();
+    return k.includes('color') || k.includes('colour') || k.includes('fill')
+        || k.includes('stroke') || k === 'style' || k.includes('background');
+}
+
+// `href="#top"`-style anchors: a hex-looking fragment right after
+// `href="`/`href='` is never a colour, whatever else is true of it.
+function isHrefAnchor(before) {
+    return /href\s*=\s*["']$/.test(before);
+}
+
+// Decides whether one `#xxx` match in `line` is a colour value: a CSS
+// declaration value (inside a <style> block, with a `:` earlier on the
+// line — as opposed to a bare `#id {` selector, which has no colon before
+// it), a color/bg/fill/stroke/style/background attribute or property value,
+// or a string literal that is exactly a hex colour (immediately bounded by
+// matching quotes, not merely somewhere inside a longer quoted string).
+export function hexIsColor(line, index, hex, inStyleBlock) {
+    const before = line.slice(0, index);
+    const after = line.slice(index + hex.length);
+
+    if (isHrefAnchor(before)) return false;
+
+    if (inStyleBlock && before.includes(':')) return true;
+
+    const window = before.slice(-60);
+    const keyMatch = COLOR_KEY_RE.exec(window);
+    if (keyMatch && isColorKey(keyMatch[1])) return true;
+
+    const prevChar = before.slice(-1);
+    const nextChar = after.slice(0, 1);
+    if ((prevChar === '"' && nextChar === '"')
+        || (prevChar === "'" && nextChar === "'")
+        || (prevChar === '`' && nextChar === '`')) {
+        return true;
+    }
+
+    return false;
+}
+
+function lineHasRawColor(line, inStyleBlock) {
+    if (RGBA_LITERAL_RE.test(line)) return true;
+    HEX_RE.lastIndex = 0;
+    let m;
+    while ((m = HEX_RE.exec(line))) {
+        if (hexIsColor(line, m.index, m[0], inStyleBlock)) return true;
+    }
+    return false;
+}
+
+export function lineFails(line, inStyleBlock = false) {
+    if (VUETIFY_COLOR_RE.test(line)) return true;
+    return lineHasRawColor(line, inStyleBlock);
+}
+
+// --- PENDING / ALLOW ----------------------------------------------------
+
+// Files that still contain hard-coded colours, not yet swept onto the theme
+// system. Seeded by running this check once with an empty PENDING and
+// listing the files that failed (Task 6, step 1). Sweep tasks (7-8) delete
+// entries as they clean each file; Task 8 leaves this empty.
+const PENDING = new Set([
+    'src/components/AgentGlobalSettings.vue',
+    'src/components/AgentMessages.vue',
+    'src/components/AgentModal.vue',
+    'src/components/AIAgent.vue',
+    'src/components/AIClient.vue',
+    'src/components/AppConfigAppearanceScene.vue',
+    'src/components/AppConfigPresetsEmbeddings.vue',
+    'src/components/AppConfigPresetsInference.vue',
+    'src/components/AppConfigPresetsSystemPrompts.vue',
+    'src/components/AppSettingsApiKeys.vue',
+    'src/components/AppSettingsEnvVariables.vue',
+    'src/components/AppSettingsMenu.vue',
+    'src/components/AppSettingsPageHeader.vue',
+    'src/components/AppSettingsStringList.vue',
+    'src/components/AppSettings.vue',
+    'src/components/AssetView.vue',
+    'src/components/AudioQueue.vue',
+    'src/components/CharacterCardImport.vue',
+    'src/components/CharacterCreator.vue',
+    'src/components/CharacterMessage.vue',
+    'src/components/ClientModal.vue',
+    'src/components/ConfigWidgetWeights.vue',
+    'src/components/ContextInvestigationMessage.vue',
+    'src/components/ContextualGenerateFromTopic.vue',
+    'src/components/ContextualGenerate.vue',
+    'src/components/CoverBBoxEditor.vue',
+    'src/components/cultures/CultureMixBar.vue',
+    'src/components/cultures/CultureOverview.vue',
+    'src/components/cultures/GeneratorList.vue',
+    'src/components/cultures/GlossaryDetail.vue',
+    'src/components/cultures/GlossaryView.vue',
+    'src/components/cultures/ImportCultureDialog.vue',
+    'src/components/cultures/NameLanguageSection.vue',
+    'src/components/cultures/PeopleView.vue',
+    'src/components/cultures/PhraseList.vue',
+    'src/components/cultures/PlaceDetail.vue',
+    'src/components/cultures/PlacesView.vue',
+    'src/components/cultures/WorldStateManagerMenuCulturesTools.vue',
+    'src/components/DebugToolGameState.vue',
+    'src/components/DebugToolMemoryRequestLog.vue',
+    'src/components/DebugToolMemoryRequestView.vue',
+    'src/components/DefaultCharacter.vue',
+    'src/components/DirectorConsoleChatMessageAssetView.vue',
+    'src/components/DirectorConsoleChatMessageMarkdown.vue',
+    'src/components/DirectorMessage.vue',
+    'src/components/DynamicAgentRegistry.vue',
+    'src/components/EntityTooltip.vue',
+    'src/components/IntroRecentScenes.vue',
+    'src/components/MessageAssetImage.vue',
+    'src/components/MessageToolbar.vue',
+    'src/components/NarratorMessage.vue',
+    'src/components/NodeEditorLog.vue',
+    'src/components/NodeEditor.vue',
+    'src/components/prompts/ActiveTab.vue',
+    'src/components/prompts/GroupManagement.vue',
+    'src/components/prompts/GroupTab.vue',
+    'src/components/prompts/LLMTemplatesTab.vue',
+    'src/components/prompts/PromptDetailView.vue',
+    'src/components/prompts/PromptLogItem.vue',
+    'src/components/prompts/PromptsMenu.vue',
+    'src/components/prompts/PromptsView.vue',
+    'src/components/prompts/TemplateSourceSelect.vue',
+    'src/components/prompts/TemplateTree.vue',
+    'src/components/QuickCreateStateReinforcement.vue',
+    'src/components/SceneBrowser.vue',
+    'src/components/SceneContextReviewInline.vue',
+    'src/components/SceneLanding.vue',
+    'src/components/SceneMessages.vue',
+    'src/components/SceneTimeline.vue',
+    'src/components/SceneTools.vue',
+    'src/components/SpiceAppliedNotification.vue',
+    'src/components/TalemateApp.vue',
+    'src/components/TemplatesMenu.vue',
+    'src/components/Templates.vue',
+    'src/components/TemplateWritingStyle.vue',
+    'src/components/TimePassageMessage.vue',
+    'src/components/UxElementTextInput.vue',
+    'src/components/UxField.vue',
+    'src/components/VersionMismatchAlert.vue',
+    'src/components/VisualAssetBadge.vue',
+    'src/components/VisualAssetGrid.vue',
+    'src/components/VisualImageView.vue',
+    'src/components/VisualLibraryGenerate.vue',
+    'src/components/VisualLibraryPendingQueue.vue',
+    'src/components/VisualLibraryQueue.vue',
+    'src/components/VisualLibraryUpload.vue',
+    'src/components/VisualLibrary.vue',
+    'src/components/VisualQueue.vue',
+    'src/components/VisualReferenceImages.vue',
+    'src/components/VoiceLibrary.vue',
+    'src/components/WhatsNew.vue',
+    'src/components/WorldStateManagerCharacterActor.vue',
+    'src/components/WorldStateManagerCharacterAttributes.vue',
+    'src/components/WorldStateManagerCharacterDetails.vue',
+    'src/components/WorldStateManagerCharacterReinforcements.vue',
+    'src/components/WorldStateManagerCharacterVisualsAvatar.vue',
+    'src/components/WorldStateManagerCharacterVisualsCover.vue',
+    'src/components/WorldStateManagerCharacter.vue',
+    'src/components/WorldStateManagerContextDB.vue',
+    'src/components/WorldStateManagerHistoryEntry.vue',
+    'src/components/WorldStateManagerMenuCharacterTools.vue',
+    'src/components/WorldStateManagerMenuSuggestionsTools.vue',
+    'src/components/WorldStateManagerMenuWorldTools.vue',
+    'src/components/WorldStateManagerPinConditionGroups.vue',
+    'src/components/WorldStateManagerPins.vue',
+    'src/components/WorldStateManagerSceneDirection.vue',
+    'src/components/WorldStateManagerSceneEpisodes.vue',
+    'src/components/WorldStateManagerSceneSharedContext.vue',
+    'src/components/WorldStateManagerSceneSharedWorld.vue',
+    'src/components/WorldStateManagerSceneVisualsAssets.vue',
+    'src/components/WorldStateManager.vue',
+    'src/components/WorldStateManagerWorldEntries.vue',
+    'src/components/WorldStateManagerWorldStates.vue',
+    'src/components/WorldStateManagerWorld.vue',
+    'src/components/WorldState.vue',
+    'src/utils/litegraphUtils.js',
+    'src/utils/recentNodes.js',
+    'src/utils/sceneMessageRenderer.js',
+]);
+
+// Permanent exceptions: `path:line-substring`. Each entry needs a one-line
+// comment saying why it is never swept.
+const ALLOW = new Set([
+    // messageColors.js's LEGACY_DEFAULT_COLORS: the canonical hex values
+    // from before message colours followed the theme. Kept only to
+    // *recognise* an old saved config (an exact-match hex means "unset, use
+    // the theme role colour" — see getMessageColor) — never rendered as a
+    // colour themselves.
+    'src/utils/messageColors.js:"#A180AE"',
+    'src/utils/messageColors.js:"#B39DDB"',
+    'src/utils/messageColors.js:"#FF5722"',
+    'src/utils/messageColors.js:"#FFECB3"',
+    'src/utils/messageColors.js:"#D5C0A1"',
+    'src/utils/messageColors.js:"#BA8574"',
+    'src/utils/messageColors.js:"#FFFFFF"',
+    'src/utils/messageColors.js:"#DB9DC2"',
+    'src/utils/messageColors.js:"#DC5D5D"',
+    'src/utils/messageColors.js:"#FFE082"',
+    // AssetView.vue's two nav-arrow icons: they sit on a translucent black
+    // overlay drawn over an arbitrary image, so they must stay light under
+    // every theme, not follow it.
+    'src/components/AssetView.vue:<v-icon color="white">',
+]);
+
+function isAllowed(relPath, line) {
+    const prefix = `${relPath}:`;
+    for (const entry of ALLOW) {
+        if (entry.startsWith(prefix) && line.includes(entry.slice(prefix.length))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// --- Walking the tree -----------------------------------------------------
+
+function listFiles(dir, results = []) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (full === THEME_DIR) continue;
+        if (entry.isDirectory()) {
+            listFiles(full, results);
+        } else if (/\.(vue|js)$/.test(entry.name)) {
+            results.push(full);
+        }
+    }
+    return results;
+}
+
+function toRelPath(filePath) {
+    return path.relative(process.cwd(), filePath).split(path.sep).join('/');
+}
+
+// Returns `{relPath, line, text}` for every failing, non-allowed line of
+// every non-PENDING file under src/ (excluding src/theme/).
+export function scanRepo() {
+    const offenders = [];
+    for (const filePath of listFiles(SRC_DIR)) {
+        const relPath = toRelPath(filePath);
+        if (PENDING.has(relPath)) continue;
+        const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+        let inStyle = false;
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (/<style\b/.test(line)) inStyle = true;
+            if (lineFails(line, inStyle) && !isAllowed(relPath, line)) {
+                offenders.push({ relPath, line: i + 1, text: line.trim() });
+            }
+            if (/<\/style>/.test(line)) inStyle = false;
+        }
+    }
+    return offenders;
+}
+
+// --- Self-tests for the matcher -------------------------------------------
+
+let passed = 0;
+const failures = [];
+
+function check(name, fn) {
+    try {
+        fn();
+        passed += 1;
+    } catch (err) {
+        failures.push({ name, err });
+    }
+}
+
+// Vuetify colour-scale name: one true positive per position (`color=`,
+// `bg-`, `text-`).
+check('vuetify_color_attr_true_positive', () => {
+    assert.ok(lineFails('<v-icon color="grey-darken-3">x</v-icon>'));
+});
+
+check('vuetify_bg_class_true_positive', () => {
+    assert.ok(lineFails('<div class="bg-red-darken-2">x</div>'));
+});
+
+check('vuetify_text_class_true_positive', () => {
+    assert.ok(lineFails('<span class="text-white">x</span>'));
+});
+
+// Raw hex: one true positive per colour context (CSS declaration value,
+// attribute value, string literal).
+check('hex_css_declaration_true_positive', () => {
+    assert.ok(lineFails('  color: #ff0000;', true));
+});
+
+check('hex_attribute_true_positive', () => {
+    assert.ok(lineFails('<path fill="#112233" />'));
+});
+
+check('hex_string_literal_true_positive', () => {
+    assert.ok(lineFails("const c = '#ffffff';"));
+});
+
+// rgba()/rgb(): a literal call fails; the theme's CSS-var form does not.
+check('rgba_literal_true_positive', () => {
+    assert.ok(lineFails('box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);'));
+});
+
+check('rgb_theme_var_is_not_a_failure', () => {
+    assert.ok(!lineFails('color: rgb(var(--v-theme-accent));', true));
+    assert.ok(!lineFails('background: rgba(var(--v-theme-surface), 0.5);', true));
+});
+
+// False positives named in the brief: an href anchor, and string
+// concatenation starting with '#'.
+check('href_anchor_is_not_a_failure', () => {
+    assert.ok(!lineFails('<a href="#top">Top</a>'));
+    // A stronger case: the fragment is itself hex-shaped (b/a/d are valid
+    // hex digits), so only the href-attribute guard (not "not valid hex")
+    // keeps this from failing.
+    assert.ok(!lineFails('<a href="#bad">Bad</a>'));
+});
+
+check('hash_concatenation_is_not_a_failure', () => {
+    assert.ok(!lineFails("const sel = '#' + id;"));
+});
+
+// Extra coverage for the other non-colour `#` uses the brief calls out: an
+// HTML numeric entity, and a bare CSS id selector (no colon before it, as
+// opposed to a declaration).
+check('html_entity_is_not_a_failure', () => {
+    assert.ok(!lineFails('const label = "&#9733;";'));
+});
+
+check('css_id_selector_is_not_a_failure', () => {
+    assert.ok(!lineFails('#app {', true));
+});
+
+// A real declaration still fails even without "color" in the property name,
+// as long as it's inside a <style> block with a colon before the hex.
+check('css_declaration_without_color_in_key_true_positive', () => {
+    assert.ok(lineFails('  border: 1px solid #cccccc;', true));
+});
+
+// The sweep itself: every file under src/ (outside src/theme/, PENDING and
+// ALLOW) is clean.
+check('no_unswept_hardcoded_colors', () => {
+    const offenders = scanRepo();
+    if (offenders.length > 0) {
+        const lines = offenders.map((o) => `${o.relPath}:${o.line}: ${o.text}`);
+        assert.fail(`hard-coded colour(s) found outside PENDING/ALLOW:\n${lines.join('\n')}`);
+    }
+});
+
+if (failures.length > 0) {
+    for (const { name, err } of failures) {
+        console.error(`FAIL ${name}`);
+        console.error(err && err.stack ? err.stack : err);
+    }
+    process.exit(1);
+} else {
+    console.log(`ok ${passed}`);
+    process.exit(0);
+}
