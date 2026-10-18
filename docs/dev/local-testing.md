@@ -119,6 +119,34 @@ is made just by collecting or running them. With it exported, a run that
 doesn't select `-m ai` (a plain `pytest`, say) still makes no call: the
 header's model-name probe only runs when `-m ai` is given.
 
+### Cultures AI evaluation
+
+An overnight measurement of how well the Culture agent works with the
+loaded model, rather than a pass/fail test. It needs the same go-ahead
+as the AI group.
+
+```bash
+TALEMATE_AI_TESTS=1 guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/eval_cultures_ai.py [--runs 3] [--npcs 5] [--narrations 3] [--out DIR]
+```
+
+- It starts one isolated app with the KoboldCpp client. Then, for each
+  run and each of the three cultures scenarios (`tests/ai/cultures/scenarios.py`),
+  it seeds a fresh world, creates characters, asks for narrations and
+  requests two snapshots.
+- It writes `report.md` (plain tables, with a short note on what each
+  number means, plus samples of the names, narration excerpts and
+  glossary entries), `report.json` (every raw result) and `model.txt`
+  to `--out`. The default is `.test-artifacts/cultures-eval-<YYYYmmdd-HHMMSS>/`.
+- Both reports are rewritten after every step. A failed step is listed
+  under `errors` and the run goes on.
+- At the default size it takes about 1 to 2 hours on Skyfall-31B, and
+  it prints a progress line with an estimate of the time left after
+  each step.
+- `--scenarios` limits a run to some scenarios, for a quick check (e.g.
+  `--runs 1 --npcs 2 --narrations 1 --scenarios taelrik_town`).
+- Without `TALEMATE_AI_TESTS=1` it exits at once with "AI runs need
+  TALEMATE_AI_TESTS=1 — ask the owner first" and makes no network call.
+
 ## Owner's koboldcpp and the AI opt-in
 
 The AI group's `ai_app` fixture, and a `start --ai` run, point at the
