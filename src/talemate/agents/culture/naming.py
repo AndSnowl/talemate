@@ -40,7 +40,9 @@ from talemate.cultures.naming import (
 from talemate.cultures.signals import guarded, send_event
 from talemate.cultures.words import (
     _LEADING_STOP_WORDS,
+    _SENTENCE_ENDERS,
     clean_name,
+    ends_with_place_word,
     first_mention,
     looks_like_name,
     mid_sentence_occurrence,
@@ -85,6 +87,68 @@ PICK_NAME_SPEC = ResponseSpec(
 )
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+# Task 0: prepositions that mean a capitalised run right after them is a
+# place mention ("a ferryman from Kesterholm"), not the content naming the
+# character — even when that place isn't yet known to the world.
+_LOCATION_PREPOSITIONS = {
+    "from", "in", "of", "at", "near", "by", "on", "to", "into", "across",
+    "beyond", "outside", "inside", "around", "toward", "towards", "under",
+    "over", "past", "through",
+}  # fmt: skip
+
+# Explicit naming phrases always win over the place rules above ("a
+# ferryman called Port" still names the ferryman "Port").
+_EXPLICIT_NAMING_SINGLE = {"named", "called", "name's"}
+_EXPLICIT_NAMING_PAIR = {("known", "as"), ("name", "is")}
+
+_WORD = re.compile(r"[A-Za-z']+")
+
+
+def _explicit_naming_before(words: list[str]) -> bool:
+    if not words:
+        return False
+    if words[-1].lower() in _EXPLICIT_NAMING_SINGLE:
+        return True
+    return (
+        len(words) >= 2
+        and (
+            words[-2].lower(),
+            words[-1].lower(),
+        )
+        in _EXPLICIT_NAMING_PAIR
+    )
+
+
+def _location_preposition_before(words: list[str]) -> bool:
+    if not words:
+        return False
+    if words[-1].lower() == "the":
+        words = words[:-1]
+    return bool(words) and words[-1].lower() in _LOCATION_PREPOSITIONS
+
+
+def _names_mid_sentence(name: str, content: str) -> bool:
+    """Whether `name`'s mid-sentence occurrence in `content` is the
+    content naming the character (Task 0): explicit framing ("named",
+    "called", "known as", "name is", "name's") always counts; a location
+    preposition right before it, or `name` itself reading as a place
+    (`ends_with_place_word`), means it's a place mention instead."""
+
+    pattern = re.compile(r"\b" + re.escape(name) + r"\b")
+    for match in pattern.finditer(content):
+        preceding_text = content[: match.start()].rstrip(" ")
+        if not preceding_text or preceding_text.endswith("\n"):
+            continue
+        if preceding_text[-1] in _SENTENCE_ENDERS:
+            continue
+        words = _WORD.findall(preceding_text)
+        if _explicit_naming_before(words):
+            return True
+        if _location_preposition_before(words) or ends_with_place_word(name):
+            continue
+        return True
+    return False
 
 
 def _first_sentence(text: str) -> str:
@@ -233,7 +297,10 @@ class CultureNamingMixin:
         """Whether the request's content gives the character a name ("a
         baker named Bob Harl"): a capitalised run mid-sentence that looks
         like a name and isn't a scene character, glossary entry, place or
-        culture/language name ("a baker who works in Veldhaer")."""
+        culture/language name ("a baker who works in Veldhaer"), and isn't
+        plausibly an unknown place either ("a ferryman from Kesterholm",
+        "the Lowmarsh Docks") unless explicitly named as such ("called
+        Port")."""
 
         content = content or ""
         known = {name_key(name) for name in self.scene.all_character_names}
@@ -252,7 +319,7 @@ class CultureNamingMixin:
             rest = " ".join(w for w in name.split() if w.lower() not in culture_words)
             if not rest or not looks_like_name(rest) or name_key(rest) in known:
                 continue
-            if mid_sentence_occurrence(name, content):
+            if _names_mid_sentence(name, content):
                 return True
         return False
 

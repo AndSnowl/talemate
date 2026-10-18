@@ -250,6 +250,7 @@ churn
 churning
 cider
 citizen
+city
 clay
 clean
 clearing
@@ -363,9 +364,11 @@ distaff
 distance
 distant
 distillery
+district
 do
 dock
 dockhand
+docks
 does
 dog
 doing
@@ -577,6 +580,7 @@ hammer
 hand
 happy
 harbor
+harbour
 hard
 hare
 harness
@@ -610,12 +614,14 @@ herself
 hex
 hide
 hill
+hills
 hillside
 him
 himself
 hinge
 his
 hoe
+hold
 hollow
 holy
 honest
@@ -698,6 +704,7 @@ lady
 lake
 lamp
 lance
+lane
 lantern
 large
 lass
@@ -753,6 +760,7 @@ many
 map
 maple
 marble
+marches
 mare
 mark
 marker
@@ -789,6 +797,7 @@ mine
 miner
 minstrel
 mint
+mire
 mirror
 mist
 mistress
@@ -810,6 +819,7 @@ moth
 mother
 mound
 mountain
+mountains
 mountainside
 mouse
 mouth
@@ -976,7 +986,9 @@ purple
 purse
 quarry
 quarryman
+quarter
 quartz
+quay
 queen
 quest
 quiet
@@ -993,6 +1005,7 @@ rat
 rather
 raven
 ravine
+reach
 reaping
 reason
 reckless
@@ -1206,6 +1219,7 @@ strange
 stranger
 straw
 stream
+street
 stride
 string
 strong
@@ -1302,6 +1316,7 @@ tooth
 top
 torch
 tower
+town
 townsfolk
 track
 trade
@@ -1339,6 +1354,7 @@ urchin
 us
 useless
 vagrant
+vale
 valley
 vault
 vegetable
@@ -1348,6 +1364,7 @@ vermilion
 very
 veteran
 vial
+village
 villager
 vine
 vineyard
@@ -1372,6 +1389,7 @@ warehouse
 warm
 was
 wasp
+wastes
 watchman
 water
 waterfall

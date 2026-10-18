@@ -20,6 +20,7 @@ __all__ = [
     "mid_sentence_occurrence",
     "is_proper_item_name",
     "first_mention",
+    "ends_with_place_word",
 ]
 
 
@@ -156,6 +157,33 @@ _ROLE_WORDS: frozenset[str] = frozenset(
         "urchin",
     }
 )
+
+
+# Geographic/building words (Task 0): a capitalised run ending in one of
+# these ("Lowmarsh Docks", "Kesterholm Port") reads as a place, not a
+# person's name, even when it isn't yet a known place in the world.
+_PLACE_WORDS: tuple[str, ...] = (
+    "reach", "mire", "vale", "wastes", "marches", "hold", "ford", "port",
+    "harbour", "harbor", "bay", "isle", "island", "hills", "mountains",
+    "peak", "river", "lake", "sea", "coast", "woods", "wood", "forest",
+    "marsh", "fen", "moor", "keep", "tower", "gate", "bridge", "market",
+    "docks", "quay", "square", "street", "lane", "road", "inn", "tavern",
+    "hall", "temple", "city", "town", "village", "quarter", "district",
+)  # fmt: skip
+
+
+def ends_with_place_word(name: str) -> bool:
+    """Whether `name`'s last word is a geographic/building word
+    (`_PLACE_WORDS`), a trailing possessive or simple plural normalised
+    away first. False for an empty `name`."""
+
+    words = name.split()
+    if not words:
+        return False
+    normalised = _strip_possessive(words[-1].lower())
+    return any(
+        candidate in _PLACE_WORDS for candidate in _plural_candidates(normalised)
+    )
 
 
 def _is_single_word_description(word: str) -> bool:

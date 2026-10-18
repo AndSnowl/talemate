@@ -649,6 +649,42 @@ async def test_known_place_or_culture_in_content_still_named(
 
 
 @pytest.mark.asyncio
+async def test_unknown_place_in_content_does_not_block_naming(
+    scene, world, agent, monkeypatch
+):
+    """Task 0: an unrecognised place mention ("from Kesterholm", "at the
+    Lowmarsh Docks") isn't mistaken for the content naming the character,
+    so culture naming still rolls a candidate."""
+    calls = install_picker(monkeypatch, pick_index(0))
+
+    emission = requested("a Taelrik ferryman from Kesterholm")
+    await agent.on_before_name_character(emission)
+    assert len(calls) == 1
+    assert emission.chosen_name == calls[0]["vars"]["candidates"][0]
+
+    emission = requested("a stallkeeper who sells fish at the Lowmarsh Docks")
+    await agent.on_before_name_character(emission)
+    assert len(calls) == 2
+    assert emission.chosen_name == calls[1]["vars"]["candidates"][0]
+
+
+@pytest.mark.asyncio
+async def test_explicit_naming_still_wins_over_an_unknown_place(
+    scene, world, agent, monkeypatch
+):
+    """Task 0 rule 3: explicit naming phrases ("called Varn") still keep
+    the content's own name, even when another unknown place is mentioned
+    right next to it."""
+    calls = install_picker(monkeypatch, pick_index(0))
+
+    emission = requested("a sailor called Varn from Kesterholm")
+    await agent.on_before_name_character(emission)
+
+    assert emission.chosen_name is None
+    assert calls == []
+
+
+@pytest.mark.asyncio
 async def test_overlapping_creations_keep_their_own_decisions(
     scene, world, agent, monkeypatch
 ):

@@ -1,6 +1,7 @@
 from talemate.cultures.words import (
     COMMON_WORDS,
     clean_name,
+    ends_with_place_word,
     is_proper_item_name,
     looks_like_name,
     mid_sentence_occurrence,
@@ -73,6 +74,20 @@ def test_is_proper_item_name():
     assert not is_proper_item_name("lantern", ["lifted the lantern"])
     assert not is_proper_item_name("Lantern", ["lifted the Lantern"])
     assert not is_proper_item_name("Rusty Sword", ["held a rusty sword"])
+
+
+def test_ends_with_place_word():
+    assert ends_with_place_word("Lowmarsh Docks") is True
+    assert ends_with_place_word("Taelrik Reach") is True
+    assert ends_with_place_word("Kesterholm Port") is True
+    assert ends_with_place_word("Dhunmouth Hills") is True
+    # possessive and simple plural are normalised away
+    assert ends_with_place_word("Docks'") is True
+    assert ends_with_place_word("Harbour's") is True
+
+    assert ends_with_place_word("Kesterholm") is False
+    assert ends_with_place_word("Bob Harl") is False
+    assert ends_with_place_word("") is False
 
 
 def test_common_words_loaded():
