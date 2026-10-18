@@ -1,4 +1,5 @@
 from talemate.cultures.models import (
+    CharacterCulture,
     Culture,
     CultureShare,
     DictionaryEntry,
@@ -17,6 +18,7 @@ from talemate.cultures.models import (
 )
 
 __all__ = [
+    "CharacterCulture",
     "Culture",
     "CultureShare",
     "DictionaryEntry",

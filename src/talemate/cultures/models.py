@@ -21,6 +21,7 @@ __all__ = [
     "PlayAddition",
     "Culture",
     "CultureShare",
+    "CharacterCulture",
     "Place",
     "GlossaryOrigin",
     "GlossaryEntry",
@@ -138,6 +139,15 @@ class CultureShare(BaseModel):
     share: int
 
 
+class CharacterCulture(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    culture_id: str | None = None
+    set_by: Literal["ai", "owner"] = "ai"
+    unsure: bool = False
+    reason: str = ""
+
+
 class Place(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -185,6 +195,7 @@ class GlossaryEntry(BaseModel):
     edited_by_owner: bool = False
     character_name: str | None = None
     place_id: str | None = None
+    doesnt_fit: bool = False
 
 
 class PlacesFile(BaseModel):
