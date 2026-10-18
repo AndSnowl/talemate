@@ -222,3 +222,22 @@ def test_guess_from_characters_counts_each_character():
     guess = guess_culture(cultures, scene, "a visitor", random.Random(2))
     assert guess.culture_id == "taelrik"
     assert guess.reason == "from the people around them"
+
+
+def test_guess_for_name_prefers_a_fitting_culture_over_the_mix():
+    # Ilsara inherits the Birch Coast mix: Elsiri 90, Taelrik 10; only
+    # Taelrik has generators
+    cultures = cultures_with(load_taelrik_culture())
+    scene = scene_at("Ilsara", cultures)
+    assert max(scene.mix, key=lambda s: s.share).culture_id == "elsiri"
+
+    # the name fits Taelrik's language: Taelrik, though the mix is Elsiri
+    fitting = guess_culture_for_name(cultures, scene, "Khusrek")
+    assert fitting.culture_id == "taelrik"
+    assert fitting.unsure is False
+
+    # an English-style name fits nothing: the location guess, unsure
+    english = guess_culture_for_name(cultures, scene, "Brannoch")
+    assert english.culture_id == "elsiri"
+    assert english.unsure is True
+    assert english.reason == "no language fits the name"
