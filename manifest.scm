@@ -11,6 +11,9 @@
 ;; - ungoogled-chromium: the browser Playwright drives for e2e tests.
 ;; - nss-certs, font-dejavu: TLS certs and fonts so headless Chromium
 ;;   renders and networks correctly.
+;; - ffmpeg: torchcodec (imported by the memory agent's embeddings) dlopens
+;;   its libraries; scripts/dev/talemate_app.py puts them on the backend's
+;;   LD_LIBRARY_PATH. Without it, loading any scene fails.
 (specifications->manifest
  (list "uv"
        "python@3.11"
@@ -18,4 +21,5 @@
        "ruff"
        "ungoogled-chromium"
        "nss-certs"
-       "font-dejavu"))
+       "font-dejavu"
+       "ffmpeg"))

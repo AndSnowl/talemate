@@ -285,3 +285,43 @@ def test_backend_env_keeps_writes_in_root(tmp_path):
     assert env["PYTHONPYCACHEPREFIX"] == str(tmp_path / "pycache")
     assert env["NLTK_DATA"] == str(tmp_path / "nltk_data")
     assert "VIRTUAL_ENV" not in env
+
+
+def test_backend_env_puts_ffmpeg_libs_on_library_path(tmp_path, monkeypatch):
+    """torchcodec (loaded by the memory agent's embeddings) dlopens FFmpeg's
+    libraries; on Guix they're only found through LD_LIBRARY_PATH."""
+    store = tmp_path / "ffmpeg-8"
+    (store / "bin").mkdir(parents=True)
+    (store / "lib").mkdir()
+    (store / "bin" / "ffmpeg").touch()
+    profile_bin = tmp_path / "profile" / "bin"
+    profile_bin.mkdir(parents=True)
+    (profile_bin / "ffmpeg").symlink_to(store / "bin" / "ffmpeg")
+    monkeypatch.setattr(
+        talemate_app.shutil,
+        "which",
+        lambda name: str(profile_bin / name) if name == "ffmpeg" else None,
+    )
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/existing")
+
+    env = talemate_app.backend_env(tmp_path)
+
+    assert env["LD_LIBRARY_PATH"].split(os.pathsep) == [str(store / "lib"), "/existing"]
+
+
+def test_vite_config_allows_checkout_node_modules(tmp_path):
+    """node_modules entries are symlinks into the checkout; vite serves them
+    by their real path, which its default fs.allow (the copy) refuses with
+    403 (e.g. the icon font). The run's vite config must allow them."""
+    (tmp_path / "talemate_frontend").mkdir()
+
+    config = talemate_app.write_vite_config(tmp_path)
+
+    assert config.parent == tmp_path / "talemate_frontend"
+    text = config.read_text()
+    assert 'from "./vite.config.mjs"' in text
+    assert json.dumps(str(tmp_path)) in text
+    modules = (_REPO_ROOT / "talemate_frontend" / "node_modules").resolve()
+    assert json.dumps(str(modules)) in text
+    cmd = talemate_app.frontend_command(tmp_path, 4000)
+    assert cmd[cmd.index("--config") + 1] == str(config)

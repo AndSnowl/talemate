@@ -29,7 +29,8 @@ def _pid_gone(pid: int) -> bool:
     return not os.path.exists(f"/proc/{pid}")
 
 
-def test_runner_starts_isolated_app(tmp_path, page):
+def test_runner_starts_isolated_app(tmp_path, browser_page):
+    page = browser_page
     checkout_config = _REPO_ROOT / "config.yaml"
     checkout_scenes = _REPO_ROOT / "scenes"
     before = _snapshot(checkout_config, checkout_scenes)
