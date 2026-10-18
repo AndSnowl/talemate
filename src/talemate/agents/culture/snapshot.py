@@ -46,10 +46,12 @@ from talemate.cultures.models import (
 from talemate.cultures.naming import CultureGuess, guess_culture_for_name
 from talemate.cultures.scene_context import SceneCultures
 from talemate.cultures.signals import guarded, send_event
-from talemate.cultures.words import clean_name
+from talemate.cultures.words import clean_name, first_mention
 from talemate.exceptions import GenerationCancelled
 from talemate.prompts import Prompt
 from talemate.prompts.response import AnchorExtractor, ResponseSpec
+
+from .naming import record_kept_name
 
 if TYPE_CHECKING:
     from talemate.agents.culture import LoadedWorld
@@ -268,7 +270,8 @@ class CultureSnapshotMixin:
         self, world: "LoadedWorld", sc: SceneCultures
     ) -> list[dict]:
         """An AI culture for each scene character that has none (an existing
-        culture, owner-set or not, is left alone)."""
+        culture, owner-set or not, is left alone), and a kept-name glossary
+        entry for it when it doesn't have one yet (see `record_kept_name`)."""
 
         cultures_set = []
         offered = self.get_scene_state("offered_spares") or {}
@@ -291,6 +294,13 @@ class CultureSnapshotMixin:
                 unsure=guess.unsure,
                 reason=guess.reason,
             )
+            culture = world.cultures.get(guess.culture_id)
+            mention = first_mention(character.name, list(self.scene.history))
+            story = self._story_label()
+            first_used = (
+                f"{story}, message {mention.id}" if mention is not None else story
+            )
+            record_kept_name(world, character.name, culture, first_used)
             cultures_set.append(
                 {
                     "name": character.name,

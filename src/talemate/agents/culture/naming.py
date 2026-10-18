@@ -50,11 +50,17 @@ from talemate.prompts.response import AnchorExtractor, ResponseSpec
 
 if TYPE_CHECKING:
     from talemate.agents.creator.character import CharacterNamingEmission
+    from talemate.agents.culture import LoadedWorld
     from talemate.agents.director.character_management import (
         PersistCharacterEmission,
     )
 
-__all__ = ["CultureNamingMixin", "MAX_PENDING", "NAMING_DECISION_TTL"]
+__all__ = [
+    "CultureNamingMixin",
+    "MAX_PENDING",
+    "NAMING_DECISION_TTL",
+    "record_kept_name",
+]
 
 log = structlog.get_logger("talemate.agents.culture.naming")
 
@@ -106,6 +112,43 @@ def _culture_instruction(name: str, culture: Culture) -> str:
 
 def _decision_key(emission: "CharacterNamingEmission") -> tuple[str, str]:
     return (emission.name.strip().lower(), emission.content.strip())
+
+
+def record_kept_name(
+    world: "LoadedWorld",
+    name: str,
+    culture: Culture | None,
+    first_used: str,
+) -> bool:
+    """Record a kept name (one the agent didn't pick) in the glossary, when
+    it has no entry yet (case-insensitive, any language): origin "ai_free",
+    language = `culture.id` or `None`, `doesnt_fit` set when `culture` has
+    generators and the name doesn't fit them, status unreviewed.
+
+    Shared by `on_after_persist_character` and `_snapshot_character_cultures`
+    so a kept name reaches the glossary whichever one sets the culture
+    first. R2: the glossary is re-loaded right before the save, no await in
+    between. Returns whether an entry was written.
+    """
+
+    entries = world.store.load_glossary()
+    if any(entry.text.lower() == name.lower() for entry in entries):
+        return False
+    entries.append(
+        GlossaryEntry(
+            id=new_id(),
+            text=name,
+            language=culture.id if culture is not None else None,
+            kind="person",
+            origin=GlossaryOrigin(by="ai_free"),
+            first_used=first_used,
+            status="unreviewed",
+            character_name=name,
+            doesnt_fit=culture is not None and not fits(culture.language, name),
+        )
+    )
+    world.store.save_glossary(entries)
+    return True
 
 
 class CultureNamingMixin:
@@ -379,23 +422,34 @@ class CultureNamingMixin:
         glossary_written = False
 
         if pending is not None:
+            # the hook's own pick already recorded the glossary entry
             character.culture = pending
             culture_set = True
-        elif character.culture is None:
-            guess = guess_culture_for_name(
-                world.cultures, self.scene_cultures(world), name
-            )
-            # a mix can name a culture the world doesn't have (yet)
-            culture = world.cultures.get(guess.culture_id) if guess.culture_id else None
-            if culture is not None:
-                character.culture = CharacterCulture(
-                    culture_id=culture.id,
-                    set_by="ai",
-                    unsure=guess.unsure,
-                    reason=guess.reason,
+        else:
+            if character.culture is None:
+                guess = guess_culture_for_name(
+                    world.cultures, self.scene_cultures(world), name
                 )
-                culture_set = True
+                # a mix can name a culture the world doesn't have (yet)
+                culture = (
+                    world.cultures.get(guess.culture_id) if guess.culture_id else None
+                )
+                if culture is not None:
+                    character.culture = CharacterCulture(
+                        culture_id=culture.id,
+                        set_by="ai",
+                        unsure=guess.unsure,
+                        reason=guess.reason,
+                    )
+                    culture_set = True
 
+            # a kept name reaches the glossary whether its culture was just
+            # set above or already set earlier (e.g. by a snapshot race)
+            culture = (
+                world.cultures.get(character.culture.culture_id)
+                if character.culture is not None
+                else None
+            )
             mention = first_mention(name, list(self.scene.history))
             story = self._story_label()
             first_used = (
@@ -403,27 +457,7 @@ class CultureNamingMixin:
                 if mention is not None
                 else f"{story}, character creation"
             )
-
-            # R2: load and save with no await in between
-            entries = world.store.load_glossary()
-            if not any(entry.text.lower() == name.lower() for entry in entries):
-                entries.append(
-                    GlossaryEntry(
-                        id=new_id(),
-                        text=name,
-                        language=culture.id if culture is not None else None,
-                        kind="person",
-                        origin=GlossaryOrigin(by="ai_free"),
-                        first_used=first_used,
-                        status="unreviewed",
-                        character_name=name,
-                        doesnt_fit=(
-                            culture is not None and not fits(culture.language, name)
-                        ),
-                    )
-                )
-                world.store.save_glossary(entries)
-                glossary_written = True
+            glossary_written = record_kept_name(world, name, culture, first_used)
 
         if not (culture_set or glossary_written):
             return

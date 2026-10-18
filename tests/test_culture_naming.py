@@ -18,6 +18,7 @@ from talemate.agents.director.character_management import (
     PersistCharacterEmission,
     PersistCharacterRequest,
 )
+from talemate.agents.world_state.snapshot import WorldStateSnapshotEmission
 from talemate.character import Character
 from talemate.cultures.exchange import apply_import
 from talemate.cultures.models import CharacterCulture, GlossaryEntry, GlossaryOrigin
@@ -352,6 +353,93 @@ async def test_owner_culture_kept_on_persist(scene, world, agent, events):
     assert character.culture.set_by == "owner"
     assert ai_entries(world) == []
     assert events == []
+
+
+def snapshot_emission(scene) -> WorldStateSnapshotEmission:
+    return WorldStateSnapshotEmission(
+        agent=instance.get_agent("world_state"), world_state=scene.world_state
+    )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_culture_first_then_persist_still_glossaries_kept_name(
+    scene, world, agent, monkeypatch
+):
+    # task 8c: a background snapshot can set the character's culture before
+    # after-persist runs; the kept name must still reach the glossary
+    install_picker(monkeypatch, lambda vars: ("", {}))
+    scene.world_state.location = "A room at Quillister House in Veldhaer"
+    character = await add_character_to_scene(scene, "Marigold")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+    assert character.culture is not None
+    assert character.culture.culture_id == "taelrik"
+    assert character.culture.set_by == "ai"
+
+    await agent.on_after_persist_character(
+        PersistCharacterEmission(
+            agent=instance.get_agent("director"), character=character
+        )
+    )
+
+    [entry] = [e for e in ai_entries(world) if e.text == "Marigold"]
+    assert entry.origin.by == "ai_free"
+    assert entry.language == "taelrik"
+    assert entry.doesnt_fit is True
+
+
+@pytest.mark.asyncio
+async def test_persist_then_snapshot_still_one_glossary_entry(
+    scene, world, agent, monkeypatch
+):
+    install_picker(monkeypatch, lambda vars: ("", {}))
+    scene.world_state.location = "A room at Quillister House in Veldhaer"
+    character = await add_character_to_scene(scene, "Marigold")
+
+    await agent.on_after_persist_character(
+        PersistCharacterEmission(
+            agent=instance.get_agent("director"), character=character
+        )
+    )
+    assert character.culture.culture_id == "taelrik"
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+
+    entries = [e for e in ai_entries(world) if e.text == "Marigold"]
+    assert len(entries) == 1
+    assert entries[0].origin.by == "ai_free"
+    # the snapshot step left the persist-time culture alone
+    assert character.culture.culture_id == "taelrik"
+    assert character.culture.set_by == "ai"
+
+
+@pytest.mark.asyncio
+async def test_kept_name_glossary_entry_never_duplicated(
+    scene, world, agent, monkeypatch
+):
+    install_picker(monkeypatch, lambda vars: ("", {}))
+    scene.world_state.location = "A room at Quillister House in Veldhaer"
+    entries = world.load_glossary()
+    entries.append(
+        GlossaryEntry(
+            id="seeded",
+            text="Marigold",
+            language="taelrik",
+            kind="person",
+            origin=GlossaryOrigin(by="owner"),
+        )
+    )
+    world.save_glossary(entries)
+    character = await add_character_to_scene(scene, "Marigold")
+
+    await agent.on_snapshot_after(snapshot_emission(scene))
+    await agent.on_after_persist_character(
+        PersistCharacterEmission(
+            agent=instance.get_agent("director"), character=character
+        )
+    )
+
+    assert len([e for e in world.load_glossary() if e.text == "Marigold"]) == 1
 
 
 @pytest.mark.asyncio
