@@ -60,11 +60,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .generator import GeneratorError, roll, validate_language
+from .generator import GeneratorError, fits, pattern_letters, roll, validate_language
 from .models import (
     Culture,
+    GeneratorDef,
     GlossaryEntry,
     GlossaryOrigin,
+    Language,
     Place,
     new_id,
     slugify,
@@ -79,6 +81,7 @@ __all__ = [
     "ForeignRendering",
     "CultureFile",
     "ImportPreview",
+    "lint_culture_file",
     "preview_import",
     "apply_import",
     "export_culture",
@@ -183,8 +186,13 @@ REPLACEABLE_SECTIONS: tuple[tuple[str, str], ...] = (
 # --------------------------------------------------------------------------
 
 
-def _parse_and_resolve(raw: str) -> tuple[CultureFile, str]:
-    """Parse `raw` into a `CultureFile` and resolve its sanitised culture id."""
+def _parse_and_resolve(raw: str) -> tuple[CultureFile, str, dict]:
+    """Parse `raw` into a `CultureFile` and resolve its sanitised culture id.
+
+    Also returns the raw parsed JSON dict (before the pydantic models drop
+    unknown keys), so callers that want `lint_culture_file`'s unknown-field
+    check don't have to parse `raw` a second time.
+    """
 
     try:
         data = json.loads(raw)
@@ -209,7 +217,7 @@ def _parse_and_resolve(raw: str) -> tuple[CultureFile, str]:
     except GeneratorError as exc:
         raise ImportFormatError(f"invalid culture file: {exc}") from exc
 
-    return file, culture_id
+    return file, culture_id, data
 
 
 # --------------------------------------------------------------------------
@@ -335,12 +343,128 @@ def _glossary_differs(existing: GlossaryEntry, file_entry: CultureFileGlossary) 
 
 
 # --------------------------------------------------------------------------
+# Lint: warnings about likely mistakes, never errors
+# --------------------------------------------------------------------------
+
+
+def _unknown_keys(obj: object, allowed: set[str], path: str) -> list[str]:
+    if not isinstance(obj, dict):
+        return []
+    return [
+        f"Unknown field '{path}.{key}' is ignored (typo?)"
+        for key in obj
+        if key not in allowed
+    ]
+
+
+def _unknown_field_warnings(raw: dict) -> list[str]:
+    """Warn about keys the models silently drop (`extra=\"ignore\"`).
+
+    Checked at the few spots a hand-edited or AI-generated file is most
+    likely to carry a typo'd field: the culture itself, its language, each
+    generator, each glossary entry and each place. Anything else (holidays,
+    dictionary entries, phrases, additions, foreign renderings, …) isn't
+    checked — YAGNI until a real mistake turns up there.
+    """
+    warnings: list[str] = []
+
+    culture = raw.get("culture")
+    if isinstance(culture, dict):
+        warnings.extend(
+            _unknown_keys(culture, set(Culture.model_fields.keys()), "culture")
+        )
+
+        language = culture.get("language")
+        if isinstance(language, dict):
+            warnings.extend(
+                _unknown_keys(language, set(Language.model_fields.keys()), "language")
+            )
+
+            generators = language.get("generators")
+            if isinstance(generators, list):
+                generator_allowed = set(GeneratorDef.model_fields.keys())
+                for index, gen in enumerate(generators):
+                    warnings.extend(
+                        _unknown_keys(
+                            gen, generator_allowed, f"language.generators[{index}]"
+                        )
+                    )
+
+    glossary = raw.get("glossary")
+    if isinstance(glossary, list):
+        glossary_allowed = set(CultureFileGlossary.model_fields.keys())
+        for index, entry in enumerate(glossary):
+            warnings.extend(
+                _unknown_keys(entry, glossary_allowed, f"glossary[{index}]")
+            )
+
+    places = raw.get("places")
+    if isinstance(places, list):
+        places_allowed = set(CultureFilePlace.model_fields.keys())
+        for index, place in enumerate(places):
+            warnings.extend(_unknown_keys(place, places_allowed, f"places[{index}]"))
+
+    return warnings
+
+
+def lint_culture_file(raw: dict, file: CultureFile) -> list[str]:
+    """Warnings about likely mistakes in a culture file.
+
+    None of these are errors: a file that was valid yesterday must still
+    import, and `apply_import` never consults this list. `raw` is the
+    parsed-but-unvalidated JSON (needed only for the unknown-field check,
+    since the pydantic models quietly drop keys they don't define);
+    `file` is the already-validated model.
+    """
+    warnings: list[str] = []
+    language = file.culture.language
+
+    # An uppercase letter in a pattern that isn't one of the language's
+    # own category keys is still legal (the parser treats it as literal
+    # text), but it's the single most common typo in a hand-written
+    # pattern, so flag every one of them, plainly.
+    category_keys = set(language.categories.keys())
+    for gen in language.generators:
+        for pattern in gen.patterns:
+            for letter in sorted(pattern_letters(pattern) - category_keys):
+                warnings.append(
+                    f"Generator '{gen.name}': '{letter}' in pattern "
+                    f"'{pattern}' is not a category, so it is written literally"
+                )
+
+    warnings.extend(_unknown_field_warnings(raw))
+
+    if language.level == "description" and language.generators:
+        warnings.append(
+            f"Language '{language.name}' is description-only but has "
+            "generators; they will never be used"
+        )
+
+    # A name-shaped glossary entry (person/place) that the language's own
+    # generators wouldn't have produced — most often because a generator
+    # was written, then the glossary entry was typed in by hand to a
+    # different shape. "thing"/"word" entries are ordinary vocabulary, not
+    # generated names, so they're never checked here.
+    if language.generators:
+        for entry in file.glossary:
+            if entry.kind not in ("person", "place"):
+                continue
+            if not fits(language, entry.text):
+                warnings.append(
+                    f"Glossary '{entry.text}' in {language.name} doesn't "
+                    "fit its own generators"
+                )
+
+    return warnings
+
+
+# --------------------------------------------------------------------------
 # Preview
 # --------------------------------------------------------------------------
 
 
 def preview_import(store: WorldStore, raw: str) -> ImportPreview:
-    file, culture_id = _parse_and_resolve(raw)
+    file, culture_id, data = _parse_and_resolve(raw)
 
     cultures = store.load_cultures()
     is_update = culture_id in cultures
@@ -370,7 +494,7 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
         "places": len(file.places),
     }
 
-    warnings: list[str] = []
+    warnings: list[str] = list(lint_culture_file(data, file))
 
     glossary = store.load_glossary()
     claimed_unassigned: list[str] = []
@@ -449,7 +573,7 @@ def preview_import(store: WorldStore, raw: str) -> ImportPreview:
 
 
 def apply_import(store: WorldStore, raw: str, today: str) -> Culture:
-    file, culture_id = _parse_and_resolve(raw)
+    file, culture_id, _data = _parse_and_resolve(raw)
 
     cultures = store.load_cultures()
     existing_culture = cultures.get(culture_id)

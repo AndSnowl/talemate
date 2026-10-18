@@ -211,12 +211,16 @@ def test_foreign_rendering_applied(tmp_path):
     )
 
     preview = preview_import(store, fixture_raw())
-    # The only warning here is the new sole-culture one (Dhunmouth is a
-    # brand-new place and Taelrik is alone there); the foreign rendering
-    # itself raises none, since "Kasrool" is already in the glossary.
+    # Two warnings here: the lint check that "Kethrun" doesn't fit
+    # Taelrik's own generators (a known quirk of the fixture — see
+    # test_lint_warns_about_glossary_entry_that_doesnt_fit for the rule
+    # itself) and the sole-culture one (Dhunmouth is a brand-new place and
+    # Taelrik is alone there). The foreign rendering itself raises none,
+    # since "Kasrool" is already in the glossary.
     assert preview.warnings == [
+        "Glossary 'Kethrun' in Taelrik doesn't fit its own generators",
         "Dhunmouth: Taelrik is the only culture here, so it will be 100% "
-        "(file says 55%)"
+        "(file says 55%)",
     ]
 
     apply_import(store, fixture_raw(), today="2026-10-17")
@@ -501,6 +505,167 @@ def test_duplicate_generator_ids_rejected_on_import(tmp_path):
 
     with pytest.raises(ImportFormatError, match="duplicate"):
         preview_import(store, json.dumps(raw))
+
+
+def _minimal_raw(
+    generators: list[dict] | None = None,
+    categories: dict[str, str] | None = None,
+    glossary: list[dict] | None = None,
+    level: str = "full",
+) -> dict:
+    """The smallest culture file dict that satisfies the schema, for tests
+    that only care about one lint rule and shouldn't be tripped up by the
+    full Taelrik fixture's other content."""
+
+    return {
+        "format_version": 1,
+        "culture": {
+            "id": "mini",
+            "name": "Mini",
+            "language": {
+                "name": "Mini",
+                "level": level,
+                "categories": categories
+                if categories is not None
+                else {"C": "k t", "V": "a e"},
+                "generators": generators
+                if generators is not None
+                else [
+                    {
+                        "id": "g1",
+                        "name": "Gen",
+                        "use": "people",
+                        "patterns": ["CVC"],
+                    }
+                ],
+            },
+        },
+        "glossary": glossary or [],
+    }
+
+
+def test_lint_warns_about_undefined_category_letter(tmp_path):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0]["patterns"] = ["CVX"]
+
+    preview = preview_import(store, json.dumps(raw))
+
+    assert (
+        "Generator 'Given names (male)': 'X' in pattern 'CVX' is not a "
+        "category, so it is written literally" in preview.warnings
+    )
+
+
+def test_lint_warns_about_unknown_field():
+    raw = _minimal_raw(
+        generators=[
+            {
+                "id": "g1",
+                "name": "Gen",
+                "use": "people",
+                "patterns": ["CVC"],
+                "rejects": ["^ng"],
+            }
+        ]
+    )
+    file = CultureFile.model_validate(raw)
+
+    from talemate.cultures.exchange import lint_culture_file
+
+    warnings = lint_culture_file(raw, file)
+
+    assert (
+        "Unknown field 'language.generators[0].rejects' is ignored (typo?)" in warnings
+    )
+
+
+def test_lint_warns_about_unknown_field_via_preview(tmp_path):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0]["rejects"] = ["^ng"]
+
+    preview = preview_import(store, json.dumps(raw))
+
+    assert (
+        "Unknown field 'language.generators[0].rejects' is ignored (typo?)"
+        in preview.warnings
+    )
+
+
+def test_lint_warns_about_generators_on_description_only_language(tmp_path):
+    store = make_store(tmp_path)
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["level"] = "description"
+
+    preview = preview_import(store, json.dumps(raw))
+
+    assert (
+        "Language 'Taelrik' is description-only but has generators; they "
+        "will never be used" in preview.warnings
+    )
+
+
+def test_lint_warns_about_glossary_entry_that_doesnt_fit(tmp_path):
+    store = make_store(tmp_path)
+    raw = _minimal_raw(
+        glossary=[
+            {"text": "Zog", "kind": "person"},
+            # "thing"/"word" entries are ordinary vocabulary, not
+            # generated names, so a mismatch there is never flagged.
+            {"text": "Whatever this is", "kind": "thing"},
+        ]
+    )
+
+    preview = preview_import(store, json.dumps(raw))
+
+    assert "Glossary 'Zog' in Mini doesn't fit its own generators" in preview.warnings
+    assert not any("Whatever" in w for w in preview.warnings)
+
+
+def test_lint_taelrik_fixture_known_warnings(tmp_path):
+    """The Taelrik fixture itself trips one lint rule: "Kethrun" (a
+    glossary entry of kind "person") doesn't fit its own language's
+    generators. This is a known, deliberate quirk of the fixture, not a
+    bug — recorded here so a future change to the fixture or the lint
+    rules has to notice it."""
+
+    store = make_store(tmp_path)
+    preview = preview_import(store, fixture_raw())
+
+    lint_warnings = [w for w in preview.warnings if w.startswith("Glossary ")]
+    assert lint_warnings == [
+        "Glossary 'Kethrun' in Taelrik doesn't fit its own generators"
+    ]
+
+    other_lint_warnings = [
+        w
+        for w in preview.warnings
+        if w.startswith("Generator ")
+        or w.startswith("Unknown field")
+        or w.startswith("Language ")
+    ]
+    assert other_lint_warnings == []
+
+
+def test_cli_validate_prints_warnings_but_still_exits_0(tmp_path):
+    raw = json.loads(fixture_raw())
+    raw["culture"]["language"]["generators"][0]["patterns"] = ["CVX"]
+    warn_path = tmp_path / "warn.culture.json"
+    warn_path.write_text(json.dumps(raw), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "talemate.cultures.cli", "validate", str(warn_path)],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "WARNING: Generator 'Given names (male)': 'X' in pattern 'CVX' is "
+        "not a category, so it is written literally" in result.stdout
+    )
+    assert "OK:" in result.stdout
 
 
 def _shares_snapshot(store: WorldStore) -> dict[str, dict[str, int]]:

@@ -90,7 +90,14 @@ from typing import Union
 
 from talemate.cultures.models import GeneratorDef, Language
 
-__all__ = ["GeneratorError", "parse_categories", "roll", "fits", "validate_language"]
+__all__ = [
+    "GeneratorError",
+    "parse_categories",
+    "pattern_letters",
+    "roll",
+    "fits",
+    "validate_language",
+]
 
 
 class GeneratorError(ValueError):
@@ -144,6 +151,20 @@ def _split_weight(text: str) -> tuple[str, int]:
     if match:
         return match.group(1), int(match.group(2))
     return text, 1
+
+
+def pattern_letters(pattern: str) -> set[str]:
+    """Return the uppercase ASCII letters appearing in `pattern`.
+
+    The pattern's own trailing ``*n`` weight suffix (if any) is stripped
+    first, so it never contributes a false category-letter candidate. Used
+    by the importer's lint to flag an uppercase letter that isn't one of
+    the language's defined categories (see `lint_culture_file`) — such a
+    letter is still accepted by the parser, which treats it as literal
+    text, so this never raises on its own.
+    """
+    text, _ = _split_weight(pattern)
+    return {ch for ch in text if ch.isalpha() and ch.isupper()}
 
 
 def parse_categories(categories: dict[str, str]) -> dict[str, list[tuple[str, int]]]:

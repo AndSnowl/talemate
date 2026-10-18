@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from talemate.cultures.exchange import CultureFile
+from talemate.cultures.exchange import CultureFile, lint_culture_file
 from talemate.cultures.generator import GeneratorError, fits, roll, validate_language
 
 
@@ -30,6 +30,9 @@ def cmd_validate(args: argparse.Namespace) -> int:
     except GeneratorError as exc:
         print(f"Invalid culture file: {exc}", file=sys.stderr)
         return 1
+
+    for warning in lint_culture_file(data, file):
+        print(f"WARNING: {warning}")
 
     print(f"OK: {path}")
     return 0
