@@ -8,7 +8,12 @@ All four checks share one seeded tree (The Taelrik Reach -> Birch Coast ->
 Ilsara) and a second culture, Elsiri, which the fixture culture file
 doesn't include -- both are written straight to the shared world's files
 before ``open_scene``, the same technique checks 7-9 use for play
-additions and glossary entries that the fixture has none of.
+additions and glossary entries that the fixture has none of. Check 16
+additionally seeds an unrelated root place (Khaz-Rull): in this tree,
+every place other than The Taelrik Reach is its descendant, so checking
+only that a descendant is excluded can't tell "excluded correctly" apart
+from "the picker wrongly hides everything" -- an unrelated place that
+*should* stay offered makes the check discriminating.
 """
 
 import json
@@ -84,10 +89,16 @@ def _seed_places(world, places) -> None:
     )
 
 
-def _seed_tree(world) -> None:
+# An unrelated root place, no relation to the Reach/Birch/Ilsara tree at
+# all -- used only by check 16, to make sure "excluded" and "the picker
+# shows nothing" can't be confused.
+KHAZ_RULL = _place("khaz", "Khaz-Rull", "terrain")
+
+
+def _seed_tree(world, extra_places=()) -> None:
     place_culture(world, CULTURE_FILE)
     _seed_elsiri(world)
-    _seed_places(world, REACH_BIRCH_ILSARA)
+    _seed_places(world, REACH_BIRCH_ILSARA + list(extra_places))
 
 
 def _place_row(page, name):
@@ -179,10 +190,15 @@ def test_runbook_15_dragging_a_share_slider_and_releasing_sums_to_100(app, page)
 
 def test_runbook_16_taelrik_reach_parent_select_excludes_its_own_descendant(app, page):
     world = seed_world(app.root, project="rb16")
-    _seed_tree(world)
+    _seed_tree(world, extra_places=[KHAZ_RULL])
     open_scene(page, world.scene_path)
     open_places_view(page)
 
+    # From The Taelrik Reach's own side: both its descendants (Birch Coast
+    # and Ilsara) must be excluded -- but Khaz-Rull, an unrelated place
+    # elsewhere in the tree, must still be offered. Without that positive
+    # case, this check would pass even if the picker wrongly excluded
+    # every place, not just descendants.
     _place_row(page, "The Taelrik Reach").click()
     parent_select = page.get_by_role("combobox", name="Parent")
     parent_select.wait_for(state="visible", timeout=15_000)
@@ -191,6 +207,27 @@ def test_runbook_16_taelrik_reach_parent_select_excludes_its_own_descendant(app,
     parent_select.click(force=True)
 
     page.get_by_role("option", name="No parent (root)").wait_for(
+        state="visible", timeout=10_000
+    )
+    assert page.get_by_role("option", name="Ilsara", exact=True).count() == 0
+    assert page.get_by_role("option", name="Birch Coast", exact=True).count() == 0
+    page.get_by_role("option", name="Khaz-Rull", exact=True).wait_for(
+        state="visible", timeout=5_000
+    )
+    page.keyboard.press("Escape")
+    page.get_by_role("option", name="No parent (root)").wait_for(
+        state="hidden", timeout=5_000
+    )
+
+    # From Birch Coast's own side: The Taelrik Reach is its *ancestor*, not
+    # a descendant, so it must be offered; Ilsara, Birch Coast's own
+    # descendant, must not.
+    _place_row(page, "Birch Coast").click()
+    parent_select = page.get_by_role("combobox", name="Parent")
+    parent_select.wait_for(state="visible", timeout=15_000)
+    parent_select.click(force=True)
+
+    page.get_by_role("option", name="The Taelrik Reach", exact=True).wait_for(
         state="visible", timeout=10_000
     )
     assert page.get_by_role("option", name="Ilsara", exact=True).count() == 0
@@ -209,6 +246,12 @@ def test_runbook_17_deleting_a_place_with_children_asks_where_they_go(app, page)
     menu.wait_for(state="visible", timeout=10_000)
     assert "1 place nested under it need a new parent" in menu.inner_text()
 
+    # "Asked where the children go" is a real picker (PlaceDetail.vue's
+    # `moveChildrenTo` v-select, bound to `moveChildrenOptions`), not just
+    # informational text -- it defaults to the deleted place's own parent
+    # (PlaceDetail.vue's `deleteMenu` watcher), which is why Confirm alone,
+    # with no selection made, is enough to move Ilsara under The Taelrik
+    # Reach below.
     menu.get_by_role("button", name="Confirm").click()
 
     places_path = world.world_dir / "places.json"
