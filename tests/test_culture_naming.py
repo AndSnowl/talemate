@@ -685,6 +685,45 @@ async def test_explicit_naming_still_wins_over_an_unknown_place(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    ["a ranger named Vale", "a ferryman called Port", "a clerk known as Lane"],
+)
+async def test_explicit_naming_keeps_a_name_that_is_also_a_place_word(
+    scene, world, agent, monkeypatch, content
+):
+    """A name that is also a common place word ("Vale", "Port", "Lane") is
+    still the content naming the character when it is explicitly named."""
+    calls = install_picker(monkeypatch, pick_index(0))
+
+    emission = requested(content)
+    await agent.on_before_name_character(emission)
+
+    assert emission.chosen_name is None
+    assert calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "content",
+    ["a Taelrik ferryman from Kesterholm", "a Taelrik ferryman who works the Port"],
+)
+async def test_a_place_without_explicit_naming_is_not_a_name(
+    scene, world, agent, monkeypatch, content
+):
+    """Without explicit naming, an unknown place or a common place word
+    isn't the content naming the character, so culture naming still rolls
+    a candidate."""
+    calls = install_picker(monkeypatch, pick_index(0))
+
+    emission = requested(content)
+    await agent.on_before_name_character(emission)
+
+    assert len(calls) == 1
+    assert emission.chosen_name == calls[0]["vars"]["candidates"][0]
+
+
+@pytest.mark.asyncio
 async def test_overlapping_creations_keep_their_own_decisions(
     scene, world, agent, monkeypatch
 ):

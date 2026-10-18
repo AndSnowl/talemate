@@ -128,6 +128,31 @@ def _location_preposition_before(words: list[str]) -> bool:
     return bool(words) and words[-1].lower() in _LOCATION_PREPOSITIONS
 
 
+def _explicitly_named(name: str, content: str) -> bool:
+    """Whether some mid-sentence occurrence of `name` in `content` comes
+    right after explicit naming ("named", "called", "known as", "name is",
+    "name's")."""
+
+    return any(
+        _explicit_naming_before(_WORD.findall(preceding_text))
+        for preceding_text in mid_sentence_matches(name, content)
+    )
+
+
+def _reads_as_given_name(text: str) -> bool:
+    """`looks_like_name` without its common-word rule: one to four words,
+    capitalised, not starting with an article or other stop word. Used
+    only after explicit naming, where "Vale" or "Port" is the name the
+    request gives."""
+
+    words = clean_name(text).split()
+    return (
+        1 <= len(words) <= 4
+        and words[0].lower() not in _LEADING_STOP_WORDS
+        and words[0][:1].isupper()
+    )
+
+
 def _names_mid_sentence(name: str, content: str) -> bool:
     """Whether `name`'s mid-sentence occurrence in `content` is the
     content naming the character: explicit framing ("named",
@@ -315,7 +340,13 @@ class CultureNamingMixin:
                 continue
             # "a Taelrik Ferryman": the culture word isn't part of a name
             rest = " ".join(w for w in name.split() if w.lower() not in culture_words)
-            if not rest or not looks_like_name(rest) or name_key(rest) in known:
+            if not rest or name_key(rest) in known:
+                continue
+            # explicit naming ("a ranger named Vale") keeps a name that is
+            # also a common word, so it is checked before that rejection
+            if _explicitly_named(name, content) and _reads_as_given_name(rest):
+                return True
+            if not looks_like_name(rest):
                 continue
             if _names_mid_sentence(name, content):
                 return True

@@ -61,4 +61,5 @@ This note goes with the foundation plan (`2026-10-17-cultures-foundation.md`) an
 - Plan 3: story highlights match stored phrases and dictionary words exactly (case and apostrophes aside). An inflected form the narrator invents ("Saerviks", "Dhunna's") isn't highlighted.
 - Plan 3: a character who isn't in a snapshot anchor message gets a culture chip in the World panel, but their name isn't highlighted in the story (names only highlight on anchor messages, as before).
 - Plan 3: a place is unsure but its name is reviewed → the review dot opens Places, not the glossary.
+- Plan 3: a snapshot character whose name is one of the place words added to the common-word list (Vale, Lane, Reach, Port, …) gets no glossary entry. Culture naming keeps such a name when the request names it explicitly ("a ranger named Vale").
 - Culture naming won't give a woman a male-only name. If a culture has only male given-name generators, a female character gets no culture name.
