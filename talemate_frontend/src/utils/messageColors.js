@@ -2,8 +2,18 @@
 //
 // Single source of truth for the set of configurable "special" message color
 // types and how their effective color/style is resolved from the user's
-// appearance config. Mirrors talemate.util.colors.SPECIAL_COLOR_NAMES on the
-// backend — keep in sync.
+// appearance config, folded into the fantasymate theme (see ../theme/).
+// Mirrors talemate.util.colors.SPECIAL_COLOR_NAMES on the backend — keep in
+// sync.
+//
+// Imports from ../theme/ by relative path (not the `@/` Vite alias) so this
+// module stays loadable under plain node — see checks/theme.check.mjs and
+// checks/culturesStory.check.mjs (which imports sceneMessageRenderer.js,
+// which imports this file).
+
+import { isHex } from '../theme/colorMath.js';
+import { PALETTE_KEYS } from '../theme/palette.js';
+import { currentTheme } from '../theme/store.js';
 
 export const SPECIAL_MESSAGE_COLORS = [
   "narrator",
@@ -14,12 +24,12 @@ export const SPECIAL_MESSAGE_COLORS = [
   "information",
 ];
 
-// Canonical default colors used both as the resolution fallback (when the
-// user has not configured a color) and as the reset target in the appearance
-// config UI. Keyed by bare type name — both message types (narrator, actor,
-// director, time, context_investigation, information) and markup types
-// (quotes, parentheses, brackets, emphasis, entities).
-export const DEFAULT_APPEARANCE_COLORS = {
+// Canonical default colors from before message colours followed the theme.
+// Kept only to recognise old saved configs: a saved hex equal to the value
+// here (any case) counts as "unset" and falls back to the type's theme
+// role colour — see AppConfigAppearanceScene.vue's `hydrateMarkupStyle`,
+// which used to seed these as literal defaults.
+export const LEGACY_DEFAULT_COLORS = {
   narrator: "#A180AE",
   actor: "#B39DDB",
   director: "#FF5722",
@@ -33,25 +43,84 @@ export const DEFAULT_APPEARANCE_COLORS = {
   entities: "#FFE082",
 };
 
+// Markup types are stored bare on the scene appearance config (`quotes`,
+// `parentheses`, ...); message types are stored with a `_messages` suffix
+// (`narrator_messages`, ...) — see src/talemate/config/schema.py's
+// SceneAppearance.
+const MARKUP_TYPES = new Set(["quotes", "parentheses", "brackets", "emphasis", "entities"]);
+
+function sceneConfigKey(typ) {
+  return MARKUP_TYPES.has(typ) ? typ : `${typ}_messages`;
+}
+
+// Message/markup type -> theme role. Markup types share their role's name;
+// message types map onto the closest existing core/message role so they
+// don't introduce new roles.
+export const MESSAGE_ROLE = {
+  narrator: "narrator",
+  actor: "charname",
+  director: "director",
+  time: "date",
+  context_investigation: "context_investigation",
+  information: "information",
+  quotes: "quotes",
+  parentheses: "parentheses",
+  brackets: "brackets",
+  emphasis: "emphasis",
+  entities: "entities",
+};
+
 export function isSpecialMessageColor(name) {
   return SPECIAL_MESSAGE_COLORS.includes(name);
 }
 
+function roleColorFor(typ, resolved) {
+  const role = MESSAGE_ROLE[typ] || typ;
+  return resolved?.colors?.[role];
+}
+
 // Resolve the effective color for a scene-message type against the user's
-// appearance config. Returns the configured color when set, otherwise the
-// canonical default.
-export function getMessageColor(appearanceConfig, typ) {
-  const cfg = appearanceConfig?.scene?.[`${typ}_messages`];
-  return cfg?.color || DEFAULT_APPEARANCE_COLORS[typ];
+// appearance config and a resolved theme (see ../theme/engine.js's
+// `resolveTheme` / `themeFromConfig`; defaults to the live applied theme).
+//
+// `cfg.color` is resolved as:
+//   - a palette key (exact, case-sensitive match against PALETTE_KEYS): the
+//     palette's hex for that key
+//   - a hex value equal (any case) to LEGACY_DEFAULT_COLORS[typ]: treated as
+//     unset — the type's theme role colour
+//   - any other hex value: that hex, verbatim
+//   - empty/unset: the type's theme role colour
+export function getMessageColor(appearanceConfig, typ, resolved = currentTheme.value) {
+  const cfg = appearanceConfig?.scene?.[sceneConfigKey(typ)];
+  const color = cfg?.color;
+  const roleColor = roleColorFor(typ, resolved);
+
+  if (!color) {
+    return roleColor;
+  }
+
+  if (PALETTE_KEYS.includes(color)) {
+    return resolved?.palette?.[color] ?? roleColor;
+  }
+
+  if (isHex(color)) {
+    const legacy = LEGACY_DEFAULT_COLORS[typ];
+    if (legacy && color.toLowerCase() === legacy.toLowerCase()) {
+      return roleColor;
+    }
+    return color;
+  }
+
+  return roleColor;
 }
 
 // Build an inline CSS style string (color + optional italic/bold) for a
 // scene-message type from the user's appearance config.
-export function getMessageStyle(appearanceConfig, typ) {
-  const cfg = appearanceConfig?.scene?.[`${typ}_messages`] || {};
+export function getMessageStyle(appearanceConfig, typ, resolved = currentTheme.value) {
+  const cfg = appearanceConfig?.scene?.[sceneConfigKey(typ)] || {};
   let styles = "";
   if (cfg.italic) styles += "font-style: italic;";
   if (cfg.bold) styles += "font-weight: bold;";
-  styles += `color: ${getMessageColor(appearanceConfig, typ)};`;
+  styles += `color: ${getMessageColor(appearanceConfig, typ, resolved)};`;
   return styles;
 }

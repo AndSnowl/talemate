@@ -38,16 +38,36 @@
                         </td>
                         <td class="text-right" style="padding: 4px 12px;" v-if="canSetColorOn[typ]">
                             <div class="d-flex align-center justify-end">
-                                <v-btn 
-                                    size="x-small" 
-                                    variant="outlined" 
-                                    :color="getColor(typ, styleConfig.color)"
-                                    @click="openColorPicker(typ, getColor(typ, styleConfig.color))"
-                                    class="mr-1"
-                                >
-                                    <v-icon start size="small">mdi-palette</v-icon>
-                                    Color
-                                </v-btn>
+                                <v-menu>
+                                    <template v-slot:activator="{ props }">
+                                        <v-btn
+                                            v-bind="props"
+                                            size="x-small"
+                                            variant="outlined"
+                                            :color="getColor(typ, styleConfig.color)"
+                                            class="mr-1"
+                                        >
+                                            <v-icon start size="small">mdi-palette</v-icon>
+                                            Color
+                                        </v-btn>
+                                    </template>
+                                    <v-list density="compact">
+                                        <v-list-item
+                                            v-for="key in paletteKeys"
+                                            :key="key"
+                                            @click="selectPaletteColor(typ, key)"
+                                        >
+                                            <template v-slot:prepend>
+                                                <v-avatar size="16" :color="paletteSwatch(key)" class="mr-2"></v-avatar>
+                                            </template>
+                                            <v-list-item-title>{{ key }}</v-list-item-title>
+                                        </v-list-item>
+                                        <v-divider></v-divider>
+                                        <v-list-item @click="openColorPicker(typ, getColor(typ, styleConfig.color))">
+                                            <v-list-item-title>Custom…</v-list-item-title>
+                                        </v-list-item>
+                                    </v-list>
+                                </v-menu>
                                 <v-btn size="x-small" color="secondary" variant="text" prepend-icon="mdi-refresh" @click="reset(typ, styleConfig)">Reset</v-btn>
                             </div>
                         </td>
@@ -59,8 +79,8 @@
     </div>
     <v-row class="ma-5" no-gutters>
         <v-col cols="8" class="pr-3">
-            <v-card color="black">
-                <v-card-text style="background-color: black;">
+            <v-card color="surface">
+                <v-card-text>
                     <div>
                         <div class="mb-2 d-flex align-center">
                             <v-icon class="mr-2" :color="getColor('narrator_messages', config.narrator_messages?.color)">mdi-script-text-outline</v-icon>
@@ -120,7 +140,9 @@
 
 <script>
 import { SceneTextParser } from '@/utils/sceneMessageRenderer';
-import { DEFAULT_APPEARANCE_COLORS } from '@/utils/messageColors.js';
+import { getMessageColor } from '@/utils/messageColors.js';
+import { PALETTE_KEYS } from '@/theme/palette.js';
+import { currentTheme } from '@/theme/store.js';
 
 export default {
     name: 'AppConfigAppearanceScene',
@@ -261,6 +283,7 @@ export default {
             colorPicker: null,
             color: "#000000",
             colorPickerTarget: null,
+            paletteKeys: PALETTE_KEYS,
             typLabelMap: {
                 "narrator_messages": "Narrator Messages",
                 "actor_messages": "Actor Messages",
@@ -321,7 +344,9 @@ export default {
         hydrateMarkupStyle(sceneConfig, key, { italic = false, bold = false, withShow = false } = {}) {
             if (!sceneConfig[key]) {
                 const fresh = {
-                    color: DEFAULT_APPEARANCE_COLORS[key],
+                    // Unset — resolved to the type's theme role colour by
+                    // getMessageColor/getColor below.
+                    color: null,
                     italic,
                     bold,
                     override_color: true,
@@ -346,6 +371,17 @@ export default {
                 this.config[this.colorPickerTarget].color = this.color;
             }
         },
+        // A palette swatch picked from the "Color" menu stores the key
+        // string (e.g. "teal") as the colour, rather than a hex value.
+        selectPaletteColor(typ, key) {
+            if (this.config[typ]) {
+                this.config[typ].color = key;
+            }
+        },
+        // The hex a palette key currently resolves to, for swatch previews.
+        paletteSwatch(key) {
+            return currentTheme.value.palette[key];
+        },
         buildCssStyles(typ, config) {
             if (!config) {
                 config = {};
@@ -366,16 +402,21 @@ export default {
             this.colorPickerTarget = target;
         },
 
-        getColor(typ, color) {
-            // if color is None load the default color
-            if (color === null) {
-                // Message-type keys use the `_messages` suffix in the config UI
-                // (e.g. "narrator_messages") but DEFAULT_APPEARANCE_COLORS is
-                // keyed by bare type name — strip the suffix on lookup.
-                const key = typ.endsWith('_messages') ? typ.slice(0, -'_messages'.length) : typ;
-                return DEFAULT_APPEARANCE_COLORS[key];
-            }
-            return color;
+        // Resolve `typ`'s effective colour through the theme — a palette
+        // key resolves to that palette hex, an unset/legacy-default colour
+        // falls back to the type's theme role colour, and any other hex is
+        // kept as-is. See utils/messageColors.js's getMessageColor.
+        //
+        // `color` itself isn't used (this.config already holds the same
+        // value `styleConfig.color`/`config.color` reads at the call
+        // sites) — the parameter stays so every existing call site keeps
+        // its current shape.
+        getColor(typ, _color) {
+            // Message-type keys use the `_messages` suffix in the config UI
+            // (e.g. "narrator_messages") but getMessageColor expects the
+            // bare type name — strip the suffix on lookup.
+            const key = typ.endsWith('_messages') ? typ.slice(0, -'_messages'.length) : typ;
+            return getMessageColor({ scene: this.config }, key, currentTheme.value);
         }
     },
 }

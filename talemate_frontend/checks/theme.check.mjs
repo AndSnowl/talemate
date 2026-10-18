@@ -10,6 +10,7 @@ import { ALL_ROLES, TEXT_ROLES } from '../src/theme/roles.js';
 import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/presets.js';
 import { resolveTheme, toVuetifyColors, themeFromConfig } from '../src/theme/engine.js';
 import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
+import { getMessageColor } from '../src/utils/messageColors.js';
 import { LGraph, LGraphGroup } from 'litegraph.js';
 import { convertGraphToJSON } from '../src/utils/exportGraph.js';
 // Importing this for its side effects (rebuildThemeNodeColors() at module
@@ -223,6 +224,42 @@ check('group_color_is_raw_single_source_of_truth', () => {
     assert.ok(
         !exported.groups[0].color,
         `expected no stored colour after "No color", got ${exported.groups[0].color}`,
+    );
+});
+
+// Task 5: message colours fold into the theme — getMessageColor resolves
+// against an explicit resolved theme (never the live `currentTheme`
+// singleton here, so these checks don't depend on load order / applied
+// theme state).
+check('message_color_empty_uses_role', () => {
+    const r = resolveTheme(getPreset('gruvbox-dark'));
+    assert.equal(
+        getMessageColor({ scene: { narrator_messages: {} } }, 'narrator', r),
+        r.colors.narrator,
+    );
+});
+
+check('message_color_legacy_default_is_unset', () => {
+    const r = resolveTheme(getPreset('gruvbox-dark'));
+    assert.equal(
+        getMessageColor({ scene: { quotes: { color: '#FFFFFF' } } }, 'quotes', r),
+        r.colors.quotes,
+    );
+});
+
+check('message_color_palette_name', () => {
+    const r = resolveTheme(getPreset('gruvbox-dark'));
+    assert.equal(
+        getMessageColor({ scene: { quotes: { color: 'teal' } } }, 'quotes', r),
+        r.palette.teal,
+    );
+});
+
+check('message_color_user_hex_kept', () => {
+    const r = resolveTheme(getPreset('gruvbox-dark'));
+    assert.equal(
+        getMessageColor({ scene: { quotes: { color: '#123456' } } }, 'quotes', r),
+        '#123456',
     );
 });
 
