@@ -386,7 +386,10 @@ def test_name_bubble_language_section(app, page):
     assert "“ford-born”" in section_text
 
     culture_row = page.get_by_test_id("name-culture-row")
-    assert "Worked out by the AI · picked from the Veldhaer mix" in culture_row.inner_text()
+    assert (
+        "Worked out by the AI · picked from the Veldhaer mix"
+        in culture_row.inner_text()
+    )
 
     review_note = page.get_by_test_id("name-unreviewed-note")
     assert "Picked from Given names (male)." in review_note.inner_text()

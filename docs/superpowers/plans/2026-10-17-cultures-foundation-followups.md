@@ -55,6 +55,10 @@ This note goes with the foundation plan (`2026-10-17-cultures-foundation.md`) an
 - There's no button to delete a culture. The server action exists.
 - The import preview shows place counts but not place names, and has no language-level chip.
 - Export doesn't include unassigned names. The skill can read `glossary.json` from the world folder instead.
-- The Cultures badge shows 0 until the tab has been opened once.
+- ~~The Cultures badge shows 0 until the tab has been opened once.~~ Fixed in plan 3 (the badge reads the pushed `counts`).
 - Re-importing an older file can bring back an addition you dropped.
 - The NLTK `punkt_tab` data is missing on the build machine. It causes 141 test failures elsewhere in the suite, none of them in cultures code.
+- Plan 3: story highlights match stored phrases and dictionary words exactly (case and apostrophes aside). An inflected form the narrator invents ("Saerviks", "Dhunna's") isn't highlighted.
+- Plan 3: a character who isn't in a snapshot anchor message gets a culture chip in the World panel, but their name isn't highlighted in the story (names only highlight on anchor messages, as before).
+- Plan 3: a place is unsure but its name is reviewed → the review dot opens Places, not the glossary.
+- Culture naming won't give a woman a male-only name. If a culture has only male given-name generators, a female character gets no culture name.
