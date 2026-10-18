@@ -211,8 +211,9 @@ export default {
                 parentheses: sceneConfig.parentheses || narratorStyles,
                 brackets: sceneConfig.brackets || narratorStyles,
                 default: narratorStyles,
+                messageType: 'narrator',
             });
-            
+
             return parser.parse('The quick brown fox jumps over the lazy dog. "Did you see that?" he wondered (with some surprise). The moment felt [significant] and *unforgettable*.');
         },
         renderedActorMessagePreview() {
@@ -233,8 +234,9 @@ export default {
                 parentheses: sceneConfig.parentheses || narratorStyles,
                 brackets: sceneConfig.brackets || narratorStyles,
                 default: defaultStyles,
+                messageType: 'actor',
             });
-            
+
             return parser.parse('John walked into the room. "Wow, that was a quick brown fox - did you see it?" he exclaimed (still catching his breath). The scene was [dramatic] and *intense*.');
         },
         renderedContextInvestigationPreview() {
@@ -264,6 +266,7 @@ export default {
                 brackets: sceneConfig.brackets || narratorStyles,
                 entities: sceneConfig.entities,
                 default: narratorStyles,
+                messageType: 'narrator',
             });
 
             return parser.parse(

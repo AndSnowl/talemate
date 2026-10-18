@@ -11,6 +11,7 @@ import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/pres
 import { resolveTheme, toVuetifyColors, themeFromConfig } from '../src/theme/engine.js';
 import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
 import { getMessageColor } from '../src/utils/messageColors.js';
+import { SceneTextParser } from '../src/utils/sceneMessageRenderer.js';
 import { LGraph, LGraphGroup } from 'litegraph.js';
 import { convertGraphToJSON } from '../src/utils/exportGraph.js';
 // Importing this for its side effects (rebuildThemeNodeColors() at module
@@ -260,6 +261,32 @@ check('message_color_user_hex_kept', () => {
     assert.equal(
         getMessageColor({ scene: { quotes: { color: '#123456' } } }, 'quotes', r),
         '#123456',
+    );
+});
+
+// Fix round 1, finding 1/2: SceneTextParser (the single choke point every
+// message component and AppConfigAppearanceScene.vue's preview renders
+// through) must resolve a style's raw stored colour the same way
+// getMessageColor does — not use it verbatim. Relies on the live
+// currentTheme being gruvbox-dark (its default with no applied config —
+// see theme/store.js), same preset asserted against here.
+check('scene_text_parser_legacy_quotes_color_is_unset', () => {
+    const r = resolveTheme(getPreset('gruvbox-dark'));
+    const parser = new SceneTextParser({ quotes: { color: '#FFFFFF' } });
+    const html = parser.parse('"hi"');
+    assert.ok(
+        html.includes(`color: ${r.colors.quotes};`),
+        `expected quotes to render the quotes role colour (${r.colors.quotes}), got: ${html}`,
+    );
+});
+
+check('scene_text_parser_palette_key_quotes_color', () => {
+    const r = resolveTheme(getPreset('gruvbox-dark'));
+    const parser = new SceneTextParser({ quotes: { color: 'teal' } });
+    const html = parser.parse('"hi"');
+    assert.ok(
+        html.includes(`color: ${r.palette.teal};`),
+        `expected quotes to render the palette teal colour (${r.palette.teal}), got: ${html}`,
     );
 });
 

@@ -79,39 +79,51 @@ function roleColorFor(typ, resolved) {
   return resolved?.colors?.[role];
 }
 
-// Resolve the effective color for a scene-message type against the user's
-// appearance config and a resolved theme (see ../theme/engine.js's
-// `resolveTheme` / `themeFromConfig`; defaults to the live applied theme).
+// Resolve a raw stored colour value for a scene-message/markup type against
+// a resolved theme (see ../theme/engine.js's `resolveTheme` /
+// `themeFromConfig`; defaults to the live applied theme). This is the
+// single choke point for the "counts as unset" rule — getMessageColor uses
+// it directly, and sceneMessageRenderer.js's SceneTextParser uses it too
+// (for every style it renders: quotes, parentheses, brackets, emphasis,
+// entities, and the message type's own "default" text colour), so a saved
+// palette key or legacy-default hex resolves the same way everywhere it's
+// rendered, not just through getMessageColor's direct callers.
 //
-// `cfg.color` is resolved as:
+// `rawColor` (typically `cfg.color`) is resolved as:
 //   - a palette key (exact, case-sensitive match against PALETTE_KEYS): the
 //     palette's hex for that key
 //   - a hex value equal (any case) to LEGACY_DEFAULT_COLORS[typ]: treated as
 //     unset — the type's theme role colour
 //   - any other hex value: that hex, verbatim
 //   - empty/unset: the type's theme role colour
-export function getMessageColor(appearanceConfig, typ, resolved = currentTheme.value) {
-  const cfg = appearanceConfig?.scene?.[sceneConfigKey(typ)];
-  const color = cfg?.color;
+export function resolveMessageColor(typ, rawColor, resolved = currentTheme.value) {
   const roleColor = roleColorFor(typ, resolved);
 
-  if (!color) {
+  if (!rawColor) {
     return roleColor;
   }
 
-  if (PALETTE_KEYS.includes(color)) {
-    return resolved?.palette?.[color] ?? roleColor;
+  if (PALETTE_KEYS.includes(rawColor)) {
+    return resolved?.palette?.[rawColor] ?? roleColor;
   }
 
-  if (isHex(color)) {
+  if (isHex(rawColor)) {
     const legacy = LEGACY_DEFAULT_COLORS[typ];
-    if (legacy && color.toLowerCase() === legacy.toLowerCase()) {
+    if (legacy && rawColor.toLowerCase() === legacy.toLowerCase()) {
       return roleColor;
     }
-    return color;
+    return rawColor;
   }
 
   return roleColor;
+}
+
+// Resolve the effective color for a scene-message type against the user's
+// appearance config and a resolved theme — see `resolveMessageColor` for
+// the resolution rules.
+export function getMessageColor(appearanceConfig, typ, resolved = currentTheme.value) {
+  const cfg = appearanceConfig?.scene?.[sceneConfigKey(typ)];
+  return resolveMessageColor(typ, cfg?.color, resolved);
 }
 
 // Build an inline CSS style string (color + optional italic/bold) for a
