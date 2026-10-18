@@ -489,6 +489,13 @@ import { isVisualAgentReady, isImageEditAvailable, isImageCreateAvailable } from
 import { createSceneAssetsRequester } from './VisualAssetsMixin.js';
 import AutocompleteMixin from './AutocompleteMixin.js';
 import { culturesStory, ingestCulturesMessage, requestReview } from '@/components/cultures/culturesStory.js';
+import { themeFromConfig } from '@/theme/engine.js';
+import { applyTheme } from '@/theme/store.js';
+// Vuetify wraps `$vuetify.theme` in `reactive()`, which auto-unwraps the
+// `themes` ref inside it (Vue unwraps top-level refs of a reactive proxy on
+// access) — `$vuetify.theme.themes.value` is then undefined. Go straight to
+// the plugin's own (un-proxied) theme instance instead.
+import vuetify from '@/plugins/vuetify.js';
 
 export default {
   components: {
@@ -704,6 +711,13 @@ export default {
     }
   },
   watch:{
+    effectiveAppearanceConfig: {
+      handler(appearance) {
+        applyTheme(vuetify.theme, themeFromConfig(appearance?.theme));
+      },
+      deep: true,
+      immediate: true,
+    },
     availableTabs(tabs) {
       // check if tab still exists
       // in tabs

@@ -24,7 +24,6 @@
                     icon="mdi-chevron-left"
                     variant="flat"
                     color="rgba(0,0,0,0.5)"
-                    theme="dark"
                     class="nav-arrow nav-arrow-left"
                     @click.stop="$emit('prev')"
                 ></v-btn>
@@ -34,7 +33,6 @@
                     icon="mdi-chevron-right"
                     variant="flat"
                     color="rgba(0,0,0,0.5)"
-                    theme="dark"
                     class="nav-arrow nav-arrow-right"
                     @click.stop="$emit('next')"
                 ></v-btn>
