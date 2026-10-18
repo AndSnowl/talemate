@@ -72,10 +72,12 @@ Key points:
 - `foreign_renderings` is how *this* culture's speakers render a name
   that belongs to *another* culture — e.g. how river-folk say a
   mountain-clan name. Each `name` must match an existing glossary entry
-  (in any culture) *at import time*; if the target culture hasn't been
-  imported yet, the entry is silently dropped rather than held for
-  later — when designing several cultures together, import the one a
-  name belongs to before the culture that renders it.
+  (in any culture) *at import time*. If the target culture hasn't been
+  imported yet, the entry is dropped and never applied later — `cli
+  validate`/`sample` won't catch this (they only check the file on its
+  own), but the import preview warns with `No glossary entry found for
+  '<name>'`. When designing several cultures together, import the one
+  a name belongs to before the culture that renders it.
 - Re-importing an existing culture replaces its core fields but keeps
   play `additions`, never deletes a glossary entry or place, and keeps
   Talemate's own copy of any glossary entry marked `reviewed` or edited

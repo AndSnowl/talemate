@@ -42,12 +42,13 @@ consonant, then one of `rin`/`rek`/`mar`/`l`.
 — but it's the most common typo in a hand-written pattern: a category
 meant to be `C` but typed `X` silently renders as a stray capital `X`
 in every name that pattern produces. `cli validate` warns about every
-such letter (`'<X>' in pattern '<p>' is not a category, so it is
-written literally`). The warning fires the same way for a capital you
-meant literally — a literal word fragment such as `"The CVC"` in an
-inn-name generator, or the `B` in a choice literal like `[a|B]` — it
-can't tell a typo from an intentional literal, so expect and ignore the
-warning whenever the capital is there on purpose.
+such letter (`Generator '<name>': '<X>' in pattern '<p>' is not a
+category, so it is written literally`). The warning fires the same way
+for a capital you meant literally — a literal word fragment such as
+`"The CVC"` in an inn-name generator, or the `B` in a choice literal
+like `[a|B]` — it can't tell a typo from an intentional literal, so
+expect and ignore the warning whenever the capital is there on
+purpose.
 
 ## Pattern weight
 
