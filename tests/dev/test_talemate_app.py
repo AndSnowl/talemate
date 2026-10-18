@@ -230,6 +230,8 @@ def test_start_reports_backend_crash_with_log_tail(tmp_path, monkeypatch):
         ],
     )
     # A stand-in frontend that never becomes ready; start must clean it up.
+    # Its argv carries a path under the root, so the runner's ownership
+    # check matches it by cmdline (as for the real backend), not by cwd.
     monkeypatch.setattr(
         talemate_app,
         "frontend_command",
@@ -237,10 +239,49 @@ def test_start_reports_backend_crash_with_log_tail(tmp_path, monkeypatch):
             sys.executable,
             "-c",
             "import time; time.sleep(60)",
-            str(copy_root),
+            str(copy_root / "talemate_frontend"),
         ],
     )
+    launched = []
+    real_launch = talemate_app._launch
+
+    def recording_launch(cmd, cwd, env, log_file):
+        proc = real_launch(cmd, cwd, env, log_file)
+        launched.append(proc)
+        return proc
+
+    monkeypatch.setattr(talemate_app, "_launch", recording_launch)
     root = tmp_path / "root"
     with pytest.raises(talemate_app.AppStartError, match="boom"):
         talemate_app.start(root=root, timeout=60)
     assert not (root / ".talemate-app.json").exists()
+    assert len(launched) == 2
+    frontend = launched[1]
+    assert str(root.resolve() / "talemate_frontend") in frontend.args
+    assert not _pid_alive(frontend.pid)
+
+
+def test_port_free_after_closed_connection_in_time_wait():
+    # The side that closes first keeps the port in TIME_WAIT; a fresh
+    # server can still bind it (with SO_REUSEADDR), so it counts as free.
+    server = socket.socket()
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+    port = server.getsockname()[1]
+    client = socket.create_connection(("127.0.0.1", port))
+    conn, _ = server.accept()
+    conn.close()  # server side closes first -> TIME_WAIT on `port`
+    client.recv(1)  # wait for the FIN
+    client.close()
+    server.close()
+
+    assert talemate_app._port_free(port)
+
+
+def test_backend_env_keeps_writes_in_root(tmp_path):
+    env = talemate_app.backend_env(tmp_path)
+    assert env["PYTHONPATH"].split(os.pathsep)[0] == str(tmp_path / "src")
+    assert env["PYTHONPYCACHEPREFIX"] == str(tmp_path / "pycache")
+    assert env["NLTK_DATA"] == str(tmp_path / "nltk_data")
+    assert "VIRTUAL_ENV" not in env

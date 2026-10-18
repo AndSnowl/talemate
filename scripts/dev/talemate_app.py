@@ -250,6 +250,9 @@ def _kill_group(pid: int, root: Path) -> None:
 
 def _port_free(port: int) -> bool:
     with socket.socket() as sock:
+        # Like the servers themselves: a port held only by TIME_WAIT sockets
+        # from a previous run is free; a live listener still fails the bind.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind(("127.0.0.1", port))
         except OSError:
@@ -356,6 +359,30 @@ def _prepare_root(root: Path) -> None:
     (root / ROOT_MARKER).write_text("created by scripts/dev/talemate_app.py\n")
 
 
+def backend_env(root: Path) -> dict:
+    """Environment for the backend: the copy's code, all writes inside root."""
+    env = dict(os.environ)
+    env.pop("VIRTUAL_ENV", None)  # the copy's .venv is the project env
+    env["PYTHONPATH"] = os.pathsep.join(
+        p for p in (str(root / "src"), os.environ.get("PYTHONPATH")) if p
+    )
+    # .venv is a symlink into the checkout; keep bytecode caches out of it.
+    env["PYTHONPYCACHEPREFIX"] = str(root / "pycache")
+    env["NLTK_DATA"] = str(root / "nltk_data")  # keep downloads in root
+    return env
+
+
+def frontend_env(backend_port: int) -> dict:
+    env = dict(os.environ)
+    env["VITE_TALEMATE_BACKEND_WEBSOCKET_URL"] = f"ws://127.0.0.1:{backend_port}"
+    env["COREPACK_ENABLE_DOWNLOAD_PROMPT"] = "0"
+    # pnpm's pre-run deps check keys node_modules state by the checkout's
+    # path, so in the copy it would always decide to reinstall (purging
+    # node_modules, whose entries point into the checkout). Turn it off.
+    env["pnpm_config_verify_deps_before_run"] = "false"
+    return env
+
+
 def _launch(cmd: list[str], cwd: Path, env: dict, log_file: Path) -> subprocess.Popen:
     with open(log_file, "wb") as log:
         return subprocess.Popen(
@@ -395,20 +422,6 @@ def start(
     log_dir.mkdir(exist_ok=True)
     (root / "nltk_data").mkdir(exist_ok=True)
 
-    backend_env = dict(os.environ)
-    backend_env.pop("VIRTUAL_ENV", None)  # the copy's .venv is the project env
-    backend_env["PYTHONPATH"] = os.pathsep.join(
-        p for p in (str(root / "src"), os.environ.get("PYTHONPATH")) if p
-    )
-    backend_env["NLTK_DATA"] = str(root / "nltk_data")  # keep downloads in root
-    frontend_env = dict(os.environ)
-    frontend_env["VITE_TALEMATE_BACKEND_WEBSOCKET_URL"] = f"ws://127.0.0.1:{bp}"
-    frontend_env["COREPACK_ENABLE_DOWNLOAD_PROMPT"] = "0"
-    # pnpm's pre-run deps check keys node_modules state by the checkout's
-    # path, so in the copy it would always decide to reinstall (purging
-    # node_modules, whose entries point into the checkout). Turn it off.
-    frontend_env["pnpm_config_verify_deps_before_run"] = "false"
-
     backend_log = log_dir / "backend.log"
     frontend_log = log_dir / "frontend.log"
     procs: list[tuple[str, subprocess.Popen, Path]] = []
@@ -416,7 +429,9 @@ def start(
         procs.append(
             (
                 "backend",
-                _launch(backend_command(root, bp), root, backend_env, backend_log),
+                _launch(
+                    backend_command(root, bp), root, backend_env(root), backend_log
+                ),
                 backend_log,
             )
         )
@@ -426,7 +441,7 @@ def start(
                 _launch(
                     frontend_command(root, fp),
                     root / "talemate_frontend",
-                    frontend_env,
+                    frontend_env(bp),
                     frontend_log,
                 ),
                 frontend_log,
