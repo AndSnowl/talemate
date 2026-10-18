@@ -1,0 +1,69 @@
+{
+  "format_version": 1,
+  "culture": {
+    "id": "elsiri",
+    "name": "Elsiri",
+    "color": "#4FC3F7",
+    "description": "Coast-folk of the Birch Coast. Net-menders, salt-gatherers and singers; quiet, patient, slow to anger and slower to forget.",
+    "language": {
+      "name": "Elsiri",
+      "level": "naming",
+      "writable": true,
+      "sound": "Soft and flowing: l, r, n, s and w between long, open vowels (ia, ie, ea, ii, aa). No harsh stops at all, never kh, dh or th. Words drift to an open vowel at the end, as if sung across water.",
+      "categories": {
+        "L": "l*3 r*2 n*2 s*2 m w",
+        "V": "a*2 e i*2 o",
+        "W": "ia*2 ie ea ii aa io"
+      },
+      "syllable_notes": [
+        "Every name holds a long vowel or begins with a vowel",
+        "No hard stops: never k, t, d, g, b or p",
+        "Women's names and place names end in an open vowel"
+      ],
+      "generators": [
+        {
+          "id": "given_female",
+          "name": "Given names (female)",
+          "use": "people",
+          "patterns": ["VLWL[a|e|ia]", "LWL[ara|enna|isa]", "VL(V)LW"],
+          "reject": [],
+          "capitalize": true,
+          "min_length": 4,
+          "max_length": 12
+        },
+        {
+          "id": "given_male",
+          "name": "Given names (male)",
+          "use": "people",
+          "patterns": ["VLW[n|s|l]", "LWL[ien|ion|ias]", "VL(V)LW[n|s]"],
+          "reject": [],
+          "capitalize": true,
+          "min_length": 4,
+          "max_length": 12
+        },
+        {
+          "id": "place_names",
+          "name": "Place names",
+          "use": "places",
+          "patterns": ["VLVL[ara|eia|ia]", "LWL[enna|ira|osa]", "VLW[mere|wenna]"],
+          "reject": [],
+          "capitalize": true,
+          "min_length": 5,
+          "max_length": 16
+        }
+      ]
+    },
+    "customs": [
+      "Nets are mended in song; a net mended in silence is thought to tear.",
+      "A guest is offered salt before bread, and refusing it is an insult.",
+      "The dead are named once at the tide line and never spoken of by name again."
+    ],
+    "food": "Salt fish, kelp bread, mussels steamed in birch smoke. Pale linen and grey wool, birch-bark beads.",
+    "holidays": [],
+    "additions": []
+  },
+  "glossary": [
+    {"text": "Ilsara", "kind": "place", "meaning": "white sands"},
+    {"text": "Saelin", "kind": "person", "meaning": "tide-born"}
+  ]
+}
