@@ -11,10 +11,10 @@ import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/pres
 import { resolveTheme, toVuetifyColors, toVuetifyVariables, themeFromConfig } from '../src/theme/engine.js';
 import { createTheme } from 'vuetify/lib/composables/theme.js';
 import { exportTheme, parseThemeFile } from '../src/theme/themeFile.js';
-import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
+import { toHex, characterPaletteKey, dataColor, nodeColors, nodeEditorColors } from '../src/theme/dataColors.js';
 import { getMessageColor } from '../src/utils/messageColors.js';
 import { SceneTextParser } from '../src/utils/sceneMessageRenderer.js';
-import { LGraph, LGraphGroup } from 'litegraph.js';
+import { LGraph, LGraphGroup, LGraphNode, LiteGraph, LGraphCanvas } from 'litegraph.js';
 import { convertGraphToJSON } from '../src/utils/exportGraph.js';
 import { themeExtensions } from '../src/theme/codemirrorTheme.js';
 import { EditorState } from '@codemirror/state';
@@ -23,7 +23,7 @@ import { EditorView } from '@codemirror/view';
 // load, and the LGraphCanvas.prototype.drawGroups override) proves the
 // litegraph utilities module itself is importable outside Vite (no `@/`
 // aliases left unresolved) — see Task 4 fix round 1, finding 1.
-import '../src/utils/litegraphUtils.js';
+import { rebuildThemeNodeColors, reapplyNodeColors, applyThemeToCanvas } from '../src/utils/litegraphUtils.js';
 
 let passed = 0;
 const failures = [];
@@ -295,6 +295,70 @@ check('group_color_is_raw_single_source_of_truth', () => {
         !exported.groups[0].color,
         `expected no stored colour after "No color", got ${exported.groups[0].color}`,
     );
+});
+
+// Final fix 2: the node editor stays readable under every preset —
+// LiteGraph's own global text/widget/default colours follow the theme, and
+// its text reaches 4.5:1 on every node title bar and body.
+check('node_editor_text_contrast', () => {
+    for (const preset of BUILTIN_PRESETS) {
+        const r = resolveTheme(preset);
+        const c = nodeEditorColors(r);
+        const values = [...ACCENT_KEYS.map((k) => r.palette[k]), null];
+        for (const value of values) {
+            const { title, body } = nodeColors(value, r);
+            const label = value ?? 'neutral';
+            for (const [what, text, bg] of [
+                ['title text on title', c.NODE_TITLE_COLOR, title],
+                ['node text on body', c.NODE_TEXT_COLOR, body],
+            ]) {
+                const ratio = contrastRatio(text, bg);
+                assert.ok(ratio >= 4.5, `${preset.id} ${label}: ${what} (${text} on ${bg}) is ${ratio.toFixed(2)}`);
+            }
+        }
+        for (const [what, text, bg] of [
+            ['widget text', c.WIDGET_TEXT_COLOR, c.WIDGET_BGCOLOR],
+            ['widget label', c.WIDGET_SECONDARY_TEXT_COLOR, c.WIDGET_BGCOLOR],
+            ['default title', c.NODE_TITLE_COLOR, c.NODE_DEFAULT_COLOR],
+            ['default body', c.NODE_TEXT_COLOR, c.NODE_DEFAULT_BGCOLOR],
+        ]) {
+            const ratio = contrastRatio(text, bg);
+            assert.ok(ratio >= 4.5, `${preset.id}: ${what} (${text} on ${bg}) is ${ratio.toFixed(2)}`);
+        }
+    }
+});
+
+check('node_editor_litegraph_constants_follow_theme', () => {
+    const light = resolveTheme(getPreset('gruvbox-light'));
+    try {
+        rebuildThemeNodeColors(light);
+        const c = nodeEditorColors(light);
+        for (const [key, value] of Object.entries(c)) {
+            if (key === 'link_type_colors') continue;
+            assert.equal(LiteGraph[key], value, `LiteGraph.${key}`);
+        }
+        assert.equal(LiteGraph.NODE_TEXT_COLOR, light.colors['on-surface']);
+        assert.equal(LGraphCanvas.link_type_colors['-1'], c.EVENT_LINK_COLOR);
+
+        const canvas = { setDirty() {} };
+        applyThemeToCanvas(canvas, light);
+        assert.equal(canvas.node_title_color, c.NODE_TITLE_COLOR);
+        assert.equal(canvas.default_link_color, c.LINK_COLOR);
+        assert.equal(canvas.clear_background_color, light.palette['bg-alt']);
+    } finally {
+        rebuildThemeNodeColors(resolveTheme(getPreset(DEFAULT_PRESET_ID)));
+    }
+});
+
+check('unstyled_node_gets_neutral_colors_on_reapply', () => {
+    const graph = new LGraph();
+    const node = new LGraphNode('plain');
+    graph.add(node);
+    const light = resolveTheme(getPreset('gruvbox-light'));
+    reapplyNodeColors(graph, light);
+    const neutral = nodeColors(null, light);
+    assert.equal(node.color, neutral.title);
+    assert.equal(node.bgcolor, neutral.body);
 });
 
 // Task 5: message colours fold into the theme — getMessageColor resolves

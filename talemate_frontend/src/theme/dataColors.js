@@ -140,7 +140,37 @@ export function nodeColors(value, resolved = currentTheme.value) {
 
     const accentHex = palette[accent];
     return {
-        title: mix(accentHex, palette.bg, 0.65),
+        // 0.7 (not less): keeps the title text (`on-surface`) at 4.5:1 on
+        // every accent's title bar — see checks' node_editor_text_contrast.
+        title: mix(accentHex, palette.bg, 0.7),
         body: mix(accentHex, palette.bg, 0.8),
+    };
+}
+
+/**
+ * LiteGraph's own global colours (`LiteGraph.*` constants, keyed by their
+ * LiteGraph names) for `resolved`: node text, default (unstyled) node
+ * colours, widgets and links. Text uses `on-surface`/`muted`, which reach
+ * 4.5:1 on every nodeColors() title/body and on the widget background
+ * (see checks' node_editor_text_contrast).
+ */
+export function nodeEditorColors(resolved = currentTheme.value) {
+    const colors = resolved.colors;
+    const neutral = nodeColors(null, resolved);
+    return {
+        NODE_TITLE_COLOR: colors['on-surface'],
+        NODE_SELECTED_TITLE_COLOR: colors['on-surface'],
+        NODE_TEXT_COLOR: colors['on-surface'],
+        NODE_DEFAULT_COLOR: neutral.title,
+        NODE_DEFAULT_BGCOLOR: neutral.body,
+        NODE_DEFAULT_BOXCOLOR: colors.strong,
+        NODE_BOX_OUTLINE_COLOR: colors['on-surface'],
+        WIDGET_BGCOLOR: resolved.palette['bg-alt'],
+        WIDGET_OUTLINE_COLOR: colors.border,
+        WIDGET_TEXT_COLOR: colors['on-surface'],
+        WIDGET_SECONDARY_TEXT_COLOR: colors.muted,
+        LINK_COLOR: colors.muted,
+        EVENT_LINK_COLOR: colors.accent,
+        CONNECTING_LINK_COLOR: colors.success,
     };
 }

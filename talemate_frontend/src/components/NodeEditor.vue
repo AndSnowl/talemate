@@ -313,7 +313,6 @@ import { watch, computed } from 'vue';
 import { LGraphCanvas, LiteGraph } from 'litegraph.js';
 import { initializeGraphFromJSON, normalizeHexColor, rebuildThemeNodeColors, applyThemeToCanvas, reapplyNodeColors } from '@/utils/litegraphUtils'
 import { currentTheme } from '@/theme/store';
-import { nodeColors } from '@/theme/dataColors';
 import { themeExtensions } from '@/theme/codemirrorTheme';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { convertGraphToJSON, convertSelectedGraphToJSON } from '@/utils/exportGraph.js'
@@ -929,17 +928,17 @@ export default {
                 };
             }
 
-            if (highlightState === "error") {
-                const dangerHex = currentTheme.value.colors.danger;
-                ltNode.color = nodeColors(dangerHex).title;
-                ltNode.title_text_color = null;
-                ltNode.boxcolor = dangerHex;
-            } else {
-                const accentHex = currentTheme.value.colors.accent;
-                ltNode.color = nodeColors(accentHex).title;
-                ltNode.title_text_color = null;
-                ltNode.boxcolor = accentHex;
-            }
+            // The full-strength role colour (not a nodeColors() tint) as the
+            // title bar, so a running/failed node stands out from every
+            // node category's muted tint; its title text is the theme's bg,
+            // which reaches 4.5:1 on every text role (contrast_text_roles).
+            const theme = currentTheme.value;
+            const highlightHex = highlightState === "error"
+                ? theme.colors.danger
+                : theme.colors.success;
+            ltNode.color = highlightHex;
+            ltNode.title_text_color = theme.palette.bg;
+            ltNode.boxcolor = highlightHex;
 
             ltNode._talemateHighlightState = highlightState;
         },

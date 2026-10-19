@@ -5,7 +5,7 @@ import { trackRecentNodes } from './recentNodes.js';
 import { handleFitGroupToNodes, handleDuplicateGroup, handleVerticalSnapGroup, handleCreateGroupFromSelectedNodes } from './groupInteractions.js';
 import { handleWatchNodeShortcut, handleSetStateNodeShortcut, handleStageNodeShortcut } from './graphConnectionUtil.js';
 import { isPrimaryModifier } from './keyboardModifiers.js';
-import { nodeColors } from '../theme/dataColors.js';
+import { nodeColors, nodeEditorColors } from '../theme/dataColors.js';
 import { currentTheme } from '../theme/store.js';
 import { ACCENT_KEYS } from '../theme/palette.js';
 import { hexToRgba } from '../theme/colorMath.js';
@@ -93,6 +93,17 @@ export function rebuildThemeNodeColors(resolved = currentTheme.value) {
         bgcolor: palette.base1,
         groupcolor: palette.base2,
     };
+
+    // LiteGraph's own global colours (node text, unstyled nodes, widgets,
+    // links) — read at draw time, so updating them here is enough.
+    const editorColors = nodeEditorColors(resolved);
+    Object.assign(LiteGraph, editorColors);
+    LGraphCanvas.link_type_colors = {
+        ...LGraphCanvas.link_type_colors,
+        '-1': editorColors.EVENT_LINK_COLOR,
+        number: editorColors.LINK_COLOR,
+        node: resolved.colors.link,
+    };
 }
 
 /**
@@ -101,7 +112,17 @@ export function rebuildThemeNodeColors(resolved = currentTheme.value) {
  */
 export function applyThemeToCanvas(canvas, resolved = currentTheme.value) {
     if (!canvas) return;
+    const editorColors = nodeEditorColors(resolved);
     canvas.clear_background_color = resolved.palette['bg-alt'];
+    // Copied from LiteGraph's constants once, at canvas construction.
+    canvas.node_title_color = editorColors.NODE_TITLE_COLOR;
+    canvas.default_link_color = editorColors.LINK_COLOR;
+    canvas.default_connection_color = {
+        input_off: resolved.colors.muted,
+        input_on: resolved.colors.success,
+        output_off: resolved.colors.muted,
+        output_on: resolved.colors.success,
+    };
     canvas.setDirty(true, true);
 }
 
@@ -120,22 +141,16 @@ export function reapplyNodeColors(graph, resolved = currentTheme.value) {
     if (!graph) return;
 
     for (const node of graph._nodes || []) {
-        if (node.type === 'util/ModuleStyle') {
-            if (node.properties?.title_color) {
-                node.color = nodeColors(node.properties.title_color, resolved).title;
-            }
-            if (node.properties?.node_color) {
-                node.bgcolor = nodeColors(node.properties.node_color, resolved).body;
-            }
-        } else if (node._definition?.style) {
-            const style = node._definition.style;
-            if (style.title_color) {
-                node.color = nodeColors(style.title_color, resolved).title;
-            }
-            if (style.node_color) {
-                node.bgcolor = nodeColors(style.node_color, resolved).body;
-            }
-        }
+        // Comments re-tint themselves on every draw (see commentNode.js).
+        if (node instanceof CommentNode) continue;
+        // A missing stored colour gives nodeColors' neutral pair, the
+        // same as the NodeClass constructor gives an unstyled node.
+        // A ModuleStyle node's own properties win over its definition's
+        // style, as in the NodeClass constructor.
+        const style = node._definition?.style || {};
+        const props = node.type === 'util/ModuleStyle' ? node.properties || {} : {};
+        node.color = nodeColors(props.title_color || style.title_color, resolved).title;
+        node.bgcolor = nodeColors(props.node_color || style.node_color, resolved).body;
     }
 }
 
@@ -730,9 +745,11 @@ function createNodeClass(nodeDefinition) {
         }
         this.titleIcon = "F09DE"; // circle
 
+        // An unstyled node (or style without colours) gets nodeColors'
+        // neutral pair, the same as reapplyNodeColors gives it.
+        this.color = nodeColors(nodeDefinition.style?.title_color).title;
+        this.bgcolor = nodeColors(nodeDefinition.style?.node_color).body;
         if(nodeDefinition.style) {
-            this.color = nodeColors(nodeDefinition.style.title_color).title;
-            this.bgcolor = nodeColors(nodeDefinition.style.node_color).body;
             // Store the icon if provided
             if(nodeDefinition.style.icon) {
                 this.titleIcon = nodeDefinition.style.icon;
