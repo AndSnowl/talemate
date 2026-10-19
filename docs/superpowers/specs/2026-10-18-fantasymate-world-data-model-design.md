@@ -370,7 +370,11 @@ owner's suggested order (world, scenes, characters, cultures):
    facts as the truth; it informs phase 2's prompt work, not phase 1's schema.
 1. **World store.** SQLite per world, ids, the general thing shape (core-field timelines, facts,
    references, sources, both clocks), the calendar basics needed for dates, and the derived search
-   index. Fully tested before any screen uses it. The app may be broken from here.
+   index. Fully tested before any screen uses it. The app may be broken from here. (Done
+   2026-10-19. Undo now follows explicit reversal links; see
+   `docs/superpowers/plans/2026-10-19-world-undo-provenance.md`.)
+1b. **Hardening before phase 2** (owner, 2026-10-19). This is the "Before phase 2" list under
+   "Code health" below. Plan: `docs/superpowers/plans/2026-10-19-fantasymate-pre-phase-2.md`.
 2. **Scenes and characters together** (a scene can't be played without characters). Message tree
    with stable ids and dates, mention records, scene-local changes, characters as facts with
    generated prose, the existing features moved over, the node editor's data nodes rewritten, the
@@ -387,6 +391,87 @@ owner's suggested order (world, scenes, characters, cultures):
 5. **The rest**: items, dated images with new-portrait offers, and the view-as-of-a-date screen for
    any thing.
 6. **Later**: stories as a reading order (see "Navigation").
+
+## Code health
+
+This is a survey of the inherited code, measured on 2026-10-19 (sizes and counts, not a
+line-by-line audit). The code works and has a real test suite: 251 test files and cached prompt
+baselines. Its maintainability problems are concentrated in a few places:
+
+- **God classes.**
+  - `Scene` (`tale_mate.py`) has 126 methods and about 2,050 lines. It holds history, characters,
+    time, saving, memory, assets and state.
+  - `ClientBase` has 112 methods, and `Agent` has 69.
+  - Agents reach straight into the scene, with about 440 `scene.` references under `agents/`.
+- **Large files.**
+  - About 20 Python files are over 1,100 lines, led by node core (2,559), `tale_mate.py` (2,168)
+    and `client/base.py` (2,100).
+  - On the frontend, the largest are `SceneMessages.vue` (2,394), `litegraphUtils.js` (2,305)
+    and `TalemateApp.vue` (2,102).
+- **Long functions.** 92 functions are over 100 lines, and 9 are over 200. The engine API
+  `create()` factories are mostly nested class definitions. The real ones are
+  `websocket_endpoint` (283), `_send_prompt` (229) and `persist_character` (217).
+- **Import tangles.** There are 188 imports inside functions, most of them working around
+  circular imports.
+- **Implicit frontend state.**
+  - There is no store.
+  - 98 components each register their own websocket handlers.
+  - Data passes through 140 provide/inject links.
+- **Duplication and drift.**
+  - There are two `slugify` functions.
+  - Ad hoc ids are 6, 8, 10 or 12 hex characters long.
+  - Atomic writes exist only in the cultures code.
+  - There are 96 lookups of characters by name.
+  - The shared-world sync copies data and overwrites it.
+- **Silent errors.** 12 places catch an exception and do nothing.
+
+### Before phase 2
+
+Each of these is small and protective:
+
+1. **A green test suite.** The 141 "environment" failures (NLTK's `punkt_tab` data is missing in
+   tests) make every run red and hide real regressions. The tests must pass with no network
+   access.
+2. **chromadb usable outside pytest on Guix.** Add zlib to the dev shell and to the dev app's
+   library path (ruling R7 of the world-store build).
+3. **Pin today's behaviour where phase 2 will cut.** Add a golden test that plays a short scene
+   with the mock client and records both the prompts the AI receives and the saved scene. The
+   rewrite will change these recordings, and every change is then reviewed on purpose rather than
+   happening by accident.
+4. **Strict type checking (mypy) on `src/talemate/world/`**, enforced by the test suite, so the
+   new package stays clean.
+5. **World view hardening** that phase 2 builds on. The deferred review items:
+   - tests for field values, date decoding and fact order;
+   - tests that `referencing()` drops ended and removed facts;
+   - replacing the `IN (…)` id lists, which fail past about 32,000 things, with a join on the
+     same live filter.
+
+Don't clean up code that phase 2 deletes: `shared_context.py`, the name-keyed character maps,
+history ranges stored as list positions, and the per-file changelog.
+
+### During the rework: each phase cleans what it touches
+
+- **Strangle `Scene`.** Each phase-2 task that rewrites part of the scene moves that part into
+  its own module: the message tree, the character registry by id, time and dates, and
+  persistence, which moves into the world database. `Scene` shrinks to a coordinator. No
+  big-bang restructuring.
+- **Ids everywhere.**
+  - Replace the name lookups with the id-based registry as characters move over.
+  - Use the world store's 32-hex ids.
+  - Delete the duplicate `slugify` and the ad hoc id helpers when their callers move.
+- **A narrow interface for agents.** An agent moved onto the new data gets a small scene-context
+  object with only what it needs, instead of the whole `Scene`. This is how the 440 references
+  shrink.
+- **New packages stay import-clean.** New code has no imports inside functions apart from
+  deliberate lazy ones, and strict typing extends to each new package.
+- **Frontend.**
+  - The new Worlds, World and Inbox screens use a small Pinia store with one websocket handler
+    per area.
+  - An old component moves over only when it's being edited anyway.
+- **Silent errors** get logged or re-raised whenever the code around them is touched.
+- **Leave alone what the rework doesn't touch:** `ClientBase`, TTS, the large node files other
+  than the data nodes, and `litegraphUtils.js`. They are large but self-contained, and splitting
+  them now buys nothing.
 
 ## Left to the builder
 
