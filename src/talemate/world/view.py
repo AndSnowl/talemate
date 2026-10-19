@@ -18,6 +18,7 @@ are written.
 import json
 import re
 import sqlite3
+from typing import cast
 
 import structlog
 from pydantic import BaseModel
@@ -107,7 +108,7 @@ class WorldView:
         ).fetchone()
         if row is None:
             return None
-        return json.loads(row["value_json"])
+        return cast(str, json.loads(row["value_json"]))
 
     def _live_things_filter(
         self, prefix: str, *, kind: str | None = None, thing_id: str | None = None

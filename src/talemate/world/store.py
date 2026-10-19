@@ -10,6 +10,10 @@ retirements; leaving the `with` block normally commits it, an exception
 rolls back everything the revision did, including the revision row itself.
 """
 
+# `builtins` is used below to spell `list[...]` in annotations that come
+# after `World.list` in this class: an unqualified `list` there would bind
+# to that classmethod instead of the builtin.
+import builtins
 import functools
 import json
 import sqlite3
@@ -18,7 +22,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
 from pydantic import BaseModel
@@ -75,19 +79,26 @@ def _kind_for(name: str) -> KindSpec:
 def _encode_value(kind_spec: KindSpec, field: str, value: object) -> str:
     spec = next(f for f in kind_spec.fields if f.name == field)
     if spec.type == "date":
-        date = value if isinstance(value, WorldDate) else WorldDate(**value)
+        date = (
+            value
+            if isinstance(value, WorldDate)
+            # a plain {"instant": ..., "precision": ...} dict, passed through
+            # as-is; pydantic validates it at construction, same as any other
+            # caller-supplied value
+            else WorldDate(**cast("dict[str, object]", value))  # type: ignore[arg-type]
+        )
         return date.model_dump_json()
     return json.dumps(value)
 
 
-def _require_open(method: Callable) -> Callable:
+def _require_open(method: Callable[..., Any]) -> Callable[..., Any]:
     """Reject a call on a `Revision` whose transaction has already ended
     (committed or rolled back), since a write afterwards would either
     autocommit outside that transaction or hit an already-closed
     connection."""
 
     @functools.wraps(method)
-    def wrapper(self: "Revision", *args, **kwargs):
+    def wrapper(self: "Revision", *args: Any, **kwargs: Any) -> Any:
         if self._closed:
             raise RuntimeError(
                 "this revision has already ended; open a new one with World.revision()"
@@ -164,7 +175,7 @@ class Revision:
         ).fetchone()
         if row is None:
             raise KeyError(f"no such thing: {thing_id}")
-        return row[0]
+        return cast(str, row[0])
 
     def _thing_kind(self, thing_id: str) -> str:
         """Return a thing's kind name regardless of removal, raising
@@ -176,7 +187,7 @@ class Revision:
         ).fetchone()
         if row is None:
             raise KeyError(f"no such thing: {thing_id}")
-        return row[0]
+        return cast(str, row[0])
 
     def _check_refs(self, text: str) -> None:
         """Raise `ValueError` unless every thing `text` references is live
@@ -230,7 +241,7 @@ class Revision:
         ).fetchone()
         if row is None:
             raise KeyError(f"no such fact: {fact_id}")
-        return row
+        return cast(sqlite3.Row, row)
 
     @_require_open
     def create_thing(
@@ -302,7 +313,7 @@ class Revision:
         text: str,
         valid_from: WorldDate | None = None,
         valid_until: WorldDate | None = None,
-        origin: dict | None = None,
+        origin: dict[str, object] | None = None,
     ) -> str:
         """Add a fact version for `thing_id`. Returns the new `fact_id`."""
 
@@ -337,7 +348,7 @@ class Revision:
                 self.rev,
             ),
         )
-        self._write_fact_refs(cur.lastrowid, text)
+        self._write_fact_refs(cast(int, cur.lastrowid), text)
         return fact_id
 
     @_require_open
@@ -360,15 +371,15 @@ class Revision:
 
         new_text = live["text"] if text is None else text
         new_category = live["category"] if category is None else category
-        new_from = (
+        new_from: WorldDate | None = (
             _decode_date(live["valid_from"], live["from_precision"])
             if valid_from is _UNSET
-            else valid_from
+            else cast("WorldDate | None", valid_from)
         )
-        new_until = (
+        new_until: WorldDate | None = (
             _decode_date(live["valid_until"], live["until_precision"])
             if valid_until is _UNSET
-            else valid_until
+            else cast("WorldDate | None", valid_until)
         )
 
         kind = self._thing_kind(live["thing_id"])
@@ -405,7 +416,7 @@ class Revision:
                 self.rev,
             ),
         )
-        self._write_fact_refs(cur.lastrowid, new_text)
+        self._write_fact_refs(cast(int, cur.lastrowid), new_text)
 
     @_require_open
     def end_fact(self, fact_id: str, until: WorldDate) -> None:
@@ -540,7 +551,7 @@ class World:
         ).fetchone()
         if row is None:
             raise KeyError(key)
-        return row[0]
+        return cast(str, row[0])
 
     def _set_meta(self, key: str, value: str) -> None:
         self._conn.execute("BEGIN IMMEDIATE")
@@ -586,7 +597,9 @@ class World:
 
         return WorldView(self._conn, at, rev if rev is not None else self.head_rev())
 
-    def timeline(self, thing_id: str, rev: int | None = None) -> "list[TimelineEntry]":
+    def timeline(
+        self, thing_id: str, rev: int | None = None
+    ) -> builtins.list["TimelineEntry"]:
         """Every field value and fact start/end live for `thing_id` at
         `rev`, in story-time order. `rev=None` means `head_rev()`. Raises
         `KeyError` if the thing doesn't exist at `rev`."""
@@ -597,7 +610,7 @@ class World:
             self._conn, thing_id, rev if rev is not None else self.head_rev()
         )
 
-    def _live_fact_rows(self, rev: int | None = None) -> "list[sqlite3.Row]":
+    def _live_fact_rows(self, rev: int | None = None) -> builtins.list[sqlite3.Row]:
         """Every fact row live at `rev` on the source clock, across every
         story date -- unlike `view()`, this ignores `valid_from`/
         `valid_until` entirely, since the derived search index (`index.py`)
@@ -613,7 +626,7 @@ class World:
         scene_id: str | None = None,
         branch_id: str | None = None,
         message_id: str | None = None,
-    ) -> "list[RevisionInfo]":
+    ) -> builtins.list[RevisionInfo]:
         """Every revision matching all the given filters, oldest first. This
         is how a branch's or message's contribution is found, e.g. to pass
         to `undo`."""
@@ -649,7 +662,7 @@ class World:
             for row in rows
         ]
 
-    def undo(self, revs: "list[int]", note: str = "") -> "UndoReport":
+    def undo(self, revs: builtins.list[int], note: str = "") -> "UndoReport":
         """Revert what `revs` did, in one new revision with source kind
         `undo`. Rows changed again by a later revision are left alone and
         reported as conflicts. If nothing can be reverted, no revision is
@@ -706,7 +719,7 @@ class World:
                     _now(),
                 ),
             )
-            current = Revision(cursor.lastrowid, conn)
+            current = Revision(cast(int, cursor.lastrowid), conn)
             yield current
         except BaseException:
             conn.execute("ROLLBACK")

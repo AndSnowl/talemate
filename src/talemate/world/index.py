@@ -21,6 +21,7 @@ re-rendered from the world itself, e.g. at a scene's date.
 """
 
 import sqlite3
+from typing import Any, cast
 
 import structlog
 from pydantic import BaseModel
@@ -137,13 +138,13 @@ def _metadata_for(doc: IndexDoc) -> dict[str, object]:
 def _doc_from_result(doc_id: str, text: str, metadata: dict[str, object]) -> IndexDoc:
     return IndexDoc(
         id=doc_id,
-        thing_id=metadata["thing_id"],
-        kind=metadata["kind"],
-        category=metadata["category"] or None,
-        fact_id=metadata["fact_id"] or None,
+        thing_id=cast(str, metadata["thing_id"]),
+        kind=cast(str, metadata["kind"]),
+        category=cast(str, metadata["category"]) or None,
+        fact_id=cast(str, metadata["fact_id"]) or None,
         text=text,
-        valid_from=metadata["valid_from"],
-        valid_until=metadata["valid_until"],
+        valid_from=cast(int, metadata["valid_from"]),
+        valid_until=cast(int, metadata["valid_until"]),
     )
 
 
@@ -153,14 +154,20 @@ class WorldIndex:
     default. Built by `rebuild`, read by `query`; never written to
     directly."""
 
-    def __init__(self, world: World, *, client=None, embedding_function=None):
+    def __init__(
+        self,
+        world: World,
+        *,
+        client: Any = None,
+        embedding_function: Any = None,
+    ):
         self._world = world
         self._embedding_function = embedding_function
         self._client = client if client is not None else self._default_client(world)
         self._collection_name = f"world-{world.id}"
 
     @staticmethod
-    def _default_client(world: World):
+    def _default_client(world: World) -> Any:
         import chromadb
 
         return chromadb.PersistentClient(path=str(world.path / "index"))
@@ -170,7 +177,7 @@ class WorldIndex:
             return {}
         return {"embedding_function": self._embedding_function}
 
-    def _collection(self):
+    def _collection(self) -> Any:
         return self._client.get_collection(
             self._collection_name, **self._collection_kwargs()
         )

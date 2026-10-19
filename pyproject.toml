@@ -127,6 +127,17 @@ use_parentheses = true
 ensure_newline_before_comments = true
 line_length = 88
 
+[tool.mypy]
+python_version = "3.11"
+# Third-party packages (chromadb, isodate, ...) ship no stubs, and the rest
+# of talemate isn't typed yet; keep both out of the strict check below.
+follow_imports = "silent"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["talemate.world", "talemate.world.*"]
+strict = true
+
 [tool.uv]
 exclude-newer = "1 week"
 # nltk 3.10.2 (uploaded 2026-08-05) removes the CWD-import hook that 3.10.1 shipped;
