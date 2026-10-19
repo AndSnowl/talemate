@@ -1,0 +1,61 @@
+{
+  "create_prompts": [
+    {
+      "kind": "character",
+      "prompt": "a grizzled ferryman who owes the Wardens more than money"
+    },
+    {
+      "kind": "character",
+      "prompt": "a sharp-tongued herbalist who never leaves her tower before dusk"
+    },
+    {
+      "kind": "character",
+      "prompt": "a disgraced duelist looking for one more fight worth losing"
+    },
+    {
+      "kind": "place",
+      "prompt": "a riverside smuggling town that's been half-flooded for a generation"
+    },
+    {
+      "kind": "place",
+      "prompt": "a mountain pass shrine where travelers leave coins for safe passage"
+    },
+    {
+      "kind": "lore",
+      "prompt": "the old treaty that lets river Wardens tax any boat crossing the delta"
+    },
+    {
+      "kind": "lore",
+      "prompt": "a plague two generations back that emptied the lowland villages"
+    }
+  ],
+  "tiny_world": {
+    "characters": [
+      {
+        "name": "Senna Dreck",
+        "summary": "a riverside smuggler who runs cargo past the Wardens' checkpoints at night."
+      },
+      {
+        "name": "Corlas Wick",
+        "summary": "a retired Warden captain who now patrols the locks alone, still loyal to the old oath."
+      }
+    ],
+    "places": [
+      {
+        "name": "Mire's Landing",
+        "summary": "a half-flooded lock-town where the river smugglers and the Wardens both keep a foothold."
+      }
+    ],
+    "lore": [
+      {
+        "name": "The Warden's Tithe",
+        "summary": "a debt law binding anyone who crosses the river checkpoints without a permit to years of unpaid service."
+      }
+    ]
+  },
+  "scene_prompts": [
+    "Senna Dreck needs to smuggle a crate through Mire's Landing before the Wardens' dawn patrol.",
+    "Corlas Wick discovers a stranger trying to forge a Warden's Tithe writ at the lock-house.",
+    "A flood has cut off Mire's Landing from the mainland, and someone has to decide who gets the last boat out."
+  ]
+}
