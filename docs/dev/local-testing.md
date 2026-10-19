@@ -33,8 +33,9 @@ a newer pnpm that `corepack@0.34.0` fails to start).
 
 `manifest.scm` (repo root) pins the tools these commands need: `uv`,
 `python@3.11`, `node`, `ruff`, `ungoogled-chromium`, `nss-certs`,
-`font-dejavu` and `ffmpeg` (the memory agent's embeddings load FFmpeg's
-libraries; without it no scene loads). Every command on this page runs inside
+`font-dejavu`, `ffmpeg` (the memory agent's embeddings load FFmpeg's
+libraries; without it no scene loads) and `zlib` (numpy, which chromadb
+uses, dlopens `libz.so.1`). Every command on this page runs inside
 `guix shell -m manifest.scm -- ...`.
 
 ## Starting, checking and stopping the local app
@@ -249,6 +250,18 @@ folder, `model.txt` (the koboldcpp model name it used) and, at the end of
 the session, `results.txt`: the model name and the passed, failed and
 skipped counts. Neither is written when the AI group was skipped. `.test-artifacts/` is gitignored — nothing under it is ever
 committed.
+
+## Scripts that import chromadb
+
+`scripts/dev/talemate_app.py`'s own `start` already puts `zlib`'s library
+directory on the backend's `LD_LIBRARY_PATH` (see `backend_env`), but a
+one-off script run directly — not through `start` — needs the same thing
+done by hand, or numpy's `import chromadb` fails trying to dlopen
+`libz.so.1`:
+
+```bash
+guix shell -m manifest.scm -- bash -c 'LD_LIBRARY_PATH=$GUIX_ENVIRONMENT/lib uv run --no-sync python …'
+```
 
 ## Known environment facts
 

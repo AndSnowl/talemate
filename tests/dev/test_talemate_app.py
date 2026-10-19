@@ -431,6 +431,10 @@ def test_backend_env_never_uses_the_os_keyring(tmp_path, monkeypatch):
 def test_backend_env_puts_ffmpeg_libs_on_library_path(tmp_path, monkeypatch):
     """torchcodec (loaded by the memory agent's embeddings) dlopens FFmpeg's
     libraries; on Guix they're only found through LD_LIBRARY_PATH."""
+    # Isolate from the real shell's GUIX_ENVIRONMENT (set when this test
+    # itself runs under `guix shell`), which backend_env also appends to
+    # LD_LIBRARY_PATH and would otherwise leak into this assertion.
+    monkeypatch.delenv("GUIX_ENVIRONMENT", raising=False)
     store = tmp_path / "ffmpeg-8"
     (store / "bin").mkdir(parents=True)
     (store / "lib").mkdir()
@@ -448,6 +452,32 @@ def test_backend_env_puts_ffmpeg_libs_on_library_path(tmp_path, monkeypatch):
     env = talemate_app.backend_env(tmp_path)
 
     assert env["LD_LIBRARY_PATH"].split(os.pathsep) == [str(store / "lib"), "/existing"]
+
+
+def test_backend_env_adds_guix_environment_lib(tmp_path, monkeypatch):
+    """chromadb (via numpy) dlopens libz.so.1; on Guix that's only found
+    through LD_LIBRARY_PATH, under the active shell's profile."""
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+    monkeypatch.setattr(talemate_app.shutil, "which", lambda name: None)
+    guix_env = tmp_path / "guix-profile"
+    (guix_env / "lib").mkdir(parents=True)
+    monkeypatch.setenv("GUIX_ENVIRONMENT", str(guix_env))
+
+    env = talemate_app.backend_env(tmp_path)
+
+    assert str(guix_env / "lib") in env["LD_LIBRARY_PATH"].split(os.pathsep)
+
+
+def test_backend_env_without_guix_environment_unchanged(tmp_path, monkeypatch):
+    """Without GUIX_ENVIRONMENT, LD_LIBRARY_PATH holds only what it held
+    before: the ffmpeg-derived value, and nothing GUIX_ENVIRONMENT-derived."""
+    monkeypatch.delenv("GUIX_ENVIRONMENT", raising=False)
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)
+    monkeypatch.setattr(talemate_app.shutil, "which", lambda name: None)
+
+    env = talemate_app.backend_env(tmp_path)
+
+    assert "LD_LIBRARY_PATH" not in env
 
 
 def test_vite_config_allows_checkout_node_modules(tmp_path):
