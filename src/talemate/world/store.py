@@ -30,6 +30,7 @@ from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .kinds import KindSpec, get_kind, validate_field
 from .refs import parse_refs
+from .view import WorldView
 
 log = structlog.get_logger("talemate.world.store")
 
@@ -549,6 +550,13 @@ class World:
     def head_rev(self) -> int:
         row = self._conn.execute("SELECT MAX(rev) FROM revisions").fetchone()
         return row[0] or 0
+
+    def view(self, at: WorldDate | None = None, rev: int | None = None) -> WorldView:
+        """A snapshot of the world at `(at, rev)`. `at=None` means the
+        latest telling; `rev=None` is resolved to `head_rev()` now, so the
+        view stays pinned even as later revisions are written."""
+
+        return WorldView(self._conn, at, rev if rev is not None else self.head_rev())
 
     def close(self) -> None:
         self._conn.close()

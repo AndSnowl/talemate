@@ -6,6 +6,7 @@ from .kinds import KINDS, FieldSpec, KindSpec, get_kind, validate_field
 from .refs import REF_PATTERN, parse_refs, ref
 from .schema import SCHEMA_VERSION
 from .store import Revision, Source, World, WorldInfo
+from .view import FactState, ThingState, WorldView
 
 __all__ = [
     "Calendar",
@@ -26,4 +27,7 @@ __all__ = [
     "Source",
     "World",
     "WorldInfo",
+    "FactState",
+    "ThingState",
+    "WorldView",
 ]
