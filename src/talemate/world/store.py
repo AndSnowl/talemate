@@ -37,6 +37,8 @@ from .refs import parse_refs
 from .view import WorldView
 
 if TYPE_CHECKING:
+    from .prose import ProseCache
+    from .scenes import SceneStore
     from .timeline import TimelineEntry
     from .undo import UndoReport
 
@@ -609,6 +611,24 @@ class World:
         return build_timeline(
             self._conn, thing_id, rev if rev is not None else self.head_rev()
         )
+
+    def scenes(self) -> "SceneStore":
+        """Scenes, their messages and their scene-local invented things.
+        They aren't world things: `SceneStore` writes them in plain
+        transactions on this connection, not through `World.revision`."""
+
+        from .scenes import SceneStore
+
+        return SceneStore(self._conn)
+
+    def prose(self) -> "ProseCache":
+        """The cached prose for this world's things, kept fresh against
+        `timeline()`. Like `scenes()`, written in plain transactions, not
+        through `World.revision`."""
+
+        from .prose import ProseCache
+
+        return ProseCache(self._conn, lambda: self)
 
     def _live_fact_rows(self, rev: int | None = None) -> builtins.list[sqlite3.Row]:
         """Every fact row live at `rev` on the source clock, across every
