@@ -36,12 +36,18 @@ signal that ``advance_time`` sends).
 Normalisation (``normalise``) drops, from any dict at any depth:
   - the brief's keys: ``id``, ``memory_id``, ``memory_session_id``,
     ``saved_memory_session_id``.
-  - any key whose value looks like a wall-clock Unix timestamp (no such
-    key appears in this script's recording today, but the rule is kept
-    general per the brief rather than narrowed to today's shape).
+  - any key whose *name* denotes time (contains "time"/"timestamp", or is
+    "ts"/ends "_ts"/"_at") *and* whose value is a large-enough int/float to
+    be a wall-clock Unix timestamp. Neither condition alone is enough: a
+    large plain count or id number under an unrelated key is real content
+    and must survive (no such timestamp key appears in this script's
+    recording today, but the rule is kept general per the brief rather
+    than narrowed to today's shape).
 No keys beyond the brief's list are dropped.
-It also replaces 8+ character hex runs (scene/message/memory ids,
-asset hashes) with ``<id>``, and sorts dict keys everywhere.
+It also replaces 8+ character hex runs with ``<id>`` — but only runs that
+actually contain a hex letter (a-f); a pure-digit run of 8+ digits (a
+year, a count) is real content, not an id, and is left alone — and sorts
+dict keys everywhere.
 """
 
 import json
@@ -65,7 +71,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 GOLDEN_PATH = BASE_DIR / "data" / "characterization" / "scene_golden.json"
 FIXTURE_SCENES_DIR = BASE_DIR / "data" / "scenes"
 
-_HEX_ID_RE = re.compile(r"\b[0-9a-fA-F]{8,}\b")
+# A run of 8+ hex characters, bounded so it doesn't bite off part of a
+# longer alnum token. Deliberately wider than any one id shape the code
+# emits today (scene/memory ids are 10-character hex from
+# ``str(uuid.uuid4())[:10]`` — see tale_mate.py:157,168,170; asset hashes
+# are full sha256 hex) so a shape that changes length still gets caught.
+_HEX_RUN_RE = re.compile(r"\b[0-9a-fA-F]{8,}\b")
 _DROP_KEYS = {"id", "memory_id", "memory_session_id", "saved_memory_session_id"}
 
 # Unix timestamps in this range cover roughly year 2001 to year 5138 in
@@ -76,11 +87,32 @@ _TIMESTAMP_MIN = 1_000_000_000
 _TIMESTAMP_MAX = 99_999_999_999
 
 
-def _looks_like_timestamp(value) -> bool:
+def _looks_like_id(hex_run: str) -> bool:
+    """A hex run is an id (not a plain decimal count) only if it actually
+    uses a hex letter. A pure-digit run of 8+ characters — a year range, a
+    count, a duration in milliseconds — is real narration/data content and
+    must survive normalisation unchanged, not get redacted to ``<id>``.
+    """
+    return any(c in "abcdefABCDEF" for c in hex_run)
+
+
+def _looks_like_timestamp(key: str, value) -> bool:
+    """A wall-clock Unix timestamp: a large-enough int/float *and* a key
+    name that actually denotes time. The magnitude check alone would also
+    drop any plain large count or id number under an unrelated key, which
+    is real content, not noise — so both have to hold.
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    if not (_TIMESTAMP_MIN <= value <= _TIMESTAMP_MAX):
+        return False
+    lowered = key.lower()
     return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and _TIMESTAMP_MIN <= value <= _TIMESTAMP_MAX
+        "time" in lowered
+        or "timestamp" in lowered
+        or lowered == "ts"
+        or lowered.endswith("_ts")
+        or lowered.endswith("_at")
     )
 
 
@@ -93,12 +125,14 @@ def normalise(obj):
         return {
             key: normalise(value)
             for key, value in sorted(obj.items())
-            if key not in _DROP_KEYS and not _looks_like_timestamp(value)
+            if key not in _DROP_KEYS and not _looks_like_timestamp(key, value)
         }
     if isinstance(obj, list):
         return [normalise(item) for item in obj]
     if isinstance(obj, str):
-        return _HEX_ID_RE.sub("<id>", obj)
+        return _HEX_RUN_RE.sub(
+            lambda m: "<id>" if _looks_like_id(m.group()) else m.group(), obj
+        )
     return obj
 
 
@@ -261,7 +295,48 @@ async def test_golden_scene_matches_recording(tmp_path, update_baselines):
 @pytest.mark.asyncio
 async def test_golden_scene_is_deterministic(tmp_path):
     """Running the script twice, in two fresh scenes, gives identical
-    normalised recordings — no timestamps, uuids or dict-order noise."""
+    normalised recordings — no timestamps, uuids or dict-order noise.
+
+    Comparing the two runs against each other is this test's whole job;
+    comparing either of them against the committed recording is
+    ``test_golden_scene_matches_recording``'s.
+    """
     first = normalise(await _play_golden_scene(tmp_path / "first"))
     second = normalise(await _play_golden_scene(tmp_path / "second"))
     assert first == second
+
+
+# ---------------------------------------------------------------------------
+# normalise() unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_normalise_keeps_decimal_runs_but_redacts_real_ids():
+    """A pure-digit run of 8+ digits (a year, a count) is real content and
+    must survive; a real id — 10 hex characters, the shape
+    ``str(uuid.uuid4())[:10]`` produces at tale_mate.py:157,168,170 — is
+    redacted. A fixed id (rather than a freshly generated uuid) keeps this
+    test from being the rare uuid whose first 10 characters are all
+    digits.
+    """
+    real_id = "a1b2c3d4e5"
+    data = {"year_span": "12345678", "scene_id": f"scene-{real_id}-done"}
+
+    result = normalise(data)
+
+    assert result["year_span"] == "12345678"
+    assert real_id not in result["scene_id"]
+    assert result["scene_id"] == "scene-<id>-done"
+
+
+def test_normalise_scopes_timestamp_drop_to_time_like_keys():
+    """The magnitude check alone isn't enough to call something a
+    timestamp: a large int under an unrelated key is content and is kept;
+    the same magnitude under a key that actually denotes time is dropped."""
+    large_int = 1_700_000_000
+    data = {"revision_count": large_int, "created_at": large_int}
+
+    result = normalise(data)
+
+    assert result["revision_count"] == large_int
+    assert "created_at" not in result
