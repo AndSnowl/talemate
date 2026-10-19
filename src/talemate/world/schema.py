@@ -8,6 +8,14 @@ transaction and records the result in `PRAGMA user_version`.
 of revisions it's live for (an undo can retire a thing and later restore
 it), so `things.id` isn't unique and `field_values`/`facts` can't carry a
 foreign key to it. Their thing ids are checked in code instead.
+
+Undo leaves reversal links instead of relying on content: `revision_reverts`
+lists, per undo revision, the revisions it reversed, and a row an undo
+restores records in `restored_from` the `row_id` (in the same table) of the
+row it's a copy of. Every other write leaves `restored_from` NULL. An undo
+revision also records in `undo_conflicts` each row it left alone because of
+a conflict (`table_name` is `things`, `field_values` or `facts`), so a later
+undo knows which of its slots it didn't go through for.
 """
 
 import sqlite3
@@ -36,12 +44,25 @@ MIGRATIONS: list[str] = [
         created_at TEXT NOT NULL
     );
 
+    CREATE TABLE revision_reverts (
+        undo_rev INTEGER NOT NULL REFERENCES revisions,
+        target_rev INTEGER NOT NULL REFERENCES revisions,
+        PRIMARY KEY (undo_rev, target_rev)
+    );
+
+    CREATE TABLE undo_conflicts (
+        undo_rev INTEGER NOT NULL REFERENCES revisions,
+        table_name TEXT NOT NULL,
+        row_id INTEGER NOT NULL
+    );
+
     CREATE TABLE things (
         row_id INTEGER PRIMARY KEY,
         id TEXT NOT NULL,
         kind TEXT NOT NULL,
         rev_added INTEGER NOT NULL REFERENCES revisions,
-        rev_removed INTEGER REFERENCES revisions
+        rev_removed INTEGER REFERENCES revisions,
+        restored_from INTEGER
     );
 
     CREATE TABLE field_values (
@@ -52,7 +73,8 @@ MIGRATIONS: list[str] = [
         valid_from INTEGER,
         from_precision TEXT,
         rev_added INTEGER NOT NULL,
-        rev_removed INTEGER
+        rev_removed INTEGER,
+        restored_from INTEGER
     );
 
     CREATE TABLE facts (
@@ -67,7 +89,8 @@ MIGRATIONS: list[str] = [
         until_precision TEXT,
         origin_json TEXT,
         rev_added INTEGER NOT NULL,
-        rev_removed INTEGER
+        rev_removed INTEGER,
+        restored_from INTEGER
     );
 
     CREATE TABLE fact_refs (
@@ -86,6 +109,9 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_facts_rev_removed ON facts (rev_removed);
 
     CREATE INDEX idx_fact_refs_thing ON fact_refs (thing_id);
+
+    CREATE INDEX idx_undo_conflicts_undo_rev ON undo_conflicts (undo_rev);
+    CREATE INDEX idx_undo_conflicts_row ON undo_conflicts (table_name, row_id);
 
     CREATE INDEX idx_things_id ON things (id);
     CREATE INDEX idx_things_rev_added ON things (rev_added);
