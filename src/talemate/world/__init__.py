@@ -2,6 +2,10 @@
 
 from .calendar import Calendar, Era, Holiday
 from .dates import Precision, WorldDate
+from .kinds import KINDS, FieldSpec, KindSpec, get_kind, validate_field
+from .refs import REF_PATTERN, parse_refs, ref
+from .schema import SCHEMA_VERSION
+from .store import Revision, Source, World, WorldInfo
 
 __all__ = [
     "Calendar",
@@ -9,4 +13,17 @@ __all__ = [
     "Holiday",
     "Precision",
     "WorldDate",
+    "KINDS",
+    "FieldSpec",
+    "KindSpec",
+    "get_kind",
+    "validate_field",
+    "REF_PATTERN",
+    "parse_refs",
+    "ref",
+    "SCHEMA_VERSION",
+    "Revision",
+    "Source",
+    "World",
+    "WorldInfo",
 ]
