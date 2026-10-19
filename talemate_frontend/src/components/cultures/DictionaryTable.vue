@@ -35,7 +35,7 @@
                             density="compact"
                             variant="plain"
                             hide-details
-                            class="font-italic text-highlight7"
+                            class="font-italic text-foreign"
                             @blur="save()"
                         ></v-text-field>
                     </td>

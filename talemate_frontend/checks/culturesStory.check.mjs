@@ -65,6 +65,8 @@ check('case_and_quotes', () => {
     assert.ok(html.includes('data-foreign-id="phrase:taelrik:curse-rot"'), html);
     assert.ok(html.includes('data-foreign-kind="curse"'), html);
     assert.ok(html.includes('font-style: italic'), html);
+    // Final fix 3: foreign words use the theme's `foreign` role.
+    assert.ok(html.includes('var(--v-theme-foreign)'), html);
     const match = html.match(/<span class="scene-foreign"[^>]*>([^<]*)<\/span>/);
     assert.ok(match, 'expected a scene-foreign span');
     assert.equal(match[1], 'rhok TAL’DUN');

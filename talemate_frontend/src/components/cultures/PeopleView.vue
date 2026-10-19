@@ -159,6 +159,6 @@ export default {
 }
 
 .people-row-focus {
-    background: rgba(var(--v-theme-highlight7), 0.12);
+    background: rgba(var(--v-theme-foreign), 0.12);
 }
 </style>

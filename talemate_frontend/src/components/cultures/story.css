@@ -10,7 +10,7 @@
 }
 
 .scene-foreign:hover {
-    background: rgba(var(--v-theme-highlight7), 0.15);
+    background: rgba(var(--v-theme-foreign), 0.15);
 }
 
 .scene-entity[data-entity-unreviewed]::after {

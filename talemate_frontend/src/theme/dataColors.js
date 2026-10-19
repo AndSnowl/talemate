@@ -108,6 +108,23 @@ export function characterPaletteKey(stored, name, resolved = currentTheme.value)
 }
 
 /**
+ * The colour a character's name and message border are drawn in: the
+ * `you` role for the player character, else the accent picked by
+ * characterPaletteKey.
+ */
+export function characterColor(stored, name, isPlayer = false, resolved = currentTheme.value) {
+    if (isPlayer) return resolved.colors.you;
+    return resolved.palette[characterPaletteKey(stored, name, resolved)];
+}
+
+/** Whether `name` is the player character in a scene status payload (`scene.data.characters[].is_player`). */
+export function isPlayerCharacter(scene, name) {
+    const characters = scene?.data?.characters;
+    if (!name || !Array.isArray(characters)) return false;
+    return characters.some((c) => c?.name === name && c.is_player === true);
+}
+
+/**
  * Remaps a raw data colour (hex or Vuetify colour name) onto the current
  * theme: a saturated value becomes its nearest accent's hex; an
  * unsaturated one becomes `colors.muted`, or `colors['on-surface']` when

@@ -11,7 +11,7 @@ import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/pres
 import { resolveTheme, toVuetifyColors, toVuetifyVariables, themeFromConfig } from '../src/theme/engine.js';
 import { createTheme } from 'vuetify/lib/composables/theme.js';
 import { exportTheme, parseThemeFile } from '../src/theme/themeFile.js';
-import { toHex, characterPaletteKey, dataColor, nodeColors, nodeEditorColors } from '../src/theme/dataColors.js';
+import { toHex, characterPaletteKey, characterColor, isPlayerCharacter, dataColor, nodeColors, nodeEditorColors } from '../src/theme/dataColors.js';
 import { getMessageColor } from '../src/utils/messageColors.js';
 import { SceneTextParser } from '../src/utils/sceneMessageRenderer.js';
 import { LGraph, LGraphGroup, LGraphNode, LiteGraph, LGraphCanvas } from 'litegraph.js';
@@ -235,6 +235,22 @@ check('character_key_stable', () => {
 check('character_key_from_vuetify_name', () => {
     const gruvboxDark = resolveTheme(getPreset('gruvbox-dark'));
     assert.equal(characterPaletteKey('red-lighten-3', 'x', gruvboxDark), 'red');
+});
+
+// Final fix 3: the player character's lines use the `you` role; every
+// other character keeps its accent (stored colour, else name hash).
+check('character_color_player_uses_you', () => {
+    const r = resolveTheme(getPreset('cb-blue-yellow'));
+    assert.equal(characterColor('#fff', 'Marta', true, r), r.colors.you);
+    assert.equal(characterColor('#fff', 'Marta', false, r), r.palette[characterPaletteKey('#fff', 'Marta', r)]);
+    const scene = { data: { characters: [
+        { name: 'Marta', is_player: true },
+        { name: 'Ilsa', is_player: false },
+    ] } };
+    assert.equal(isPlayerCharacter(scene, 'Marta'), true);
+    assert.equal(isPlayerCharacter(scene, 'Ilsa'), false);
+    assert.equal(isPlayerCharacter(scene, 'Nobody'), false);
+    assert.equal(isPlayerCharacter(null, 'Marta'), false);
 });
 
 check('data_color_grey_is_muted', () => {

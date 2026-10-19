@@ -2,12 +2,12 @@
     <div data-testid="foreign-word-card">
         <v-card-item class="pb-1">
             <div class="d-flex align-center flex-wrap ga-2">
-                <span class="text-subtitle-2 font-italic text-highlight7 foreign-word-text">{{ entry?.text }}</span>
+                <span class="text-subtitle-2 font-italic text-foreign foreign-word-text">{{ entry?.text }}</span>
                 <v-chip
                     size="x-small"
                     label
                     variant="tonal"
-                    color="highlight7"
+                    color="foreign"
                     prepend-icon="mdi-translate"
                     class="text-caption"
                 >

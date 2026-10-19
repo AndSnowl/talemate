@@ -65,7 +65,7 @@
                         >
                             <td>
                                 <span v-if="entry.status === 'unreviewed'" class="unrev-dot mr-1"></span>
-                                <span :class="{ 'text-highlight7 font-italic': entry.kind === 'thing' || entry.kind === 'word' }">
+                                <span :class="{ 'text-foreign font-italic': entry.kind === 'thing' || entry.kind === 'word' }">
                                     {{ entry.text }}
                                 </span>
                                 <v-icon

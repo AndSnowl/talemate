@@ -217,15 +217,11 @@ const ALLOW = new Set([
     'src/utils/recentNodes.js:makeColorItem("Error Handling", \'red\'),',
     'src/utils/recentNodes.js:makeColorItem("Input", \'blue\'),',
     'src/utils/recentNodes.js:makeColorItem("UX", \'teal\'),',
-    // CharacterMessage.vue's always-on text-shadow is kept pixel-identical
-    // to SceneMessages.vue's scene-backdrop message shadow (see the
-    // "align it with the backdrop shadow" comment there) so every message
-    // type stays legible over an arbitrary backdrop image regardless of
-    // theme.
-    'src/components/CharacterMessage.vue:text-shadow: 2px 2px 4px #000000;',
     // SceneMessages.vue: the scene-backdrop message panel's text-shadow
-    // must stay dark so message text of every colour stays legible over an
-    // arbitrary backdrop image, whatever the active theme.
+    // (scoped to .scene-backdrop-active, and inherited by character lines,
+    // which have no shadow of their own) must stay dark so message text of
+    // every colour stays legible over an arbitrary backdrop image,
+    // whatever the active theme.
     'src/components/SceneMessages.vue:text-shadow: 1px 1px 2px #000000, 0 0 6px rgba(0, 0, 0, 0.85);',
     // SceneMessages.vue: the backdrop-indicator marker sits over the same
     // arbitrary backdrop image, so its drop-shadow must stay dark under

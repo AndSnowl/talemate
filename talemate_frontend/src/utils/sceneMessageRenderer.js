@@ -47,7 +47,7 @@ function buildDefaults() {
             bold: true,
         },
         foreign: {
-            color: 'rgb(var(--v-theme-highlight7))',
+            color: 'rgb(var(--v-theme-foreign))',
             italic: true,
             bold: false,
         },

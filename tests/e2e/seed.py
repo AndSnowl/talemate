@@ -51,7 +51,7 @@ from pathlib import Path
 import talemate.instance as instance
 from talemate.character import Character
 from talemate.cultures.store import world_dir_for
-from talemate.scene_message import NarratorMessage
+from talemate.scene_message import CharacterMessage, NarratorMessage
 from talemate.shared_context import SharedContext
 from talemate.tale_mate import Scene
 from talemate.world_state import WorldState
@@ -65,8 +65,20 @@ async def main(spec):
     scene.filename = spec["project"] + ".json"
     scene.intro = spec.get("intro") or ""
 
+    player_names = {
+        item["name"] for item in spec.get("characters") or [] if item.get("is_player")
+    }
     for message in spec.get("messages") or []:
-        scene.history.append(NarratorMessage(message=message["text"]))
+        speaker = message.get("character")
+        if speaker:
+            scene.history.append(
+                CharacterMessage(
+                    message=CharacterMessage.with_name_prefix(speaker, message["text"]),
+                    source="player" if speaker in player_names else "ai",
+                )
+            )
+        else:
+            scene.history.append(NarratorMessage(message=message["text"]))
 
     ws = dict(spec.get("world_state") or {})
     ws.setdefault("anchor_message_ids", [m.id for m in scene.history])
@@ -98,9 +110,11 @@ async def main(spec):
             color="#fff",
             shared=item.get("shared", False),
             culture=item.get("culture"),
+            is_player=item.get("is_player", False),
         )
         if item.get("active", True):
-            actor = scene.Actor(character, None)
+            actor_cls = scene.Player if character.is_player else scene.Actor
+            actor = actor_cls(character, None)
             await scene.add_actor(actor, commit_to_memory=False)
             if character.name not in scene.active_characters:
                 scene.active_characters.append(character.name)
@@ -209,11 +223,13 @@ def seed_world(
 ) -> SeededWorld:
     """Create a minimal scene in ``<root>/scenes/<project>/`` linked to a Shared World.
 
-    ``messages`` items are ``{"text": str}``, appended as ``NarratorMessage``s
-    to the scene's history. ``characters`` items are ``{"name",
-    "description"="", "culture": dict|None, "active": bool=True, "shared":
-    bool=False}``: active ones are added via a real ``Actor``/``Player``
-    (``commit_to_memory=False``), inactive ones go only into
+    ``messages`` items are ``{"text": str, "character": str|None}``, appended
+    to the scene's history as a ``CharacterMessage`` (``"Name: text"``) when
+    ``character`` is given, else as a ``NarratorMessage``. ``characters``
+    items are ``{"name", "description"="", "culture": dict|None, "active":
+    bool=True, "shared": bool=False, "is_player": bool=False}``: active ones
+    are added via a real ``Actor`` (``Player`` when ``is_player``,
+    ``commit_to_memory=False``), inactive ones go only into
     ``scene.character_data``.
 
     ``world_state`` is passed straight to ``WorldState(**world_state)`` (so

@@ -101,7 +101,7 @@ import { insertNewlineAtCursor } from '@/utils/textAreaUtils';
 import { isPrimaryModifier } from '@/utils/keyboardModifiers';
 import { spliceContinuation } from '@/utils/messageContinuation';
 import { createAutocompleteField } from '@/utils/autocompleteField';
-import { characterPaletteKey } from '@/theme/dataColors';
+import { characterColor, isPlayerCharacter } from '@/theme/dataColors';
 import { currentTheme } from '@/theme/store';
 import MessageAssetImage from './MessageAssetImage.vue';
 import MessageAssetMixin from './MessageAssetMixin.js';
@@ -225,10 +225,15 @@ export default {
   computed: {
     // The stored `color` prop is remapped onto the current theme's accent
     // palette at render time (never written back to the prop/stored
-    // data). See theme/dataColors.js's characterPaletteKey.
+    // data). The player character uses the `you` role instead. See
+    // theme/dataColors.js's characterColor.
     resolvedColor() {
-      const palette = currentTheme.value.palette;
-      return palette[characterPaletteKey(this.color, this.character)];
+      return characterColor(
+        this.color,
+        this.character,
+        isPlayerCharacter(this.scene, this.character),
+        currentTheme.value,
+      );
     },
     parser() {
       const sceneConfig = this.appearanceConfig?.scene || {};
@@ -417,10 +422,6 @@ export default {
 
 .highlight:after {
   --content: "*";
-}
-
-.character-message {
-  text-shadow: 2px 2px 4px #000000;
 }
 
 .character-name-chip {

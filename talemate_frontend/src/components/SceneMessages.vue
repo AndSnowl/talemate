@@ -409,7 +409,7 @@ import { effectiveActionEnabled } from '@/constants/sceneAgentSettings';
 import { isVisualAgentReady, VIS_TYPE } from '@/constants/visual';
 import { isKnownSceneCharacter } from '@/utils/entityActions';
 import { parseCharacterMessage } from '@/utils/characterMessage.js';
-import { characterPaletteKey, dataColor } from '@/theme/dataColors';
+import { characterColor, isPlayerCharacter, dataColor } from '@/theme/dataColors';
 import { currentTheme } from '@/theme/store';
 import { primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { base64ToObjectUrl } from '@/utils/objectUrl.js';
@@ -754,10 +754,15 @@ export default {
 
         // The stored `message.color` is a raw backend value (often the
         // default white hex); remap it onto the current theme's accent
-        // palette at render time. See theme/dataColors.js.
+        // palette at render time (the `you` role for the player character).
+        // See theme/dataColors.js's characterColor.
         characterBorderColor(message) {
-            const palette = currentTheme.value.palette;
-            return palette[characterPaletteKey(message.color, message.character)];
+            return characterColor(
+                message.color,
+                message.character,
+                isPlayerCharacter(this.scene, message.character),
+                currentTheme.value,
+            );
         },
 
         // Non-character data colours (system message `meta.color`, etc.)
@@ -2279,15 +2284,10 @@ export default {
     /* slim right gutter so the backdrop indicator sits beside the panel,
        not over the message content */
     margin-right: 28px;
-    /* tight, dense shadow so message text of every type stays legible
-       over the backdrop */
+    /* tight, dense shadow so message text of every type (character lines
+       included — text-shadow inherits) stays legible over the backdrop;
+       without a backdrop no message has a shadow */
     text-shadow: 1px 1px 2px #000000, 0 0 6px rgba(0, 0, 0, 0.85);
-}
-
-/* character messages carry their own always-on shadow — align it with
-   the backdrop shadow so all types match */
-.scene-backdrop-active .message :deep(.character-message) {
-    text-shadow: inherit;
 }
 
 /* backdrop text shadow disabled via appearance config */
