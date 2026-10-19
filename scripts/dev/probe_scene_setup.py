@@ -7,8 +7,16 @@ goal and intro -- given the prompt plus a tiny world (also in that file,
 under ``tiny_world``: a couple of characters, a place, a lore entry)
 rendered as plain text. The model is asked to flag, for each named
 character and the place, whether it matches one of those world things or
-was invented for the prompt; the report also rolls that up into
-``world_used``/``invented`` name lists.
+was invented for the prompt; the probe does not just take that self-report
+on faith -- it checks each name against ``tiny_world``'s own names (case-
+and whitespace-normalised) and records both the model's claim and whether
+that claim was right (``named``, with ``self_report``/``in_world``/
+``self_report_correct`` per name), alongside the simpler ``world_used``/
+``invented`` name lists.
+
+A malformed reply shape (e.g. a character given as a bare string instead
+of ``{"name", "world"}``) fails just that prompt, recorded as a "shape"
+error, rather than aborting the run.
 
 The setup prompt (``SETUP_SYSTEM``) is the seed for Task 8's scene-setup
 template; keep its wording here, not duplicated elsewhere.
@@ -29,6 +37,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -53,6 +62,44 @@ SETUP_SYSTEM = (
     "matches one of the world things given, and false for one you "
     "invented. No commentary, no markdown fences."
 )
+
+
+def _normalize_name(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip()).casefold()
+
+
+def world_names(tiny_world: dict) -> list[str]:
+    """``tiny_world``'s character and place names -- the ground truth a
+    scene's named things are checked against (lore isn't a nameable scene
+    thing, so it's left out)."""
+    names = []
+    for key in ("characters", "places"):
+        for thing in tiny_world.get(key) or []:
+            name = thing.get("name")
+            if name:
+                names.append(name)
+    return names
+
+
+def _named_entries(scene: dict) -> list[dict]:
+    """The scene's named characters plus its place, as a flat list of
+    ``{"name", "world"}`` dicts.
+
+    Raises ``ValueError`` if an entry isn't shaped as asked for (e.g. a
+    character given as a bare string) -- the caller turns that into a
+    recorded error for just this prompt instead of crashing the run.
+    """
+    named = []
+    for character in scene.get("characters") or []:
+        if not isinstance(character, dict):
+            raise ValueError(f"character entry is not an object: {character!r}")
+        named.append(character)
+    place = scene.get("place")
+    if place is not None:
+        if not isinstance(place, dict):
+            raise ValueError(f"place entry is not an object: {place!r}")
+        named.append(place)
+    return named
 
 
 def render_world(tiny_world: dict) -> str:
@@ -86,11 +133,19 @@ def run_prompt(
 ) -> dict:
     """Ask the model to plan a scene for ``prompt_text`` against ``tiny_world``.
 
-    Returns ``{"prompt", "scene", "world_used", "invented", "errors"}``.
-    ``scene`` is the model's parsed JSON reply as-is; ``world_used`` and
-    ``invented`` are the names of its characters/place with ``world`` true
-    or false, respectively. ``errors`` (step "setup") is for the caller to
-    fold into the run's overall error list.
+    Returns ``{"prompt", "scene", "tiny_world_names", "named", "world_used",
+    "invented", "errors"}``. ``scene`` is the model's parsed JSON reply
+    as-is. ``tiny_world_names`` is the ground truth (``world_names``)
+    checked against. ``named`` lists, per character and the place,
+    ``{"name", "self_report", "in_world", "self_report_correct"}`` --
+    ``self_report`` is the model's own ``world`` flag, ``in_world`` is the
+    normalised-name match against ``tiny_world_names``, and
+    ``self_report_correct`` is whether the two agree. ``world_used`` and
+    ``invented`` are the simpler names-only lists (by ``self_report``, for
+    convenience). ``errors`` (step "setup" for a bad/unparsable reply,
+    "shape" for a parsed reply whose inner shape isn't as asked for) is
+    for the caller to fold into the run's overall error list. Either way,
+    this prompt stops there -- the caller moves on to the next prompt.
 
     ``on_step``, if given, is called once with the result dict built so
     far (including on failure).
@@ -98,6 +153,8 @@ def run_prompt(
     result = {
         "prompt": prompt_text,
         "scene": None,
+        "tiny_world_names": None,
+        "named": None,
         "world_used": None,
         "invented": None,
         "errors": [],
@@ -107,6 +164,17 @@ def run_prompt(
         if on_step is not None:
             on_step(result)
 
+    def fail(step: str, exc: Exception) -> dict:
+        result["errors"].append(
+            {
+                "prompt": prompt_text,
+                "step": step,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        )
+        notify()
+        return result
+
     user = f"Storyline prompt:\n{prompt_text}\n\nWorld:\n{render_world(tiny_world)}"
     try:
         reply = chat(url, SETUP_SYSTEM, user)
@@ -114,23 +182,33 @@ def run_prompt(
         if not isinstance(scene, dict):
             raise ValueError(f"no JSON object found in setup reply: {reply!r}")
     except Exception as exc:
-        result["errors"].append(
+        return fail("setup", exc)
+    result["scene"] = scene
+    notify()
+
+    try:
+        named = _named_entries(scene)
+    except Exception as exc:
+        return fail("shape", exc)
+
+    known = {_normalize_name(name) for name in world_names(tiny_world)}
+    checked = []
+    for thing in named:
+        name = thing.get("name")
+        self_report = bool(thing.get("world"))
+        in_world = bool(name) and _normalize_name(name) in known
+        checked.append(
             {
-                "prompt": prompt_text,
-                "step": "setup",
-                "error": f"{type(exc).__name__}: {exc}",
+                "name": name,
+                "self_report": self_report,
+                "in_world": in_world,
+                "self_report_correct": self_report == in_world,
             }
         )
-        notify()
-        return result
-
-    result["scene"] = scene
-    named = list(scene.get("characters") or [])
-    place = scene.get("place")
-    if isinstance(place, dict):
-        named = named + [place]
-    result["world_used"] = [n.get("name") for n in named if n.get("world")]
-    result["invented"] = [n.get("name") for n in named if not n.get("world")]
+    result["tiny_world_names"] = world_names(tiny_world)
+    result["named"] = checked
+    result["world_used"] = [c["name"] for c in checked if c["self_report"]]
+    result["invented"] = [c["name"] for c in checked if not c["self_report"]]
     notify()
     return result
 
@@ -142,6 +220,18 @@ def _write_atomic(path: Path, text: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     tmp.replace(path)
+
+
+def _table(header: list[str], rows: list[list]) -> list[str]:
+    lines = [
+        "| " + " | ".join(header) + " |",
+        "|" + "|".join("---" for _ in header) + "|",
+    ]
+    lines += [
+        "| " + " | ".join(str(cell).replace("|", "\\|") for cell in row) + " |"
+        for row in rows
+    ]
+    return lines
 
 
 def _render_markdown(results: dict) -> str:
@@ -156,9 +246,26 @@ def _render_markdown(results: dict) -> str:
     for prompt_result in results.get("prompts") or []:
         out += [f"## {prompt_result.get('prompt')}", ""]
         scene = prompt_result.get("scene")
-        out.append(f"- **World used:** {prompt_result.get('world_used')}")
-        out.append(f"- **Invented:** {prompt_result.get('invented')}")
+        out.append(f"- **Tiny world names:** {prompt_result.get('tiny_world_names')}")
+        out.append(f"- **World used (self-report):** {prompt_result.get('world_used')}")
+        out.append(f"- **Invented (self-report):** {prompt_result.get('invented')}")
         out.append("")
+        named = prompt_result.get("named") or []
+        if named:
+            out += ["### Self-report vs. ground truth", ""]
+            out += _table(
+                ["Name", "Self-report", "In world", "Correct"],
+                [
+                    [
+                        n["name"],
+                        n["self_report"],
+                        n["in_world"],
+                        n["self_report_correct"],
+                    ]
+                    for n in named
+                ],
+            )
+            out.append("")
         if scene:
             out += ["### Scene", "", "```json", json.dumps(scene, indent=2), "```", ""]
 

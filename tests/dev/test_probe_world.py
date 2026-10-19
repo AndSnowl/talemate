@@ -11,6 +11,7 @@ at this stub.
 
 import importlib.util
 import json
+import socket
 import sys
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -254,6 +255,82 @@ def test_setup_probe_records_world_use():
     assert "Senna Dreck" in result["world_used"]
     assert "Mire's Landing" in result["world_used"]
     assert "a nosy toll clerk" in result["invented"]
+    assert sorted(result["tiny_world_names"]) == sorted(
+        ["Senna Dreck", "Corlas Wick", "Mire's Landing"]
+    )
+    # the stub's self-reports happen to be honest here, so every verdict agrees
+    assert all(n["self_report_correct"] for n in result["named"])
+
+
+_SETUP_DISHONEST_REPLY = json.dumps(
+    {
+        "player": "a river trader new to the lock-town",
+        "characters": [
+            # claims world:true for a name that isn't in tiny_world
+            {"name": "a nosy toll clerk", "world": True},
+            # claims world:false for a name that IS in tiny_world
+            {"name": "Corlas Wick", "world": False},
+        ],
+        "place": {"name": "Mire's Landing", "world": True},
+        "goal": "get the crate past the dawn patrol",
+        "intro": "The locks groan open as the fog lifts over Mire's Landing.",
+    }
+)
+
+
+def test_setup_probe_flags_incorrect_self_report():
+    """The probe checks self-reports against tiny_world's own names rather
+    than trusting them: a lie in either direction is caught."""
+    with _stub_server({"player": _SETUP_DISHONEST_REPLY}) as url:
+        result = setup_probe.run_prompt(
+            url,
+            "Senna Dreck needs to smuggle a crate through Mire's Landing.",
+            _TINY_WORLD,
+        )
+
+    assert result["errors"] == []
+    by_name = {n["name"]: n for n in result["named"]}
+
+    clerk = by_name["a nosy toll clerk"]
+    assert clerk["self_report"] is True
+    assert clerk["in_world"] is False
+    assert clerk["self_report_correct"] is False
+
+    corlas = by_name["Corlas Wick"]
+    assert corlas["self_report"] is False
+    assert corlas["in_world"] is True
+    assert corlas["self_report_correct"] is False
+
+    # the honestly-reported place is still recorded as correct
+    mire = by_name["Mire's Landing"]
+    assert mire["self_report_correct"] is True
+
+
+def test_setup_probe_malformed_characters_recorded_as_error():
+    """A malformed inner shape (characters given as bare strings, not
+    objects) fails just this prompt with a recorded error, instead of
+    raising out of run_prompt and aborting the run."""
+    malformed_reply = json.dumps(
+        {
+            "player": "a river trader",
+            "characters": ["Senna Dreck", "a toll clerk"],
+            "place": {"name": "Mire's Landing", "world": True},
+            "goal": "get the crate past the dawn patrol",
+            "intro": "The locks groan open.",
+        }
+    )
+    with _stub_server({"player": malformed_reply}) as url:
+        result = setup_probe.run_prompt(
+            url,
+            "Senna Dreck needs to smuggle a crate through Mire's Landing.",
+            _TINY_WORLD,
+        )
+
+    assert len(result["errors"]) == 1
+    assert result["errors"][0]["step"] == "shape"
+    # the reply itself still parsed fine -- only the inner shape was bad
+    assert result["scene"] is not None
+    assert result["named"] is None
 
 
 def test_setup_probe_refuses_without_opt_in(tmp_path, monkeypatch):
@@ -263,4 +340,20 @@ def test_setup_probe_refuses_without_opt_in(tmp_path, monkeypatch):
     code = setup_probe.main(["--out", str(out_dir)])
 
     assert code == 2
+    assert not out_dir.exists()
+
+
+def test_setup_probe_exits_3_when_koboldcpp_unreachable(tmp_path, monkeypatch):
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        closed_port = sock.getsockname()[1]
+    # the socket above is now closed; nothing listens on closed_port
+
+    monkeypatch.setenv("TALEMATE_AI_TESTS", "1")
+    monkeypatch.setenv("TALEMATE_TEST_KOBOLDCPP_URL", f"http://127.0.0.1:{closed_port}")
+    out_dir = tmp_path / "out"
+
+    code = setup_probe.main(["--out", str(out_dir)])
+
+    assert code == 3
     assert not out_dir.exists()
