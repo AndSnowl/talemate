@@ -29,6 +29,16 @@ export default defineConfig(({ mode }) => {
         // Use OS-native, decoded path for Windows compatibility (handles spaces)
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },
+      // Belt-and-braces guard against a dual-package hazard: CodeMirror's
+      // facets/plugins match by identity, so two copies of either package
+      // (e.g. our own direct dependency resolving differently from
+      // @codemirror/language's) would make codemirrorTheme.js's
+      // syntaxHighlighting() build against a different @codemirror/view
+      // instance than the one vue-codemirror actually constructs the
+      // EditorView with. pnpm-workspace.yaml's overrides already pin both
+      // to a single version in the lockfile; this forces Vite's own
+      // resolver to the same single copy regardless.
+      dedupe: ["@codemirror/view", "@codemirror/state"],
     },
     server: {
       // host: "0.0.0.0", // Make accessible from any network interface

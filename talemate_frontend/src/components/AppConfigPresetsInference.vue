@@ -4,7 +4,7 @@
         <p>
             This interface is a work in progress and provides basic parameter preset editing.
         </p>
-        <p class="text-caption text-grey">
+        <p class="text-caption text-muted">
             Client support varies by parameter. <span class="text-primary">All presets are active</span> based on agent actions. Default values recommended unless you understand the parameters.
         </p>
     </v-alert>
@@ -182,7 +182,7 @@
                 </v-form>
             </div>
             <div v-else>
-                <v-alert color="grey" variant="text">Select a preset to edit</v-alert>
+                <v-alert color="muted" variant="text">Select a preset to edit</v-alert>
             </div>
         </v-col>
     </v-row>

@@ -233,6 +233,7 @@ export default {
         parentheses: sceneConfig.parentheses || narratorStyles,
         brackets: sceneConfig.brackets || narratorStyles,
         default: defaultStyles,
+        messageType: 'narrator',
       });
     },
     renderedBody() {

@@ -1,6 +1,6 @@
 <template>
     <v-list density="compact" slim>
-        <v-list-subheader color="grey">
+        <v-list-subheader color="muted">
             <v-icon color="primary" class="mr-1">mdi-plus</v-icon>
             Create
         </v-list-subheader>
@@ -14,7 +14,7 @@
 
     <v-list selectable slim density="compact" color="secondary" v-model:selected="selected">
 
-        <v-list-subheader color="grey">
+        <v-list-subheader color="muted">
             Cultures ({{ cultures.length }})
         </v-list-subheader>
         <v-list-item
@@ -23,7 +23,7 @@
             :value="`culture:${culture.id}`"
         >
             <template v-slot:prepend>
-                <span class="culture-swatch" :style="{ backgroundColor: culture.color }"></span>
+                <span class="culture-swatch" :style="{ backgroundColor: swatchColor(culture.color) }"></span>
             </template>
             <v-list-item-title>{{ culture.name }}</v-list-item-title>
             <v-list-item-subtitle>{{ cultureSubtitle(culture) }}</v-list-item-subtitle>
@@ -41,7 +41,7 @@
         </v-card>
 
         <v-divider class="my-2"></v-divider>
-        <v-list-subheader color="grey">Where they live</v-list-subheader>
+        <v-list-subheader color="muted">Where they live</v-list-subheader>
         <v-list-item value="places" prepend-icon="mdi-map-marker-outline">
             <v-list-item-title>Places &amp; regions</v-list-item-title>
             <template v-slot:append>
@@ -66,7 +66,7 @@
         </v-list-item>
 
         <v-divider class="my-2"></v-divider>
-        <v-list-subheader color="grey">Not yet in a language</v-list-subheader>
+        <v-list-subheader color="muted">Not yet in a language</v-list-subheader>
         <v-list-item value="unassigned" prepend-icon="mdi-help-circle-outline">
             <v-list-item-title>Unassigned names</v-list-item-title>
             <template v-slot:append>
@@ -90,6 +90,7 @@
 
 <script>
 import { levelLabel } from './levelLabels';
+import { dataColor } from '@/theme/dataColors';
 
 export default {
     name: 'WorldStateManagerMenuCulturesTools',
@@ -174,6 +175,12 @@ export default {
                 subtitle += ", can't be written";
             }
             return subtitle;
+        },
+        // The culture's own stored colour is data: remap it onto the
+        // theme's accent palette at render time (never rewrite the stored
+        // value) — see theme/dataColors.js.
+        swatchColor(color) {
+            return dataColor(color) || color;
         },
     },
 }

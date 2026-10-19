@@ -22,14 +22,14 @@
                     :generation-options="generationOptions" />
                 </v-tabs-window-item>
                 <v-tabs-window-item value="info">
-                    <v-alert type="info" color="grey" variant="text" icon="mdi-earth">
+                    <v-alert type="info" color="muted" variant="text" icon="mdi-earth">
                         Add world information / lore and additional details.
                         <br><br>
                         You can also set up automatic reinforcement of world information states. This will cause the AI to regularly re-evaluate the state and update the detail accordingly.
                         <br><br>
                         Add a new entry or select an existing one to get started.
                         <br><br>
-                        <v-icon color="orange" class="mr-1">mdi-alert</v-icon> If you want to add details to an acting character do that through the character manager instead.
+                        <v-icon color="warning" class="mr-1">mdi-alert</v-icon> If you want to add details to an acting character do that through the character manager instead.
                     </v-alert>
                 </v-tabs-window-item>
             </v-tabs-window>

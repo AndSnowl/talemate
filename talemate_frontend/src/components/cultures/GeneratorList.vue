@@ -12,7 +12,7 @@
                     </div>
 
                     <div class="d-flex flex-wrap ga-1 mb-3 generator-out">
-                        <v-chip v-for="(name, i) in (rolls[gen.id] || [])" :key="i" size="small" class="font-italic text-highlight7">
+                        <v-chip v-for="(name, i) in (rolls[gen.id] || [])" :key="i" size="small" class="font-italic text-foreign">
                             {{ name }}
                         </v-chip>
                         <span v-if="rollErrors[gen.id]" class="text-error text-caption">
@@ -216,7 +216,7 @@ export default {
 }
 
 .empty-hint {
-    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border: 1px dashed rgb(var(--v-theme-border));
     border-radius: 6px;
 }
 </style>

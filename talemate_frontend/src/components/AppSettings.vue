@@ -1,6 +1,6 @@
 <template>
     <v-card variant="text" v-if="app_config !== null">
-        <v-toolbar rounded="md" density="compact" color="grey-darken-4" class="pl-2 mb-1 app-settings-toolbar">
+        <v-toolbar rounded="md" density="compact" color="raised" class="pl-2 mb-1 app-settings-toolbar">
             <v-icon class="mr-2" color="primary">{{ currentPage?.icon || 'mdi-cog' }}</v-icon>
             <span class="text-subtitle-2 mr-4">{{ currentPage?.group }} <span class="text-muted">/</span> {{ currentPage?.title }}</span>
             <v-btn color="primary" variant="text" prepend-icon="mdi-check-circle-outline" :disabled="!canSave" @click="saveConfig">Save</v-btn>
@@ -28,6 +28,9 @@
                 </v-window-item>
                 <v-window-item value="player-character">
                     <AppSettingsPlayerCharacter :config="app_config" />
+                </v-window-item>
+                <v-window-item value="appearance-theme">
+                    <AppConfigAppearanceTheme ref="appearance-theme" :immutableConfig="app_config" :sceneActive="sceneActive" @changed="onAppearanceChanged"></AppConfigAppearanceTheme>
                 </v-window-item>
                 <v-window-item value="appearance-messages">
                     <AppConfigAppearanceScene ref="appearance-messages" :immutableConfig="app_config" :sceneActive="sceneActive" @changed="onAppearanceChanged"></AppConfigAppearanceScene>
@@ -95,6 +98,7 @@ import AppSettingsPlayerCharacter from './AppSettingsPlayerCharacter.vue';
 import AppSettingsApiKeys from './AppSettingsApiKeys.vue';
 import AppSettingsEnvVariables from './AppSettingsEnvVariables.vue';
 import AppSettingsStringList from './AppSettingsStringList.vue';
+import AppConfigAppearanceTheme from './AppConfigAppearanceTheme.vue';
 import AppConfigAppearanceScene from './AppConfigAppearanceScene.vue';
 import AppConfigAppearanceAssets from './AppConfigAppearanceAssets.vue';
 import AppConfigPresetsInference from './AppConfigPresetsInference.vue';
@@ -111,6 +115,7 @@ export default {
         AppSettingsApiKeys,
         AppSettingsEnvVariables,
         AppSettingsStringList,
+        AppConfigAppearanceTheme,
         AppConfigAppearanceScene,
         AppConfigAppearanceAssets,
         AppConfigPresetsInference,

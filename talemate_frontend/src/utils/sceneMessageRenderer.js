@@ -1,47 +1,57 @@
 import { marked, Marked } from 'marked';
-import { DEFAULT_APPEARANCE_COLORS } from './messageColors.js';
+import { MESSAGE_ROLE, resolveMessageColor } from './messageColors.js';
+import { currentTheme } from '../theme/store.js';
 
-const DEFAULTS = {
-    quotes: {
-        color: DEFAULT_APPEARANCE_COLORS.quotes,
-        italic: false,
-        bold: false,
-    },
-    parentheses: {
-        color: DEFAULT_APPEARANCE_COLORS.parentheses,
-        italic: false,
-        bold: false,
-    },
-    brackets: {
-        color: DEFAULT_APPEARANCE_COLORS.brackets,
-        italic: false,
-        bold: true,
-    },
-    emphasis: {
-        color: DEFAULT_APPEARANCE_COLORS.emphasis,
-        italic: false,
-        bold: false,
-    },
-    entities: {
-        color: DEFAULT_APPEARANCE_COLORS.entities,
-        italic: false,
-        bold: false,
-    },
-    default: {
-        color: DEFAULT_APPEARANCE_COLORS.emphasis,
-        italic: true,
-        bold: false,
-    },
-    prefix: {
-        color: "#FFE082",
-        italic: false,
-        bold: true,
-    },
-    foreign: {
-        color: 'rgb(var(--v-theme-highlight7))',
-        italic: true,
-        bold: false,
-    },
+// Default colors for markup/message types, read from the live theme (see
+// ../theme/store.js) rather than hard-coded hex literals. Built fresh per
+// `SceneTextParser` instantiation so a theme switch is picked up by the
+// next render (components re-create their parser on every render — see
+// NarratorMessage.vue, CharacterMessage.vue, etc.).
+function buildDefaults() {
+    const colors = currentTheme.value.colors;
+    return {
+        quotes: {
+            color: colors.quotes,
+            italic: false,
+            bold: false,
+        },
+        parentheses: {
+            color: colors.parentheses,
+            italic: false,
+            bold: false,
+        },
+        brackets: {
+            color: colors.brackets,
+            italic: false,
+            bold: true,
+        },
+        emphasis: {
+            color: colors.emphasis,
+            italic: false,
+            bold: false,
+        },
+        entities: {
+            color: colors.entities,
+            italic: false,
+            bold: false,
+        },
+        default: {
+            color: colors.emphasis,
+            italic: true,
+            bold: false,
+        },
+        prefix: {
+            // "Character Name:" prefix — reuses the charname role.
+            color: colors.charname,
+            italic: false,
+            bold: true,
+        },
+        foreign: {
+            color: 'rgb(var(--v-theme-foreign))',
+            italic: true,
+            bold: false,
+        },
+    };
 }
 
 // Escape a string for use inside a regex literal.
@@ -149,28 +159,57 @@ export function compileEntityMentions(mentions) {
 
 export class SceneTextParser {
     constructor(config = {}) {
+        const resolved = currentTheme.value;
+        const DEFAULTS = buildDefaults();
+
+        // Resolve a raw colour value (hex / palette key / legacy-default
+        // hex / empty) the same way getMessageColor does (see
+        // messageColors.js's `resolveMessageColor` — the single choke
+        // point shared by both), falling back to `fallback` — itself
+        // already a resolved, final hex — when there's no raw value to
+        // resolve. `typ` is the message/markup type the colour belongs to
+        // (quotes, parentheses, ..., or `config.messageType` for the
+        // "default" paragraph colour); it may be unknown (undefined),
+        // which still resolves palette keys correctly and simply skips the
+        // legacy-default "counts as unset" check.
+        const resolveColor = (typ, rawColor, fallback) => {
+            if (rawColor == null) return fallback;
+            return resolveMessageColor(typ, rawColor, resolved) ?? fallback;
+        };
+
         // Determine default color:
         // 1. Use config.defaultColor if explicitly provided
-        // 2. Use message type default from DEFAULT_APPEARANCE_COLORS if messageType is specified
+        // 2. Use the message type's theme role colour if messageType is specified
         // 3. Otherwise use DEFAULTS.default.color
-        const defaultColor = config.defaultColor ??
-                            (config.messageType && DEFAULT_APPEARANCE_COLORS[config.messageType]) ??
-                            DEFAULTS.default.color;
-        
-        // Get the default message color from config.default if available
-        const defaultMessageColor = config.default?.color ?? defaultColor;
-        
-        // Helper to merge a user-supplied style object with defaults
-        const merge = (key, defaultObj, defaults, isMarkupStyle = false) => {
+        const messageTypeRole = config.messageType && (MESSAGE_ROLE[config.messageType] || config.messageType);
+        const defaultColor = config.defaultColor != null
+                            ? resolveColor(config.messageType, config.defaultColor, DEFAULTS.default.color)
+                            : (messageTypeRole && resolved.colors[messageTypeRole]) ?? DEFAULTS.default.color;
+
+        // Get the default message color from config.default if available —
+        // config.default is typically the message type's own style object
+        // (e.g. narrator_messages/actor_messages), so its raw colour is
+        // resolved against that same message type.
+        const defaultMessageColor = resolveColor(config.messageType, config.default?.color, defaultColor);
+
+        // Helper to merge a user-supplied style object with defaults.
+        // `typ` identifies the style for colour resolution — defaults to
+        // `key` (quotes/parentheses/brackets/emphasis/entities/prefix/
+        // foreign all share their theme role's name); 'default' passes
+        // `config.messageType` explicitly below.
+        const merge = (key, defaultObj, defaults, isMarkupStyle = false, typ = key) => {
             const user = config[key] ?? {};
             let color;
 
             if (isMarkupStyle && user.override_color === false) {
-                // When override_color is false, use the default message color
+                // When override_color is false, use the default message
+                // color (already resolved above).
                 color = defaultMessageColor;
             } else {
-                // Use the markup's own color if provided, otherwise use defaults
-                color = user.color != null ? user.color : defaults.color;
+                // Use the markup's own color if provided (resolved through
+                // the theme the same way getMessageColor is), otherwise
+                // use defaults (already a resolved, final hex).
+                color = resolveColor(typ, user.color, defaults.color);
             }
 
             return {
@@ -182,7 +221,7 @@ export class SceneTextParser {
                 show: user.show != null ? user.show : true,
             };
         };
-        
+
         this.config = {
             quotes: merge('quotes', { className: 'scene-quotes' }, { color: DEFAULTS.quotes.color, bold: DEFAULTS.quotes.bold, italic: DEFAULTS.quotes.italic }, true),
             emphasis: merge('emphasis', { className: 'scene-emphasis' }, { color: DEFAULTS.emphasis.color, bold: DEFAULTS.emphasis.bold, italic: DEFAULTS.emphasis.italic }, true),
@@ -191,9 +230,9 @@ export class SceneTextParser {
             entities: merge('entities', { className: 'scene-entity' }, { color: DEFAULTS.entities.color, bold: DEFAULTS.entities.bold, italic: DEFAULTS.entities.italic }, true),
             prefix:   merge('prefix',   { className: 'scene-prefix' },   { color: DEFAULTS.prefix.color,  bold: true, italic: false }),
             foreign: merge('foreign', { className: 'scene-foreign' }, { color: DEFAULTS.foreign.color, bold: false, italic: true }),
-            default: merge('default', { className: 'scene-default' }, { color: defaultColor, bold: false, italic: false }),
+            default: merge('default', { className: 'scene-default' }, { color: defaultColor, bold: false, italic: false }, false, config.messageType),
         };
-        
+
         this.marked = new Marked();
         this.setupMarked();
     }
@@ -373,7 +412,7 @@ export class SceneTextParser {
 
             // Custom renderer for horizontal rules (---) to match v-divider styling
             hr: () => {
-                return '<hr class="scene-hr" style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.12); margin: 16px 0; width: 100%;" />';
+                return '<hr class="scene-hr" style="border: none; border-top: 1px solid rgb(var(--v-theme-border)); margin: 16px 0; width: 100%;" />';
             },
 
             // Disable markdown images
@@ -533,25 +572,27 @@ export function parseSceneText(text, config = {}) {
 
 // Example usage:
 /*
-// Create a parser with custom configuration
+// Create a parser with custom configuration — colors here are themed role
+// names (see buildDefaults() above), not raw hex, so they follow whatever
+// theme is active.
 const parser = new SceneTextParser({
     emphasis: {
-        color: '#e74c3c',
+        color: currentTheme.value.colors.danger,
         italic: true,
         bold: false
     },
     quotes: {
-        color: '#3498db',
+        color: currentTheme.value.colors.you,
         italic: false,
         bold: true
     },
     parentheses: {
-        color: '#95a5a6',
+        color: currentTheme.value.colors.muted,
         italic: true,
         bold: false
     },
     brackets: {
-        color: '#f39c12',
+        color: currentTheme.value.colors.warning,
         italic: false,
         bold: true
     }
@@ -562,7 +603,7 @@ const html = parser.parse('*This is emphasized* and "this is quoted" while (this
 
 // Or use the function directly
 const html2 = parseSceneText('Some *text* with "quotes"', {
-    emphasis: { color: 'red' },
-    quotes: { color: 'blue' }
+    emphasis: { color: currentTheme.value.colors.danger },
+    quotes: { color: currentTheme.value.colors.you }
 });
 */

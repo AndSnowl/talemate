@@ -1,11 +1,11 @@
 # Connect a client
 
 !!! note "First time setup?"
-    If this is your first time launching Talemate, the [Setup Wizard](setup-wizard.md) will guide you through adding your first client and configuring essential settings. This page covers manual client configuration for adding additional clients or if you skipped the wizard.
+    If this is your first time launching fantasymate, the [Setup Wizard](setup-wizard.md) will guide you through adding your first client and configuring essential settings. This page covers manual client configuration for adding additional clients or if you skipped the wizard.
 
-Once Talemate is up and running and you are connected, the Home screen shows a warning at the top while no client is configured, reminding you that all enabled clients and agents need to be configured before you can load scenes.
+Once fantasymate is up and running and you are connected, the Home screen shows a warning at the top while no client is configured, reminding you that all enabled clients and agents need to be configured before you can load scenes.
 
-Talemate uses client(s) to connect to local or remote AI text generation APIs like koboldcpp, text-generation-webui or OpenAI.
+fantasymate uses client(s) to connect to local or remote AI text generation APIs like koboldcpp, text-generation-webui or OpenAI.
 
 ## Add a new client
 
@@ -58,7 +58,7 @@ Select the API you want to use and click through to follow the instructions to c
 
 ## Assign the client to the agents
 
-Whenever you add your first client, Talemate will automatically assign it to all agents. Once the client is configured and assigned, all agents should have a green dot next to them. (Or grey if the agent is currently disabled)
+Whenever you add your first client, fantasymate will automatically assign it to all agents. Once the client is configured and assigned, all agents should have a green dot next to them. (Or grey if the agent is currently disabled)
 
 ![Connect a client assigned](/talemate/img/0.30.0/connect-a-client-ready.png)
 

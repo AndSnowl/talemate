@@ -1,10 +1,10 @@
 # Setup Wizard
 
-When you launch Talemate for the first time, a setup wizard will guide you through the initial configuration. This wizard helps you connect to an AI model and configure essential settings so you can start creating stories right away.
+When you launch fantasymate for the first time, a setup wizard will guide you through the initial configuration. This wizard helps you connect to an AI model and configure essential settings so you can start creating stories right away.
 
 ## Step 1: Choose Your AI Provider Type
 
-The first decision is how you want to connect to an AI model. Talemate offers two options:
+The first decision is how you want to connect to an AI model. fantasymate offers two options:
 
 ### Self-hosted
 
@@ -44,7 +44,7 @@ Once you complete the client configuration, the wizard will automatically advanc
 
 ## Step 3: Configure Long-term Memory
 
-Talemate uses embeddings to store and retrieve story details over time. This includes character names, relationships, locations, and other facts that should persist as your story grows.
+fantasymate uses embeddings to store and retrieve story details over time. This includes character names, relationships, locations, and other facts that should persist as your story grows.
 
 ### Embeddings Model
 
@@ -93,13 +93,13 @@ Choose **Enable** to automatically configure the Visual Agent, or **Skip** to co
 
 ## Completing the Wizard
 
-After completing all steps, click **Apply & finish** to save your settings and close the wizard. You are now ready to start using Talemate.
+After completing all steps, click **Apply & finish** to save your settings and close the wizard. You are now ready to start using fantasymate.
 
 ## Skipping the Wizard
 
-If you prefer to configure Talemate manually, you can click **Skip setup for now** at any time. The wizard will close and you can configure clients and settings through the regular interface.
+If you prefer to configure fantasymate manually, you can click **Skip setup for now** at any time. The wizard will close and you can configure clients and settings through the regular interface.
 
-The wizard will not appear again once you have added at least one client. If you skipped the wizard without adding a client, it will appear again the next time you launch Talemate.
+The wizard will not appear again once you have added at least one client. If you skipped the wizard without adding a client, it will appear again the next time you launch fantasymate.
 
 ## Re-accessing Setup Options
 

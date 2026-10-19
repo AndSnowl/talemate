@@ -114,6 +114,8 @@ export function convertGraphToJSON(graph) {
 
         groups.push({
             title: group.title,
+            // Raw, saved value — litegraphUtils.js's `drawGroups` only
+            // ever tints a *copy* for drawing, never `group.color` itself.
             color: group.color,
             x: parseInt(group.pos[0]),
             y: parseInt(group.pos[1]),

@@ -196,7 +196,7 @@
   >
     <template v-if="$slots.prepend" v-slot:prepend><slot name="prepend" /></template>
     <template v-slot:message="{ message }">
-      <span class="text-caption text-grey">{{ message }}</span>
+      <span class="text-caption text-muted">{{ message }}</span>
       <span v-if="field.expensive" class="text-warning mt-2 text-caption">
         <v-icon size="x-small">mdi-alert-circle-outline</v-icon>
         Potential for many additional prompts.

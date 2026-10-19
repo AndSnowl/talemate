@@ -26,7 +26,7 @@
         <v-row no-gutters class="content-split">
             <!-- Tree Panel -->
             <v-col cols="auto" class="tree-panel pa-2">
-                <div class="text-subtitle-2 text-grey mb-2">
+                <div class="text-subtitle-2 text-muted mb-2">
                     <v-icon size="small" class="mr-1">mdi-file-tree</v-icon>
                     Resolved Templates
                     <v-progress-circular
@@ -40,8 +40,8 @@
                 </div>
                 <div class="tree-container">
                     <!-- Empty state when no templates exist -->
-                    <div v-if="resolvedTemplates.length === 0 && !loading" class="text-center text-grey pa-4">
-                        <v-icon size="48" color="grey-darken-1">mdi-file-outline</v-icon>
+                    <div v-if="resolvedTemplates.length === 0 && !loading" class="text-center text-muted pa-4">
+                        <v-icon size="48" color="muted">mdi-file-outline</v-icon>
                         <div class="mt-2 text-body-2">No templates available</div>
                         <div class="text-caption">Templates will appear here once loaded</div>
                     </div>
@@ -78,7 +78,7 @@
 
             <!-- Preview Panel -->
             <v-col class="editor-panel pa-2">
-                <div class="text-subtitle-2 text-grey mb-2">
+                <div class="text-subtitle-2 text-muted mb-2">
                     <v-icon size="small" class="mr-1">mdi-eye</v-icon>
                     Preview
                     <v-chip
@@ -86,7 +86,7 @@
                         size="x-small"
                         label
                         class="ml-2"
-                        color="grey"
+                        color="muted"
                     >
                         read-only
                         <v-tooltip activator="parent" location="bottom">
@@ -168,8 +168,8 @@
                 </v-card>
 
                 <v-card v-else flat color="transparent" class="d-flex align-center justify-center" style="min-height: 300px;">
-                    <v-card-text class="text-center text-grey">
-                        <v-icon size="64" color="grey-darken-1">mdi-file-document-outline</v-icon>
+                    <v-card-text class="text-center text-muted">
+                        <v-icon size="64" color="muted">mdi-file-document-outline</v-icon>
                         <div class="mt-2">Select a template to preview</div>
                     </v-card-text>
                 </v-card>
@@ -182,8 +182,9 @@
 import { Codemirror } from 'vue-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 import GroupManagement from './GroupManagement.vue';
 import TemplateTree from './TemplateTree.vue';
 import TemplateSourceSelect from './TemplateSourceSelect.vue';
@@ -244,7 +245,7 @@ export default {
                     base: markdownLanguage,
                     codeLanguages: languages,
                 }),
-                oneDark,
+                ...themeExtensions(currentTheme.value),
                 EditorView.lineWrapping,
                 EditorView.editable.of(false)
             ];
@@ -359,7 +360,7 @@ export default {
 }
 
 .tree-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgb(var(--v-theme-border));
     overflow-y: auto;
     max-width: 750px;
     flex: 0 0 auto;

@@ -131,7 +131,7 @@
         <v-card-actions>
             <DirectorConsoleChatInput
                 v-model="chatInput"
-                label="Ask about Talemate"
+                label="Ask about fantasymate"
                 :show-interrupt="false"
                 :active="!!activeChatId && helpAvailable"
                 :processing="isProcessing"
@@ -162,7 +162,7 @@ import DirectorConsoleChatMessageActionResult from './DirectorConsoleChatMessage
 import DirectorConsoleChatMessageLoading from './DirectorConsoleChatMessageLoading.vue';
 import DirectorConsoleChatMessageMarkdown from './DirectorConsoleChatMessageMarkdown.vue';
 
-const usageCheatSheet = "Ask anything about how to use Talemate - settings, agents, clients, the world editor and more.\n\nAnswers are grounded in the bundled documentation.\n\nThe help chat cannot change your scene; ask the director chat for that."
+const usageCheatSheet = "Ask anything about how to use fantasymate - settings, agents, clients, the world editor and more.\n\nAnswers are grounded in the bundled documentation.\n\nThe help chat cannot change your scene; ask the director chat for that."
 
 export default {
     name: 'HelpChat',

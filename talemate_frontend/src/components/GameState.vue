@@ -42,11 +42,13 @@
 
 <script>
 
+import { computed } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
 import { linter } from '@codemirror/lint'
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 import { extractGameStatePaths } from '@/utils/gameStatePaths.js'
 import GameStateWatchedPaths from './GameStateWatchedPaths.vue'
 
@@ -237,12 +239,12 @@ export default {
             return diagnostics;
         });
 
-        const extensions = [
+        const extensions = computed(() => [
             json(),
-            oneDark,
+            ...themeExtensions(currentTheme.value),
             EditorView.lineWrapping,
             jsonLinter
-        ];
+        ]);
 
         const editorStyle = {
             height: "calc(100vh - 470px)",

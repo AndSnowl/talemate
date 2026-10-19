@@ -7,7 +7,7 @@
                     <v-icon start size="small">mdi-code-braces</v-icon>
                     LLM Prompt Templates
                 </span>
-                <span class="text-caption text-grey ml-2">
+                <span class="text-caption text-muted ml-2">
                     Base chat formatting templates for local LLM inference
                 </span>
             </div>
@@ -35,7 +35,7 @@
                 </div>
                 <template v-else>
                     <!-- User Templates -->
-                    <div class="text-subtitle-2 text-grey mb-1">
+                    <div class="text-subtitle-2 text-muted mb-1">
                         <v-icon size="small" class="mr-1">mdi-account-edit</v-icon>
                         User Templates
                         <span class="text-caption">(editable)</span>
@@ -54,14 +54,14 @@
                             <v-list-item-title class="text-body-2">user/{{ tmpl.name }}</v-list-item-title>
                         </v-list-item>
                     </v-list>
-                    <div v-else class="text-caption text-grey pa-2 mb-3">
+                    <div v-else class="text-caption text-muted pa-2 mb-3">
                         No user templates yet. Click "New Template" or copy a built-in template.
                     </div>
 
                     <v-divider class="mb-2"></v-divider>
 
                     <!-- Built-in Templates -->
-                    <div class="text-subtitle-2 text-grey mb-1">
+                    <div class="text-subtitle-2 text-muted mb-1">
                         <v-icon size="small" class="mr-1">mdi-lock-outline</v-icon>
                         Built-in Templates
                         <span class="text-caption">(read-only)</span>
@@ -75,7 +75,7 @@
                             class="template-item"
                         >
                             <template v-slot:prepend>
-                                <v-icon size="small" color="grey">mdi-file-document-outline</v-icon>
+                                <v-icon size="small" color="muted">mdi-file-document-outline</v-icon>
                             </template>
                             <v-list-item-title class="text-body-2">{{ tmpl.name }}</v-list-item-title>
                         </v-list-item>
@@ -85,21 +85,21 @@
 
             <!-- Editor Panel -->
             <v-col class="editor-panel pa-2">
-                <div class="text-subtitle-2 text-grey mb-2">
+                <div class="text-subtitle-2 text-muted mb-2">
                     <v-icon size="small" class="mr-1">mdi-code-braces</v-icon>
                     {{ selectedSource === 'builtin' ? 'Preview' : 'Editor' }}
                 </div>
 
                 <v-card v-if="selectedTemplate" flat class="editor-container">
                     <v-card-subtitle class="pa-2 d-flex align-center">
-                        <v-chip size="small" label :color="selectedSource === 'user' ? 'primary' : 'grey'" variant="tonal">
+                        <v-chip size="small" label :color="selectedSource === 'user' ? 'primary' : 'muted'" variant="tonal">
                             {{ selectedSource === 'user' ? 'user/' : '' }}{{ selectedTemplate.name }}
                         </v-chip>
                         <v-chip
                             v-if="selectedSource === 'builtin'"
                             size="small"
                             label
-                            color="grey"
+                            color="muted"
                             variant="outlined"
                             class="ml-2"
                         >
@@ -162,8 +162,8 @@
                 </v-card>
 
                 <v-card v-else flat color="transparent" class="d-flex align-center justify-center" style="min-height: 300px;">
-                    <v-card-text class="text-center text-grey">
-                        <v-icon size="64" color="grey-darken-1">mdi-file-document-edit-outline</v-icon>
+                    <v-card-text class="text-center text-muted">
+                        <v-icon size="64" color="muted">mdi-file-document-edit-outline</v-icon>
                         <div class="mt-2">Select a template to view or edit</div>
                         <div class="text-caption">User templates are fully editable. Built-in templates are read-only but can be copied.</div>
                     </v-card-text>
@@ -196,7 +196,7 @@
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer></v-spacer>
-                    <v-btn color="grey" variant="text" @click="showNewDialog = false">Cancel</v-btn>
+                    <v-btn color="muted" variant="text" @click="showNewDialog = false">Cancel</v-btn>
                     <v-btn color="primary" variant="tonal" :disabled="!newFormValid" @click="createTemplate">Create</v-btn>
                 </v-card-actions>
             </v-card>
@@ -228,8 +228,9 @@
 import { Codemirror } from 'vue-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 import ConfirmActionPrompt from '../ConfirmActionPrompt.vue';
 
 export default {
@@ -281,7 +282,7 @@ export default {
                     base: markdownLanguage,
                     codeLanguages: languages,
                 }),
-                oneDark,
+                ...themeExtensions(currentTheme.value),
                 EditorView.lineWrapping,
             ];
         },
@@ -465,7 +466,7 @@ export default {
 }
 
 .list-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgb(var(--v-theme-border));
     overflow-y: auto;
     max-width: 350px;
     min-width: 250px;

@@ -187,10 +187,10 @@ export default {
         modeOptions() {
             return {
                 normal: { value: 'normal', title: 'Normal', icon: 'mdi-chat-processing', color: 'default' },
-                decisive: { value: 'decisive', title: 'Decisive', icon: 'mdi-lightning-bolt', color: 'orange' },
+                decisive: { value: 'decisive', title: 'Decisive', icon: 'mdi-lightning-bolt', color: 'accent' },
                 nospoilers: { value: 'nospoilers', title: 'No Spoilers', icon: 'mdi-emoticon-cool', color: 'primary' },
-                generate_arc: { value: 'generate_arc', title: 'Generate Arc', icon: 'mdi-movie-open', color: 'green' },
-                generate_arc_expand: { value: 'generate_arc_expand', title: 'Generate Arc (Expand)', icon: 'mdi-lightning-bolt', color: 'green' }
+                generate_arc: { value: 'generate_arc', title: 'Generate Arc', icon: 'mdi-movie-open', color: 'success' },
+                generate_arc_expand: { value: 'generate_arc_expand', title: 'Generate Arc (Expand)', icon: 'mdi-lightning-bolt', color: 'success' }
             }
         },
         chatSelectItems() {

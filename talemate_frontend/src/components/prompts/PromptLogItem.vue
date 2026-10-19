@@ -39,7 +39,7 @@
                         size="x-small"
                         variant="text"
                         label
-                        color="grey-darken-1"
+                        color="muted"
                     >
                         {{ prompt.time || 0 }}s
                         <v-icon size="14" class="ml-1">mdi-clock</v-icon>
@@ -51,7 +51,7 @@
             <v-chip
                 v-if="prompt.agent_name"
                 size="x-small"
-                color="grey-lighten-1"
+                color="muted"
                 variant="text"
             >
                 {{ prompt.agent_name }}
@@ -59,7 +59,7 @@
             <v-chip
                 v-if="prompt.agent_action"
                 size="x-small"
-                color="grey"
+                color="muted"
                 variant="text"
             >
                 {{ prompt.agent_action }}

@@ -375,7 +375,7 @@ function infoOnlyChip(info) {
         return { label: info.culture_name, color: info.color };
     }
     if (info && !info.language_name) {
-        return { label: 'No language', color: 'grey' };
+        return { label: 'No language', color: 'muted' };
     }
     return null;
 }
@@ -395,7 +395,7 @@ export function characterChip(story, name) {
     if (character && character.culture_id) {
         base = { label: character.culture_name, color: character.color };
     } else if (character && character.set_by === 'owner') {
-        base = { label: 'No culture', color: 'grey' };
+        base = { label: 'No culture', color: 'muted' };
     } else {
         base = infoOnlyChip(info);
     }

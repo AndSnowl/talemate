@@ -5,7 +5,7 @@
             {{ provider.title }}
         </v-card-title>
         <v-card-text>
-            <div class="text-grey text-body-2 mb-2">
+            <div class="text-muted text-body-2 mb-2">
                 <p v-if="provider.description" class="mb-1">{{ provider.description }}</p>
                 <template v-if="provider.id === 'google_api'">
                     <p class="mb-2"><strong>Option&nbsp;1 – API&nbsp;Key&nbsp;(recommended)</strong></p>
@@ -24,7 +24,7 @@
                 :label="provider.fieldLabel" density="compact" hide-details></v-text-field>
             <template v-if="provider.id === 'google_api'">
                 <v-text-field v-model="config.google.gcloud_credentials_path" class="mt-3"
-                    label="Google Cloud Credentials Path" density="compact" messages="Path to the service-account JSON credentials file on the machine running the Talemate backend."></v-text-field>
+                    label="Google Cloud Credentials Path" density="compact" messages="Path to the service-account JSON credentials file on the machine running the fantasymate backend."></v-text-field>
                 <v-combobox v-model="config.google.gcloud_location" class="mt-3"
                     label="Google Cloud Location" density="compact" :items="googleCloudLocations" messages="Pick something close to you" :return-object="false"></v-combobox>
             </template>

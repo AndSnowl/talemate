@@ -5,7 +5,7 @@
 1. copy config file
     1. linux: `cp config.example.yaml config.yaml` 
     1. windows: `copy config.example.yaml config.yaml` (or just copy the file and rename it via the file explorer)
-1. Start Talemate:
+1. Start fantasymate:
     1. NVIDIA GPU host with the NVIDIA Container Toolkit installed: `docker compose up`
     1. Host without an NVIDIA GPU: `docker compose -f docker-compose.cpu.yml up`
 1. Navigate your browser to http://localhost:8082

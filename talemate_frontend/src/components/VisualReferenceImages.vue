@@ -1,5 +1,5 @@
 <template>
-  <v-card elevation="7" class="mt-2" color="grey" variant="tonal" v-if="editable || hasReferences">
+  <v-card elevation="7" class="mt-2" color="muted" variant="tonal" v-if="editable || hasReferences">
     <v-card-title class="d-flex align-center">
       <span>{{ title }}</span>
       <v-spacer></v-spacer>
@@ -43,7 +43,7 @@
 
     <v-dialog v-model="pickerOpen" max-width="1280">
       <v-card>
-        <v-toolbar density="comfortable" color="grey-darken-4">
+        <v-toolbar density="comfortable" color="raised">
           <v-toolbar-title>Select Reference Images</v-toolbar-title>
         </v-toolbar>
         <v-divider></v-divider>

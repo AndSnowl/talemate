@@ -296,11 +296,11 @@ export default {
 .asset-placeholder {
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(var(--v-theme-background), 0.2);
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.03) 50%,
+    rgba(var(--v-theme-on-surface), 0.03) 50%,
     transparent 100%
   );
   background-size: 200% 100%;

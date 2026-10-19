@@ -1,10 +1,33 @@
 import { LiteGraph } from 'litegraph.js';
+import { currentTheme } from '../theme/store.js';
+
+function hexToRgba(hex, alpha) {
+    const n = hex.replace('#', '');
+    const r = parseInt(n.slice(0, 2), 16);
+    const g = parseInt(n.slice(2, 4), 16);
+    const b = parseInt(n.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// A comment has no stored colour of its own (just text), so there's
+// nothing to remap per-instance — it's tinted from the theme's neutral
+// "on-surface" role, recomputed on every draw so it follows theme changes
+// (including live preview) without needing a rebuild hook.
+function commentPalette(resolved = currentTheme.value) {
+    const fg = resolved.colors['on-surface'];
+    return {
+        border: hexToRgba(fg, 0.25),
+        background: hexToRgba(fg, 0.08),
+        text: resolved.colors.muted,
+    };
+}
 
 // Define the Comment node class
 export function CommentNode() {
     this.properties = { text: "Comment" };
-    this.color = "rgba(0,0,0,0.1)"; // Transparent border
-    this.bgcolor = "rgba(0,0,0,0.05)"; // Very transparent background
+    const { border, background } = commentPalette();
+    this.color = border; // Transparent border
+    this.bgcolor = background; // Very transparent background
     this.size = [200, 100];
     this.resizable = true;
     this.removable = true;
@@ -54,6 +77,11 @@ CommentNode.prototype.wrapText = function(text, maxWidth) {
 
 // Draw the comment background
 CommentNode.prototype.onDrawBackground = function(ctx) {
+  // Recomputed live so the comment follows theme changes (including
+  // preview) without needing to be touched elsewhere.
+  const { border, background } = commentPalette();
+  this.color = border;
+  this.bgcolor = background;
   ctx.fillStyle = this.bgcolor;
   ctx.strokeStyle = this.color;
   ctx.beginPath();
@@ -65,9 +93,9 @@ CommentNode.prototype.onDrawBackground = function(ctx) {
 // Draw the comment text
 CommentNode.prototype.onDrawForeground = function(ctx) {
   if (!this.properties.text) return;
-  
+
   ctx.font = "italic 14px Arial";
-  ctx.fillStyle = "#AAA";
+  ctx.fillStyle = commentPalette().text;
   ctx.textAlign = "left";
   
   // Get wrapped lines based on current node width

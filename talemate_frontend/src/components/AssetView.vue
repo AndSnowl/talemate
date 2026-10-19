@@ -16,28 +16,30 @@
                     :width="previewWidth"
                     ref="previewImage"
                     @load="onImageLoad"
-                    class="bg-grey-darken-4"
+                    class="bg-background"
                 />
                 
                 <v-btn
                     v-if="showNavigation && hasPrev"
-                    icon="mdi-chevron-left"
+                    icon
                     variant="flat"
                     color="rgba(0,0,0,0.5)"
-                    theme="dark"
                     class="nav-arrow nav-arrow-left"
                     @click.stop="$emit('prev')"
-                ></v-btn>
-                
+                >
+                    <v-icon color="white">mdi-chevron-left</v-icon>
+                </v-btn>
+
                 <v-btn
                     v-if="showNavigation && hasNext"
-                    icon="mdi-chevron-right"
+                    icon
                     variant="flat"
                     color="rgba(0,0,0,0.5)"
-                    theme="dark"
                     class="nav-arrow nav-arrow-right"
                     @click.stop="$emit('next')"
-                ></v-btn>
+                >
+                    <v-icon color="white">mdi-chevron-right</v-icon>
+                </v-btn>
             </v-card-text>
         </v-card>
     </v-dialog>

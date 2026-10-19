@@ -5,6 +5,10 @@ import { trackRecentNodes } from './recentNodes.js';
 import { handleFitGroupToNodes, handleDuplicateGroup, handleVerticalSnapGroup, handleCreateGroupFromSelectedNodes } from './groupInteractions.js';
 import { handleWatchNodeShortcut, handleSetStateNodeShortcut, handleStageNodeShortcut } from './graphConnectionUtil.js';
 import { isPrimaryModifier } from './keyboardModifiers.js';
+import { nodeColors, nodeEditorColors } from '../theme/dataColors.js';
+import { currentTheme } from '../theme/store.js';
+import { ACCENT_KEYS } from '../theme/palette.js';
+import { hexToRgba, mix } from '../theme/colorMath.js';
 
 const UNRESOLVED = "<class 'talemate.game.engine.nodes.core.UNRESOLVED'>";
 
@@ -50,11 +54,186 @@ if (!LGraphCanvas.node_colors) {
     LGraphCanvas.node_colors = {};
 }
 
-// Add or extend color definitions for groups
-LGraphCanvas.node_colors.teal = {
-    color: "#00796B",      // teal darken-3 (for title/border)
-    bgcolor: "#004D40",    // teal darken-4 (for background - very dark)
-    groupcolor: "#00796B"  // teal darken-4 (for group color - very dark)
+// Legacy LiteGraph swatch names (not in ACCENT_KEYS) mapped onto the accent
+// they read closest to, so "Create Group from Selection"'s presets (see
+// recentNodes.js) and the "Change Color" menu stay theme-consistent too.
+const LEGACY_SWATCH_ALIASES = {
+    pale_blue: 'blue',
+    cyan: 'teal',
+    brown: 'orange',
+    purple: 'magenta',
+};
+
+/**
+ * Rebuilds the LiteGraph "Change Color" swatch palette
+ * (`LGraphCanvas.node_colors`), one entry per accent key plus the legacy
+ * swatch names LiteGraph/our own menus still reference, from the current
+ * theme's palette. Call again whenever `currentTheme` changes (see
+ * NodeEditor.vue's theme watcher) so the editor's colour picker stays
+ * theme-consistent.
+ */
+export function rebuildThemeNodeColors(resolved = currentTheme.value) {
+    const palette = resolved.palette;
+    for (const key of ACCENT_KEYS) {
+        const accentHex = palette[key];
+        const { title, body } = nodeColors(accentHex, resolved);
+        LGraphCanvas.node_colors[key] = {
+            color: title,
+            bgcolor: body,
+            groupcolor: accentHex,
+        };
+    }
+    for (const [legacyKey, accentKey] of Object.entries(LEGACY_SWATCH_ALIASES)) {
+        LGraphCanvas.node_colors[legacyKey] = LGraphCanvas.node_colors[accentKey];
+    }
+    // The black swatch name has no accent counterpart — the neutral pair
+    // nodeColors itself falls back to for an unsaturated/no-colour value.
+    LGraphCanvas.node_colors.black = {
+        color: palette.base2,
+        bgcolor: palette.base1,
+        groupcolor: palette.base2,
+    };
+
+    // LiteGraph's own global colours (node text, unstyled nodes, widgets,
+    // links) — read at draw time, so updating them here is enough.
+    const editorColors = nodeEditorColors(resolved);
+    Object.assign(LiteGraph, editorColors);
+    LGraphCanvas.link_type_colors = {
+        ...LGraphCanvas.link_type_colors,
+        '-1': editorColors.EVENT_LINK_COLOR,
+        number: editorColors.LINK_COLOR,
+        node: resolved.colors.link,
+    };
+}
+
+/**
+ * A 100x100 grid tile in the theme's colours, as a data URL, to replace
+ * LiteGraph's own opaque #222 grid image (which greys out every theme's
+ * background, and makes light ones murky). Null outside a browser.
+ */
+function themedGridImage(resolved) {
+    if (typeof document === 'undefined') return null;
+    const tile = document.createElement('canvas');
+    tile.width = 100;
+    tile.height = 100;
+    const ctx = tile.getContext('2d');
+    if (!ctx) return null;
+    const bg = resolved.palette['bg-alt'];
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 100, 100);
+    ctx.fillStyle = mix(bg, resolved.colors['on-surface'], 0.06);
+    for (let i = 0; i < 100; i += 10) {
+        const width = i === 0 ? 2 : 1;
+        ctx.fillRect(i, 0, width, 100);
+        ctx.fillRect(0, i, 100, width);
+    }
+    return tile.toDataURL('image/png');
+}
+
+/**
+ * Applies the current theme's background to a litegraph canvas instance.
+ * Call again whenever `currentTheme` changes.
+ */
+export function applyThemeToCanvas(canvas, resolved = currentTheme.value) {
+    if (!canvas) return;
+    const editorColors = nodeEditorColors(resolved);
+    canvas.clear_background_color = resolved.palette['bg-alt'];
+    const grid = themedGridImage(resolved);
+    if (grid) canvas.background_image = grid;
+    // Copied from LiteGraph's constants once, at canvas construction.
+    canvas.node_title_color = editorColors.NODE_TITLE_COLOR;
+    canvas.default_link_color = editorColors.LINK_COLOR;
+    canvas.default_connection_color = {
+        input_off: resolved.colors.muted,
+        input_on: resolved.colors.success,
+        output_off: resolved.colors.muted,
+        output_on: resolved.colors.success,
+    };
+    canvas.setDirty(true, true);
+}
+
+/**
+ * Re-derives every node's `.color`/`.bgcolor` render fields from its raw
+ * stored colour (node definition style, or ModuleStyle properties) under
+ * the given theme, without touching the stored data itself or reloading
+ * the graph. Call whenever `currentTheme` changes so already-loaded nodes
+ * follow along.
+ *
+ * Groups don't need this: `drawGroups` (below) re-tints `group.color` —
+ * the single source of truth for a group's raw colour — live on every
+ * draw, so they already follow theme changes once the canvas redraws.
+ */
+export function reapplyNodeColors(graph, resolved = currentTheme.value) {
+    if (!graph) return;
+
+    for (const node of graph._nodes || []) {
+        // Comments re-tint themselves on every draw (see commentNode.js).
+        if (node instanceof CommentNode) continue;
+        // A missing stored colour gives nodeColors' neutral pair, the
+        // same as the NodeClass constructor gives an unstyled node.
+        // A ModuleStyle node's own properties win over its definition's
+        // style, as in the NodeClass constructor.
+        const style = node._definition?.style || {};
+        const props = node.type === 'util/ModuleStyle' ? node.properties || {} : {};
+        node.color = nodeColors(props.title_color || style.title_color, resolved).title;
+        node.bgcolor = nodeColors(props.node_color || style.node_color, resolved).body;
+    }
+}
+
+rebuildThemeNodeColors();
+
+// A group's `.color` is always the raw, saved/exported value (whatever set
+// it last: JSON load, LiteGraph's own "Change Color"/"No color" menu,
+// duplication, or "Create Group from Selection" — see createGraphFromJSON,
+// groupInteractions.js and recentNodes.js, none of which tint it). The
+// theme's tint is applied only here, at draw time, so it's impossible for
+// a remapped colour to leak back into saved data, and a group drawn right
+// after creation looks identical to the same group after a reload.
+// Replaces LiteGraph's own `LGraphCanvas.prototype.drawGroups` (see
+// node_modules/litegraph.js/build/litegraph.js) rather than wrapping it,
+// since the colour is the only thing that needs to change.
+LGraphCanvas.prototype.drawGroups = function (canvas, ctx) {
+    if (!this.graph) {
+        return;
+    }
+
+    const groups = this.graph._groups;
+
+    ctx.save();
+    ctx.globalAlpha = 0.5 * this.editor_alpha;
+
+    for (let i = 0; i < groups.length; ++i) {
+        const group = groups[i];
+
+        if (!LiteGraph.overlapBounding(this.visible_area, group._bounding)) {
+            continue; // out of the visible area
+        }
+
+        const tint = nodeColors(group.color).title;
+        ctx.fillStyle = tint;
+        ctx.strokeStyle = tint;
+        const pos = group._pos;
+        const size = group._size;
+        ctx.globalAlpha = 0.25 * this.editor_alpha;
+        ctx.beginPath();
+        ctx.rect(pos[0] + 0.5, pos[1] + 0.5, size[0], size[1]);
+        ctx.fill();
+        ctx.globalAlpha = this.editor_alpha;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(pos[0] + size[0], pos[1] + size[1]);
+        ctx.lineTo(pos[0] + size[0] - 10, pos[1] + size[1]);
+        ctx.lineTo(pos[0] + size[0], pos[1] + size[1] - 10);
+        ctx.fill();
+
+        const font_size = group.font_size || LiteGraph.DEFAULT_GROUP_FONT_SIZE;
+        ctx.font = font_size + "px Arial";
+        ctx.textAlign = "left";
+        ctx.fillText(group.title, pos[0] + 4, pos[1] + font_size);
+    }
+
+    ctx.restore();
 };
 
 // Define style presets array (mutable to allow session-only additions)
@@ -96,7 +275,7 @@ let stylePresets = [
         icon: "F0159"  // alert
     },
     {
-        name: "Talemate Tint",
+        name: "fantasymate Tint",
         node_color: "#27233a",
         title_color: "#3d315b",
         icon: "F09DE"  // circle
@@ -125,10 +304,15 @@ function applyStylePreset(node, preset) {
         });
     }
     
-    // Update actual node appearance
+    // Update actual node appearance (remapped onto the current theme; the
+    // stored node_color/title_color above stay the raw preset values).
+    // Title comes from title_color and body from node_color, same as
+    // every other application site (constructor, widget setters,
+    // createGraphFromJSON) — keeps a node's body colour the same before
+    // and after a reload.
     if (node.type === "util/ModuleStyle") {
-        node.color = preset.title_color;
-        node.bgcolor = preset.node_color;
+        node.color = nodeColors(preset.title_color).title;
+        node.bgcolor = nodeColors(preset.node_color).body;
         node.titleIcon = preset.icon;
     }
     
@@ -337,7 +521,7 @@ function drawColorWidget(ctx, node, widget_width, y, H, widget) {
     const show_text = canvas ? canvas.ds.scale > 0.5 : true;
 
     const raw = widget.value == null ? "" : String(widget.value);
-    const swatch = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw) ? raw : "#000000";
+    const swatch = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw) ? raw : currentTheme.value.colors.background;
 
     ctx.textAlign = "left";
     ctx.strokeStyle = outline_color;
@@ -462,11 +646,13 @@ function createNodeClass(nodeDefinition) {
                 let setter = (v) => { 
                     this.properties[key] = v; 
                     // Automatically update node appearance for ModuleStyle node
+                    // (remapped onto the current theme; the stored property
+                    // above stays the raw value).
                     if (this.type === "util/ModuleStyle") {
                         if (key === "title_color") {
-                            this.color = v;
+                            this.color = nodeColors(v).title;
                         } else if (key === "node_color") {
-                            this.bgcolor = v;
+                            this.bgcolor = nodeColors(v).body;
                         } else if (key === "icon") {
                             this.titleIcon = v;
                         }
@@ -585,9 +771,11 @@ function createNodeClass(nodeDefinition) {
         }
         this.titleIcon = "F09DE"; // circle
 
+        // An unstyled node (or style without colours) gets nodeColors'
+        // neutral pair, the same as reapplyNodeColors gives it.
+        this.color = nodeColors(nodeDefinition.style?.title_color).title;
+        this.bgcolor = nodeColors(nodeDefinition.style?.node_color).body;
         if(nodeDefinition.style) {
-            this.color = nodeDefinition.style.title_color;
-            this.bgcolor = nodeDefinition.style.node_color;
             // Store the icon if provided
             if(nodeDefinition.style.icon) {
                 this.titleIcon = nodeDefinition.style.icon;
@@ -615,12 +803,13 @@ function createNodeClass(nodeDefinition) {
         
         // Special initialization for ModuleStyle node
         if (this.type === "util/ModuleStyle") {
-            // Set initial colors from properties if they exist
+            // Set initial colors from properties if they exist (remapped
+            // onto the current theme; the stored properties stay raw).
             if (this.properties.title_color) {
-                this.color = this.properties.title_color;
+                this.color = nodeColors(this.properties.title_color).title;
             }
             if (this.properties.node_color) {
-                this.bgcolor = this.properties.node_color;
+                this.bgcolor = nodeColors(this.properties.node_color).body;
             }
             if (this.properties.icon) {
                 this.titleIcon = this.properties.icon;
@@ -839,11 +1028,13 @@ function createNodeClass(nodeDefinition) {
                 set: function(v) { 
                     this.properties[key] = v; 
                     // Also update node appearance for ModuleStyle
+                    // (remapped onto the current theme; the stored property
+                    // above stays the raw value).
                     if (this.type === "util/ModuleStyle") {
                         if (key === "title_color") {
-                            this.color = v;
+                            this.color = nodeColors(v).title;
                         } else if (key === "node_color") {
-                            this.bgcolor = v;
+                            this.bgcolor = nodeColors(v).body;
                         } else if (key === "icon") {
                             this.titleIcon = v;
                         }
@@ -887,7 +1078,7 @@ function createNodeClass(nodeDefinition) {
             ctx.save();
             
             // Draw a subtle separator line above the button area
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+            ctx.strokeStyle = hexToRgba(currentTheme.value.colors['on-surface'], 0.1);
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(5, socketAreaHeight + 2);
@@ -895,7 +1086,7 @@ function createNodeClass(nodeDefinition) {
             ctx.stroke();
             
             // Draw add button (+) on the left
-            ctx.fillStyle = "#4CAF50"; // Green
+            ctx.fillStyle = currentTheme.value.colors.success;
             ctx.beginPath();
             ctx.roundRect(addButtonX, addButtonY, buttonSize, buttonSize, 3);
             ctx.fill();
@@ -916,7 +1107,7 @@ function createNodeClass(nodeDefinition) {
             const dynamicInputs = (this.inputs || []).filter(i => i.dynamic);
             if (dynamicInputs.length > 0) {
                 // Draw remove button (-) on the right
-                ctx.fillStyle = "#f44336"; // Red
+                ctx.fillStyle = currentTheme.value.colors.danger;
                 ctx.beginPath();
                 ctx.roundRect(removeButtonX, removeButtonY, buttonSize, buttonSize, 3);
                 ctx.fill();
@@ -964,7 +1155,7 @@ function createNodeClass(nodeDefinition) {
             const bgY = this.size[1] + yOffset; // Positioned at the bottom of the node
             
             // Draw rounded rectangle background
-            ctx.fillStyle = "rgb(27, 27, 27, 1)";
+            ctx.fillStyle = currentTheme.value.colors.raised;
             ctx.beginPath();
             
             // Top-left corner (sharp)
@@ -982,7 +1173,7 @@ function createNodeClass(nodeDefinition) {
             
             // Draw text
             ctx.textAlign = "left";
-            ctx.fillStyle = "#ddd"; // Light text color for contrast with black background
+            ctx.fillStyle = currentTheme.value.colors['on-surface'];
             ctx.fillText(text, bgX + padding, bgY + 10); // Position text inside background
             
             ctx.restore();
@@ -1273,13 +1464,15 @@ export function createGraphFromJSON(graphData) {
                     });
                 }
 
-                // Special handling for ModuleStyle nodes - apply colors directly to node appearance
+                // Special handling for ModuleStyle nodes - apply colors directly to node
+                // appearance (remapped onto the current theme; node.properties above
+                // keeps the raw, saved/exported values).
                 if (node.type === "util/ModuleStyle") {
                     if (nodeData.properties.title_color) {
-                        node.color = nodeData.properties.title_color;
+                        node.color = nodeColors(nodeData.properties.title_color).title;
                     }
                     if (nodeData.properties.node_color) {
-                        node.bgcolor = nodeData.properties.node_color;
+                        node.bgcolor = nodeColors(nodeData.properties.node_color).body;
                     }
                     if (nodeData.properties.icon) {
                         node.titleIcon = nodeData.properties.icon;
@@ -1383,6 +1576,8 @@ export function createGraphFromJSON(graphData) {
         node.size = [group.width, group.height];
         node.title = group.title;
         node.font_size = group.font_size;
+        // Raw/saved value — `drawGroups` (above) tints it for display at
+        // draw time; nothing here remaps it.
         node.color = group.color;
         node.inherited = group.inherited || false;
 

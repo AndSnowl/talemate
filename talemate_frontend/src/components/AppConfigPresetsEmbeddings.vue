@@ -116,7 +116,7 @@
                 </v-form>
             </div>
             <div v-else>
-                <v-alert color="grey" variant="text">Select a preset to edit</v-alert>
+                <v-alert color="muted" variant="text">Select a preset to edit</v-alert>
             </div>
         </v-col>
     </v-row>

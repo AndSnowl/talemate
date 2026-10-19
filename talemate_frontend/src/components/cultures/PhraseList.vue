@@ -15,7 +15,7 @@
                         >
                             <div class="d-flex align-start ga-1">
                                 <div class="flex-grow-1">
-                                    <div class="font-italic text-highlight7">{{ phrase.original }}</div>
+                                    <div class="font-italic text-foreign">{{ phrase.original }}</div>
                                     <div>{{ phrase.translation }}</div>
                                     <div v-if="phrase.usage" class="text-caption text-muted">{{ phrase.usage }}</div>
                                     <div v-if="phrase.breakdown.length" class="d-flex flex-wrap ga-1 mt-1">
@@ -235,7 +235,7 @@ export default {
 
 <style scoped>
 .phrase-row {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgb(var(--v-theme-border));
 }
 
 .phrase-row:last-child {
@@ -243,7 +243,7 @@ export default {
 }
 
 .phrase-focus {
-    border-left: 3px solid rgb(var(--v-theme-highlight7));
+    border-left: 3px solid rgb(var(--v-theme-foreign));
     padding-left: 8px;
 }
 </style>

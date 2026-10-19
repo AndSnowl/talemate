@@ -1,12 +1,12 @@
 # Prompt Logging
 
-Talemate can write every prompt it sends to a language model — together with the model's response and a bundle of metadata — to a JSON Lines file on disk. This is intended for debugging prompt issues, comparing behaviour across clients, or feeding collected prompts into offline analysis.
+fantasymate can write every prompt it sends to a language model — together with the model's response and a bundle of metadata — to a JSON Lines file on disk. This is intended for debugging prompt issues, comparing behaviour across clients, or feeding collected prompts into offline analysis.
 
 Prompt logging is **off by default** and is enabled with a single environment variable.
 
 ## Enabling
 
-Set `TALEMATE_LOG_PROMPTS=1` before starting the server. Any truthy value enables logging (Talemate checks for the variable being set to a non-empty string).
+Set `TALEMATE_LOG_PROMPTS=1` before starting the server. Any truthy value enables logging (fantasymate checks for the variable being set to a non-empty string).
 
 #### :material-linux: Linux
 
@@ -31,7 +31,7 @@ start.bat
 
 ## Disabling
 
-Unset the variable (or set it to an empty string) and restart Talemate:
+Unset the variable (or set it to an empty string) and restart fantasymate:
 
 #### :material-linux: Linux
 
@@ -51,12 +51,12 @@ start.bat
 
 | Setting | Value |
 |---------|-------|
-| Path | `logs/prompt_log.jsonl` in the Talemate project root |
+| Path | `logs/prompt_log.jsonl` in the fantasymate project root |
 | Format | JSON Lines (one JSON object per line) |
 | Write mode | Append — never truncated or rotated |
 | Flush | Every record is flushed immediately, so partial runs are not lost |
 
-The file is opened the first time a prompt is logged after startup and kept open for the lifetime of the process. It is **never rotated or truncated by Talemate**, so the file will keep growing as long as the variable is set. If you only need a short capture, enable the variable, reproduce the problem, disable it, and delete or move the file afterwards.
+The file is opened the first time a prompt is logged after startup and kept open for the lifetime of the process. It is **never rotated or truncated by fantasymate**, so the file will keep growing as long as the variable is set. If you only need a short capture, enable the variable, reproduce the problem, disable it, and delete or move the file afterwards.
 
 !!! info "`logs/prompt_log.jsonl` vs `logs/prompt_log.json`"
     The JSON-Lines file described here is written by the server while it runs.
@@ -84,7 +84,7 @@ Each line in `prompt_log.jsonl` is a single JSON object with the fields below. F
 | `reasoning` | string or null | The extracted reasoning / thinking trace for this response, when the client supports reasoning tokens. |
 | `template_uid` | string or null | UID of the Jinja prompt template that produced the prompt. Useful for correlating a log line back to a specific template in the Prompt Manager. |
 
-The record is the same `PromptData` structure that Talemate emits over the websocket to populate the in-app [Debug Tools](../../user-guide/debug-tools.md#prompts) Prompts tab, so anything visible there is also in the log file.
+The record is the same `PromptData` structure that fantasymate emits over the websocket to populate the in-app [Debug Tools](../../user-guide/debug-tools.md#prompts) Prompts tab, so anything visible there is also in the log file.
 
 ## Quick inspection
 

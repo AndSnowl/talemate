@@ -36,7 +36,7 @@
                             size="x-small"
                             label
                             variant="outlined"
-                            color="grey-lighten-1"
+                            color="muted"
                             class="text-caption"
                         >
                             {{ entity.emotion }}
@@ -96,9 +96,9 @@ import ForeignWordCard from './cultures/ForeignWordCard.vue';
 import NameLanguageSection from './cultures/NameLanguageSection.vue';
 
 const KIND_META = {
-    character: { color: 'primary',     icon: 'mdi-account' },
-    item:      { color: 'amber',       icon: 'mdi-cube' },
-    place:     { color: 'teal',        icon: 'mdi-map-marker' },
+    character: { color: 'primary',      icon: 'mdi-account' },
+    item:      { color: 'pal-yellow',   icon: 'mdi-cube' },
+    place:     { color: 'pal-teal',     icon: 'mdi-map-marker' },
 };
 
 export default {
@@ -112,7 +112,7 @@ export default {
     emits: ['update:modelValue', 'configure-highlights', 'examine', 'look-at'],
     computed: {
         kindColor() {
-            return KIND_META[this.entity?.kind]?.color || 'grey';
+            return KIND_META[this.entity?.kind]?.color || 'muted';
         },
         kindIcon() {
             return KIND_META[this.entity?.kind]?.icon || 'mdi-help-circle-outline';
@@ -140,7 +140,7 @@ export default {
 <style scoped>
 .entity-tooltip-card {
     background-color: rgb(var(--v-theme-surface));
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
 .entity-tooltip-name {

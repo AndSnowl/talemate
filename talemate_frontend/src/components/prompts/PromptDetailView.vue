@@ -3,7 +3,7 @@
         <!-- Header with prompt metadata -->
         <div class="d-flex align-center flex-wrap mb-2">
             <span class="text-h6 mr-2">#{{ prompt.num }}</span>
-            <v-chip color="grey-lighten-1" variant="text">{{ prompt.agent_name }}</v-chip>
+            <v-chip color="muted" variant="text">{{ prompt.agent_name }}</v-chip>
             <v-chip size="small" label class="mr-1" color="primary" variant="tonal">
                 <strong class="mr-1">action</strong>{{ prompt.agent_action }}
             </v-chip>
@@ -21,15 +21,15 @@
                         variant="text"
                         class="mr-1"
                         icon="mdi-brain"
-                        :color="reasoningOverrideActive ? 'delete' : 'grey-darken-1'"
+                        :color="reasoningOverrideActive ? 'delete' : 'muted'"
                         @click="toggleReasoningOverride"
                     />
                 </template>
             </v-tooltip>
-            <v-chip class="mr-1" size="small" color="grey" label variant="tonal">
+            <v-chip class="mr-1" size="small" color="muted" label variant="tonal">
                 <strong class="mr-1">task</strong> {{ prompt.kind }}
             </v-chip>
-            <v-chip size="small" color="grey" label variant="tonal">
+            <v-chip size="small" color="muted" label variant="tonal">
                 <strong class="mr-1">preset</strong> {{ prompt.inference_preset }}
             </v-chip>
             <v-chip size="small" color="primary" variant="text" label>
@@ -38,10 +38,10 @@
             <v-chip size="small" color="secondary" variant="text" label>
                 {{ prompt.response_tokens }}<v-icon size="14" class="ml-1">mdi-arrow-up-bold</v-icon>
             </v-chip>
-            <v-chip size="small" variant="text" label color="grey-darken-1">
+            <v-chip size="small" variant="text" label color="muted">
                 {{ prompt.time }}s<v-icon size="14" class="ml-1">mdi-clock</v-icon>
             </v-chip>
-            <v-chip color="grey" variant="text" prepend-icon="mdi-network-outline">
+            <v-chip color="muted" variant="text" prepend-icon="mdi-network-outline">
                 {{ prompt.client_name }}
             </v-chip>
             <v-chip
@@ -83,10 +83,10 @@
                         <v-icon>mdi-transit-connection-variant</v-icon> Agent Stack
                     </v-list-subheader>
                     <v-list-item v-for="(agent, index) in prompt.agent_stack" :key="index">
-                        <v-list-item-subtitle class="text-grey-lighten-3">
+                        <v-list-item-subtitle class="text-on-surface">
                             {{ agentParts(agent).name }}
                         </v-list-item-subtitle>
-                        <v-list-item-subtitle class="text-grey-lighten-1 text-caption">
+                        <v-list-item-subtitle class="text-muted text-caption">
                             {{ agentParts(agent).action }}
                         </v-list-item-subtitle>
                     </v-list-item>
@@ -96,7 +96,7 @@
                             size="x-small"
                             variant="text"
                             v-if="promptHasDirtyParams"
-                            color="orange"
+                            color="dirty"
                             @click.stop="resetParams"
                             prepend-icon="mdi-restore"
                         >Reset</v-btn>
@@ -130,7 +130,7 @@
                             size="x-small"
                             variant="text"
                             v-if="promptHasDirtyPrompt"
-                            color="orange"
+                            color="dirty"
                             @click.stop="resetPrompt"
                             prepend-icon="mdi-restore"
                         >Reset</v-btn>
@@ -152,7 +152,7 @@
                 </v-tabs>
                 <v-window v-model="responseTab">
                     <v-window-item value="response">
-                        <v-card elevation="10" color="grey-darken-3" style="overflow-y:auto; max-height: calc(80vh - 200px);">
+                        <v-card elevation="10" color="raised" style="overflow-y:auto; max-height: calc(80vh - 200px);">
                             <v-card-title>
                                 Response
                                 <v-progress-circular
@@ -166,18 +166,18 @@
                                     size="x-small"
                                     variant="text"
                                     v-else-if="promptHasDirtyResponse"
-                                    color="orange"
+                                    color="dirty"
                                     @click.stop="resetResponse"
                                     prepend-icon="mdi-restore"
                                 >Reset</v-btn>
                             </v-card-title>
-                            <v-card-text :class="busy ? 'text-grey' : 'text-white'">
+                            <v-card-text :class="busy ? 'text-muted' : 'text-on-surface'">
                                 <div class="prompt-view">{{ localPrompt.response }}</div>
                             </v-card-text>
                         </v-card>
                     </v-window-item>
                     <v-window-item value="reasoning">
-                        <v-card elevation="10" color="grey-darken-3" style="overflow-y:auto; max-height: calc(80vh - 200px);">
+                        <v-card elevation="10" color="raised" style="overflow-y:auto; max-height: calc(80vh - 200px);">
                             <v-card-title>Reasoning</v-card-title>
                             <v-card-text>
                                 <div class="prompt-view">{{ localPrompt.reasoning }}</div>
@@ -196,7 +196,7 @@
             <template v-slot:activator="{ props }">
                 <v-btn
                     :disabled="busy"
-                    color="orange"
+                    color="accent"
                     variant="text"
                     @click.stop="testChanges"
                     v-bind="props"
@@ -211,11 +211,13 @@
 </template>
 
 <script>
+import { computed } from 'vue';
 import { Codemirror } from 'vue-codemirror'
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 
 export default {
     name: 'PromptDetailView',
@@ -410,14 +412,14 @@ export default {
         this.registerMessageHandler(this.handleMessage);
     },
     setup() {
-        const extensions = [
+        const extensions = computed(() => [
             markdown({
                 base: markdownLanguage,
                 codeLanguages: languages,
             }),
-            oneDark,
+            ...themeExtensions(currentTheme.value),
             EditorView.lineWrapping
-        ];
+        ]);
 
         return {
             extensions,

@@ -7,7 +7,7 @@
                     <v-icon start size="small">mdi-folder-edit-outline</v-icon>
                     {{ group }}
                 </span>
-                <span v-if="isScene" class="text-caption text-grey ml-2">
+                <span v-if="isScene" class="text-caption text-muted ml-2">
                     (scene-specific templates)
                 </span>
             </div>
@@ -41,15 +41,15 @@
         <v-row no-gutters class="content-split">
             <!-- Tree Panel -->
             <v-col cols="auto" class="tree-panel pa-2">
-                <div class="text-subtitle-2 text-grey mb-2">
+                <div class="text-subtitle-2 text-muted mb-2">
                     <v-icon size="small" class="mr-1">mdi-file-tree</v-icon>
                     Templates
                     <span class="text-caption">(muted = not overridden)</span>
                 </div>
                 <div class="tree-container">
                     <!-- Empty state when no templates exist -->
-                    <div v-if="groupTemplates.length === 0 && !loading" class="text-center text-grey pa-4">
-                        <v-icon size="48" color="grey-darken-1">mdi-file-outline</v-icon>
+                    <div v-if="groupTemplates.length === 0 && !loading" class="text-center text-muted pa-4">
+                        <v-icon size="48" color="muted">mdi-file-outline</v-icon>
                         <div class="mt-2 text-body-2">No templates available</div>
                         <div class="text-caption">Templates will appear here once loaded</div>
                     </div>
@@ -68,7 +68,7 @@
 
             <!-- Editor Panel -->
             <v-col class="editor-panel pa-2">
-                <div class="text-subtitle-2 text-grey mb-2">
+                <div class="text-subtitle-2 text-muted mb-2">
                     <v-icon size="small" class="mr-1">mdi-code-braces</v-icon>
                     Editor
                 </div>
@@ -152,8 +152,8 @@
                 </v-card>
 
                 <v-card v-else flat color="transparent" class="d-flex align-center justify-center" style="min-height: 300px;">
-                    <v-card-text class="text-center text-grey">
-                        <v-icon size="64" color="grey-darken-1">mdi-file-document-edit-outline</v-icon>
+                    <v-card-text class="text-center text-muted">
+                        <v-icon size="64" color="muted">mdi-file-document-edit-outline</v-icon>
                         <div class="mt-2">Select a template to edit</div>
                         <div class="text-caption">Click a muted template to create an override</div>
                     </v-card-text>
@@ -229,7 +229,7 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn
-                        color="grey"
+                        color="muted"
                         variant="text"
                         @click="closeNewFileDialog"
                     >
@@ -263,8 +263,9 @@
 import { Codemirror } from 'vue-codemirror';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView } from '@codemirror/view';
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 import TemplateTree from './TemplateTree.vue';
 import ConfirmActionPrompt from '../ConfirmActionPrompt.vue';
 
@@ -389,7 +390,7 @@ export default {
                     base: markdownLanguage,
                     codeLanguages: languages,
                 }),
-                oneDark,
+                ...themeExtensions(currentTheme.value),
                 EditorView.lineWrapping
             ];
         }
@@ -727,7 +728,7 @@ export default {
 }
 
 .tree-panel {
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid rgb(var(--v-theme-border));
     overflow-y: auto;
     max-width: 750px;
     flex: 0 0 auto;

@@ -10,7 +10,7 @@
       />
       <v-card-title class="text-h5 text-center mb-6">
         <v-icon icon="mdi-book-open-page-variant-outline" size="small" class="mr-2" color="primary"></v-icon>
-        Welcome to Talemate
+        Welcome to fantasymate
       </v-card-title>
       
       <v-window v-model="step" class="wizard-window">
@@ -18,7 +18,7 @@
         <v-window-item :value="1">
           <v-card-text>
             <div class="text-body-1 text-center mb-8">
-              Talemate relies on an AI model to write the story with you.
+              fantasymate relies on an AI model to write the story with you.
               <br class="hidden-sm-and-down">First, we need to get you connected to one.
             </div>
 
@@ -128,7 +128,7 @@
                     <v-icon icon="mdi-brain" size="small" class="mr-1" color="primary"></v-icon>
                   </template>
                   <div class="text-body-2">
-                    <strong>Reasoning models:</strong> If you load a reasoning model (like DeepSeek R1, GLM, etc.) in your self-hosted service, you'll need to enable reasoning in Talemate's client settings. You can do this by clicking the <v-icon icon="mdi-brain" size="x-small" class="mx-1" /> brain icon in the client card or in the advanced client setup view.
+                    <strong>Reasoning models:</strong> If you load a reasoning model (like DeepSeek R1, GLM, etc.) in your self-hosted service, you'll need to enable reasoning in fantasymate's client settings. You can do this by clicking the <v-icon icon="mdi-brain" size="x-small" class="mx-1" /> brain icon in the client card or in the advanced client setup view.
                   </div>
                 </v-alert>
               </v-col>
@@ -153,7 +153,7 @@
               Long term memory
             </div>
             <div class="text-body-1 text-medium-emphasis mb-8">
-              Talemate uses embeddings to store and retrieve story details over time (names, relationships, places, facts, and other context that shouldn’t get lost as the chat grows).
+              fantasymate uses embeddings to store and retrieve story details over time (names, relationships, places, facts, and other context that shouldn’t get lost as the chat grows).
               <br class="hidden-sm-and-down">A more capable embeddings model generally improves recall quality and reduces “forgotten details”.
             </div>
 
@@ -186,7 +186,7 @@
                   </v-card-text>
                   <v-card-text class="text-center pt-0">
                     <div class="text-caption text-medium-emphasis">
-                      More capable and recommended for best recall. Talemate will download/load this model when a scene is loaded (first use). Model weights are ~550MB; on CUDA plan ~1GB+ free VRAM.
+                      More capable and recommended for best recall. fantasymate will download/load this model when a scene is loaded (first use). Model weights are ~550MB; on CUDA plan ~1GB+ free VRAM.
                     </div>
                   </v-card-text>
                 </v-card>
@@ -358,7 +358,7 @@
                 (via Google's gemini visual models)
               </span>.
               <br class="hidden-sm-and-down">This will configure the Visual Agent to use {{ visualAgentProviderName }} for all image operations.
-              <br class="hidden-sm-and-down"><span class="text-caption text-medium-emphasis mt-2 d-block">Note: Talemate may send existing images as references during visual editing.</span>
+              <br class="hidden-sm-and-down"><span class="text-caption text-medium-emphasis mt-2 d-block">Note: fantasymate may send existing images as references during visual editing.</span>
             </div>
 
             <v-row justify="center">

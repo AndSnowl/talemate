@@ -11,7 +11,7 @@
           v-model="action.enabled"
           @update:modelValue="$emit('change')">
           <template v-slot:message="{ message }">
-            <div class="text-caption text-grey mb-8">{{ message }}</div>
+            <div class="text-caption text-muted mb-8">{{ message }}</div>
           </template>
         </v-checkbox>
         <div v-else-if="action.container" class="text-muted mt-2">

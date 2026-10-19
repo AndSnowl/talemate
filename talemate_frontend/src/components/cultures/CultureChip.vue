@@ -5,7 +5,7 @@
         label
         variant="outlined"
         class="culture-chip"
-        :color="chip.color"
+        :color="chipColor"
         :data-chip-for="kind + ':' + name"
     >
         {{ chip.label }}
@@ -25,6 +25,7 @@
 <script>
 import { culturesStory } from './culturesStory.js';
 import { characterChip, placeChip } from './storyLexicon.js';
+import { dataColor } from '@/theme/dataColors';
 
 // A small culture label for a character's or a place's own title row in
 // the World panel: "Taelrik", "No culture", "No language" or
@@ -52,6 +53,15 @@ export default {
             return this.kind === 'character'
                 ? characterChip(story, this.name)
                 : placeChip(story, this.name);
+        },
+        // The chip's colour may be a stored culture colour (data, remapped
+        // onto the theme's accent palette at render time) or one of this
+        // component's own role names ('muted' for "no culture"/"no
+        // language") — dataColor() returns null for the latter since it
+        // isn't a hex/Vuetify colour, so fall back to the raw value.
+        chipColor() {
+            if (!this.chip) return undefined;
+            return dataColor(this.chip.color) || this.chip.color;
         },
     },
 };

@@ -25,10 +25,12 @@
 
 <script>
 
+import { computed } from 'vue';
 import { Codemirror } from 'vue-codemirror'
 import { json } from '@codemirror/lang-json'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 
 export default {
     name: 'DebugToolSceneState',
@@ -90,11 +92,11 @@ export default {
     },
     setup() {
 
-        const extensions = [
+        const extensions = computed(() => [
             json(),
-            oneDark,
+            ...themeExtensions(currentTheme.value),
             EditorView.lineWrapping
-        ];
+        ]);
 
         const promptEditorStyle = {
             maxHeight: "1440px",

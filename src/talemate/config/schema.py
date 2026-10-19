@@ -670,8 +670,23 @@ class SceneAppearance(pydantic.BaseModel):
         return value
 
 
+class CustomTheme(pydantic.BaseModel):
+    id: str
+    name: str
+    base: str = "gruvbox-dark"
+    dark: bool = True
+    palette: dict[str, str] = {}
+    roles: dict[str, str] = {}
+
+
+class ThemeSettings(pydantic.BaseModel):
+    active: str = "gruvbox-dark"
+    custom: list[CustomTheme] = []
+
+
 class Appearance(pydantic.BaseModel):
     scene: SceneAppearance = SceneAppearance()
+    theme: ThemeSettings = ThemeSettings()
 
 
 class PromptsConfig(pydantic.BaseModel):

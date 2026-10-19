@@ -160,7 +160,7 @@
             <v-card-title>Select Portrait</v-card-title>
             <v-card-text>
                 <div v-if="avatarSelectDialog.assetIds.length === 0" class="text-center text-medium-emphasis py-8">
-                    <v-icon size="48" color="grey">mdi-image-off-outline</v-icon>
+                    <v-icon size="48" color="muted">mdi-image-off-outline</v-icon>
                     <p class="mt-2">No portraits available for this character</p>
                 </div>
                 <VisualReferenceCarousel
@@ -193,7 +193,7 @@
             <v-card-title>Select Scene Illustration</v-card-title>
             <v-card-text>
                 <div v-if="illustrationSelectDialog.assetIds.length === 0" class="text-center text-medium-emphasis py-8">
-                    <v-icon size="48" color="grey">mdi-image-off-outline</v-icon>
+                    <v-icon size="48" color="muted">mdi-image-off-outline</v-icon>
                     <p class="mt-2">No scene illustrations available</p>
                 </div>
                 <VisualReferenceCarousel
@@ -226,7 +226,7 @@
             <v-card-title>Select Card</v-card-title>
             <v-card-text>
                 <div v-if="cardSelectDialog.assetIds.length === 0" class="text-center text-medium-emphasis py-8">
-                    <v-icon size="48" color="grey">mdi-image-off-outline</v-icon>
+                    <v-icon size="48" color="muted">mdi-image-off-outline</v-icon>
                     <p class="mt-2">No cards available</p>
                 </div>
                 <VisualReferenceCarousel
@@ -299,7 +299,7 @@
                 </template>
             </v-tooltip>
             <div v-if="message.type === 'character' || message.type === 'processing_input'"
-                :class="`message ${message.type}`" :id="`message-${message.id}`" :style="{ borderColor: message.color }">
+                :class="`message ${message.type}`" :id="`message-${message.id}`" :style="{ borderColor: characterBorderColor(message) }">
                 <div class="character-message">
                     <CharacterMessage :character="message.character" :text="message.text" :color="message.color" :message_id="message.id" :uxLocked="uxLocked" :appBusy="appBusy" :ttsAvailable="ttsAvailable" :ttsBusy="ttsBusy" :isLastMessage="index === messages.length - 1" :editorRevisionsEnabled="editorRevisionsEnabled" :editorRevisionMethod="editorRevisionMethod" :rev="message.rev || 0" :scene-rev="scene?.data?.rev || 0" :appearanceConfig="appearanceConfig" :scene="scene" :asset_id="message.asset_id" :asset_type="message.asset_type" :disable_avatar_fallback="message.disable_avatar_fallback || false" :revisionsCount="(message.revisions && message.revisions.length) || 0" :revisionIndex="message.revision_index || 0" :revisionSource="revisionCurrentSource(message)" :revisionReason="revisionCurrentReason(message)" :revisionBusy="message.regenerating || false" :entityMentions="getEntityMentionsForMessage(message.id)" @navigate-revision="(dir) => navigateRevision(message.id, dir)" />
                 </div>
@@ -328,7 +328,7 @@
                 <SystemMessage 
                     :message="message.text" 
                     :message-id="message.id"
-                    :color="message.meta.color" 
+                    :color="systemMessageColor(message.meta.color)"
                     :icon="message.meta.icon" 
                     :title="message.meta.title" 
                     :display="message.meta.display" 
@@ -409,6 +409,8 @@ import { effectiveActionEnabled } from '@/constants/sceneAgentSettings';
 import { isVisualAgentReady, VIS_TYPE } from '@/constants/visual';
 import { isKnownSceneCharacter } from '@/utils/entityActions';
 import { parseCharacterMessage } from '@/utils/characterMessage.js';
+import { characterColor, isPlayerCharacter, dataColor } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 import { primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { base64ToObjectUrl } from '@/utils/objectUrl.js';
 import {
@@ -748,6 +750,27 @@ export default {
 
         getMessageColor(typ) {
             return resolveMessageColor(this.appearanceConfig, typ);
+        },
+
+        // The stored `message.color` is a raw backend value (often the
+        // default white hex); remap it onto the current theme's accent
+        // palette at render time (the `you` role for the player character).
+        // See theme/dataColors.js's characterColor.
+        characterBorderColor(message) {
+            return characterColor(
+                message.color,
+                message.character,
+                isPlayerCharacter(this.scene, message.character),
+                currentTheme.value,
+            );
+        },
+
+        // Non-character data colours (system message `meta.color`, etc.)
+        // route through dataColor; fall back to the raw value so Vuetify
+        // colour/role names (e.g. "info") keep working when dataColor
+        // can't resolve them.
+        systemMessageColor(rawColor) {
+            return dataColor(rawColor) || rawColor;
         },
 
         getMessageTypeHidden(typ) {
@@ -2261,15 +2284,10 @@ export default {
     /* slim right gutter so the backdrop indicator sits beside the panel,
        not over the message content */
     margin-right: 28px;
-    /* tight, dense shadow so message text of every type stays legible
-       over the backdrop */
+    /* tight, dense shadow so message text of every type (character lines
+       included — text-shadow inherits) stays legible over the backdrop;
+       without a backdrop no message has a shadow */
     text-shadow: 1px 1px 2px #000000, 0 0 6px rgba(0, 0, 0, 0.85);
-}
-
-/* character messages carry their own always-on shadow — align it with
-   the backdrop shadow so all types match */
-.scene-backdrop-active .message :deep(.character-message) {
-    text-shadow: inherit;
 }
 
 /* backdrop text shadow disabled via appearance config */
@@ -2311,15 +2329,15 @@ export default {
 }
 
 .message.system {
-    color: #FFA726;
+    color: rgb(var(--v-theme-accent));
 }
 
 .message.narrator {
-    color: #26A69A;
+    color: rgb(var(--v-theme-narrator));
 }
 
 .message.character {
-    color: #E0E0E0;
+    color: rgb(var(--v-theme-on-surface));
 }
 
 .character-message {

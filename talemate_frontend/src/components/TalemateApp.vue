@@ -42,7 +42,7 @@
       <v-spacer></v-spacer>
       <AudioQueue ref="audioQueue" @message-audio-played="onMessageAudioPlayed" />
       <v-divider class="ml-2 mr-2" vertical></v-divider>
-      <span v-if="version !== null" class="text-grey text-caption">v{{ version }}</span>
+      <span v-if="version !== null" class="text-muted text-caption">v{{ version }}</span>
       <span v-if="!ready">
         <v-icon icon="mdi-application-cog"></v-icon>
         <span class="ml-1">Configuration required</span>
@@ -52,6 +52,7 @@
 
     <!-- app bar -->
     <v-app-bar app density="compact">
+      <FmWordmark size="sm" class="ml-3 mr-2" />
       <v-app-bar-nav-icon v-if="tab !== 'home'" size="small" @click="toggleNavigation('game')">
         <v-tooltip activator="parent" location="top">Toggle sidebar</v-tooltip>
         <v-icon v-if="sceneDrawer">mdi-arrow-collapse-left</v-icon>
@@ -108,7 +109,7 @@
 
       <v-tooltip text="Clients / Agents" location="top">
         <template v-slot:activator="{ props }">
-          <v-app-bar-nav-icon @click="toggleNavigation('settings')" v-if="!ready" v-bind="props" color="red-darken-1"><v-icon>mdi-application-cog</v-icon></v-app-bar-nav-icon>
+          <v-app-bar-nav-icon @click="toggleNavigation('settings')" v-if="!ready" v-bind="props" color="danger"><v-icon>mdi-application-cog</v-icon></v-app-bar-nav-icon>
           <v-app-bar-nav-icon @click="toggleNavigation('settings')" v-else v-bind="props"><v-icon>mdi-application-cog</v-icon></v-app-bar-nav-icon>
         </template>
       </v-tooltip>
@@ -122,8 +123,8 @@
       <!-- left side navigation drawer -->
       <v-navigation-drawer :model-value="sceneDrawer && tab !== 'home'" @update:model-value="sceneDrawer = $event" app :width="leftDrawerWidth">
         <v-alert v-if="!connected" type="error" variant="tonal">
-          Not connected to Talemate backend
-          <p class="text-body-2" color="white">
+          Not connected to fantasymate backend
+          <p class="text-body-2" color="on-surface">
             Make sure the backend process is running.
           </p>
         </v-alert>
@@ -182,8 +183,8 @@
       <!-- right side navigation drawer -->
       <v-navigation-drawer v-model="drawer" app location="right" width="350" disable-resize-watcher>
         <v-alert v-if="!connected" type="error" variant="tonal">
-          Not connected to Talemate backend
-          <p class="text-body-2" color="white">
+          Not connected to fantasymate backend
+          <p class="text-body-2" color="on-surface">
             Make sure the backend process is running.
           </p>
         </v-alert>
@@ -218,6 +219,8 @@
       </v-navigation-drawer>
 
       <v-container :class="(sceneActive ? '' : 'backdrop')" fluid style="height: 100%;">
+
+        <FmWordmark v-if="!sceneActive" size="lg" class="backdrop-wordmark" />
 
         <v-tabs-window v-model="tab" style="height: 100%;">
           <!-- HOME -->
@@ -423,7 +426,7 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
-    <v-snackbar v-model="errorNotification" color="red-darken-1" :timeout="3000">
+    <v-snackbar v-model="errorNotification" color="danger" :timeout="3000">
         {{ errorMessage }}
     </v-snackbar>
   </v-app>
@@ -446,6 +449,7 @@
 </template>
   
 <script>
+import FmWordmark from './FmWordmark.vue';
 import AIClient from './AIClient.vue';
 import AIAgent from './AIAgent.vue';
 import AgentActivityBar from './AgentActivityBar.vue';
@@ -489,9 +493,17 @@ import { isVisualAgentReady, isImageEditAvailable, isImageCreateAvailable } from
 import { createSceneAssetsRequester } from './VisualAssetsMixin.js';
 import AutocompleteMixin from './AutocompleteMixin.js';
 import { culturesStory, ingestCulturesMessage, requestReview } from '@/components/cultures/culturesStory.js';
+import { themeFromConfig } from '@/theme/engine.js';
+import { applyTheme } from '@/theme/store.js';
+// Vuetify wraps `$vuetify.theme` in `reactive()`, which auto-unwraps the
+// `themes` ref inside it (Vue unwraps top-level refs of a reactive proxy on
+// access) — `$vuetify.theme.themes.value` is then undefined. Go straight to
+// the plugin's own (un-proxied) theme instance instead.
+import vuetify from '@/plugins/vuetify.js';
 
 export default {
   components: {
+    FmWordmark,
     AIClient,
     AIAgent,
     AgentActivityBar,
@@ -701,9 +713,27 @@ export default {
       promptsOutdatedCount: 0,
       // Flag to ensure new-scene navigation only happens once per scene load
       newSceneNavigationPending: false,
+      // What the theme watcher last pushed into Vuetify (see
+      // effectiveThemeSettings's watcher).
+      appliedThemeKey: null,
     }
   },
   watch:{
+    // Only the theme subtree (saved, or the Settings page's live preview)
+    // drives the Vuetify theme; other appearance edits (scene message
+    // styles, assets, ...) leave it alone, and so does a theme change that
+    // resolves to the colours already applied.
+    effectiveThemeSettings: {
+      handler(themeSettings) {
+        const resolved = themeFromConfig(themeSettings);
+        const key = JSON.stringify([resolved.id, resolved.dark, resolved.palette, resolved.colors]);
+        if (key === this.appliedThemeKey) return;
+        this.appliedThemeKey = key;
+        applyTheme(vuetify.theme, resolved);
+      },
+      deep: true,
+      immediate: true,
+    },
     availableTabs(tabs) {
       // check if tab still exists
       // in tabs
@@ -866,6 +896,9 @@ export default {
     effectiveAppearanceConfig() {
       // Use preview if available, otherwise fall back to saved config
       return this.appearancePreview ?? (this.appConfig ? this.appConfig.appearance : {});
+    },
+    effectiveThemeSettings() {
+      return this.effectiveAppearanceConfig?.theme;
     },
     rightToolsDrawerWidth() {
       // based on the current (reactive) window width, set the width of the right hand drawers
@@ -1363,16 +1396,16 @@ export default {
       }
 
       // if any agents are busy show the browser's native loading spinner in the tab
-      // 
-      // favicon.ico vs favicon-loading.ico
+      //
+      // favicon.svg vs favicon-loading.svg
 
       if(Object.values(this.agentStatus).find(agent => agent.busy)) {
         if(this.favicon) {
-          this.favicon.href = '/favicon-loading.ico';
+          this.favicon.href = '/favicon-loading.svg';
         }
       } else {
         if(this.favicon) {
-          this.favicon.href = '/favicon.ico';
+          this.favicon.href = '/favicon.svg';
         }
       }
 
@@ -1985,26 +2018,19 @@ export default {
 
 <style scoped>
 .backdrop {
-  background-image: url('/src/assets/logo-13.1-backdrop.png');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 512px 512px;
+  background-color: rgb(var(--v-theme-background));
+  position: relative;
+  z-index: 0;
 }
 
-.backdrop-active {
-  background-image: url('/src/assets/logo-13.1-backdrop.png');
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-position: center;
-  background-size: 512px 512px;
-}
-
-.logo {
-  background-image: url('/src/assets/logo-13.1-transparent.png');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: fit;
-  background-color: transparent;
+.backdrop-wordmark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .scene-container {

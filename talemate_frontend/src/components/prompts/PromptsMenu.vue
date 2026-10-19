@@ -1,5 +1,5 @@
 <template>
-    <v-list-subheader color="grey" class="ml-2">
+    <v-list-subheader color="muted" class="ml-2">
         <v-icon color="primary" class="mr-1">mdi-history</v-icon>
         Recent
     </v-list-subheader>

@@ -1,6 +1,6 @@
 <template>
     <div>
-        <v-alert density="compact" variant="outlined" color="grey-darken-2" class="mb-4">
+        <v-alert density="compact" variant="outlined" color="surface-variant" class="mb-4">
             <div class="text-muted">
                 Episodes are alternative introductions that can be used to create new scenes. They are shared across all scenes in the <span class="font-weight-bold text-primary">{{ scene?.data?.project_name || 'project' }}</span> project.
             </div>
@@ -270,6 +270,9 @@ export default {
                 emphasis: sceneConfig.emphasis || narratorStyles,
                 parentheses: sceneConfig.parentheses || narratorStyles,
                 brackets: sceneConfig.brackets || narratorStyles,
+                // Summaries/history read as narration: narrator styles and role.
+                default: narratorStyles,
+                messageType: 'narrator',
             });
         },
         getPreviewText(text, maxLength = 60) {

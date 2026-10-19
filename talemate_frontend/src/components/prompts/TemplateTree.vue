@@ -18,7 +18,7 @@
             <v-icon v-else size="small" :color="item.isUnresolvable ? 'warning' : item.isOverride ? 'success' : undefined">mdi-file-document-outline</v-icon>
         </template>
         <template #title="{ item }">
-            <span :class="{ 'text-grey': isMuted(item) }">
+            <span :class="{ 'text-muted': isMuted(item) }">
                 {{ abbreviateName(item.name) }}
                 <v-tooltip v-if="item.name.length > 40" activator="parent" location="top">{{ item.name }}</v-tooltip>
             </span>
@@ -59,7 +59,7 @@
                 v-if="item.isUnresolvable && !item.isDirectory"
                 size="x-small"
                 label
-                color="grey"
+                color="muted"
                 variant="tonal"
                 class="ml-1"
             >

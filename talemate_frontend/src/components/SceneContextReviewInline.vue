@@ -9,7 +9,7 @@
       <v-alert type="error" variant="outlined" density="compact">{{ error }}</v-alert>
     </div>
 
-    <div v-else-if="!preview" class="text-center pa-8 text-grey">
+    <div v-else-if="!preview" class="text-center pa-8 text-muted">
       <v-icon size="64" class="mb-4">mdi-view-split-horizontal</v-icon>
       <p>No context preview loaded.</p>
       <p class="text-caption">Click Refresh to build a context preview.</p>
@@ -212,10 +212,10 @@
                   <v-chip size="x-small" variant="tonal" :color="sectionColor(section)" class="ml-2" label>
                     {{ section.token_count }} tokens
                   </v-chip>
-                  <v-chip size="x-small" variant="outlined" color="grey" class="ml-1" label>
+                  <v-chip size="x-small" variant="outlined" color="muted" class="ml-1" label>
                     {{ section.entry_count }} {{ section.entry_count === 1 ? 'entry' : 'entries' }}
                   </v-chip>
-                  <v-chip v-if="section.budget != null" size="x-small" variant="outlined" color="grey" class="ml-1" label>
+                  <v-chip v-if="section.budget != null" size="x-small" variant="outlined" color="muted" class="ml-1" label>
                     budget: {{ section.budget }}
                   </v-chip>
                   <v-chip v-if="section.incomplete" size="x-small" variant="tonal" color="warning" class="ml-1" label>
@@ -248,11 +248,16 @@
 
 <script>
 import { SceneTextParser } from '../utils/sceneMessageRenderer.js';
+import { currentTheme } from '../theme/store.js';
 
-const SECTION_COLORS = {
-  layer: '#B39DDB',
-  archived: '#FF8A65',
-  dialogue: '#4FC3F7',
+// Fixed section kinds (not user data) kept visually distinct via their
+// nearest accent key, resolved to an actual hex below since sectionColor()
+// feeds raw inline `style` values (borderColor/color), not Vuetify `color`
+// props.
+const SECTION_ACCENTS = {
+  layer: 'magenta',
+  archived: 'orange',
+  dialogue: 'blue',
 };
 
 const SECTION_ICONS = {
@@ -299,6 +304,9 @@ export default {
         emphasis: sceneConfig.emphasis || narratorStyles,
         parentheses: sceneConfig.parentheses || narratorStyles,
         brackets: sceneConfig.brackets || narratorStyles,
+        // Summaries/history read as narration: narrator styles and role.
+        default: narratorStyles,
+        messageType: 'narrator',
       });
     },
     configMeta() {
@@ -420,7 +428,9 @@ export default {
     },
 
     sectionColor(section) {
-      return SECTION_COLORS[section.type] || '#9E9E9E';
+      const accent = SECTION_ACCENTS[section.type];
+      const resolved = currentTheme.value;
+      return (accent && resolved.palette[accent]) || resolved.colors.muted;
     },
 
     sectionIcon(section) {

@@ -1,6 +1,6 @@
 <template>
     <v-list density="compact" slim>
-        <v-list-subheader color="grey">
+        <v-list-subheader color="muted">
             <v-icon color="primary" class="mr-1">mdi-account-multiple-plus</v-icon>
             Create
         </v-list-subheader>
@@ -15,7 +15,7 @@
         </v-list-item>
     </v-list>
     <v-list density="compact" slim selectable color="primary" v-model:selected="selected" :opened="openedFolders" @update:opened="onOpenedChange" open-strategy="multiple">
-        <v-list-subheader color="grey">
+        <v-list-subheader color="muted">
             <v-icon color="primary" class="mr-1">mdi-account-group</v-icon>
             Characters
         </v-list-subheader>
@@ -51,7 +51,7 @@
             <template v-slot:activator="{ props }">
                 <v-list-item v-bind="props">
                     <template v-slot:prepend>
-                        <v-chip label size="x-small" variant="flat" :color="folder.anyActive ? 'success' : 'grey-darken-3'" class="mr-2 folder-count-chip">{{ folder.count }}</v-chip>
+                        <v-chip label size="x-small" variant="flat" :color="folder.anyActive ? 'success' : 'muted'" class="mr-2 folder-count-chip">{{ folder.count }}</v-chip>
                     </template>
                     <v-list-item-title>{{ folder.name }}</v-list-item-title>
                     <template v-slot:append>

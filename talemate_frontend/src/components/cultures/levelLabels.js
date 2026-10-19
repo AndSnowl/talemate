@@ -9,11 +9,13 @@ export function levelLabel(level) {
     return label.toLowerCase();
 }
 
+// Each kind keeps its own distinct, stable colour (via the palette's accent
+// keys) so the four kinds stay visually distinguishable under every theme.
 const KIND_META = {
     person: { color: 'primary', icon: 'mdi-account' },
-    place: { color: 'teal', icon: 'mdi-map-marker' },
-    thing: { color: 'amber', icon: 'mdi-shape' },
-    word: { color: 'blue', icon: 'mdi-translate' },
+    place: { color: 'pal-teal', icon: 'mdi-map-marker' },
+    thing: { color: 'pal-yellow', icon: 'mdi-shape' },
+    word: { color: 'pal-blue', icon: 'mdi-translate' },
 };
 
 export function kindMeta(kind) {

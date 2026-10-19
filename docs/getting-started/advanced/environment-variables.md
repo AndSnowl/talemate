@@ -1,6 +1,6 @@
 # Environment variables
 
-Talemate reads a small set of environment variables at startup. They cover networking, debugging, encryption, and the Docker frontend's WebSocket discovery. CLI flags (where applicable) override the matching env var.
+fantasymate reads a small set of environment variables at startup. They cover networking, debugging, encryption, and the Docker frontend's WebSocket discovery. CLI flags (where applicable) override the matching env var.
 
 ## Backend & frontend networking
 
@@ -48,7 +48,7 @@ See [API key encryption](../../user-guide/api-key-encryption.md) for the full ke
 
 ## Docker Compose passthroughs
 
-The values below are not consumed by Talemate's Python code directly — they're consumed by the default and CPU-only Compose configurations so that the same variable controls both the published host port and the value passed into the container as `TALEMATE_BACKEND_PORT` / `TALEMATE_FRONTEND_PORT`:
+The values below are not consumed by fantasymate's Python code directly — they're consumed by the default and CPU-only Compose configurations so that the same variable controls both the published host port and the value passed into the container as `TALEMATE_BACKEND_PORT` / `TALEMATE_FRONTEND_PORT`:
 
 - `TALEMATE_BACKEND_PORT`
 - `TALEMATE_FRONTEND_PORT`

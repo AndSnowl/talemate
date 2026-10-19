@@ -31,7 +31,7 @@
                     <v-card variant="tonal" class="pa-3 mb-3">
                         <div class="d-flex align-center ga-2 flex-wrap mb-2">
                             <span class="text-h6 font-weight-regular">{{ preview.culture_name }}</span>
-                            <v-chip size="small" :color="preview.is_update ? 'amber' : 'green'" variant="tonal">
+                            <v-chip size="small" :color="preview.is_update ? 'warning' : 'success'" variant="tonal">
                                 {{ preview.is_update ? 'Updating' : 'New' }}
                             </v-chip>
                         </div>
@@ -45,7 +45,7 @@
 
                     <div class="d-flex flex-column ga-2">
                         <div class="d-flex ga-2 align-start">
-                            <v-icon size="small" :color="preview.name_clash ? 'warning' : 'green'">
+                            <v-icon size="small" :color="preview.name_clash ? 'warning' : 'success'">
                                 {{ preview.name_clash ? 'mdi-alert-circle-outline' : 'mdi-check-circle-outline' }}
                             </v-icon>
                             <span v-if="preview.name_clash">
@@ -57,7 +57,7 @@
                         </div>
 
                         <div v-if="preview.claimed_unassigned.length" class="d-flex ga-2 align-start">
-                            <v-icon size="small" color="amber">mdi-link-variant</v-icon>
+                            <v-icon size="small" color="warning">mdi-link-variant</v-icon>
                             <span>
                                 Claims {{ preview.claimed_unassigned.length }}
                                 name{{ preview.claimed_unassigned.length === 1 ? '' : 's' }} from Unassigned names:
@@ -66,7 +66,7 @@
                         </div>
 
                         <div v-if="preview.places_existing.length || preview.places_new.length" class="d-flex ga-2 align-start">
-                            <v-icon size="small" color="teal">mdi-map-marker-outline</v-icon>
+                            <v-icon size="small" color="pal-teal">mdi-map-marker-outline</v-icon>
                             <span>
                                 {{ preview.places_existing.length }} existing
                                 place{{ preview.places_existing.length === 1 ? '' : 's' }},
@@ -76,10 +76,10 @@
                         </div>
 
                         <div v-if="preview.conflicts.length" class="d-flex ga-2 align-start">
-                            <v-icon size="small" color="amber">mdi-shield-alert-outline</v-icon>
+                            <v-icon size="small" color="warning">mdi-shield-alert-outline</v-icon>
                             <span>
                                 {{ preview.conflicts.length }} glossary
-                                entr{{ preview.conflicts.length === 1 ? 'y' : 'ies' }} kept from Talemate
+                                entr{{ preview.conflicts.length === 1 ? 'y' : 'ies' }} kept from fantasymate
                                 (reviewed or edited): {{ preview.conflicts.join(', ') }}.
                             </span>
                         </div>
@@ -93,13 +93,13 @@
                                     <li v-for="change in shareChanges" :key="change">{{ change }}</li>
                                 </ul>
                                 <div class="text-caption text-muted">
-                                    Talemate's copy differs from the file. Export the culture first if you want to keep it.
+                                    fantasymate's copy differs from the file. Export the culture first if you want to keep it.
                                 </div>
                             </div>
                         </div>
 
                         <div v-if="additionsInFile.length" class="d-flex ga-2 align-start">
-                            <v-icon size="small" color="amber">mdi-playlist-check</v-icon>
+                            <v-icon size="small" color="warning">mdi-playlist-check</v-icon>
                             <div>
                                 <div>Already in the file. Drop the addition after import?</div>
                                 <ul class="ml-4">

@@ -126,6 +126,8 @@
 import PlaceDetail from './PlaceDetail.vue';
 import CultureMixBar from './CultureMixBar.vue';
 import { PLACE_KINDS, placeKindLabel } from './levelLabels';
+import { dataColor } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 
 export default {
     name: 'PlacesView',
@@ -229,7 +231,7 @@ export default {
         },
         chipStyle(cultureId) {
             const culture = this.cultureFor(cultureId);
-            const color = culture ? culture.color : '#9E9E9E';
+            const color = culture ? (dataColor(culture.color) || culture.color) : currentTheme.value.colors.muted;
             return { backgroundColor: `${color}33`, color };
         },
         sourceNameFor(row) {
@@ -268,11 +270,11 @@ export default {
 }
 
 .place-row:hover {
-    background: rgba(255, 255, 255, 0.035);
+    background: rgba(var(--v-theme-on-surface), 0.035);
 }
 
 .place-row-selected {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--v-theme-on-surface), 0.07);
 }
 
 .unrev-dot {

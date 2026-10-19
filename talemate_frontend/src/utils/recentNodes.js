@@ -6,6 +6,7 @@
  */
 import { LiteGraph, LGraphCanvas } from 'litegraph.js';
 import { handleCreateGroupFromSelectedNodes } from './groupInteractions.js';
+import { currentTheme } from '../theme/store.js';
 
 // Track if we've already modified the canvas prototype
 let canvasPrototypeModified = false;
@@ -83,8 +84,14 @@ export function trackRecentNodes(graph, max_recent_nodes = 10) {
                             const colors = LGraphCanvas.node_colors || {};
                             const makeColorItem = (label, key) => {
                                 const c = colors[key];
+                                // A litegraph ContextMenu renders outside the Vue app root (it
+                                // mounts its own DOM straight onto document.body), so this
+                                // needs an actual resolved hex rather than a
+                                // `rgb(var(--v-theme-x))` reference that may have no theme
+                                // class above it to cascade from.
+                                const labelColor = currentTheme.value.colors.muted;
                                 const html = c
-                                    ? `<span style='display: block; color: #999; padding-left: 4px; border-left: 8px solid ${c.color}; background-color:${c.bgcolor}'>${label}</span>`
+                                    ? `<span style='display: block; color: ${labelColor}; padding-left: 4px; border-left: 8px solid ${c.color}; background-color:${c.bgcolor}'>${label}</span>`
                                     : label;
                                 return {
                                     content: html,

@@ -302,21 +302,23 @@
 
 
 
-    <v-snackbar v-model="testErrorMessage" color="red-darken-2" location="top" close-on-content-click :timeout="8000" elevation="5">
+    <v-snackbar v-model="testErrorMessage" color="danger" location="top" close-on-content-click :timeout="8000" elevation="5">
         <v-icon>mdi-alert-circle</v-icon>
         <span class="ml-2">{{ testErrorMessage }}</span>
     </v-snackbar>
 </template>
 
 <script>
+import { watch, computed } from 'vue';
 import { LGraphCanvas, LiteGraph } from 'litegraph.js';
-import { initializeGraphFromJSON, normalizeHexColor } from '@/utils/litegraphUtils'
+import { initializeGraphFromJSON, normalizeHexColor, rebuildThemeNodeColors, applyThemeToCanvas, reapplyNodeColors } from '@/utils/litegraphUtils'
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { convertGraphToJSON, convertSelectedGraphToJSON } from '@/utils/exportGraph.js'
 //import '@/utils/litegraphSearchBox'
 import { Codemirror } from 'vue-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
 
 import NodeEditorLibrary from './NodeEditorLibrary.vue';
@@ -709,6 +711,7 @@ export default {
                 this.canvas.showShowNodePanel = function(){};
                 this.canvas.align_to_grid = true;
                 this.canvas.container = this.$refs.outer_container;
+                applyThemeToCanvas(this.canvas, currentTheme.value);
             }
 
             this.canvas.read_only = this.editingLockedModule;
@@ -867,8 +870,8 @@ export default {
 
         indicatedDeactivatedSocket(nodeDeactivated, input, value) {
             if(nodeDeactivated && !input.optional && value === "<class 'talem...e.UNRESOLVED'>") {
-                input.color_off = "#f44336";
-                input.color_on = "#f44336";
+                input.color_off = currentTheme.value.colors.danger;
+                input.color_on = currentTheme.value.colors.danger;
             } else {
                 input.color_off = null;
                 input.color_on = null;
@@ -925,15 +928,17 @@ export default {
                 };
             }
 
-            if (highlightState === "error") {
-                ltNode.color = "#f44336";
-                ltNode.title_text_color = "#fff";
-                ltNode.boxcolor = "#ff0000";
-            } else {
-                ltNode.color = "#2f2b36";
-                ltNode.title_text_color = "#9575cd";
-                ltNode.boxcolor = "#9575cd";
-            }
+            // The full-strength role colour (not a nodeColors() tint) as the
+            // title bar, so a running/failed node stands out from every
+            // node category's muted tint; its title text is the theme's bg,
+            // which reaches 4.5:1 on every text role (contrast_text_roles).
+            const theme = currentTheme.value;
+            const highlightHex = highlightState === "error"
+                ? theme.colors.danger
+                : theme.colors.success;
+            ltNode.color = highlightHex;
+            ltNode.title_text_color = theme.palette.bg;
+            ltNode.boxcolor = highlightHex;
 
             ltNode._talemateHighlightState = highlightState;
         },
@@ -994,12 +999,12 @@ export default {
 
                     if(deactivated || !nodeState || inputUnresolved) {
                         if(deactivated && !ltInput.optional && inputUnresolved) {
-                            ltLink.color = "#f44336";
+                            ltLink.color = currentTheme.value.colors.danger;
                         } else {
-                            ltLink.color = "#666";
+                            ltLink.color = currentTheme.value.colors.muted;
                         }
                     } else {
-                        ltLink.color = "#9575cd";
+                        ltLink.color = currentTheme.value.colors.accent;
                     }
 
                     //console.log({ltInput, ltLink});
@@ -1104,6 +1109,19 @@ export default {
         this.onResize();
         this.registerMessageHandler(this.handleMessage);
 
+        // Rebuild the litegraph colour swatches/background whenever the
+        // theme changes (live preview included), and redraw any open
+        // nodes/groups so their remapped colours follow along.
+        rebuildThemeNodeColors(currentTheme.value);
+        watch(currentTheme, (resolved) => {
+            rebuildThemeNodeColors(resolved);
+            applyThemeToCanvas(this.canvas, resolved);
+            reapplyNodeColors(this.graph, resolved);
+            if (this.canvas) {
+                this.canvas.setDirty(true, true);
+            }
+        });
+
         // Load debug menu state from local storage if available
         const savedDebugOptions = localStorage.getItem('talemate_debug_options');
         if (savedDebugOptions) {
@@ -1172,11 +1190,11 @@ export default {
 
     setup() {
 
-        const extensions = [
+        const extensions = computed(() => [
             markdown(),
-            oneDark,
+            ...themeExtensions(currentTheme.value),
             EditorView.lineWrapping
-        ];
+        ]);
 
         const propertyEditorStyle = {
             maxHeight: "600px"
@@ -1206,7 +1224,7 @@ export default {
 
 .litegraph.lite-search-item:hover {
     color: rgb(var(--v-theme-primary));
-    background-color: #000;
+    background-color: rgb(var(--v-theme-raised));
 }
 
 .litegraph.litesearchbox input {

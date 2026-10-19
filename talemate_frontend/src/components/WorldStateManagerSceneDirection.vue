@@ -6,10 +6,10 @@
             <v-form>
 
                 <v-card class="my-2" variant="text" color="muted">
-                    <v-card-title class="text-white">
+                    <v-card-title class="text-on-surface">
                         <v-icon color="primary" size="small" class="mr-2">mdi-bullhorn</v-icon>
                         Scene Direction</v-card-title>
-                    <v-card-text class="text-white">
+                    <v-card-text class="text-on-surface">
                         <v-alert color="warning" variant="outlined" density="compact" icon="mdi-flask" v-if="sceneIntent?.direction?.always_on">
                             A strong LLM (100B+), preferably with reasoning capabilities, is HIGHLY recommended for this to work in any meaningful way.
                         </v-alert>
@@ -45,7 +45,7 @@
 
                 <!-- director instructions -->
                 <v-card class="my-2" variant="text">
-                    <v-card-title class="text-white">
+                    <v-card-title class="text-on-surface">
                         <v-icon color="primary" size="small" class="mr-2">mdi-note-text</v-icon>
                         Director Instructions
                     </v-card-title>
