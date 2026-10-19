@@ -89,6 +89,27 @@ excludes both other groups (`-m "not e2e and not ai"`) and distributes
 across cores; add `-n0 -v` for serial, verbose output. The full suite is
 expected to pass clean: 0 failed.
 
+### Golden scene recording (characterization)
+
+`tests/characterization/test_scene_golden.py` plays a short, scripted
+scene (a line of dialogue, a narrator turn, a day passing, another line of
+dialogue) through the real agents and the mock LLM client, and compares
+both what the AI was sent and what the scene saved against a committed
+recording, `tests/data/characterization/scene_golden.json`.
+
+A change to scene or context code — most of all the phase-2 rework this
+test was written ahead of — is *expected* to change the recording on
+purpose. When it does:
+
+```bash
+guix shell -m manifest.scm -- uv run --no-sync pytest tests/characterization -v -n0 --update-baselines
+```
+
+regenerates it, and the diff is reviewed in the same commit as the code
+change that caused it — that diff is the point of the test. Without
+`--update-baselines` the test fails on any difference from the committed
+recording, intentional or not.
+
 ### Frontend logic checks
 
 Pure JS logic (no Vue, no browser) that's fast enough to check with plain
