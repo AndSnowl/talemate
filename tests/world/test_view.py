@@ -1,6 +1,7 @@
 import sqlite3
 
-from talemate.world.dates import WorldDate
+from talemate.world.dates import Precision, WorldDate
+from talemate.world.index import index_documents
 from talemate.world.refs import ref
 from talemate.world.store import Source
 from talemate.world.view import UNKNOWN_NAME
@@ -117,3 +118,73 @@ def test_removed_thing_absent_from_view(world, maren):
     view = world.view()
     assert view.thing(maren.id) is None
     assert maren.id not in {thing.id for thing in view.things()}
+
+
+def test_things_beyond_variable_limit(world):
+    with world.revision(Source.manual(note="many lore entries")) as rev:
+        ids = [
+            rev.create_thing("lore", fields={"name": f"Lore {i}"}) for i in range(30)
+        ]
+
+    world._conn.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 10)
+
+    things = world.view().things()
+    assert len(things) == 30
+    assert {thing.id for thing in things} == set(ids)
+
+    docs = index_documents(world)
+    headers = {doc.thing_id for doc in docs if doc.fact_id is None}
+    assert headers == set(ids)
+
+
+def test_fields_at_date(world, maren):
+    thing = world.view(at=WorldDate.of(312)).thing(maren.id)
+
+    assert thing.fields == {"name": "Maren", "born": WorldDate.of(290)}
+    assert thing.fields["born"].precision == Precision.YEAR
+
+
+def test_no_fields_before_valid_from(world, maren):
+    thing = world.view(at=WorldDate.of(289)).thing(maren.id)
+
+    assert thing.fields == {}
+
+
+def test_fact_order(world, maren):
+    facts = world.view(at=WorldDate.of(315)).thing(maren.id).facts
+
+    assert [fact.fact_id for fact in facts] == [
+        maren.laugh,
+        maren.tattoo,
+        maren.warden,
+        maren.eye,
+    ]
+
+
+def test_referencing_drops_ended_and_removed(world, maren):
+    with world.revision(Source.manual(note="Oskar's ties to Maren")) as rev:
+        oskar_id = rev.create_thing("character", fields={"name": "Oskar"})
+        ended_fact = rev.add_fact(
+            oskar_id,
+            "relationship",
+            f"Owed {ref(maren.id)} a debt.",
+            valid_from=WorldDate.of(300),
+            valid_until=WorldDate.of(310),
+        )
+        removed_fact = rev.add_fact(
+            oskar_id, "relationship", f"Served {ref(maren.id)}."
+        )
+        rev_created = rev.rev
+
+    while_live = world.view(at=WorldDate.of(305), rev=rev_created).referencing(maren.id)
+    assert ended_fact in {fact.fact_id for _, fact in while_live}
+
+    after_end = world.view(at=WorldDate.of(315), rev=rev_created).referencing(maren.id)
+    assert ended_fact not in {fact.fact_id for _, fact in after_end}
+    assert removed_fact in {fact.fact_id for _, fact in after_end}
+
+    with world.revision(Source.manual(note="Oskar's ties forgotten")) as rev:
+        rev.remove_fact(removed_fact)
+
+    after_removal = world.view().referencing(maren.id)
+    assert removed_fact not in {fact.fact_id for _, fact in after_removal}

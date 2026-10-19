@@ -35,7 +35,7 @@ class TimelineEntry(BaseModel):
     source: Source
 
 
-def _sort_key(entry: TimelineEntry) -> tuple:
+def _sort_key(entry: TimelineEntry) -> tuple[tuple[int, ...], int, int, str | None]:
     date_key = (0,) if entry.date is None else (1, entry.date.instant)
     name_key = entry.field if entry.change == "field" else entry.fact_id
     return (date_key, _CHANGE_RANK[entry.change], entry.source_rev, name_key)

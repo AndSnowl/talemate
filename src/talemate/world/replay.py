@@ -27,7 +27,7 @@ full replay.
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeVar, cast
 
 import structlog
 
@@ -38,10 +38,12 @@ TABLES: tuple[Table, ...] = ("things", "field_values", "facts")
 
 # ("things", id) | ("field_values", thing_id, field, valid_from) |
 # ("facts", fact_id)
-Slot = tuple
+Slot = tuple[object, ...]
 
 # SQLite's default limit on bound parameters is 999 in older builds
 _CHUNK = 500
+
+_T = TypeVar("_T")
 
 
 def slot_of(table: Table, row: sqlite3.Row) -> Slot:
@@ -56,9 +58,9 @@ def thing_slot(thing_id: str) -> Slot:
     return ("things", thing_id)
 
 
-def _chunks(values: list) -> Iterable[list]:
-    for start in range(0, len(values), _CHUNK):
-        yield values[start : start + _CHUNK]
+def _chunks(values: list[_T], size: int = _CHUNK) -> Iterable[list[_T]]:
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
 
 
 @dataclass(frozen=True)
@@ -132,7 +134,10 @@ class History:
         revs = sorted(set(revs))
         slots: dict[Slot, None] = {}
         for table in TABLES:
-            for chunk in _chunks(revs):
+            # This query binds each chunk twice (rev_added and rev_removed),
+            # so the chunk size used elsewhere would itself double the
+            # bound-parameter count past the 999 the module comment cites.
+            for chunk in _chunks(revs, _CHUNK // 2):
                 placeholders = ",".join("?" for _ in chunk)
                 for row in self.conn.execute(
                     f"SELECT * FROM {table} WHERE rev_added IN ({placeholders}) "
@@ -180,7 +185,7 @@ class History:
             return
 
         wanted = set(slots)
-        facts = sorted({slot[1] for slot in wanted if slot[0] == "facts"})
+        facts = sorted({cast(str, slot[1]) for slot in wanted if slot[0] == "facts"})
         for chunk in _chunks(facts):
             placeholders = ",".join("?" for _ in chunk)
             for row in self.conn.execute(
@@ -190,7 +195,9 @@ class History:
             ):
                 self._add("facts", row)
 
-        values = sorted({slot[1] for slot in wanted if slot[0] == "field_values"})
+        values = sorted(
+            {cast(str, slot[1]) for slot in wanted if slot[0] == "field_values"}
+        )
         for chunk in _chunks(values):
             placeholders = ",".join("?" for _ in chunk)
             for row in self.conn.execute(
@@ -201,7 +208,7 @@ class History:
                 if slot_of("field_values", row) in wanted:
                     self._add("field_values", row)
 
-        things = {slot[1] for slot in wanted if slot[0] == "things"}
+        things = {cast(str, slot[1]) for slot in wanted if slot[0] == "things"}
         things |= {self._thing_ids[slot] for slot in self.rows}
         for chunk in _chunks(sorted(things)):
             placeholders = ",".join("?" for _ in chunk)
@@ -288,7 +295,8 @@ class Replay:
         """The undos that revert `rev` and count for `slot`: not blocked
         there. `None` is the undo being planned."""
 
-        reverting: list[int | None] = list(self.history.reverted_by.get(rev, ()))
+        reverted_by = () if rev is None else self.history.reverted_by.get(rev, ())
+        reverting: list[int | None] = list(reverted_by)
         if rev in self.targets:
             reverting.append(None)
         return [u for u in reverting if not self._blocked(u, slot)]

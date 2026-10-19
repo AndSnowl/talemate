@@ -33,8 +33,9 @@ a newer pnpm that `corepack@0.34.0` fails to start).
 
 `manifest.scm` (repo root) pins the tools these commands need: `uv`,
 `python@3.11`, `node`, `ruff`, `ungoogled-chromium`, `nss-certs`,
-`font-dejavu` and `ffmpeg` (the memory agent's embeddings load FFmpeg's
-libraries; without it no scene loads). Every command on this page runs inside
+`font-dejavu`, `ffmpeg` (the memory agent's embeddings load FFmpeg's
+libraries; without it no scene loads) and `zlib` (numpy, which chromadb
+uses, dlopens `libz.so.1`). Every command on this page runs inside
 `guix shell -m manifest.scm -- ...`.
 
 ## Starting, checking and stopping the local app
@@ -85,11 +86,50 @@ guix shell -m manifest.scm -- uv run --no-sync pytest
 
 No browser, no AI, no network. `pyproject.toml`'s `addopts` already
 excludes both other groups (`-m "not e2e and not ai"`) and distributes
-across cores; add `-n0 -v` for serial, verbose output. The full suite
-currently has 141 pre-existing failures, all from missing NLTK
-`punkt_tab` data (`test_dedupe`, the prompts editor baselines,
-`test_tts_util`, `test_editor_revision`) — judge a run by "no new
-failures", not by a clean suite.
+across cores; add `-n0 -v` for serial, verbose output. The full suite is
+expected to pass clean: 0 failed.
+
+### Golden scene recording (characterization)
+
+`tests/characterization/test_scene_golden.py` plays a short, scripted
+scene (a line of dialogue, a narrator turn, a day passing, another line of
+dialogue) through the real agents and the mock LLM client, and compares
+both what the AI was sent and what the scene saved against a committed
+recording, `tests/data/characterization/scene_golden.json`.
+
+A change to scene or context code — most of all the phase-2 rework this
+test was written ahead of — is *expected* to change the recording on
+purpose. When it does:
+
+```bash
+guix shell -m manifest.scm -- uv run --no-sync pytest tests/characterization -v -n0 --update-baselines
+```
+
+regenerates it, and the diff is reviewed in the same commit as the code
+change that caused it — that diff is the point of the test. Without
+`--update-baselines` the test fails on any difference from the committed
+recording, intentional or not.
+
+### Strict mypy (`talemate.world`)
+
+`tests/world/test_typecheck.py` runs strict mypy over `talemate.world` as a
+regular test, so the plain suite enforces it. The rest of talemate isn't
+typed yet, so imports from there resolve to `Any` under strict mode — expect
+an explicit `cast` at that boundary (see the `[tool.mypy]` section in
+`pyproject.toml`).
+
+To run it by hand, outside pytest:
+
+```bash
+guix shell -m manifest.scm -- uv run --no-sync mypy --config-file pyproject.toml -p talemate.world
+```
+
+It uses a persistent cache, `.mypy_cache/world-typecheck` (gitignored), so a
+warm run is fast. Making another package strict the same way needs two
+edits: add it to the `[[tool.mypy.overrides]]` `module` list in
+`pyproject.toml`, and add it as its own `-p` target in
+`tests/world/test_typecheck.py` (or move that test somewhere more general
+once there's more than one strict package).
 
 ### Frontend logic checks
 
@@ -253,6 +293,18 @@ the session, `results.txt`: the model name and the passed, failed and
 skipped counts. Neither is written when the AI group was skipped. `.test-artifacts/` is gitignored — nothing under it is ever
 committed.
 
+## Scripts that import chromadb
+
+`scripts/dev/talemate_app.py`'s own `start` already puts `zlib`'s library
+directory on the backend's `LD_LIBRARY_PATH` (see `backend_env`), but a
+one-off script run directly — not through `start` — needs the same thing
+done by hand, or numpy's `import chromadb` fails trying to dlopen
+`libz.so.1`:
+
+```bash
+guix shell -m manifest.scm -- bash -c 'LD_LIBRARY_PATH=$GUIX_ENVIRONMENT/lib uv run --no-sync python …'
+```
+
 ## Known environment facts
 
 - This is a Guix machine: `uv`, `node` and `pytest` aren't on `PATH` on
@@ -262,6 +314,6 @@ committed.
   project and drops the `dev` extra (and with it, `pytest`).
 - The frontend's package manager is pnpm, run through Corepack:
   `npx --yes corepack@0.34.0 pnpm ...` (never `npm install`).
-- The plain suite's 141 failures (missing NLTK `punkt_tab` data) predate
-  this work and aren't something a local run is expected to fix — only
-  watch for *new* failures.
+- The plain suite is expected to pass clean (0 failed); NLTK's `punkt_tab`
+  English model is vendored under `tests/data/nltk_data` so sentence
+  tokenization works with no `~/nltk_data` and no network.

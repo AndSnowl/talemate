@@ -38,7 +38,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import structlog
 from pydantic import BaseModel
@@ -104,7 +104,7 @@ class _Planner:
         self.history = History(conn)
         self.closure = self.history.closure(targets)
         slots = self.history.touched_slots(self.closure)
-        things = [slot[1] for slot in slots if slot[0] == "things"]
+        things = [cast(str, slot[1]) for slot in slots if slot[0] == "things"]
         slots.update(self.history.child_slots(things))
         self.slots = list(slots)
         self.history.load(self.slots)
@@ -123,7 +123,7 @@ class _Planner:
         """Report `slot`, keyed by its live row, or by the latest row a
         target wrote there when nothing is live."""
 
-        table = slot[0]
+        table = cast(Table, slot[0])
         row = self.history.live_row(slot)
         if row is None:
             row = max(
@@ -183,7 +183,7 @@ class _Planner:
             return None
         while row["restored_from"] is not None:
             row = self._row(table, row["restored_from"])
-        rev = row["rev_added"]
+        rev = cast(int, row["rev_added"])
         if rev <= since or rev in self.targets or rev in self.history.undo_revs:
             return None
         return rev
@@ -234,7 +234,7 @@ class _Planner:
         that wrote the thing, or for a thing only an undo of an undo puts
         back, from the first revision behind that."""
 
-        thing_id = slot[1]
+        thing_id = cast(str, slot[1])
         touched = self.history.touched(slot)
         since = min((touched & self.targets) or (touched & self.closure))
 
@@ -267,7 +267,7 @@ class _Planner:
             self._changed_later(slot, self.after.latest(slot))
         ):
             # kept as it is, along with all its values and facts
-            self.blocked_things.add(slot[1])
+            self.blocked_things.add(cast(str, slot[1]))
             self.final[slot] = self.history.live_origin(slot)
             return
         self.final[slot] = want
@@ -315,18 +315,19 @@ class _Planner:
 
         order = {"things": 0, "field_values": 1, "facts": 2}
         self.plan.conflicts.sort(key=lambda c: order[c.table])
-        for slot in sorted(self.slots, key=lambda slot: order[slot[0]]):
+        for slot in sorted(self.slots, key=lambda slot: order[cast(str, slot[0])]):
             live = self.history.live_row(slot)
             want = self.final[slot]
             have = self.history.live_origin(slot)
             if (have is None) == (want is None) and (
-                want is None or have["row_id"] == want["row_id"]
+                want is None or (have is not None and have["row_id"] == want["row_id"])
             ):
                 continue
+            table = cast(Table, slot[0])
             if live is not None:
-                self.plan.retire.append((slot[0], live["row_id"]))
+                self.plan.retire.append((table, live["row_id"]))
             if want is not None:
-                self.plan.restore.append((slot[0], want))
+                self.plan.restore.append((table, want))
         return self.plan
 
 

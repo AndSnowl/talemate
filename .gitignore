@@ -17,6 +17,7 @@ logs/
 .cursor
 .claude
 .coverage
+.mypy_cache/
 
 # uv
 .venv/

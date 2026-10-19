@@ -434,6 +434,15 @@ def backend_env(root: Path) -> dict:
             env["LD_LIBRARY_PATH"] = os.pathsep.join(
                 p for p in (str(lib), os.environ.get("LD_LIBRARY_PATH")) if p
             )
+    # numpy (used by chromadb) dlopens libz.so.1; on Guix that's only found
+    # through LD_LIBRARY_PATH, under the active shell's profile.
+    guix_environment = os.environ.get("GUIX_ENVIRONMENT")
+    if guix_environment:
+        guix_lib = Path(guix_environment) / "lib"
+        if guix_lib.is_dir():
+            env["LD_LIBRARY_PATH"] = os.pathsep.join(
+                p for p in (env.get("LD_LIBRARY_PATH"), str(guix_lib)) if p
+            )
     return env
 
 

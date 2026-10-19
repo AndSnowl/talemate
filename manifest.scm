@@ -14,6 +14,7 @@
 ;; - ffmpeg: torchcodec (imported by the memory agent's embeddings) dlopens
 ;;   its libraries; scripts/dev/talemate_app.py puts them on the backend's
 ;;   LD_LIBRARY_PATH. Without it, loading any scene fails.
+;; - zlib: numpy, which chromadb uses, dlopens libz.so.1.
 (specifications->manifest
  (list "uv"
        "python@3.11"
@@ -22,4 +23,5 @@
        "ungoogled-chromium"
        "nss-certs"
        "font-dejavu"
-       "ffmpeg"))
+       "ffmpeg"
+       "zlib"))
