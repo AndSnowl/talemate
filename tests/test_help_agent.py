@@ -1255,3 +1255,9 @@ def test_read_clients_unified_api_key(settings_env):
         "set (unified API key from application settings: openrouter.api_key)"
     )
     assert "sk-or-unified-secret" not in json.dumps(payload)
+
+
+def test_initial_message_uses_fantasymate_name():
+    """The help chat's greeting shows the app's visible name (visual-only rename)."""
+    assert "fantasymate" in INITIAL_MESSAGE
+    assert "Talemate" not in INITIAL_MESSAGE

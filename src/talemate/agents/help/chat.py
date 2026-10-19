@@ -32,7 +32,7 @@ __all__ = ["HelpChatMixin", "HelpChatEmission"]
 log = structlog.get_logger("talemate.agents.help.chat")
 
 INITIAL_MESSAGE = (
-    "Hi! I can help you with anything Talemate - settings, agents, clients, "
+    "Hi! I can help you with anything fantasymate - settings, agents, clients, "
     "the world editor and more. I can also look up your current settings and "
     "change them for you if you ask. What would you like to know?"
 )
