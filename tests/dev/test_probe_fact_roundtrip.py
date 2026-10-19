@@ -2,9 +2,10 @@
 
 No real network: a local stub HTTP server answers ``/api/v1/model`` and
 ``/v1/chat/completions``, the latter with a canned reply chosen by a
-keyword in the system prompt (extract / prose / check), same pattern as
-``tests/dev/test_ai_helpers.py``. ``TALEMATE_AI_TESTS`` is never set to
-``1`` in these tests -- the gate itself is what's being tested.
+keyword found in either the system or the user message (extract / prose /
+check, or a per-sample override), same pattern as
+``tests/dev/test_ai_helpers.py``. ``TALEMATE_AI_TESTS`` is set only in the
+tests that need ``main()`` to actually run, and always points at this stub.
 """
 
 import importlib.util
@@ -50,8 +51,17 @@ def _make_handler(replies: dict[str, str], model_name: str = "stub-model"):
                 (m["content"] for m in payload["messages"] if m["role"] == "system"),
                 "",
             )
+            user = next(
+                (m["content"] for m in payload["messages"] if m["role"] == "user"),
+                "",
+            )
+            # a keyword may be in the system prompt (which step) or the user
+            # message (e.g. a marker specific to one sample's text), checked
+            # in the replies dict's insertion order so a sample-specific
+            # override can be listed ahead of the general per-step replies
+            haystack = f"{system}\n{user}"
             content = next(
-                (reply for keyword, reply in replies.items() if keyword in system),
+                (reply for keyword, reply in replies.items() if keyword in haystack),
                 "",
             )
             body = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
@@ -119,20 +129,79 @@ def test_run_sample_against_stub():
     assert result["errors"] == []
 
 
-def test_unparsable_facts_recorded_as_error():
-    replies = dict(_STANDARD_REPLIES)
-    replies["JSON list"] = "sorry"
+def test_unparsable_facts_recorded_as_error(tmp_path, monkeypatch):
+    """One sample's unparsable extraction is recorded as an error, and the
+    run still completes the next sample (via ``main()`` end to end, since
+    that's the only level at which "the next sample" has meaning).
+    """
+    # "ZZZ_BROKEN_ZZZ" only ever appears in the broken sample's own source
+    # text, so it's checked (and matches) ahead of the general "JSON list"
+    # extraction reply -- the fine sample's text never contains it, so its
+    # extract/re-extract calls fall through to the normal facts reply.
+    replies = {"ZZZ_BROKEN_ZZZ": "sorry", **_STANDARD_REPLIES}
 
     with _stub_server(replies) as url:
-        sample = {"name": "Dorran", "text": "A tall, shaved-headed man."}
+        monkeypatch.setenv("TALEMATE_AI_TESTS", "1")
+        monkeypatch.setenv("TALEMATE_TEST_KOBOLDCPP_URL", url)
 
-        result = probe.run_sample(url, sample, rounds=2)
+        samples_path = tmp_path / "samples.json"
+        samples_path.write_text(
+            json.dumps(
+                [
+                    {"name": "Broken", "text": "ZZZ_BROKEN_ZZZ description"},
+                    {
+                        "name": "Fine",
+                        "text": "A tall, shaved-headed man, blunt and loyal.",
+                    },
+                ]
+            )
+        )
+        out_dir = tmp_path / "out"
 
-    assert len(result["errors"]) == 1
-    error = result["errors"][0]
-    assert error["sample"] == "Dorran"
+        code = probe.main(
+            ["--rounds", "2", "--samples", str(samples_path), "--out", str(out_dir)]
+        )
+
+    assert code == 0
+    report = json.loads((out_dir / "report.json").read_text())
+
+    assert len(report["errors"]) == 1
+    error = report["errors"][0]
+    assert error["sample"] == "Broken"
     assert error["step"] == "extract"
-    assert result["rounds"] == []
+
+    broken, fine = report["samples"]
+    assert broken["name"] == "Broken"
+    assert broken["rounds"] == []
+    # the run continued past the broken sample: the next one completed in full
+    assert fine["name"] == "Fine"
+    assert len(fine["rounds"]) == 3
+    assert fine["rounds"][0]["facts"] == json.loads(_FACTS_REPLY)
+
+
+def test_run_sample_calls_on_step_after_every_step():
+    """``on_step`` fires after every extract/prose/check/reextract, with the
+    result built so far -- so a caller can rewrite its report after each
+    one rather than losing a sample's completed rounds to a kill or a hang.
+    """
+    with _stub_server(_STANDARD_REPLIES) as url:
+        sample = {
+            "name": "Dorran",
+            "text": "A tall, shaved-headed man, blunt and loyal.",
+        }
+        snapshots = []
+
+        probe.run_sample(
+            url,
+            sample,
+            rounds=2,
+            on_step=lambda partial: snapshots.append(json.loads(json.dumps(partial))),
+        )
+
+    # 1 (extract) + 2 rounds * 3 (prose, check, reextract) + 1 (final
+    # trailing re-extract-only round) = 8 calls
+    assert len(snapshots) == 8
+    assert [len(s["rounds"]) for s in snapshots] == [0, 0, 0, 1, 1, 1, 2, 3]
 
 
 def test_think_block_stripped():

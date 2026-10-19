@@ -9,7 +9,8 @@ is also kept, with no prose of its own, so the last round reflects the
 facts after going all the way through every round-trip. Metrics on the
 raw results are in ``fact_probe_metrics.py`` (Task 1); this script only
 drives the model and writes ``report.json``/``report.md`` (rewritten after
-every sample) into ``--out``.
+every step -- extract, prose, check or re-extract -- so a killed or hung
+run loses at most the step in flight) into ``--out``.
 
 Makes real model calls, so it needs ``TALEMATE_AI_TESTS=1`` (ask the owner
 first)::
@@ -28,6 +29,7 @@ import os
 import re
 import sys
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -35,8 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import ai_helpers  # noqa: E402
 import fact_probe_metrics as metrics  # noqa: E402
-
-AI_GATE_MESSAGE = "AI runs need TALEMATE_AI_TESTS=1 — ask the owner first"
+import talemate_app  # noqa: E402
 
 DEFAULT_SAMPLES = Path(__file__).resolve().parent / "probe_data" / "characters.json"
 
@@ -169,7 +170,13 @@ def check_prose(url: str, facts: list[dict], prose: str) -> tuple[list[str], lis
     return list(data.get("invented") or []), list(data.get("dropped") or [])
 
 
-def run_sample(url: str, sample: dict, rounds: int) -> dict:
+def run_sample(
+    url: str,
+    sample: dict,
+    rounds: int,
+    *,
+    on_step: Callable[[dict], None] | None = None,
+) -> dict:
     """Extract, then (prose, check, re-extract) ``rounds`` times.
 
     Returns ``{"name", "rounds", "errors"}``: ``rounds`` matches the shape
@@ -177,9 +184,18 @@ def run_sample(url: str, sample: dict, rounds: int) -> dict:
     "prose", "check", "reextract") is for the caller to fold into the run's
     overall error list. On any step's failure, this sample stops there --
     the caller moves on to the next sample.
+
+    ``on_step``, if given, is called with the result dict built so far
+    after every step (including the failing one, if any) -- a caller
+    writes a progress report from it, so a killed or hung run loses at
+    most the step in flight, not the rest of the sample.
     """
     name = sample.get("name")
     result = {"name": name, "rounds": [], "errors": []}
+
+    def notify() -> None:
+        if on_step is not None:
+            on_step(result)
 
     def fail(round_index: int, step: str, exc: Exception) -> dict:
         result["errors"].append(
@@ -190,22 +206,26 @@ def run_sample(url: str, sample: dict, rounds: int) -> dict:
                 "error": f"{type(exc).__name__}: {exc}",
             }
         )
+        notify()
         return result
 
     try:
         facts = extract_facts(url, sample.get("text", ""))
     except Exception as exc:
         return fail(0, "extract", exc)
+    notify()
 
     for round_index in range(rounds):
         try:
             prose = write_prose(url, facts)
         except Exception as exc:
             return fail(round_index, "prose", exc)
+        notify()
         try:
             invented, dropped = check_prose(url, facts, prose)
         except Exception as exc:
             return fail(round_index, "check", exc)
+        notify()
         result["rounds"].append(
             {"facts": facts, "prose": prose, "invented": invented, "dropped": dropped}
         )
@@ -213,10 +233,12 @@ def run_sample(url: str, sample: dict, rounds: int) -> dict:
             facts = extract_facts(url, prose)
         except Exception as exc:
             return fail(round_index, "reextract", exc)
+        notify()
 
     result["rounds"].append(
         {"facts": facts, "prose": None, "invented": [], "dropped": []}
     )
+    notify()
     return result
 
 
@@ -272,7 +294,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if os.environ.get("TALEMATE_AI_TESTS") != "1":
-        print(AI_GATE_MESSAGE, file=sys.stderr)
+        print(talemate_app.AI_GATE_MESSAGE, file=sys.stderr)
         return 2
 
     url = ai_helpers.koboldcpp_url()
@@ -300,9 +322,19 @@ def main(argv: list[str] | None = None) -> int:
     _write_report(out_dir, results)
 
     for sample in samples:
-        sample_result = run_sample(url, sample, args.rounds)
+        index = len(results["samples"])
+        results["samples"].append({"name": sample.get("name"), "rounds": []})
+
+        def on_step(partial: dict, index: int = index) -> None:
+            results["samples"][index] = {
+                "name": partial["name"],
+                "rounds": partial["rounds"],
+            }
+            _write_report(out_dir, results)
+
+        sample_result = run_sample(url, sample, args.rounds, on_step=on_step)
         results["errors"].extend(sample_result.pop("errors"))
-        results["samples"].append(sample_result)
+        results["samples"][index] = sample_result
         _write_report(out_dir, results)
 
     results["finished"] = _now()
