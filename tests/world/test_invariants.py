@@ -8,6 +8,11 @@ checking after every step that:
 
 - at most one row per thing id, `fact_id` and field slot is live;
 - no fact or field value is live on a thing that isn't;
+- every slot holds what a full replay says (`talemate.world.replay`): the
+  latest write among the non-undo revisions in effect for it, by the
+  reversal links and the conflicts each undo recorded, and a value or fact
+  only while its thing is live. A live restored copy counts as the row its
+  `restored_from` chain leads back to;
 - `index_documents` and `timeline` don't raise.
 
 A revision only ever adds rows or retires live ones, so a view at an older
@@ -23,8 +28,7 @@ whatever has happened since.
 Each seed then undoes a random target revision (trying a few until one
 undoes without a conflict), redoes it (undoes the undo) and undoes it
 again, and checks that the slots the target touched end up as the first
-undo left them, and, when nothing touched them between the target and that
-undo, as they were just before the target.
+undo left them, and as they were before the first undo after the redo.
 
 Thing and fact ids come from `uuid4`, and things are picked from a list in
 id order, so the test seeds `uuid4` too: each seed replays exactly.
@@ -40,6 +44,7 @@ import pytest
 from talemate.world.dates import WorldDate
 from talemate.world.index import index_documents
 from talemate.world.refs import ref
+from talemate.world.replay import History, Replay
 from talemate.world import store
 from talemate.world.store import Source, World
 
@@ -82,9 +87,29 @@ def _check_invariants(world: World) -> None:
         ).fetchall()
         assert not orphans, (f"{table} rows live on a thing that isn't", orphans)
 
+    _check_replay(world)
+
     index_documents(world, head)
     for thing in world.view(rev=head).things():
         world.timeline(thing.id, head)
+
+
+def _check_replay(world: World) -> None:
+    """Every slot's live row stands for the write a full replay says it
+    should hold (compared by row, never by content)."""
+
+    history = History(world._conn)
+    history.load()
+    replay = Replay(history)
+    wrong = []
+    for slot in history.slots():
+        want = replay.live(slot)
+        have = history.live_origin(slot)
+        want_id = None if want is None else want["row_id"]
+        have_id = None if have is None else have["row_id"]
+        if want_id != have_id:
+            wrong.append((slot, "want", want_id, "have", have_id))
+    assert not wrong, ("slots that differ from a replay", wrong)
 
 
 def _touched_slots(conn: sqlite3.Connection, rev: int) -> dict[str, set]:
@@ -282,6 +307,7 @@ def _check_reundo_is_noop(world: World, undos: dict[int, list[int]]) -> None:
 
         live = _live_rows(conn)
         report = world.undo(revs)
+        _check_replay(world)
         for table, row_id in live ^ _live_rows(conn):
             slot, thing_id = _slot_of(conn, table, row_id)
             assert slot in exempt_slots or thing_id in exempt_things, (
@@ -317,10 +343,6 @@ def _check_undo_redo_undo(world: World, target: int) -> bool:
     assert again.conflicts == []
     assert again.undo_rev is not None
     assert _slot_state(conn, slots, world.head_rev()) == after_undo
-
-    untouched_since = _slot_state(conn, slots, target) == before_undo
-    if untouched_since:
-        assert after_undo == _slot_state(conn, slots, target - 1)
     return True
 
 

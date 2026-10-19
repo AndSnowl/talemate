@@ -1,44 +1,36 @@
 """Undo by source: revert what a set of revisions did, in one new revision.
 
-Nothing is deleted or updated in place. A row the target revisions added is
-retired at the undo revision; a row they retired is restored as a copy whose
-`rev_added` is the undo revision (facts keep their `fact_id`, and the copy
-gets the original's `fact_refs`). The full history stays viewable.
+Nothing is deleted or updated in place. Undo retires live rows and restores
+earlier ones as copies whose `rev_added` is the undo revision (facts keep
+their `fact_id`, and the copy gets the original's `fact_refs`). The full
+history stays viewable.
 
 Every undo leaves reversal links (the reversing-entry pattern, as in
 accounting reversals or `git revert`): its revision records the revisions it
-reverses in `revision_reverts`, and each restored copy records the row it
-copies in `restored_from`. Planning follows those links and never compares
-content, so an unrelated write or undo that happens to bring back the same
-text or value is never mistaken for the targets' change:
+reverses in `revision_reverts`, each restored copy records the row it copies
+in `restored_from`, and each conflict it left alone is recorded in
+`undo_conflicts`. Planning reads those links and never compares content.
 
-- a row the targets added is reverted through its current copy (the live
-  row whose `restored_from` chain reaches it). With none live, the change
-  was already reverted (R5) -- unless a later revision outside the targets,
-  not an undo, retired it, which is a conflict. A copy retired by a redo
-  counts as retired by whatever retired the row it copies;
-- a row the targets retired is restored unless an undo already restored a
-  copy of it that's still live, or that a later revision has since retired
-  (a later, unrelated change). A copy retired by an undo of the undo that
-  restored it (a redo) puts the targets' change back in effect.
+An undo is planned as a replay (see `replay.py`): the slots it can affect
+are worked out again with the undo added to the links, and the difference
+from what's live is written. Those slots are the ones the targets wrote,
+the ones written by the revisions an undo among the targets reverses
+(recursively, since undoing an undo puts them back in effect), and every
+value and fact slot of a thing among them, since a value or fact is only
+live while its thing is.
 
-An undo that went through for a slot leaves its targets' changes there
-reverted, even where it wrote nothing (a row its targets both added and
-retired cancels out). So a retired row is never brought back while an undo
-in effect, since its retirement, has reverted the revision behind it: the
-planner reads that from `revision_reverts`, and whether the undo went
-through from `undo_conflicts`, where each undo records the rows it left
-alone.
+A slot's change is left alone and reported as an `UndoConflict` when a
+revision outside the targets, not an undo, wrote it after the last write of
+a target that's still in effect there: the targets' change isn't what's
+live any more. A write outside the targets that's older than that is just
+uncovered (undoing T1 and T2 of T1, N, T2 leaves N's value, quietly). A
+value or fact that can't come back because its thing was removed later
+counts as removed later. A thing whose creation is being undone is kept,
+with its rows, when a later revision outside the targets added rows to it
+or referenced it (from a fact, a `thing` field or a `shares` field).
 
-A row changed again by a later revision outside the targets is left alone
-and reported as an `UndoConflict`, as is a thing the targets created that a
-later revision has since added rows to or referenced (from a fact, a `thing`
-field or a `shares` field). A restored copy counts as the change its origin
-(the end of its `restored_from` chain) made.
-
-Rows are grouped into slots -- a fact's `fact_id`, or a field value's
-`(thing_id, field, valid_from)` -- since at most one row per slot is live at
-a time, and a conflict anywhere in a slot leaves the whole slot untouched.
+An undo that changes nothing writes no revision, so re-undoing an undone
+revision is a quiet no-op.
 """
 
 import json
@@ -46,12 +38,13 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import structlog
 from pydantic import BaseModel
 
 from .kinds import KINDS
+from .replay import History, Replay, Slot, Table, Write, thing_slot
 
 if TYPE_CHECKING:
     from .store import Revision
@@ -72,8 +65,6 @@ _REF_FIELD_NAMES = sorted(
         if spec.type in ("thing", "shares")
     }
 )
-
-Table = Literal["things", "field_values", "facts"]
 
 
 class UndoConflict(BaseModel):
@@ -105,58 +96,74 @@ class _Planner:
     """Works out the whole undo before anything is written, so an undo that
     reverts nothing doesn't consume a revision number."""
 
-    def __init__(
-        self, conn: sqlite3.Connection, targets: set[int], undo_revs: set[int]
-    ):
+    def __init__(self, conn: sqlite3.Connection, targets: set[int]):
         self.conn = conn
         self.targets = targets
-        self.undo_revs = undo_revs
         self.plan = _Plan()
-        # things created in the targets: their rows are handled with the
-        # thing, never one by one
-        self.created: set[str] = set()
-        self.retired_things: set[str] = set()
-        self.restored_things: set[str] = set()
+
+        self.history = History(conn)
+        self.closure = self.history.closure(targets)
+        slots = self.history.touched_slots(self.closure)
+        things = [slot[1] for slot in slots if slot[0] == "things"]
+        slots.update(self.history.child_slots(things))
+        self.slots = list(slots)
+        self.history.load(self.slots)
+
+        # the state now, and with this undo in effect everywhere
+        self.before = Replay(self.history)
+        self.after = Replay(self.history, targets)
+        # the row each slot should stand for once the undo is written
+        self.final: dict[Slot, sqlite3.Row | None] = {}
+        self.blocked_things: set[str] = set()
         self._rows: dict[tuple[Table, int], sqlite3.Row] = {}
-        # the reversal links, both ways: what each undo reverted, and which
-        # undos reverted each revision
-        self._reverts: dict[int, set[int]] = {}
-        self._reverted_in: dict[int, set[int]] = {}
-        for undo_rev, target_rev in conn.execute(
-            "SELECT undo_rev, target_rev FROM revision_reverts"
-        ):
-            self._reverts.setdefault(undo_rev, set()).add(target_rev)
-            self._reverted_in.setdefault(target_rev, set()).add(undo_rev)
-        # the rows each undo left alone because of a conflict
-        self._conflicted: dict[int, set[tuple[str, int]]] = {}
-        for undo_rev, table_name, row_id in conn.execute(
-            "SELECT undo_rev, table_name, row_id FROM undo_conflicts"
-        ):
-            self._conflicted.setdefault(undo_rev, set()).add((table_name, row_id))
-        self._in_effect: dict[tuple[int, int | None], bool] = {}
-        self._things: dict[str, list[sqlite3.Row]] = {}
 
-    def _in(self) -> tuple[str, list[int]]:
-        placeholders = ",".join("?" for _ in self.targets)
-        return placeholders, sorted(self.targets)
+    # -- conflicts -----------------------------------------------------------
 
-    def _is_later_change(self, rev: int | None) -> bool:
-        """A revision outside the targets that isn't itself an undo."""
+    def _conflict(self, slot: Slot, reason: str, later_rev: int) -> None:
+        """Report `slot`, keyed by its live row, or by the latest row a
+        target wrote there when nothing is live."""
 
-        return rev is not None and rev not in self.targets and rev not in self.undo_revs
-
-    def _conflict(
-        self, table: Table, row: sqlite3.Row, thing_id: str, reason: str, later_rev: int
-    ) -> None:
+        table = slot[0]
+        row = self.history.live_row(slot)
+        if row is None:
+            row = max(
+                (
+                    r
+                    for r in self.history.rows[slot]
+                    if r["rev_added"] in self.targets
+                    or r["rev_removed"] in self.targets
+                ),
+                key=lambda r: r["row_id"],
+            )
         self.plan.conflicts.append(
             UndoConflict(
                 table=table,
                 row_id=row["row_id"],
-                thing_id=thing_id,
+                thing_id=self.history.thing_id(slot),
                 reason=reason,
                 later_rev=later_rev,
             )
         )
+
+    def _changed_later(self, slot: Slot, latest: Write | None) -> bool:
+        """Report `slot` if `latest`, the write it would hold, is a later
+        change: by a revision outside the targets, after the last write a
+        target still in effect there made. A slot no target in effect wrote
+        isn't the targets' change (the undo only uncovers it, or it's already
+        reverted), so it's never a conflict."""
+
+        mine = [
+            rev
+            for rev in self.history.touched(slot)
+            if rev in self.targets and self.before.in_effect(rev, slot)
+        ]
+        if not mine or latest is None or latest.rev in self.targets:
+            return False
+        if latest.rev < max(mine):
+            return False
+        reason = REMOVED_LATER if latest.row is None else CHANGED_LATER
+        self._conflict(slot, reason, latest.rev)
+        return True
 
     def _row(self, table: Table, row_id: int) -> sqlite3.Row:
         key = (table, row_id)
@@ -166,175 +173,27 @@ class _Planner:
             ).fetchone()
         return self._rows[key]
 
-    def _origin(self, table: Table, row: sqlite3.Row) -> sqlite3.Row:
-        """The row `row` is ultimately a copy of: `restored_from`, followed
-        until it's NULL (`row` itself when it isn't a copy)."""
-
-        while row["restored_from"] is not None:
-            row = self._row(table, row["restored_from"])
-        return row
-
-    def _undo_in_effect(self, undo_rev: int, at: int | None = None) -> bool:
-        """Whether `undo_rev` was in effect just before revision `at` (`None`
-        meaning now, with this undo's own targets counted as reverted): no
-        undo before then, itself in effect then, reverted it (a redo)."""
-
-        if at is None and undo_rev in self.targets:
-            return False
-        key = (undo_rev, at)
-        if key not in self._in_effect:
-            self._in_effect[key] = not any(
-                self._undo_in_effect(later, at)
-                for later in self._reverted_in.get(undo_rev, ())
-                if at is None or later < at
-            )
-        return self._in_effect[key]
-
-    def _thing_rows(self, thing_id: str) -> list[sqlite3.Row]:
-        if thing_id not in self._things:
-            self._things[thing_id] = self.conn.execute(
-                "SELECT * FROM things WHERE id = ? ORDER BY row_id", (thing_id,)
-            ).fetchall()
-        return self._things[thing_id]
-
-    def _blocked(self, table: Table, rows: list[sqlite3.Row], undo_rev: int) -> bool:
-        """Whether `undo_rev` recorded a conflict on any of `rows` (one
-        slot, or one thing's rows), and so left them all alone."""
-
-        conflicted = self._conflicted.get(undo_rev, set())
-        return any((table, r["row_id"]) in conflicted for r in rows)
-
-    def _undone_since(
-        self, table: Table, row: sqlite3.Row, slot_rows: list[sqlite3.Row]
-    ) -> bool:
-        """Whether an undo in effect, after `row` was retired, reverted the
-        revision behind it (its origin's) and went through for `row`'s slot
-        and thing. That undo left the change reverted there, so `row` must
-        stay retired: even when that undo wrote nothing for it (its targets
-        retired it too, so the two cancel out), and even when a later undo
-        would restore it as a copy of an older retirement.
-
-        Only an undo that reverted it while no earlier one that did was in
-        effect counts: a re-undo of an already reverted change is a no-op,
-        and redoing the undo that really reverted it brings it back
-        whatever the re-undo claims."""
-
-        added = self._origin(table, row)["rev_added"]
-        reverters = []
-        for undo_rev in sorted(self._reverted_in.get(added, ())):
-            if self._blocked(table, slot_rows, undo_rev):
-                continue
-            if table != "things" and self._blocked(
-                "things", self._thing_rows(row["thing_id"]), undo_rev
-            ):
-                continue
-            if not any(
-                self._undo_in_effect(earlier, undo_rev) for earlier in reverters
-            ):
-                reverters.append(undo_rev)
-        return any(
-            undo_rev > row["rev_removed"] and self._undo_in_effect(undo_rev)
-            for undo_rev in reverters
-        )
-
-    def _retirement(self, table: Table, row: sqlite3.Row) -> sqlite3.Row:
-        """The row whose retirement stands for retired `row`'s. A copy
-        retired by a redo (an undo of the undo that restored it) is retired
-        again by whatever retired the row it copies, so that's followed
-        through `restored_from`."""
-
-        while self._is_redone(row):
-            row = self._row(table, row["restored_from"])
-        return row
-
-    def _is_redone(self, row: sqlite3.Row) -> bool:
-        """A restored copy retired by an undo of the undo that restored it."""
-
-        return (
-            row["restored_from"] is not None
-            and row["rev_removed"] in self.undo_revs
-            and row["rev_added"] in self._reverts.get(row["rev_removed"], ())
-        )
-
-    @staticmethod
-    def _latest_copy(
-        row: sqlite3.Row, slot_rows: list[sqlite3.Row]
-    ) -> sqlite3.Row | None:
-        """The newest row in the slot that's a copy of `row`, directly or
-        through other copies. A copy always comes after the row it copies,
-        and `slot_rows` is in `row_id` order."""
-
-        reached = {row["row_id"]}
-        latest = None
-        for r in slot_rows:
-            if r["restored_from"] in reached:
-                reached.add(r["row_id"])
-                latest = r
-        return latest
-
-    def _restorable(self, table: Table, row: sqlite3.Row) -> bool:
-        """A row the targets retired but didn't add, either directly or as
-        the copy of a row they added (that retirement just nets out)."""
-
-        return (
-            row["rev_removed"] in self.targets
-            and row["rev_added"] not in self.targets
-            and self._origin(table, row)["rev_added"] not in self.targets
-        )
-
-    def _still_retired(
-        self,
-        table: Table,
-        row: sqlite3.Row,
-        slot_rows: list[sqlite3.Row],
-        retiring: set[int],
-    ) -> bool:
-        """Whether the targets' retirement of `row` is still in effect. It
-        isn't once an undo reverted its change since (see `_undone_since`)
-        or restored a
-        copy of it (R5: already reverted), unless that copy is being retired
-        by this undo, was retired by a target that this undo reverts in its
-        own right, or was undone (a redo) in a way that puts `row`'s own
-        retirement back (see `_retirement`). A copy retired by anything else
-        stands for a later, unrelated change, so `row` stays retired."""
-
-        if self._undone_since(table, row, slot_rows):
-            return False
-        copy = self._latest_copy(row, slot_rows)
-        if copy is None:
-            return True
-        removed = copy["rev_removed"]
-        if removed is None:
-            return copy["row_id"] in retiring
-        # a redo puts back whatever retired the row its copy was made from;
-        # the targets' retirement is in effect again only if that's `row`'s
-        while removed not in self.targets:
-            if not self._is_redone(copy):
-                return False
-            copy = self._row(table, copy["restored_from"])
-            if copy["row_id"] == row["row_id"]:
-                return True
-            removed = copy["rev_removed"]
-        # retired by a target: restored in its own right when it can be
-        return not self._restorable(table, copy)
-
     def _later_write(self, table: Table, row: sqlite3.Row, since: int) -> int | None:
         """The revision behind live `row` when that's a later change after
         `since`: the row's own `rev_added`, or for a restored copy its
         origin's (an undo only ever brings a change back, it never makes
-        one). `None` for a row the targets added."""
+        one). `None` for a row a target added."""
 
         if row["rev_added"] in self.targets:
             return None
-        rev = self._origin(table, row)["rev_added"]
-        return rev if rev > since and self._is_later_change(rev) else None
+        while row["restored_from"] is not None:
+            row = self._row(table, row["restored_from"])
+        rev = row["rev_added"]
+        if rev <= since or rev in self.targets or rev in self.history.undo_revs:
+            return None
+        return rev
 
     def _later_reference(self, thing_id: str, since: int) -> int | None:
         """The earliest later change after `since` (see `_later_write`)
         behind a live reference to `thing_id`: a fact mentioning it, a
         `thing` field holding its id, or a `shares` field naming it. A
         reference an undo restored counts by its origin, so a redo brings
-        back its power to keep the thing (Review Focus 4)."""
+        back its power to keep the thing."""
 
         revs = [
             self._later_write("facts", row, since)
@@ -368,221 +227,107 @@ class _Planner:
         later = [rev for rev in revs if rev is not None]
         return min(later) if later else None
 
-    def plan_things(self) -> None:
-        """Decide once per thing id, over all of that id's rows, so a thing
-        removed and restored several times never ends up with two live
-        rows."""
+    def _keeps_creation(self, slot: Slot) -> bool:
+        """For a live thing this undo would remove: report it if a later
+        revision outside the targets added a row that's live on it now (R6)
+        or a live reference to it (F1). Later counts from the first target
+        that wrote the thing, or for a thing only an undo of an undo puts
+        back, from the first revision behind that."""
 
-        placeholders, params = self._in()
-        ids = self.conn.execute(
-            f"SELECT DISTINCT id FROM things WHERE rev_added IN ({placeholders}) "
-            f"OR rev_removed IN ({placeholders}) ORDER BY id",
-            params + params,
-        ).fetchall()
+        thing_id = slot[1]
+        touched = self.history.touched(slot)
+        since = min((touched & self.targets) or (touched & self.closure))
 
-        for (thing_id,) in ids:
-            rows = self.conn.execute(
-                "SELECT * FROM things WHERE id = ? ORDER BY row_id", (thing_id,)
-            ).fetchall()
-            if any(r["rev_added"] in self.targets for r in rows):
-                # its creation (or a restore of it) is being undone: never
-                # restore it, and its rows go with it
-                self.created.add(thing_id)
-                self._plan_created_thing(rows)
-            else:
-                self._plan_removed_thing(rows)
-
-    def _plan_created_thing(self, rows: list[sqlite3.Row]) -> None:
-        # the live row now standing for a row the targets added, and the
-        # earliest such added row (later changes count from there)
-        live = None
-        since = None
-        removed_later = []
-        for row in rows:
-            if row["rev_added"] not in self.targets:
-                continue
-            current = self._latest_copy(row, rows) or row
-            if current["rev_removed"] is None:
-                live = current
-                since = row["rev_added"] if since is None else since
-                continue
-            retired = self._retirement("things", current)
-            if self._is_later_change(retired["rev_removed"]) and not self._undone_since(
-                "things", retired, rows
-            ):
-                removed_later.append(retired)
-            # else already reverted: retired by an undo or within the
-            # targets, or undone since (see `_undone_since`)
-
-        if live is None:
-            if removed_later:
-                row = max(removed_later, key=lambda r: r["rev_removed"])
-                self._conflict(
-                    "things", row, row["id"], REMOVED_LATER, row["rev_removed"]
-                )
-            return
-
-        thing_id = live["id"]
-        live_rows = {
-            table: self.conn.execute(
-                f"SELECT * FROM {table} WHERE thing_id = ? AND rev_removed IS NULL",
-                (thing_id,),
-            ).fetchall()
-            for table in ("field_values", "facts")
-        }
         later = [
             rev
-            for table, table_rows in live_rows.items()
-            for r in table_rows
-            if (rev := self._later_write(table, r, since)) is not None
+            for table in ("field_values", "facts")
+            for row in self.conn.execute(
+                f"SELECT * FROM {table} WHERE thing_id = ? AND rev_removed IS NULL",
+                (thing_id,),
+            )
+            if (rev := self._later_write(table, row, since)) is not None
         ]
         if later:
-            self._conflict("things", live, thing_id, CHANGED_LATER, min(later))
-            return
-        # retiring it would leave a later reference dangling; one older
-        # than the targets' row (left behind by a removal, say) doesn't count
+            self._conflict(slot, CHANGED_LATER, min(later))
+            return True
+        # removing it would leave a later reference dangling; one older than
+        # the targets' write (left behind by a removal, say) doesn't count
         referenced = self._later_reference(thing_id, since)
         if referenced is not None:
-            self._conflict("things", live, thing_id, REFERENCED_LATER, referenced)
-            return
-
-        self.plan.retire.append(("things", live["row_id"]))
-        self.retired_things.add(thing_id)
-        for table, table_rows in live_rows.items():
-            self.plan.retire.extend((table, r["row_id"]) for r in table_rows)
-
-    def _plan_removed_thing(self, rows: list[sqlite3.Row]) -> None:
-        if any(r["rev_removed"] is None for r in rows):
-            # only an undo can bring a thing back, so it's already restored
-            return
-        retired = [
-            r
-            for r in rows
-            if self._restorable("things", r)
-            and self._still_retired("things", r, rows, set())
-        ]
-        if not retired:
-            return
-        latest = max(retired, key=lambda r: (r["rev_removed"], r["row_id"]))
-        self.plan.restore.append(("things", latest))
-        self.restored_things.add(latest["id"])
-
-    def _thing_live_after(self, thing_id: str) -> bool:
-        if thing_id in self.restored_things:
+            self._conflict(slot, REFERENCED_LATER, referenced)
             return True
-        if thing_id in self.retired_things:
-            return False
-        row = self.conn.execute(
-            "SELECT 1 FROM things WHERE id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ).fetchone()
-        return row is not None
+        return False
 
-    def _thing_removed_rev(self, thing_id: str) -> int:
-        return self.conn.execute(
-            "SELECT MAX(rev_removed) FROM things WHERE id = ?", (thing_id,)
-        ).fetchone()[0]
+    # -- planning ------------------------------------------------------------
 
-    def plan_rows(self, table: Literal["field_values", "facts"]) -> None:
-        placeholders, params = self._in()
-        rows = self.conn.execute(
-            f"SELECT * FROM {table} WHERE rev_added IN ({placeholders}) "
-            f"OR rev_removed IN ({placeholders}) ORDER BY row_id",
-            params + params,
-        ).fetchall()
+    def plan_thing(self, slot: Slot) -> None:
+        live = self.history.live_row(slot)
+        want = self.after.state(slot)
+        if (live is not None and want is None and self._keeps_creation(slot)) or (
+            self._changed_later(slot, self.after.latest(slot))
+        ):
+            # kept as it is, along with all its values and facts
+            self.blocked_things.add(slot[1])
+            self.final[slot] = self.history.live_origin(slot)
+            return
+        self.final[slot] = want
 
-        slots: dict[tuple, None] = {}
-        for row in rows:
-            if row["thing_id"] in self.created:
-                continue
-            if table == "facts":
-                key = (row["fact_id"],)
-            else:
-                key = (row["thing_id"], row["field"], row["valid_from"])
-            slots.setdefault(key, None)
+    def plan_child(self, slot: Slot) -> None:
+        thing_id = self.history.thing_id(slot)
+        if thing_id in self.blocked_things:
+            self.final[slot] = self.history.live_origin(slot)
+            return
 
-        for key in slots:
-            if table == "facts":
-                slot_rows = self.conn.execute(
-                    "SELECT * FROM facts WHERE fact_id = ? ORDER BY row_id", key
-                ).fetchall()
-            else:
-                slot_rows = self.conn.execute(
-                    "SELECT * FROM field_values "
-                    "WHERE thing_id = ? AND field = ? AND valid_from IS ? "
-                    "ORDER BY row_id",
-                    key,
-                ).fetchall()
-            self._plan_slot(table, slot_rows)
+        own = thing_slot(thing_id)
+        thing_now = self.history.live_row(own) is not None
+        thing_after = (
+            self.final[own] if own in self.final else self.after.state(own)
+        ) is not None
+        want = self.after.state(slot) if thing_after else None
+        if thing_now and not thing_after:
+            # it goes with its thing, whatever its own history
+            self.final[slot] = None
+            return
 
-    def _plan_slot(
-        self, table: Literal["field_values", "facts"], slot_rows: list[sqlite3.Row]
-    ) -> None:
-        thing_id = slot_rows[0]["thing_id"]
-        revs_adding = {r["rev_added"] for r in slot_rows}
+        latest = self.after.latest(slot)
+        if not thing_after:
+            # a removal of its thing counts as a later write of nothing
+            removal = self.after.latest(own)
+            if removal is not None and (latest is None or removal.rev > latest.rev):
+                latest = removal
+        if not self._changed_later(slot, latest):
+            self.final[slot] = want
+        elif not thing_after:
+            self.final[slot] = None
+        elif thing_now:
+            self.final[slot] = self.history.live_origin(slot)
+        else:
+            # kept as it'd be without this undo, now that its thing is back
+            self.final[slot] = self.before.state(slot)
 
-        # rule 1: retire the live row now standing for each row the targets
-        # added, unless a later change retired it
-        to_retire: dict[int, sqlite3.Row] = {}
-        conflicted = False
-        for row in slot_rows:
-            if row["rev_added"] not in self.targets:
-                continue
-            current = self._latest_copy(row, slot_rows) or row
-            if current["rev_removed"] is None:
-                to_retire[current["row_id"]] = current
-                continue
-            retired = self._retirement(table, current)
-            removed = retired["rev_removed"]
-            if self._is_later_change(removed) and not self._undone_since(
-                table, retired, slot_rows
+    def run(self) -> _Plan:
+        for slot in self.slots:
+            if slot[0] == "things":
+                self.plan_thing(slot)
+        for slot in self.slots:
+            if slot[0] != "things":
+                self.plan_child(slot)
+
+        order = {"things": 0, "field_values": 1, "facts": 2}
+        self.plan.conflicts.sort(key=lambda c: order[c.table])
+        for slot in sorted(self.slots, key=lambda slot: order[slot[0]]):
+            live = self.history.live_row(slot)
+            want = self.final[slot]
+            have = self.history.live_origin(slot)
+            if (have is None) == (want is None) and (
+                want is None or have["row_id"] == want["row_id"]
             ):
-                reason = CHANGED_LATER if removed in revs_adding else REMOVED_LATER
-                self._conflict(table, current, thing_id, reason, removed)
-                conflicted = True
-            # else already reverted: retired by an undo or within the
-            # targets, or undone since (see `_undone_since`)
-        if conflicted:
-            return
-        self.plan.retire.extend((table, row_id) for row_id in to_retire)
-
-        # rule 2: restore the newest row the targets retired, if that's
-        # still in effect
-        retiring = set(to_retire)
-        retired = [
-            r
-            for r in slot_rows
-            if self._restorable(table, r)
-            and self._still_retired(table, r, slot_rows, retiring)
-        ]
-        if not retired:
-            return
-        latest = max(retired, key=lambda r: (r["rev_removed"], r["row_id"]))
-        newer = [
-            r
-            for r in slot_rows
-            if r["rev_removed"] is None and r["row_id"] not in retiring
-        ]
-        if newer:
-            origin = self._origin(table, newer[-1])
-            if origin["row_id"] != self._origin(table, latest)["row_id"] and (
-                self._is_later_change(origin["rev_added"])
-            ):
-                self._conflict(
-                    table, latest, thing_id, CHANGED_LATER, origin["rev_added"]
-                )
-            # else restored by an undo already
-            return
-        if not self._thing_live_after(thing_id):
-            self._conflict(
-                table,
-                latest,
-                thing_id,
-                REMOVED_LATER,
-                self._thing_removed_rev(thing_id),
-            )
-            return
-        self.plan.restore.append((table, latest))
+                continue
+            if live is not None:
+                self.plan.retire.append((slot[0], live["row_id"]))
+            if want is not None:
+                self.plan.restore.append((slot[0], want))
+        return self.plan
 
 
 def _apply(
@@ -662,24 +407,19 @@ def undo_revisions(
     revs: list[int],
     open_revision: "Callable[[], AbstractContextManager[Revision]]",
 ) -> UndoReport:
-    """Plan the undo of `revs`, then, if it reverts anything, apply it
+    """Plan the undo of `revs`, then, if it changes anything, apply it
     inside the revision `open_revision()` opens (an `undo` revision).
     Raises `KeyError` for a revision that doesn't exist."""
 
     targets = set(revs)
-    kinds = dict(conn.execute("SELECT rev, source_kind FROM revisions").fetchall())
-    missing = targets - kinds.keys()
+    known = {row[0] for row in conn.execute("SELECT rev FROM revisions")}
+    missing = targets - known
     if missing:
         raise KeyError(f"no such revision: {sorted(missing)}")
     if not targets:
         return UndoReport(undo_rev=None, reverted=0, conflicts=[])
 
-    undo_revs = {rev for rev, kind in kinds.items() if kind == "undo"}
-    planner = _Planner(conn, targets, undo_revs)
-    planner.plan_things()
-    planner.plan_rows("field_values")
-    planner.plan_rows("facts")
-    plan = planner.plan
+    plan = _Planner(conn, targets).run()
 
     if not plan.reverted:
         log.info(

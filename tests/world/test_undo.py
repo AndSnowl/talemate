@@ -762,7 +762,7 @@ def test_undo_after_redone_removal_lists_the_removal(world, oskar_and_home):
     ]
 
 
-def test_redo_of_netting_undo_outweighs_a_later_reundo(world, maren):
+def test_redo_of_one_undo_leaves_a_change_another_undo_reverts(world, maren):
     first = _correct(world, maren.laugh, "A slow laugh.", Source.scene("s1", "E", "m1"))
     second = _correct(
         world, maren.laugh, "A rare laugh.", Source.scene("s1", "E", "m2")
@@ -772,13 +772,24 @@ def test_redo_of_netting_undo_outweighs_a_later_reundo(world, maren):
         other = rev.rev
     netting = world.undo([first, second])
     assert _fact_texts(world, maren.id)[maren.laugh] == "A quick laugh."
-    # a no-op for the laugh: the pair is already reverted
-    assert world.undo([first, second, other]).reverted == 1
+    # a no-op for the laugh, but it reverts the pair all the same
+    again = world.undo([first, second, other])
+    assert again.reverted == 1
+
+    # redoing the first undo changes nothing: the second still reverts the
+    # pair, so it writes no revision
+    assert world.undo([netting.undo_rev]).undo_rev is None
+    assert world.undo([second]).undo_rev is None
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A quick laugh."
+
+    # with the second redone, the first still reverts the pair
+    assert world.undo([again.undo_rev]).reverted == 1
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A quick laugh."
+
+    # and redoing the first as well puts it back in effect
     world.undo([netting.undo_rev])
     assert _fact_texts(world, maren.id)[maren.laugh] == "A rare laugh."
-
     report = world.undo([second])
-
     assert report.conflicts == []
     assert _fact_texts(world, maren.id)[maren.laugh] == "A slow laugh."
 
@@ -827,3 +838,63 @@ def test_undoing_a_redo_keeps_a_change_undone_since(world, oskar_and_home):
     world.undo([redo.undo_rev])
 
     assert "culture" not in world.view().thing(oskar).fields
+
+
+def test_redo_restores_a_fact_its_undo_never_wrote(world):
+    # Shape A: undo[2,3] retires B but writes nothing for F (r4 already
+    # retired it), and undo[1,4] leaves F alone too, since B is gone; redoing
+    # undo[2,3] puts r3 back in effect and r4 stays undone, so F is live
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("character", {"name": "A"})
+        create_a = rev.rev
+    with world.revision(Source.manual()) as rev:
+        b = rev.create_thing("character", {"name": "B"})
+        create_b = rev.rev
+    with world.revision(Source.manual()) as rev:
+        fact = rev.add_fact(b, "appearance", "F")
+        added = rev.rev
+    with world.revision(Source.manual()) as rev:
+        rev.remove_fact(fact)
+        removed = rev.rev
+    first = world.undo([create_b, added])
+    assert first.conflicts == []
+    second = world.undo([create_a, removed])
+    assert second.conflicts == []
+    assert world.view().thing(b) is None
+
+    report = world.undo([first.undo_rev])
+
+    assert report.conflicts == []
+    assert _fact_texts(world, b) == {fact: "F"}
+    assert world.view().thing(b).fields["name"] == "B"
+
+
+def test_undo_uncovers_a_write_between_two_targets(world, maren):
+    # R9: T1, N (outside), T2, then undo [T1, T2] gives N's value, quietly
+    t1 = _set_name(world, maren.id, "T1", Source.scene("s1", "E", "m1"))
+    n = _set_name(world, maren.id, "N")
+    t2 = _set_name(world, maren.id, "T2", Source.scene("s1", "E", "m2"))
+
+    report = world.undo([t1, t2])
+
+    assert report.conflicts == []
+    assert report.reverted == 2
+    assert _name(world, maren.id) == "N"
+    # and N itself is still undoable to the value before T1
+    assert world.undo([n]).conflicts == []
+    assert _name(world, maren.id) == "Maren the Grey"
+
+
+def test_undo_lists_a_write_after_the_last_target(world, maren):
+    # R9's other side: N after both targets is a later change
+    t1 = _set_name(world, maren.id, "T1", Source.scene("s1", "E", "m1"))
+    t2 = _set_name(world, maren.id, "T2", Source.scene("s1", "E", "m2"))
+    n = _set_name(world, maren.id, "N")
+
+    report = world.undo([t1, t2])
+
+    assert report.undo_rev is None
+    assert [(c.table, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("field_values", "changed again in a later revision", n)
+    ]
+    assert _name(world, maren.id) == "N"
