@@ -1,6 +1,6 @@
 # Changing host and port
 
-Talemate reads its listen host and port from environment variables, with CLI flags available as an explicit override. The same variables are consumed by the start scripts on Linux and Windows and by the Docker images.
+fantasymate reads its listen host and port from environment variables, with CLI flags available as an explicit override. The same variables are consumed by the start scripts on Linux and Windows and by the Docker images.
 
 ## Environment variables
 
@@ -12,7 +12,7 @@ Talemate reads its listen host and port from environment variables, with CLI fla
 | `TALEMATE_FRONTEND_PORT` | `8082` | `--frontend-port` | Port the frontend web server binds to. |
 
 !!! info "CLI flags override the environment"
-    When both are provided, the explicit CLI flag wins over the matching environment variable. If neither is set, the default in the table above is used. Invalid port values (non-numeric or outside `1–65535`) cause Talemate to exit with an error at startup.
+    When both are provided, the explicit CLI flag wins over the matching environment variable. If neither is set, the default in the table above is used. Invalid port values (non-numeric or outside `1–65535`) cause fantasymate to exit with an error at startup.
 
 In Docker the host variables default to `0.0.0.0` inside the container (set by the image) so the ports are reachable from your browser. You normally only need to change the port variables when running in Docker.
 
@@ -43,7 +43,7 @@ By default, the backend listens on `localhost:5050`.
 
 There are two ways to change it:
 
-1. Set the `TALEMATE_BACKEND_PORT` (and optionally `TALEMATE_BACKEND_HOST`) environment variables before launching Talemate. This is the easiest option and does not require editing any scripts.
+1. Set the `TALEMATE_BACKEND_PORT` (and optionally `TALEMATE_BACKEND_HOST`) environment variables before launching fantasymate. This is the easiest option and does not require editing any scripts.
 2. Pass the `--host` and `--port` parameters explicitly on the command line. The CLI flags take precedence over the environment variables.
 
 In either case, you also need to make sure the frontend knows the new backend address — see [Letting the frontend know about the new host and port](#letting-the-frontend-know-about-the-new-host-and-port) below.
@@ -119,7 +119,7 @@ By default, the frontend listens on `localhost:8082`.
 
 There are two ways to change it:
 
-1. Set the `TALEMATE_FRONTEND_PORT` (and optionally `TALEMATE_FRONTEND_HOST`) environment variables before launching Talemate. This is the easiest option and does not require editing any scripts.
+1. Set the `TALEMATE_FRONTEND_PORT` (and optionally `TALEMATE_FRONTEND_HOST`) environment variables before launching fantasymate. This is the easiest option and does not require editing any scripts.
 2. Pass the `--frontend-host` and `--frontend-port` parameters explicitly on the command line. The CLI flags take precedence over the environment variables.
 
 ### Using environment variables
@@ -187,7 +187,7 @@ Set `TALEMATE_FRONTEND_PORT` before running `docker compose up`:
 TALEMATE_FRONTEND_PORT=9090 docker compose up
 ```
 
-This sets both the host-side published port and the port that uvicorn binds inside the container, so you can reach Talemate at `http://localhost:9090`.
+This sets both the host-side published port and the port that uvicorn binds inside the container, so you can reach fantasymate at `http://localhost:9090`.
 
 ### Changing the backend port
 

@@ -189,7 +189,7 @@
                       ></v-checkbox>
                     </template>
                   </v-tooltip>
-                  <v-tooltip v-if="options.import_character_book" text="If enabled, character book metadata will be stored with world entries. (Note: Talemate does not do anything with this metadata at the moment.)" max-width="300">
+                  <v-tooltip v-if="options.import_character_book" text="If enabled, character book metadata will be stored with world entries. (Note: fantasymate does not do anything with this metadata at the moment.)" max-width="300">
                     <template v-slot:activator="{ props }">
                       <v-checkbox
                         v-bind="props"

@@ -234,7 +234,7 @@ let stylePresets = [
         icon: "F0159"  // alert
     },
     {
-        name: "Talemate Tint",
+        name: "fantasymate Tint",
         node_color: "#27233a",
         title_color: "#3d315b",
         icon: "F09DE"  // circle

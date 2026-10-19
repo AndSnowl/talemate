@@ -321,7 +321,7 @@ _BACKEND_SOCKET_JS = """
 
 
 def dismiss_onboarding(page, timeout_ms: float = 60_000) -> None:
-    """Close the first-run "Welcome to Talemate" wizard, if it opens.
+    """Close the first-run "Welcome to fantasymate" wizard, if it opens.
 
     The app opens it when its config has no AI client (a run started
     without ``--ai``), and remembers a dismissal only per page. With a

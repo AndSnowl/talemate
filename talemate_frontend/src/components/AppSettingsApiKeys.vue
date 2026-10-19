@@ -24,7 +24,7 @@
                 :label="provider.fieldLabel" density="compact" hide-details></v-text-field>
             <template v-if="provider.id === 'google_api'">
                 <v-text-field v-model="config.google.gcloud_credentials_path" class="mt-3"
-                    label="Google Cloud Credentials Path" density="compact" messages="Path to the service-account JSON credentials file on the machine running the Talemate backend."></v-text-field>
+                    label="Google Cloud Credentials Path" density="compact" messages="Path to the service-account JSON credentials file on the machine running the fantasymate backend."></v-text-field>
                 <v-combobox v-model="config.google.gcloud_location" class="mt-3"
                     label="Google Cloud Location" density="compact" :items="googleCloudLocations" messages="Pick something close to you" :return-object="false"></v-combobox>
             </template>

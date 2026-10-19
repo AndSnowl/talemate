@@ -30,7 +30,11 @@
                     <v-divider vertical />
                     <v-col class="pa-4" style="overflow-y: auto; max-height: 70vh;">
 
-                        <v-window v-model="selected">
+                        <!-- Entries are upstream changelog data and keep mentioning
+                             "Talemate" in their bodies (controller ruling R2); this
+                             container's data-testid lets e2e tests exclude it from
+                             a page-wide "no Talemate" text check. -->
+                        <v-window v-model="selected" data-testid="whats-new-entries">
                             <v-window-item v-for="item in whatsNew" :key="item.version" :value="item.version">
 
                                 <div class="feature-list">

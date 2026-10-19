@@ -197,8 +197,8 @@ export const SETTINGS_GROUPS = [
                 id: 'env-variables',
                 title: 'Environment Variables',
                 icon: 'mdi-variable',
-                description: 'Named values passed as environment variables to processes Talemate spawns — currently the Pi Bridge client, where pi\'s models.json can reference them as $NAME. Values are encrypted at rest in Talemate\'s configuration file.',
-                descriptionHtml: '<p class="mb-1">Named values passed as environment variables to processes Talemate spawns — currently the <span class="text-primary">Pi Bridge</span> client, where pi\'s <code>models.json</code> can reference them as <code>$NAME</code>.</p>Values are encrypted at rest in Talemate\'s configuration file.',
+                description: 'Named values passed as environment variables to processes fantasymate spawns — currently the Pi Bridge client, where pi\'s models.json can reference them as $NAME. Values are encrypted at rest in fantasymate\'s configuration file.',
+                descriptionHtml: '<p class="mb-1">Named values passed as environment variables to processes fantasymate spawns — currently the <span class="text-primary">Pi Bridge</span> client, where pi\'s <code>models.json</code> can reference them as <code>$NAME</code>.</p>Values are encrypted at rest in fantasymate\'s configuration file.',
                 entries: [
                     { label: 'Environment variables', keywords: ['env', 'secret', 'pi bridge', 'variable'] },
                 ],

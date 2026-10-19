@@ -1,7 +1,7 @@
 <template>
     <div class="scene-landing">
         <v-alert v-if="!connected" type="error" variant="tonal" density="compact" class="mb-4">
-            Not connected to Talemate backend. Make sure the backend process is running.
+            Not connected to fantasymate backend. Make sure the backend process is running.
         </v-alert>
         <v-alert v-else-if="!sceneLoadingAvailable" type="warning" variant="tonal" density="compact" class="mb-4">
             There are some outstanding configuration issues, please ensure that all enabled clients and agents are configured correctly.
@@ -51,7 +51,7 @@
                             <v-icon size="48" color="primary" class="mb-2">mdi-tray-arrow-down</v-icon>
                             <div class="text-body-2">Drop a file here or click to browse</div>
                             <div class="text-caption text-muted mt-1">
-                                Talemate scenes (.json, .zip) and character cards (.png, .webp, .json)
+                                fantasymate scenes (.json, .zip) and character cards (.png, .webp, .json)
                             </div>
                         </div>
                     </v-card-text>

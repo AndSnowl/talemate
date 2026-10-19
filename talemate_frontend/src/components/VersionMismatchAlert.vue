@@ -8,7 +8,7 @@
             <v-card-text class="text-muted pt-4">
                 <v-alert type="warning" color="delete" variant="tonal" density="compact" class="mb-4">
                     <template v-slot:text>
-                        Talemate will likely not function correctly until this is resolved.
+                        fantasymate will likely not function correctly until this is resolved.
                     </template>
                 </v-alert>
                 <p>
@@ -16,7 +16,7 @@
                     does not match the backend version <span class="text-delete">({{ backendVersion }})</span>.
                 </p>
                 <p class="mt-3">
-                    This usually happens when you updated Talemate but forgot to rebuild the frontend, or your browser is serving a cached version.
+                    This usually happens when you updated fantasymate but forgot to rebuild the frontend, or your browser is serving a cached version.
                 </p>
                 <v-divider class="my-4"></v-divider>
                 <p class="text-body-2">

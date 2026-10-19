@@ -52,6 +52,7 @@
 
     <!-- app bar -->
     <v-app-bar app density="compact">
+      <FmWordmark size="sm" class="ml-3 mr-2" />
       <v-app-bar-nav-icon v-if="tab !== 'home'" size="small" @click="toggleNavigation('game')">
         <v-tooltip activator="parent" location="top">Toggle sidebar</v-tooltip>
         <v-icon v-if="sceneDrawer">mdi-arrow-collapse-left</v-icon>
@@ -122,7 +123,7 @@
       <!-- left side navigation drawer -->
       <v-navigation-drawer :model-value="sceneDrawer && tab !== 'home'" @update:model-value="sceneDrawer = $event" app :width="leftDrawerWidth">
         <v-alert v-if="!connected" type="error" variant="tonal">
-          Not connected to Talemate backend
+          Not connected to fantasymate backend
           <p class="text-body-2" color="on-surface">
             Make sure the backend process is running.
           </p>
@@ -182,7 +183,7 @@
       <!-- right side navigation drawer -->
       <v-navigation-drawer v-model="drawer" app location="right" width="350" disable-resize-watcher>
         <v-alert v-if="!connected" type="error" variant="tonal">
-          Not connected to Talemate backend
+          Not connected to fantasymate backend
           <p class="text-body-2" color="on-surface">
             Make sure the backend process is running.
           </p>
@@ -218,6 +219,8 @@
       </v-navigation-drawer>
 
       <v-container :class="(sceneActive ? '' : 'backdrop')" fluid style="height: 100%;">
+
+        <FmWordmark v-if="!sceneActive" size="lg" class="backdrop-wordmark" />
 
         <v-tabs-window v-model="tab" style="height: 100%;">
           <!-- HOME -->
@@ -446,6 +449,7 @@
 </template>
   
 <script>
+import FmWordmark from './FmWordmark.vue';
 import AIClient from './AIClient.vue';
 import AIAgent from './AIAgent.vue';
 import AgentActivityBar from './AgentActivityBar.vue';
@@ -499,6 +503,7 @@ import vuetify from '@/plugins/vuetify.js';
 
 export default {
   components: {
+    FmWordmark,
     AIClient,
     AIAgent,
     AgentActivityBar,
@@ -1377,16 +1382,16 @@ export default {
       }
 
       // if any agents are busy show the browser's native loading spinner in the tab
-      // 
-      // favicon.ico vs favicon-loading.ico
+      //
+      // favicon.svg vs favicon-loading.svg
 
       if(Object.values(this.agentStatus).find(agent => agent.busy)) {
         if(this.favicon) {
-          this.favicon.href = '/favicon-loading.ico';
+          this.favicon.href = '/favicon-loading.svg';
         }
       } else {
         if(this.favicon) {
-          this.favicon.href = '/favicon.ico';
+          this.favicon.href = '/favicon.svg';
         }
       }
 
@@ -2000,22 +2005,18 @@ export default {
 <style scoped>
 .backdrop {
   background-color: rgb(var(--v-theme-background));
+  position: relative;
+  z-index: 0;
 }
 
-.backdrop-active {
-  background-image: url('/src/assets/logo-13.1-backdrop.png');
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-position: center;
-  background-size: 512px 512px;
-}
-
-.logo {
-  background-image: url('/src/assets/logo-13.1-transparent.png');
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: fit;
-  background-color: transparent;
+.backdrop-wordmark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: -1;
 }
 
 .scene-container {

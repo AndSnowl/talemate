@@ -22,7 +22,7 @@ On a host without an NVIDIA GPU, start the CPU-only configuration instead:
 docker compose -f docker-compose.cpu.yml up
 ```
 
-If the host has an NVIDIA GPU, confirm `nvidia-smi` works on the host, then install or repair the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). Verify the Toolkit before retrying Talemate:
+If the host has an NVIDIA GPU, confirm `nvidia-smi` works on the host, then install or repair the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html). Verify the Toolkit before retrying fantasymate:
 
 ```bash
 docker run --rm --gpus all ubuntu nvidia-smi
@@ -30,14 +30,14 @@ docker run --rm --gpus all ubuntu nvidia-smi
 
 ### CUDA is not available in a running container
 
-If the Toolkit probe succeeds and Talemate starts, check the running container:
+If the Toolkit probe succeeds and fantasymate starts, check the running container:
 
 ```bash
 docker compose exec talemate nvidia-smi
 docker compose exec talemate /app/.venv/bin/python -B -c "import torch; print(torch.__version__, torch.version.cuda, torch.cuda.is_available())"
 ```
 
-If `nvidia-smi` works inside Talemate but the Python command reports `False`, update the host NVIDIA driver to one compatible with the image's locked CUDA 12.8 build, then recreate the container.
+If `nvidia-smi` works inside fantasymate but the Python command reports `False`, update the host NVIDIA driver to one compatible with the image's locked CUDA 12.8 build, then recreate the container.
 
 To run without CUDA instead, use:
 
@@ -82,7 +82,7 @@ services:
 
 ### Running behind reverse proxy with SSL
 
-To run Talemate behind a reverse proxy with SSL:
+To run fantasymate behind a reverse proxy with SSL:
 
 1. Configure your reverse proxy to forward WebSocket connections to the backend (port 5050)
 2. Set the WebSocket URL to use your proxy's public address:

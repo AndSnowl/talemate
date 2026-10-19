@@ -102,7 +102,7 @@ export default {
         return {
             MAX_CONTENT_WIDTH,
             formats: [
-                { value: 'talemate', title: 'Talemate Scene (JSON only)' },
+                { value: 'talemate', title: 'fantasymate Scene (JSON only)' },
                 { value: 'talemate_complete', title: 'Complete Scene Package (ZIP)' },
             ],
             format: 'talemate_complete',

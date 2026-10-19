@@ -79,7 +79,7 @@
                             <v-icon size="small" color="warning">mdi-shield-alert-outline</v-icon>
                             <span>
                                 {{ preview.conflicts.length }} glossary
-                                entr{{ preview.conflicts.length === 1 ? 'y' : 'ies' }} kept from Talemate
+                                entr{{ preview.conflicts.length === 1 ? 'y' : 'ies' }} kept from fantasymate
                                 (reviewed or edited): {{ preview.conflicts.join(', ') }}.
                             </span>
                         </div>
@@ -93,7 +93,7 @@
                                     <li v-for="change in shareChanges" :key="change">{{ change }}</li>
                                 </ul>
                                 <div class="text-caption text-muted">
-                                    Talemate's copy differs from the file. Export the culture first if you want to keep it.
+                                    fantasymate's copy differs from the file. Export the culture first if you want to keep it.
                                 </div>
                             </div>
                         </div>

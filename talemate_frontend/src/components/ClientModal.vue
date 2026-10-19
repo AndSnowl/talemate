@@ -205,7 +205,7 @@
                         <p class="mt-2">For APIs that provide a way to specify the reasoning tokens, this will be the amount of tokens to spend on reasoning.</p>
                         <p class="mt-2">For APIs that do <span class="text-warning">NOT</span> provide a way to specify the reasoning tokens, this will simply add extra allowance for response tokens to ALL requests.</p>
                         <p class="mt-2">
-                          Talemate relies strongly on response token limit to wrangle model verbosity normally, so in the latter case this can lead to more verbose responses than wanted.
+                          fantasymate relies strongly on response token limit to wrangle model verbosity normally, so in the latter case this can lead to more verbose responses than wanted.
                         </p>
                       </v-alert>
                     </v-col>
@@ -440,12 +440,12 @@ export default {
       ],
       tab: 'general',
       dataManageFormatChoices: [
-        { title: 'Talemate decides', value: null},
+        { title: 'fantasymate decides', value: null},
         { title: 'JSON', value: 'json' },
         { title: 'YAML', value: 'yaml' },
       ],
       sectionFormatChoices: [
-        { title: 'Talemate decides', value: null},
+        { title: 'fantasymate decides', value: null},
         { title: 'Markdown', value: 'markdown' },
         { title: 'XML', value: 'xml' },
       ],
