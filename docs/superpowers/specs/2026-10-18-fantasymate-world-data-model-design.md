@@ -182,6 +182,28 @@ The owner confirmed this list as complete for now:
 | Item | name, owner | Things that matter, such as a sword handed down. |
 | Event | name, date or span, place | Dated things that happened. A scene's history summary becomes an event when promoted. The "remember the ferryman?" recall reads from events. |
 | Lore entry | name | Free-form world facts; replaces today's world entries. |
+| Species | name | Added 2026-10-19 (owner). Intelligent species, such as humans; most settings have two or more. |
+| Race | name, species | Added 2026-10-19 (owner). A variant of a species. In the UI it lives inside its species' page. |
+
+**Characters gain the core fields species and race** (added 2026-10-19).
+
+**Inheritance** (owner, 2026-10-19). A character takes on the general facts of their species,
+race and culture, so a creation prompt only needs what makes this character unique. The
+character's own facts come first, the species, race and culture facts fill in what the character
+doesn't say, and the character's own fact wins on conflict. My guess, recorded as a direction: the
+same layering generalises to the things a thing points at in core fields (a tavern takes on its
+town, the town its region).
+
+**Create from a prompt** (owner, 2026-10-19). Every kind except cultures, which are made through
+the culture skill, can be created from a short prompt:
+- The AI treats the prompt as intent, the way the `@` action treats scene input.
+- It invents plausible detail generously within the chosen background things.
+- The owner accepts, regenerates, edits or retries.
+- The pipeline is prompt → facts → prose. Invention happens once, at creation.
+
+**Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
+layout relative to each other is known. The map must allow places that aren't placed yet, or that
+have unknown distances between them.
 
 The **calendar** is world-level configuration rather than a thing: month and weekday names, eras,
 holidays. It follows `docs/ideas/world-calendar.org`: Earth lengths for days, weeks, months and
@@ -473,6 +495,37 @@ are 26–31B with reasoning on). Features that need one long structured call per
 (perspectives) go against our watchlist ("slower play") and only come after a probe on the
 owner's model.
 
+## Scene runners (owner, 2026-10-19; a later phase)
+
+The node-graph runtime that Talemate uses for the game loop, the `@` action and much agent
+behaviour is replaced, in a later phase, by **scene runners** written in Python. The owner prefers
+code to nodes here: the graphs are large (96 and 100 nodes in places), layered and hard to read,
+and the owner's experience is that nodes suit visual event flows (inputs, variables, random
+choices, branching), not this.
+
+- **A runner is a scene type, separate from any scene.** Starting a scene in a world means:
+  - pick a runner;
+  - fill in the settings menu that runner defines;
+  - play.
+- **A runner is plain Python, editable inside the app.** Its main file is a few clearly named
+  functions:
+  - the initial input it asks for, such as the storyline prompt or a random-story topic;
+  - the functions or commands available in the scene, like the Suite's "computer, …";
+  - the gameplay loop, which names the agents it runs, in order and on conditions.
+
+  It should be readable by someone who doesn't code much.
+- **The machinery is readable defaults** (owner). The built-in agents and context builders are
+  exposed in the app to read, not to edit. To change one, copy it, change the copy, and hook it
+  into a new runner. Runners call into the library: agents, the world, context building.
+- **Who it's for:** mostly people comfortable with Python or with prompting for Python, including
+  the owner when an output irritates them. A good early candidate is a world-aware version of
+  dynamic story v2's random-story mode.
+- **Python, not Lisp/Scheme** (owner): the app is Python, and it will be shared.
+- **Until then, the node runtime stays.** Phase 2's slice reuses the existing loop (see the slice
+  design). New world features are built in Python, not as nodes. Plan E rewrites only the data
+  nodes that touch characters and world entries. Once the default runner covers today's loop and
+  the `@` action, the node editor becomes an optional extra or goes away.
+
 ## Phases
 
 One design (this one), built in phases, each with its own plan. My recommendation, close to the
@@ -500,9 +553,14 @@ owner's suggested order (world, scenes, characters, cultures):
    shares one shape, phase 2 also brings in **basic places, lore entries and events** (enough for
    the AI's context and history); no adapters to the old stores are written. The cultures features
    (naming, culture context, highlights, culture review) are switched off until phase 4.
+   **Order (owner, 2026-10-19):** phase 2 starts with a thin **playable slice**, so the local
+   model's performance can be gauged early. It then widens in plans B–F; see
+   `2026-10-19-fantasymate-phase-2-slice-design.md`. The additions below land in those later
+   plans.
    **Additions from 2026-10-19:**
-   - **Schema first.** Fact references and knowledge records are added to the world store before
-     the scene work builds on it. Replay and undo learn the new slot kind (a knowledge record).
+   - **Schema.** Fact references and knowledge records are added to the world store (plan C).
+     Replay and undo learn the new slot kind (a knowledge record).
+   - **Species, races and inheritance** (plan B).
    - **Scene state as of a message,** and presence with away bridges.
    - **Knowledge-aware context:** a character's own context gets only what they know;
      narrator and director context is labelled with who knows what.
@@ -525,6 +583,7 @@ owner's suggested order (world, scenes, characters, cultures):
 5. **The rest**: items, dated images with new-portrait offers, the view-as-of-a-date screen for
    any thing, and scene backgrounds drawn from the current place's dated images.
 6. **Later**:
+   - scene runners in Python, replacing the node runtime (see "Scene runners");
    - stories as a reading order (see "Navigation");
    - replay as a reader for branches and stories;
    - character perspectives, only after a probe shows the owner's model can do it without
