@@ -132,6 +132,8 @@ class RevisionInfo(BaseModel):
     rev: int
     source: Source
     created_at: str
+    # for an undo revision, the revisions it reversed; `[]` otherwise
+    reverts: list[int] = []
 
 
 class WorldInfo(BaseModel):
@@ -631,11 +633,18 @@ class World:
         rows = self._conn.execute(
             f"SELECT * FROM revisions {where} ORDER BY rev", params
         ).fetchall()
+        reverts: dict[int, list[int]] = {}
+        for undo_rev, target_rev in self._conn.execute(
+            "SELECT undo_rev, target_rev FROM revision_reverts "
+            "ORDER BY undo_rev, target_rev"
+        ):
+            reverts.setdefault(undo_rev, []).append(target_rev)
         return [
             RevisionInfo(
                 rev=row["rev"],
                 source=_source_from_revision_row(row),
                 created_at=row["created_at"],
+                reverts=reverts.get(row["rev"], []),
             )
             for row in rows
         ]
@@ -651,7 +660,7 @@ class World:
         return undo_revisions(
             self._conn,
             revs,
-            lambda: self.revision(Source(kind="undo", note=note)),
+            lambda: self._open_revision(Source(kind="undo", note=note)),
         )
 
     def close(self) -> None:
@@ -664,7 +673,21 @@ class World:
         `asyncio.CancelledError` or `KeyboardInterrupt` -- rolls back
         everything, including the revision row. Either way, the `Revision`
         handle is closed on the way out, so it can't be used to write
-        outside its own transaction."""
+        outside its own transaction. Raises `ValueError` for an `undo`
+        source: only `undo` writes those, since replay (`replay.py`) never
+        counts an undo revision's rows as writes."""
+
+        if source.kind == "undo":
+            raise ValueError(
+                "undo revisions are written by World.undo, not World.revision"
+            )
+        with self._open_revision(source) as current:
+            yield current
+
+    @contextmanager
+    def _open_revision(self, source: Source) -> Iterator[Revision]:
+        """`revision` without the source check, for `undo` to write its
+        own revision through."""
 
         conn = self._conn
         conn.execute("BEGIN IMMEDIATE")
