@@ -75,7 +75,9 @@ def _open_theme_settings(page) -> None:
     # "Clients / Agents" button next to it (icon mdi-application-cog).
     page.locator("button:has(i.mdi-cog)").first.click()
     page.locator(".v-list-item", has_text="Theme").first.click()
-    page.get_by_text("Presets", exact=True).first.wait_for(state="visible", timeout=10_000)
+    page.get_by_text("Presets", exact=True).first.wait_for(
+        state="visible", timeout=10_000
+    )
 
 
 def _click_preset(page, name: str) -> None:
@@ -149,14 +151,20 @@ def test_import_bad_file_shows_error(page, tmp_path):
         _open_theme_settings(page)
         # "Yours" is empty — see _reset_theme's {"active": "gruvbox-dark",
         # "custom": []} baseline every test restores in its own finally.
-        page.get_by_text("No themes of your own yet.").wait_for(state="visible", timeout=10_000)
+        page.get_by_text("No themes of your own yet.").wait_for(
+            state="visible", timeout=10_000
+        )
 
         import_card = page.locator(".v-card", has_text="Import / export")
         import_card.locator('input[type="file"]').set_input_files(str(bad_file))
 
-        page.locator(".v-alert", has_text="format").wait_for(state="visible", timeout=10_000)
+        page.locator(".v-alert", has_text="format").wait_for(
+            state="visible", timeout=10_000
+        )
 
         # Still empty: the failed import changed nothing.
-        page.get_by_text("No themes of your own yet.").wait_for(state="visible", timeout=5_000)
+        page.get_by_text("No themes of your own yet.").wait_for(
+            state="visible", timeout=5_000
+        )
     finally:
         _reset_theme(page)

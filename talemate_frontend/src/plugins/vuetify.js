@@ -4,7 +4,7 @@ import 'vuetify/styles'
 
 // Vuetify
 import { createVuetify } from 'vuetify'
-import { themeFromConfig, toVuetifyColors } from '@/theme/engine.js'
+import { themeFromConfig, toVuetifyColors, toVuetifyVariables } from '@/theme/engine.js'
 
 // Seed the "fantasymate" theme from the default preset. TalemateApp's
 // `effectiveAppearanceConfig` watcher (see theme/store.js's `applyTheme`)
@@ -19,6 +19,7 @@ export default createVuetify({
       fantasymate: {
         dark: initialTheme.dark,
         colors: toVuetifyColors(initialTheme),
+        variables: toVuetifyVariables(initialTheme),
       }
     }
   }

@@ -89,3 +89,63 @@ def test_theme_from_config_applies(page):
             """,
             timeout=15_000,
         )
+
+
+GRUVBOX_LIGHT_BG_ALT = "rgb(242, 229, 188)"  # #f2e5bc
+
+
+def _root_css_var(page, name: str) -> str:
+    return page.evaluate(
+        f"() => getComputedStyle(document.documentElement).getPropertyValue('{name}').trim()"
+    )
+
+
+def _rgb_triplet(value: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in value.replace(" ", "").split(","))
+
+
+def _luminance(rgb: tuple[int, ...]) -> float:
+    def channel(c: int) -> float:
+        c = c / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(c) for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def test_vuetify_defaults_follow_light_theme(page):
+    """Final fix 1: a theme swap keeps Vuetify's own keys (error, info,
+    surface-bright, ...) and re-derives its variables (border-color, ...)."""
+    try:
+        _set_active_theme(page, "gruvbox-light")
+        page.wait_for_function(
+            f"""
+            () => getComputedStyle(document.querySelector('.v-application'))
+                .backgroundColor === '{GRUVBOX_LIGHT_BG_ALT}'
+            """,
+            timeout=15_000,
+        )
+        # gruvbox-light's red (#9d0006), via the danger role.
+        assert _rgb_triplet(_root_css_var(page, "--v-theme-error")) == (157, 0, 6)
+        for key in (
+            "--v-theme-info",
+            "--v-theme-surface-bright",
+            "--v-theme-surface-light",
+        ):
+            assert _root_css_var(page, key), f"{key} is not set"
+        # Dividers/borders: dark on light (gruvbox-light fg #3c3836), not
+        # Vuetify's dark-theme white.
+        border = _rgb_triplet(_root_css_var(page, "--v-border-color"))
+        assert border == (60, 56, 54)
+        assert _luminance(border) < 0.2
+        # Inline code is a light chip with dark text under a light theme.
+        assert _luminance(_rgb_triplet(_root_css_var(page, "--v-theme-code"))) > 0.5
+    finally:
+        _set_active_theme(page, "gruvbox-dark")
+        page.wait_for_function(
+            f"""
+            () => getComputedStyle(document.querySelector('.v-application'))
+                .backgroundColor === '{GRUVBOX_DARK_BG_ALT}'
+            """,
+            timeout=15_000,
+        )

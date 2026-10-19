@@ -3,7 +3,7 @@
 // runtime theme object.
 
 import { shallowRef } from 'vue';
-import { themeFromConfig, toVuetifyColors } from './engine.js';
+import { themeFromConfig, toVuetifyColors, toVuetifyVariables } from './engine.js';
 
 /** The currently-applied resolved theme (see engine.js's `themeFromConfig`). */
 export const currentTheme = shallowRef(themeFromConfig());
@@ -18,6 +18,10 @@ export const currentTheme = shallowRef(themeFromConfig());
 export function applyTheme(vuetifyTheme, resolved) {
     const theme = vuetifyTheme.themes.value.fantasymate;
     theme.dark = resolved.dark;
+    // Replaced wholesale: both maps carry every key of Vuetify's own
+    // default theme (see roles.js's VUETIFY_ROLES and engine.js's
+    // toVuetifyVariables), which Vuetify itself merges in only once.
     theme.colors = toVuetifyColors(resolved);
+    theme.variables = toVuetifyVariables(resolved);
     currentTheme.value = resolved;
 }

@@ -8,7 +8,8 @@ import { isHex, normalizeHex, mix, contrastRatio } from '../src/theme/colorMath.
 import { PALETTE_KEYS, ACCENT_KEYS } from '../src/theme/palette.js';
 import { ALL_ROLES, TEXT_ROLES } from '../src/theme/roles.js';
 import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/presets.js';
-import { resolveTheme, toVuetifyColors, themeFromConfig } from '../src/theme/engine.js';
+import { resolveTheme, toVuetifyColors, toVuetifyVariables, themeFromConfig } from '../src/theme/engine.js';
+import { createTheme } from 'vuetify/lib/composables/theme.js';
 import { exportTheme, parseThemeFile } from '../src/theme/themeFile.js';
 import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
 import { getMessageColor } from '../src/utils/messageColors.js';
@@ -120,6 +121,70 @@ check('vuetify_colors_include_palette', () => {
     const r = resolveTheme(getPreset(DEFAULT_PRESET_ID));
     const vuetifyColors = toVuetifyColors(r);
     assert.equal(vuetifyColors['pal-teal'], r.palette.teal);
+});
+
+// Final fix 1: Vuetify merges its own default theme (error, info,
+// surface-bright, ...) into a theme only once, at createVuetify time, so
+// applyTheme's wholesale `theme.colors = toVuetifyColors(...)` must itself
+// carry every key Vuetify's defaults define — and the same for
+// `theme.variables` (border-color, theme-code, ...).
+const vuetifyDefaults = createTheme().themes.value;
+
+check('vuetify_colors_cover_vuetify_defaults', () => {
+    const expected = new Set([
+        ...Object.keys(vuetifyDefaults.dark.colors),
+        ...Object.keys(vuetifyDefaults.light.colors),
+    ]);
+    assert.ok(expected.has('error') && expected.has('surface-bright'));
+    for (const preset of BUILTIN_PRESETS) {
+        const colors = toVuetifyColors(resolveTheme(preset));
+        for (const key of expected) {
+            assert.ok(isHex(colors[key]), `${preset.id}: Vuetify colour ${key} = ${colors[key]} is not a hex value`);
+        }
+    }
+});
+
+check('vuetify_variables_cover_vuetify_defaults', () => {
+    const expected = new Set([
+        ...Object.keys(vuetifyDefaults.dark.variables),
+        ...Object.keys(vuetifyDefaults.light.variables),
+    ]);
+    for (const preset of BUILTIN_PRESETS) {
+        const variables = toVuetifyVariables(resolveTheme(preset));
+        for (const key of expected) {
+            assert.ok(variables[key] !== undefined, `${preset.id}: Vuetify variable ${key} is missing`);
+        }
+    }
+});
+
+check('vuetify_variables_follow_theme', () => {
+    for (const preset of BUILTIN_PRESETS) {
+        const r = resolveTheme(preset);
+        const v = toVuetifyVariables(r);
+        // Borders/dividers are drawn from border-color at low opacity, so
+        // it must be the theme's text colour (dark on light, light on dark).
+        assert.ok(
+            contrastRatio(v['border-color'], r.palette.bg) >= 4.5,
+            `${preset.id}: border-color ${v['border-color']} does not stand out from bg ${r.palette.bg}`,
+        );
+        assert.ok(
+            contrastRatio(v['theme-on-code'], v['theme-code']) >= 4.5,
+            `${preset.id}: inline code text ${v['theme-on-code']} on ${v['theme-code']} is below 4.5`,
+        );
+        const defaults = (r.dark ? vuetifyDefaults.dark : vuetifyDefaults.light).variables;
+        for (const [key, value] of Object.entries(defaults)) {
+            if (key.endsWith('-opacity')) {
+                assert.equal(v[key], value, `${preset.id}: ${key} should be Vuetify's ${r.dark ? 'dark' : 'light'} default`);
+            }
+        }
+    }
+});
+
+check('vuetify_error_follows_danger', () => {
+    const p = getPreset(DEFAULT_PRESET_ID);
+    assert.equal(resolveTheme(p).colors.error, resolveTheme(p).colors.danger);
+    const overridden = resolveTheme(p, { palette: {}, roles: { danger: 'magenta' } });
+    assert.equal(overridden.colors.error, p.palette.magenta);
 });
 
 check('config_none_is_default', () => {

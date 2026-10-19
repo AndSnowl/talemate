@@ -4,7 +4,7 @@
 
 import { isHex, normalizeHex, darken, lighten, mix } from './colorMath.js';
 import { PALETTE_KEYS } from './palette.js';
-import { ALL_ROLES } from './roles.js';
+import { ALL_ROLES, ROLE_ALIASES } from './roles.js';
 import { getPreset, DEFAULT_PRESET_ID } from './presets.js';
 
 /** Resolve a role ref (a palette key, or a derived `{pal, darken, lighten, mix}`) to a hex colour. */
@@ -69,6 +69,15 @@ export function resolveTheme(preset, overrides = { palette: {}, roles: {} }) {
     const roleOverrides = sanitizeRoleOverrides(overrides.roles, palette);
     Object.assign(roleRefs, roleOverrides);
 
+    for (const [alias, target] of Object.entries(ROLE_ALIASES)) {
+        const setExplicitly =
+            Object.prototype.hasOwnProperty.call(preset.roles || {}, alias)
+            || Object.prototype.hasOwnProperty.call(roleOverrides, alias);
+        if (!setExplicitly) {
+            roleRefs[alias] = roleRefs[target];
+        }
+    }
+
     const colors = {};
     for (const [role, ref] of Object.entries(roleRefs)) {
         colors[role] = resolveRef(ref, palette);
@@ -94,6 +103,57 @@ export function toVuetifyColors(resolved) {
         out[`pal-${key}`] = hex;
     }
     return out;
+}
+
+// Vuetify's default opacities per light/dark (node_modules/vuetify/lib/
+// composables/theme.js's genDefaults), pinned here so a theme swap can
+// replace `theme.variables` wholesale. checks/theme.check.mjs compares
+// these against Vuetify's own defaults.
+const VUETIFY_OPACITIES = {
+    light: {
+        'border-opacity': 0.12,
+        'high-emphasis-opacity': 0.87,
+        'medium-emphasis-opacity': 0.60,
+        'disabled-opacity': 0.38,
+        'idle-opacity': 0.04,
+        'hover-opacity': 0.04,
+        'focus-opacity': 0.12,
+        'selected-opacity': 0.08,
+        'activated-opacity': 0.12,
+        'pressed-opacity': 0.12,
+        'dragged-opacity': 0.08,
+    },
+    dark: {
+        'border-opacity': 0.12,
+        'high-emphasis-opacity': 1,
+        'medium-emphasis-opacity': 0.70,
+        'disabled-opacity': 0.50,
+        'idle-opacity': 0.10,
+        'hover-opacity': 0.04,
+        'focus-opacity': 0.12,
+        'selected-opacity': 0.08,
+        'activated-opacity': 0.12,
+        'pressed-opacity': 0.16,
+        'dragged-opacity': 0.08,
+    },
+};
+
+/**
+ * The Vuetify theme `variables` map for `resolved`: Vuetify's own
+ * light/dark opacities, plus border, inline-code and kbd colours drawn
+ * from the theme (borders/dividers use the text colour at
+ * `border-opacity`, as Vuetify's own defaults do with black/white).
+ */
+export function toVuetifyVariables(resolved) {
+    const colors = resolved.colors;
+    return {
+        'border-color': colors['on-surface'],
+        ...(resolved.dark ? VUETIFY_OPACITIES.dark : VUETIFY_OPACITIES.light),
+        'theme-kbd': colors['surface-variant'],
+        'theme-on-kbd': colors['on-surface'],
+        'theme-code': colors.raised,
+        'theme-on-code': colors['on-surface'],
+    };
 }
 
 /**

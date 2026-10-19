@@ -9,6 +9,10 @@
 //   - LEGACY_ROLES: every colour key `plugins/vuetify.js` defines today,
 //     minus the ones already named above (muted, narrator, director,
 //     context_investigation).
+//   - VUETIFY_ROLES: the keys of Vuetify's own default theme (error, info,
+//     surface-bright, ...) not already named above. Vuetify merges its
+//     defaults into a theme only once, at createVuetify time, so a theme
+//     swap (store.js's applyTheme) has to supply these itself.
 //
 // Defaults are picked so the app reads as gruvbox dark under that preset
 // (see presets.js).
@@ -120,6 +124,31 @@ export const LEGACY_ROLES = {
     cornflowerblue: 'blue',
 };
 
+// Vuetify's own default theme colour keys (node_modules/vuetify/lib/
+// composables/theme.js's genDefaults) not named by any group above.
+// checks/theme.check.mjs's `vuetify_colors_cover_vuetify_defaults` fails if
+// a Vuetify upgrade adds one this list misses.
+export const VUETIFY_ROLES = {
+    error: 'red', // follows `danger` — see ROLE_ALIASES
+    info: 'blue',
+    // v-switch's thumb: must stand out from its base2 track and the surface.
+    'surface-bright': 'fg-alt',
+    // v-toolbar, v-select's mask, v-slider ticks, v-timeline dots, alerts.
+    'surface-light': 'base2',
+    'on-surface-light': 'fg',
+    // Text on surface-variant (base2): tooltips, chips, snackbars.
+    'on-surface-variant': 'fg',
+    'primary-darken-1': { pal: 'orange', darken: 0.15 },
+    'secondary-darken-1': { pal: 'yellow', darken: 0.15 },
+};
+
+// Roles that follow another role's ref unless a preset or override sets
+// them itself: Vuetify's `error` (validation, `type="error"` alerts) is
+// the app's `danger`.
+export const ROLE_ALIASES = {
+    error: 'danger',
+};
+
 const coreRolesAsMap = Object.fromEntries(CORE_ROLES.map(({ id, ref }) => [id, ref]));
 
 export const ALL_ROLES = {
@@ -127,6 +156,7 @@ export const ALL_ROLES = {
     ...NEUTRAL_ROLES,
     ...MESSAGE_ROLES,
     ...LEGACY_ROLES,
+    ...VUETIFY_ROLES,
 };
 
 // Roles used to render text, checked for 4.5:1 contrast against every
