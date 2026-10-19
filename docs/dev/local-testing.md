@@ -109,7 +109,7 @@ aren't available.
 ### Browser (`e2e`) group
 
 ```bash
-guix shell -m manifest.scm -- uv run --no-sync pytest tests/e2e -m e2e -n0 -v
+guix shell -m manifest.scm -- uv run --no-sync pytest tests/e2e -m e2e -n 4 -v
 ```
 
 Drives a real headless Chromium (via Playwright) against an isolated app

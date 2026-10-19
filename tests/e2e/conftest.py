@@ -4,7 +4,9 @@ These tests drive a real headless Chromium via Playwright against an isolated
 Talemate app (scripts/dev/talemate_app.py). They only run inside the
 project's Guix dev shell (which supplies Node + Chromium):
 
-    guix shell -m manifest.scm -- uv run --no-sync pytest tests/e2e -m e2e -n0 -v
+    guix shell -m manifest.scm -- uv run --no-sync pytest tests/e2e -m e2e -n 4 -v
+
+(`-n 4`: one isolated app per worker; 4 fits in 31 GB, 8 does not.)
 
 Outside that shell (no Chromium on PATH and no TALEMATE_CHROMIUM), every e2e
 test is skipped, so the plain suite stays runnable without a browser.
