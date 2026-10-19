@@ -29,6 +29,9 @@
                 <v-window-item value="player-character">
                     <AppSettingsPlayerCharacter :config="app_config" />
                 </v-window-item>
+                <v-window-item value="appearance-theme">
+                    <AppConfigAppearanceTheme ref="appearance-theme" :immutableConfig="app_config" :sceneActive="sceneActive" @changed="onAppearanceChanged"></AppConfigAppearanceTheme>
+                </v-window-item>
                 <v-window-item value="appearance-messages">
                     <AppConfigAppearanceScene ref="appearance-messages" :immutableConfig="app_config" :sceneActive="sceneActive" @changed="onAppearanceChanged"></AppConfigAppearanceScene>
                 </v-window-item>
@@ -95,6 +98,7 @@ import AppSettingsPlayerCharacter from './AppSettingsPlayerCharacter.vue';
 import AppSettingsApiKeys from './AppSettingsApiKeys.vue';
 import AppSettingsEnvVariables from './AppSettingsEnvVariables.vue';
 import AppSettingsStringList from './AppSettingsStringList.vue';
+import AppConfigAppearanceTheme from './AppConfigAppearanceTheme.vue';
 import AppConfigAppearanceScene from './AppConfigAppearanceScene.vue';
 import AppConfigAppearanceAssets from './AppConfigAppearanceAssets.vue';
 import AppConfigPresetsInference from './AppConfigPresetsInference.vue';
@@ -111,6 +115,7 @@ export default {
         AppSettingsApiKeys,
         AppSettingsEnvVariables,
         AppSettingsStringList,
+        AppConfigAppearanceTheme,
         AppConfigAppearanceScene,
         AppConfigAppearanceAssets,
         AppConfigPresetsInference,

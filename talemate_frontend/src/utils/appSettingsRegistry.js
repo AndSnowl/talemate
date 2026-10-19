@@ -142,6 +142,19 @@ export const SETTINGS_GROUPS = [
         icon: 'mdi-palette-outline',
         pages: [
             {
+                id: 'appearance-theme',
+                title: 'Theme',
+                icon: 'mdi-palette-swatch-outline',
+                description: 'Pick a theme, build your own from a palette and roles, and import or export theme files.',
+                entries: [
+                    { label: 'Presets', keywords: ['preset', 'gruvbox', 'nord', 'solarized', 'monokai', 'colour vision', 'color vision'] },
+                    { label: 'Palette', keywords: ['palette', 'colour', 'color', 'hex', 'swatch'] },
+                    { label: 'Roles', keywords: ['role', 'accent', 'link', 'narrator', 'charname'] },
+                    { label: 'Your themes', keywords: ['custom theme', 'duplicate', 'rename', 'delete', 'yours'] },
+                    { label: 'Import / export', keywords: ['import', 'export', 'theme file', 'json'] },
+                ],
+            },
+            {
                 id: 'appearance-messages',
                 title: 'Messages',
                 icon: 'mdi-script-text',

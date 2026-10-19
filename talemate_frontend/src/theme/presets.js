@@ -95,7 +95,7 @@ export const BUILTIN_PRESETS = [
     },
     {
         id: 'cb-red-green',
-        name: 'Warm, red-green safe',
+        name: 'Warm, red–green safe',
         dark: true,
         group: 'vision',
         palette: {
@@ -110,7 +110,7 @@ export const BUILTIN_PRESETS = [
     },
     {
         id: 'cb-blue-yellow',
-        name: 'Warm, blue-yellow safe',
+        name: 'Warm, blue–yellow safe',
         dark: true,
         group: 'vision',
         palette: {

@@ -9,6 +9,7 @@ import { PALETTE_KEYS, ACCENT_KEYS } from '../src/theme/palette.js';
 import { ALL_ROLES, TEXT_ROLES } from '../src/theme/roles.js';
 import { BUILTIN_PRESETS, getPreset, DEFAULT_PRESET_ID } from '../src/theme/presets.js';
 import { resolveTheme, toVuetifyColors, themeFromConfig } from '../src/theme/engine.js';
+import { exportTheme, parseThemeFile } from '../src/theme/themeFile.js';
 import { toHex, characterPaletteKey, dataColor, nodeColors } from '../src/theme/dataColors.js';
 import { getMessageColor } from '../src/utils/messageColors.js';
 import { SceneTextParser } from '../src/utils/sceneMessageRenderer.js';
@@ -308,6 +309,126 @@ check('codemirror_theme_extensions_build_and_match_dark_flag', () => {
     const lightState = EditorState.create({ extensions: themeExtensions(lightResolved) });
     assert.equal(darkState.facet(EditorView.darkTheme), true);
     assert.equal(lightState.facet(EditorView.darkTheme), false);
+});
+
+// Task 9: themeFile.js's export/import round trip and validation. See
+// task-9-brief.md Step 1.
+check('export_parse_round_trip', () => {
+    const t = {
+        id: 'custom-x',
+        name: 'Mine',
+        base: 'nord',
+        dark: true,
+        palette: { ...getPreset('nord').palette, orange: '#aa5500' },
+        roles: { accent: 'teal' },
+    };
+    const parsed = parseThemeFile(JSON.stringify(exportTheme(t)));
+    assert.ok(parsed.ok, parsed.error);
+    assert.deepEqual(parsed.theme.palette, t.palette);
+    assert.deepEqual(parsed.theme.roles, t.roles);
+});
+
+check('parse_rejects_not_json', () => {
+    const parsed = parseThemeFile('not json{');
+    assert.equal(parsed.ok, false);
+    assert.ok(parsed.error.includes('JSON'), parsed.error);
+});
+
+check('parse_rejects_wrong_format', () => {
+    const parsed = parseThemeFile(JSON.stringify({ format: 'other' }));
+    assert.equal(parsed.ok, false);
+});
+
+check('parse_rejects_bad_hex', () => {
+    const parsed = parseThemeFile(JSON.stringify({
+        format: 'fantasymate-theme',
+        version: 1,
+        name: 'Bad',
+        base: 'gruvbox-dark',
+        palette: { orange: 'tomato' },
+    }));
+    assert.equal(parsed.ok, false);
+    assert.ok(parsed.error.includes('orange'), parsed.error);
+});
+
+check('parse_fills_missing_palette_from_base', () => {
+    const parsed = parseThemeFile(JSON.stringify({
+        format: 'fantasymate-theme',
+        version: 1,
+        name: 'Partial',
+        base: 'nord',
+        palette: { orange: '#aa5500' },
+    }));
+    assert.ok(parsed.ok, parsed.error);
+    const resolved = themeFromConfig({
+        active: 'custom-partial',
+        custom: [{ id: 'custom-partial', ...parsed.theme }],
+    });
+    assert.equal(resolved.palette.bg, getPreset('nord').palette.bg);
+    assert.equal(resolved.palette.orange, '#aa5500');
+});
+
+check('parse_rejects_unknown_role_target', () => {
+    const parsed = parseThemeFile(JSON.stringify({
+        format: 'fantasymate-theme',
+        version: 1,
+        name: 'BadRole',
+        base: 'gruvbox-dark',
+        roles: { accent: 'chartreuse' },
+    }));
+    assert.equal(parsed.ok, false);
+});
+
+check('parse_ignores_unknown_role_id', () => {
+    const parsed = parseThemeFile(JSON.stringify({
+        format: 'fantasymate-theme',
+        version: 1,
+        name: 'UnknownRoleId',
+        base: 'gruvbox-dark',
+        roles: { not_a_real_role: 'teal' },
+    }));
+    assert.ok(parsed.ok, parsed.error);
+    assert.ok(!Object.prototype.hasOwnProperty.call(parsed.theme.roles, 'not_a_real_role'));
+});
+
+check('parse_rejects_missing_name', () => {
+    const parsed = parseThemeFile(JSON.stringify({
+        format: 'fantasymate-theme',
+        version: 1,
+        base: 'gruvbox-dark',
+    }));
+    assert.equal(parsed.ok, false);
+});
+
+check('parse_rejects_unknown_base', () => {
+    const parsed = parseThemeFile(JSON.stringify({
+        format: 'fantasymate-theme',
+        version: 1,
+        name: 'BadBase',
+        base: 'not-a-preset',
+    }));
+    assert.equal(parsed.ok, false);
+});
+
+check('export_theme_shape', () => {
+    const t = {
+        id: 'custom-x',
+        name: 'Mine',
+        base: 'gruvbox-dark',
+        dark: true,
+        palette: { orange: '#aa5500' },
+        roles: {},
+    };
+    const exported = exportTheme(t);
+    assert.deepEqual(exported, {
+        format: 'fantasymate-theme',
+        version: 1,
+        name: 'Mine',
+        dark: true,
+        base: 'gruvbox-dark',
+        palette: { orange: '#aa5500' },
+        roles: {},
+    });
 });
 
 if (failures.length > 0) {
