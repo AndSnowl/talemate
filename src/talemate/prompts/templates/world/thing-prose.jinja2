@@ -1,0 +1,14 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+Write a present-tense descriptive profile of {{ name }}'s {{ section }}, as a {{ kind }} in a story world.
+
+Known facts:
+{% for fact in facts -%}
+- {{ fact }}
+{% endfor %}
+Describe {{ name }} alone, as they are right now. No plot, no dialogue, no other characters acting -- only what is true about {{ name }}. A few sentences.
+<|CLOSE_SECTION|>
+{{ set_prepared_response(name) }}

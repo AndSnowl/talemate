@@ -60,7 +60,8 @@
         "shared_details": [],
         "visual_finalizers": [],
         "visual_rules": null,
-        "voice": null
+        "voice": null,
+        "world_thing_id": null
       },
       "Bob": {
         "avatar": null,
@@ -82,7 +83,8 @@
         "shared_details": [],
         "visual_finalizers": [],
         "visual_rules": null,
-        "voice": null
+        "voice": null,
+        "world_thing_id": null
       }
     },
     "context": "",

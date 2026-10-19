@@ -1,0 +1,17 @@
+[world]
+{% if goal -%}
+Goal: {{ goal }}
+{% endif -%}
+{% if place -%}
+Place: {{ place.name }}
+{% for fact in place.facts -%}
+- {{ fact }}
+{% endfor -%}
+{% endif -%}
+{% for entry in lore %}
+{{ entry.name }}
+{% for fact in entry.facts -%}
+- {{ fact }}
+{% endfor %}
+{% endfor -%}
+[end of world]
