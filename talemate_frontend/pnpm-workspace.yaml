@@ -21,10 +21,21 @@ allowBuilds:
   esbuild: true
   core-js: false
 
-# Pin transitive packages to patched versions for security advisories.
+# Pin transitive packages to patched versions for security advisories, and
+# to a single resolved version where a dual-package hazard would otherwise
+# appear.
 #   - esbuild: vite 7.3.5 pins esbuild ^0.27.0, but GHSA-g7r4-m6w7-qqqr
 #     (dev-server arbitrary file read) is only fixed in >=0.28.1. esbuild's
 #     API is stable across 0.27->0.28 (vite 8 itself moved to 0.28), so the
 #     override is safe.
+#   - @codemirror/view, @codemirror/state: CodeMirror's facets/plugins match
+#     by identity, so two copies of either package in the tree (e.g. our own
+#     direct dependency resolving differently from @codemirror/language's)
+#     is a dual-package hazard — codemirrorTheme.js's syntaxHighlighting()
+#     would build against a different @codemirror/view instance than the
+#     one vue-codemirror actually constructs the EditorView with. Pinned to
+#     the version the wider @codemirror/* dependency tree already wants.
 overrides:
   esbuild: ">=0.28.1"
+  "@codemirror/view": "6.43.1"
+  "@codemirror/state": "6.6.0"
