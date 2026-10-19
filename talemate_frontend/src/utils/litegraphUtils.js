@@ -8,7 +8,7 @@ import { isPrimaryModifier } from './keyboardModifiers.js';
 import { nodeColors, nodeEditorColors } from '../theme/dataColors.js';
 import { currentTheme } from '../theme/store.js';
 import { ACCENT_KEYS } from '../theme/palette.js';
-import { hexToRgba } from '../theme/colorMath.js';
+import { hexToRgba, mix } from '../theme/colorMath.js';
 
 const UNRESOLVED = "<class 'talemate.game.engine.nodes.core.UNRESOLVED'>";
 
@@ -107,6 +107,30 @@ export function rebuildThemeNodeColors(resolved = currentTheme.value) {
 }
 
 /**
+ * A 100x100 grid tile in the theme's colours, as a data URL, to replace
+ * LiteGraph's own opaque #222 grid image (which greys out every theme's
+ * background, and makes light ones murky). Null outside a browser.
+ */
+function themedGridImage(resolved) {
+    if (typeof document === 'undefined') return null;
+    const tile = document.createElement('canvas');
+    tile.width = 100;
+    tile.height = 100;
+    const ctx = tile.getContext('2d');
+    if (!ctx) return null;
+    const bg = resolved.palette['bg-alt'];
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 100, 100);
+    ctx.fillStyle = mix(bg, resolved.colors['on-surface'], 0.06);
+    for (let i = 0; i < 100; i += 10) {
+        const width = i === 0 ? 2 : 1;
+        ctx.fillRect(i, 0, width, 100);
+        ctx.fillRect(0, i, 100, width);
+    }
+    return tile.toDataURL('image/png');
+}
+
+/**
  * Applies the current theme's background to a litegraph canvas instance.
  * Call again whenever `currentTheme` changes.
  */
@@ -114,6 +138,8 @@ export function applyThemeToCanvas(canvas, resolved = currentTheme.value) {
     if (!canvas) return;
     const editorColors = nodeEditorColors(resolved);
     canvas.clear_background_color = resolved.palette['bg-alt'];
+    const grid = themedGridImage(resolved);
+    if (grid) canvas.background_image = grid;
     // Copied from LiteGraph's constants once, at canvas construction.
     canvas.node_title_color = editorColors.NODE_TITLE_COLOR;
     canvas.default_link_color = editorColors.LINK_COLOR;
