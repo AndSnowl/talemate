@@ -10,6 +10,7 @@ import os
 from collections import deque
 from pathlib import Path
 
+import nltk
 import pytest
 import yaml
 
@@ -25,6 +26,13 @@ from talemate.tale_mate import Scene
 
 # Root of the repository (where config.example.yaml lives)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Vendored NLTK data (currently just punkt_tab's English model — see
+# tests/data/nltk_data/tokenizers/punkt_tab/SOURCE.md) so sentence
+# tokenization works with no `~/nltk_data` and no network. Prepended ahead
+# of NLTK's own search path, before any test module (and so any module under
+# test) can import nltk and query it.
+nltk.data.path.insert(0, str(_REPO_ROOT / "tests" / "data" / "nltk_data"))
 
 # ---------------------------------------------------------------------------
 # Parallel execution (pytest-xdist)

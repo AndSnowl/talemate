@@ -85,11 +85,8 @@ guix shell -m manifest.scm -- uv run --no-sync pytest
 
 No browser, no AI, no network. `pyproject.toml`'s `addopts` already
 excludes both other groups (`-m "not e2e and not ai"`) and distributes
-across cores; add `-n0 -v` for serial, verbose output. The full suite
-currently has 141 pre-existing failures, all from missing NLTK
-`punkt_tab` data (`test_dedupe`, the prompts editor baselines,
-`test_tts_util`, `test_editor_revision`) — judge a run by "no new
-failures", not by a clean suite.
+across cores; add `-n0 -v` for serial, verbose output. The full suite is
+expected to pass clean: 0 failed.
 
 ### Frontend logic checks
 
@@ -262,6 +259,6 @@ committed.
   project and drops the `dev` extra (and with it, `pytest`).
 - The frontend's package manager is pnpm, run through Corepack:
   `npx --yes corepack@0.34.0 pnpm ...` (never `npm install`).
-- The plain suite's 141 failures (missing NLTK `punkt_tab` data) predate
-  this work and aren't something a local run is expected to fix — only
-  watch for *new* failures.
+- The plain suite is expected to pass clean (0 failed); NLTK's `punkt_tab`
+  English model is vendored under `tests/data/nltk_data` so sentence
+  tokenization works with no `~/nltk_data` and no network.
