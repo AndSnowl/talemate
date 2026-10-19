@@ -23,7 +23,7 @@ import { EditorView } from '@codemirror/view';
 // load, and the LGraphCanvas.prototype.drawGroups override) proves the
 // litegraph utilities module itself is importable outside Vite (no `@/`
 // aliases left unresolved) — see Task 4 fix round 1, finding 1.
-import { rebuildThemeNodeColors, reapplyNodeColors, applyThemeToCanvas } from '../src/utils/litegraphUtils.js';
+import { rebuildThemeNodeColors, reapplyNodeColors, applyThemeToCanvas, withNodeTitleColor } from '../src/utils/litegraphUtils.js';
 
 let passed = 0;
 const failures = [];
@@ -406,6 +406,38 @@ check('unstyled_node_gets_neutral_colors_on_reapply', () => {
     const neutral = nodeColors(null, light);
     assert.equal(node.color, neutral.title);
     assert.equal(node.bgcolor, neutral.body);
+});
+
+// A running/failed node's title text is drawn in its own title colour
+// (LiteGraph alone would use the canvas-wide colour), and that colour reads
+// at 4.5:1 on its full-strength success/danger title bar under every preset.
+check('highlighted_node_title_drawn_in_own_colour', () => {
+    const canvas = { node_title_color: '#999999' };
+    const selectedBefore = LiteGraph.NODE_SELECTED_TITLE_COLOR;
+    const node = { _talemateHighlightState: 'active', title_text_color: '#123456' };
+    let seen = null;
+    withNodeTitleColor(canvas, node, () => {
+        seen = [canvas.node_title_color, LiteGraph.NODE_SELECTED_TITLE_COLOR];
+    });
+    assert.deepEqual(seen, ['#123456', '#123456']);
+    assert.equal(canvas.node_title_color, '#999999');
+    assert.equal(LiteGraph.NODE_SELECTED_TITLE_COLOR, selectedBefore);
+
+    const idle = { _talemateHighlightState: null, title_text_color: '#123456' };
+    withNodeTitleColor(canvas, idle, () => {
+        seen = canvas.node_title_color;
+    });
+    assert.equal(seen, '#999999');
+});
+
+check('highlighted_node_title_contrast', () => {
+    for (const preset of BUILTIN_PRESETS) {
+        const r = resolveTheme(preset);
+        for (const role of ['success', 'danger']) {
+            const ratio = contrastRatio(r.palette.bg, r.colors[role]);
+            assert.ok(ratio >= 4.5, `${preset.id}: bg on ${role} title bar is ${ratio.toFixed(2)}:1`);
+        }
+    }
 });
 
 // Task 5: message colours fold into the theme — getMessageColor resolves

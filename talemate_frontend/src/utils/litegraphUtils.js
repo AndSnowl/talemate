@@ -182,6 +182,34 @@ export function reapplyNodeColors(graph, resolved = currentTheme.value) {
 
 rebuildThemeNodeColors();
 
+// LiteGraph draws a node's title text in `node.constructor.title_text_color`
+// or the canvas-wide `node_title_color` (`NODE_SELECTED_TITLE_COLOR` when
+// selected) and ignores the instance's own `title_text_color`. A running or
+// failed node (NodeEditor.vue's applyHighlightStyleToLitegraphNode) sets its
+// own title colour to match its full-strength title bar, so swap that in for
+// the duration of that node's draw.
+export function withNodeTitleColor(canvas, node, draw) {
+    const own = node && node._talemateHighlightState ? node.title_text_color : null;
+    if (!own) {
+        return draw();
+    }
+    const canvasColor = canvas.node_title_color;
+    const selectedColor = LiteGraph.NODE_SELECTED_TITLE_COLOR;
+    canvas.node_title_color = own;
+    LiteGraph.NODE_SELECTED_TITLE_COLOR = own;
+    try {
+        return draw();
+    } finally {
+        canvas.node_title_color = canvasColor;
+        LiteGraph.NODE_SELECTED_TITLE_COLOR = selectedColor;
+    }
+}
+
+const drawNodeShape = LGraphCanvas.prototype.drawNodeShape;
+LGraphCanvas.prototype.drawNodeShape = function (node, ...rest) {
+    return withNodeTitleColor(this, node, () => drawNodeShape.call(this, node, ...rest));
+};
+
 // A group's `.color` is always the raw, saved/exported value (whatever set
 // it last: JSON load, LiteGraph's own "Change Color"/"No color" menu,
 // duplication, or "Create Group from Selection" — see createGraphFromJSON,
