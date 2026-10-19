@@ -5,8 +5,9 @@ from .dates import Precision, WorldDate
 from .kinds import KINDS, FieldSpec, KindSpec, get_kind, validate_field
 from .refs import REF_PATTERN, parse_refs, ref
 from .schema import SCHEMA_VERSION
-from .store import Revision, Source, World, WorldInfo
+from .store import Revision, RevisionInfo, Source, World, WorldInfo
 from .timeline import TimelineEntry
+from .undo import UndoConflict, UndoReport
 from .view import FactState, ThingState, WorldView
 
 __all__ = [
@@ -25,10 +26,13 @@ __all__ = [
     "ref",
     "SCHEMA_VERSION",
     "Revision",
+    "RevisionInfo",
     "Source",
     "World",
     "WorldInfo",
     "TimelineEntry",
+    "UndoConflict",
+    "UndoReport",
     "FactState",
     "ThingState",
     "WorldView",

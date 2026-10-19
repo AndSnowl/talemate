@@ -34,6 +34,7 @@ from .view import WorldView
 
 if TYPE_CHECKING:
     from .timeline import TimelineEntry
+    from .undo import UndoReport
 
 log = structlog.get_logger("talemate.world.store")
 
@@ -117,6 +118,22 @@ class Source(BaseModel):
         )
 
 
+def _source_from_revision_row(row: sqlite3.Row) -> Source:
+    return Source(
+        kind=row["source_kind"],
+        scene_id=row["scene_id"],
+        branch_id=row["branch_id"],
+        message_id=row["message_id"],
+        note=row["note"],
+    )
+
+
+class RevisionInfo(BaseModel):
+    rev: int
+    source: Source
+    created_at: str
+
+
 class WorldInfo(BaseModel):
     id: str
     name: str
@@ -139,8 +156,9 @@ class Revision:
         or already removed."""
 
         row = self._conn.execute(
-            "SELECT kind FROM things WHERE id = ? AND rev_removed IS NULL",
-            (thing_id,),
+            "SELECT kind FROM things WHERE id = ? "
+            "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
+            (thing_id, self.rev, self.rev),
         ).fetchone()
         if row is None:
             raise KeyError(f"no such thing: {thing_id}")
@@ -151,7 +169,8 @@ class Revision:
         `KeyError` only if the id was never a thing."""
 
         row = self._conn.execute(
-            "SELECT kind FROM things WHERE id = ?", (thing_id,)
+            "SELECT kind FROM things WHERE id = ? ORDER BY row_id DESC LIMIT 1",
+            (thing_id,),
         ).fetchone()
         if row is None:
             raise KeyError(f"no such thing: {thing_id}")
@@ -400,7 +419,7 @@ class Revision:
 
         self._require_thing(thing_id)
         self._conn.execute(
-            "UPDATE things SET rev_removed = ? WHERE id = ?",
+            "UPDATE things SET rev_removed = ? WHERE id = ? AND rev_removed IS NULL",
             (self.rev, thing_id),
         )
         self._conn.execute(
@@ -570,6 +589,55 @@ class World:
 
         return build_timeline(
             self._conn, thing_id, rev if rev is not None else self.head_rev()
+        )
+
+    def revisions(
+        self,
+        *,
+        scene_id: str | None = None,
+        branch_id: str | None = None,
+        message_id: str | None = None,
+    ) -> "list[RevisionInfo]":
+        """Every revision matching all the given filters, oldest first. This
+        is how a branch's or message's contribution is found, e.g. to pass
+        to `undo`."""
+
+        clauses = []
+        params = []
+        for column, value in (
+            ("scene_id", scene_id),
+            ("branch_id", branch_id),
+            ("message_id", message_id),
+        ):
+            if value is not None:
+                clauses.append(f"{column} = ?")
+                params.append(value)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+
+        rows = self._conn.execute(
+            f"SELECT * FROM revisions {where} ORDER BY rev", params
+        ).fetchall()
+        return [
+            RevisionInfo(
+                rev=row["rev"],
+                source=_source_from_revision_row(row),
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
+
+    def undo(self, revs: "list[int]", note: str = "") -> "UndoReport":
+        """Revert what `revs` did, in one new revision with source kind
+        `undo`. Rows changed again by a later revision are left alone and
+        reported as conflicts. If nothing can be reverted, no revision is
+        written and the report's `undo_rev` is `None`."""
+
+        from .undo import undo_revisions
+
+        return undo_revisions(
+            self._conn,
+            revs,
+            lambda: self.revision(Source(kind="undo", note=note)),
         )
 
     def close(self) -> None:

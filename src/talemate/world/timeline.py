@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from .dates import WorldDate
 from .kinds import get_kind
-from .store import Source
+from .store import Source, _source_from_revision_row
 from .view import _decode_date, _decode_field_value
 
 log = structlog.get_logger("talemate.world.timeline")
@@ -33,16 +33,6 @@ class TimelineEntry(BaseModel):
     text: str | None = None
     source_rev: int
     source: Source
-
-
-def _source_from_revision_row(row: sqlite3.Row) -> Source:
-    return Source(
-        kind=row["source_kind"],
-        scene_id=row["scene_id"],
-        branch_id=row["branch_id"],
-        message_id=row["message_id"],
-        note=row["note"],
-    )
 
 
 def _sort_key(entry: TimelineEntry) -> tuple:

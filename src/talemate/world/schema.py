@@ -1,7 +1,12 @@
 """Database schema and migrations for a world's SQLite file.
 
 Each entry in `MIGRATIONS` is the DDL that upgrades a database from its
-index's version to the next. `apply` runs the pending ones inside a single
+index's version to the next.
+
+`things` is versioned like every other table: one row per thing per span
+of revisions it's live for (an undo can retire a thing and later restore
+it), so `things.id` isn't unique and `field_values`/`facts` can't carry a
+foreign key to it. Their thing ids are checked in code instead. `apply` runs the pending ones inside a single
 transaction and records the result in `PRAGMA user_version`.
 """
 
@@ -32,7 +37,8 @@ MIGRATIONS: list[str] = [
     );
 
     CREATE TABLE things (
-        id TEXT PRIMARY KEY,
+        row_id INTEGER PRIMARY KEY,
+        id TEXT NOT NULL,
         kind TEXT NOT NULL,
         rev_added INTEGER NOT NULL REFERENCES revisions,
         rev_removed INTEGER REFERENCES revisions
@@ -40,7 +46,7 @@ MIGRATIONS: list[str] = [
 
     CREATE TABLE field_values (
         row_id INTEGER PRIMARY KEY,
-        thing_id TEXT NOT NULL REFERENCES things,
+        thing_id TEXT NOT NULL,
         field TEXT NOT NULL,
         value_json TEXT NOT NULL,
         valid_from INTEGER,
@@ -52,7 +58,7 @@ MIGRATIONS: list[str] = [
     CREATE TABLE facts (
         row_id INTEGER PRIMARY KEY,
         fact_id TEXT NOT NULL,
-        thing_id TEXT NOT NULL REFERENCES things,
+        thing_id TEXT NOT NULL,
         category TEXT NOT NULL,
         text TEXT NOT NULL,
         valid_from INTEGER,
@@ -81,6 +87,7 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_fact_refs_thing ON fact_refs (thing_id);
 
+    CREATE INDEX idx_things_id ON things (id);
     CREATE INDEX idx_things_rev_added ON things (rev_added);
     CREATE INDEX idx_things_rev_removed ON things (rev_removed);
     """,
