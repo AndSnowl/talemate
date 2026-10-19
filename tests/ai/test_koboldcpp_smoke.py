@@ -11,8 +11,8 @@ import time
 from e2e.seed import dismiss_onboarding, open_scene, seed_world
 
 # How the "connected, not erroring" state reads in AIClient.vue's client
-# row: a plain green dot (`v-icon color="green"` -> Vuetify's `text-green`
-# class) in the status slot. Busy renders a spinner instead, warning an
+# row: a dot in the theme's success role (`v-icon color="success"` ->
+# Vuetify's `text-success` class) in the status slot. Busy renders a spinner instead, warning an
 # orange dot, error a red one, disabled a power button -- none of those
 # match this selector, so waiting for it rules all of them out at once.
 #
@@ -21,7 +21,7 @@ from e2e.seed import dismiss_onboarding, open_scene, seed_world
 # own row (data-testid="ai-client") -- unscoped, it also matches every
 # ready agent's dot (a real failure hit this: 11 matches, 1 client + 10
 # agents, a Playwright strict-mode violation).
-CONNECTED_DOT = ".mdi-checkbox-blank-circle.text-green"
+CONNECTED_DOT = ".mdi-checkbox-blank-circle.text-success"
 # SceneTools.vue's narrator menu button (SceneToolsNarrator.vue): an
 # icon-only v-btn with no accessible name, so it's found by its icon class
 # instead, scoped to the scene's tools card to avoid any other mdi-script-text
