@@ -10,6 +10,7 @@ month moves the calendar month rather than approximating it as 30 days.
 import datetime
 import re
 from enum import Enum
+from functools import total_ordering
 
 import isodate
 import structlog
@@ -32,6 +33,7 @@ class Precision(str, Enum):
     EXACT = "exact"
 
 
+@total_ordering
 class WorldDate(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -73,15 +75,17 @@ class WorldDate(BaseModel):
         """Add an ISO-8601 duration, keeping EXACT precision if the duration
         carries a time part, otherwise keeping this date's precision."""
 
-        try:
-            dt = self.to_datetime() + isodate.parse_duration(duration)
-        except OverflowError as exc:
-            raise ValueError("result predates year 1") from exc
+        # parsed separately from the addition below, so a malformed duration
+        # string (also a ValueError, from isodate) isn't mistaken for a
+        # year-range overflow
+        parsed = isodate.parse_duration(duration)
+        is_negative = duration.strip().startswith("-")
 
-        if dt < EPOCH:
-            raise ValueError("result predates year 1")
-        if dt.year > 9999:
-            raise ValueError("result is past year 9999")
+        try:
+            dt = self.to_datetime() + parsed
+        except (OverflowError, ValueError) as exc:
+            direction = "before year 1" if is_negative else "past year 9999"
+            raise ValueError(f"result is {direction}") from exc
 
         instant = int((dt - EPOCH).total_seconds())
         precision = (
@@ -90,13 +94,6 @@ class WorldDate(BaseModel):
         return WorldDate(instant=instant, precision=precision)
 
     def __lt__(self, other: "WorldDate") -> bool:
+        if not isinstance(other, WorldDate):
+            return NotImplemented
         return self.instant < other.instant
-
-    def __le__(self, other: "WorldDate") -> bool:
-        return self.instant <= other.instant
-
-    def __gt__(self, other: "WorldDate") -> bool:
-        return self.instant > other.instant
-
-    def __ge__(self, other: "WorldDate") -> bool:
-        return self.instant >= other.instant

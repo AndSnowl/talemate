@@ -32,14 +32,24 @@ def test_plus_with_time_part_becomes_exact():
     assert result.precision is Precision.EXACT
 
 
-def test_plus_rejects_past_9999():
-    with pytest.raises(ValueError):
+def test_plus_rejects_past_9999_day_based():
+    with pytest.raises(ValueError, match="past year 9999"):
         WorldDate.of(9999, 12, 31).plus("P1D")
 
 
-def test_plus_rejects_negative_result():
-    with pytest.raises(ValueError):
-        WorldDate.of(1, 1, 1).plus("-P1D")
+def test_plus_rejects_past_9999_month_based():
+    with pytest.raises(ValueError, match="past year 9999"):
+        WorldDate.of(9999, 12, 31).plus("P1M")
+
+
+def test_plus_rejects_negative_result_day_based():
+    with pytest.raises(ValueError, match="before year 1"):
+        WorldDate.of(1).plus("-P1D")
+
+
+def test_plus_rejects_negative_result_month_based():
+    with pytest.raises(ValueError, match="before year 1"):
+        WorldDate.of(1, 1, 1).plus("-P1M")
 
 
 def test_dates_order_by_instant():
