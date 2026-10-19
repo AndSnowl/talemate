@@ -10,10 +10,11 @@ retirements; leaving the `with` block normally commits it, an exception
 rolls back everything the revision did, including the revision row itself.
 """
 
+import functools
 import json
 import sqlite3
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -74,6 +75,23 @@ def _encode_value(kind_spec: KindSpec, field: str, value: object) -> str:
     return json.dumps(value)
 
 
+def _require_open(method: Callable) -> Callable:
+    """Reject a call on a `Revision` whose transaction has already ended
+    (committed or rolled back), since a write afterwards would either
+    autocommit outside that transaction or hit an already-closed
+    connection."""
+
+    @functools.wraps(method)
+    def wrapper(self: "Revision", *args, **kwargs):
+        if self._closed:
+            raise RuntimeError(
+                "this revision has already ended; open a new one with World.revision()"
+            )
+        return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Source(BaseModel):
     kind: Literal["manual", "scene", "undo"]
     scene_id: str | None = None
@@ -110,6 +128,7 @@ class Revision:
     def __init__(self, rev: int, conn: sqlite3.Connection):
         self.rev = rev
         self._conn = conn
+        self._closed = False
 
     def _require_thing(self, thing_id: str) -> str:
         """Return the thing's kind name, raising `KeyError` if it's unknown
@@ -184,6 +203,7 @@ class Revision:
             raise KeyError(f"no such fact: {fact_id}")
         return row
 
+    @_require_open
     def create_thing(
         self,
         kind: str,
@@ -204,6 +224,7 @@ class Revision:
             self.set_field(thing_id, field, value, valid_from)
         return thing_id
 
+    @_require_open
     def set_field(
         self,
         thing_id: str,
@@ -231,6 +252,7 @@ class Revision:
             (thing_id, field, value_json, from_instant, from_precision, self.rev),
         )
 
+    @_require_open
     def remove_field_value(
         self, thing_id: str, field: str, valid_from: WorldDate | None
     ) -> None:
@@ -243,6 +265,7 @@ class Revision:
         if not self._retire_field_value(thing_id, field, from_instant):
             raise KeyError(f"no live value for {field!r} at that date")
 
+    @_require_open
     def add_fact(
         self,
         thing_id: str,
@@ -288,6 +311,7 @@ class Revision:
         self._write_fact_refs(cur.lastrowid, text)
         return fact_id
 
+    @_require_open
     def correct_fact(
         self,
         fact_id: str,
@@ -354,9 +378,11 @@ class Revision:
         )
         self._write_fact_refs(cur.lastrowid, new_text)
 
+    @_require_open
     def end_fact(self, fact_id: str, until: WorldDate) -> None:
         self.correct_fact(fact_id, valid_until=until)
 
+    @_require_open
     def remove_fact(self, fact_id: str) -> None:
         live = self._live_fact(fact_id)
         self._conn.execute(
@@ -364,6 +390,7 @@ class Revision:
             (self.rev, live["row_id"]),
         )
 
+    @_require_open
     def remove_thing(self, thing_id: str) -> None:
         """Remove a thing, also retiring its live field values and facts."""
 
@@ -427,7 +454,7 @@ class World:
                     ("created_at", _now()),
                 ],
             )
-        except Exception:
+        except BaseException:
             conn.execute("ROLLBACK")
             raise
         else:
@@ -494,7 +521,7 @@ class World:
                 "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
                 (key, value),
             )
-        except Exception:
+        except BaseException:
             self._conn.execute("ROLLBACK")
             raise
         else:
@@ -529,11 +556,15 @@ class World:
     @contextmanager
     def revision(self, source: Source) -> Iterator[Revision]:
         """One SQLite transaction per revision. Leaving the block normally
-        commits it; an exception rolls back everything, including the
-        revision row."""
+        commits it; any exception -- including a `BaseException` such as
+        `asyncio.CancelledError` or `KeyboardInterrupt` -- rolls back
+        everything, including the revision row. Either way, the `Revision`
+        handle is closed on the way out, so it can't be used to write
+        outside its own transaction."""
 
         conn = self._conn
         conn.execute("BEGIN IMMEDIATE")
+        current = None
         try:
             cursor = conn.execute(
                 "INSERT INTO revisions "
@@ -548,9 +579,13 @@ class World:
                     _now(),
                 ),
             )
-            yield Revision(cursor.lastrowid, conn)
-        except Exception:
+            current = Revision(cursor.lastrowid, conn)
+            yield current
+        except BaseException:
             conn.execute("ROLLBACK")
             raise
         else:
             conn.execute("COMMIT")
+        finally:
+            if current is not None:
+                current._closed = True

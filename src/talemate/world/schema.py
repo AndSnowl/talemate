@@ -109,7 +109,7 @@ def apply(conn: sqlite3.Connection) -> None:
             for statement in _statements(migration):
                 conn.execute(statement)
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-    except Exception:
+    except BaseException:
         conn.execute("ROLLBACK")
         raise
     else:

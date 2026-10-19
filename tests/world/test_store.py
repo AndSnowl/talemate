@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 
 import pytest
@@ -219,3 +220,55 @@ def test_remove_thing_retires_children(world):
 
     assert field_row["rev_removed"] is not None
     assert fact_row["rev_removed"] is not None
+
+
+def test_revision_rolls_back_on_base_exception(world):
+    """A `BaseException` (CancelledError, KeyboardInterrupt, ...) raised
+    inside a revision must still roll back the transaction and leave the
+    connection free for the next revision, not just an `Exception`."""
+
+    with pytest.raises(asyncio.CancelledError):
+        with world.revision(Source.manual()) as rev:
+            rev.create_thing("character")
+            raise asyncio.CancelledError()
+
+    assert world.head_rev() == 0
+
+    # a later revision must succeed -- it would raise
+    # "cannot start a transaction within a transaction" if the first one's
+    # BEGIN IMMEDIATE was never rolled back
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("character")
+
+    assert world.head_rev() == 1
+
+    conn = _raw_connect(world)
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM things").fetchone()[0]
+    finally:
+        conn.close()
+
+    # only the second revision's thing made it in; the first left nothing
+    assert count == 1
+
+
+def test_revision_handle_closed_after_block_raises(world):
+    with world.revision(Source.manual()) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Maren"})
+
+    with pytest.raises(RuntimeError):
+        rev.set_field(thing_id, "name", "Too late", None)
+
+    conn = _raw_connect(world)
+    try:
+        rows = conn.execute(
+            "SELECT value_json FROM field_values "
+            "WHERE thing_id = ? AND field = 'name' AND rev_removed IS NULL",
+            (thing_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    # the rejected call didn't sneak a row in outside the transaction
+    assert len(rows) == 1
+    assert rows[0]["value_json"] == '"Maren"'
