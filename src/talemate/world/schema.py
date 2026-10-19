@@ -12,7 +12,10 @@ foreign key to it. Their thing ids are checked in code instead.
 Undo leaves reversal links instead of relying on content: `revision_reverts`
 lists, per undo revision, the revisions it reversed, and a row an undo
 restores records in `restored_from` the `row_id` (in the same table) of the
-row it's a copy of. Every other write leaves `restored_from` NULL.
+row it's a copy of. Every other write leaves `restored_from` NULL. An undo
+revision also records in `undo_conflicts` each row it left alone because of
+a conflict (`table_name` is `things`, `field_values` or `facts`), so a later
+undo knows which of its slots it didn't go through for.
 """
 
 import sqlite3
@@ -45,6 +48,12 @@ MIGRATIONS: list[str] = [
         undo_rev INTEGER NOT NULL REFERENCES revisions,
         target_rev INTEGER NOT NULL REFERENCES revisions,
         PRIMARY KEY (undo_rev, target_rev)
+    );
+
+    CREATE TABLE undo_conflicts (
+        undo_rev INTEGER NOT NULL REFERENCES revisions,
+        table_name TEXT NOT NULL,
+        row_id INTEGER NOT NULL
     );
 
     CREATE TABLE things (

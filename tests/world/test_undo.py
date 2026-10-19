@@ -669,3 +669,161 @@ def test_reundo_after_conflicted_netting_still_restores(world, maren):
 
     assert report.reverted == 1
     assert _fact_texts(world, oskar)[ferry] == "A ferryman."
+
+
+def test_reundo_after_netting_blocked_by_removed_thing_restores(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.correct_fact(maren.laugh, text="A slow laugh.")
+        rev.create_thing("character", fields={"name": "Oskar"})
+        corrected = rev.rev
+    with world.revision(Source.scene("s1", "E", "m2")) as rev:
+        rev.remove_fact(maren.laugh)
+        removed = rev.rev
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(maren.id)
+        maren_removed = rev.rev
+    # the laugh slot can't get its original back with Maren gone, so this
+    # leaves the slot alone, the correction-and-removal pair included
+    branch = world.undo([corrected, removed])
+    assert [(c.table, c.reason) for c in branch.conflicts] == [
+        ("facts", "removed in a later revision")
+    ]
+    world.undo([maren_removed])
+
+    report = world.undo([removed])
+
+    assert report.reverted == 1
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A slow laugh."
+
+
+def test_reundo_after_netting_blocked_by_newer_value_restores(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.set_field(maren.id, "name", "Maren Vell", WorldDate.of(317))
+        rev.create_thing("character", fields={"name": "Oskar"})
+        renamed = rev.rev
+    with world.revision(Source.scene("s1", "E", "m2")) as rev:
+        rev.remove_field_value(maren.id, "name", WorldDate.of(317))
+        cleared = rev.rev
+    fixed = _set_name(world, maren.id, "Maren Ash")
+    # a later hand edit holds the slot, so this leaves it alone
+    branch = world.undo([renamed, cleared])
+    assert [(c.table, c.reason, c.later_rev) for c in branch.conflicts] == [
+        ("field_values", "changed again in a later revision", fixed)
+    ]
+    world.undo([fixed])
+    assert _name(world, maren.id) is None
+
+    report = world.undo([cleared])
+
+    assert report.reverted == 1
+    assert _name(world, maren.id) == "Maren Vell"
+
+
+def test_undo_records_its_conflicts(world, maren):
+    with world.revision(Source.manual()) as rev:
+        fact_id = rev.add_fact(maren.id, "background", "Sailed the northern sea.")
+        added = rev.rev
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(fact_id, text="Sailed the southern sea.")
+        rev.add_fact(maren.id, "personality", "Restless.")
+    with world.revision(Source.manual()) as rev:
+        rev.remove_fact(maren.eye)
+        eye_removed = rev.rev
+
+    report = world.undo([added, eye_removed])
+
+    assert len(report.conflicts) == 1
+    rows = world._conn.execute(
+        "SELECT table_name, row_id FROM undo_conflicts WHERE undo_rev = ?",
+        (report.undo_rev,),
+    ).fetchall()
+    assert [tuple(r) for r in rows] == [("facts", report.conflicts[0].row_id)]
+
+
+def test_undo_after_redone_removal_lists_the_removal(world, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.set_field(oskar, "culture", home, None)
+        target = rev.rev
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(oskar)
+        removed = rev.rev
+    restored = world.undo([removed])
+    world.undo([restored.undo_rev])
+    assert world.view().thing(oskar) is None
+
+    report = world.undo([target])
+
+    # the redo put the removal back in effect, so this is the same conflict
+    # as without the undo and redo in between
+    assert report.undo_rev is None
+    assert [(c.table, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("field_values", "removed in a later revision", removed)
+    ]
+
+
+def test_redo_of_netting_undo_outweighs_a_later_reundo(world, maren):
+    first = _correct(world, maren.laugh, "A slow laugh.", Source.scene("s1", "E", "m1"))
+    second = _correct(
+        world, maren.laugh, "A rare laugh.", Source.scene("s1", "E", "m2")
+    )
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(maren.id, "background", "Sailed the northern sea.")
+        other = rev.rev
+    netting = world.undo([first, second])
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A quick laugh."
+    # a no-op for the laugh: the pair is already reverted
+    assert world.undo([first, second, other]).reverted == 1
+    world.undo([netting.undo_rev])
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A rare laugh."
+
+    report = world.undo([second])
+
+    assert report.conflicts == []
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A slow laugh."
+
+
+def test_reundo_after_redo_of_a_later_removal_is_noop(world, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.remove_thing(oskar)
+        target = rev.rev
+    world.undo([target])
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(oskar)
+        removed_again = rev.rev
+    restored = world.undo([removed_again])
+    # redoing that puts the later removal back, not the target's
+    world.undo([restored.undo_rev])
+    assert world.view().thing(oskar) is None
+
+    report = world.undo([target])
+
+    assert (report.undo_rev, report.reverted, report.conflicts) == (None, 0, [])
+    assert world.view().thing(oskar) is None
+
+
+def test_undoing_a_redo_keeps_a_change_undone_since(world, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.set_field(oskar, "culture", home, None)
+        target = rev.rev
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(oskar)
+        removed = rev.rev
+    restored = world.undo([removed])
+    redo = world.undo([restored.undo_rev])
+    world.undo([removed])
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(oskar)
+        removed_again = rev.rev
+    # brings Oskar back without the culture: the target's write and the
+    # removal of it cancel out
+    world.undo([target, removed_again])
+    assert "culture" not in world.view().thing(oskar).fields
+
+    # undoing the redo would restore the first undo's copy of the culture,
+    # but the target has been undone since
+    world.undo([redo.undo_rev])
+
+    assert "culture" not in world.view().thing(oskar).fields

@@ -14,25 +14,33 @@ A revision only ever adds rows or retires live ones, so a view at an older
 revision never changes once written; checking the head after each step
 covers every revision.
 
-Each seed then re-undoes the targets of every clean undo (no conflicts),
-unless an undo of one of them has since been redone, and checks that this changes no live row: the
-targets' changes are already reverted, whatever has happened since.
+Each seed then re-undoes the targets of every undo that wrote a revision,
+unless an undo of one of them has since been redone, and checks that this
+changes no live row outside the slots and things that undo recorded a
+conflict on: everywhere else the targets' changes are already reverted,
+whatever has happened since.
 
 Each seed then undoes a random target revision (trying a few until one
-undoes without a conflict), redoes it (undoes the undo) and undoes it again, and checks that the slots the target touched
-end up as the first undo left them, and, when nothing touched them between
-the target and that undo, as they were just before the target.
+undoes without a conflict), redoes it (undoes the undo) and undoes it
+again, and checks that the slots the target touched end up as the first
+undo left them, and, when nothing touched them between the target and that
+undo, as they were just before the target.
+
+Thing and fact ids come from `uuid4`, and things are picked from a list in
+id order, so the test seeds `uuid4` too: each seed replays exactly.
 """
 
 import json
 import random
 import sqlite3
+import uuid
 
 import pytest
 
 from talemate.world.dates import WorldDate
 from talemate.world.index import index_documents
 from talemate.world.refs import ref
+from talemate.world import store
 from talemate.world.store import Source, World
 
 SEEDS = range(40)
@@ -182,7 +190,7 @@ def _rewrite_earlier_content(world: World, rnd: random.Random, source) -> None:
 
 
 def _random_step(
-    world: World, rnd: random.Random, step: int, clean_undos: dict[int, list[int]]
+    world: World, rnd: random.Random, step: int, undos: dict[int, list[int]]
 ) -> None:
     view = world.view()
     things = [thing.id for thing in view.things()]
@@ -224,27 +232,64 @@ def _random_step(
         if rnd.random() < 0.3:
             revs = [r.rev for r in world.revisions(branch_id=rnd.choice("EF"))]
         report = world.undo(revs)
-        if report.undo_rev is not None and not report.conflicts:
-            clean_undos[report.undo_rev] = revs
+        if report.undo_rev is not None:
+            undos[report.undo_rev] = revs
 
 
-def _check_reundo_is_noop(world: World, clean_undos: dict[int, list[int]]) -> None:
-    """Re-undo each clean undo's targets, unless an undo of any of them has
-    since been redone (which puts that target's change back in effect)."""
+def _slot_of(conn: sqlite3.Connection, table: str, row_id: int) -> tuple:
+    """`(slot key, thing id)` for one row."""
+
+    if table == "things":
+        (thing_id,) = conn.execute(
+            "SELECT id FROM things WHERE row_id = ?", (row_id,)
+        ).fetchone()
+        return ("things", thing_id), thing_id
+    if table == "facts":
+        fact_id, thing_id = conn.execute(
+            "SELECT fact_id, thing_id FROM facts WHERE row_id = ?", (row_id,)
+        ).fetchone()
+        return ("facts", fact_id), thing_id
+    thing_id, field, valid_from = conn.execute(
+        "SELECT thing_id, field, valid_from FROM field_values WHERE row_id = ?",
+        (row_id,),
+    ).fetchone()
+    return ("field_values", thing_id, field, valid_from), thing_id
+
+
+def _check_reundo_is_noop(world: World, undos: dict[int, list[int]]) -> None:
+    """Re-undo each undo's targets, unless an undo of any of them has since
+    been redone (which puts that target's change back in effect). Only the
+    slots, and things, the undo recorded a conflict on may change."""
 
     conn = world._conn
     reverts = conn.execute("SELECT undo_rev, target_rev FROM revision_reverts")
     undone_in: dict[int, set[int]] = {}
     for undo_rev, target_rev in reverts:
         undone_in.setdefault(target_rev, set()).add(undo_rev)
-    for revs in clean_undos.values():
-        undos = set().union(*(undone_in.get(rev, set()) for rev in revs))
-        if any(undo_rev in undone_in for undo_rev in undos):
+    for undo_rev, revs in undos.items():
+        undos_of = set().union(*(undone_in.get(rev, set()) for rev in revs))
+        if any(other in undone_in for other in undos_of):
             continue
+        exempt_slots, exempt_things = set(), set()
+        for table, row_id in conn.execute(
+            "SELECT table_name, row_id FROM undo_conflicts WHERE undo_rev = ?",
+            (undo_rev,),
+        ).fetchall():
+            slot, thing_id = _slot_of(conn, table, row_id)
+            exempt_slots.add(slot)
+            if table == "things":
+                exempt_things.add(thing_id)
+
         live = _live_rows(conn)
         report = world.undo(revs)
-        assert report.undo_rev is None, (revs, report)
-        assert _live_rows(conn) == live
+        for table, row_id in live ^ _live_rows(conn):
+            slot, thing_id = _slot_of(conn, table, row_id)
+            assert slot in exempt_slots or thing_id in exempt_things, (
+                undo_rev,
+                revs,
+                report,
+                slot,
+            )
 
 
 def _check_undo_redo_undo(world: World, target: int) -> bool:
@@ -280,15 +325,19 @@ def _check_undo_redo_undo(world: World, target: int) -> bool:
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_random_history_keeps_invariants(tmp_path, seed):
+def test_random_history_keeps_invariants(tmp_path, monkeypatch, seed):
+    ids = random.Random(-seed - 1)
+    monkeypatch.setattr(
+        store.uuid, "uuid4", lambda: uuid.UUID(int=ids.getrandbits(128))
+    )
     rnd = random.Random(seed)
     world = World.create("fuzz", root=tmp_path)
     try:
-        clean_undos: dict[int, list[int]] = {}
+        undos: dict[int, list[int]] = {}
         for step in range(STEPS):
-            _random_step(world, rnd, step, clean_undos)
+            _random_step(world, rnd, step, undos)
             _check_invariants(world)
-        _check_reundo_is_noop(world, clean_undos)
+        _check_reundo_is_noop(world, undos)
         candidates = [r.rev for r in world.revisions() if r.source.kind != "undo"]
         for target in rnd.sample(candidates, min(TARGET_TRIES, len(candidates))):
             if _check_undo_redo_undo(world, target):

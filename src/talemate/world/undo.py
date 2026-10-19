@@ -15,17 +15,20 @@ text or value is never mistaken for the targets' change:
 - a row the targets added is reverted through its current copy (the live
   row whose `restored_from` chain reaches it). With none live, the change
   was already reverted (R5) -- unless a later revision outside the targets,
-  not an undo, retired it, which is a conflict;
+  not an undo, retired it, which is a conflict. A copy retired by a redo
+  counts as retired by whatever retired the row it copies;
 - a row the targets retired is restored unless an undo already restored a
   copy of it that's still live, or that a later revision has since retired
   (a later, unrelated change). A copy retired by an undo of the undo that
   restored it (a redo) puts the targets' change back in effect.
 
-An undo whose targets both added a row and retired it writes nothing for
-it, since the two cancel out. A later undo of just one of them still sees
-the pair as reverted, through `revision_reverts`, as long as that earlier
-undo is in effect (not redone) and went through for the row's slot and
-thing (a conflict would have left one of its targets' rows live).
+An undo that went through for a slot leaves its targets' changes there
+reverted, even where it wrote nothing (a row its targets both added and
+retired cancels out). So a retired row is never brought back while an undo
+in effect, since its retirement, has reverted the revision behind it: the
+planner reads that from `revision_reverts`, and whether the undo went
+through from `undo_conflicts`, where each undo records the rows it left
+alone.
 
 A row changed again by a later revision outside the targets is left alone
 and reported as an `UndoConflict`, as is a thing the targets created that a
@@ -124,7 +127,13 @@ class _Planner:
         ):
             self._reverts.setdefault(undo_rev, set()).add(target_rev)
             self._reverted_in.setdefault(target_rev, set()).add(undo_rev)
-        self._in_effect: dict[int, bool] = {}
+        # the rows each undo left alone because of a conflict
+        self._conflicted: dict[int, set[tuple[str, int]]] = {}
+        for undo_rev, table_name, row_id in conn.execute(
+            "SELECT undo_rev, table_name, row_id FROM undo_conflicts"
+        ):
+            self._conflicted.setdefault(undo_rev, set()).add((table_name, row_id))
+        self._in_effect: dict[tuple[int, int | None], bool] = {}
         self._things: dict[str, list[sqlite3.Row]] = {}
 
     def _in(self) -> tuple[str, list[int]]:
@@ -165,18 +174,21 @@ class _Planner:
             row = self._row(table, row["restored_from"])
         return row
 
-    def _undo_in_effect(self, undo_rev: int) -> bool:
-        """An undo outside the targets that no later undo in effect has
-        reverted (a redo)."""
+    def _undo_in_effect(self, undo_rev: int, at: int | None = None) -> bool:
+        """Whether `undo_rev` was in effect just before revision `at` (`None`
+        meaning now, with this undo's own targets counted as reverted): no
+        undo before then, itself in effect then, reverted it (a redo)."""
 
-        if undo_rev in self.targets:
+        if at is None and undo_rev in self.targets:
             return False
-        if undo_rev not in self._in_effect:
-            self._in_effect[undo_rev] = not any(
-                self._undo_in_effect(later)
+        key = (undo_rev, at)
+        if key not in self._in_effect:
+            self._in_effect[key] = not any(
+                self._undo_in_effect(later, at)
                 for later in self._reverted_in.get(undo_rev, ())
+                if at is None or later < at
             )
-        return self._in_effect[undo_rev]
+        return self._in_effect[key]
 
     def _thing_rows(self, thing_id: str) -> list[sqlite3.Row]:
         if thing_id not in self._things:
@@ -186,42 +198,63 @@ class _Planner:
         return self._things[thing_id]
 
     def _blocked(self, table: Table, rows: list[sqlite3.Row], undo_rev: int) -> bool:
-        """Whether `undo_rev` left a change of its own targets in effect
-        among `rows` (one slot, or one thing's rows): a row whose origin one
-        of them added stayed live across it. That's what a conflict leaves
-        behind, since an undo that went through retired every such row."""
+        """Whether `undo_rev` recorded a conflict on any of `rows` (one
+        slot, or one thing's rows), and so left them all alone."""
 
-        reverted = self._reverts[undo_rev]
-        return any(
-            r["rev_added"] < undo_rev
-            and (r["rev_removed"] is None or r["rev_removed"] > undo_rev)
-            and self._origin(table, r)["rev_added"] in reverted
-            for r in rows
-        )
+        conflicted = self._conflicted.get(undo_rev, set())
+        return any((table, r["row_id"]) in conflicted for r in rows)
 
-    def _netted_out(
+    def _undone_since(
         self, table: Table, row: sqlite3.Row, slot_rows: list[sqlite3.Row]
     ) -> bool:
-        """Whether an undo in effect reverted both the revision behind
-        retired `row` (its origin's) and the one that retired it, and went
-        through for `row`'s slot and thing. The two cancel out, so that undo
-        wrote nothing for `row`, yet the change is already reverted (R5)."""
+        """Whether an undo in effect, after `row` was retired, reverted the
+        revision behind it (its origin's) and went through for `row`'s slot
+        and thing. That undo left the change reverted there, so `row` must
+        stay retired: even when that undo wrote nothing for it (its targets
+        retired it too, so the two cancel out), and even when a later undo
+        would restore it as a copy of an older retirement.
+
+        Only an undo that reverted it while no earlier one that did was in
+        effect counts: a re-undo of an already reverted change is a no-op,
+        and redoing the undo that really reverted it brings it back
+        whatever the re-undo claims."""
 
         added = self._origin(table, row)["rev_added"]
-        removed = row["rev_removed"]
-        for undo_rev in self._reverted_in.get(added, ()):
-            if removed not in self._reverts[undo_rev]:
-                continue
-            if not self._undo_in_effect(undo_rev):
-                continue
+        reverters = []
+        for undo_rev in sorted(self._reverted_in.get(added, ())):
             if self._blocked(table, slot_rows, undo_rev):
                 continue
             if table != "things" and self._blocked(
                 "things", self._thing_rows(row["thing_id"]), undo_rev
             ):
                 continue
-            return True
-        return False
+            if not any(
+                self._undo_in_effect(earlier, undo_rev) for earlier in reverters
+            ):
+                reverters.append(undo_rev)
+        return any(
+            undo_rev > row["rev_removed"] and self._undo_in_effect(undo_rev)
+            for undo_rev in reverters
+        )
+
+    def _retirement(self, table: Table, row: sqlite3.Row) -> sqlite3.Row:
+        """The row whose retirement stands for retired `row`'s. A copy
+        retired by a redo (an undo of the undo that restored it) is retired
+        again by whatever retired the row it copies, so that's followed
+        through `restored_from`."""
+
+        while self._is_redone(row):
+            row = self._row(table, row["restored_from"])
+        return row
+
+    def _is_redone(self, row: sqlite3.Row) -> bool:
+        """A restored copy retired by an undo of the undo that restored it."""
+
+        return (
+            row["restored_from"] is not None
+            and row["rev_removed"] in self.undo_revs
+            and row["rev_added"] in self._reverts.get(row["rev_removed"], ())
+        )
 
     @staticmethod
     def _latest_copy(
@@ -257,13 +290,15 @@ class _Planner:
         retiring: set[int],
     ) -> bool:
         """Whether the targets' retirement of `row` is still in effect. It
-        isn't once an undo netted it out (see `_netted_out`) or restored a
-        copy of it (R5: already reverted), unless that copy was itself undone (a redo), is being retired by
-        this undo, or was retired by a target that this undo reverts in its
-        own right. A copy retired by anything else stands for a later,
-        unrelated change, so `row` stays retired."""
+        isn't once an undo reverted its change since (see `_undone_since`)
+        or restored a
+        copy of it (R5: already reverted), unless that copy is being retired
+        by this undo, was retired by a target that this undo reverts in its
+        own right, or was undone (a redo) in a way that puts `row`'s own
+        retirement back (see `_retirement`). A copy retired by anything else
+        stands for a later, unrelated change, so `row` stays retired."""
 
-        if self._netted_out(table, row, slot_rows):
+        if self._undone_since(table, row, slot_rows):
             return False
         copy = self._latest_copy(row, slot_rows)
         if copy is None:
@@ -271,12 +306,17 @@ class _Planner:
         removed = copy["rev_removed"]
         if removed is None:
             return copy["row_id"] in retiring
-        if removed in self.targets:
-            # restored in its own right when it can be
-            return not self._restorable(table, copy)
-        return removed in self.undo_revs and copy["rev_added"] in self._reverts.get(
-            removed, ()
-        )
+        # a redo puts back whatever retired the row its copy was made from;
+        # the targets' retirement is in effect again only if that's `row`'s
+        while removed not in self.targets:
+            if not self._is_redone(copy):
+                return False
+            copy = self._row(table, copy["restored_from"])
+            if copy["row_id"] == row["row_id"]:
+                return True
+            removed = copy["rev_removed"]
+        # retired by a target: restored in its own right when it can be
+        return not self._restorable(table, copy)
 
     def _later_write(self, table: Table, row: sqlite3.Row, since: int) -> int | None:
         """The revision behind live `row` when that's a later change after
@@ -365,12 +405,14 @@ class _Planner:
             if current["rev_removed"] is None:
                 live = current
                 since = row["rev_added"] if since is None else since
-            elif self._is_later_change(current["rev_removed"]) and not self._netted_out(
-                "things", current, rows
+                continue
+            retired = self._retirement("things", current)
+            if self._is_later_change(retired["rev_removed"]) and not self._undone_since(
+                "things", retired, rows
             ):
-                removed_later.append(current)
+                removed_later.append(retired)
             # else already reverted: retired by an undo or within the
-            # targets, or netted out (see `_netted_out`)
+            # targets, or undone since (see `_undone_since`)
 
         if live is None:
             if removed_later:
@@ -487,17 +529,19 @@ class _Planner:
             if row["rev_added"] not in self.targets:
                 continue
             current = self._latest_copy(row, slot_rows) or row
-            removed = current["rev_removed"]
-            if removed is None:
+            if current["rev_removed"] is None:
                 to_retire[current["row_id"]] = current
-            elif self._is_later_change(removed) and not self._netted_out(
-                table, current, slot_rows
+                continue
+            retired = self._retirement(table, current)
+            removed = retired["rev_removed"]
+            if self._is_later_change(removed) and not self._undone_since(
+                table, retired, slot_rows
             ):
                 reason = CHANGED_LATER if removed in revs_adding else REMOVED_LATER
                 self._conflict(table, current, thing_id, reason, removed)
                 conflicted = True
             # else already reverted: retired by an undo or within the
-            # targets, or netted out (see `_netted_out`)
+            # targets, or undone since (see `_undone_since`)
         if conflicted:
             return
         self.plan.retire.extend((table, row_id) for row_id in to_retire)
@@ -547,6 +591,10 @@ def _apply(
     conn.executemany(
         "INSERT INTO revision_reverts (undo_rev, target_rev) VALUES (?, ?)",
         [(undo_rev, rev) for rev in sorted(targets)],
+    )
+    conn.executemany(
+        "INSERT INTO undo_conflicts (undo_rev, table_name, row_id) VALUES (?, ?, ?)",
+        [(undo_rev, c.table, c.row_id) for c in plan.conflicts],
     )
 
     for table, row_id in plan.retire:
