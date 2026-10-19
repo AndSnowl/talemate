@@ -125,6 +125,51 @@ A world thing has:
 References are stored as ids and shown with the name the referenced thing had **on the date being
 viewed**. Renames never touch text.
 
+**References can point at a fact as well as a thing** (owner, 2026-10-19). A fact has a stable
+`fact_id`, which is kept across corrections, so other records can point at one specific fact:
+"Oskar knows ⟨that Maren lost her eye⟩", an event that cites the facts it changed, a pin on one
+fact.
+- In text the token is `[[fact:<fact_id>]]`, alongside today's `[[thing:<id>]]`.
+- The reference index records which kind of target it points at.
+- A fact reference renders as the fact's text on the viewing date, or as a short label when it
+  is used inline.
+- A reference to a fact that has ended or been removed renders as it stood at the viewing date,
+  and as "⟨unknown⟩" if it never existed then.
+
+### Knowledge: who knows a fact
+
+Owner, 2026-10-19, following the upstream review in `docs/ideas/upstream-pr-279-review.md`.
+
+A fact is world truth. Who knows it is a separate, dated record, so a secret can exist in the
+world without every character knowing it.
+
+- **Common knowledge:** a fact can be marked common knowledge, meaning everyone in the world
+  knows it (the default for most lore and public events). An optional scope narrows it to
+  members of a culture or another group thing, for example "every Lowmarsh child knows the flood
+  song".
+- **Knowledge records:** otherwise a fact is known only by the characters with a *knowledge
+  record* for it. A record has:
+  - the knower (a thing id);
+  - the fact (a fact id);
+  - a from date, and an optional until date for forgetting or being deceived;
+  - a source, as on every change.
+
+  Knowledge records are world changes like any other. They are dated on story time, stamped with
+  their source, go through the inbox, and can be undone by source. In undo terms each one is its
+  own slot.
+- **Facts about a character are known by that character,** unless the fact is marked as hidden
+  from them (an unknown parent, a curse they don't know about). (My call.)
+- **How the AI uses it:**
+  - When context is built for one character (their dialogue, their decisions), only facts that
+    character knows on the scene's date are given as their knowledge.
+  - The narrator and the director see world truth, labelled with who knows what, so they can
+    write dramatic irony without leaking it into a character's mouth.
+  - Exactly how this is phrased in prompts is the AI-handoff layer's job; see the guiding
+    principle.
+- **Learning in play:** a character learning something in a scene is a scene-local knowledge
+  record anchored to the message, promoted through the inbox like any other change. That is how
+  knowledge carries across scenes.
+
 ### Kinds for now
 
 The owner confirmed this list as complete for now:
@@ -189,6 +234,25 @@ was a teenager"), so a date carries a precision (year, month, day, exact). An op
 - **Scene-local things and changes** use the same shapes as world ones (a new thing, a new fact, an
   ended fact, a new core-field value), scoped to the scene and **anchored to the message** where
   they arose. A branch sees only the local changes on its own path.
+- **Scene state as of a message** (2026-10-19, from the upstream review). Every per-scene state
+  is anchored to messages, so branching at message 40 restores it as it was there. That covers:
+  - game state;
+  - agent state;
+  - the world-state snapshot and tracked-state answers;
+  - pins;
+  - layered history summaries;
+  - which character the player is playing.
+
+  Storing it as changes anchored to messages (my call) makes it work like scene-local changes:
+  a branch sees the state on its own path, up to its fork point.
+- **Presence and absence** (2026-10-19, from upstream's "character knowledge, standard mode").
+  Each message records which characters are present. When a character comes back after missing
+  part of the story, two things are given to them automatically:
+  - a short "away for 2 days" bridge, exact because messages carry dates;
+  - what happened while they were gone, drawn from history.
+
+  This costs no extra LLM calls. Presence also feeds knowledge: a character present for a
+  message can learn what was said in it.
 - Inside a scene, a world thing is seen as: the world's version at the scene's current date and
   accepted revision, **plus** any world changes sourced from this scene's current path (approved
   after that revision), **plus** the scene-local changes on the current path layered on top. (My
@@ -357,6 +421,58 @@ would spoil later ones if read first (the way *New Spring* sits in *The Wheel of
 this design should block it. Scenes already carry dates; a story would add a container and an
 ordering.
 
+## Decision model
+
+Upstream 0.40 adds a decision model: a small classifier that answers yes/no, choice and score
+questions with a confidence, and falls back to the LLM when it is off or unsure. That suits our
+many judgement calls:
+- importance for the inbox;
+- the invented-fact check, which the phase-0 probe showed the LLM can't do reliably;
+- prequel conflict checks;
+- "bring in world changes?";
+- whether a tracked state needs re-asking;
+- the editor's repetition and verbal-tic checks.
+
+- **It stays local (my call).** Story text is never sent to a hosted provider by default, which
+  matches the owner's local-model setup. The candidate provider is Laya, a local non-generative
+  decision model. Whether its API fits upstream's decision-model interface is the first probe.
+- **Every judgement goes through it,** with the LLM as fallback. So each "AI judges X" feature
+  in this spec is built against one decision interface, not ad hoc prompts.
+- Per the "probe the AI before building" principle, each judgement gets a probe against the
+  decision model first, and then against the LLM fallback.
+
+## Upstream features to port
+
+Reviewed 2026-10-19 against upstream PR #279 (Talemate 0.40). The full notes are in
+`docs/ideas/upstream-pr-279-review.md`. Upstream code is keyed by names and message positions, so
+these are **reimplemented on our data model**; copying is reserved for self-contained parts (the
+decision model's core, the koboldcpp client changes, the memory reranker). The phase for each is
+listed under "Phases".
+
+| Feature | What it gives us | Phase |
+|---|---|---|
+| Decision model | one local interface for every judgement call | 2 (probe first) |
+| Scene state as of a message | branches restore game/agent/world state at the fork point | 2 |
+| Presence and away bridges | re-entry context with exact durations, no LLM calls | 2 |
+| Prompt-override compatibility checker | flags user prompt overrides that break after template changes | 2 |
+| koboldcpp client improvements, local memory reranker | better local-model behaviour and recall | 2 |
+| Editor decision checks (repetition, tics) | quality guard without long LLM calls | 2–3 |
+| Help chat permission gating | the help agent asks before changing things | any time |
+| Learned knowledge, "Known by" view | knowledge carried across scenes through the inbox | 3 |
+| "Add to world" from selected text, "make real" | owner-picked inbox candidates | 3 |
+| Scene background | rebuilt on dated place images, not a per-scene setting | 5 |
+| Replay | re-reading a branch, which later becomes the reader for stories | 5–6 |
+| Character perspectives | per-character inner views of a passage | later, after a probe |
+
+**Not ported:** upstream's scene revisions. They take one deduplicated snapshot per save and fork
+by copying the save file, and they can't undo a specific change. Our message-level branches and
+undo by source cover them. The one useful idea, scene state as of a point, is above.
+
+**Watch:** upstream now targets strong reasoning models (its smallest "known good" local models
+are 26–31B with reasoning on). Features that need one long structured call per passage
+(perspectives) go against our watchlist ("slower play") and only come after a probe on the
+owner's model.
+
 ## Phases
 
 One design (this one), built in phases, each with its own plan. My recommendation, close to the
@@ -384,13 +500,37 @@ owner's suggested order (world, scenes, characters, cultures):
    shares one shape, phase 2 also brings in **basic places, lore entries and events** (enough for
    the AI's context and history); no adapters to the old stores are written. The cultures features
    (naming, culture context, highlights, culture review) are switched off until phase 4.
-3. **Promotion and the inbox**, including importance judgement, path-following, prequel and branch
-   conflicts, undo by source, and the "bring in world changes?" prompt on reopening a scene.
+   **Additions from 2026-10-19:**
+   - **Schema first.** Fact references and knowledge records are added to the world store before
+     the scene work builds on it. Replay and undo learn the new slot kind (a knowledge record).
+   - **Scene state as of a message,** and presence with away bridges.
+   - **Knowledge-aware context:** a character's own context gets only what they know;
+     narrator and director context is labelled with who knows what.
+   - **Decision model:** first a probe of Laya as the local provider against upstream's
+     interface, then one decision interface with LLM fallback. Phase 2's own judgement calls
+     (tracked-state skip, invented-fact check) use it.
+   - **Opportunistic upstream ports:** the koboldcpp client improvements, the local memory
+     reranker, the prompt-override compatibility checker, and editor decision checks.
+3. **Promotion and the inbox**, including importance judgement (through the decision model),
+   path-following, prequel and branch conflicts, undo by source, and the "bring in world
+   changes?" prompt on reopening a scene. It also adds learned knowledge as inbox requests, a
+   "Known by" view on facts, and "add to world" from selected text or "make real" as
+   owner-picked candidates. The undo notes left for this phase:
+   - a redo cancelled by another undo is silent, so the inbox should say why;
+   - undo planning reads the whole link graph;
+   - the timeline shows restored copies as coming from "undo".
 4. **Cultures and places** onto the new shape: cultures and the glossary move over and are switched
-   back on, the three kinds of place merge, and the culture review joins the inbox.
-5. **The rest**: items, dated images with new-portrait offers, and the view-as-of-a-date screen for
-   any thing.
-6. **Later**: stories as a reading order (see "Navigation").
+   back on, the three kinds of place merge, and the culture review joins the inbox. Common
+   knowledge can be scoped to a culture.
+5. **The rest**: items, dated images with new-portrait offers, the view-as-of-a-date screen for
+   any thing, and scene backgrounds drawn from the current place's dated images.
+6. **Later**:
+   - stories as a reading order (see "Navigation");
+   - replay as a reader for branches and stories;
+   - character perspectives, only after a probe shows the owner's model can do it without
+     blocking play.
+
+Help chat permission gating can land in any phase.
 
 ## Code health
 
