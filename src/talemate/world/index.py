@@ -15,6 +15,8 @@ chromadb metadata can't hold `None` or an unbounded span, so an open start
 or end is stored as the numeric sentinels `OPEN_START`/`OPEN_END` instead.
 """
 
+import sqlite3
+
 import structlog
 from pydantic import BaseModel
 
@@ -37,6 +39,20 @@ class IndexDoc(BaseModel):
     text: str
     valid_from: int
     valid_until: int
+
+
+def index_rows(conn: sqlite3.Connection, rev: int) -> list[sqlite3.Row]:
+    """Every fact row live at `rev` on the source clock (`rev_added <=
+    rev`, not yet retired), across every story date. Package code never
+    touches a `World`'s connection directly, so this takes it explicitly,
+    the same way `timeline.build_timeline` and `undo.undo_revisions` do;
+    `World._live_fact_rows` is the method that supplies it."""
+
+    return conn.execute(
+        "SELECT row_id, thing_id, category, text, valid_from, valid_until "
+        "FROM facts WHERE rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
+        (rev, rev),
+    ).fetchall()
 
 
 def index_documents(world: World, rev: int | None = None) -> list[IndexDoc]:
@@ -73,22 +89,19 @@ def index_documents(world: World, rev: int | None = None) -> list[IndexDoc]:
             )
         )
 
-    fact_rows = world._conn.execute(
-        "SELECT row_id, thing_id, category, text, valid_from, valid_until "
-        "FROM facts WHERE rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
-        (rev, rev),
-    ).fetchall()
-
-    for row in fact_rows:
+    # `remove_thing` retires a thing's facts in the same revision it
+    # retires the thing, so any fact row still live at `rev` belongs to a
+    # thing that's also live at `rev` -- `names`/`kinds` always have an
+    # entry for `row["thing_id"]` below.
+    for row in world._live_fact_rows(rev):
         thing_id = row["thing_id"]
-        name = names.get(thing_id, thing_id)
         docs.append(
             IndexDoc(
                 id=f"fact:{row['row_id']}",
                 thing_id=thing_id,
-                kind=kinds.get(thing_id, ""),
+                kind=kinds[thing_id],
                 category=row["category"],
-                text=f"{name}: {view.render(row['text'])}",
+                text=f"{names[thing_id]}: {view.render(row['text'])}",
                 valid_from=OPEN_START
                 if row["valid_from"] is None
                 else row["valid_from"],

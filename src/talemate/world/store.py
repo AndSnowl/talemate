@@ -591,6 +591,16 @@ class World:
             self._conn, thing_id, rev if rev is not None else self.head_rev()
         )
 
+    def _live_fact_rows(self, rev: int | None = None) -> "list[sqlite3.Row]":
+        """Every fact row live at `rev` on the source clock, across every
+        story date -- unlike `view()`, this ignores `valid_from`/
+        `valid_until` entirely, since the derived search index (`index.py`)
+        needs ended facts too. `rev=None` means `head_rev()`."""
+
+        from .index import index_rows
+
+        return index_rows(self._conn, rev if rev is not None else self.head_rev())
+
     def revisions(
         self,
         *,
