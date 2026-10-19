@@ -713,12 +713,23 @@ export default {
       promptsOutdatedCount: 0,
       // Flag to ensure new-scene navigation only happens once per scene load
       newSceneNavigationPending: false,
+      // What the theme watcher last pushed into Vuetify (see
+      // effectiveThemeSettings's watcher).
+      appliedThemeKey: null,
     }
   },
   watch:{
-    effectiveAppearanceConfig: {
-      handler(appearance) {
-        applyTheme(vuetify.theme, themeFromConfig(appearance?.theme));
+    // Only the theme subtree (saved, or the Settings page's live preview)
+    // drives the Vuetify theme; other appearance edits (scene message
+    // styles, assets, ...) leave it alone, and so does a theme change that
+    // resolves to the colours already applied.
+    effectiveThemeSettings: {
+      handler(themeSettings) {
+        const resolved = themeFromConfig(themeSettings);
+        const key = JSON.stringify([resolved.id, resolved.dark, resolved.palette, resolved.colors]);
+        if (key === this.appliedThemeKey) return;
+        this.appliedThemeKey = key;
+        applyTheme(vuetify.theme, resolved);
       },
       deep: true,
       immediate: true,
@@ -885,6 +896,9 @@ export default {
     effectiveAppearanceConfig() {
       // Use preview if available, otherwise fall back to saved config
       return this.appearancePreview ?? (this.appConfig ? this.appConfig.appearance : {});
+    },
+    effectiveThemeSettings() {
+      return this.effectiveAppearanceConfig?.theme;
     },
     rightToolsDrawerWidth() {
       // based on the current (reactive) window width, set the width of the right hand drawers

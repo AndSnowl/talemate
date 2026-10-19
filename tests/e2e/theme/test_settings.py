@@ -8,6 +8,8 @@ are independent of each other and of execution order (the app under test is
 session-scoped — see tests/e2e/conftest.py).
 """
 
+from playwright.sync_api import expect
+
 from e2e.seed import send_backend
 
 # The app's own backend socket (open, not vite's HMR socket) — duplicated
@@ -166,5 +168,38 @@ def test_import_bad_file_shows_error(page, tmp_path):
         page.get_by_text("No themes of your own yet.").wait_for(
             state="visible", timeout=5_000
         )
+    finally:
+        _reset_theme(page)
+
+
+def _high_emphasis_opacity(page) -> str:
+    return page.evaluate(
+        "() => getComputedStyle(document.documentElement)"
+        ".getPropertyValue('--v-high-emphasis-opacity').trim()"
+    )
+
+
+def test_dark_switch_on_own_theme_previews_live(page):
+    """Final fix 6: a theme of your own can switch light/dark (built-ins can't)."""
+    try:
+        _open_theme_settings(page)
+        dark_switch = page.get_by_label("Dark theme", exact=True)
+        dark_switch.wait_for(state="attached", timeout=10_000)
+        # Built-in preset: read-only, shows its own (dark) flag.
+        assert dark_switch.is_disabled()
+        assert dark_switch.is_checked()
+        assert _high_emphasis_opacity(page) == "1"
+
+        page.get_by_role("button", name="Duplicate current as new").click()
+        expect(dark_switch).to_be_enabled(timeout=10_000)
+        dark_switch.click()
+
+        # Vuetify's light-theme variables apply live (unsaved preview).
+        page.wait_for_function(
+            "() => getComputedStyle(document.documentElement)"
+            ".getPropertyValue('--v-high-emphasis-opacity').trim() === '0.87'",
+            timeout=15_000,
+        )
+        assert not dark_switch.is_checked()
     finally:
         _reset_theme(page)

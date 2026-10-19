@@ -113,6 +113,15 @@
                         Two layers, as in Doom Emacs: a palette of named colours, and roles that point at a
                         palette name. Presets set both — edit either on a theme of your own.
                     </p>
+                    <v-switch
+                        v-model="darkValue"
+                        label="Dark theme"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                        class="mt-2"
+                        :disabled="!isCustomActive"
+                    ></v-switch>
                 </div>
 
                 <v-card variant="flat" color="surface" class="pa-4 mb-4">
@@ -158,6 +167,7 @@
                     <v-color-picker
                         class="mt-3"
                         mode="hex"
+                        :modes="['hex']"
                         :disabled="!isCustomActive"
                         v-model="colorPickerValue"
                     ></v-color-picker>
@@ -339,6 +349,18 @@ export default {
                 (role) => this.resolvedActive.roleRefs[role.id] === this.selectedPaletteKey
             ).map((role) => role.label);
             return matches.length ? matches.join(', ') : 'surfaces and text';
+        },
+        // Light/dark for Vuetify (its own opacities and variables) and
+        // CodeMirror. Only a theme of your own can change it; the setter
+        // edits the live config, so the preview follows at once.
+        darkValue: {
+            get() {
+                return !!this.resolvedActive.dark;
+            },
+            set(value) {
+                if (!this.isCustomActive) return;
+                this.activeCustomTheme.dark = !!value;
+            },
         },
         colorPickerValue: {
             get() {
