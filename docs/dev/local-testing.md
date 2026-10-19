@@ -118,6 +118,36 @@ configured, so these are safe to run freely. Outside the Guix shell (no
 Chromium on PATH, no `TALEMATE_CHROMIUM`), every test here skips, keeping
 the plain suite runnable without a browser.
 
+Each xdist worker starts its own isolated app, so `-n 4` runs the full
+suite in about 3.5 minutes. Don't go above 4 on this machine: each app
+(backend, vite, Chromium) takes 2–3 GB, and `-n 8` ran out of memory.
+
+### A fast loop while working
+
+- While iterating, run only the tests for the area you changed, for
+  example `tests/e2e/theme` or `tests/e2e/cultures`, plus the frontend
+  checks (1 s) and the plain suite (about 40 s). Run the full browser
+  suite once, at the end of a task, not after every fix.
+- A change to UI that the AI tests drive, such as a selector, a class or
+  a test id, also needs `grep -rn` over `tests/ai` for the old value. The
+  AI group isn't run without the owner's go-ahead, so nothing else will
+  catch it.
+- Seeding goes through one long-lived worker per app (see
+  `tests/e2e/seed.py`). Keep seed scripts free of state that leaks
+  between calls, or reset it in the worker, as it already does for
+  message ids.
+- A killed run (a timeout, a cancelled agent, an out-of-memory kill)
+  leaves its app running, because the app's children start in their own
+  session. Before a big run, check for leftovers and stop them:
+
+  ```bash
+  ps -eo pid,etime,cmd | grep "[p]ytest-of-$USER/pytest-.*/app"
+  pkill -f "pytest-of-$USER/pytest-<N>/app0"
+  ```
+
+The measurements behind these numbers are in
+[dev-loop-optimizations.md](dev-loop-optimizations.md).
+
 ### AI (opt-in) group
 
 Needs the owner's go-ahead every time (see the warning above). It is
