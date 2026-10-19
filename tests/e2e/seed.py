@@ -184,24 +184,63 @@ print(RESULT_PREFIX + json.dumps({"id": culture.id}))
 """
 
 
+# One long-lived seeding process per app root: importing talemate costs ~5 s,
+# so paying it once per run instead of once per seed call saves minutes.
+# The worker exec()s each script in a fresh namespace with sys.argv set, the
+# same contract as the old `python -c script spec` call.
+_WORKER_SRC = r"""
+import contextlib, io, json, sys, traceback
+for line in sys.stdin:
+    req = json.loads(line)
+    buf = io.StringIO()
+    ok = True
+    try:
+        sys.argv = ["-c", req["spec"]]
+        # A fresh process started message ids at 1; keep that per seed.
+        if "talemate.scene_message" in sys.modules:
+            sys.modules["talemate.scene_message"].reset_message_id()
+        with contextlib.redirect_stdout(buf):
+            exec(compile(req["script"], "<seed>", "exec"), {"__name__": "__seed__", "RESULT_PREFIX": req["prefix"]})
+    except BaseException:
+        ok = False
+        buf.write(traceback.format_exc())
+    sys.__stdout__.write(json.dumps({"ok": ok, "out": buf.getvalue()}) + "\n")
+    sys.__stdout__.flush()
+"""
+
+_WORKERS: dict = {}
+
+
+def _worker(root: Path):
+    key = str(Path(root).resolve())
+    proc = _WORKERS.get(key)
+    if proc is None or proc.poll() is not None:
+        env = _load_talemate_app().backend_env(Path(root))
+        proc = subprocess.Popen(
+            [sys.executable, "-c", _WORKER_SRC],
+            cwd=root,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        _WORKERS[key] = proc
+    return proc
+
+
 def _run_in_copy(root: Path, script: str, spec: dict) -> dict:
     """Run ``script`` with the copy's code in ``root``; return its result JSON."""
     root = Path(root)
-    env = _load_talemate_app().backend_env(root)
-    proc = subprocess.run(
-        [sys.executable, "-c", f"RESULT_PREFIX = {RESULT_PREFIX!r}\n{script}"]
-        + [json.dumps(spec)],
-        cwd=root,
-        env=env,
-        capture_output=True,
-        text=True,
+    proc = _worker(root)
+    proc.stdin.write(
+        json.dumps({"script": script, "spec": json.dumps(spec), "prefix": RESULT_PREFIX})
+        + "\n"
     )
-    lines = [ln for ln in proc.stdout.splitlines() if ln.startswith(RESULT_PREFIX)]
-    if proc.returncode != 0 or not lines:
-        raise RuntimeError(
-            f"seeding in {root} failed (exit {proc.returncode}):\n"
-            f"--- stdout:\n{proc.stdout}\n--- stderr:\n{proc.stderr}"
-        )
+    proc.stdin.flush()
+    reply = json.loads(proc.stdout.readline())
+    lines = [ln for ln in reply["out"].splitlines() if ln.startswith(RESULT_PREFIX)]
+    if not reply["ok"] or not lines:
+        raise RuntimeError(f"seeding in {root} failed:\n{reply['out']}")
     return json.loads(lines[-1][len(RESULT_PREFIX) :])
 
 
