@@ -1,7 +1,7 @@
 <template>
   <v-row>
     <v-col cols="7">
-        <v-card elevation="7" color="raised" variant="outlined">
+        <v-card elevation="7" variant="outlined" style="border-color: rgb(var(--v-theme-border))">
           <v-card-text>
             <CoverBBoxEditor
               v-if="editable && activeTab === 'cover_crop'"

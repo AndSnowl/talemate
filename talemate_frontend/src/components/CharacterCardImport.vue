@@ -414,7 +414,7 @@
                   <v-window v-model="playerCharacterMode" class="mt-3">
                     <!-- Default Character Template -->
                     <v-window-item value="template">
-                      <v-card color="raised" variant="outlined">
+                      <v-card variant="outlined" style="border-color: rgb(var(--v-theme-border))">
                         <v-card-text class="text-on-surface">
                           <v-text-field
                             v-model="playerCharacterTemplate.name"
@@ -437,7 +437,7 @@
                     
                     <!-- Use Detected Character -->
                     <v-window-item value="existing">
-                      <v-card color="raised" variant="outlined">
+                      <v-card variant="outlined" style="border-color: rgb(var(--v-theme-border))">
                         <v-card-text class="text-on-surface">
                           <v-select
                             v-model="playerCharacterExisting"
@@ -455,7 +455,7 @@
                     
                     <!-- Import from Another Scene -->
                     <v-window-item value="import">
-                      <v-card color="raised" variant="outlined">
+                      <v-card variant="outlined" style="border-color: rgb(var(--v-theme-border))">
                         <v-card-text class="text-on-surface">
                           <v-autocomplete
                             v-model="importSceneInput"

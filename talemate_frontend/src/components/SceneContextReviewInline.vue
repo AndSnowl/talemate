@@ -304,6 +304,9 @@ export default {
         emphasis: sceneConfig.emphasis || narratorStyles,
         parentheses: sceneConfig.parentheses || narratorStyles,
         brackets: sceneConfig.brackets || narratorStyles,
+        // Summaries/history read as narration: narrator styles and role.
+        default: narratorStyles,
+        messageType: 'narrator',
       });
     },
     configMeta() {

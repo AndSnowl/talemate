@@ -18,7 +18,7 @@
         <v-card-text v-if="config != null">
             <div class="tiles">
                 <div class="tile" v-for="(scene, index) in recentScenes()" :key="index">
-                    <v-card :disabled="!sceneLoadingAvailable || sceneIsLoading" density="compact" elevation="7"  @click="loadScene(scene)" color="raised" variant="outlined">
+                    <v-card :disabled="!sceneLoadingAvailable || sceneIsLoading" density="compact" elevation="7"  @click="loadScene(scene)" variant="outlined" style="border-color: rgb(var(--v-theme-border))">
                         <v-card-title class="text-primary">
                             {{ filenameToTitle(scene.filename) }}
                         </v-card-title>

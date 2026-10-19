@@ -407,6 +407,43 @@ check('no_unswept_hardcoded_colors', () => {
     }
 });
 
+// Final fix 13: `color="raised" variant="outlined"` draws its border (and
+// any uncoloured text) in the raised surface colour, about 1.1:1 against
+// the surface. Outline such cards with the `border` role instead.
+check('no_outlined_raised_cards', () => {
+    const offenders = [];
+    for (const filePath of listFiles(SRC_DIR)) {
+        const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+        lines.forEach((line, i) => {
+            if (line.includes('color="raised"') && line.includes('variant="outlined"')) {
+                offenders.push(`${toRelPath(filePath)}:${i + 1}: ${line.trim()}`);
+            }
+        });
+    }
+    assert.deepEqual(offenders, []);
+});
+
+// Final fix 12: a SceneTextParser built without `messageType` colours its
+// paragraphs with the generic default and resolves a stored default colour
+// without the message type's legacy-unset check. Every component caller
+// names its message type.
+check('scene_text_parser_callers_pass_message_type', () => {
+    const offenders = [];
+    for (const filePath of listFiles(SRC_DIR)) {
+        if (!filePath.endsWith('.vue')) continue;
+        const text = fs.readFileSync(filePath, 'utf8');
+        const re = /new SceneTextParser\(\{([\s\S]*?)\}\);/g;
+        let match;
+        while ((match = re.exec(text)) !== null) {
+            if (!/\bmessageType\s*:/.test(match[1])) {
+                const line = text.slice(0, match.index).split('\n').length;
+                offenders.push(`${toRelPath(filePath)}:${line}`);
+            }
+        }
+    }
+    assert.deepEqual(offenders, []);
+});
+
 if (failures.length > 0) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}`);
