@@ -129,10 +129,29 @@ line_length = 88
 
 [tool.mypy]
 python_version = "3.11"
-# Third-party packages (chromadb, isodate, ...) ship no stubs, and the rest
-# of talemate isn't typed yet; keep both out of the strict check below.
+# Third-party packages with no stubs at all (isodate, ...) resolve to Any
+# via ignore_missing_imports below; the default here is for packages that
+# do ship types but aren't part of the strict check.
 follow_imports = "silent"
 ignore_missing_imports = true
+
+# The rest of talemate isn't typed yet and has a large import graph (e.g.
+# talemate.world.store imports talemate.path); don't even follow it, so
+# checking talemate.world stays fast. The more specific override below wins
+# for talemate.world itself (an explicit `-p` target is always checked in
+# full regardless of follow_imports, so this only affects what talemate.world
+# imports from the rest of talemate).
+[[tool.mypy.overrides]]
+module = ["talemate.*"]
+follow_imports = "skip"
+
+# chromadb ships its own types (py.typed) but pulls in a huge dependency
+# graph (onnx, grpc, numpy, ...); index.py only ever touches it through
+# values already typed Any here, so there's nothing strict checking would
+# gain by following it.
+[[tool.mypy.overrides]]
+module = ["chromadb", "chromadb.*"]
+follow_imports = "skip"
 
 [[tool.mypy.overrides]]
 module = ["talemate.world", "talemate.world.*"]
