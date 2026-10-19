@@ -23,7 +23,7 @@ import structlog
 from pydantic import BaseModel
 
 from .dates import Precision, WorldDate
-from .kinds import KindSpec, get_kind
+from .kinds import KindSpec, _field_spec, get_kind
 from .refs import REF_PATTERN, parse_refs
 
 log = structlog.get_logger("talemate.world.view")
@@ -44,7 +44,10 @@ def _decode_date(instant: int | None, precision: str | None) -> WorldDate | None
 
 
 def _decode_field_value(kind_spec: KindSpec, field: str, value_json: str) -> object:
-    spec = next(f for f in kind_spec.fields if f.name == field)
+    try:
+        spec = _field_spec(kind_spec, field)
+    except ValueError:
+        raise KeyError(f"{kind_spec.name!r} has no field {field!r}") from None
     if spec.type == "date":
         return WorldDate.model_validate_json(value_json)
     return json.loads(value_json)
@@ -106,110 +109,142 @@ class WorldView:
             return None
         return json.loads(row["value_json"])
 
-    def _fetch_fields(self, kinds: dict[str, str]) -> dict[str, dict[str, object]]:
+    def _live_things_filter(
+        self, prefix: str, *, kind: str | None = None, thing_id: str | None = None
+    ) -> tuple[str, list[object]]:
+        """A SQL condition (columns named with `prefix`, e.g. `"t."`) and
+        its params that picks out things live at `self.rev`, optionally
+        narrowed to one `kind` or one `thing_id`. Used to join against
+        `things` instead of binding one placeholder per id, so callers
+        aren't bounded by SQLite's bound-variable limit."""
+
+        clauses = [
+            f"{prefix}rev_added <= ?",
+            f"({prefix}rev_removed IS NULL OR {prefix}rev_removed > ?)",
+        ]
+        params: list[object] = [self.rev, self.rev]
+        if kind is not None:
+            clauses.append(f"{prefix}kind = ?")
+            params.append(kind)
+        if thing_id is not None:
+            clauses.append(f"{prefix}id = ?")
+            params.append(thing_id)
+        return " AND ".join(clauses), params
+
+    def _fetch_fields(
+        self,
+        thing_ids: list[str],
+        *,
+        kind: str | None = None,
+        thing_id: str | None = None,
+    ) -> dict[str, dict[str, object]]:
         """`thing_id -> {field: decoded value}`, one row per (thing_id,
         field): the live row with the greatest `valid_from <= at`, NULL
-        sorting lowest."""
+        sorting lowest. Joined against `things` (narrowed to `kind` or
+        `thing_id` when given) rather than an `IN (...)` list of
+        `thing_ids`, which is only used here to seed the empty result for
+        things with no field values."""
 
-        result: dict[str, dict[str, object]] = {thing_id: {} for thing_id in kinds}
-        if not kinds:
+        result: dict[str, dict[str, object]] = {tid: {} for tid in thing_ids}
+        if not thing_ids:
             return result
 
-        placeholders = ",".join("?" for _ in kinds)
+        things_filter, things_params = self._live_things_filter(
+            "t.", kind=kind, thing_id=thing_id
+        )
         rows = self._conn.execute(
             f"""
-            SELECT thing_id, field, value_json FROM (
-                SELECT thing_id, field, value_json,
+            SELECT thing_id, field, value_json, thing_kind FROM (
+                SELECT fv.thing_id, fv.field, fv.value_json, t.kind AS thing_kind,
                        ROW_NUMBER() OVER (
-                           PARTITION BY thing_id, field
-                           ORDER BY valid_from DESC, row_id DESC
+                           PARTITION BY fv.thing_id, fv.field
+                           ORDER BY fv.valid_from DESC, fv.row_id DESC
                        ) AS rn
-                FROM field_values
-                WHERE thing_id IN ({placeholders})
-                  AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)
-                  AND (valid_from IS NULL OR valid_from <= ?)
+                FROM field_values fv
+                JOIN things t ON t.id = fv.thing_id AND {things_filter}
+                WHERE fv.rev_added <= ? AND (fv.rev_removed IS NULL OR fv.rev_removed > ?)
+                  AND (fv.valid_from IS NULL OR fv.valid_from <= ?)
             )
             WHERE rn = 1
             """,
-            (*kinds, self.rev, self.rev, self._at_instant()),
+            (*things_params, self.rev, self.rev, self._at_instant()),
         ).fetchall()
 
         for row in rows:
-            thing_id = row["thing_id"]
-            kind_spec = get_kind(kinds[thing_id])
-            result[thing_id][row["field"]] = _decode_field_value(
+            kind_spec = get_kind(row["thing_kind"])
+            result.setdefault(row["thing_id"], {})[row["field"]] = _decode_field_value(
                 kind_spec, row["field"], row["value_json"]
             )
         return result
 
-    def _fetch_facts(self, thing_ids: list[str]) -> dict[str, list[FactState]]:
+    def _fetch_facts(
+        self,
+        thing_ids: list[str],
+        *,
+        kind: str | None = None,
+        thing_id: str | None = None,
+    ) -> dict[str, list[FactState]]:
         """`thing_id -> [FactState, ...]`, ordered by `valid_from` (NULL
-        first), then `fact_id`."""
+        first), then `fact_id`. Joined against `things` (narrowed to
+        `kind` or `thing_id` when given) rather than an `IN (...)` list of
+        `thing_ids`, which is only used here to seed the empty result for
+        things with no facts."""
 
-        result: dict[str, list[FactState]] = {thing_id: [] for thing_id in thing_ids}
+        result: dict[str, list[FactState]] = {tid: [] for tid in thing_ids}
         if not thing_ids:
             return result
 
-        placeholders = ",".join("?" for _ in thing_ids)
+        things_filter, things_params = self._live_things_filter(
+            "t.", kind=kind, thing_id=thing_id
+        )
         at_instant = self._at_instant()
         rows = self._conn.execute(
             f"""
-            SELECT thing_id, fact_id, category, text, valid_from, from_precision,
-                   valid_until, until_precision, rev_added
-            FROM facts
-            WHERE thing_id IN ({placeholders})
-              AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)
-              AND (valid_from IS NULL OR valid_from <= ?)
-              AND (valid_until IS NULL OR valid_until > ?)
-            ORDER BY thing_id, valid_from ASC, fact_id ASC
+            SELECT f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
+                   f.from_precision, f.valid_until, f.until_precision, f.rev_added
+            FROM facts f
+            JOIN things t ON t.id = f.thing_id AND {things_filter}
+            WHERE f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
+              AND (f.valid_from IS NULL OR f.valid_from <= ?)
+              AND (f.valid_until IS NULL OR f.valid_until > ?)
+            ORDER BY f.thing_id, f.valid_from ASC, f.fact_id ASC
             """,
-            (*thing_ids, self.rev, self.rev, at_instant, at_instant),
+            (*things_params, self.rev, self.rev, at_instant, at_instant),
         ).fetchall()
 
         for row in rows:
-            result[row["thing_id"]].append(_fact_state_from_row(row))
+            result.setdefault(row["thing_id"], []).append(_fact_state_from_row(row))
         return result
 
     def thing(self, thing_id: str) -> ThingState | None:
         """The thing's state at `(at, rev)`, or `None` if it doesn't exist
         at `rev` (never created yet, or already removed)."""
 
+        things_filter, things_params = self._live_things_filter("", thing_id=thing_id)
         row = self._conn.execute(
-            "SELECT kind FROM things WHERE id = ? "
-            "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
-            (thing_id, self.rev, self.rev),
+            f"SELECT kind FROM things WHERE {things_filter}", things_params
         ).fetchone()
         if row is None:
             return None
 
         kind = row["kind"]
-        fields = self._fetch_fields({thing_id: kind})[thing_id]
-        facts = self._fetch_facts([thing_id])[thing_id]
+        fields = self._fetch_fields([thing_id], thing_id=thing_id)[thing_id]
+        facts = self._fetch_facts([thing_id], thing_id=thing_id)[thing_id]
         return ThingState(id=thing_id, kind=kind, fields=fields, facts=facts)
 
     def things(self, kind: str | None = None) -> list[ThingState]:
         """Every thing that exists at `rev`, optionally restricted to one
         `kind`, ordered by id."""
 
-        if kind is None:
-            rows = self._conn.execute(
-                "SELECT id, kind FROM things "
-                "WHERE rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?) "
-                "ORDER BY id",
-                (self.rev, self.rev),
-            ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT id, kind FROM things "
-                "WHERE kind = ? AND rev_added <= ? "
-                "AND (rev_removed IS NULL OR rev_removed > ?) "
-                "ORDER BY id",
-                (kind, self.rev, self.rev),
-            ).fetchall()
+        things_filter, things_params = self._live_things_filter("", kind=kind)
+        rows = self._conn.execute(
+            f"SELECT id, kind FROM things WHERE {things_filter} ORDER BY id",
+            things_params,
+        ).fetchall()
 
         kinds = {row["id"]: row["kind"] for row in rows}
-        fields_by_id = self._fetch_fields(kinds)
-        facts_by_id = self._fetch_facts(list(kinds))
+        fields_by_id = self._fetch_fields(list(kinds), kind=kind)
+        facts_by_id = self._fetch_facts(list(kinds), kind=kind)
 
         return [
             ThingState(
