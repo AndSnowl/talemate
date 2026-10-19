@@ -103,7 +103,9 @@ export const BUILTIN_PRESETS = [
             base1: '#32302f', base2: '#3c3836', base3: '#504945', base4: '#7c6f64',
             fg: '#ebdbb2', 'fg-alt': '#d5c4a1', grey: '#a89984',
             red: '#fe7000', orange: '#e69f00', yellow: '#f0e442', green: '#00ad7e',
-            teal: '#00ad7e', blue: '#56b4e9', magenta: '#cf80ac',
+            // Okabe-Ito has one bluish green; teal is a much lighter one of
+            // the same hue, so it differs from green by lightness alone.
+            teal: '#8fe3c6', blue: '#56b4e9', magenta: '#cf80ac',
         },
         // Okabe-Ito colours: success and scene never rely on red vs green.
         roles: { success: 'blue', scene: 'blue', danger: 'red' },

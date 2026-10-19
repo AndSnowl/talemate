@@ -47,6 +47,13 @@ export function toHex(value) {
         shadeName = dash === -1 ? undefined : name.slice(dash + 1);
     }
 
+    // Vuetify keeps these under `colors.shades`, not as colour families.
+    // Transparent has no #rrggbb form, so it reads as "no colour".
+    if (!shadeName && (familyKey === 'white' || familyKey === 'black')) {
+        return normalizeHex(vuetifyColors.shades[familyKey]);
+    }
+    if (!shadeName && familyKey === 'transparent') return null;
+
     const family = vuetifyColors[familyKey];
     if (!family) return null;
 
@@ -83,8 +90,10 @@ export function nearestAccent(hex, palette) {
     return best;
 }
 
-// FNV-1a 32-bit over the UTF-16 code units of `str`, unsigned.
-function fnv1aHash(str) {
+// FNV-1a 32-bit over the UTF-16 code units of `value` (stringified, so a
+// missing or non-string name hashes instead of throwing), unsigned.
+function fnv1aHash(value) {
+    const str = String(value ?? '');
     let hash = 0x811c9dc5;
     for (let i = 0; i < str.length; i++) {
         hash ^= str.charCodeAt(i);

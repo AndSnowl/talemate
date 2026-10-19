@@ -218,6 +218,37 @@ check('to_hex_forms', () => {
     assert.equal(toHex('nonsense'), null);
 });
 
+// Final fix 15: Vuetify keeps white/black/transparent under
+// `colors.shades`, not as colour families.
+check('to_hex_shades', () => {
+    assert.equal(toHex('white'), '#ffffff');
+    assert.equal(toHex('black'), '#000000');
+    assert.equal(toHex('WHITE'), '#ffffff');
+    // Transparent has no #rrggbb form: no colour.
+    assert.equal(toHex('transparent'), null);
+});
+
+// Final fix 11: a non-string name never throws.
+check('character_key_non_string_name', () => {
+    for (const name of [undefined, null, 42, { a: 1 }]) {
+        assert.ok(ACCENT_KEYS.includes(characterPaletteKey(null, name)), String(name));
+    }
+    assert.equal(characterPaletteKey(null, 42), characterPaletteKey(null, '42'));
+});
+
+// Final fix 16: every accent of every preset is a distinct colour, so two
+// characters hashing to different accents never look the same.
+check('preset_accents_distinct', () => {
+    for (const preset of BUILTIN_PRESETS) {
+        const seen = new Map();
+        for (const key of ACCENT_KEYS) {
+            const hex = normalizeHex(preset.palette[key]);
+            assert.ok(!seen.has(hex), `${preset.id}: ${key} and ${seen.get(hex)} are both ${hex}`);
+            seen.set(hex, key);
+        }
+    }
+});
+
 check('character_key_white_uses_name_hash', () => {
     const fromWhite = characterPaletteKey('#fff', 'Marta');
     assert.ok(ACCENT_KEYS.includes(fromWhite), `${fromWhite} is not an accent key`);
