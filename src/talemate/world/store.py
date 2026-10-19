@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 from pydantic import BaseModel
@@ -31,6 +31,9 @@ from .dates import Precision, WorldDate
 from .kinds import KindSpec, get_kind, validate_field
 from .refs import parse_refs
 from .view import WorldView
+
+if TYPE_CHECKING:
+    from .timeline import TimelineEntry
 
 log = structlog.get_logger("talemate.world.store")
 
@@ -557,6 +560,17 @@ class World:
         view stays pinned even as later revisions are written."""
 
         return WorldView(self._conn, at, rev if rev is not None else self.head_rev())
+
+    def timeline(self, thing_id: str, rev: int | None = None) -> "list[TimelineEntry]":
+        """Every field value and fact start/end live for `thing_id` at
+        `rev`, in story-time order. `rev=None` means `head_rev()`. Raises
+        `KeyError` if the thing doesn't exist at `rev`."""
+
+        from .timeline import build_timeline
+
+        return build_timeline(
+            self._conn, thing_id, rev if rev is not None else self.head_rev()
+        )
 
     def close(self) -> None:
         self._conn.close()
