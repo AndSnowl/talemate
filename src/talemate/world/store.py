@@ -177,12 +177,16 @@ class Revision:
         return row[0]
 
     def _check_refs(self, text: str) -> None:
+        """Raise `ValueError` unless every thing `text` references is live
+        at this revision (the same test as `_require_thing`)."""
+
         for ref_id in parse_refs(text):
-            row = self._conn.execute(
-                "SELECT 1 FROM things WHERE id = ?", (ref_id,)
-            ).fetchone()
-            if row is None:
-                raise ValueError(f"fact references unknown thing: {ref_id}")
+            try:
+                self._require_thing(ref_id)
+            except KeyError:
+                raise ValueError(
+                    f"fact references unknown or removed thing: {ref_id}"
+                ) from None
 
     def _check_span(
         self, valid_from: WorldDate | None, valid_until: WorldDate | None

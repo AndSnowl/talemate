@@ -12,7 +12,12 @@ imported lazily, inside `WorldIndex`, so importing this module never
 requires it.
 
 chromadb metadata can't hold `None` or an unbounded span, so an open start
-or end is stored as the numeric sentinels `OPEN_START`/`OPEN_END` instead.
+or end is stored as the numeric sentinels `OPEN_START`/`OPEN_END` instead,
+and a header's missing `fact_id`/`category` as an empty string.
+
+Each fact document carries its stable `fact_id`, and the collection records
+the revision it was built at (`WorldIndex.built_rev`), so a hit can be
+re-rendered from the world itself, e.g. at a scene's date.
 """
 
 import sqlite3
@@ -36,6 +41,8 @@ class IndexDoc(BaseModel):
     thing_id: str
     kind: str
     category: str | None
+    # the fact's stable id for a fact document; None for a thing header
+    fact_id: str | None
     text: str
     valid_from: int
     valid_until: int
@@ -49,7 +56,7 @@ def index_rows(conn: sqlite3.Connection, rev: int) -> list[sqlite3.Row]:
     `World._live_fact_rows` is the method that supplies it."""
 
     return conn.execute(
-        "SELECT row_id, thing_id, category, text, valid_from, valid_until "
+        "SELECT row_id, fact_id, thing_id, category, text, valid_from, valid_until "
         "FROM facts WHERE rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
         (rev, rev),
     ).fetchall()
@@ -83,6 +90,7 @@ def index_documents(world: World, rev: int | None = None) -> list[IndexDoc]:
                 thing_id=thing.id,
                 kind=thing.kind,
                 category=None,
+                fact_id=None,
                 text=f"{thing.kind}: {name}",
                 valid_from=OPEN_START,
                 valid_until=OPEN_END,
@@ -101,6 +109,7 @@ def index_documents(world: World, rev: int | None = None) -> list[IndexDoc]:
                 thing_id=thing_id,
                 kind=kinds[thing_id],
                 category=row["category"],
+                fact_id=row["fact_id"],
                 text=f"{names[thing_id]}: {view.render(row['text'])}",
                 valid_from=OPEN_START
                 if row["valid_from"] is None
@@ -119,6 +128,7 @@ def _metadata_for(doc: IndexDoc) -> dict[str, object]:
         "thing_id": doc.thing_id,
         "kind": doc.kind,
         "category": doc.category or "",
+        "fact_id": doc.fact_id or "",
         "valid_from": doc.valid_from,
         "valid_until": doc.valid_until,
     }
@@ -130,6 +140,7 @@ def _doc_from_result(doc_id: str, text: str, metadata: dict[str, object]) -> Ind
         thing_id=metadata["thing_id"],
         kind=metadata["kind"],
         category=metadata["category"] or None,
+        fact_id=metadata["fact_id"] or None,
         text=text,
         valid_from=metadata["valid_from"],
         valid_until=metadata["valid_until"],
@@ -166,10 +177,13 @@ class WorldIndex:
 
     def rebuild(self, rev: int | None = None) -> int:
         """Drop the collection if it exists, recreate it, and refill it
-        from `index_documents(self._world, rev)`. Returns the document
+        from `index_documents(self._world, rev)` (`None` means head),
+        recording `rev` in the collection's metadata. Returns the document
         count."""
 
         import chromadb
+
+        rev = rev if rev is not None else self._world.head_rev()
 
         try:
             self._client.delete_collection(self._collection_name)
@@ -177,7 +191,7 @@ class WorldIndex:
             pass
 
         collection = self._client.create_collection(
-            self._collection_name, **self._collection_kwargs()
+            self._collection_name, metadata={"rev": rev}, **self._collection_kwargs()
         )
 
         docs = index_documents(self._world, rev)
@@ -188,8 +202,22 @@ class WorldIndex:
                 metadatas=[_metadata_for(doc) for doc in docs],
             )
 
-        log.info("world.index.rebuild", world_id=self._world.id, count=len(docs))
+        log.info(
+            "world.index.rebuild", world_id=self._world.id, rev=rev, count=len(docs)
+        )
         return len(docs)
+
+    def built_rev(self) -> int | None:
+        """The revision the collection was last rebuilt at, or `None` if
+        it hasn't been built."""
+
+        import chromadb
+
+        try:
+            collection = self._collection()
+        except chromadb.errors.NotFoundError:
+            return None
+        return (collection.metadata or {}).get("rev")
 
     def query(
         self,

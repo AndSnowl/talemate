@@ -1,4 +1,7 @@
+import pytest
+
 from talemate.world.dates import WorldDate
+from talemate.world.refs import ref
 from talemate.world.store import Source
 
 
@@ -274,3 +277,197 @@ def test_undo_creation_never_restores_the_thing(world, maren):
     assert report.conflicts == []
     assert world.view().thing(oskar) is None
     assert _live_thing_rows(world, oskar) == 0
+
+
+def _branch_revs(world, branch_id):
+    return [r.rev for r in world.revisions(branch_id=branch_id)]
+
+
+def test_undo_after_redo_reverts_fact_again(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        scar = rev.add_fact(maren.id, "appearance", "A scar across her cheek.")
+        target = rev.rev
+    before = _fact_texts(world, maren.id, rev=target - 1)
+
+    undone = world.undo([target])
+    redone = world.undo([undone.undo_rev])
+    assert scar in _fact_texts(world, maren.id)
+
+    report = world.undo(_branch_revs(world, "E"))
+
+    assert report.undo_rev is not None
+    assert report.reverted == 1
+    assert report.conflicts == []
+    assert _fact_texts(world, maren.id) == before
+    # and re-undoing it once more is still a quiet no-op
+    again = world.undo([target])
+    assert (again.undo_rev, again.reverted, again.conflicts) == (None, 0, [])
+    assert redone.conflicts == []
+
+
+def test_undo_after_redo_restores_corrected_fact(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.correct_fact(maren.laugh, text="A slow, rare laugh.")
+        target = rev.rev
+
+    undone = world.undo([target])
+    world.undo([undone.undo_rev])
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A slow, rare laugh."
+
+    report = world.undo([target])
+
+    assert report.reverted == 2
+    assert report.conflicts == []
+    assert _fact_texts(world, maren.id)[maren.laugh] == "A quick laugh."
+
+
+def test_undo_after_redo_reverts_thing_creation_again(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        oskar = rev.create_thing("character", fields={"name": "Oskar"})
+        rev.add_fact(oskar, "background", "A ferryman.")
+        target = rev.rev
+
+    undone = world.undo([target])
+    world.undo([undone.undo_rev])
+    assert world.view().thing(oskar).fields["name"] == "Oskar"
+
+    report = world.undo(_branch_revs(world, "E"))
+
+    # the thing, its name and its fact
+    assert report.reverted == 3
+    assert report.conflicts == []
+    assert world.view().thing(oskar) is None
+    assert _live_thing_rows(world, oskar) == 0
+    assert world.undo([target]).undo_rev is None
+
+
+def test_undo_after_redo_lists_later_change(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        scar = rev.add_fact(maren.id, "appearance", "A scar across her cheek.")
+        target = rev.rev
+    undone = world.undo([target])
+    world.undo([undone.undo_rev])
+    with world.revision(Source.manual(note="hand fix")) as rev:
+        rev.correct_fact(scar, text="A faint scar across her cheek.")
+        fixed = rev.rev
+
+    report = world.undo([target])
+
+    assert report.undo_rev is None
+    assert [(c.table, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("facts", "changed again in a later revision", fixed)
+    ]
+    assert _fact_texts(world, maren.id)[scar] == "A faint scar across her cheek."
+
+
+def _referencing_write(kind):
+    """A write, in a later revision, that makes Oskar (or his home) point
+    at the new thing."""
+
+    def fact(rev, oskar, home, new):
+        rev.add_fact(oskar, "relationship", f"Owes {ref(new)} a debt.")
+
+    def thing_field(rev, oskar, home, new):
+        rev.set_field(oskar, "culture", new, None)
+
+    def shares_field(rev, oskar, home, new):
+        rev.set_field(home, "cultures", [{"thing_id": new, "share": 1.0}], None)
+
+    return {"fact": fact, "thing": thing_field, "shares": shares_field}[kind]
+
+
+@pytest.fixture
+def oskar_and_home(world):
+    with world.revision(Source.manual()) as rev:
+        oskar = rev.create_thing("character", fields={"name": "Oskar"})
+        home = rev.create_thing("place", fields={"name": "Low Harbour"})
+    return oskar, home
+
+
+@pytest.mark.parametrize("kind", ["fact", "thing", "shares"])
+def test_undo_creation_conflicts_with_later_reference(world, oskar_and_home, kind):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        new = rev.create_thing("character", fields={"name": "Maren"})
+        created = rev.rev
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        _referencing_write(kind)(rev, oskar, home, new)
+        referenced = rev.rev
+
+    report = world.undo([created])
+
+    assert report.undo_rev is None
+    assert [(c.table, c.thing_id, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("things", new, "referenced in a later revision", referenced)
+    ]
+    assert world.view().thing(new).fields["name"] == "Maren"
+
+
+def test_undo_creation_reports_one_conflict_for_several_references(
+    world, oskar_and_home
+):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        created = rev.rev
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        rev.add_fact(oskar, "relationship", f"Owes {ref(maren)} a debt.")
+        rev.set_field(oskar, "culture", maren, None)
+        referenced = rev.rev
+
+    report = world.undo([created])
+
+    assert [(c.reason, c.later_rev) for c in report.conflicts] == [
+        ("referenced in a later revision", referenced)
+    ]
+    assert world.view().thing(maren) is not None
+    assert "Maren" in world.view().render(f"{ref(maren)}")
+
+
+def test_undo_creation_with_reference_inside_targets(world, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+    with world.revision(Source.scene("s1", "E", "m2")) as rev:
+        rev.add_fact(oskar, "relationship", f"Owes {ref(maren)} a debt.")
+        rev.set_field(oskar, "culture", maren, None)
+
+    report = world.undo(_branch_revs(world, "E"))
+
+    assert report.conflicts == []
+    assert world.view().thing(maren) is None
+    state = world.view().thing(oskar)
+    assert state.facts == []
+    assert "culture" not in state.fields
+
+
+def test_undo_creation_ignores_retired_reference(world, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        created = rev.rev
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        debt = rev.add_fact(oskar, "relationship", f"Owes {ref(maren)} a debt.")
+    with world.revision(Source.manual()) as rev:
+        rev.remove_fact(debt)
+
+    report = world.undo([created])
+
+    assert report.conflicts == []
+    assert world.view().thing(maren) is None
+
+
+def test_redo_of_removal_ignores_earlier_reference(world, maren, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(oskar, "relationship", f"Owes {ref(maren.id)} a debt.")
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.remove_thing(maren.id)
+        removed = rev.rev
+    restored = world.undo([removed])
+
+    # redoing the removal: the reference predates the restored thing
+    redo = world.undo([restored.undo_rev])
+
+    assert redo.conflicts == []
+    assert world.view().thing(maren.id) is None

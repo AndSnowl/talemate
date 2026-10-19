@@ -161,6 +161,60 @@ def test_add_fact_rejects_unknown_reference(world):
             )
 
 
+def test_add_fact_rejects_reference_to_removed_thing(world):
+    with world.revision(Source.manual()) as rev:
+        thing_id = rev.create_thing("character")
+        gone = rev.create_thing("character")
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+
+    with world.revision(Source.manual()) as rev:
+        with pytest.raises(ValueError):
+            rev.add_fact(thing_id, "background", f"Friends with [[thing:{gone}]].")
+
+
+def test_end_fact_hides_it_from_the_end_date(world):
+    with world.revision(Source.manual()) as rev:
+        thing_id = rev.create_thing("character")
+        fact_id = rev.add_fact(
+            thing_id, "background", "Warden.", valid_from=WorldDate.of(300)
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.end_fact(fact_id, WorldDate.of(310))
+
+    def visible(year):
+        state = world.view(at=WorldDate.of(year)).thing(thing_id)
+        return fact_id in {f.fact_id for f in state.facts}
+
+    assert visible(309)
+    assert not visible(310)
+    assert not visible(320)
+    assert world.view().thing(thing_id).facts == []
+
+
+def test_correct_fact_reopens_an_ended_fact(world):
+    with world.revision(Source.manual()) as rev:
+        thing_id = rev.create_thing("character")
+        fact_id = rev.add_fact(
+            thing_id,
+            "background",
+            "Warden.",
+            valid_from=WorldDate.of(300),
+            valid_until=WorldDate.of(310),
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(fact_id, valid_until=None)
+
+    facts = world.view().thing(thing_id).facts
+    assert [(f.fact_id, f.valid_until) for f in facts] == [(fact_id, None)]
+    assert facts[0].valid_from == WorldDate.of(300)
+    live = world._conn.execute(
+        "SELECT COUNT(*) FROM facts WHERE fact_id = ? AND rev_removed IS NULL",
+        (fact_id,),
+    ).fetchone()[0]
+    assert live == 1
+
+
 def test_add_fact_rejects_until_before_from(world):
     with world.revision(Source.manual()) as rev:
         thing_id = rev.create_thing("character")

@@ -150,3 +150,46 @@ def test_rebuild_is_idempotent(world, maren):
     second = index.rebuild()
 
     assert first == second == len(index_documents(world))
+
+
+def test_index_documents_carry_fact_ids(world, maren):
+    docs = index_documents(world)
+
+    header = next(doc for doc in docs if doc.id == maren.id)
+    assert header.fact_id is None
+    by_fact = {doc.fact_id: doc for doc in docs if doc.fact_id is not None}
+    assert set(by_fact) == {maren.tattoo, maren.warden, maren.laugh, maren.eye}
+    assert "eye" in by_fact[maren.eye].text
+
+
+def _index(world):
+    return WorldIndex(
+        world,
+        client=chromadb.EphemeralClient(),
+        embedding_function=_TrigramEmbeddingFunction(),
+    )
+
+
+@requires_chromadb
+def test_query_returns_fact_ids(world, maren):
+    index = _index(world)
+    index.rebuild()
+
+    hits = index.query("Lost her left eye", at=WorldDate.of(315), n=10)
+
+    eye = next(doc for doc in hits if "eye" in doc.text.lower())
+    assert eye.fact_id == maren.eye
+    header = next(doc for doc in hits if doc.id == maren.id)
+    assert header.fact_id is None
+
+
+@requires_chromadb
+def test_built_rev_records_rebuild_rev(world, maren):
+    index = _index(world)
+    assert index.built_rev() is None
+
+    index.rebuild()
+    assert index.built_rev() == world.head_rev()
+
+    index.rebuild(rev=maren.rev_created)
+    assert index.built_rev() == maren.rev_created
