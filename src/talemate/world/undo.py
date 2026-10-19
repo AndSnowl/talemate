@@ -100,34 +100,47 @@ class _Planner:
         )
 
     def plan_things(self) -> None:
+        """Decide once per thing id, over all of that id's rows, so a thing
+        removed and restored several times never ends up with two live
+        rows."""
+
         placeholders, params = self._in()
-        rows = self.conn.execute(
-            f"SELECT * FROM things WHERE rev_added IN ({placeholders}) "
-            f"OR rev_removed IN ({placeholders}) ORDER BY row_id",
+        ids = self.conn.execute(
+            f"SELECT DISTINCT id FROM things WHERE rev_added IN ({placeholders}) "
+            f"OR rev_removed IN ({placeholders}) ORDER BY id",
             params + params,
         ).fetchall()
 
-        for row in rows:
-            thing_id = row["id"]
-            added_here = row["rev_added"] in self.targets
-            removed_here = row["rev_removed"] in self.targets
-
-            if added_here:
+        for (thing_id,) in ids:
+            rows = self.conn.execute(
+                "SELECT * FROM things WHERE id = ? ORDER BY row_id", (thing_id,)
+            ).fetchall()
+            if any(r["rev_added"] in self.targets for r in rows):
+                # its creation (or a restore of it) is being undone: never
+                # restore it, and its rows go with it
                 self.created.add(thing_id)
-                if removed_here:
-                    continue
-                self._plan_created_thing(row)
-            elif removed_here:
-                self._plan_removed_thing(row)
+                self._plan_created_thing(rows)
+            else:
+                self._plan_removed_thing(rows)
 
-    def _plan_created_thing(self, row: sqlite3.Row) -> None:
-        thing_id = row["id"]
-        removed = row["rev_removed"]
-        if removed is not None:
-            if self._is_later_change(removed):
-                self._conflict("things", row, thing_id, REMOVED_LATER, removed)
+    def _plan_created_thing(self, rows: list[sqlite3.Row]) -> None:
+        added = [
+            r
+            for r in rows
+            if r["rev_added"] in self.targets and r["rev_removed"] not in self.targets
+        ]
+        live = next((r for r in added if r["rev_removed"] is None), None)
+        if live is None:
+            later = [r for r in added if self._is_later_change(r["rev_removed"])]
+            if later:
+                row = max(later, key=lambda r: r["rev_removed"])
+                self._conflict(
+                    "things", row, row["id"], REMOVED_LATER, row["rev_removed"]
+                )
+            # else added and removed within the targets, or already undone
             return
 
+        thing_id = live["id"]
         live_rows = {
             table: self.conn.execute(
                 f"SELECT row_id, rev_added FROM {table} "
@@ -138,30 +151,27 @@ class _Planner:
         }
         later = [
             r["rev_added"]
-            for rows in live_rows.values()
-            for r in rows
+            for table_rows in live_rows.values()
+            for r in table_rows
             if self._is_later_change(r["rev_added"])
         ]
         if later:
-            self._conflict("things", row, thing_id, CHANGED_LATER, min(later))
+            self._conflict("things", live, thing_id, CHANGED_LATER, min(later))
             return
 
-        self.plan.retire.append(("things", row["row_id"]))
+        self.plan.retire.append(("things", live["row_id"]))
         self.retired_things.add(thing_id)
-        for table, rows in live_rows.items():
-            self.plan.retire.extend((table, r["row_id"]) for r in rows)
+        for table, table_rows in live_rows.items():
+            self.plan.retire.extend((table, r["row_id"]) for r in table_rows)
 
-    def _plan_removed_thing(self, row: sqlite3.Row) -> None:
-        thing_id = row["id"]
-        live = self.conn.execute(
-            "SELECT 1 FROM things WHERE id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ).fetchone()
-        if live is not None:
+    def _plan_removed_thing(self, rows: list[sqlite3.Row]) -> None:
+        if any(r["rev_removed"] is None for r in rows):
             # only an undo can bring a thing back, so it's already restored
             return
-        self.plan.restore.append(("things", row))
-        self.restored_things.add(thing_id)
+        retired = [r for r in rows if r["rev_removed"] in self.targets]
+        latest = max(retired, key=lambda r: r["rev_removed"])
+        self.plan.restore.append(("things", latest))
+        self.restored_things.add(latest["id"])
 
     def _thing_live_after(self, thing_id: str) -> bool:
         if thing_id in self.restored_things:
@@ -274,11 +284,14 @@ class _Planner:
 
 def _apply(conn: sqlite3.Connection, undo_rev: int, plan: _Plan) -> None:
     for table, row_id in plan.retire:
-        conn.execute(
+        cur = conn.execute(
             f"UPDATE {table} SET rev_removed = ? "
             "WHERE row_id = ? AND rev_removed IS NULL",
             (undo_rev, row_id),
         )
+        if cur.rowcount != 1:
+            # the plan no longer matches the database; the revision rolls back
+            raise RuntimeError(f"undo: {table} row {row_id} is no longer live")
 
     for table, row in plan.restore:
         if table == "things":

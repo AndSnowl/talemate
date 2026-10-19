@@ -1,13 +1,13 @@
 """Database schema and migrations for a world's SQLite file.
 
 Each entry in `MIGRATIONS` is the DDL that upgrades a database from its
-index's version to the next.
+index's version to the next. `apply` runs the pending ones inside a single
+transaction and records the result in `PRAGMA user_version`.
 
 `things` is versioned like every other table: one row per thing per span
 of revisions it's live for (an undo can retire a thing and later restore
 it), so `things.id` isn't unique and `field_values`/`facts` can't carry a
-foreign key to it. Their thing ids are checked in code instead. `apply` runs the pending ones inside a single
-transaction and records the result in `PRAGMA user_version`.
+foreign key to it. Their thing ids are checked in code instead.
 """
 
 import sqlite3

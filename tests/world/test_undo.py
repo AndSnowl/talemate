@@ -227,3 +227,50 @@ def test_undo_remove_thing_restores_it(world, maren):
     with world.revision(Source.manual()) as rev:
         rev.add_fact(maren.id, "background", "Came back.")
     assert len(world.timeline(maren.id)) > 0
+
+
+def _live_thing_rows(world, thing_id):
+    return world._conn.execute(
+        "SELECT COUNT(*) FROM things WHERE id = ? AND rev_removed IS NULL",
+        (thing_id,),
+    ).fetchone()[0]
+
+
+def test_undo_branch_that_removed_a_thing_twice(world, maren):
+    with world.revision(Source.manual()) as rev:
+        oskar = rev.create_thing("character", fields={"name": "Oskar"})
+        rev.add_fact(oskar, "background", "A ferryman.")
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        rev.remove_thing(oskar)
+        first = rev.rev
+    world.undo([first])
+    with world.revision(Source.scene("s1", "E", "m2")) as rev:
+        rev.remove_thing(oskar)
+
+    report = world.undo([r.rev for r in world.revisions(branch_id="E")])
+
+    # the thing, its name and its fact, each restored once
+    assert report.reverted == 3
+    assert report.conflicts == []
+    assert _live_thing_rows(world, oskar) == 1
+    state = world.view().thing(oskar)
+    assert state.fields["name"] == "Oskar"
+    assert len(state.facts) == 1
+
+
+def test_undo_creation_never_restores_the_thing(world, maren):
+    with world.revision(Source.manual()) as rev:
+        oskar = rev.create_thing("character", fields={"name": "Oskar"})
+        created = rev.rev
+    dropped = world.undo([created]).undo_rev
+    world.undo([dropped])
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(oskar)
+        removed = rev.rev
+
+    report = world.undo([created, removed])
+
+    assert report.undo_rev is None
+    assert report.conflicts == []
+    assert world.view().thing(oskar) is None
+    assert _live_thing_rows(world, oskar) == 0
