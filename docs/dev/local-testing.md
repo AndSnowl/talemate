@@ -110,6 +110,27 @@ change that caused it — that diff is the point of the test. Without
 `--update-baselines` the test fails on any difference from the committed
 recording, intentional or not.
 
+### Strict mypy (`talemate.world`)
+
+`tests/world/test_typecheck.py` runs strict mypy over `talemate.world` as a
+regular test, so the plain suite enforces it. The rest of talemate isn't
+typed yet, so imports from there resolve to `Any` under strict mode — expect
+an explicit `cast` at that boundary (see the `[tool.mypy]` section in
+`pyproject.toml`).
+
+To run it by hand, outside pytest:
+
+```bash
+guix shell -m manifest.scm -- uv run --no-sync mypy --config-file pyproject.toml -p talemate.world
+```
+
+It uses a persistent cache, `.mypy_cache/world-typecheck` (gitignored), so a
+warm run is fast. Making another package strict the same way needs two
+edits: add it to the `[[tool.mypy.overrides]]` `module` list in
+`pyproject.toml`, and add it as its own `-p` target in
+`tests/world/test_typecheck.py` (or move that test somewhere more general
+once there's more than one strict package).
+
 ### Frontend logic checks
 
 Pure JS logic (no Vue, no browser) that's fast enough to check with plain

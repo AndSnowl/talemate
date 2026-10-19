@@ -44,10 +44,16 @@ Normalisation (``normalise``) drops, from any dict at any depth:
     recording today, but the rule is kept general per the brief rather
     than narrowed to today's shape).
 No keys beyond the brief's list are dropped.
-It also replaces 8+ character hex runs with ``<id>`` — but only runs that
-actually contain a hex letter (a-f); a pure-digit run of 8+ digits (a
-year, a count) is real content, not an id, and is left alone — and sorts
-dict keys everywhere.
+It also replaces id-shaped runs with ``<id>``, redacting the whole match:
+  - a full dashed uuid (``8-4-4-4-12`` hex digits);
+  - the 10-character scene/memory id shape, ``str(uuid.uuid4())[:10]``
+    (8 hex digits, a dash, 1 hex digit — see tale_mate.py:157,168,170);
+  - a 32-character undashed hex world id.
+These three fixed shapes are redacted whatever digits they happen to
+contain — a decimal-looking uuid is still a uuid. Any other 8+ character
+hex run is redacted only if it actually contains a hex letter (a-f); a
+pure-digit run of 8+ digits (a year, a count) is real content, not an id,
+and is left alone. Dict keys are sorted everywhere.
 """
 
 import json
@@ -68,15 +74,26 @@ from talemate.tale_mate import Actor, Player
 from conftest import MockClientContext, MockScene, bootstrap_scene
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BASE_DIR.parent
 GOLDEN_PATH = BASE_DIR / "data" / "characterization" / "scene_golden.json"
 FIXTURE_SCENES_DIR = BASE_DIR / "data" / "scenes"
+# Gitignored (see .gitignore's ``.test-artifacts/``). Written only on a
+# mismatch, so a `diff` against the committed baseline shows exactly what
+# changed instead of pytest's dict diff of the whole structure.
+ACTUAL_RECORDING_PATH = REPO_ROOT / ".test-artifacts" / "scene_golden.actual.json"
 
-# A run of 8+ hex characters, bounded so it doesn't bite off part of a
-# longer alnum token. Deliberately wider than any one id shape the code
-# emits today (scene/memory ids are 10-character hex from
-# ``str(uuid.uuid4())[:10]`` — see tale_mate.py:157,168,170; asset hashes
-# are full sha256 hex) so a shape that changes length still gets caught.
-_HEX_RUN_RE = re.compile(r"\b[0-9a-fA-F]{8,}\b")
+# Three fixed id shapes, tried first (longest/most specific first so a
+# short shape can't win a partial match inside a longer one), plus a
+# catch-all free-length hex run for anything else. Named groups let the
+# substitution callback below tell a fixed shape (always redacted) from
+# the free-length fallback (redacted only if it contains a hex letter —
+# see _looks_like_id).
+_ID_RE = re.compile(
+    r"\b(?P<uuid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\b"
+    r"|\b(?P<short_uuid>[0-9a-fA-F]{8}-[0-9a-fA-F])\b"
+    r"|\b(?P<world_id>[0-9a-fA-F]{32})\b"
+    r"|\b(?P<hex_run>[0-9a-fA-F]{8,})\b"
+)
 _DROP_KEYS = {"id", "memory_id", "memory_session_id", "saved_memory_session_id"}
 
 # Unix timestamps in this range cover roughly year 2001 to year 5138 in
@@ -88,12 +105,24 @@ _TIMESTAMP_MAX = 99_999_999_999
 
 
 def _looks_like_id(hex_run: str) -> bool:
-    """A hex run is an id (not a plain decimal count) only if it actually
-    uses a hex letter. A pure-digit run of 8+ characters — a year range, a
-    count, a duration in milliseconds — is real narration/data content and
-    must survive normalisation unchanged, not get redacted to ``<id>``.
+    """A free-length hex run (the ``hex_run`` fallback group, not one of the
+    three fixed id shapes) is an id, not a plain decimal count, only if it
+    actually uses a hex letter. A pure-digit run of 8+ characters — a year
+    range, a count, a duration in milliseconds — is real narration/data
+    content and must survive normalisation unchanged, not get redacted to
+    ``<id>``.
     """
     return any(c in "abcdefABCDEF" for c in hex_run)
+
+
+def _redact_id(match: re.Match) -> str:
+    """Redact a fixed id shape (uuid, the 10-char scene/memory id shape, or
+    a 32-char world id) unconditionally. The free-length ``hex_run``
+    fallback is redacted only if ``_looks_like_id`` says it's one."""
+
+    if match.group("hex_run") is not None:
+        return "<id>" if _looks_like_id(match.group()) else match.group()
+    return "<id>"
 
 
 def _looks_like_timestamp(key: str, value) -> bool:
@@ -130,9 +159,7 @@ def normalise(obj):
     if isinstance(obj, list):
         return [normalise(item) for item in obj]
     if isinstance(obj, str):
-        return _HEX_RUN_RE.sub(
-            lambda m: "<id>" if _looks_like_id(m.group()) else m.group(), obj
-        )
+        return _ID_RE.sub(_redact_id, obj)
     return obj
 
 
@@ -265,6 +292,32 @@ async def _play_golden_scene(tmp_path: Path) -> dict:
     return {"prompts": recorded_prompts, "scene": scene_data}
 
 
+def _fail_on_golden_mismatch(
+    recording: dict, expected: dict, golden_path: Path, actual_path: Path
+) -> None:
+    """Compare `recording` against the committed `expected` baseline. On a
+    mismatch, write `recording` to `actual_path` and fail with a message
+    that names it and suggests a `diff` against `golden_path`, instead of
+    only pytest's dict diff of the whole structure. A no-op when they
+    match (`actual_path` isn't written, so a stale copy from an earlier
+    failing run doesn't linger as a false lead)."""
+
+    if recording == expected:
+        return
+    actual_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(actual_path, "w") as f:
+        json.dump(recording, f, indent=2, sort_keys=True)
+        f.write("\n")
+    pytest.fail(
+        f"Golden scene recording does not match {golden_path}.\n"
+        f"The actual recording was written to {actual_path} — diff it "
+        f"against the baseline for exactly what changed:\n"
+        f"  diff {golden_path} {actual_path}\n"
+        "If this change is an intentional part of the phase-2 rework, "
+        "regenerate the baseline with --update-baselines and review the diff."
+    )
+
+
 @pytest.mark.asyncio
 async def test_golden_scene_matches_recording(tmp_path, update_baselines):
     recording = normalise(await _play_golden_scene(tmp_path))
@@ -285,11 +338,7 @@ async def test_golden_scene_matches_recording(tmp_path, update_baselines):
     with open(GOLDEN_PATH, "r") as f:
         expected = json.load(f)
 
-    assert recording == expected, (
-        f"Golden scene recording does not match {GOLDEN_PATH}.\n"
-        "If this change is an intentional part of the phase-2 rework, "
-        "regenerate it with --update-baselines and review the diff."
-    )
+    _fail_on_golden_mismatch(recording, expected, GOLDEN_PATH, ACTUAL_RECORDING_PATH)
 
 
 @pytest.mark.asyncio
@@ -304,6 +353,28 @@ async def test_golden_scene_is_deterministic(tmp_path):
     first = normalise(await _play_golden_scene(tmp_path / "first"))
     second = normalise(await _play_golden_scene(tmp_path / "second"))
     assert first == second
+
+
+def test_fail_on_golden_mismatch_writes_actual_and_names_it(tmp_path):
+    golden_path = tmp_path / "golden.json"
+    actual_path = tmp_path / "actual.json"
+
+    with pytest.raises(pytest.fail.Exception) as exc_info:
+        _fail_on_golden_mismatch({"a": 1}, {"a": 2}, golden_path, actual_path)
+
+    assert json.loads(actual_path.read_text()) == {"a": 1}
+    message = str(exc_info.value)
+    assert str(golden_path) in message
+    assert str(actual_path) in message
+    assert "diff" in message
+
+
+def test_fail_on_golden_mismatch_is_noop_when_equal(tmp_path):
+    actual_path = tmp_path / "actual.json"
+
+    _fail_on_golden_mismatch({"a": 1}, {"a": 1}, tmp_path / "golden.json", actual_path)
+
+    assert not actual_path.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +398,28 @@ def test_normalise_keeps_decimal_runs_but_redacts_real_ids():
     assert result["year_span"] == "12345678"
     assert real_id not in result["scene_id"]
     assert result["scene_id"] == "scene-<id>-done"
+
+
+def test_normalise_redacts_fixed_id_shapes_whole():
+    """Each of the three fixed id shapes is redacted whole, regardless of
+    whether it happens to contain a hex letter — unlike the free-length
+    ``hex_run`` fallback, which ``test_normalise_keeps_decimal_runs_but_redacts_real_ids``
+    covers. "12345678" (8 plain digits, too short and undashed for any
+    fixed shape) still survives.
+    """
+    data = {
+        "full_uuid": "scene-1b4e28ba-9d2e-4331-9f5a-abc123456789-done",
+        "short_uuid": "scene-1b4e28ba-2-done",
+        "world_id": "scene-" + "0123456789abcdef" * 2 + "-done",
+        "decimal_run": "12345678",
+    }
+
+    result = normalise(data)
+
+    assert result["full_uuid"] == "scene-<id>-done"
+    assert result["short_uuid"] == "scene-<id>-done"
+    assert result["world_id"] == "scene-<id>-done"
+    assert result["decimal_run"] == "12345678"
 
 
 def test_normalise_scopes_timestamp_drop_to_time_like_keys():

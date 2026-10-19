@@ -156,6 +156,20 @@ follow_imports = "skip"
 [[tool.mypy.overrides]]
 module = ["talemate.world", "talemate.world.*"]
 strict = true
+# Because `follow_imports = "skip"` applies to the rest of talemate (see
+# above), anything talemate.world imports from there resolves to `Any`
+# under strict mode — expect an explicit `cast` at that boundary rather
+# than a real checked type.
+#
+# To make another package strict the same way, two edits are needed: add
+# it to this override's `module` list, and add it as its own `-p` target
+# in tests/world/test_typecheck.py (or move that test somewhere more
+# general once there's more than one strict package).
+#
+# Run by hand: `guix shell -m manifest.scm -- uv run --no-sync mypy
+# --config-file pyproject.toml -p talemate.world`. Its persistent cache
+# (also used by tests/world/test_typecheck.py) lives at
+# `.mypy_cache/world-typecheck`.
 
 [tool.uv]
 exclude-newer = "1 week"

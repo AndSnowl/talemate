@@ -58,9 +58,9 @@ def thing_slot(thing_id: str) -> Slot:
     return ("things", thing_id)
 
 
-def _chunks(values: list[_T]) -> Iterable[list[_T]]:
-    for start in range(0, len(values), _CHUNK):
-        yield values[start : start + _CHUNK]
+def _chunks(values: list[_T], size: int = _CHUNK) -> Iterable[list[_T]]:
+    for start in range(0, len(values), size):
+        yield values[start : start + size]
 
 
 @dataclass(frozen=True)
@@ -134,7 +134,10 @@ class History:
         revs = sorted(set(revs))
         slots: dict[Slot, None] = {}
         for table in TABLES:
-            for chunk in _chunks(revs):
+            # This query binds each chunk twice (rev_added and rev_removed),
+            # so the chunk size used elsewhere would itself double the
+            # bound-parameter count past the 999 the module comment cites.
+            for chunk in _chunks(revs, _CHUNK // 2):
                 placeholders = ",".join("?" for _ in chunk)
                 for row in self.conn.execute(
                     f"SELECT * FROM {table} WHERE rev_added IN ({placeholders}) "
