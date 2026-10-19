@@ -256,3 +256,66 @@ What the owner agreed in the brainstorm. It gets its own design after this one s
   character's context, and their shared history, and that steers the scene.
 - Top navigation becomes **Worlds · World · Story · Scene · Inbox**. Templates, Prompts and Mods
   move into a **Tools** menu.
+
+### Further agreements (2026-10-18, after the cultures work merged)
+
+These came out of a discussion with the cultures agent. They're inputs for project 3's own design, not a finished design.
+
+**The paradigm**
+- The world is the single source of truth for world info. Scenes are children of a world, never the other way round.
+- A scene builds its own context as scenes do today, and promotes it to the world only through the inbox. Scenes never write the world automatically.
+- Nothing drops the world. Every scene and every fork belongs to its world.
+- The no-core-edits rule is gone. Project 3 reworks Talemate's scene, shared-context and save model freely. My suggestion: stop tracking upstream Talemate from project 3 on, and keep merging upstream through projects 1–2 only.
+
+**What today's structure gets wrong (for the design to avoid)**
+- A "world" is a shared-context file inside one project folder (`scenes/<project>/shared-context/<name>.json`), so it can't span projects.
+- Sharing works by copying. Shared characters and entries are copied into each scene on load and back on every save, and the last save wins. Two open scenes or two tabs overwrite each other. A shared character can lose its culture on reload because the world copy's empty value overwrites the scene's (`character.py`, `apply_shared_context`).
+- Removing a shared world entry deletes it from every scene. The shared history is replaced wholesale. When a character leaves the shared world, the code un-shares the wrong one (`shared_context.py`, the leftover `scene_character` variable).
+- Culture data is keyed by the shared-context file's name (`<name>.world/`), so renaming that file orphans it.
+- Forks drop their world link.
+- Places and objects each exist three times:
+  - places: world-state places, the cultures' `places.json`, and manual world entries;
+  - objects: world-state items, glossary "thing" entries, and world entries.
+- The World Editor and the cultures plugin find the world through the loaded scene, so nothing works without one.
+- Characters are identified by name everywhere, which is why renaming needed a whole plan.
+- Talemate's memory database is per scene and gets world entries by copying them in.
+
+**Identity and text**
+- World entities have stable ids. Structured data refers to ids, not names, so it renames itself.
+- Suggestion: record mentions when a message is created, meaning which entity ids appear and where. Highlights, renames and the inbox's importance signals then read those records instead of matching name strings. Today the cultures highlights run one big regex over every message and need a 600-entry cap, and the planned rename was a careful string replace across files. Text from before mention records existed falls back to matching.
+- Story text in past scene histories still contains the names as written. A rename needs a policy for that text: rewrite it through a preview, or leave it as it was said at the time.
+
+**The story tree**
+- A fork can happen at any message. Each fork stores its parent and the message it split at, which makes the story a real tree. Today's forks are copied files with no link back.
+
+**The inbox**
+- Requests are anchored to the message where they arose, and a fork inherits only the requests made before its fork point.
+- **You see your own path only.** On F in the tree A→B, A→C, B→D, B→E, D→F, the inbox shows the requests from A, B, D and F. Sibling branches (E) stay out of sight until you move there.
+- **The combined inbox** lists every scene's requests, marked with the scene they came from. Each scene contributes the path it was last left on.
+- The player decides which fork is canon by choosing which path to approve from. Canon is the player's view, not a system setting.
+- **Requests are ordered changes.** A later request about the same thing (a detail someone revealed after their first sighting) is just a second change. Approving both one at a time ends in the same place as approving them together. If the first sighting was rejected, the later change becomes a new first sighting.
+- **Conflicts between branches.**
+  - Say you approve from F, then move to E and approve there. The app warns that the two may conflict.
+  - The changes at risk are the ones approved from nodes that aren't ancestors of both E and F. That's everything below their last shared ancestor (B) on F's side: D and F.
+  - You can undo those changes, or ignore the warning and keep E's information alongside F's.
+- **A world change log** makes the undo possible. Each approved change records:
+  - its origin: the scene, branch and message;
+  - the value before and after.
+
+  Undo reverts only the entries it needs to. A field that changed again afterwards, by a later approval or a hand edit, is listed for the user instead of being reverted silently.
+- **The AI judges importance**, so that inbox fatigue stays low: a major character goes to the inbox, a throwaway one stays in the scene.
+  - Signals: how often the entity is named, whether they speak, ties to named characters, whether they recur across scenes, and how much the player engages with them.
+  - The judgement comes with a short reason.
+  - The AI re-checks at milestones, so the gate guard who becomes important gets proposed later.
+  - Suggestion: low-importance finds sit in a collapsed "minor" section rather than vanishing, so a wrong judgement can be recovered.
+
+**Cultures in a world-first app**
+- Culture data already lives at world level: a world folder with atomic writes, never copied into scenes. It's a good starting shape for the world store.
+- The cultures' places become the world's places: one place entity with culture shares, a parent and laws.
+- The glossary keeps only language material: words, phrases, true names, renderings in other languages, and the pool of names nobody has yet. People and places are entities, linked by id.
+- Today the cultures AI writes its findings (names from snapshots, culture guesses, play additions) straight into the world glossary, marked unreviewed. Under the inbox rule these become scene requests. The existing culture review becomes part of the inbox.
+- The names of throwaway characters, and the names in pending requests, still count as "in use" across the whole world. Otherwise two scenes get the same generated name.
+- A scene-only place still needs a parent world place or its own culture mix. Otherwise naming, highlights and the culture section stop working there.
+- Holidays and customs belong on the world calendar (docs/ideas/world-calendar.org).
+- One prompt budget across features is better than each feature capping its own. World-first steering will compete with the ~350-token culture section.
+- Migration: an existing shared context plus its `.world` folder becomes a world. Scenes with no shared context go to an "unsorted" area until they're moved.
