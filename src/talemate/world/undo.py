@@ -69,7 +69,7 @@ _REF_FIELD_NAMES = sorted(
 
 class UndoConflict(BaseModel):
     table: Table
-    row_id: str | int
+    row_id: int
     thing_id: str
     reason: str
     later_rev: int

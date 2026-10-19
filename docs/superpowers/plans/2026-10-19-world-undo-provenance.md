@@ -57,6 +57,8 @@
   - The undo revision writes one `revision_reverts` row per target rev.
   - Every restored copy gets `restored_from` set.
 
+> **Superseded by the per-slot replay design (rulings R8–R10); see `src/talemate/world/replay.py` and the round-2 brief.** The rules below describe the first planner and are kept for the record.
+
 **Planning rules.** Define two things first:
 - **The origin of a row:** follow `restored_from` until it is NULL.
 - **A row's current copy:** a live row in the same table whose `restored_from` chain reaches it, or the row itself when it's live.

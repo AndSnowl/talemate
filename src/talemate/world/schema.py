@@ -110,6 +110,9 @@ MIGRATIONS: list[str] = [
 
     CREATE INDEX idx_fact_refs_thing ON fact_refs (thing_id);
 
+    CREATE INDEX idx_undo_conflicts_undo_rev ON undo_conflicts (undo_rev);
+    CREATE INDEX idx_undo_conflicts_row ON undo_conflicts (table_name, row_id);
+
     CREATE INDEX idx_things_id ON things (id);
     CREATE INDEX idx_things_rev_added ON things (rev_added);
     CREATE INDEX idx_things_rev_removed ON things (rev_removed);

@@ -284,21 +284,39 @@ class Replay:
             slot
         ) in history.blocked_things.get(undo_rev, ())
 
+    def _reverting(self, rev: int | None, slot: Slot) -> list[int | None]:
+        """The undos that revert `rev` and count for `slot`: not blocked
+        there. `None` is the undo being planned."""
+
+        reverting: list[int | None] = list(self.history.reverted_by.get(rev, ()))
+        if rev in self.targets:
+            reverting.append(None)
+        return [u for u in reverting if not self._blocked(u, slot)]
+
     def in_effect(self, rev: int | None, slot: Slot) -> bool:
         """Whether `rev` (`None` for the undo being planned) is in effect for
         `slot`: no undo in effect for `slot` reverts it, leaving aside undos
-        that recorded a conflict on `slot` or its thing."""
+        that recorded a conflict on `slot` or its thing.
 
-        key = (rev, slot)
-        if key not in self._in_effect:
-            reverting: list[int | None] = list(self.history.reverted_by.get(rev, ()))
-            if rev in self.targets:
-                reverting.append(None)
-            self._in_effect[key] = not any(
-                not self._blocked(undo_rev, slot) and self.in_effect(undo_rev, slot)
-                for undo_rev in reverting
-            )
-        return self._in_effect[key]
+        Walked with an explicit stack rather than by recursion, since an undo
+        of an undo of an undo... can be any number of levels deep. An undo
+        only ever reverts earlier revisions, so the walk always ends."""
+
+        memo = self._in_effect
+        stack = [rev]
+        while stack:
+            current = stack[-1]
+            if (current, slot) in memo:
+                stack.pop()
+                continue
+            reverting = self._reverting(current, slot)
+            pending = [u for u in reverting if (u, slot) not in memo]
+            if pending:
+                stack.extend(pending)
+                continue
+            memo[(current, slot)] = not any(memo[(u, slot)] for u in reverting)
+            stack.pop()
+        return memo[(rev, slot)]
 
     def latest(self, slot: Slot) -> Write | None:
         """The latest write to `slot` by a revision in effect for it."""

@@ -96,7 +96,10 @@ def _check_invariants(world: World) -> None:
 
 def _check_replay(world: World) -> None:
     """Every slot's live row stands for the write a full replay says it
-    should hold (compared by row, never by content)."""
+    should hold (compared by row, never by content). The replay trusts the
+    conflicts each undo recorded in `undo_conflicts`, so this can't catch an
+    undo that reports more conflicts than it should: only the unit tests in
+    `test_undo.py` catch over-reporting."""
 
     history = History(world._conn)
     history.load()

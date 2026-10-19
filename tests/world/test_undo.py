@@ -631,6 +631,7 @@ def test_reundo_after_undo_of_earlier_write_is_noop(world, maren):
 
 
 def test_reundo_of_a_netted_out_removal_is_noop(world, maren):
+    # pins: an undo stays in effect on a slot it wrote nothing to (R5)
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
         oskar = rev.create_thing("character", fields={"name": "Oskar"})
     with world.revision(Source.scene("s1", "E", "m2")) as rev:
@@ -649,6 +650,7 @@ def test_reundo_of_a_netted_out_removal_is_noop(world, maren):
 
 
 def test_reundo_after_conflicted_netting_still_restores(world, maren):
+    # pins: a thing conflict blocks the undo on the thing's child slots
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
         oskar = rev.create_thing("character", fields={"name": "Oskar"})
     with world.revision(Source.scene("s1", "E", "m2")) as rev:
@@ -672,6 +674,7 @@ def test_reundo_after_conflicted_netting_still_restores(world, maren):
 
 
 def test_reundo_after_netting_blocked_by_removed_thing_restores(world, maren):
+    # pins: a later thing removal blocks the child slot (REMOVED_LATER)
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
         rev.correct_fact(maren.laugh, text="A slow laugh.")
         rev.create_thing("character", fields={"name": "Oskar"})
@@ -697,6 +700,7 @@ def test_reundo_after_netting_blocked_by_removed_thing_restores(world, maren):
 
 
 def test_reundo_after_netting_blocked_by_newer_value_restores(world, maren):
+    # pins: a CHANGED_LATER conflict blocks the undo on that slot
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
         rev.set_field(maren.id, "name", "Maren Vell", WorldDate.of(317))
         rev.create_thing("character", fields={"name": "Oskar"})
@@ -763,6 +767,7 @@ def test_undo_after_redone_removal_lists_the_removal(world, oskar_and_home):
 
 
 def test_redo_of_one_undo_leaves_a_change_another_undo_reverts(world, maren):
+    # pins: a revision stays reverted while any undo in effect for the slot reverts it
     first = _correct(world, maren.laugh, "A slow laugh.", Source.scene("s1", "E", "m1"))
     second = _correct(
         world, maren.laugh, "A rare laugh.", Source.scene("s1", "E", "m2")
@@ -898,3 +903,30 @@ def test_undo_lists_a_write_after_the_last_target(world, maren):
         ("field_values", "changed again in a later revision", n)
     ]
     assert _name(world, maren.id) == "N"
+
+
+def test_revision_rejects_an_undo_source(world, maren):
+    # only `World.undo` may write an undo revision: replay never counts an
+    # undo revision's rows as writes, so a hand-made one would be lost
+    head = world.head_rev()
+    with pytest.raises(ValueError):
+        with world.revision(Source(kind="undo")) as rev:
+            rev.add_fact(maren.id, "appearance", "A scar.")
+    assert world.head_rev() == head
+    assert world.revisions()[-1].source.kind != "undo"
+
+
+# the undo-of-undo chain is longer than Python's recursion limit allowed the
+# old recursive in-effect walk to follow (it failed at about 330 levels)
+CHAIN = 600
+
+
+def test_long_undo_redo_chain_on_one_slot(world, maren):
+    last = _set_name(world, maren.id, "Maren Vell")
+    for _ in range(CHAIN):
+        last = world.undo([last]).undo_rev
+
+    # an even number of undos leaves the rename in effect
+    assert _name(world, maren.id) == "Maren Vell"
+    assert world.undo([last]).reverted == 2
+    assert _name(world, maren.id) == "Maren the Grey"
