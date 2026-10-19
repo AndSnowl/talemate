@@ -302,7 +302,7 @@
 
 
 
-    <v-snackbar v-model="testErrorMessage" color="red-darken-2" location="top" close-on-content-click :timeout="8000" elevation="5">
+    <v-snackbar v-model="testErrorMessage" color="danger" location="top" close-on-content-click :timeout="8000" elevation="5">
         <v-icon>mdi-alert-circle</v-icon>
         <span class="ml-2">{{ testErrorMessage }}</span>
     </v-snackbar>
@@ -313,6 +313,7 @@ import { watch } from 'vue';
 import { LGraphCanvas, LiteGraph } from 'litegraph.js';
 import { initializeGraphFromJSON, normalizeHexColor, rebuildThemeNodeColors, applyThemeToCanvas, reapplyNodeColors } from '@/utils/litegraphUtils'
 import { currentTheme } from '@/theme/store';
+import { nodeColors } from '@/theme/dataColors';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { convertGraphToJSON, convertSelectedGraphToJSON } from '@/utils/exportGraph.js'
 //import '@/utils/litegraphSearchBox'
@@ -870,8 +871,8 @@ export default {
 
         indicatedDeactivatedSocket(nodeDeactivated, input, value) {
             if(nodeDeactivated && !input.optional && value === "<class 'talem...e.UNRESOLVED'>") {
-                input.color_off = "#f44336";
-                input.color_on = "#f44336";
+                input.color_off = currentTheme.value.colors.danger;
+                input.color_on = currentTheme.value.colors.danger;
             } else {
                 input.color_off = null;
                 input.color_on = null;
@@ -929,13 +930,15 @@ export default {
             }
 
             if (highlightState === "error") {
-                ltNode.color = "#f44336";
-                ltNode.title_text_color = "#fff";
-                ltNode.boxcolor = "#ff0000";
+                const dangerHex = currentTheme.value.colors.danger;
+                ltNode.color = nodeColors(dangerHex).title;
+                ltNode.title_text_color = null;
+                ltNode.boxcolor = dangerHex;
             } else {
-                ltNode.color = "#2f2b36";
-                ltNode.title_text_color = "#9575cd";
-                ltNode.boxcolor = "#9575cd";
+                const accentHex = currentTheme.value.colors.accent;
+                ltNode.color = nodeColors(accentHex).title;
+                ltNode.title_text_color = null;
+                ltNode.boxcolor = accentHex;
             }
 
             ltNode._talemateHighlightState = highlightState;
@@ -997,12 +1000,12 @@ export default {
 
                     if(deactivated || !nodeState || inputUnresolved) {
                         if(deactivated && !ltInput.optional && inputUnresolved) {
-                            ltLink.color = "#f44336";
+                            ltLink.color = currentTheme.value.colors.danger;
                         } else {
-                            ltLink.color = "#666";
+                            ltLink.color = currentTheme.value.colors.muted;
                         }
                     } else {
-                        ltLink.color = "#9575cd";
+                        ltLink.color = currentTheme.value.colors.accent;
                     }
 
                     //console.log({ltInput, ltLink});
@@ -1222,7 +1225,7 @@ export default {
 
 .litegraph.lite-search-item:hover {
     color: rgb(var(--v-theme-primary));
-    background-color: #000;
+    background-color: rgb(var(--v-theme-raised));
 }
 
 .litegraph.litesearchbox input {

@@ -41,7 +41,7 @@
                                 </div>
                             </v-list-item>
                         </v-list>
-                        <v-divider color="white"></v-divider>
+                        <v-divider color="border"></v-divider>
                     </v-list-item>
 
                 </v-list>

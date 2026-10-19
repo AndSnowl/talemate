@@ -160,7 +160,7 @@
                 </v-window-item>
                 <!-- COERCION -->
                 <v-window-item value="coercion">
-                  <v-alert icon="mdi-account-lock-open" density="compact" color="grey-darken-1" variant="text">
+                  <v-alert icon="mdi-account-lock-open" density="compact" color="muted" variant="text">
                     <div>
                       If set, this text will be prepended to every LLM response, attempting to enforce compliance with the request.
                       <p>
@@ -181,7 +181,7 @@
                 <!-- REASONING -->
                 <v-window-item value="reasoning">
 
-                  <v-alert icon="mdi-brain" density="compact" color="grey-darken-1" variant="text">
+                  <v-alert icon="mdi-brain" density="compact" color="muted" variant="text">
                     Configuration to deal with reasoning models.
                   </v-alert>
                   <v-row>
@@ -335,7 +335,7 @@
                     </v-col>
                   </v-row>
                   <!-- AUTO RETRY -->
-                  <v-alert icon="mdi-refresh" density="compact" color="grey-darken-1" variant="text">
+                  <v-alert icon="mdi-refresh" density="compact" color="muted" variant="text">
                     Automatic retries on response issues before you are notified. (0 = notify immediately)
                   </v-alert>
                   <v-row>

@@ -122,63 +122,7 @@ export function lineFails(line, inStyleBlock = false) {
 // system. Seeded by running this check once with an empty PENDING and
 // listing the files that failed (Task 6, step 1). Sweep tasks (7-8) delete
 // entries as they clean each file; Task 8 leaves this empty.
-const PENDING = new Set([
-    'src/components/AgentGlobalSettings.vue',
-    'src/components/AgentMessages.vue',
-    'src/components/AgentModal.vue',
-    'src/components/AIAgent.vue',
-    'src/components/AIClient.vue',
-    'src/components/AssetView.vue',
-    'src/components/CharacterCardImport.vue',
-    'src/components/ClientModal.vue',
-    'src/components/ConfigWidgetWeights.vue',
-    'src/components/ContextualGenerateFromTopic.vue',
-    'src/components/CoverBBoxEditor.vue',
-    'src/components/DebugToolGameState.vue',
-    'src/components/DebugToolMemoryRequestLog.vue',
-    'src/components/DebugToolMemoryRequestView.vue',
-    'src/components/DefaultCharacter.vue',
-    'src/components/DirectorConsoleChatMessageAssetView.vue',
-    'src/components/DirectorConsoleChatMessageMarkdown.vue',
-    'src/components/DirectorConsoleChatsToolbar.vue',
-    'src/components/DirectorConsoleMessage.vue',
-    'src/components/DynamicAgentRegistry.vue',
-    'src/components/NodeEditorLog.vue',
-    'src/components/NodeEditor.vue',
-    'src/components/prompts/ActiveTab.vue',
-    'src/components/prompts/GroupManagement.vue',
-    'src/components/prompts/GroupTab.vue',
-    'src/components/prompts/LLMTemplatesTab.vue',
-    'src/components/prompts/PromptDetailView.vue',
-    'src/components/prompts/PromptLogItem.vue',
-    'src/components/prompts/PromptsMenu.vue',
-    'src/components/prompts/PromptsView.vue',
-    'src/components/prompts/TemplateSourceSelect.vue',
-    'src/components/prompts/TemplateTree.vue',
-    'src/components/QuickCreateStateReinforcement.vue',
-    'src/components/SceneContextReviewInline.vue',
-    'src/components/SceneOverrideToggle.vue',
-    'src/components/TemplatesMenu.vue',
-    'src/components/Templates.vue',
-    'src/components/TemplateWritingStyle.vue',
-    'src/components/UxElementTextInput.vue',
-    'src/components/UxField.vue',
-    'src/components/VisualAssetBadge.vue',
-    'src/components/VisualAssetGrid.vue',
-    'src/components/VisualImageView.vue',
-    'src/components/VisualLibraryGenerate.vue',
-    'src/components/VisualLibraryPendingQueue.vue',
-    'src/components/VisualLibraryQueue.vue',
-    'src/components/VisualLibraryUpload.vue',
-    'src/components/VisualLibrary.vue',
-    'src/components/VisualQueue.vue',
-    'src/components/VisualReferenceImages.vue',
-    'src/components/VoiceLibraryCharacterManager.vue',
-    'src/components/VoiceLibrary.vue',
-    'src/utils/litegraphUtils.js',
-    'src/utils/recentNodes.js',
-    'src/utils/sceneMessageRenderer.js',
-]);
+const PENDING = new Set([]);
 
 // Permanent exceptions: `path:line-substring`. Each entry needs a one-line
 // comment saying why it is never swept.
@@ -202,10 +146,77 @@ const ALLOW = new Set([
     // overlay drawn over an arbitrary image, so they must stay light under
     // every theme, not follow it.
     'src/components/AssetView.vue:<v-icon color="white">',
+    // AssetView.vue's two nav-arrow buttons: same reasoning as the icons
+    // above — a translucent black scrim over an arbitrary image, kept dark
+    // under every theme rather than following it.
+    'src/components/AssetView.vue:color="rgba(0,0,0,0.5)"',
     // MessageAssetImage.vue's loading-overlay scrim dims an arbitrary,
     // not-yet-loaded asset image for the spinner's contrast — same
     // reasoning as the AssetView nav icons above.
     'src/components/MessageAssetImage.vue:scrim="rgba(0, 0, 0, 0.9)"',
+    // DefaultCharacter.vue's initial `defaultCharacter.color`: a seed hex
+    // value sent to the backend as the new default character's own stored
+    // colour (not drawn anywhere in this dialog), remapped at render time
+    // like any other character colour — never rewritten.
+    "src/components/DefaultCharacter.vue:color: '#3362bb'",
+    // CoverBBoxEditor.vue draws its dimming mask, crop-rectangle/handle
+    // contrast shadows and hint label over an arbitrary cover image, so
+    // (like AssetView/MessageAssetImage/SceneMessages above) they must
+    // stay legible under every theme rather than follow it.
+    'src/components/CoverBBoxEditor.vue:background: rgba(0, 0, 0, 0.45);',
+    'src/components/CoverBBoxEditor.vue:box-shadow: 0 0 0 1px rgba(0,0,0,0.35);',
+    'src/components/CoverBBoxEditor.vue:box-shadow: 0 0 0 2px rgba(0,0,0,0.25);',
+    'src/components/CoverBBoxEditor.vue:background: rgba(0, 0, 0, 0.5);',
+    'src/components/CoverBBoxEditor.vue:color: rgba(255,255,255,0.9);',
+    // VisualAssetBadge.vue's icon colour matches its own unflagged CSS
+    // `.asset-badge { color: white; }` label text: both are chosen for
+    // reliable contrast against this badge's varied accent backgrounds
+    // (primary/delete/defaultBadge), independent of theme.
+    'src/components/VisualAssetBadge.vue:<v-icon size="x-small" color="white">',
+    // litegraphUtils.js's stylePresets: the ModuleStyle node's built-in
+    // "quick pick" presets. Picking one writes these literal hex values
+    // into the node's own stored node_color/title_color properties (see
+    // applyStylePreset) — exactly the "default node colour presets saved
+    // into node files" case from Global Constraints; the node's rendered
+    // colour is always remapped from them via nodeColors() afterwards,
+    // never drawn from these literals directly.
+    'src/utils/litegraphUtils.js:node_color: "#392c34",',
+    'src/utils/litegraphUtils.js:title_color: "#572e44",',
+    'src/utils/litegraphUtils.js:node_color: "#392f2c",',
+    'src/utils/litegraphUtils.js:title_color: "#573a2e",',
+    'src/utils/litegraphUtils.js:node_color: "#32422d",',
+    'src/utils/litegraphUtils.js:title_color: "#44552f",',
+    'src/utils/litegraphUtils.js:node_color: "#223040",',
+    'src/utils/litegraphUtils.js:title_color: "#2e4657",',
+    'src/utils/litegraphUtils.js:node_color: "#5f2323",',
+    'src/utils/litegraphUtils.js:title_color: "#7f2e2e",',
+    'src/utils/litegraphUtils.js:node_color: "#27233a",',
+    'src/utils/litegraphUtils.js:title_color: "#3d315b",',
+    'src/utils/litegraphUtils.js:node_color: "#1e3a38",',
+    'src/utils/litegraphUtils.js:title_color: "#2d5a55",',
+    // litegraphUtils.js's dynamic-socket +/- glyphs: drawn on top of the
+    // success/danger-coloured add/remove buttons right next to them, so
+    // (like VisualAssetBadge.vue's icon above) they stay white for
+    // reliable contrast against those vivid accent fills, independent of
+    // theme.
+    'src/utils/litegraphUtils.js:ctx.strokeStyle = "#fff";',
+    // recentNodes.js's "Create Group from Selection" submenu: these quoted
+    // strings are lookup keys into LGraphCanvas.node_colors (built by
+    // rebuildThemeNodeColors() from the current theme's accent palette —
+    // see litegraphUtils.js), not literal colours themselves. They read
+    // as Vuetify hue names only because that's litegraph's own historical
+    // swatch-key vocabulary (see LEGACY_SWATCH_ALIASES); the group colour
+    // actually stored (`preset.groupcolor`, in groupInteractions.js) is
+    // already the theme-resolved hex.
+    'src/utils/recentNodes.js:makeColorItem("Output", \'green\'),',
+    'src/utils/recentNodes.js:makeColorItem("Process", \'pale_blue\'),',
+    'src/utils/recentNodes.js:makeColorItem("Prepare", \'cyan\'),',
+    'src/utils/recentNodes.js:makeColorItem("Validation", \'yellow\'),',
+    'src/utils/recentNodes.js:makeColorItem("Function", \'brown\'),',
+    'src/utils/recentNodes.js:makeColorItem("Special", \'purple\'),',
+    'src/utils/recentNodes.js:makeColorItem("Error Handling", \'red\'),',
+    'src/utils/recentNodes.js:makeColorItem("Input", \'blue\'),',
+    'src/utils/recentNodes.js:makeColorItem("UX", \'teal\'),',
     // CharacterMessage.vue's always-on text-shadow is kept pixel-identical
     // to SceneMessages.vue's scene-backdrop message shadow (see the
     // "align it with the backdrop shadow" comment there) so every message

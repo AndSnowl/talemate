@@ -121,7 +121,7 @@
 
                 <!-- Prompts Tab -->
                 <v-window-item value="prompts">
-                    <div v-if="openPrompts.length === 0" class="text-center pa-8 text-grey">
+                    <div v-if="openPrompts.length === 0" class="text-center pa-8 text-muted">
                         <v-icon size="64" class="mb-4">mdi-message-text-outline</v-icon>
                         <p>No prompts open.</p>
                         <p class="text-caption">Click on a prompt in the sidebar to view its details here.</p>
@@ -202,7 +202,7 @@
                 <v-card-actions>
                     <v-spacer></v-spacer>
                     <v-btn
-                        color="grey"
+                        color="muted"
                         variant="text"
                         @click="showNewGroupDialog = false"
                     >

@@ -71,19 +71,19 @@
             <v-icon size="small" class="mr-2">{{ iconForTemplate(template) }}</v-icon>
             {{ template.name  }}
             <v-chip label size="x-small" color="primary" class="ml-1">
-                <strong class="mr-2 text-deep-purple-lighten-3">Group</strong>{{ toLabel(group.name) }}
+                <strong class="mr-2 text-on-surface">Group</strong>{{ toLabel(group.name) }}
             </v-chip>
-            <v-chip label size="x-small" color="grey" class="ml-1">
-                <strong class="mr-2 text-grey-lighten-2">Type</strong>{{ toLabel(template.template_type) }}
+            <v-chip label size="x-small" color="muted" class="ml-1">
+                <strong class="mr-2 text-on-surface">Type</strong>{{ toLabel(template.template_type) }}
             </v-chip>
         </v-card-title>
         <v-card-title v-else>
             <v-icon size="small" class="mr-2">{{ iconForTemplate(template) }}</v-icon>
             New Template
             <v-chip label size="x-small" color="primary" class="ml-1">
-                <strong class="mr-2 text-deep-purple-lighten-3">Group</strong>{{ toLabel(group.name) }}
+                <strong class="mr-2 text-on-surface">Group</strong>{{ toLabel(group.name) }}
             </v-chip>
-            <v-chip label size="x-small" color="grey" class="ml-1" v-if="template.template_type">
+            <v-chip label size="x-small" color="muted" class="ml-1" v-if="template.template_type">
                 {{ toLabel(template.template_type) }}
             </v-chip>
         </v-card-title>
@@ -216,7 +216,7 @@
         <v-row>
             <v-col cols="12" lg="12" xl="8" xxl="6">
                 <v-card>
-                    <v-alert type="info" color="grey" variant="text" icon="mdi-cube-scan">
+                    <v-alert type="info" color="muted" variant="text" icon="mdi-cube-scan">
                         Templates are used to facilitate the generation of content for your game. They can be used to define character attributes, character details, writing styles, and automated world or character state tracking.
                         <br><br>
                         Templates are managed in <span class="text-primary"><v-icon size="small">mdi-group</v-icon> groups.</span> Each group can contain multiple templates. When starting out, start by creating a new group and then add templates to it.

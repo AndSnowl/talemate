@@ -45,7 +45,7 @@
               <v-icon>mdi-help-circle-outline</v-icon>
               <v-tooltip activator="parent" location="top">Ask the help agent about these settings</v-tooltip>
             </v-btn>
-            <v-checkbox :label="enabledLabel()" hide-details density="compact" color="green" v-model="agent.enabled"
+            <v-checkbox :label="enabledLabel()" hide-details density="compact" color="success" v-model="agent.enabled"
               v-if="agent.data.has_toggle && mode === 'global'" @update:modelValue="save(false)"></v-checkbox>
             <v-btn icon variant="text" size="small" class="ml-1" @click="onDialogModelUpdate(false)">
               <v-icon>mdi-close</v-icon>

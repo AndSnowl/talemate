@@ -11,6 +11,18 @@ import { ACCENT_KEYS } from '../theme/palette.js';
 
 const UNRESOLVED = "<class 'talemate.game.engine.nodes.core.UNRESOLVED'>";
 
+// Canvas fillStyle/strokeStyle can't resolve `rgb(var(--v-theme-x))` (no
+// cascade context ties a CSS custom property to a canvas), so translucent
+// theme-coloured draws on the litegraph canvas build an actual rgba()
+// string from the current theme's resolved hex instead.
+function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function normalizeHexColor(value) {
     // Accept Vuetify string formats; persist as #RRGGBB.
     if (value && typeof value === 'object') {
@@ -85,8 +97,8 @@ export function rebuildThemeNodeColors(resolved = currentTheme.value) {
     for (const [legacyKey, accentKey] of Object.entries(LEGACY_SWATCH_ALIASES)) {
         LGraphCanvas.node_colors[legacyKey] = LGraphCanvas.node_colors[accentKey];
     }
-    // "black" has no accent counterpart — the neutral pair `nodeColors`
-    // itself falls back to for an unsaturated/no-colour value.
+    // The black swatch name has no accent counterpart — the neutral pair
+    // nodeColors itself falls back to for an unsaturated/no-colour value.
     LGraphCanvas.node_colors.black = {
         color: palette.base2,
         bgcolor: palette.base1,
@@ -479,7 +491,7 @@ function drawColorWidget(ctx, node, widget_width, y, H, widget) {
     const show_text = canvas ? canvas.ds.scale > 0.5 : true;
 
     const raw = widget.value == null ? "" : String(widget.value);
-    const swatch = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw) ? raw : "#000000";
+    const swatch = /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(raw) ? raw : currentTheme.value.colors.background;
 
     ctx.textAlign = "left";
     ctx.strokeStyle = outline_color;
@@ -1034,7 +1046,7 @@ function createNodeClass(nodeDefinition) {
             ctx.save();
             
             // Draw a subtle separator line above the button area
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+            ctx.strokeStyle = hexToRgba(currentTheme.value.colors['on-surface'], 0.1);
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(5, socketAreaHeight + 2);
@@ -1042,7 +1054,7 @@ function createNodeClass(nodeDefinition) {
             ctx.stroke();
             
             // Draw add button (+) on the left
-            ctx.fillStyle = "#4CAF50"; // Green
+            ctx.fillStyle = currentTheme.value.colors.success;
             ctx.beginPath();
             ctx.roundRect(addButtonX, addButtonY, buttonSize, buttonSize, 3);
             ctx.fill();
@@ -1063,7 +1075,7 @@ function createNodeClass(nodeDefinition) {
             const dynamicInputs = (this.inputs || []).filter(i => i.dynamic);
             if (dynamicInputs.length > 0) {
                 // Draw remove button (-) on the right
-                ctx.fillStyle = "#f44336"; // Red
+                ctx.fillStyle = currentTheme.value.colors.danger;
                 ctx.beginPath();
                 ctx.roundRect(removeButtonX, removeButtonY, buttonSize, buttonSize, 3);
                 ctx.fill();
@@ -1111,7 +1123,7 @@ function createNodeClass(nodeDefinition) {
             const bgY = this.size[1] + yOffset; // Positioned at the bottom of the node
             
             // Draw rounded rectangle background
-            ctx.fillStyle = "rgb(27, 27, 27, 1)";
+            ctx.fillStyle = currentTheme.value.colors.raised;
             ctx.beginPath();
             
             // Top-left corner (sharp)
@@ -1129,7 +1141,7 @@ function createNodeClass(nodeDefinition) {
             
             // Draw text
             ctx.textAlign = "left";
-            ctx.fillStyle = "#ddd"; // Light text color for contrast with black background
+            ctx.fillStyle = currentTheme.value.colors['on-surface'];
             ctx.fillText(text, bgX + padding, bgY + 10); // Position text inside background
             
             ctx.restore();

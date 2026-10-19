@@ -16,7 +16,7 @@
                     :width="previewWidth"
                     ref="previewImage"
                     @load="onImageLoad"
-                    class="bg-grey-darken-4"
+                    class="bg-background"
                 />
                 
                 <v-btn

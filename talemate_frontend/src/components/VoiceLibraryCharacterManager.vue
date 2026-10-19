@@ -41,7 +41,7 @@
       <template v-slot:[`item.name`]="{ item }">
         <div class="d-flex align-center">
           <v-avatar
-            :color="item.color || 'grey'"
+            :color="avatarColor(item)"
             size="24"
             class="mr-2"
           >
@@ -112,6 +112,8 @@
 
 <script>
 import VoiceSelect from './VoiceSelect.vue';
+import { characterPaletteKey } from '@/theme/dataColors';
+import { currentTheme } from '@/theme/store';
 
 export default {
   name: 'VoiceLibraryCharacterManager',
@@ -155,6 +157,15 @@ export default {
     },
   },
   methods: {
+    // The character's stored `color` (if any), remapped onto the current
+    // theme's accent palette at render time — never rewritten. Falls back
+    // to a stable hash of the name, same as SceneMessageInput.vue's
+    // `actAsColor`.
+    avatarColor(item) {
+      const palette = currentTheme.value.palette;
+      return palette[characterPaletteKey(item.color, item.name)];
+    },
+
     requestCharacterVoiceConfig() {
       this.getWebsocket().send(JSON.stringify({
         type: 'tts',

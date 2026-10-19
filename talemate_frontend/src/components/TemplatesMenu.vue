@@ -1,6 +1,6 @@
 <template>
     <v-list density="compact" slim>
-        <v-list-subheader color="grey">
+        <v-list-subheader color="muted">
             <v-icon color="primary" class="mr-1">mdi-plus</v-icon>
             Create
         </v-list-subheader>
@@ -10,7 +10,7 @@
         </v-list-item>
     </v-list>
     <v-list v-for="(group, index) in safeGroups" :key="index" density="compact" slim color="primary" selectable  @update:selected="onSelectGroup" :selected="selectedGroups">
-        <v-list-subheader color="grey" v-if="index === 0">
+        <v-list-subheader color="muted" v-if="index === 0">
             <v-icon color="primary" class="mr-1">mdi-cube-scan</v-icon>
             Templates
         </v-list-subheader>
@@ -19,8 +19,8 @@
             {{ toLabel(group.name) }}
         </v-list-item>
         <v-card v-if="groupIsOpen(index)">
-            <v-card-text class="text-grey text-caption">
-                <p><span class="text-white">Author</span> <span>{{ group.author }}</span></p>
+            <v-card-text class="text-muted text-caption">
+                <p><span class="text-on-surface">Author</span> <span>{{ group.author }}</span></p>
                 {{ group.description }}
             </v-card-text>
         </v-card>
@@ -45,7 +45,7 @@
                 <v-list-item-subtitle>
                     <v-chip label size="x-small" variant="outlined" class="mr-1" v-if="template.state_type">{{ template.state_type
                     }}</v-chip>
-                    <v-chip v-if="template.favorite" label size="x-small" color="orange" variant="outlined"
+                    <v-chip v-if="template.favorite" label size="x-small" color="favorite" variant="outlined"
                         class="mr-1">Favorite</v-chip>
                 </v-list-item-subtitle>
             </v-list-item>

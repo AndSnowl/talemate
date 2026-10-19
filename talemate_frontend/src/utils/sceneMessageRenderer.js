@@ -412,7 +412,7 @@ export class SceneTextParser {
 
             // Custom renderer for horizontal rules (---) to match v-divider styling
             hr: () => {
-                return '<hr class="scene-hr" style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.12); margin: 16px 0; width: 100%;" />';
+                return '<hr class="scene-hr" style="border: none; border-top: 1px solid rgb(var(--v-theme-border)); margin: 16px 0; width: 100%;" />';
             },
 
             // Disable markdown images
@@ -572,25 +572,27 @@ export function parseSceneText(text, config = {}) {
 
 // Example usage:
 /*
-// Create a parser with custom configuration
+// Create a parser with custom configuration — colors here are themed role
+// names (see buildDefaults() above), not raw hex, so they follow whatever
+// theme is active.
 const parser = new SceneTextParser({
     emphasis: {
-        color: '#e74c3c',
+        color: currentTheme.value.colors.danger,
         italic: true,
         bold: false
     },
     quotes: {
-        color: '#3498db',
+        color: currentTheme.value.colors.you,
         italic: false,
         bold: true
     },
     parentheses: {
-        color: '#95a5a6',
+        color: currentTheme.value.colors.muted,
         italic: true,
         bold: false
     },
     brackets: {
-        color: '#f39c12',
+        color: currentTheme.value.colors.warning,
         italic: false,
         bold: true
     }
@@ -601,7 +603,7 @@ const html = parser.parse('*This is emphasized* and "this is quoted" while (this
 
 // Or use the function directly
 const html2 = parseSceneText('Some *text* with "quotes"', {
-    emphasis: { color: 'red' },
-    quotes: { color: 'blue' }
+    emphasis: { color: currentTheme.value.colors.danger },
+    quotes: { color: currentTheme.value.colors.you }
 });
 */
