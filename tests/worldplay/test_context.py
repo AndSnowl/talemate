@@ -89,10 +89,15 @@ async def test_since_lines_after_time_passage(world):
             valid_from=WorldDate.of(314),
         )
 
+    # The real stretch boundaries for this thing are (None, 280), (280,
+    # 314) and (314, None) -- cached here for the (280, 314) one (fix
+    # round 1 / Critical 2: an earlier version of this test used the
+    # fabricated, non-real pair (None, 314), which happened to still
+    # match on lookup and so never exercised the cache walk-back bug).
     world.prose().put(
         thing_id,
         "description",
-        None,
+        WorldDate.of(280),
         WorldDate.of(314),
         "A quiet trader with a steady gaze.",
     )
@@ -106,8 +111,10 @@ async def test_since_lines_after_time_passage(world):
 
     character = character_from_world(world, thing_id, record.start, is_player=False)
     assert "scar" not in character.description
+    character.color = "#abc123"  # a per-scene field refresh must not touch
 
-    actor = Actor(character=character, agent=None)
+    conversation = instance.get_agent("conversation")
+    actor = Actor(character=character, agent=conversation)
     actor.scene = scene
     scene.actors.append(actor)
     scene.active_characters.append(character.name)
@@ -123,7 +130,58 @@ async def test_since_lines_after_time_passage(world):
     assert refreshed is not character
     assert "Since 314: A scar across her cheek." in refreshed.description
 
+    # fix round 1 / Critical 4: a per-scene field survives the refresh.
+    assert refreshed.color == "#abc123"
+    # fix round 1 (small fix): the agent's own pointer is updated too.
+    assert actor.agent.character is refreshed
+
     # No queued responses in `scene.mock_client` -- a call to `send_prompt`
     # would have appended to `prompt_history` regardless of what it
     # returned, so an empty history proves the model was never touched.
     assert scene.mock_client.prompt_history == []
+
+
+@pytest.mark.asyncio
+async def test_connect_does_not_leak_between_scenes(world):
+    """Fix round 1 / Critical 3: `connect` used to add a per-scene closure
+    that was never disconnected, so a second scene's signal traffic would
+    still carry the first scene's "World" block. The handlers are
+    module-level now, resolved from `emission.agent.scene` -- which is
+    whichever scene most recently claimed the (process-wide) agent
+    instance, the same as real scene loading."""
+
+    scenes = world.scenes()
+    scene_id = scenes.create(
+        "Scene A", WorldDate.of(310), goal="Find the missing envoy"
+    )
+    record = scenes.get(scene_id)
+
+    scene_a = MockScene()
+    bootstrap_scene(scene_a)
+    scene_a.world_context = WorldSceneContext(world=world, record=record)
+    connect(scene_a)
+
+    scene_b = MockScene()
+    bootstrap_scene(scene_b)  # re-points every agent's `.scene` at scene_b
+    connect(scene_b)  # scene_b never gets a `world_context`
+
+    conversation = instance.get_agent("conversation")
+
+    emission_b = ConversationAgentEmission(
+        agent=conversation, character=Character(name="Anyone"), response=""
+    )
+    await async_signals.get("agent.conversation.inject_instructions").send(emission_b)
+    assert emission_b.dynamic_instructions == []
+
+    # make the (shared) agent "live" in scene A again, the way loading a
+    # scene would, and fire the same signal: exactly one "World"
+    # instruction, not two, even though `connect` ran twice.
+    conversation.scene = scene_a
+    emission_a = ConversationAgentEmission(
+        agent=conversation, character=Character(name="Anyone"), response=""
+    )
+    await async_signals.get("agent.conversation.inject_instructions").send(emission_a)
+    world_instructions = [
+        i for i in emission_a.dynamic_instructions if i.title == "World"
+    ]
+    assert len(world_instructions) == 1

@@ -86,7 +86,13 @@ class WorldSceneContext:
         current date (`scene_date(self.record, scene.ts)`), replacing it on
         the scene but keeping the actor binding. Never calls the model --
         characters whose prose has gone stale stay stale until something
-        else (not this) regenerates it."""
+        else (not this) regenerates it.
+
+        Only the world-derived fields (name, description, base attributes,
+        dialogue instructions, example dialogue) are replaced --
+        `character.model_copy(update=...)` keeps everything per-scene
+        (color, avatar, voice, details, greeting text, ...) exactly as it
+        was."""
 
         at = scene_date(self.record, scene.ts)
         for actor in scene.actors:
@@ -98,46 +104,79 @@ class WorldSceneContext:
             rebuilt = character_from_world(
                 self.world, thing_id, at, is_player=character.is_player
             )
-            rebuilt.agent = character.agent
-            rebuilt.actor = actor
+            updated = character.model_copy(
+                update={
+                    "name": rebuilt.name,
+                    "description": rebuilt.description,
+                    "base_attributes": rebuilt.base_attributes,
+                    "dialogue_instructions": rebuilt.dialogue_instructions,
+                    "example_dialogue": rebuilt.example_dialogue,
+                }
+            )
 
-            actor.character = rebuilt
+            actor.character = updated
+            if actor.agent is not None:
+                actor.agent.character = updated
+
+            if character.name in scene.active_characters:
+                index = scene.active_characters.index(character.name)
+                scene.active_characters[index] = updated.name
+
             if character.name in scene.character_data:
                 del scene.character_data[character.name]
-            scene.character_data[rebuilt.name] = rebuilt
+            scene.character_data[updated.name] = updated
+
+
+async def _on_inject_instructions(emission) -> None:
+    scene = emission.agent.scene
+    context: WorldSceneContext | None = getattr(scene, "world_context", None)
+    if context is None:
+        return
+
+    at = scene_date(context.record, scene.ts)
+    content = world_context_block(context.world, context.record, at)
+    if not content.strip():
+        return
+
+    emission.dynamic_instructions.append(
+        DynamicInstruction(title=SECTION_TITLE, content=content)
+    )
+
+
+async def _on_time_passage(emission) -> None:
+    scene = emission.agent.scene
+    context: WorldSceneContext | None = getattr(scene, "world_context", None)
+    if context is None:
+        return
+    await context.refresh_characters(scene)
 
 
 def connect(scene) -> None:
-    """Wire `scene`'s world context into the narrator and conversation
-    agents' prompts, and keep its characters fresh across time passage.
-    `scene.world_context` is read on every call rather than once here, so
-    it can be set (or cleared) after `connect` runs -- a scene that never
-    gets one is left exactly as before."""
+    """Wire the "World" instruction into the narrator and conversation
+    agents' prompts, and keep a scene's characters fresh across time
+    passage.
 
-    async def on_inject_instructions(emission) -> None:
-        context: WorldSceneContext | None = getattr(scene, "world_context", None)
-        if context is None:
-            return
+    The handlers are module-level, not closures over `scene`: each one
+    resolves *its own* scene from `emission.agent.scene` at call time --
+    the same pattern `CultureAgent` uses
+    (`agents/culture/__init__.py:246-252`) -- rather than from this call's
+    `scene` argument. A closure bound to one scene would leak: nothing
+    ever disconnects it, so a scene loaded after this one would keep
+    getting *this* scene's "World" block and time-passage refresh instead
+    of its own. `scene` is accepted (and otherwise unused) only so this
+    has the same `connect(scene)` shape every other agent's scene-load
+    hook does.
 
-        at = scene_date(context.record, scene.ts)
-        content = world_context_block(context.world, context.record, at)
-        if not content.strip():
-            return
-
-        emission.dynamic_instructions.append(
-            DynamicInstruction(title=SECTION_TITLE, content=content)
-        )
-
-    async def on_time_passage(emission) -> None:
-        context: WorldSceneContext | None = getattr(scene, "world_context", None)
-        if context is None:
-            return
-        await context.refresh_characters(scene)
+    `AsyncSignal.connect` already dedupes a repeat of the exact same
+    function object, so calling this once per scene load -- the normal
+    thing to do -- never double-connects. Acting only on a scene that has
+    `scene.world_context` set means a non-world scene, or one whose world
+    context hasn't loaded yet, is left exactly as before."""
 
     async_signals.get("agent.conversation.inject_instructions").connect(
-        on_inject_instructions
+        _on_inject_instructions
     )
     async_signals.get("agent.narrator.inject_instructions").connect(
-        on_inject_instructions
+        _on_inject_instructions
     )
-    async_signals.get("agent.world_state.time").connect(on_time_passage)
+    async_signals.get("agent.world_state.time").connect(_on_time_passage)
