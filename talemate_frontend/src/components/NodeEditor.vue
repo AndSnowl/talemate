@@ -309,17 +309,17 @@
 </template>
 
 <script>
-import { watch } from 'vue';
+import { watch, computed } from 'vue';
 import { LGraphCanvas, LiteGraph } from 'litegraph.js';
 import { initializeGraphFromJSON, normalizeHexColor, rebuildThemeNodeColors, applyThemeToCanvas, reapplyNodeColors } from '@/utils/litegraphUtils'
 import { currentTheme } from '@/theme/store';
 import { nodeColors } from '@/theme/dataColors';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import { convertGraphToJSON, convertSelectedGraphToJSON } from '@/utils/exportGraph.js'
 //import '@/utils/litegraphSearchBox'
 import { Codemirror } from 'vue-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
 
 import NodeEditorLibrary from './NodeEditorLibrary.vue';
@@ -1191,11 +1191,11 @@ export default {
 
     setup() {
 
-        const extensions = [
+        const extensions = computed(() => [
             markdown(),
-            oneDark,
+            ...themeExtensions(currentTheme.value),
             EditorView.lineWrapping
-        ];
+        ]);
 
         const propertyEditorStyle = {
             maxHeight: "600px"

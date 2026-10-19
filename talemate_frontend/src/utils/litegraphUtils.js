@@ -8,20 +8,9 @@ import { isPrimaryModifier } from './keyboardModifiers.js';
 import { nodeColors } from '../theme/dataColors.js';
 import { currentTheme } from '../theme/store.js';
 import { ACCENT_KEYS } from '../theme/palette.js';
+import { hexToRgba } from '../theme/colorMath.js';
 
 const UNRESOLVED = "<class 'talemate.game.engine.nodes.core.UNRESOLVED'>";
-
-// Canvas fillStyle/strokeStyle can't resolve `rgb(var(--v-theme-x))` (no
-// cascade context ties a CSS custom property to a canvas), so translucent
-// theme-coloured draws on the litegraph canvas build an actual rgba()
-// string from the current theme's resolved hex instead.
-function hexToRgba(hex, alpha) {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
 
 export function normalizeHexColor(value) {
     // Accept Vuetify string formats; persist as #RRGGBB.

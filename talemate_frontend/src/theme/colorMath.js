@@ -51,6 +51,18 @@ export function mix(a, b, t) {
     });
 }
 
+/**
+ * A hex colour as a CSS `rgba(...)` string at the given alpha (0..1).
+ * Needed anywhere a literal `rgb(var(--v-theme-x))` CSS-var reference can't
+ * resolve — a canvas 2D context, or a CodeMirror theme spec, both of which
+ * read colours as plain strings with no DOM cascade to resolve a custom
+ * property against.
+ */
+export function hexToRgba(hex, alpha) {
+    const { r, g, b } = hexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 /** Darken a hex colour toward black by `t` (0..1). */
 export function darken(hex, t) {
     return mix(hex, '#000000', t);

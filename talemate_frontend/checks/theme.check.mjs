@@ -14,6 +14,9 @@ import { getMessageColor } from '../src/utils/messageColors.js';
 import { SceneTextParser } from '../src/utils/sceneMessageRenderer.js';
 import { LGraph, LGraphGroup } from 'litegraph.js';
 import { convertGraphToJSON } from '../src/utils/exportGraph.js';
+import { themeExtensions } from '../src/theme/codemirrorTheme.js';
+import { EditorState } from '@codemirror/state';
+import { EditorView } from '@codemirror/view';
 // Importing this for its side effects (rebuildThemeNodeColors() at module
 // load, and the LGraphCanvas.prototype.drawGroups override) proves the
 // litegraph utilities module itself is importable outside Vite (no `@/`
@@ -288,6 +291,23 @@ check('scene_text_parser_palette_key_quotes_color', () => {
         html.includes(`color: ${r.palette.teal};`),
         `expected quotes to render the palette teal colour (${r.palette.teal}), got: ${html}`,
     );
+});
+
+// Fix round 1 (Task 8B review): CodeMirror's editors must follow the active
+// theme instead of a fixed `oneDark` — see codemirrorTheme.js. Builds the
+// extensions for both a dark and a light preset and confirms each one
+// actually threads CodeMirror's own `EditorView.darkTheme` facet through
+// correctly (not just that `resolveTheme(...).dark` itself is right).
+check('codemirror_theme_extensions_build_and_match_dark_flag', () => {
+    const darkResolved = resolveTheme(getPreset('gruvbox-dark'));
+    const lightResolved = resolveTheme(getPreset('gruvbox-light'));
+    assert.equal(darkResolved.dark, true);
+    assert.equal(lightResolved.dark, false);
+
+    const darkState = EditorState.create({ extensions: themeExtensions(darkResolved) });
+    const lightState = EditorState.create({ extensions: themeExtensions(lightResolved) });
+    assert.equal(darkState.facet(EditorView.darkTheme), true);
+    assert.equal(lightState.facet(EditorView.darkTheme), false);
 });
 
 if (failures.length > 0) {

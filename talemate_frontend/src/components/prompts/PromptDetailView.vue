@@ -211,11 +211,13 @@
 </template>
 
 <script>
+import { computed } from 'vue';
 import { Codemirror } from 'vue-codemirror'
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView } from '@codemirror/view'
+import { currentTheme } from '@/theme/store';
+import { themeExtensions } from '@/theme/codemirrorTheme';
 
 export default {
     name: 'PromptDetailView',
@@ -410,14 +412,14 @@ export default {
         this.registerMessageHandler(this.handleMessage);
     },
     setup() {
-        const extensions = [
+        const extensions = computed(() => [
             markdown({
                 base: markdownLanguage,
                 codeLanguages: languages,
             }),
-            oneDark,
+            ...themeExtensions(currentTheme.value),
             EditorView.lineWrapping
-        ];
+        ]);
 
         return {
             extensions,
