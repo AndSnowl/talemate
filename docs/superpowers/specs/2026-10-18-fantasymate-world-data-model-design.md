@@ -279,6 +279,19 @@ was a teenager"), so a date carries a precision (year, month, day, exact). An op
   accepted revision, **plus** any world changes sourced from this scene's current path (approved
   after that revision), **plus** the scene-local changes on the current path layered on top. (My
   call: approving a scene's own request never pulls unrelated world changes into it.)
+- **Repositioning a scene in time** (owner, 2026-10-19). A scene's start date can be changed
+  after play has started. A typical reason: the scene ran into a world event the owner didn't
+  mean it to, and they'd rather move the scene than change the event.
+  - Message dates are the start date plus the time passed, so every message moves with the
+    start. Scene-local changes anchored to messages move with them.
+  - The characters' context (prose, "since" lines) is rebuilt for the new dates.
+  - World changes already approved from this scene keep their story dates, unless the owner
+    chooses to shift them by the same offset. Shifting writes a new revision (a source-stamped
+    correction), so it can be undone like any other change.
+  - After a move, the prequel and conflict checks run again against the new dates. Anything that
+    now clashes is flagged in the inbox, as with any prequel conflict.
+  - Before the inbox exists (the phase-2 slice), moving a scene just changes its start date,
+    because nothing from the scene has reached the world yet. (My call.)
 - **Editing, regenerating, deleting and rewinding messages** (my call):
   - Edit and regenerate change a message **in place**; earlier versions are kept as versions of
     that message, not as branches. Only an explicit fork makes a branch, so the tree and the
