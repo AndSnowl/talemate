@@ -132,6 +132,8 @@ class RevisionInfo(BaseModel):
     rev: int
     source: Source
     created_at: str
+    # for an undo revision, the revisions it reversed; `[]` otherwise
+    reverts: list[int] = []
 
 
 class WorldInfo(BaseModel):
@@ -631,11 +633,18 @@ class World:
         rows = self._conn.execute(
             f"SELECT * FROM revisions {where} ORDER BY rev", params
         ).fetchall()
+        reverts: dict[int, list[int]] = {}
+        for undo_rev, target_rev in self._conn.execute(
+            "SELECT undo_rev, target_rev FROM revision_reverts "
+            "ORDER BY undo_rev, target_rev"
+        ):
+            reverts.setdefault(undo_rev, []).append(target_rev)
         return [
             RevisionInfo(
                 rev=row["rev"],
                 source=_source_from_revision_row(row),
                 created_at=row["created_at"],
+                reverts=reverts.get(row["rev"], []),
             )
             for row in rows
         ]

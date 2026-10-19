@@ -8,6 +8,11 @@ transaction and records the result in `PRAGMA user_version`.
 of revisions it's live for (an undo can retire a thing and later restore
 it), so `things.id` isn't unique and `field_values`/`facts` can't carry a
 foreign key to it. Their thing ids are checked in code instead.
+
+Undo leaves reversal links instead of relying on content: `revision_reverts`
+lists, per undo revision, the revisions it reversed, and a row an undo
+restores records in `restored_from` the `row_id` (in the same table) of the
+row it's a copy of. Every other write leaves `restored_from` NULL.
 """
 
 import sqlite3
@@ -36,12 +41,19 @@ MIGRATIONS: list[str] = [
         created_at TEXT NOT NULL
     );
 
+    CREATE TABLE revision_reverts (
+        undo_rev INTEGER NOT NULL REFERENCES revisions,
+        target_rev INTEGER NOT NULL REFERENCES revisions,
+        PRIMARY KEY (undo_rev, target_rev)
+    );
+
     CREATE TABLE things (
         row_id INTEGER PRIMARY KEY,
         id TEXT NOT NULL,
         kind TEXT NOT NULL,
         rev_added INTEGER NOT NULL REFERENCES revisions,
-        rev_removed INTEGER REFERENCES revisions
+        rev_removed INTEGER REFERENCES revisions,
+        restored_from INTEGER
     );
 
     CREATE TABLE field_values (
@@ -52,7 +64,8 @@ MIGRATIONS: list[str] = [
         valid_from INTEGER,
         from_precision TEXT,
         rev_added INTEGER NOT NULL,
-        rev_removed INTEGER
+        rev_removed INTEGER,
+        restored_from INTEGER
     );
 
     CREATE TABLE facts (
@@ -67,7 +80,8 @@ MIGRATIONS: list[str] = [
         until_precision TEXT,
         origin_json TEXT,
         rev_added INTEGER NOT NULL,
-        rev_removed INTEGER
+        rev_removed INTEGER,
+        restored_from INTEGER
     );
 
     CREATE TABLE fact_refs (

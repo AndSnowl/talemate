@@ -1,8 +1,10 @@
 """Randomised invariant checks over the world store, with fixed seeds.
 
 Each seed drives a short random history of creations, facts, corrections,
-field writes, references, removals and undos (an undo of an undo revision
-is a redo), checking after every step that:
+field writes, references, removals, undos (an undo of an undo revision is a
+redo) and manual writes that bring back a value or text the same slot held
+before (so identical content keeps turning up in unrelated revisions),
+checking after every step that:
 
 - at most one row per thing id, `fact_id` and field slot is live;
 - no fact or field value is live on a thing that isn't;
@@ -12,12 +14,17 @@ A revision only ever adds rows or retires live ones, so a view at an older
 revision never changes once written; checking the head after each step
 covers every revision.
 
+Each seed then re-undoes the targets of every clean undo (no conflicts),
+unless an undo of one of them has since been redone, and checks that this changes no live row: the
+targets' changes are already reverted, whatever has happened since.
+
 Each seed then undoes a random target revision (trying a few until one
 undoes without a conflict), redoes it (undoes the undo) and undoes it again, and checks that the slots the target touched
 end up as the first undo left them, and, when nothing touched them between
 the target and that undo, as they were just before the target.
 """
 
+import json
 import random
 import sqlite3
 
@@ -128,7 +135,55 @@ def _slot_state(conn: sqlite3.Connection, slots: dict[str, set], rev: int) -> di
     return state
 
 
-def _random_step(world: World, rnd: random.Random, step: int) -> None:
+def _live_rows(conn: sqlite3.Connection) -> set[tuple[str, int]]:
+    return {
+        (table, row[0])
+        for table in ("things", "field_values", "facts")
+        for row in conn.execute(f"SELECT row_id FROM {table} WHERE rev_removed IS NULL")
+    }
+
+
+def _rewrite_earlier_content(world: World, rnd: random.Random, source) -> None:
+    """A hand write of a value or text its slot held at some earlier
+    revision: a live fact gets an earlier version's text back, or a live
+    field value an earlier value."""
+
+    conn = world._conn
+    if rnd.random() < 0.5:
+        rows = conn.execute(
+            "SELECT DISTINCT live.fact_id, old.text FROM facts live "
+            "JOIN facts old ON old.fact_id = live.fact_id "
+            "WHERE live.rev_removed IS NULL AND old.text != live.text"
+        ).fetchall()
+        if rows:
+            fact_id, text = rnd.choice(rows)
+            try:
+                with world.revision(source) as rev:
+                    rev.correct_fact(fact_id, text=text)
+            except ValueError:
+                # the old text references a thing that's gone now
+                pass
+            return
+    rows = conn.execute(
+        "SELECT DISTINCT live.thing_id, live.valid_from, live.from_precision, "
+        "old.value_json FROM field_values live "
+        "JOIN field_values old ON old.thing_id = live.thing_id "
+        "AND old.field = live.field AND old.valid_from IS live.valid_from "
+        "WHERE live.field = 'name' AND live.rev_removed IS NULL "
+        "AND old.value_json != live.value_json"
+    ).fetchall()
+    if rows:
+        thing_id, instant, precision, value_json = rnd.choice(rows)
+        valid_from = (
+            None if instant is None else WorldDate(instant=instant, precision=precision)
+        )
+        with world.revision(source) as rev:
+            rev.set_field(thing_id, "name", json.loads(value_json), valid_from)
+
+
+def _random_step(
+    world: World, rnd: random.Random, step: int, clean_undos: dict[int, list[int]]
+) -> None:
     view = world.view()
     things = [thing.id for thing in view.things()]
     facts = [fact.fact_id for thing in view.things() for fact in thing.facts]
@@ -158,15 +213,38 @@ def _random_step(world: World, rnd: random.Random, step: int) -> None:
     elif op < 0.70 and facts:
         with world.revision(source) as rev:
             rev.remove_fact(rnd.choice(facts))
-    elif op < 0.78:
+    elif op < 0.76:
         with world.revision(source) as rev:
             rev.remove_thing(rnd.choice(things))
+    elif op < 0.84:
+        _rewrite_earlier_content(world, rnd, Source.manual())
     else:
         head = world.head_rev()
         revs = rnd.sample(range(1, head + 1), min(rnd.choice([1, 2, 3]), head))
         if rnd.random() < 0.3:
             revs = [r.rev for r in world.revisions(branch_id=rnd.choice("EF"))]
-        world.undo(revs)
+        report = world.undo(revs)
+        if report.undo_rev is not None and not report.conflicts:
+            clean_undos[report.undo_rev] = revs
+
+
+def _check_reundo_is_noop(world: World, clean_undos: dict[int, list[int]]) -> None:
+    """Re-undo each clean undo's targets, unless an undo of any of them has
+    since been redone (which puts that target's change back in effect)."""
+
+    conn = world._conn
+    reverts = conn.execute("SELECT undo_rev, target_rev FROM revision_reverts")
+    undone_in: dict[int, set[int]] = {}
+    for undo_rev, target_rev in reverts:
+        undone_in.setdefault(target_rev, set()).add(undo_rev)
+    for revs in clean_undos.values():
+        undos = set().union(*(undone_in.get(rev, set()) for rev in revs))
+        if any(undo_rev in undone_in for undo_rev in undos):
+            continue
+        live = _live_rows(conn)
+        report = world.undo(revs)
+        assert report.undo_rev is None, (revs, report)
+        assert _live_rows(conn) == live
 
 
 def _check_undo_redo_undo(world: World, target: int) -> bool:
@@ -206,9 +284,11 @@ def test_random_history_keeps_invariants(tmp_path, seed):
     rnd = random.Random(seed)
     world = World.create("fuzz", root=tmp_path)
     try:
+        clean_undos: dict[int, list[int]] = {}
         for step in range(STEPS):
-            _random_step(world, rnd, step)
+            _random_step(world, rnd, step, clean_undos)
             _check_invariants(world)
+        _check_reundo_is_noop(world, clean_undos)
         candidates = [r.rev for r in world.revisions() if r.source.kind != "undo"]
         for target in rnd.sample(candidates, min(TARGET_TRIES, len(candidates))):
             if _check_undo_redo_undo(world, target):

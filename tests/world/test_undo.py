@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from talemate.world.dates import WorldDate
@@ -471,3 +473,199 @@ def test_redo_of_removal_ignores_earlier_reference(world, maren, oskar_and_home)
 
     assert redo.conflicts == []
     assert world.view().thing(maren.id) is None
+
+
+def _name(world, thing_id, valid_from=WorldDate.of(317)):
+    row = world._conn.execute(
+        "SELECT value_json FROM field_values WHERE thing_id = ? AND field = 'name' "
+        "AND valid_from IS ? AND rev_removed IS NULL",
+        (thing_id, None if valid_from is None else valid_from.instant),
+    ).fetchone()
+    return None if row is None else json.loads(row[0])
+
+
+def _set_name(world, thing_id, name, source=None):
+    with world.revision(source or Source.manual()) as rev:
+        rev.set_field(thing_id, "name", name, WorldDate.of(317))
+        return rev.rev
+
+
+def _correct(world, fact_id, text, source=None):
+    with world.revision(source or Source.manual()) as rev:
+        rev.correct_fact(fact_id, text=text)
+        return rev.rev
+
+
+def test_reundo_after_unrelated_restore_of_same_value_is_noop(world, maren):
+    # P is the fixture's rename; T sets "A" and is undone, then a hand edit
+    # sets "A" again and an undo of a later change restores that hand edit
+    target = _set_name(world, maren.id, "A", Source.scene("s1", "E", "m1"))
+    world.undo([target])
+    _set_name(world, maren.id, "A")
+    later = _set_name(world, maren.id, "C")
+    world.undo([later])
+    assert _name(world, maren.id) == "A"
+    head = world.head_rev()
+
+    report = world.undo([target])
+
+    assert (report.undo_rev, report.reverted, report.conflicts) == (None, 0, [])
+    assert world.head_rev() == head
+    assert _name(world, maren.id) == "A"
+
+
+def test_reundo_after_unrelated_restore_of_same_fact_text_is_noop(world, maren):
+    with world.revision(Source.manual()) as rev:
+        fact_id = rev.add_fact(maren.id, "background", "c")
+    target = _correct(world, fact_id, "d", Source.scene("s1", "E", "m1"))
+    world.undo([target])
+    _correct(world, fact_id, "d")
+    later = _correct(world, fact_id, "e")
+    world.undo([later])
+    assert _fact_texts(world, maren.id)[fact_id] == "d"
+
+    report = world.undo([target])
+
+    assert (report.undo_rev, report.reverted, report.conflicts) == (None, 0, [])
+    assert _fact_texts(world, maren.id)[fact_id] == "d"
+
+
+def test_two_undos_into_one_slot_not_confused(world, maren):
+    target = _set_name(world, maren.id, "d", Source.scene("s1", "E", "m1"))
+    world.undo([target])
+    _set_name(world, maren.id, "d")
+    later = _set_name(world, maren.id, "e")
+    restored = world.undo([later])
+    assert restored.reverted == 2
+    assert _name(world, maren.id) == "d"
+
+    report = world.undo([target])
+
+    assert (report.undo_rev, report.reverted, report.conflicts) == (None, 0, [])
+    assert _name(world, maren.id) == "d"
+
+
+def test_manual_revert_after_redo_is_conflict(world, maren):
+    target = _set_name(world, maren.id, "Maren Vell", Source.scene("s1", "E", "m1"))
+    undone = world.undo([target])
+    world.undo([undone.undo_rev])
+    assert _name(world, maren.id) == "Maren Vell"
+    fixed = _set_name(world, maren.id, "Maren the Grey")
+    head = world.head_rev()
+
+    report = world.undo([target])
+
+    assert report.undo_rev is None
+    assert [(c.table, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("field_values", "changed again in a later revision", fixed)
+    ]
+    assert world.head_rev() == head
+    assert _name(world, maren.id) == "Maren the Grey"
+
+
+def test_undo_restored_reference_blocks_uncreation(world, oskar_and_home):
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        new = rev.create_thing("character", fields={"name": "Maren"})
+        created = rev.rev
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        rev.add_fact(oskar, "relationship", f"Owes {ref(new)} a debt.")
+        referenced = rev.rev
+    undone = world.undo([created, referenced])
+    world.undo([undone.undo_rev])
+    assert world.view().thing(new) is not None
+
+    report = world.undo([created])
+
+    assert report.undo_rev is None
+    assert [(c.table, c.thing_id, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("things", new, "referenced in a later revision", referenced)
+    ]
+    assert world.view().thing(new).fields["name"] == "Maren"
+
+
+def test_undo_records_reversal_links(world, maren):
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(maren.laugh, text="A slow, rare laugh.")
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(maren.id)
+    assert [r.rev for r in world.revisions()][-2:] == [4, 5]
+
+    report = world.undo([4, 5])
+
+    infos = {info.rev: info for info in world.revisions()}
+    assert infos[report.undo_rev].reverts == [4, 5]
+    assert all(infos[rev].reverts == [] for rev in infos if rev != report.undo_rev)
+    restored = 0
+    for table in ("things", "field_values", "facts"):
+        rows = world._conn.execute(
+            f"SELECT restored_from FROM {table} WHERE rev_added = ?",
+            (report.undo_rev,),
+        ).fetchall()
+        assert all(row[0] is not None for row in rows), table
+        restored += len(rows)
+        # nothing but an undo writes a restored copy
+        assert (
+            world._conn.execute(
+                f"SELECT COUNT(*) FROM {table} "
+                "WHERE rev_added != ? AND restored_from IS NOT NULL",
+                (report.undo_rev,),
+            ).fetchone()[0]
+            == 0
+        )
+    assert restored > 0
+
+
+def test_reundo_after_undo_of_earlier_write_is_noop(world, maren):
+    target = _set_name(world, maren.id, "Maren Vell", Source.scene("s1", "E", "m1"))
+    world.undo([target])
+    # undoing the rename retires the copy the first undo restored; that's
+    # not a redo of the target, so the target stays undone
+    world.undo([maren.rev_renamed])
+    assert _name(world, maren.id) is None
+
+    report = world.undo([target])
+
+    assert (report.undo_rev, report.reverted, report.conflicts) == (None, 0, [])
+    assert _name(world, maren.id) is None
+
+
+def test_reundo_of_a_netted_out_removal_is_noop(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        oskar = rev.create_thing("character", fields={"name": "Oskar"})
+    with world.revision(Source.scene("s1", "E", "m2")) as rev:
+        rev.remove_thing(oskar)
+        removed = rev.rev
+    with world.revision(Source.scene("s1", "E", "m3")) as rev:
+        rev.add_fact(maren.id, "background", "Sailed the northern sea.")
+    # the creation and the removal cancel out, so this writes nothing for
+    # Oskar, but it does revert the removal
+    assert world.undo(_branch_revs(world, "E")).reverted == 1
+
+    report = world.undo([removed])
+
+    assert (report.undo_rev, report.reverted, report.conflicts) == (None, 0, [])
+    assert world.view().thing(oskar) is None
+
+
+def test_reundo_after_conflicted_netting_still_restores(world, maren):
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        oskar = rev.create_thing("character", fields={"name": "Oskar"})
+    with world.revision(Source.scene("s1", "E", "m2")) as rev:
+        ferry = rev.add_fact(oskar, "background", "A ferryman.")
+    with world.revision(Source.scene("s1", "E", "m3")) as rev:
+        rev.remove_fact(ferry)
+        removed = rev.rev
+    with world.revision(Source.scene("s1", "E", "m4")) as rev:
+        rev.add_fact(maren.id, "background", "Sailed the northern sea.")
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        rev.add_fact(oskar, "background", "Owns a boat.")
+    # Oskar has a later fact, so this keeps him (R6) and every row of his,
+    # and the fact removal stays in effect
+    branch = world.undo(_branch_revs(world, "E"))
+    assert [(c.table, c.thing_id) for c in branch.conflicts] == [("things", oskar)]
+
+    report = world.undo([removed])
+
+    assert report.reverted == 1
+    assert _fact_texts(world, oskar)[ferry] == "A ferryman."
