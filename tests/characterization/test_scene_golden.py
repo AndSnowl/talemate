@@ -194,6 +194,9 @@ async def _play_golden_scene(tmp_path: Path) -> dict:
     bootstrap_scene(scene)
     _setup_lab_scene(scene, tmp_path)
 
+    scene.description = "Two rivermen wait out a storm in a flooded tavern."
+    scene.world_state.location = "The Drowned Stag tavern"
+
     conversation = instance.get_agent("conversation")
     narrator = instance.get_agent("narrator")
     world_state = instance.get_agent("world_state")
@@ -216,8 +219,18 @@ async def _play_golden_scene(tmp_path: Path) -> dict:
         if long_term_memory is not None:
             long_term_memory.enabled = False
 
-    alice = Character(name="Alice", description="A lab assistant.", is_player=False)
-    bob = Character(name="Bob", description="A visiting researcher.", is_player=True)
+    alice = Character(
+        name="Alice",
+        description="A riverboat pilot waiting out the storm, calloused hands wrapped around a tankard.",
+        is_player=False,
+        base_attributes={"occupation": "riverboat pilot", "age": "34"},
+        dialogue_instructions="Speaks in short, practical sentences; rarely jokes.",
+    )
+    bob = Character(
+        name="Bob",
+        description="A traveling merchant stranded by the flood, counting his coin by candlelight.",
+        is_player=True,
+    )
 
     alice_actor = Actor(character=alice, agent=conversation)
     alice_actor.scene = scene
