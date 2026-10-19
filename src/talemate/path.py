@@ -6,6 +6,7 @@ __all__ = [
     "TEMPLATES_DIR",
     "TTS_DIR",
     "LOGS_DIR",
+    "WORLDS_DIR",
     "CONFIG_FILE",
     "relative_to_root",
 ]
@@ -15,6 +16,7 @@ SCENES_DIR = TALEMATE_ROOT / "scenes"
 TEMPLATES_DIR = TALEMATE_ROOT / "templates"
 TTS_DIR = TALEMATE_ROOT / "tts"
 LOGS_DIR = TALEMATE_ROOT / "logs"
+WORLDS_DIR = TALEMATE_ROOT / "worlds"
 
 
 CONFIG_FILE = TALEMATE_ROOT / "config.yaml"
