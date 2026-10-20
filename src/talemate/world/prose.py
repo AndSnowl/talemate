@@ -18,7 +18,7 @@ way, imports this module -- lazily, inside `World.prose()` -- the same way
 """
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
 import structlog
@@ -73,16 +73,33 @@ def _boundary_dates(entries: list[TimelineEntry]) -> list[WorldDate]:
     return [by_instant[instant] for instant in sorted(by_instant)]
 
 
+def _timeline_or_empty(source: TimelineSource, thing_id: str) -> list[TimelineEntry]:
+    """`source.timeline(thing_id)`, or `[]` for an id that no longer
+    exists -- a boundary source that's gone contributes no boundaries."""
+
+    try:
+        return source.timeline(thing_id)
+    except KeyError:
+        return []
+
+
 def stretches(
-    view_factory: Callable[[], TimelineSource], thing_id: str
+    view_factory: Callable[[], TimelineSource],
+    thing_id: str,
+    also: Sequence[str] = (),
 ) -> list[tuple[WorldDate | None, WorldDate | None]]:
     """The stretches `thing_id` has been through, as `(start, end)` pairs:
-    the boundaries between consecutive changes, per `World.timeline`. The
-    first stretch's start is `None` (always); the last one's end is `None`
-    (open, "now")."""
+    the boundaries between consecutive changes, per `World.timeline`, merged
+    with the boundaries of each id in `also` (a thing's lineage, most
+    callers pass -- see `heritage.lineage`). An `also` id that no longer
+    exists simply contributes no boundaries. The first stretch's start is
+    `None` (always); the last one's end is `None` (open, "now")."""
 
     source = view_factory()
-    dates = _boundary_dates(source.timeline(thing_id))
+    entries = source.timeline(thing_id)
+    for ancestor_id in also:
+        entries = entries + _timeline_or_empty(source, ancestor_id)
+    dates = _boundary_dates(entries)
     bounds: list[WorldDate | None] = [None, *dates, None]
     return list(zip(bounds[:-1], bounds[1:]))
 
@@ -296,20 +313,40 @@ class ProseCache:
         ).fetchone()
         return value is not None
 
-    def stale(self, thing_id: str, section: str, at: WorldDate | None) -> bool:
-        """`True` if there's no cached entry for the stretch containing
-        `at`, its `rev` predates the newest timeline change inside that
-        stretch, or a row visible in that stretch was added or retired
-        after its `rev`."""
+    def _changed_since(self, thing_id: str, cached: CachedProse) -> bool:
+        """Whether `thing_id` itself changed in the cached stretch since
+        `cached.rev`, by the same two checks `stale` runs for the cached
+        thing: a newer timeline change inside the stretch, or a row visible
+        in it added or retired since. An id that no longer exists counts as
+        changed."""
 
-        cached = self.get(thing_id, section, at)
-        if cached is None:
+        try:
+            entries = self._view_factory().timeline(thing_id)
+        except KeyError:
             return True
-
-        entries = self._view_factory().timeline(thing_id)
         newest = _newest_rev_in_stretch(
             entries, cached.stretch_start, cached.stretch_end
         )
         if cached.rev < newest:
             return True
         return self._changed_in_stretch_since(thing_id, cached)
+
+    def stale(
+        self,
+        thing_id: str,
+        section: str,
+        at: WorldDate | None,
+        also: Sequence[str] = (),
+    ) -> bool:
+        """`True` if there's no cached entry for the stretch containing
+        `at`, its `rev` predates the newest timeline change inside that
+        stretch, or a row visible in that stretch was added or retired
+        after its `rev` -- for `thing_id` itself or for any id in `also`
+        (a thing's lineage, most callers pass -- see `heritage.lineage`).
+        An `also` id that no longer exists counts as changed."""
+
+        cached = self.get(thing_id, section, at)
+        if cached is None:
+            return True
+
+        return any(self._changed_since(id_, cached) for id_ in (thing_id, *also))
