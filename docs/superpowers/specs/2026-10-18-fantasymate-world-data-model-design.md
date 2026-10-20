@@ -534,6 +534,18 @@ choices, branching), not this.
   the owner when an output irritates them. A good early candidate is a world-aware version of
   dynamic story v2's random-story mode.
 - **Python, not Lisp/Scheme** (owner): the app is Python, and it will be shared.
+- **Generators are moddable too** (owner, 2026-10-20). World-level generators follow the same
+  model as runners:
+  - create from a prompt (`worldplay/create.py`, with the template `world/create-thing.jinja2`);
+  - prose writing (`worldplay/prose_gen.py`, `world/thing-prose.jinja2`);
+  - scene setup (`worldplay/setup.py`, `world/scene-setup.jinja2`).
+
+  Each one is a readable default made of a small Python entry point plus its prompt template.
+  To change one, copy it, change the copy (the template for tone or format, the code for a
+  different process such as two-step fact generation), and select it per world or per kind of
+  thing. A runner names the generators it uses, as it names its agents. Generators are not tied
+  to a scene: they run from the World tab with no scene loaded.
+
 - **Until then, the node runtime stays.** Phase 2's slice reuses the existing loop (see the slice
   design). New world features are built in Python, not as nodes. Plan E rewrites only the data
   nodes that touch characters and world entries. Once the default runner covers today's loop and
