@@ -426,6 +426,25 @@ def test_undo_creation_conflicts_with_later_reference(world, oskar_and_home, kin
     assert world.view().thing(new).fields["name"] == "Maren"
 
 
+def test_undo_creation_blocked_by_mix_parent(world):
+    with world.revision(Source.manual()) as rev:
+        human = rev.create_thing("species", fields={"name": "Human"})
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        orc = rev.create_thing("species", fields={"name": "Orc"})
+        created = rev.rev
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        rev.create_thing("mix", fields={"name": "Half-orc", "parents": [human, orc]})
+        referenced = rev.rev
+
+    report = world.undo([created])
+
+    assert report.undo_rev is None
+    assert [(c.table, c.thing_id, c.reason, c.later_rev) for c in report.conflicts] == [
+        ("things", orc, "referenced in a later revision", referenced)
+    ]
+    assert world.view().thing(orc).fields["name"] == "Orc"
+
+
 def test_undo_creation_reports_one_conflict_for_several_references(
     world, oskar_and_home
 ):
