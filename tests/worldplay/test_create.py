@@ -212,6 +212,23 @@ def test_parse_rejects_the_example_since_placeholder():
     assert facts[0].since is None
 
 
+def test_parse_accepts_a_raw_line_break_in_a_truncated_names_name():
+    """Regression (fix round 1): the same bug also hit the name recovered
+    from a truncated reply's unterminated head -- `_NAME_RE`'s match is
+    decoded with `json.loads` there too, and a raw newline inside it used
+    to raise uncaught."""
+
+    reply = (
+        '{"name": "Tam\nthe Ferryman", "age": 60, "facts": ['
+        '{"category": "background", "text": "A ferryman."}, '
+        '{"category": "personality", "text": "Grumbles at'
+    )
+    name, age, facts = parse_create_reply(reply, "character", Calendar(), 313)
+    assert name == "Tam\nthe Ferryman"
+    assert age == 60
+    assert facts[0].text == "A ferryman."
+
+
 def test_parse_accepts_a_raw_line_break_in_fact_text():
     """Regression: a model reply with a real newline inside a fact's
     "text" string (instead of an escaped "\\n") is still parsed, the same

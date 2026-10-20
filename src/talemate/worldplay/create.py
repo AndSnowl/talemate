@@ -176,6 +176,8 @@ def json_objects(text: str) -> list[dict[str, Any]]:
             continue
         if isinstance(obj, dict):
             found.append(obj)
+        # jumps past a successfully parsed object rather than descending
+        # into it, so a setup reply (one top-level object) is found whole
         index = end
     return found
 
@@ -221,7 +223,9 @@ def parse_create_reply(
     # are still there before the first fact
     head = reply.split('"facts"', 1)[0]
     if name is None and (match := _NAME_RE.search(head)):
-        name = json.loads(f'"{match.group(1)}"')
+        # non-strict for the same reason as json_objects: a raw line break
+        # in the name would otherwise raise here uncaught
+        name = json.JSONDecoder(strict=False).decode(f'"{match.group(1)}"')
     if age is None and (match := _AGE_RE.search(head)):
         age = int(match.group(1))
 
