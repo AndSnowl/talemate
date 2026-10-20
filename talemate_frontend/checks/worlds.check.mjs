@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
-import { useWorldsStore } from '../src/stores/worlds.js';
+import { useWorldsStore, parseWorldTarget, worldTarget } from '../src/stores/worlds.js';
+import { NEW_THING, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
 
 let passed = 0;
 const failures = [];
@@ -64,6 +65,65 @@ check('spanLabel', () => {
     assert.equal(spanLabel(null, label(304), null), '304 →');
     assert.equal(spanLabel(null, label(305), label(316)), '305 → 316');
     assert.equal(spanLabel(null, null, label(316)), '→ 316');
+});
+
+// --- name highlights ----------------------------------------------------------
+
+const VOS = { id: 'vos', name: 'Maren Vos', kind: 'character' };
+const HOLT = { id: 'holt', name: 'Maren Holt', kind: 'character' };
+const SALLOW = { id: 'sal', name: 'Sallowford', kind: 'place' };
+const PROMPT = 'Maren went from Sallowford for bleakcap; maren came back.';
+const MATCHES = [
+    { start: 0, end: 5, text: 'Maren', candidates: [HOLT, VOS] },
+    { start: 16, end: 26, text: 'Sallowford', candidates: [SALLOW] },
+    { start: 41, end: 46, text: 'maren', candidates: [HOLT, VOS] },
+];
+
+check('a name picks its best candidate until the owner picks another', () => {
+    assert.equal(pickedId(MATCHES[0], {}), 'holt');
+    assert.equal(pickedId(MATCHES[0], { maren: 'vos' }), 'vos');
+    // a pick that isn't one of the candidates falls back to the best
+    assert.equal(pickedId(MATCHES[0], { maren: 'gone' }), 'holt');
+    assert.equal(pickedId(MATCHES[0], { maren: NEW_THING }), NEW_THING);
+});
+
+check('picks go out once per name, leaving out names treated as new', () => {
+    assert.deepEqual(picksPayload(MATCHES, { maren: 'vos' }), { Maren: 'vos', Sallowford: 'sal' });
+    assert.deepEqual(picksPayload(MATCHES, { maren: NEW_THING }), { Sallowford: 'sal' });
+});
+
+check('the prompt is cut into plain text, matched names and new names', () => {
+    const segments = promptSegments(PROMPT, MATCHES, { sallowford: NEW_THING }, ['Bleakcap']);
+    assert.deepEqual(
+        segments.map((s) => [s.text, s.state || null]),
+        [
+            ['Maren', 'matched'],
+            [' went from ', null],
+            ['Sallowford', 'new'],
+            [' for ', null],
+            ['bleakcap', 'new'],
+            ['; ', null],
+            ['maren', 'matched'],
+            [' came back.', null],
+        ],
+    );
+    assert.equal(segments.map((s) => s.text).join(''), PROMPT);
+    assert.deepEqual([segments[2].start, segments[2].end], [16, 26]);
+    assert.equal(segments[4].match, null);
+});
+
+check('match offsets count code points, as the backend does', () => {
+    const text = '🌙 Maren waits';
+    const segments = promptSegments(text, [{ start: 2, end: 7, text: 'Maren', candidates: [VOS] }], {});
+    assert.deepEqual(segments.map((s) => s.text), ['🌙 ', 'Maren', ' waits']);
+});
+
+check('world scene targets', () => {
+    assert.equal(worldTarget('/w/a|b', 's1'), 'world:///w/a|b|s1');
+    assert.deepEqual(parseWorldTarget('world:///w/a|b|s1'), { worldPath: '/w/a|b', sceneId: 's1' });
+    assert.equal(parseWorldTarget('/scenes/x.json'), null);
+    assert.equal(parseWorldTarget('world://nobar'), null);
+    assert.equal(parseWorldTarget(null), null);
 });
 
 // --- the store ---------------------------------------------------------------
@@ -198,6 +258,112 @@ check('a disconnect forgets the open world', () => {
     assert.equal(store.currentWorld, null);
     assert.equal(store.worlds.length, 1);
     assert.deepEqual(store.things.character, []);
+});
+
+check('name matches for older text are dropped', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.matchNames('Maren', dateOf(314));
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'match_names', text: 'Maren', at: dateOf(314) });
+    store.matchNames('Maren went');
+    store.handleMessage(reply('match_names', { text: 'Maren', matches: [MATCHES[0]] }));
+    assert.deepEqual(store.nameMatches, []);
+    store.handleMessage(reply('match_names', { text: 'Maren went', matches: [MATCHES[0]] }));
+    assert.equal(store.nameMatches.length, 1);
+    // blank text asks nothing
+    sent.length = 0;
+    store.matchNames('  ');
+    assert.deepEqual(sent, []);
+    assert.deepEqual(store.nameMatches, []);
+});
+
+const SETUP = { setup: { player: { thing_id: 'vos' }, start: dateOf(314), intro: 'Fog.' }, names: { vos: 'Maren Vos' } };
+
+check('plan, regenerate, edit and start a scene', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.planScene('Maren goes', { Maren: 'vos' }, null, dateOf(314));
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'plan_scene', prompt: 'Maren goes', picks: { Maren: 'vos' }, player: null, start: dateOf(314),
+    });
+    assert.equal(store.setupPending, true);
+    store.handleMessage(reply('plan_scene', SETUP));
+    assert.equal(store.setupPending, false);
+    assert.equal(store.sceneSetup.names.vos, 'Maren Vos');
+
+    store.regenerateSetup();
+    assert.equal(sent.at(-1).action, 'plan_scene');
+    assert.equal(store.sceneSetup, null);
+    store.handleMessage({ type: 'worlds', action: 'plan_failed', message: 'no reply' });
+    assert.equal(store.setupError, 'no reply');
+    assert.equal(store.setupPending, false);
+
+    store.regenerateSetup();
+    store.handleMessage(reply('plan_scene', SETUP));
+    store.discardSetup();
+    assert.equal(store.sceneSetup, null);
+    assert.equal(store.setupRequest.data.prompt, 'Maren goes');
+
+    store.regenerateSetup();
+    store.handleMessage(reply('plan_scene', SETUP));
+    store.startScene();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'start_scene', setup: SETUP.setup });
+    assert.equal(store.pending.start_scene, true);
+    const started = { scene_id: 's9', target: 'world:///worlds/w1|s9', scene: { id: 's9' } };
+    store.handleMessage(reply('start_scene', started));
+    assert.deepEqual(store.startedScene, started);
+    assert.equal(store.sceneSetup, null);
+    assert.equal(store.setupRequest, null);
+    assert.deepEqual(store.pending, {});
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_scenes' });
+});
+
+check('a failed start keeps the setup and stops its spinner', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.planScene('Maren goes');
+    store.handleMessage(reply('plan_scene', SETUP));
+    store.startScene();
+    store.handleMessage({ type: 'worlds', action: 'start_failed', message: 'no client' });
+    assert.equal(store.setupError, 'no client');
+    assert.deepEqual(store.pending, {});
+    assert.equal(store.sceneSetup.names.vos, 'Maren Vos');
+});
+
+check('a continue setup is not taken for a plan', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.continueScene('s1', 'Find the smuggler');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'continue_scene', scene_id: 's1', goal_prompt: 'Find the smuggler' });
+    store.handleMessage(reply('plan_scene', SETUP));
+    assert.equal(store.sceneSetup, null);
+    store.handleMessage(reply('continue_scene', SETUP));
+    assert.equal(store.sceneSetup.setup.intro, 'Fog.');
+    // closing the dialog drops a late reply
+    store.regenerateSetup();
+    store.closeSetup();
+    store.handleMessage(reply('continue_scene', SETUP));
+    assert.equal(store.sceneSetup, null);
+});
+
+check('opening another world drops the setup step', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.planScene('Maren goes');
+    store.openWorld('/worlds/w2');
+    assert.equal(store.setupPending, false);
+    assert.equal(store.setupRequest, null);
+});
+
+check('repositioning a scene replaces it in the list', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_scenes', { scenes: [{ id: 's1', start: dateOf(313) }, { id: 's2', start: dateOf(300) }] }));
+    store.repositionScene('s1', dateOf(320));
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'reposition_scene', scene_id: 's1', start: dateOf(320) });
+    store.handleMessage(reply('reposition_scene', { id: 's1', start: dateOf(320) }));
+    assert.deepEqual(store.scenes.map((scene) => scene.start), [dateOf(320), dateOf(300)]);
+    assert.deepEqual(store.pending, {});
 });
 
 check('other routers are ignored', () => {

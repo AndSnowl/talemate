@@ -10,8 +10,13 @@
 //
 // The backend holds one open world per connection and closes it when the
 // connection goes, so a disconnect forgets the open world. Opening another
-// world cancels a running preview without any reply, so opening (or
-// creating) a world clears the preview and every spinner itself.
+// world cancels a running preview (or scene plan) without any reply, so
+// opening (or creating) a world clears the preview, the scene setup and
+// every spinner itself.
+//
+// Scenes: the new-scene dialog and "continue in a new scene" share one
+// setup step (`setupRequest`, `sceneSetup`). A started scene's reply lands
+// in `startedScene`; TalemateApp loads its `target` as Load Scene does.
 //
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
@@ -20,6 +25,27 @@ import { defineStore } from 'pinia';
 import { LISTED_KINDS } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
+
+// as talemate.worldplay.persistence.world_target
+const TARGET_PREFIX = 'world://';
+
+// The `load_scene` path of a world scene.
+export function worldTarget(worldPath, sceneId) {
+    return `${TARGET_PREFIX}${worldPath}|${sceneId}`;
+}
+
+// `{worldPath, sceneId}` of a world scene's path, or null for any other.
+export function parseWorldTarget(path) {
+    if (typeof path !== 'string' || !path.startsWith(TARGET_PREFIX)) {
+        return null;
+    }
+    const rest = path.slice(TARGET_PREFIX.length);
+    const sep = rest.lastIndexOf('|');
+    if (sep <= 0 || sep === rest.length - 1) {
+        return null;
+    }
+    return { worldPath: rest.slice(0, sep), sceneId: rest.slice(sep + 1) };
+}
 
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field'];
@@ -44,6 +70,18 @@ function worldState() {
         previewError: null,
         // the id of the thing whose prose is being regenerated
         proseRegenerating: null,
+        // the new-scene prompt's names: the text last asked about, and the
+        // `match_names` reply for it
+        nameMatchesText: null,
+        nameMatches: [],
+        // the setup step: the request (`{action, data}`, plan_scene or
+        // continue_scene) and its reply (`{setup, names}`)
+        setupRequest: null,
+        setupPending: false,
+        sceneSetup: null,
+        setupError: null,
+        // the last `start_scene` reply: `{scene_id, target, scene}`
+        startedScene: null,
         pending: {},
     };
 }
@@ -116,6 +154,71 @@ export const useWorldsStore = defineStore('worlds', {
 
         listScenes() {
             this.request('list_scenes');
+        },
+
+        // --- scenes -------------------------------------------------------
+
+        // `at`: the date the names are as of (null for the latest)
+        matchNames(text, at = null) {
+            this.nameMatchesText = text;
+            if (!text.trim()) {
+                this.nameMatches = [];
+                return;
+            }
+            this.request('match_names', { text, at });
+        },
+
+        // `picks`: a matched name (as written) -> thing id; `player` a
+        // character id or null; `start` a date, or null for after the
+        // latest scene
+        planScene(prompt, picks = {}, player = null, start = null) {
+            this.requestSetup('plan_scene', { prompt, picks, player, start });
+        },
+
+        continueScene(sceneId, goalPrompt) {
+            this.requestSetup('continue_scene', { scene_id: sceneId, goal_prompt: goalPrompt });
+        },
+
+        requestSetup(action, data) {
+            this.setupRequest = { action, data };
+            this.sceneSetup = null;
+            this.setupError = null;
+            this.setupPending = true;
+            this.request(action, data);
+        },
+
+        regenerateSetup() {
+            const req = this.setupRequest;
+            if (req) {
+                this.requestSetup(req.action, req.data);
+            }
+        },
+
+        // drop the setup, keeping the request so the prompt can be edited
+        discardSetup() {
+            this.sceneSetup = null;
+            this.setupError = null;
+            this.setupPending = false;
+        },
+
+        // forget the setup step altogether (its dialog closed)
+        closeSetup() {
+            this.discardSetup();
+            this.setupRequest = null;
+        },
+
+        startScene() {
+            if (!this.sceneSetup) {
+                return;
+            }
+            this.setupError = null;
+            this.pending = { ...this.pending, start_scene: true };
+            this.request('start_scene', { setup: this.sceneSetup.setup });
+        },
+
+        repositionScene(sceneId, start) {
+            this.pending = { ...this.pending, reposition_scene: true };
+            this.request('reposition_scene', { scene_id: sceneId, start });
         },
 
         // --- things -------------------------------------------------------
@@ -263,6 +366,38 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'list_scenes':
                     this.scenes = data.scenes;
                     break;
+                case 'match_names':
+                    // a reply for text since typed over is dropped
+                    if (data.text === this.nameMatchesText) {
+                        this.nameMatches = data.matches;
+                    }
+                    break;
+                case 'plan_scene':
+                case 'continue_scene':
+                    if (this.setupPending && this.setupRequest?.action === action) {
+                        this.sceneSetup = data;
+                        this.setupPending = false;
+                    }
+                    break;
+                case 'plan_failed':
+                case 'continue_failed':
+                    if (this.setupPending) {
+                        this.setupError = message.message;
+                        this.setupPending = false;
+                    }
+                    break;
+                case 'start_scene':
+                    this.closeSetup();
+                    this.startedScene = data;
+                    this.listScenes();
+                    break;
+                case 'start_failed':
+                    this.setupError = message.message;
+                    this.clearPending('start_scene');
+                    break;
+                case 'reposition_scene':
+                    this.scenes = this.scenes.map((scene) => (scene.id === data.id ? data : scene));
+                    break;
                 case 'preview_thing':
                     if (this.previewPending) {
                         this.preview = data;
@@ -305,6 +440,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.pending = {};
                         this.previewPending = false;
                         this.proseRegenerating = null;
+                        this.setupPending = false;
                     }
                     break;
                 default:

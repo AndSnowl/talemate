@@ -15,9 +15,11 @@ Fixtures:
 
 - ``app`` (session): one isolated app for the whole run, stopped at the end.
   Its backend answers the `worlds` router's ``preview_thing`` from
-  ``<root>/e2e-fixed-preview.json``, never a model.
+  ``<root>/e2e-fixed-preview.json``, and its ``plan_scene`` and
+  ``continue_scene`` from ``<root>/e2e-fixed-setup.json``, never a model.
 - ``fixed_preview``: a function that writes that file (``seed.set_fixed_preview``);
   it's removed after the test, so no later test sees a stale preview.
+- ``fixed_setup``: the same for the scene setup (``seed.set_fixed_setup``).
 - ``browser_page``: a fresh browser context and blank page, closed after the test.
 - ``page``: ``browser_page`` opened on the app, onboarding wizard dismissed,
   with ``page.console_errors`` collecting console messages of type ``error``.
@@ -37,9 +39,11 @@ import pytest
 
 from e2e.seed import (
     FIXED_PREVIEW_FILE,
+    FIXED_SETUP_FILE,
     SOCKET_HOOK_JS,
     dismiss_onboarding,
     set_fixed_preview,
+    set_fixed_setup,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -98,11 +102,12 @@ def browser(chromium_path):
 def app(tmp_path_factory, chromium_path):
     # chromium_path first: without a browser, skip before starting an app.
     root = tmp_path_factory.mktemp("app")
-    # The backend's `preview_thing` answers from this file instead of a model
-    # (seed.set_fixed_preview writes it). Set only for the backend's start:
-    # it inherits the environment then.
+    # The backend's `preview_thing` and scene setups answer from these files
+    # instead of a model (seed.set_fixed_preview/set_fixed_setup write them).
+    # Set only for the backend's start: it inherits the environment then.
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(root / FIXED_PREVIEW_FILE))
+        mp.setenv("TALEMATE_TEST_FIXED_SETUP", str(root / FIXED_SETUP_FILE))
         info = talemate_app.start(root=root)
     try:
         yield info
@@ -115,6 +120,15 @@ def fixed_preview(app):
     path = Path(app.root) / FIXED_PREVIEW_FILE
     try:
         yield lambda preview: set_fixed_preview(app.root, preview)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@pytest.fixture()
+def fixed_setup(app):
+    path = Path(app.root) / FIXED_SETUP_FILE
+    try:
+        yield lambda reply: set_fixed_setup(app.root, reply)
     finally:
         path.unlink(missing_ok=True)
 

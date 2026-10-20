@@ -38,7 +38,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `target` is the `world://` path the frontend then sends to `load_scene`.
   `list_scenes` lists the world's scenes, newest first.
   `reposition_scene {scene_id, start}` moves a scene's start date; if that
-  scene is the one loaded, its characters are rebuilt for the new date.
+  scene is the one loaded, its characters are rebuilt for the new date and
+  its status sent. The scene's world characters' prose is then brought up
+  to date at the new start in the background, as after an edit.
+  For the browser tests only, `TALEMATE_TEST_FIXED_SETUP` names a JSON
+  file holding a scene-setup model reply (`{player, characters, place,
+  goal, intro, extras?}`) that `plan_scene` and `continue_scene` use
+  instead of asking any model; `start_scene` then leaves the prose as it
+  is.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -115,6 +122,10 @@ DEFAULT_PRESENT_YEAR = 1000
 # browser tests only: a JSON file `preview_thing` answers from (see the
 # module docstring)
 FIXED_PREVIEW_ENV = "TALEMATE_TEST_FIXED_PREVIEW"
+
+# browser tests only: a JSON file holding the scene-setup model reply
+# `plan_scene` and `continue_scene` use (see the module docstring)
+FIXED_SETUP_ENV = "TALEMATE_TEST_FIXED_SETUP"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -289,6 +300,14 @@ class WorldsPlugin(Plugin):
 
     def _client(self) -> Any:
         return instance.get_agent("creator").client
+
+    def _fixed_setup(self) -> dict | None:
+        """The browser tests' fixed scene-setup reply, or `None` normally."""
+
+        path = os.environ.get(FIXED_SETUP_ENV)
+        if not path:
+            return None
+        return json.loads(Path(path).read_text(encoding="utf-8"))
 
     def _reply(self, action: str, data: Any) -> None:
         self.websocket_handler.queue_put(
@@ -676,7 +695,8 @@ class WorldsPlugin(Plugin):
     async def handle_plan_scene(self, data: dict):
         payload = PlanScenePayload(**data)
         world = self._require_world()
-        client = self._client()
+        fixed = self._fixed_setup()
+        client = self._client() if fixed is None else None
         self._spawn(
             plan_scene(
                 world,
@@ -685,6 +705,7 @@ class WorldsPlugin(Plugin):
                 payload.player,
                 _date_in(payload.start),
                 client,
+                reply=fixed,
             ),
             self.create_task_done_callback(
                 "plan_scene",
@@ -697,7 +718,7 @@ class WorldsPlugin(Plugin):
     async def handle_start_scene(self, data: dict):
         payload = StartScenePayload(**data)
         world = self._require_world()
-        client = self._client()
+        client = self._client() if self._fixed_setup() is None else None
 
         def started(scene_id: str) -> dict:
             record = world.scenes().get(scene_id)
@@ -726,9 +747,12 @@ class WorldsPlugin(Plugin):
     async def handle_continue_scene(self, data: dict):
         payload = ContinueScenePayload(**data)
         world = self._require_world()
-        client = self._client()
+        fixed = self._fixed_setup()
+        client = self._client() if fixed is None else None
         self._spawn(
-            continue_setup(world, payload.scene_id, payload.goal_prompt, client),
+            continue_setup(
+                world, payload.scene_id, payload.goal_prompt, client, reply=fixed
+            ),
             self.create_task_done_callback(
                 "continue_scene",
                 "continue_failed",
@@ -740,26 +764,77 @@ class WorldsPlugin(Plugin):
     async def handle_reposition_scene(self, data: dict):
         """Move a scene's start date. In the slice nothing from a scene has
         reached the world yet, so only the start changes; the messages move
-        with it. If the scene is the one loaded, its context follows."""
+        with it. If the scene is the one loaded, its characters are rebuilt
+        for the new date and its status sent, so open character sheets
+        follow. The scene's world characters then get their prose for the
+        new start in the background; the loaded scene is rebuilt again once
+        that's done."""
 
         payload = RepositionScenePayload(**data)
         world = self._require_world()
         start = WorldDate.model_validate(payload.start)
         store = world.scenes()
         store.update(payload.scene_id, start=start)
+        record = store.get(payload.scene_id)
+        assert record is not None
+
+        scene = self._loaded_scene(world, payload.scene_id)
+        if scene is not None:
+            await self._refresh_loaded(scene)
+
+        prose_tasks = [
+            task
+            for task in (
+                self._schedule_prose(thing_id, start)
+                for thing_id in self._world_characters(record)
+            )
+            if task is not None
+        ]
+        if scene is not None and prose_tasks:
+
+            async def refresh_after_prose() -> None:
+                await asyncio.gather(*prose_tasks, return_exceptions=True)
+                if self._loaded_scene(world, payload.scene_id) is scene:
+                    await self._refresh_loaded(scene)
+
+            self._spawn(refresh_after_prose(), self._log_failure)
+
+        self._reply("reposition_scene", self._scene_out(world, record))
+
+    def _loaded_scene(self, world: World, scene_id: str) -> Any:
+        """The handler's scene if it's world scene `scene_id` of `world`."""
 
         scene = getattr(self.websocket_handler, "scene", None)
         ref = getattr(scene, "world_ref", None)
-        context = getattr(scene, "world_context", None)
         if (
             ref is not None
-            and context is not None
-            and ref.scene_id == payload.scene_id
+            and getattr(scene, "world_context", None) is not None
+            and ref.scene_id == scene_id
             and Path(ref.world_path).resolve() == world.path.resolve()
         ):
-            context.record = context.world.scenes().get(payload.scene_id)
-            await context.refresh_characters(scene)
+            return scene
+        return None
 
-        record = store.get(payload.scene_id)
-        assert record is not None
-        self._reply("reposition_scene", self._scene_out(world, record))
+    async def _refresh_loaded(self, scene: Any) -> None:
+        """Rebuild a loaded world scene's characters from its (re-read)
+        record and send its status."""
+
+        context = scene.world_context
+        context.record = context.world.scenes().get(context.record.id)
+        await context.refresh_characters(scene)
+        scene.emit_status()
+
+    @staticmethod
+    def _world_characters(record: SceneRecord) -> list[str]:
+        """The world things a scene plays: its player and its characters."""
+
+        thing_ids = [record.player_thing_id] if record.player_thing_id else []
+        for entry in record.state.get("characters") or []:
+            if isinstance(entry, dict) and entry.get("thing_id"):
+                thing_ids.append(entry["thing_id"])
+        return list(dict.fromkeys(thing_ids))
+
+    @staticmethod
+    def _log_failure(task: asyncio.Task[Any]) -> None:
+        if not task.cancelled() and task.exception() is not None:
+            log.error("worlds.background_failed", error=str(task.exception()))

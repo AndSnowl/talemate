@@ -23,6 +23,11 @@ and-setup.md) settled:
   resolved against the world in code;
 - a player picked in the UI always wins over the model's choice.
 
+For the browser tests, `plan_scene` and `continue_setup` take a ready-made
+model `reply` instead of asking the model (the websocket plugin's
+`TALEMATE_TEST_FIXED_SETUP`); everything after the model's answer runs as
+usual.
+
 Invented things stay scene-local: nothing here writes to the world.
 """
 
@@ -476,12 +481,14 @@ async def plan_scene(
     client: Any,
     *,
     embedding_function: Any = None,
+    reply: dict[str, Any] | None = None,
 ) -> SceneSetup:
     """Plan a scene from the owner's storyline `prompt`. `picks` maps a
     `NameMatch.text` to the thing the owner chose for it; `player` is the
     owner's pick of who they play, if any. `start` defaults to the world's
     current date (`create.current_date`). `embedding_function` is the
-    index's, by default the memory agent's. Writes nothing to the world."""
+    index's, by default the memory agent's. A given `reply` stands in for
+    the model's (no model or index is asked). Writes nothing to the world."""
 
     start = start or current_date(world)
     view = world.view(start)
@@ -491,22 +498,25 @@ async def plan_scene(
         if view.thing(thing_id) is None:
             raise KeyError(f"no such thing: {thing_id}")
 
-    hits = _index_hits(world, prompt, start, embedding_function)
+    hits = (
+        _index_hits(world, prompt, start, embedding_function) if reply is None else []
+    )
     shown = [
         thing_id
         for thing_id in _dedupe([*chosen, *(hit.thing_id for hit in hits)])
         if view.thing(thing_id) is not None
     ]
 
-    reply = await _ask(
-        world,
-        view,
-        client,
-        prompt=prompt,
-        start=start,
-        shown=shown,
-        player_name=(view.name_of(player) or "") if player else "",
-    )
+    if reply is None:
+        reply = await _ask(
+            world,
+            view,
+            client,
+            prompt=prompt,
+            start=start,
+            shown=shown,
+            player_name=(view.name_of(player) or "") if player else "",
+        )
     setup = _setup_from_reply(
         view,
         reply,
@@ -543,7 +553,8 @@ def _scene_name(setup: SceneSetup) -> str:
 async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     """Write `setup` as a new world scene and return its id. The world
     characters' prose is brought up to date at the start first, so the
-    scene's character sheets are fresh. The intro is the scene's intro, the
+    scene's character sheets are fresh; with no `client` (the browser
+    tests) it's left as it is. The intro is the scene's intro, the
     narration Talemate opens the scene with; invented characters, the
     place and extras become scene-local things."""
 
@@ -553,7 +564,7 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             refs.append(ref)
 
     for ref in refs:
-        if ref.thing_id is not None:
+        if ref.thing_id is not None and client is not None:
             await prose_gen.ensure_prose(world, ref.thing_id, setup.start, client)
 
     entries: list[dict[str, object]] = []
@@ -702,13 +713,19 @@ def _name(view: WorldView, ref: SetupRef) -> str:
 
 
 async def continue_setup(
-    world: World, scene_id: str, goal_prompt: str, client: Any
+    world: World,
+    scene_id: str,
+    goal_prompt: str,
+    client: Any,
+    *,
+    reply: dict[str, Any] | None = None,
 ) -> SceneSetup:
     """Plan the scene that follows `scene_id`: it starts where that one
     ended, at the same place, with the player and the characters still
     active there, and the same lore. The model writes the new goal and
     intro from `goal_prompt` and a summary of what happened; characters it
-    brings in join the carried ones."""
+    brings in join the carried ones. A given `reply` stands in for the
+    model's, and the summary is left empty (no summarizer is asked)."""
 
     store = world.scenes()
     record = store.get(scene_id)
@@ -729,7 +746,7 @@ async def continue_setup(
         for thing_id in record.state.get("pulled_in") or []
         if view.thing(thing_id) is not None
     ]
-    summary = await _summarize(record, messages)
+    summary = await _summarize(record, messages) if reply is None else ""
 
     carried_refs = [*characters, *([place] if place is not None else [])]
     shown = _dedupe(
@@ -740,17 +757,18 @@ async def continue_setup(
         ]
         + pulled_in
     )
-    reply = await _ask(
-        world,
-        view,
-        client,
-        prompt=goal_prompt,
-        start=start,
-        shown=shown,
-        player_name=_name(view, player) if player is not None else "",
-        summary=summary,
-        carried=[_name(view, ref) for ref in carried_refs],
-    )
+    if reply is None:
+        reply = await _ask(
+            world,
+            view,
+            client,
+            prompt=goal_prompt,
+            start=start,
+            shown=shown,
+            player_name=_name(view, player) if player is not None else "",
+            summary=summary,
+            carried=[_name(view, ref) for ref in carried_refs],
+        )
     planned = _setup_from_reply(
         view, reply, picks={}, player=player, start=start, prompt=goal_prompt
     )

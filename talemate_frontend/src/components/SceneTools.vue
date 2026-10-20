@@ -205,6 +205,10 @@
 
                 <SceneToolsSave :app-busy="appBusy" :app-ready="appReady" :scene="scene" />
 
+                <!-- world scene: its start date and "continue in a new scene" -->
+
+                <WorldSceneTools :scene="scene" :disabled="appBusy" />
+
 
                 </div>
             </v-card-text>
@@ -227,6 +231,7 @@ import SceneToolsSettings from './SceneToolsSettings.vue';
 import SceneToolsSave from './SceneToolsSave.vue';
 import SceneToolsTime from './SceneToolsTime.vue';
 import RequestInput from './RequestInput.vue';
+import WorldSceneTools from './worlds/WorldSceneTools.vue';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 
 export default {
@@ -243,6 +248,7 @@ export default {
         SceneToolsSettings,
         SceneToolsTime,
         RequestInput,
+        WorldSceneTools,
     },
     props: {
         appBusy: Boolean,

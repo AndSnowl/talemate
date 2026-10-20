@@ -452,6 +452,20 @@ def set_fixed_preview(root: Path, preview: dict) -> None:
     (Path(root) / FIXED_PREVIEW_FILE).write_text(json.dumps(preview))
 
 
+# The app's `worlds` router answers `plan_scene` and `continue_scene` from
+# this file (in the app root) instead of asking a model; the `app` fixture
+# points the backend's TALEMATE_TEST_FIXED_SETUP at it.
+FIXED_SETUP_FILE = "e2e-fixed-setup.json"
+
+
+def set_fixed_setup(root: Path, reply: dict) -> None:
+    """Make the app's next scene setups come from ``reply``, a scene-setup
+    model reply: ``{"player", "characters": [name | {"name", "facts"}],
+    "place": name | {"name", "facts"}, "goal", "intro", "extras"?}``. Its
+    names are resolved against the world as a model's would be."""
+    (Path(root) / FIXED_SETUP_FILE).write_text(json.dumps(reply))
+
+
 # Installed by the ``page`` fixture (context.add_init_script) before the app's
 # code runs: records every WebSocket the page opens, so ``open_scene`` can
 # send on the app's own backend connection (the scene is per connection).

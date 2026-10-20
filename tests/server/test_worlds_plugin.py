@@ -638,10 +638,80 @@ async def test_continue_scene(plugin, client):
     assert setup["start"]["label"] == "313"
 
 
-async def test_reposition_scene_refreshes_loaded_scene(plugin):
-    """Ruling R4: a scene's start can move after play; nothing has reached
-    the world, so only the start changes, and a loaded scene's characters
-    follow the new date."""
+async def test_fixed_setup_setting_answers_without_a_model(
+    plugin, client, tmp_path, monkeypatch
+):
+    """TALEMATE_TEST_FIXED_SETUP (e2e only) names a file holding a model
+    reply that `plan_scene` and `continue_scene` use instead of asking the
+    model (no index, no summarizer); the reply's names are still resolved
+    against the world, the owner's picks first. `start_scene` then leaves
+    the prose as it is."""
+
+    world, _maren, harbour = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual(note="seed")) as rev:
+        rev.create_thing("character", {"name": "Brin Vos"})
+        other = rev.create_thing("character", {"name": "Brin Holt"})
+    fixed = tmp_path / "fixed-setup.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "player": "Brin",
+                "characters": [{"name": "Daveth", "facts": ["A smuggler."]}],
+                "place": {"name": "The Harbour"},
+                "goal": "Meet the smuggler.",
+                "intro": "Fog rolls over the harbour.",
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(fixed))
+    # no AI client at all, as in the browser tests
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "plan_scene",
+            "prompt": "Brin meets a smuggler",
+            "picks": {"Brin": other},
+            "player": None,
+            "start": WorldDate.of(313).model_dump(),
+        }
+    )
+    await _drain(plugin)
+    planned = _last(plugin, "plan_scene")["data"]
+    setup = planned["setup"]
+    assert setup["player"]["thing_id"] == other
+    assert planned["names"][other] == "Brin Holt"
+    assert setup["place"]["thing_id"] == harbour
+    assert setup["invented"] == ["Daveth"]
+    assert setup["intro"] == "Fog rolls over the harbour."
+
+    await plugin.handle({"type": "worlds", "action": "start_scene", "setup": setup})
+    await _drain(plugin)
+    scene_id = _last(plugin, "start_scene")["data"]["scene_id"]
+    assert world.scenes().get(scene_id).player_thing_id == other
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "continue_scene",
+            "scene_id": scene_id,
+            "goal_prompt": "Follow the smuggler",
+        }
+    )
+    await _drain(plugin)
+    following = _last(plugin, "continue_scene")["data"]["setup"]
+    assert following["continued_from"] == scene_id
+    assert following["player"]["thing_id"] == other
+    assert following["summary"] == ""
+    assert client.prompt_history == []
+
+
+async def _loaded_river_scene(plugin, *, facts=()):
+    """A world with Mira (born 290) and a scene "River" at 313 she's in,
+    loaded the way `load_world_scene` leaves it: on its own world
+    connection, as the handler's scene. Returns `(world, mira, scene_id,
+    scene, loaded_world)`; the caller closes `loaded_world`."""
 
     await plugin.handle({"type": "worlds", "action": "create_world", "name": "Vael"})
     world = plugin.world
@@ -651,12 +721,13 @@ async def test_reposition_scene_refreshes_loaded_scene(plugin):
             {"name": "Mira", "born": WorldDate.of(290)},
             valid_from=WorldDate.of(290),
         )
+        for category, text in facts:
+            rev.add_fact(mira, category, text)
     scenes = world.scenes()
     scene_id = scenes.create(
         "River", WorldDate.of(313), state={"characters": [{"thing_id": mira}]}
     )
 
-    # the scene as `load_world_scene` leaves it: its own world connection
     loaded_world = World.open(world.path)
     scene = MockScene()
     bootstrap_scene(scene)
@@ -673,22 +744,90 @@ async def test_reposition_scene_refreshes_loaded_scene(plugin):
         world=loaded_world, record=scenes.get(scene_id)
     )
     plugin.websocket_handler.scene = scene
+    return world, mira, scene_id, scene, loaded_world
+
+
+async def _reposition(plugin, scene_id, year):
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "reposition_scene",
+            "scene_id": scene_id,
+            "start": WorldDate.of(year).model_dump(),
+        }
+    )
+
+
+async def test_reposition_scene_refreshes_loaded_scene(plugin, monkeypatch):
+    """Ruling R4: a scene's start can move after play; nothing has reached
+    the world, so only the start changes, and a loaded scene's characters
+    follow the new date."""
+
+    world, _mira, scene_id, scene, loaded_world = await _loaded_river_scene(plugin)
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
     assert scene.get_character("Mira").base_attributes["age"] == 23
 
     try:
-        await plugin.handle(
-            {
-                "type": "worlds",
-                "action": "reposition_scene",
-                "scene_id": scene_id,
-                "start": WorldDate.of(320).model_dump(),
-            }
-        )
+        await _reposition(plugin, scene_id, 320)
 
         moved = _last(plugin, "reposition_scene")["data"]
         assert moved["start"]["label"] == "320"
-        assert scenes.get(scene_id).start == WorldDate.of(320)
+        assert world.scenes().get(scene_id).start == WorldDate.of(320)
         assert scene.world_context.record.start == WorldDate.of(320)
         assert scene.get_character("Mira").base_attributes["age"] == 30
+    finally:
+        loaded_world.close()
+
+
+async def test_reposition_scene_emits_the_loaded_scenes_status(plugin, monkeypatch):
+    """After the loaded scene's characters are rebuilt, its status goes
+    out, so open character sheets show the new date's characters."""
+
+    _world, _mira, scene_id, scene, loaded_world = await _loaded_river_scene(plugin)
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+    ages = []
+    monkeypatch.setattr(
+        scene,
+        "emit_status",
+        lambda *a, **kw: ages.append(
+            scene.get_character("Mira").base_attributes["age"]
+        ),
+    )
+
+    try:
+        await _reposition(plugin, scene_id, 320)
+        assert ages == [30]
+    finally:
+        loaded_world.close()
+
+
+async def test_reposition_scene_brings_prose_up_to_date(plugin, monkeypatch):
+    """The scene's world characters get their prose for the new start in
+    the background (as an edit's prose refresh does); the loaded scene is
+    rebuilt with it and its status sent again."""
+
+    _world, mira, scene_id, scene, loaded_world = await _loaded_river_scene(
+        plugin, facts=[("appearance", "Tall and grey-eyed.")]
+    )
+    client = scene.mock_client
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=client))
+    emitted = []
+    monkeypatch.setattr(scene, "emit_status", lambda *a, **kw: emitted.append(1))
+
+    try:
+        async with MockClientContext():
+            client_responses.get().append("Mira is tall and grey-eyed.")
+            await _reposition(plugin, scene_id, 320)
+            assert plugin.tasks, "no prose task was scheduled"
+            await _drain(plugin)
+
+        assert _last(plugin, "prose_updated")["data"] == {"id": mira}
+        cache = loaded_world.prose()
+        at = WorldDate.of(320)
+        assert cache.get(mira, "description", at).text == "Mira is tall and grey-eyed."
+        assert cache.stale(mira, "description", at) is False
+        assert scene.get_character("Mira").description == "Mira is tall and grey-eyed."
+        # once for the new date, once more with the new prose
+        assert len(emitted) == 2
     finally:
         loaded_world.close()

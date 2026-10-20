@@ -74,6 +74,7 @@
                     <div class="d-flex align-center ga-2 mb-1">
                         <span class="text-h5 world-name">{{ worlds.currentWorld.name }}</span>
                         <v-spacer></v-spacer>
+                        <v-btn size="small" variant="flat" color="accent" prepend-icon="mdi-movie-open-plus" @click="newScene = true">New scene</v-btn>
                         <v-btn size="small" variant="tonal" color="accent" prepend-icon="mdi-earth-box" @click="$emit('open-world-tab')">Browse world</v-btn>
                     </div>
                     <div class="text-caption text-muted mb-4">
@@ -94,9 +95,9 @@
                         <div class="d-flex align-center ga-2">
                             <div>
                                 <div class="text-subtitle-1">{{ scene.name }}</div>
-                                <div class="text-caption text-muted">
-                                    <span class="world-date">{{ formatDate(worlds.calendar, scene.start) }}</span>
-                                    <span v-if="scene.premise"> · {{ scene.premise }}</span>
+                                <div class="text-caption text-muted d-flex align-center flex-wrap ga-1">
+                                    <SceneStartDate :scene="scene" compact />
+                                    <span v-if="scene.premise">{{ scene.premise }}</span>
                                 </div>
                             </div>
                             <v-spacer></v-spacer>
@@ -106,20 +107,25 @@
                 </div>
             </v-col>
         </v-row>
+
+        <NewSceneDialog v-if="worlds.currentWorld" v-model="newScene" />
     </div>
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
+import { useWorldsStore, worldTarget } from '@/stores/worlds.js';
 import { formatDate } from './worldDates.js';
+import NewSceneDialog from './NewSceneDialog.vue';
+import SceneStartDate from './SceneStartDate.vue';
 
 // The Worlds home: list worlds, create one, open one, and play the open
-// world's scenes. Play asks TalemateApp to load the scene's `world://`
-// target, the same way Load Scene loads a file.
-const TARGET_PREFIX = 'world://';
+// world's scenes, or start a new one from a prompt. Play asks TalemateApp
+// to load the scene's `world://` target, the same way Load Scene loads a
+// file. Each scene's start date can be moved from its card.
 
 export default {
     name: 'WorldsHome',
+    components: { NewSceneDialog, SceneStartDate },
     props: {
         visible: { type: Boolean, default: false },
     },
@@ -132,6 +138,7 @@ export default {
             newName: '',
             newYear: 1000,
             openingPath: null,
+            newScene: false,
         };
     },
     computed: {
@@ -168,8 +175,7 @@ export default {
             this.newName = '';
         },
         play(scene) {
-            // as talemate.worldplay.persistence.world_target
-            this.$emit('play-scene', `${TARGET_PREFIX}${this.worlds.currentWorld.path}|${scene.id}`);
+            this.$emit('play-scene', worldTarget(this.worlds.currentWorld.path, scene.id));
         },
     },
 };

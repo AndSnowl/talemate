@@ -227,7 +227,7 @@
           <v-tabs-window-item :transition="false" :reverse-transition="false" value="worlds">
             <WorldsHome
               :visible="tab === 'worlds'"
-              @play-scene="(target) => { resetViews(); $refs.sceneLanding.loadJsonSceneFromPath(target); }"
+              @play-scene="loadWorldScene"
               @open-world-tab="tab = 'fmworld'" />
           </v-tabs-window-item>
           <!-- WORLD (the open fantasymate world's things) -->
@@ -766,6 +766,12 @@ export default {
       },
       deep: true,
       immediate: true,
+    },
+    // a world scene was started (new, or continued from this one): load it
+    'worldsStore.startedScene'(started) {
+      if (started) {
+        this.loadWorldScene(started.target);
+      }
     },
     availableTabs(tabs) {
       // check if tab still exists
@@ -1938,6 +1944,11 @@ export default {
       return templateString;
     },
 
+    // load a world scene by its `world://` target, as Load Scene loads a file
+    loadWorldScene(target) {
+      this.resetViews();
+      this.$refs.sceneLanding.loadJsonSceneFromPath(target);
+    },
     resetViews() {
       if(this.$refs.worldStateManager)
         this.$refs.worldStateManager.reset()
