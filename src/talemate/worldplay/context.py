@@ -24,6 +24,9 @@ from .characters import WORLD_DERIVED_FIELDS, character_from_world
 
 log = structlog.get_logger("talemate.worldplay.context")
 
+# the scene-local thing kind of a place invented for a scene
+LOCAL_PLACE_KIND = "place"
+
 SECTION_TITLE = "World"
 
 
@@ -37,19 +40,38 @@ def scene_date(record: SceneRecord, scene_ts: str) -> WorldDate:
 def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
     """The "World" instruction's content: the scene's goal, its current
     place, and whatever lore has been pulled into it, all as of `at`. The
-    place is `record.state["place_thing_id"]`; the lore entries are
-    `record.state["pulled_in"]`."""
+    place is the world thing `record.state["place_thing_id"]` or, when the
+    scene invented its place, the scene-local place thing
+    `record.state["place_local_id"]` (its name and facts); the lore entries
+    are `record.state["pulled_in"]`."""
 
     view = world.view(at)
 
     place = None
     place_thing_id = record.state.get("place_thing_id")
+    place_local_id = record.state.get("place_local_id")
     if place_thing_id:
         place_state = view.thing(place_thing_id)
         if place_state is not None:
             place = {
                 "name": view.name_of(place_thing_id) or "",
                 "facts": [fact.text for fact in place_state.facts],
+            }
+    elif place_local_id:
+        local = next(
+            (
+                thing
+                for thing in world.scenes().local_things(record.id)
+                if thing["local_id"] == place_local_id
+                and thing["kind"] == LOCAL_PLACE_KIND
+            ),
+            None,
+        )
+        if local is not None:
+            data = local["data"]
+            place = {
+                "name": str(data.get("name") or ""),
+                "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
     lore = []

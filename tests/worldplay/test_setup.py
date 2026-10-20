@@ -16,6 +16,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.index import WorldIndex
 from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source
+from talemate.worldplay.context import world_context_block
 from talemate.worldplay.create import current_date
 from talemate.worldplay.persistence import close_world_scene, world_target
 from talemate.worldplay.setup import (
@@ -356,6 +357,31 @@ async def test_start_scene_local_player_and_place(world):
     assert local["Ilse"]["data"]["is_player"] is True
     assert local["The Weir"]["kind"] == "place"
     assert record.state["place_local_id"] == local["The Weir"]["local_id"]
+
+
+async def test_invented_place_reaches_the_world_block(world):
+    """An invented place (a dungeon the prompt made up) is in the scene's
+    "World" instruction, with its name and facts."""
+
+    ids = _river_world(world)
+    setup = _setup(
+        ids,
+        place=SetupRef(
+            local=LocalThing(
+                name="The Sunken Vault", facts=["A flooded dungeon under the weir."]
+            )
+        ),
+    )
+    async with MockClientContext():
+        _queue("Maren Vos has a heron tattoo.")
+        scene_id = await start_scene(world, setup, MockClient("test"))
+
+    record = world.scenes().get(scene_id)
+    block = world_context_block(world, record, START)
+
+    assert "The Sunken Vault" in block
+    assert "A flooded dungeon under the weir." in block
+    assert "Settle the toll dispute." in block
 
 
 # --- continuing -----------------------------------------------------------------

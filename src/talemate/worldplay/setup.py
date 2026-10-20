@@ -45,7 +45,7 @@ from talemate.world.scenes import MessageRecord, SceneRecord
 from talemate.world.store import World
 from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
-from talemate.worldplay.context import scene_date
+from talemate.worldplay.context import LOCAL_PLACE_KIND, scene_date
 from talemate.worldplay.create import current_date
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
@@ -57,8 +57,8 @@ SETUP_PROMPT_KIND = "creative_instruction_2048"
 # how many index hits the setup prompt is given
 INDEX_HITS = 8
 
-# scene-local thing kinds a setup writes, besides characters
-LOCAL_PLACE_KIND = "place"
+# the scene-local thing kind of an invented group that isn't a character
+# (the place's, `LOCAL_PLACE_KIND`, lives in context.py, which reads it)
 LOCAL_EXTRA_KIND = "extra"
 
 # leading words never matched on their own as a character's first name
