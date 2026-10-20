@@ -6,8 +6,8 @@ and the thing's facts, and builds an ordinary `talemate.character.Character`.
 
 A cached `description` can go stale between a scene's turns -- time passes,
 a fact changes, nothing regenerates it on the spot. `since_lines` covers
-that gap: it walks back to whichever stretch's description *is* cached and
-reports every fact that started or ended after that stretch began, so the
+that gap: it finds whichever cached stretch *is* fresh enough to use, then
+walks the thing's full timeline for everything dated since, so the
 character sheet still tells the whole story even with stale prose.
 """
 
@@ -18,7 +18,7 @@ import structlog
 from talemate.character import Character
 from talemate.util import replace_smart_quotes
 from talemate.world.dates import WorldDate
-from talemate.world.prose import stretches
+from talemate.world.prose import CachedProse, stretches
 from talemate.world.store import World
 from talemate.world.view import ThingState
 
@@ -62,13 +62,15 @@ def _probe_within(start: WorldDate | None, end: WorldDate | None) -> WorldDate |
 
 def _cached_section(
     world: World, thing_id: str, section: str, at: WorldDate | None
-) -> tuple[str, WorldDate | None]:
-    """The nearest cached `section` entry at or before `at`: its text, and
-    the start of the stretch it was cached for. `("", None)` if nothing
-    has ever been cached, including for the stretch `at` itself falls in
-    -- this is what lets a stale cache still have a horizon for
-    `since_lines` to measure from, by walking back to the last stretch
-    that was actually generated."""
+) -> CachedProse | None:
+    """The nearest cached `section` entry at or before `at`, found by
+    walking back from the stretch `at` itself falls in past any
+    stale/never-generated stretch to the last one that was actually
+    generated -- or `None` if nothing has ever been cached at all. The
+    `None` case and a found entry whose own `stretch_start` happens to be
+    `None` (the thing's very first stretch, "always" up to some dated
+    change) are different things: callers must tell them apart by testing
+    the return value itself, not any field on it."""
 
     cache = world.prose()
     stretch_list = stretches(lambda: world, thing_id)
@@ -80,78 +82,87 @@ def _cached_section(
         probe = _probe_within(start, end)
         cached = cache.get(thing_id, section, probe)
         if cached is not None:
-            return cached.text, cached.stretch_start
+            return cached
 
-    return "", None
+    return None
 
 
 def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     """One line per appearance/background fact not yet reflected in the
-    cached description, e.g. `"Since 314: Lost her left eye."` or `"Until
-    316: Member of the Wardens."`, the date formatted by the world's
-    calendar.
+    cached description, in story-time order, e.g. `"Since 314: Lost her
+    left eye."`, `"Until 316: Member of the Wardens."`, or (started and
+    ended without the cache ever catching up) `"From 310 until 312: A cast
+    on her arm."`. Dates are formatted by the world's calendar.
 
-    "Not yet reflected" is measured against the *horizon*: the start of
-    whichever stretch the cached description actually comes from (from
-    `_cached_section`, which walks back past stale/never-generated
-    stretches to find it -- see its docstring). A fact gets a line if:
+    Driven from `World.timeline(thing_id)` -- every dated fact start/end
+    for the thing, regardless of story-time visibility at any one date --
+    rather than from what's visible in a `world.view(...)` snapshot. A
+    snapshot approach has a hole no pair of snapshots closes: a fact that
+    both starts and ends between two dates never appears in a snapshot
+    taken at either one. The timeline doesn't have that hole, since it
+    reports every change directly.
 
-    - it's visible now (`world.view(at)`) and started after the horizon
-      ("Since") -- it wasn't there yet when that prose was written;
-    - it was visible *at* the horizon (so it *was* baked into that prose)
-      but has since ended, and ended no later than `at` ("Until") -- a
-      fact that will end later than `at` is left alone; reporting it
-      early would leak the future and contradict prose that still
-      describes it as true.
+    "Not yet reflected" means: dated on or after the cached entry's own
+    `stretch_end` (`_cached_section`'s return value -- the walk-back
+    already finds the most recent stretch that *is* cached, however stale
+    that makes it), and on or before `at` -- a change dated after `at`
+    is never reported, or it would leak the future. With nothing cached
+    at all, every dated change up to `at` counts (no lower bound). An
+    undated ("always") start or end isn't a reportable moment and is
+    skipped either way.
 
-    A fact can't satisfy both at once: `world.view(at)` never includes a
-    fact already ended by `at`, so the two sources (the view at `at` and
-    the view at the horizon) don't overlap for ended facts. A fact that
-    both starts and ends strictly between the horizon and `at` -- so it
-    appears in neither view -- gets no line; this is a known gap, not
-    exercised by anything that calls into this today.
+    A fact_id with a start, an end, or both inside that window gets
+    exactly one line: both -> "From ... until ...", only a start ->
+    "Since ...", only an end -> "Until ..." (its start was before the
+    window -- already part of the cached text)."""
 
-    When nothing has ever been cached (`horizon is None`, `_cached_section`
-    found no stretch to anchor to), every fact visible at `at` counts as
-    "Since" -- there's no baseline text it could already be reflected in
-    -- and nothing can be an "Until", since there's no horizon a fact
-    could have been "valid at"."""
-
-    at_state = world.view(at).thing(thing_id)
-    if at_state is None:
-        return []
-
-    _text, horizon_date = _cached_section(world, thing_id, "description", at)
-    horizon = horizon_date.instant if horizon_date is not None else None
     at_instant = at.instant if at is not None else _FAR_FUTURE
 
-    horizon_facts = (
-        world.view(horizon_date).thing(thing_id).facts
-        if horizon_date is not None
-        else []
-    )
+    entry = _cached_section(world, thing_id, "description", at)
+    if entry is not None and entry.stretch_end is None:
+        # the cache is fresh for `at`'s own, still-open stretch -- nothing
+        # dated since could possibly exist
+        return []
+    report_from = entry.stretch_end.instant if entry is not None else None
+
+    order: list[str] = []
+    starts: dict[str, WorldDate] = {}
+    ends: dict[str, WorldDate] = {}
+    texts: dict[str, str] = {}
+
+    for change in world.timeline(thing_id):
+        if change.change not in ("fact_start", "fact_end"):
+            continue
+        if change.category not in _DESCRIPTION_CATEGORIES:
+            continue
+        if change.date is None:
+            continue  # "always" -- not a reportable moment
+        if change.date.instant > at_instant:
+            continue  # never emit a change dated after `at`
+        if report_from is not None and change.date.instant < report_from:
+            continue  # already reflected in the cached prose
+
+        fact_id = change.fact_id
+        if fact_id not in texts:
+            order.append(fact_id)
+        texts[fact_id] = change.text
+        if change.change == "fact_start":
+            starts[fact_id] = change.date
+        else:
+            ends[fact_id] = change.date
 
     calendar = world.calendar
     lines = []
-
-    for fact in at_state.facts:
-        if fact.category not in _DESCRIPTION_CATEGORIES:
-            continue
-        started_after = fact.valid_from is not None and (
-            horizon is None or fact.valid_from.instant > horizon
-        )
-        if started_after:
-            lines.append(f"Since {calendar.format(fact.valid_from)}: {fact.text}")
-
-    for fact in horizon_facts:
-        if fact.category not in _DESCRIPTION_CATEGORIES:
-            continue
-        if fact.valid_until is None:
-            continue
-        if fact.valid_until.instant > at_instant:
-            # hasn't ended yet as of `at` -- still true, no leak
-            continue
-        lines.append(f"Until {calendar.format(fact.valid_until)}: {fact.text}")
+    for fact_id in order:
+        start, end, text = starts.get(fact_id), ends.get(fact_id), texts[fact_id]
+        if start is not None and end is not None:
+            lines.append(
+                f"From {calendar.format(start)} until {calendar.format(end)}: {text}"
+            )
+        elif start is not None:
+            lines.append(f"Since {calendar.format(start)}: {text}")
+        else:
+            lines.append(f"Until {calendar.format(end)}: {text}")
 
     return lines
 
@@ -199,9 +210,8 @@ def character_from_world(
 
     name = view.name_of(thing_id) or ""
 
-    description_text, _stretch_start = _cached_section(
-        world, thing_id, "description", at
-    )
+    description_entry = _cached_section(world, thing_id, "description", at)
+    description_text = description_entry.text if description_entry is not None else ""
     description = "\n".join(
         part for part in [description_text, *since_lines(world, thing_id, at)] if part
     )
@@ -213,11 +223,9 @@ def character_from_world(
         base_attributes["age"] = _age_in_years(born, at)
         base_attributes["born"] = world.calendar.format(born)
 
-    personality_text, _stretch_start = _cached_section(
-        world, thing_id, "personality", at
-    )
-    if personality_text:
-        base_attributes["personality"] = personality_text
+    personality_entry = _cached_section(world, thing_id, "personality", at)
+    if personality_entry is not None and personality_entry.text:
+        base_attributes["personality"] = personality_entry.text
 
     dialogue_instructions, example_dialogue = _speech_facts(state)
 

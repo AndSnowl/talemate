@@ -31,6 +31,9 @@ class TimelineEntry(BaseModel):
     value: object | None = None
     fact_id: str | None = None
     text: str | None = None
+    # the fact's category, for `change in ("fact_start", "fact_end")`;
+    # `None` for a `"field"` entry, which has no category
+    category: str | None = None
     source_rev: int
     source: Source
 
@@ -89,8 +92,8 @@ def build_timeline(
         )
 
     fact_rows = conn.execute(
-        "SELECT fact_id, text, valid_from, from_precision, valid_until, "
-        "until_precision, rev_added "
+        "SELECT fact_id, category, text, valid_from, from_precision, "
+        "valid_until, until_precision, rev_added "
         "FROM facts WHERE thing_id = ? "
         "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
         (thing_id, rev, rev),
@@ -103,6 +106,7 @@ def build_timeline(
                 change="fact_start",
                 fact_id=row["fact_id"],
                 text=row["text"],
+                category=row["category"],
                 source_rev=row["rev_added"],
                 source=source,
             )
@@ -114,6 +118,7 @@ def build_timeline(
                     change="fact_end",
                     fact_id=row["fact_id"],
                     text=row["text"],
+                    category=row["category"],
                     source_rev=row["rev_added"],
                     source=source,
                 )

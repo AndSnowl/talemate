@@ -182,8 +182,8 @@ def test_since_lines_no_future_leak_before_fact_ends(world, interim_warden):
 
 def test_since_lines_reports_ended_fact_after_cache_goes_stale(world, interim_warden):
     """Fix round 1 / Critical 1b: at 318, after the Wardens fact has
-    ended, `view(at)` no longer carries it at all -- the "Until" line has
-    to come from the view at the horizon instead."""
+    ended, `world.view(318)` no longer carries it at all -- the "Until"
+    line has to come from the timeline's own `fact_end` entry instead."""
 
     assert since_lines(world, interim_warden, WorldDate.of(318)) == [
         "Until 316: Member of the Wardens."
@@ -215,3 +215,93 @@ def test_age_before_and_after_birthday(world):
         world, thing_id, WorldDate.of(300, 7, 1), is_player=False
     )
     assert after_birthday.base_attributes["age"] == 20
+
+
+@pytest.fixture
+def ana(world):
+    """Fix round 2 / Finding 1: an undated fact ("always" true, no
+    `valid_from`) that ends at 314, cached in the thing's one and only
+    stretch, `(None, 314)`. The cached entry's own `stretch_start` is
+    `None` -- exactly the value `_cached_section` returns for "nothing
+    was ever cached" -- which is precisely what made this fall through
+    before: a *found* entry with no start looked identical to no entry at
+    all."""
+
+    with world.revision(Source.manual(note="create Ana")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Ana"})
+        rev.add_fact(
+            thing_id,
+            "background",
+            "Apprentice.",
+            valid_until=WorldDate.of(314),
+        )
+
+    world.prose().put(
+        thing_id, "description", None, WorldDate.of(314), "An apprentice."
+    )
+
+    return thing_id
+
+
+def test_since_lines_reports_undated_fact_ended_past_stale_cache(world, ana):
+    """Fix round 2 / Finding 1 (the reviewer's repro): at 315, past the
+    only cached stretch's end, the ended fact must still produce an
+    "Until" line even though it never had a `valid_from` of its own."""
+
+    assert since_lines(world, ana, WorldDate.of(315)) == ["Until 314: Apprentice."]
+
+    description = character_from_world(
+        world, ana, WorldDate.of(315), is_player=False
+    ).description
+    assert "Until 314: Apprentice." in description
+
+
+@pytest.fixture
+def visitor(world):
+    """Fix round 2: a character whose description is cached well before a
+    fact that both starts *and* ends inside the gap between that cache
+    and a later `at` -- the "accepted residual" fix round 1 left open,
+    since neither `world.view(at)` nor `world.view(horizon)` alone ever
+    shows a fact that's entirely contained between the two."""
+
+    with world.revision(Source.manual(note="create Priya")) as rev:
+        thing_id = rev.create_thing(
+            "character",
+            fields={"name": "Priya", "born": WorldDate.of(290)},
+            valid_from=WorldDate.of(290),
+        )
+
+    with world.revision(Source.manual(note="Priya breaks her arm")) as rev:
+        rev.add_fact(
+            thing_id,
+            "appearance",
+            "A cast on her arm.",
+            valid_from=WorldDate.of(310),
+            valid_until=WorldDate.of(312),
+        )
+
+    world.prose().put(
+        thing_id,
+        "description",
+        WorldDate.of(290),
+        WorldDate.of(310),
+        "A young woman with calloused hands.",
+    )
+
+    return thing_id
+
+
+def test_since_lines_reports_fact_starting_and_ending_inside_window(world, visitor):
+    """Fix round 2: the cache is fresh for (290, 310); the cast starts at
+    310 and ends at 312, both inside the (310, 320] window -- one combined
+    "From ... until ..." line, not two, and not the gap fix round 1 left
+    open."""
+
+    assert since_lines(world, visitor, WorldDate.of(320)) == [
+        "From 310 until 312: A cast on her arm."
+    ]
+
+    description = character_from_world(
+        world, visitor, WorldDate.of(320), is_player=False
+    ).description
+    assert "From 310 until 312: A cast on her arm." in description
