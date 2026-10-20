@@ -186,7 +186,7 @@ export default {
             return this.mine && !!this.worlds.sceneSetup;
         },
         matches() {
-            return this.worlds.nameMatchesText === this.prompt ? this.worlds.nameMatches : [];
+            return this.worlds.matchesFor(this.prompt, this.start);
         },
         // names the last setup invented, highlighted where the prompt has them
         invented() {

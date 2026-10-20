@@ -556,6 +556,15 @@ async def test_match_names_and_list_scenes(plugin):
         ("the harbour", harbour),
     ]
 
+    # the reply echoes the lookup's text and date, so the screen can tell
+    # which lookup it answers
+    at = WorldDate.of(313).model_dump(mode="json")
+    await plugin.handle(
+        {"type": "worlds", "action": "match_names", "text": "Maren", "at": at}
+    )
+    echoed = _last(plugin, "match_names")["data"]
+    assert (echoed["text"], echoed["at"]) == ("Maren", at)
+
     first = world.scenes().create("First", WorldDate.of(313))
     await plugin.handle({"type": "worlds", "action": "list_scenes"})
     scenes = _last(plugin, "list_scenes")["data"]["scenes"]

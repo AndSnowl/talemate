@@ -262,21 +262,67 @@ check('a disconnect forgets the open world', () => {
     assert.deepEqual(store.things.character, []);
 });
 
-check('name matches for older text are dropped', () => {
+check('name matches belong to the exact text and date asked about', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.matchNames('Maren', dateOf(314));
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'match_names', text: 'Maren', at: dateOf(314) });
+    store.handleMessage(reply('match_names', { text: 'Maren', at: dateOf(314), matches: [MATCHES[0]] }));
+    assert.equal(store.matchesFor('Maren', dateOf(314)).length, 1);
+    // for another text or date they don't apply
+    assert.deepEqual(store.matchesFor('Maren went', dateOf(314)), []);
+    assert.deepEqual(store.matchesFor('Maren', null), []);
+
+    // a reply for an older text is dropped
     store.matchNames('Maren went');
-    store.handleMessage(reply('match_names', { text: 'Maren', matches: [MATCHES[0]] }));
-    assert.deepEqual(store.nameMatches, []);
-    store.handleMessage(reply('match_names', { text: 'Maren went', matches: [MATCHES[0]] }));
-    assert.equal(store.nameMatches.length, 1);
-    // blank text asks nothing
+    store.handleMessage(reply('match_names', { text: 'Maren', at: null, matches: [MATCHES[0]] }));
+    assert.deepEqual(store.matchesFor('Maren went', null), []);
+    store.handleMessage(reply('match_names', { text: 'Maren went', at: null, matches: [MATCHES[0]] }));
+    assert.equal(store.matchesFor('Maren went', null).length, 1);
+
+    // blank text asks nothing, and has no matches
     sent.length = 0;
     store.matchNames('  ');
     assert.deepEqual(sent, []);
-    assert.deepEqual(store.nameMatches, []);
+    assert.deepEqual(store.matchesFor('  ', null), []);
+});
+
+check('a new lookup leaves no matches until its reply', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.matchNames('Maren went', null);
+    store.handleMessage(reply('match_names', { text: 'Maren went', at: null, matches: [MATCHES[0]] }));
+    store.matchNames('Bo Maren went', null);
+    store.matchNames('Bo Maren went home', null);
+    assert.deepEqual(store.matchesFor('Maren went', null), []);
+    assert.deepEqual(store.matchesFor('Bo Maren went home', null), []);
+});
+
+check('a reply for an older date is dropped', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.matchNames('Maren', dateOf(310));
+    store.matchNames('Maren', dateOf(320));
+    store.handleMessage(reply('match_names', { text: 'Maren', at: dateOf(310), matches: [MATCHES[0]] }));
+    assert.deepEqual(store.matchesFor('Maren', dateOf(320)), []);
+    assert.deepEqual(store.matchesFor('Maren', dateOf(310)), []);
+    // the backend echoes the date with its label; only instant and precision count
+    store.handleMessage(reply('match_names', { text: 'Maren', at: { ...dateOf(320), label: '320' }, matches: [MATCHES[0]] }));
+    assert.equal(store.matchesFor('Maren', dateOf(320)).length, 1);
+});
+
+check('a failed lookup leaves no stale matches', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.matchNames('Maren', null);
+    store.handleMessage(reply('match_names', { text: 'Maren', at: null, matches: [MATCHES[0]] }));
+    store.matchNames('Maren went', null);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during match_names: nope' } });
+    assert.deepEqual(store.matchesFor('Maren went', null), []);
+    assert.deepEqual(store.matchesFor('Maren', null), []);
+    // a late reply for the failed request is not taken either
+    store.handleMessage(reply('match_names', { text: 'Maren went', at: null, matches: [MATCHES[0]] }));
+    assert.deepEqual(store.matchesFor('Maren went', null), []);
 });
 
 const SETUP = { setup: { player: { thing_id: 'vos' }, start: dateOf(314), intro: 'Fog.' }, names: { vos: 'Maren Vos' } };

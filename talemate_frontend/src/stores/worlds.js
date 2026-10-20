@@ -34,6 +34,14 @@ export function worldTarget(worldPath, sceneId) {
     return `${TARGET_PREFIX}${worldPath}|${sceneId}`;
 }
 
+// Whether two wire dates (or nulls) are the same date; labels don't count.
+function sameDate(a, b) {
+    if (!a || !b) {
+        return !a && !b;
+    }
+    return a.instant === b.instant && a.precision === b.precision;
+}
+
 // `{worldPath, sceneId}` of a world scene's path, or null for any other.
 export function parseWorldTarget(path) {
     if (typeof path !== 'string' || !path.startsWith(TARGET_PREFIX)) {
@@ -70,10 +78,11 @@ function worldState() {
         previewError: null,
         // the id of the thing whose prose is being regenerated
         proseRegenerating: null,
-        // the new-scene prompt's names: the text last asked about, and the
-        // `match_names` reply for it
-        nameMatchesText: null,
-        nameMatches: [],
+        // the new-scene prompt's names: the lookup in flight (`{text, at}`),
+        // and the last `match_names` reply taken (`{text, at, matches}`).
+        // A new lookup drops the old reply, so stale spans never show.
+        nameLookup: null,
+        nameMatches: null,
         // the setup step: the request (`{action, data}`, plan_scene or
         // continue_scene) and its reply (`{setup, names}`)
         setupRequest: null,
@@ -100,6 +109,11 @@ export const useWorldsStore = defineStore('worlds', {
 
     getters: {
         calendar: (state) => state.currentWorld?.calendar || null,
+        // the `match_names` matches for exactly this text and date, if any
+        matchesFor: (state) => (text, at) => {
+            const found = state.nameMatches;
+            return found && found.text === text && sameDate(found.at, at) ? found.matches : [];
+        },
     },
 
     actions: {
@@ -160,11 +174,12 @@ export const useWorldsStore = defineStore('worlds', {
 
         // `at`: the date the names are as of (null for the latest)
         matchNames(text, at = null) {
-            this.nameMatchesText = text;
+            this.nameMatches = null;
             if (!text.trim()) {
-                this.nameMatches = [];
+                this.nameLookup = null;
                 return;
             }
+            this.nameLookup = { text, at };
             this.request('match_names', { text, at });
         },
 
@@ -367,9 +382,14 @@ export const useWorldsStore = defineStore('worlds', {
                     this.scenes = data.scenes;
                     break;
                 case 'match_names':
-                    // a reply for text since typed over is dropped
-                    if (data.text === this.nameMatchesText) {
-                        this.nameMatches = data.matches;
+                    // a reply for text (or a date) since changed is dropped
+                    if (
+                        this.nameLookup
+                        && data.text === this.nameLookup.text
+                        && sameDate(data.at, this.nameLookup.at)
+                    ) {
+                        this.nameMatches = { ...this.nameLookup, matches: data.matches };
+                        this.nameLookup = null;
                     }
                     break;
                 case 'plan_scene':
@@ -441,6 +461,8 @@ export const useWorldsStore = defineStore('worlds', {
                         this.previewPending = false;
                         this.proseRegenerating = null;
                         this.setupPending = false;
+                        // the failed request may be the name lookup
+                        this.nameLookup = null;
                     }
                     break;
                 default:

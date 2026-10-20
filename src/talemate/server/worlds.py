@@ -29,7 +29,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
-  prompt. `plan_scene {prompt, picks, new_names, player, start}` (picks
+  prompt (the reply echoes `text` and `at`). `plan_scene {prompt, picks, new_names, player, start}` (picks
   and names treated as new always win over automatic matching) and
   `continue_scene {scene_id, goal_prompt}` (saving that scene first if
   it's the one loaded) run in the background and answer
@@ -693,7 +693,12 @@ class WorldsPlugin(Plugin):
         matches = match_names(world, payload.text, _date_in(payload.at))
         self._reply(
             "match_names",
-            {"text": payload.text, "matches": [m.model_dump() for m in matches]},
+            {
+                "text": payload.text,
+                # echoed, so the screen can tell which lookup this answers
+                "at": payload.at,
+                "matches": [m.model_dump() for m in matches],
+            },
         )
 
     async def handle_plan_scene(self, data: dict):
@@ -723,7 +728,7 @@ class WorldsPlugin(Plugin):
     async def handle_start_scene(self, data: dict):
         payload = StartScenePayload(**data)
         world = self._require_world()
-        client = self._client() if self._fixed_setup() is None else None
+        client = None if os.environ.get(FIXED_SETUP_ENV) else self._client()
 
         def started(scene_id: str) -> dict:
             record = world.scenes().get(scene_id)
