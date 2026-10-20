@@ -54,6 +54,7 @@ from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.store import World
 from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
+from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.context import LOCAL_PLACE_KIND
 from talemate.worldplay.create import current_date
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
@@ -284,19 +285,20 @@ async def _ask(
     summary: str = "",
     carried: list[str] | None = None,
 ) -> dict[str, Any]:
-    _response, extracted = await Prompt.request(
-        "world.scene-setup",
-        client,
-        SETUP_PROMPT_KIND,
-        vars={
-            "prompt": prompt,
-            "start_label": world.calendar.format(start),
-            "player_name": player_name,
-            "summary": summary,
-            "carried": carried or [],
-            "world_things": _world_things(view, shown),
-        },
-    )
+    with world_ai_call():
+        _response, extracted = await Prompt.request(
+            "world.scene-setup",
+            client,
+            SETUP_PROMPT_KIND,
+            vars={
+                "prompt": prompt,
+                "start_label": world.calendar.format(start),
+                "player_name": player_name,
+                "summary": summary,
+                "carried": carried or [],
+                "world_things": _world_things(view, shown),
+            },
+        )
     return _reply_object(extracted["response"])
 
 
@@ -730,7 +732,8 @@ async def _summarize(record: SceneRecord, messages: list[MessageRecord]) -> str:
         return ""
 
     summarizer = instance.get_agent("summarizer")
-    summary = await summarizer.summarize_events("\n\n".join(parts))
+    with world_ai_call():
+        summary = await summarizer.summarize_events("\n\n".join(parts))
     return str(summary or "").strip()
 
 

@@ -39,6 +39,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import get_kind, validate_field
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
+from talemate.worldplay.ai import world_ai_call
 
 log = structlog.get_logger("talemate.worldplay.create")
 
@@ -292,24 +293,25 @@ async def preview_thing(
     shown_now = _shown_year(calendar, now_year)
     era = _era_at(calendar, now_year)
 
-    _response, extracted = await Prompt.request(
-        "world.create-thing",
-        client,
-        CREATE_PROMPT_KIND,
-        vars={
-            "kind": kind,
-            "prompt": prompt,
-            "categories": kind_spec.categories,
-            "known_fields": _known_fields(world, fields, now),
-            "has_name": bool(fields.get("name")),
-            "now_label": calendar.format(now),
-            "now_year": shown_now,
-            "era": era.name if era is not None else "",
-            "month_names": calendar.month_names,
-            "min_facts": MIN_FACTS,
-            "max_facts": MAX_FACTS,
-        },
-    )
+    with world_ai_call():
+        _response, extracted = await Prompt.request(
+            "world.create-thing",
+            client,
+            CREATE_PROMPT_KIND,
+            vars={
+                "kind": kind,
+                "prompt": prompt,
+                "categories": kind_spec.categories,
+                "known_fields": _known_fields(world, fields, now),
+                "has_name": bool(fields.get("name")),
+                "now_label": calendar.format(now),
+                "now_year": shown_now,
+                "era": era.name if era is not None else "",
+                "month_names": calendar.month_names,
+                "min_facts": MIN_FACTS,
+                "max_facts": MAX_FACTS,
+            },
+        )
     reply = extracted["response"]
     name, age, facts = parse_create_reply(reply, kind, calendar, now_year)
     if not facts:

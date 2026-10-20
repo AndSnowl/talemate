@@ -28,6 +28,7 @@ from talemate.world.kinds import get_kind
 from talemate.world.prose import stretches
 from talemate.world.store import World
 from talemate.world.view import ThingState
+from talemate.worldplay.ai import world_ai_call
 
 log = structlog.get_logger("talemate.worldplay.prose_gen")
 
@@ -107,17 +108,18 @@ async def render_section(
     if not facts:
         return ""
 
-    _response, extracted = await Prompt.request(
-        "world.thing-prose",
-        client,
-        "create",
-        vars={
-            "facts": facts,
-            "kind": kind,
-            "section": section,
-            "name": name,
-        },
-    )
+    with world_ai_call():
+        _response, extracted = await Prompt.request(
+            "world.thing-prose",
+            client,
+            "create",
+            vars={
+                "facts": facts,
+                "kind": kind,
+                "section": section,
+                "name": name,
+            },
+        )
     text: str = extracted["response"].strip()
 
     # the template primes the response with the thing's name (to keep it
