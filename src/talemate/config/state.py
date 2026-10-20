@@ -167,6 +167,24 @@ def cleanup_removed_agents(config: Config):
             del config.agents[agent_in_config]
 
 
+def _world_scene_exists(path: str) -> bool:
+    """Whether `path` is a world scene target (`world://...`) whose world
+    database still exists. The scene itself isn't looked up: that would
+    mean opening the database."""
+
+    # imported here: config loads long before the world/worldplay packages
+    from talemate.world.store import DB_FILENAME
+    from talemate.worldplay.persistence import TARGET_PREFIX, parse_world_target
+
+    if not path.startswith(TARGET_PREFIX):
+        return False
+    try:
+        ref = parse_world_target(path)
+    except ValueError:
+        return False
+    return os.path.exists(os.path.join(ref.world_path, DB_FILENAME))
+
+
 def cleanup_removed_recent_scenes(config: Config):
     """
     Will remove any recent scenes that are no longer present
@@ -176,6 +194,8 @@ def cleanup_removed_recent_scenes(config: Config):
         return
 
     for recent_scene in list(config.recent_scenes.scenes):
+        if _world_scene_exists(recent_scene.path):
+            continue
         if not os.path.exists(recent_scene.path):
             log.debug("recent scene path no longer exists", scene=recent_scene.path)
             config.recent_scenes.scenes.remove(recent_scene)

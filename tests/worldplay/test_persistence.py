@@ -264,10 +264,11 @@ async def test_local_character_roundtrip(world, scenes_dir):
 
     await scene.save()
 
-    local = world.scenes().local_things(scene_id)
-    assert [(t["local_id"], t["kind"]) for t in local] == [
-        ("The Stranger", "character")
-    ]
+    (local,) = world.scenes().local_things(scene_id)
+    assert local["kind"] == "character"
+    assert len(local["local_id"]) == 32
+    assert local["data"]["name"] == "The Stranger"
+    assert stranger.world_local_id == local["local_id"]
 
     loaded = await _reload(world, scene_id)
     restored = loaded.get_character("The Stranger")
@@ -276,6 +277,7 @@ async def test_local_character_roundtrip(world, scenes_dir):
     assert restored.color == "#334455"
     assert restored.base_attributes == {"gender": "unknown"}
     assert restored.world_thing_id is None
+    assert restored.world_local_id == local["local_id"]
     assert "The Stranger" in loaded.active_characters
 
     loaded.world_context.world.close()
@@ -332,3 +334,157 @@ async def test_websocket_load_scene_takes_a_world_target(monkeypatch):
     assert seen == [ref.target, ref.target]
     assert ref.target == world_target("/worlds/abc", "d" * 32)
     assert parse_world_target(ref.target) == ref
+
+
+@pytest.mark.asyncio
+async def test_save_keeps_other_local_things_and_local_ids_across_rename(
+    world, scenes_dir
+):
+    """A save only rewrites the scene's local *characters*: an invented
+    place survives it. A local character keeps its `local_id` across a
+    reload and a rename."""
+
+    scene, scene_id = await _world_scene(world)
+    place = {"local_id": "a" * 32, "kind": "place", "data": {"name": "A shed"}}
+    world.scenes().set_local_things(scene_id, [place])
+
+    await _add(scene, Character(name="The Stranger"))
+    await scene.save()
+
+    things = {t["kind"]: t for t in world.scenes().local_things(scene_id)}
+    assert things["place"] == place
+    local_id = things["character"]["local_id"]
+
+    loaded = await _reload(world, scene_id)
+    stranger = loaded.get_character("The Stranger")
+    stranger.name = "Corvin"
+    loaded.character_data["Corvin"] = loaded.character_data.pop("The Stranger")
+    loaded.active_characters[loaded.active_characters.index("The Stranger")] = "Corvin"
+    await loaded.save()
+
+    things = {t["kind"]: t for t in world.scenes().local_things(scene_id)}
+    assert things["place"] == place
+    assert things["character"]["local_id"] == local_id
+    assert things["character"]["data"]["name"] == "Corvin"
+
+    loaded.world_context.world.close()
+
+
+@pytest.mark.asyncio
+async def test_world_character_missing_from_world_is_skipped(world, scenes_dir):
+    mira_id, _ = _make_world_characters(world)
+    scene, scene_id = await _world_scene(world)
+    await _add(scene, character_from_world(world, mira_id, START, is_player=False))
+    await scene.save()
+
+    state = world.scenes().get(scene_id).state
+    state["characters"].append({"thing_id": "f" * 32, "active": True})
+    world.scenes().update(scene_id, state=state)
+
+    loaded = await _reload(world, scene_id)
+    assert loaded.character_names == ["Mira"]
+
+    loaded.world_context.world.close()
+
+
+@pytest.mark.asyncio
+async def test_rename_survives_reload_and_save_as_saves_in_place(world, scenes_dir):
+    scene, scene_id = await _world_scene(world)
+    scene.name = "The Flooded Tavern"
+    await scene.save(save_as=True, copy_name="copy")
+
+    assert world.scenes().get(scene_id).name == "The Flooded Tavern"
+    assert [s.id for s in world.scenes().list()] == [scene_id]
+
+    loaded = await _reload(world, scene_id)
+    assert loaded.name == "The Flooded Tavern"
+    loaded.world_context.world.close()
+
+
+@pytest.mark.asyncio
+async def test_save_restore_writes_nothing_for_a_world_scene(world, scenes_dir):
+    scene, _ = await _world_scene(world)
+    await scene.save_restore("restore.json")
+    assert not os.path.exists(os.path.join(scene.save_dir, "restore.json"))
+
+
+@pytest.mark.asyncio
+async def test_timeline_is_empty_for_a_world_scene(world, scenes_dir):
+    from talemate.server.timeline import TimelinePlugin
+
+    scene, scene_id = await _world_scene(world)
+    await scene.save()
+
+    class Handler:
+        def __init__(self, scene):
+            self.scene = scene
+            self.messages = []
+
+        def queue_put(self, data):
+            self.messages.append(data)
+
+    for active, scene_path in ((scene, None), (None, scene.world_ref.target)):
+        plugin = TimelinePlugin(Handler(active))
+        await plugin.handle_list_revisions({"scene_path": scene_path})
+        await plugin.handle_preview({"rev": 1, "scene_path": scene_path})
+        await plugin.handle_fork(
+            {"rev": 1, "save_name": "fork", "scene_path": scene_path}
+        )
+
+        by_action = {m["action"]: m for m in plugin.websocket_handler.messages}
+        assert by_action["revisions"]["data"]["revisions"] == []
+        assert by_action["preview"]["data"]["messages"] == []
+        assert by_action["operation_done"]["error"]["message"]
+
+    assert not os.path.exists(os.path.join(scene.save_dir, "fork.json"))
+
+
+def test_recent_scenes_cleanup_keeps_world_scenes(world, tmp_path):
+    from talemate.config.schema import RecentScene
+    from talemate.config.state import cleanup_removed_recent_scenes
+
+    kept = world_target(str(world.path), "d" * 32)
+    gone = world_target(str(tmp_path / "no-such-world"), "d" * 32)
+    config = get_config()
+    config.recent_scenes.scenes = [
+        RecentScene(name=name, path=path, filename="", date="2026-10-19")
+        for name, path in (("kept", kept), ("gone", gone))
+    ]
+
+    cleanup_removed_recent_scenes(config)
+
+    assert [s.path for s in config.recent_scenes.scenes] == [kept]
+
+
+@pytest.mark.asyncio
+async def test_websocket_closes_the_world_when_the_scene_is_replaced(
+    world, scenes_dir, monkeypatch
+):
+    import sqlite3
+
+    import talemate.server.websocket_server as websocket_server
+
+    scene, scene_id = await _world_scene(world)
+    await scene.save()
+    loaded = await _reload(world, scene_id)
+    loaded_world = loaded.world_context.world
+
+    async def fake_load_scene(scene, file_path, **kwargs):
+        return None
+
+    monkeypatch.setattr(websocket_server, "load_scene", fake_load_scene)
+
+    class Handler:
+        def __init__(self, scene):
+            self.scene = scene
+
+        def init_scene(self):
+            return MockScene()
+
+        async def load_scene_failure(self, error):
+            pass
+
+    await websocket_server.WebsocketHandler.load_scene(Handler(loaded), "other.json")
+
+    with pytest.raises(sqlite3.ProgrammingError):
+        loaded_world.scenes().get(scene_id)

@@ -134,3 +134,59 @@ def test_latest_end(world):
     # scene A starts later than scene B even accounting for B's longer
     # elapsed time, so A's end is the latest
     assert scenes.latest_end() == WorldDate.of(300).plus("P1D")
+
+
+def test_save_writes_all_or_nothing_and_keeps_other_local_kinds(world):
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(320))
+    scenes.set_local_things(
+        scene_id,
+        [
+            {"local_id": "c" * 32, "kind": "character", "data": {"name": "Old"}},
+            {"local_id": "p" * 32, "kind": "place", "data": {"name": "A shed"}},
+        ],
+    )
+
+    scenes.save(
+        scene_id,
+        fields={"name": "Renamed", "state": {"k": 1}},
+        messages=[MessageRecord(id="m1", seq=0, kind="narrator", data={})],
+        local_things=[
+            {"local_id": "d" * 32, "kind": "character", "data": {"name": "New"}}
+        ],
+        local_kinds={"character"},
+    )
+
+    record = scenes.get(scene_id)
+    assert (record.name, record.state) == ("Renamed", {"k": 1})
+    assert [m.id for m in scenes.messages(scene_id)] == ["m1"]
+    assert [(t["local_id"], t["kind"]) for t in scenes.local_things(scene_id)] == [
+        ("d" * 32, "character"),
+        ("p" * 32, "place"),
+    ]
+
+    # a bad message rolls back the field update and the local things too
+    bad = MessageRecord.model_construct(
+        id="m2", seq=0, kind=None, data={}, elapsed="PT0S"
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        scenes.save(
+            scene_id,
+            fields={"name": "Never"},
+            messages=[bad],
+            local_things=[],
+            local_kinds={"character"},
+        )
+    assert scenes.get(scene_id).name == "Renamed"
+    assert [m.id for m in scenes.messages(scene_id)] == ["m1"]
+    assert len(scenes.local_things(scene_id)) == 2
+
+    # a local thing of a kind that isn't being replaced is refused
+    with pytest.raises(ValueError):
+        scenes.save(
+            scene_id,
+            fields={},
+            messages=[],
+            local_things=[{"local_id": "x" * 32, "kind": "place", "data": {}}],
+            local_kinds={"character"},
+        )

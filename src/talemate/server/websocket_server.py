@@ -18,7 +18,7 @@ from talemate.files import list_scenes_directory, list_scenes_tree
 from talemate.load import load_scene, SceneInitialization
 from talemate.scene_assets import Asset, get_media_type_from_file_path, VIS_TYPE
 from talemate.scene_message import versions_payload_for
-from talemate.worldplay.persistence import WorldSceneRef
+from talemate.worldplay.persistence import WorldSceneRef, close_world_scene
 from talemate.server import (
     agent_config,
     assistant,
@@ -123,6 +123,7 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
         memory_agent = instance.get_agent("memory")
         if memory_agent and self.scene:
             memory_agent.close_db(self.scene)
+        close_world_scene(self.scene)
 
         for plugin in self.routes.values():
             if hasattr(plugin, "disconnect"):
@@ -162,6 +163,7 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
 
         try:
             if self.scene:
+                close_world_scene(self.scene)
                 instance.get_agent("memory").close_db(self.scene)
                 self.scene.disconnect()
                 self.scene.active = False

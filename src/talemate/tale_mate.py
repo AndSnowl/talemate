@@ -1890,6 +1890,11 @@ class Scene(Emitter):
         if self.world_ref is not None:
             from talemate.worldplay.persistence import save_world_scene
 
+            if save_as or copy_name:
+                log.warning(
+                    "save as is not supported for world scenes, saving in place",
+                    copy_name=copy_name,
+                )
             self.set_new_memory_session_id()
             save_world_scene(self)
             self.saved = True
@@ -1970,7 +1975,15 @@ class Scene(Emitter):
 
         immutable_save will be set to True
         memory_sesion_id will be randomized
+
+        A world-backed scene has no restore files: this does nothing.
         """
+
+        if self.world_ref is not None:
+            log.warning(
+                "save_restore: not supported for world scenes", filename=filename
+            )
+            return
 
         serialized = self.serialize
         serialized["immutable_save"] = True

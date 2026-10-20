@@ -61,6 +61,7 @@
         "visual_finalizers": [],
         "visual_rules": null,
         "voice": null,
+        "world_local_id": null,
         "world_thing_id": null
       },
       "Bob": {
@@ -84,6 +85,7 @@
         "visual_finalizers": [],
         "visual_rules": null,
         "voice": null,
+        "world_local_id": null,
         "world_thing_id": null
       }
     },

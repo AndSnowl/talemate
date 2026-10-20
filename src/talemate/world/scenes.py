@@ -11,6 +11,8 @@ own plain writes (`World._set_meta`), not through `World.revision`.
 import json
 import sqlite3
 import uuid
+from collections.abc import Collection, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import structlog
@@ -100,8 +102,7 @@ class SceneStore:
 
         scene_id = uuid.uuid4().hex
         now = _now()
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
+        with self._transaction():
             self._conn.execute(
                 "INSERT INTO scenes "
                 "(id, name, start_instant, start_precision, premise, goal, "
@@ -122,11 +123,6 @@ class SceneStore:
                     continued_from,
                 ),
             )
-        except BaseException:
-            self._conn.execute("ROLLBACK")
-            raise
-        else:
-            self._conn.execute("COMMIT")
         return scene_id
 
     def get(self, scene_id: str) -> SceneRecord | None:
@@ -135,12 +131,18 @@ class SceneStore:
         ).fetchone()
         return _scene_from_row(row) if row is not None else None
 
-    def update(self, scene_id: str, **fields: object) -> None:
-        """Update one or more of `name`, `premise`, `goal`,
-        `player_thing_id` or `state`, and bump `updated_at`. Raises
-        `ValueError` for any other field, `KeyError` if `scene_id` doesn't
-        exist."""
+    @contextmanager
+    def _transaction(self) -> Iterator[None]:
+        self._conn.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        except BaseException:
+            self._conn.execute("ROLLBACK")
+            raise
+        else:
+            self._conn.execute("COMMIT")
 
+    def _update_row(self, scene_id: str, fields: dict[str, object]) -> None:
         unknown = set(fields) - _UPDATABLE_FIELDS
         if unknown:
             raise ValueError(f"cannot update field(s): {', '.join(sorted(unknown))}")
@@ -158,43 +160,106 @@ class SceneStore:
         params.append(_now())
         params.append(scene_id)
 
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
-            cur = self._conn.execute(
-                f"UPDATE scenes SET {', '.join(assignments)} WHERE id = ?", params
+        cur = self._conn.execute(
+            f"UPDATE scenes SET {', '.join(assignments)} WHERE id = ?", params
+        )
+        if cur.rowcount == 0:
+            raise KeyError(f"no such scene: {scene_id}")
+
+    def _replace_message_rows(
+        self, scene_id: str, messages: list[MessageRecord]
+    ) -> None:
+        self._conn.execute(
+            "DELETE FROM scene_messages WHERE scene_id = ? AND branch_id = 'main'",
+            (scene_id,),
+        )
+        self._conn.executemany(
+            "INSERT INTO scene_messages "
+            "(id, scene_id, branch_id, seq, kind, data_json, elapsed) "
+            "VALUES (?, ?, 'main', ?, ?, ?, ?)",
+            [
+                (m.id, scene_id, m.seq, m.kind, json.dumps(m.data), m.elapsed)
+                for m in messages
+            ],
+        )
+
+    def _replace_local_rows(
+        self,
+        scene_id: str,
+        things: list[dict[str, object]],
+        kinds: Collection[str] | None,
+    ) -> None:
+        if kinds is None:
+            self._conn.execute(
+                "DELETE FROM scene_things WHERE scene_id = ?", (scene_id,)
             )
-            if cur.rowcount == 0:
-                raise KeyError(f"no such scene: {scene_id}")
-        except BaseException:
-            self._conn.execute("ROLLBACK")
-            raise
         else:
-            self._conn.execute("COMMIT")
+            stray = {str(thing["kind"]) for thing in things} - set(kinds)
+            if stray:
+                raise ValueError(
+                    f"local thing kind(s) not being replaced: {', '.join(sorted(stray))}"
+                )
+            self._conn.executemany(
+                "DELETE FROM scene_things WHERE scene_id = ? AND kind = ?",
+                [(scene_id, kind) for kind in kinds],
+            )
+        self._conn.executemany(
+            "INSERT INTO scene_things (scene_id, local_id, kind, data_json) "
+            "VALUES (?, ?, ?, ?)",
+            [
+                (
+                    scene_id,
+                    thing["local_id"],
+                    thing["kind"],
+                    json.dumps(thing.get("data", {})),
+                )
+                for thing in things
+            ],
+        )
+
+    def update(self, scene_id: str, **fields: object) -> None:
+        """Update one or more of `name`, `premise`, `goal`,
+        `player_thing_id` or `state`, and bump `updated_at`. Raises
+        `ValueError` for any other field, `KeyError` if `scene_id` doesn't
+        exist."""
+
+        with self._transaction():
+            self._update_row(scene_id, fields)
 
     def replace_messages(self, scene_id: str, messages: list[MessageRecord]) -> None:
         """Rewrite the `main` branch's messages in one transaction: a bad
         record fails the whole batch and leaves the old messages alone."""
 
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
-            self._conn.execute(
-                "DELETE FROM scene_messages WHERE scene_id = ? AND branch_id = 'main'",
-                (scene_id,),
-            )
-            self._conn.executemany(
-                "INSERT INTO scene_messages "
-                "(id, scene_id, branch_id, seq, kind, data_json, elapsed) "
-                "VALUES (?, ?, 'main', ?, ?, ?, ?)",
-                [
-                    (m.id, scene_id, m.seq, m.kind, json.dumps(m.data), m.elapsed)
-                    for m in messages
-                ],
-            )
-        except BaseException:
-            self._conn.execute("ROLLBACK")
-            raise
-        else:
-            self._conn.execute("COMMIT")
+        with self._transaction():
+            self._replace_message_rows(scene_id, messages)
+
+    def set_local_things(self, scene_id: str, things: list[dict[str, object]]) -> None:
+        """Replace the scene's local, invented things wholesale. Each entry
+        is `{"local_id": ..., "kind": ..., "data": {...}}`."""
+
+        with self._transaction():
+            self._replace_local_rows(scene_id, things, None)
+
+    def save(
+        self,
+        scene_id: str,
+        *,
+        fields: dict[str, object],
+        messages: list[MessageRecord],
+        local_things: list[dict[str, object]],
+        local_kinds: Collection[str],
+    ) -> None:
+        """Save a played scene in one transaction: `update(**fields)`,
+        `replace_messages(messages)`, and replace the scene's local things
+        of `local_kinds` with `local_things` -- local things of any other
+        kind are kept. Nothing is written if any part fails; a thing in
+        `local_things` whose kind isn't in `local_kinds` is a
+        `ValueError`."""
+
+        with self._transaction():
+            self._update_row(scene_id, fields)
+            self._replace_message_rows(scene_id, messages)
+            self._replace_local_rows(scene_id, local_things, local_kinds)
 
     def messages(self, scene_id: str) -> list[MessageRecord]:
         """The `main` branch's messages, in `seq` order."""
@@ -205,34 +270,6 @@ class SceneStore:
             (scene_id,),
         ).fetchall()
         return [_message_from_row(row) for row in rows]
-
-    def set_local_things(self, scene_id: str, things: list[dict[str, object]]) -> None:
-        """Replace the scene's local, invented things wholesale. Each entry
-        is `{"local_id": ..., "kind": ..., "data": {...}}`."""
-
-        self._conn.execute("BEGIN IMMEDIATE")
-        try:
-            self._conn.execute(
-                "DELETE FROM scene_things WHERE scene_id = ?", (scene_id,)
-            )
-            self._conn.executemany(
-                "INSERT INTO scene_things (scene_id, local_id, kind, data_json) "
-                "VALUES (?, ?, ?, ?)",
-                [
-                    (
-                        scene_id,
-                        thing["local_id"],
-                        thing["kind"],
-                        json.dumps(thing.get("data", {})),
-                    )
-                    for thing in things
-                ],
-            )
-        except BaseException:
-            self._conn.execute("ROLLBACK")
-            raise
-        else:
-            self._conn.execute("COMMIT")
 
     def local_things(self, scene_id: str) -> list[dict[str, object]]:
         rows = self._conn.execute(

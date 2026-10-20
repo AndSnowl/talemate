@@ -9,10 +9,13 @@ A world-backed scene has `scene.world_ref` set. Its record in the world's
   pulled-in lore), plus `characters` -- one entry per character in the
   scene, `{"thing_id": ..., "active": ..., "scene_fields": {...}}` for a
   world character or `{"local_id": ..., "active": ...}` for one invented in
-  the scene;
+  the scene (its `local_id` a stable 32-hex id, kept on the in-memory
+  character as `Character.world_local_id`);
 - `premise` (`scene.description`), `goal` and `player_thing_id`;
 - the messages, one row each, with a stable `SceneMessage.world_id`;
-- the scene-local things: invented characters, kept whole.
+- the scene-local things: invented characters, kept whole. Local things of
+  any other kind (scene setup's invented places, ...) are never touched by
+  a save.
 
 A world character is rebuilt with `character_from_world` at the scene's
 current date on every load; only its per-scene fields (`scene_fields`:
@@ -61,9 +64,17 @@ _NOT_IN_STATE = (
     "creative_nodes_filename",
 )
 
+# the scene-local thing kind a save owns, and rewrites
+LOCAL_CHARACTER_KIND = "character"
+
 # per-scene fields of a world character: everything but what the world
 # gives it, and `is_player`, which comes from the record's `player_thing_id`
-_NOT_SCENE_FIELDS = {*WORLD_DERIVED_FIELDS, "world_thing_id", "is_player"}
+_NOT_SCENE_FIELDS = {
+    *WORLD_DERIVED_FIELDS,
+    "world_thing_id",
+    "world_local_id",
+    "is_player",
+}
 
 
 class WorldSceneRef(BaseModel):
@@ -130,11 +141,13 @@ def _character_entries(
                 }
             )
         else:
-            entries.append({"local_id": name, "active": active})
+            if not character.world_local_id:
+                character.world_local_id = uuid.uuid4().hex
+            entries.append({"local_id": character.world_local_id, "active": active})
             local_things.append(
                 {
-                    "local_id": name,
-                    "kind": "character",
+                    "local_id": character.world_local_id,
+                    "kind": LOCAL_CHARACTER_KIND,
                     "data": character.model_dump(mode="json"),
                 }
             )
@@ -172,10 +185,11 @@ def _message_records(scene: "Scene") -> list[MessageRecord]:
 
 
 def save_world_scene(scene: "Scene") -> None:
-    """Write `scene` into its world's database (`scene.world_ref`): state,
-    premise, goal, player, messages and scene-local characters. Keys
-    already in the record's `state` that `serialize` doesn't produce (scene
-    setup's place and pulled-in lore) are kept."""
+    """Write `scene` into its world's database (`scene.world_ref`), in one
+    transaction: name, state, premise, goal, player, messages and
+    scene-local characters. Keys already in the record's `state` that
+    `serialize` doesn't produce (scene setup's place and pulled-in lore),
+    and local things that aren't characters, are kept."""
 
     ref: WorldSceneRef = scene.world_ref
     context: WorldSceneContext | None = getattr(scene, "world_context", None)
@@ -197,15 +211,21 @@ def save_world_scene(scene: "Scene") -> None:
         player = scene.get_player_character()
         goal = context.record.goal if context is not None else record.goal
 
-        store.update(
+        store.save(
             ref.scene_id,
-            state=state,
-            premise=scene.description or "",
-            goal=goal,
-            player_thing_id=player.world_thing_id if player is not None else None,
+            fields={
+                "name": scene.name or record.name,
+                "state": state,
+                "premise": scene.description or "",
+                "goal": goal,
+                "player_thing_id": (
+                    player.world_thing_id if player is not None else None
+                ),
+            },
+            messages=_message_records(scene),
+            local_things=local_things,
+            local_kinds={LOCAL_CHARACTER_KIND},
         )
-        store.replace_messages(ref.scene_id, _message_records(scene))
-        store.set_local_things(ref.scene_id, local_things)
 
         if context is not None:
             context.record = store.get(ref.scene_id)
@@ -231,7 +251,7 @@ def _character_data(
     local = {
         thing["local_id"]: thing
         for thing in local_things
-        if thing["kind"] == "character"
+        if thing["kind"] == LOCAL_CHARACTER_KIND
     }
     character_data: dict[str, dict] = {}
     active: list[str] = []
@@ -246,20 +266,25 @@ def _character_data(
         is_active = bool(entry.get("active", True))
         thing_id = entry.get("thing_id")
         if thing_id:
-            built: Character = character_from_world(
-                world, thing_id, at, is_player=thing_id == record.player_thing_id
-            )
+            try:
+                built: Character = character_from_world(
+                    world, thing_id, at, is_player=thing_id == record.player_thing_id
+                )
+            except KeyError:
+                log.warning("world scene character not in the world", entry=entry)
+                continue
             add({**built.model_dump(), **(entry.get("scene_fields") or {})}, is_active)
             continue
 
-        thing = local.pop(entry.get("local_id"), None)
+        local_id = entry.get("local_id")
+        thing = local.pop(local_id, None)
         if thing is None:
             log.warning("world scene character not found", entry=entry)
             continue
-        add(dict(thing["data"]), is_active)
+        add({**thing["data"], "world_local_id": local_id}, is_active)
 
-    for thing in local.values():
-        add(dict(thing["data"]), False)
+    for local_id, thing in local.items():
+        add({**thing["data"], "world_local_id": local_id}, False)
 
     return character_data, active
 
@@ -298,3 +323,13 @@ def scene_data_from_world(world: World, record: SceneRecord) -> dict:
 def attach_world_context(scene: "Scene", world: World, record: SceneRecord) -> None:
     scene.world_context = WorldSceneContext(world=world, record=record)
     connect(scene)
+
+
+def close_world_scene(scene: "Scene | None") -> None:
+    """Close the world connection a loaded world scene holds open (on
+    `scene.world_context`), when the scene is replaced or unloaded. Does
+    nothing for any other scene."""
+
+    context: WorldSceneContext | None = getattr(scene, "world_context", None)
+    if context is not None:
+        context.world.close()
