@@ -660,10 +660,12 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
 
 
 def _carried(
-    record: SceneRecord, local_things: list[dict[str, Any]]
+    record: SceneRecord, local_things: list[dict[str, Any]], view: WorldView
 ) -> tuple[SetupRef | None, list[SetupRef], SetupRef | None, list[LocalThing]]:
     """`(player, characters, place, extras)` carried over from `record`:
-    the player, the characters still active, the place and the extras."""
+    the player, the characters still active, the place and the extras. A
+    world thing that's since been deleted is dropped, the same way
+    `pulled_in` is filtered against `view`."""
 
     local = {thing["local_id"]: thing for thing in local_things}
 
@@ -678,6 +680,8 @@ def _carried(
     for entry in record.state.get("characters") or []:
         thing_id = entry.get("thing_id")
         if thing_id:
+            if view.thing(thing_id) is None:
+                continue
             ref = SetupRef(thing_id=thing_id)
             is_player = thing_id == record.player_thing_id
         else:
@@ -694,7 +698,7 @@ def _carried(
     place: SetupRef | None = None
     place_thing_id = record.state.get("place_thing_id")
     place_local = local.get(record.state.get("place_local_id"))
-    if isinstance(place_thing_id, str):
+    if isinstance(place_thing_id, str) and view.thing(place_thing_id) is not None:
         place = SetupRef(thing_id=place_thing_id)
     elif place_local is not None:
         place = SetupRef(local=local_thing(place_local["data"]))
@@ -761,7 +765,9 @@ async def continue_setup(
     start = scene_end(record.start, messages[-1].elapsed) if messages else record.start
     view = world.view(start)
 
-    player, characters, place, extras = _carried(record, store.local_things(scene_id))
+    player, characters, place, extras = _carried(
+        record, store.local_things(scene_id), view
+    )
     pulled_in = [
         thing_id
         for thing_id in record.state.get("pulled_in") or []

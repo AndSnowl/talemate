@@ -594,3 +594,29 @@ async def test_continue_setup_carries_date_place_people(world):
     assert new.continued_from == old_id
     assert new.start == START.plus("PT6H")
     assert "stormed out" in new.premise
+
+
+async def test_continue_setup_drops_carried_thing_that_was_deleted(world):
+    """Review-round fix: a thing carried over from the previous scene
+    (player, character or place) may since have been deleted from the
+    world. `_carried` must drop it, the same way `pulled_in` already is
+    filtered -- otherwise `continue_setup` hands back a dangling
+    `SetupRef` and `start_scene` blows up on it (`ensure_prose` ->
+    `KeyError: no such thing`)."""
+
+    ids = _river_world(world)
+    async with MockClientContext():
+        _queue("Maren Vos has a heron tattoo.")
+        old_id = await start_scene(world, _setup(ids), MockClient("test"))
+
+    with world.revision(Source.manual(note="deleted Tobin")) as rev:
+        rev.remove_thing(ids["tobin"])
+
+    reply = {"player": "Maren Vos", "characters": [], "goal": "g", "intro": "i"}
+    setup = await continue_setup(world, old_id, "next", None, reply=reply)
+
+    assert all(ref.thing_id != ids["tobin"] for ref in setup.characters)
+
+    # starting the continued scene must not choke on the deleted carry-over
+    new_id = await start_scene(world, setup, None)
+    assert new_id
