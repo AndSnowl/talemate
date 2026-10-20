@@ -3,7 +3,7 @@ pages and the create box.
 
 The worlds are seeded through `talemate.world` in the app's worlds folder
 (`seed.seed_fm_world`). No model is asked anything: the create box's
-preview comes from the fixed preview file (`seed.set_fixed_preview`).
+preview comes from the fixed preview file (the `fixed_preview` fixture).
 Every test seeds its own uniquely named world, since the app (and its
 worlds folder) is shared by the session.
 """
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 
-from e2e.seed import seed_fm_world, set_fixed_preview
+from e2e.seed import seed_fm_world
 
 TIMEOUT_MS = 30_000
 
@@ -149,11 +149,10 @@ def test_add_fact_updates_page(app, page):
     )
 
 
-def test_create_box_preview_accept(app, page):
+def test_create_box_preview_accept(app, page, fixed_preview):
     name = _world_name("Lowmarsh")
     seed_fm_world(app.root, name, present_year=318, things=[MAREN])
-    set_fixed_preview(
-        app.root,
+    fixed_preview(
         {
             "name": "Oskar Dell",
             "facts": [
@@ -181,6 +180,15 @@ def test_create_box_preview_accept(app, page):
         state="visible", timeout=TIMEOUT_MS
     )
     assert preview.get_by_text("Never forgets a debt.").is_visible()
+
+    # switching kinds and back remounts the box; the preview keeps its name
+    page.get_by_test_id("kind-place").click()
+    preview.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    page.get_by_test_id("kind-character").click()
+    preview.get_by_text("Oskar Dell is a weathered ferryman.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert preview.get_by_label("Name").input_value() == "Oskar Dell"
     preview.get_by_role("button", name="Accept").click()
 
     # accepting opens the new thing's page, and it's listed with the others

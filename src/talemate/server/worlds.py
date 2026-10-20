@@ -228,7 +228,8 @@ class RepositionScenePayload(pydantic.BaseModel):
 
 async def _fixed_preview(path: Path, payload: PreviewPayload) -> CreatePreview:
     """The browser tests' stand-in for `preview_thing`: the preview in
-    `path`, for the request's kind, prompt and fields."""
+    `path`, for the request's kind, prompt and fields. Async so it runs
+    through the same background task and reply path as the real one."""
 
     fixed = json.loads(path.read_text(encoding="utf-8"))
     return CreatePreview(

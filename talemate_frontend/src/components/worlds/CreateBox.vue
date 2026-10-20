@@ -161,8 +161,13 @@ export default {
         },
     },
     watch: {
-        preview(preview) {
-            this.previewName = preview?.name || '';
+        // immediate: the box is keyed by kind, so it remounts (switching
+        // kinds and back) with a preview already there
+        preview: {
+            handler(preview) {
+                this.previewName = preview?.name || '';
+            },
+            immediate: true,
         },
         // the request is gone once its preview is accepted (or the world
         // changes): start the box afresh
