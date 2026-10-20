@@ -99,6 +99,8 @@ class Plugin:
         failure_action: str,
         error_log_message: str,
         failure_message_key: str = "message",
+        success_data: dict | Callable[[object], dict] | None = None,
+        failure_data: dict | None = None,
     ):
         """
         Create a callback function for async task completion.
@@ -108,32 +110,39 @@ class Plugin:
             failure_action: Action name to send on failure
             error_log_message: Log message to use when logging errors
             failure_message_key: Key name for the error message in the failure payload
+            success_data: Optional `data` for the success payload: a dict, or a
+                callable that builds it from the task's result
+            failure_data: Optional `data` for the failure payload
         """
 
+        def failure(message: str) -> dict:
+            payload = {
+                "type": self.router,
+                "action": failure_action,
+                failure_message_key: message,
+            }
+            if failure_data is not None:
+                payload["data"] = failure_data
+            return payload
+
         def on_done(task: asyncio.Task):
+            if task.cancelled():
+                # cancelled on purpose (e.g. a disconnect): nobody to tell
+                return
             try:
-                task.result()
-                self.websocket_handler.queue_put(
-                    {"type": self.router, "action": success_action}
-                )
+                result = task.result()
+                payload = {"type": self.router, "action": success_action}
+                if callable(success_data):
+                    payload["data"] = success_data(result)
+                elif success_data is not None:
+                    payload["data"] = success_data
+                self.websocket_handler.queue_put(payload)
             except GenerationCancelled:
                 log.warning(error_log_message, cancelled=True)
-                self.websocket_handler.queue_put(
-                    {
-                        "type": self.router,
-                        "action": failure_action,
-                        failure_message_key: "Generation cancelled",
-                    }
-                )
+                self.websocket_handler.queue_put(failure("Generation cancelled"))
             except Exception as e:
                 log.error(error_log_message, error=traceback.format_exc())
-                self.websocket_handler.queue_put(
-                    {
-                        "type": self.router,
-                        "action": failure_action,
-                        failure_message_key: str(e),
-                    }
-                )
+                self.websocket_handler.queue_put(failure(str(e)))
 
         return on_done
 

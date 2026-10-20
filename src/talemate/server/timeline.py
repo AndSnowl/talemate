@@ -17,6 +17,9 @@ overwrite an existing scene file.
 
 All actions also work without a loaded scene by passing ``scene_path`` (used
 from the load screen), operating on a lightweight scene scaffold.
+
+A world scene (``world://`` path or ``scene.world_ref``) keeps no changelog:
+it lists no revisions, previews nothing, and refuses to fork.
 """
 
 import os
@@ -32,6 +35,7 @@ from talemate.changelog import (
 )
 from talemate.server.websocket_plugin import Plugin
 from talemate.util.path import is_safe_relative_filename
+from talemate.worldplay.persistence import TARGET_PREFIX
 
 log = structlog.get_logger("talemate.server.timeline")
 
@@ -59,6 +63,11 @@ class ForkPayload(pydantic.BaseModel):
 class TimelinePlugin(Plugin):
     router = "timeline"
 
+    def _is_world_scene(self, scene_path: str | None) -> bool:
+        if scene_path:
+            return scene_path.startswith(TARGET_PREFIX)
+        return getattr(self.scene, "world_ref", None) is not None
+
     def _target_scene(self, scene_path: str | None):
         """
         Resolve the scene object timeline actions operate on: a scaffold for
@@ -78,15 +87,18 @@ class TimelinePlugin(Plugin):
         by all changelog revisions in ascending order.
         """
         payload = ListRevisionsPayload(**data)
-        scene = self._target_scene(payload.scene_path)
 
-        revisions = sorted(list_revision_entries(scene), key=lambda x: x["rev"])
+        revisions = []
+        if not self._is_world_scene(payload.scene_path):
+            scene = self._target_scene(payload.scene_path)
+            revisions = sorted(list_revision_entries(scene), key=lambda x: x["rev"])
 
-        base_path = os.path.join(scene.changelog_dir, f"{scene.filename}.base.json")
-        if os.path.exists(base_path):
-            revisions.insert(
-                0, {"rev": 0, "ts": int(os.path.getmtime(base_path)), "is_base": True}
-            )
+            base_path = os.path.join(scene.changelog_dir, f"{scene.filename}.base.json")
+            if os.path.exists(base_path):
+                revisions.insert(
+                    0,
+                    {"rev": 0, "ts": int(os.path.getmtime(base_path)), "is_base": True},
+                )
 
         self.websocket_handler.queue_put(
             {
@@ -105,10 +117,13 @@ class TimelinePlugin(Plugin):
         history for the preview panel.
         """
         payload = PreviewPayload(**data)
-        scene = self._target_scene(payload.scene_path)
+
+        reconstructed = {}
+        if not self._is_world_scene(payload.scene_path):
+            scene = self._target_scene(payload.scene_path)
+            reconstructed = await reconstruct_scene_data(scene, to_rev=payload.rev)
 
         max_messages = max(1, min(payload.max_messages, MAX_PREVIEW_MESSAGES))
-        reconstructed = await reconstruct_scene_data(scene, to_rev=payload.rev)
 
         history = reconstructed.get("history") or []
         messages = history[-max_messages:]
@@ -137,6 +152,13 @@ class TimelinePlugin(Plugin):
         reconstructed data.
         """
         payload = ForkPayload(**data)
+
+        if self._is_world_scene(payload.scene_path):
+            await self.signal_operation_failed(
+                "World scenes have no timeline to fork from"
+            )
+            return
+
         scene = self._target_scene(payload.scene_path)
 
         fork_filename = f"{payload.save_name}.json"

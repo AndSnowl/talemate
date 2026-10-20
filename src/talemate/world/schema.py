@@ -16,6 +16,11 @@ row it's a copy of. Every other write leaves `restored_from` NULL. An undo
 revision also records in `undo_conflicts` each row it left alone because of
 a conflict (`table_name` is `things`, `field_values` or `facts`), so a later
 undo knows which of its slots it didn't go through for.
+
+`scenes`, `scene_messages`, `scene_things` and `prose_cache` (migration 2)
+aren't versioned the same way: scenes aren't world things, so they carry no
+`rev_added`/`rev_removed` and never take part in replay or undo. `scenes.py`
+and `prose.py` write them in plain transactions instead.
 """
 
 import sqlite3
@@ -24,7 +29,7 @@ import structlog
 
 log = structlog.get_logger("talemate.world.schema")
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 MIGRATIONS: list[str] = [
     # 0 -> 1
@@ -116,6 +121,52 @@ MIGRATIONS: list[str] = [
     CREATE INDEX idx_things_id ON things (id);
     CREATE INDEX idx_things_rev_added ON things (rev_added);
     CREATE INDEX idx_things_rev_removed ON things (rev_removed);
+    """,
+    # 1 -> 2
+    """
+    CREATE TABLE scenes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        start_instant INTEGER NOT NULL,
+        start_precision TEXT NOT NULL,
+        premise TEXT NOT NULL DEFAULT '',
+        goal TEXT NOT NULL DEFAULT '',
+        player_thing_id TEXT,
+        state_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        continued_from TEXT REFERENCES scenes
+    );
+
+    CREATE TABLE scene_messages (
+        id TEXT PRIMARY KEY,
+        scene_id TEXT NOT NULL REFERENCES scenes,
+        branch_id TEXT NOT NULL DEFAULT 'main',
+        seq INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        data_json TEXT NOT NULL,
+        elapsed TEXT NOT NULL DEFAULT 'PT0S',
+        UNIQUE (scene_id, branch_id, seq)
+    );
+
+    CREATE TABLE scene_things (
+        scene_id TEXT NOT NULL REFERENCES scenes,
+        local_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        data_json TEXT NOT NULL,
+        PRIMARY KEY (scene_id, local_id)
+    );
+
+    CREATE TABLE prose_cache (
+        thing_id TEXT NOT NULL,
+        section TEXT NOT NULL,
+        stretch_start INTEGER,
+        stretch_end INTEGER,
+        rev INTEGER NOT NULL,
+        text TEXT NOT NULL,
+        edited INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (thing_id, section, stretch_start)
+    );
     """,
 ]
 

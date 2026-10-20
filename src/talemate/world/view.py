@@ -276,25 +276,33 @@ class WorldView:
 
         return REF_PATTERN.sub(replace, text)
 
-    def referencing(self, thing_id: str) -> list[tuple[str, FactState]]:
+    def referencing(
+        self, thing_id: str, *, any_date: bool = False
+    ) -> list[tuple[str, FactState]]:
         """The `(owner thing id, fact)` pairs for visible facts that
         reference `thing_id`, ordered by `valid_from` (NULL first), then
-        `fact_id`."""
+        `fact_id`. With `any_date`, every fact live at `rev` counts,
+        whatever story dates it's true between (ended facts too)."""
 
         at_instant = self._at_instant()
+        dated = (
+            ""
+            if any_date
+            else "AND (f.valid_from IS NULL OR f.valid_from <= :at) "
+            "AND (f.valid_until IS NULL OR f.valid_until > :at)"
+        )
         rows = self._conn.execute(
-            """
+            f"""
             SELECT f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
                    f.from_precision, f.valid_until, f.until_precision, f.rev_added
             FROM facts f
             JOIN fact_refs fr ON fr.row_id = f.row_id
-            WHERE fr.thing_id = ?
-              AND f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
-              AND (f.valid_from IS NULL OR f.valid_from <= ?)
-              AND (f.valid_until IS NULL OR f.valid_until > ?)
+            WHERE fr.thing_id = :thing_id
+              AND f.rev_added <= :rev AND (f.rev_removed IS NULL OR f.rev_removed > :rev)
+              {dated}
             ORDER BY f.valid_from ASC, f.fact_id ASC
             """,
-            (thing_id, self.rev, self.rev, at_instant, at_instant),
+            {"thing_id": thing_id, "rev": self.rev, "at": at_instant},
         ).fetchall()
 
         return [(row["thing_id"], _fact_state_from_row(row)) for row in rows]

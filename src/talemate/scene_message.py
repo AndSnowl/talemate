@@ -105,6 +105,11 @@ class SceneMessage(pydantic.BaseModel):
 
     rev: int = 0
 
+    # stable id in a world's database (`talemate.worldplay.persistence`),
+    # assigned the first time a world-backed scene saves this message;
+    # unlike `id`, which is renumbered on every load
+    world_id: str | None = None
+
     # Transient revision stack; seeded on opt-in subclasses, excluded
     # from to_dict / persistence.
     versions: list[MessageVersion] = pydantic.Field(
@@ -223,6 +228,9 @@ class SceneMessage(pydantic.BaseModel):
 
         if self.meta:
             rv["meta"] = self.meta
+
+        if self.world_id:
+            rv["world_id"] = self.world_id
 
         return rv
 

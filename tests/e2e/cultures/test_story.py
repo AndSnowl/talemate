@@ -23,6 +23,9 @@ from e2e.seed import (
     send_backend,
 )
 
+# the loaded scene's app bar tab (TalemateApp's `main` tab, icon mdi-script)
+SCENE_TAB = f"{APP_BAR} .v-tab:has(i.mdi-script)"
+
 GHUN_CULTURE_FILE = Path(__file__).resolve().parent / "data" / "ghun.culture.json"
 
 # Mirrors e2e.seed._BACKEND_SOCKET_JS: the app's own backend socket (open,
@@ -567,9 +570,9 @@ def test_open_in_culture_phrase_and_word(app, page):
     phrase_focus.wait_for(state="visible", timeout=15_000)
     assert "Rhok tal'dun!" in phrase_focus.inner_text()
 
-    # Back on the scene tab (always first among the app bar's tabs while a
-    # scene is active, whatever the scene's own title is).
-    page.locator(f"{APP_BAR} .v-tab").first.click()
+    # Back on the scene tab (the app bar tab with the script icon, whatever
+    # the scene's own title is).
+    page.locator(SCENE_TAB).click()
 
     saervik_span = page.locator(".scene-foreign", has_text="saervik")
     saervik_span.first.wait_for(state="visible", timeout=30_000)
@@ -632,7 +635,7 @@ def test_review_jump_to_missing_entry_is_harmless(app, page):
         assert "cultures" not in error
 
     # No stale pending target is left over: a later, valid jump still works.
-    page.locator(f"{APP_BAR} .v-tab").first.click()
+    page.locator(SCENE_TAB).click()
 
     saervik_span = page.locator(".scene-foreign", has_text="saervik")
     saervik_span.first.wait_for(state="visible", timeout=30_000)

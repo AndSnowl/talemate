@@ -18,6 +18,7 @@ from talemate.files import list_scenes_directory, list_scenes_tree
 from talemate.load import load_scene, SceneInitialization
 from talemate.scene_assets import Asset, get_media_type_from_file_path, VIS_TYPE
 from talemate.scene_message import versions_payload_for
+from talemate.worldplay.persistence import WorldSceneRef, close_world_scene
 from talemate.server import (
     agent_config,
     assistant,
@@ -35,6 +36,7 @@ from talemate.server import (
     package_manager,
     prompts,
     scene_assets as scene_assets_plugin,
+    worlds,
 )
 from talemate.server.scene_assets_batching import SceneAssetsBatchingMixin
 
@@ -54,6 +56,9 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
         self.input = None
         self.scene = Scene()
         self.out_queue = out_queue
+        # the fantasymate world the `worlds` router has open, one per
+        # connection (`talemate.world.World`, set by `WorldsPlugin`)
+        self.world = None
 
         # Initialize scene assets batching
         self._init_scene_assets_batching()
@@ -87,6 +92,7 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
             ),
             timeline.TimelinePlugin.router: timeline.TimelinePlugin(self),
             cultures.CulturesPlugin.router: cultures.CulturesPlugin(self),
+            worlds.WorldsPlugin.router: worlds.WorldsPlugin(self),
         }
 
         # unconveniently named function, this `connect` method is called
@@ -122,6 +128,7 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
         memory_agent = instance.get_agent("memory")
         if memory_agent and self.scene:
             memory_agent.close_db(self.scene)
+        close_world_scene(self.scene)
 
         for plugin in self.routes.values():
             if hasattr(plugin, "disconnect"):
@@ -154,8 +161,14 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
         file_name=None,
         scene_initialization: dict | None = None,
     ):
+        # a world scene can be named by its `WorldSceneRef` as well as by
+        # its `world://` target path
+        if isinstance(path_or_data, WorldSceneRef):
+            path_or_data = path_or_data.target
+
         try:
             if self.scene:
+                close_world_scene(self.scene)
                 instance.get_agent("memory").close_db(self.scene)
                 self.scene.disconnect()
                 self.scene.active = False

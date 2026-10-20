@@ -481,9 +481,16 @@ class SceneAssets:
         self.backdrop_enabled: bool = True
 
     def _fire_signal(self, name: str, payload: pydantic.BaseModel):
-        """Fire an async signal from a synchronous context."""
+        """Fire an async signal from a synchronous context. With no event
+        loop running there is nothing to fire it on, so it's skipped
+        (creating the coroutine first would leave it never awaited)."""
         try:
-            asyncio.create_task(async_signals.get(name).send(payload))
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            log.debug(f"No running event loop, not firing {name} signal")
+            return
+        try:
+            loop.create_task(async_signals.get(name).send(payload))
         except Exception as e:
             log.error(f"Failed to fire {name} signal", error=str(e))
 

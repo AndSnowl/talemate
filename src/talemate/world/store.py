@@ -37,6 +37,8 @@ from .refs import parse_refs
 from .view import WorldView
 
 if TYPE_CHECKING:
+    from .prose import ProseCache
+    from .scenes import SceneStore
     from .timeline import TimelineEntry
     from .undo import UndoReport
 
@@ -586,6 +588,19 @@ class World:
     def set_calendar(self, calendar: Calendar) -> None:
         self._set_meta("calendar", calendar.model_dump_json())
 
+    def present(self) -> WorldDate:
+        """The world's "present": the in-world date its owner is working
+        at when no scene says otherwise (creating things before any scene
+        exists, for one). Year 1 until `set_present` is called."""
+
+        try:
+            return WorldDate.model_validate_json(self._meta("present"))
+        except KeyError:
+            return WorldDate.of(1)
+
+    def set_present(self, date: WorldDate) -> None:
+        self._set_meta("present", date.model_dump_json())
+
     def head_rev(self) -> int:
         row = self._conn.execute("SELECT MAX(rev) FROM revisions").fetchone()
         return row[0] or 0
@@ -609,6 +624,24 @@ class World:
         return build_timeline(
             self._conn, thing_id, rev if rev is not None else self.head_rev()
         )
+
+    def scenes(self) -> "SceneStore":
+        """Scenes, their messages and their scene-local invented things.
+        They aren't world things: `SceneStore` writes them in plain
+        transactions on this connection, not through `World.revision`."""
+
+        from .scenes import SceneStore
+
+        return SceneStore(self._conn)
+
+    def prose(self) -> "ProseCache":
+        """The cached prose for this world's things, kept fresh against
+        `timeline()`. Like `scenes()`, written in plain transactions, not
+        through `World.revision`."""
+
+        from .prose import ProseCache
+
+        return ProseCache(self._conn, lambda: self)
 
     def _live_fact_rows(self, rev: int | None = None) -> builtins.list[sqlite3.Row]:
         """Every fact row live at `rev` on the source clock, across every

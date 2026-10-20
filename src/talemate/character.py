@@ -62,6 +62,14 @@ class Character(pydantic.BaseModel):
     # user-facing organization (see CharacterMixin.handle_set_character_folder)
     folder: str | None = None
 
+    # the world thing (`talemate.world`) this character was built from, if
+    # any (`talemate.worldplay.characters.character_from_world`)
+    world_thing_id: str | None = None
+
+    # the stable scene-local id of a character invented in a world scene
+    # (`talemate.worldplay.persistence`)
+    world_local_id: str | None = None
+
     # dialogue instructions and examples
     dialogue_instructions: str | None = pydantic.Field(
         default=None,

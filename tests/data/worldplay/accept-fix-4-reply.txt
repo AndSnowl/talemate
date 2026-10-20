@@ -1,0 +1,23 @@
+{ "player": "Vasha",
+ "characters": [
+ {
+ "name": "Colonel Maren Duskhollow",
+ "world": false,
+ "facts": "A broad-shouldered woman in her late forties with a square jaw and close-cropped iron-gray hair. She wears the deep crimson uniform of the Southern Border Command, its silver insignia catching the lamplight as she moves. Her left eye is artificial — a glass orb of pale green — and she has a habit of tilting her head toward it when she listens, as if the prosthetic hears better than the real one. She carries herself with the rigid precision of someone who has spent three decades giving orders and expects them followed without explanation."
+ },
+ {
+ "name": "Postmaster Brenn Ashwick",
+ "world": false,
+ "facts": "A stout, balding human man of fifty-five with round spectacles perched on a crooked nose. He runs the Kalmara Postal Hall with the quiet desperation of someone who has long since stopped dreaming of adventure but still checks the mailbag every morning for his own letters. He is Vasha's immediate supervisor and the first person the Colonel will demand to see."
+ }
+ ],
+ "place": {
+ "name": "Kalmara Postal Hall",
+ "world": true,
+ "facts": "The northern city's main mail hub, a sprawling stone building with vaulted ceilings and wide arched windows that let in the pale northern light. The sorting floor is a maze of wooden bins and brass-railed chutes, perpetually smelling of ink, parchment, and the faint musk of owl feathers. At this hour — just past midnight — the hall is mostly empty, lit by rows of oil lamps that cast long, wavering shadows across the floor. The building sits at the edge of Kalmara's merchant district, its clock tower visible from the harbor."
+ },
+ "extras": [],
+ "goal": "Vasha must decide whether to volunteer for or resist the Colonel's dangerous mission to deliver a secret military message to a loyal exclave beyond the border.",
+ "intro": "The sorting room hums with the familiar rhythm of the night shift — the soft thud of parcels into bins, the distant clatter of a mail cart on stone. Vasha stands at his workstation, white plumage immaculate as fresh snowfall, carefully reading the addresses on a stack of letters by the amber glow of his desk lamp. His chest harness sits empty on its rack beside him, its leather straps coiled like sleeping snakes. It is well past midnight, and the hall is nearly deserted. Most of the human sorters finished their shifts two hours ago. Only a skeleton crew remains: a few elven runners in the back, a pair of owl couriers dozing in their roosting nook, and Vasha, who has never once left his post early in all his eleven years of service.
+
+Then the front doors open. Not the side entrance — not the staff door — but the grand, double-wide front doors that face the street, the ones reserved for customers and dignitaries. The sound of boots on stone, measured and deliberate. Vasha's head turns, one ear rotating toward the entrance with the silent precision of a hunting bird. A woman strides in, flanked by two soldiers in crimson. She is tall, broad, and carries herself like a blade kept honed for war. Her uniform bears the silver eagle of the Southern Border Command. She scans the sorting floor with the quick, cataloguing gaze of someone accustomed to assessing rooms for exits and threats, and her single real eye lands on Vasha — the only owl in sight — and stays there." }

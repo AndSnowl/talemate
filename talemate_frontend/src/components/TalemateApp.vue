@@ -53,7 +53,7 @@
     <!-- app bar -->
     <v-app-bar app density="compact">
       <FmWordmark size="sm" class="ml-3 mr-2" />
-      <v-app-bar-nav-icon v-if="tab !== 'home'" size="small" @click="toggleNavigation('game')">
+      <v-app-bar-nav-icon v-if="sceneDrawerTab" size="small" @click="toggleNavigation('game')">
         <v-tooltip activator="parent" location="top">Toggle sidebar</v-tooltip>
         <v-icon v-if="sceneDrawer">mdi-arrow-collapse-left</v-icon>
         <v-icon v-else>mdi-arrow-collapse-right</v-icon>
@@ -121,7 +121,7 @@
     <v-main style="height: 100%; display: flex; flex-direction: column;">
 
       <!-- left side navigation drawer -->
-      <v-navigation-drawer :model-value="sceneDrawer && tab !== 'home'" @update:model-value="sceneDrawer = $event" app :width="leftDrawerWidth">
+      <v-navigation-drawer :model-value="sceneDrawer && sceneDrawerTab" @update:model-value="sceneDrawer = $event" app :width="leftDrawerWidth">
         <v-alert v-if="!connected" type="error" variant="tonal">
           Not connected to fantasymate backend
           <p class="text-body-2" color="on-surface">
@@ -220,11 +220,22 @@
 
       <v-container :class="(sceneActive ? '' : 'backdrop')" fluid style="height: 100%;">
 
-        <FmWordmark v-if="!sceneActive" size="lg" class="backdrop-wordmark" />
+        <FmWordmark v-if="!sceneActive && tab !== 'fmworld'" size="lg" class="backdrop-wordmark" />
 
         <v-tabs-window v-model="tab" style="height: 100%;">
-          <!-- HOME -->
-          <v-tabs-window-item :transition="false" :reverse-transition="false" value="home">
+          <!-- WORLDS (the fantasymate home) -->
+          <v-tabs-window-item :transition="false" :reverse-transition="false" value="worlds">
+            <WorldsHome
+              :visible="tab === 'worlds'"
+              @play-scene="loadWorldScene"
+              @open-world-tab="tab = 'fmworld'" />
+          </v-tabs-window-item>
+          <!-- WORLD (the open fantasymate world's things) -->
+          <v-tabs-window-item :transition="false" :reverse-transition="false" value="fmworld">
+            <WorldTab v-if="worldsStore.currentWorld" />
+          </v-tabs-window-item>
+          <!-- HOME (eager: Worlds' Play and load_scene_request load scenes through $refs.sceneLanding, before Home is ever shown) -->
+          <v-tabs-window-item :transition="false" :reverse-transition="false" value="home" eager>
             <SceneLanding
             ref="sceneLanding"
             @request-scene-load="(path) => {  resetViews(); $refs.sceneLanding.loadJsonSceneFromPath(path); }"
@@ -486,6 +497,9 @@ import TemplatesMenu from './TemplatesMenu.vue';
 import OnboardingWizard from './OnboardingWizard.vue';
 import PromptsView from './prompts/PromptsView.vue';
 import PromptsMenu from './prompts/PromptsMenu.vue';
+import WorldsHome from './worlds/WorldsHome.vue';
+import WorldTab from './worlds/WorldTab.vue';
+import { useWorldsStore } from '@/stores/worlds.js';
 // import debounce
 import { debounce } from 'lodash';
 import { effectiveActionEnabled } from '@/constants/sceneAgentSettings';
@@ -539,9 +553,14 @@ export default {
     OnboardingWizard,
     PromptsView,
     PromptsMenu,
+    WorldsHome,
+    WorldTab,
   },
   name: 'TalemateApp',
   mixins: [AutocompleteMixin],
+  setup() {
+    return { worldsStore: useWorldsStore() };
+  },
   data() {
     return {
       appearancePreview: null, // Preview config while editing settings (null = use saved config)
@@ -552,8 +571,22 @@ export default {
       // asset id of the most recent message-attached background image the
       // scene-tools "Immersive" chip promotes when no backdrop is set
       sceneBackdropCandidate: null,
-      tab: 'home',
+      tab: 'worlds',
       tabs: [
+        {
+          title: () => { return 'Worlds' },
+          condition: () => { return true },
+          icon: () => { return 'mdi-earth' },
+          click: () => {},
+          value: 'worlds'
+        },
+        {
+          title: () => { return 'World' },
+          condition: () => { return !!this.worldsStore.currentWorld },
+          icon: () => { return 'mdi-map-legend' },
+          click: () => {},
+          value: 'fmworld'
+        },
         {
           title: () => {
             return this.scene.title || 'Untitled Scenario';
@@ -708,7 +741,7 @@ export default {
       revertingTab: false,
       // The tab the view is actually on — `tab` transiently holds a target
       // the unsaved settings guard vetoes
-      committedTab: 'home',
+      committedTab: 'worlds',
       // Count of outdated prompt template overrides
       promptsOutdatedCount: 0,
       // Flag to ensure new-scene navigation only happens once per scene load
@@ -734,13 +767,19 @@ export default {
       deep: true,
       immediate: true,
     },
+    // a world scene was started (new, or continued from this one): load it
+    'worldsStore.startedScene'(started) {
+      if (started) {
+        this.loadWorldScene(started.target);
+      }
+    },
     availableTabs(tabs) {
       // check if tab still exists
       // in tabs
       // if not select first tab
       if(!tabs.find(tab => tab.value == this.tab)) {
-        // When no scene is loaded, prefer 'home' tab
-        const homeTab = tabs.find(tab => tab.value === 'home');
+        // When no scene is loaded, prefer the Worlds home
+        const homeTab = tabs.find(tab => tab.value === 'worlds');
         this.tab = homeTab ? homeTab.value : tabs[0].value;
       }
     },
@@ -851,6 +890,10 @@ export default {
     creativeMode() {
       return this.tab === 'main' && this.sceneActive && this.scene.environment === 'creative';
     },
+    // the tabs with something in the left drawer
+    sceneDrawerTab() {
+      return !['home', 'worlds', 'fmworld'].includes(this.tab);
+    },
     leftDrawerWidth() {
       // Wider drawer for the prompts tab's denser listing
       return this.tab === 'prompts' ? 400 : 300;
@@ -936,6 +979,10 @@ export default {
       const sceneForced = this.scene?.data?.direction_always_on || false;
       return agentEnabled || sceneForced;
     },
+  },
+  created() {
+    // the world screens' store hears every message, like any other handler
+    this.registerMessageHandler((data) => this.worldsStore.handleMessage(data));
   },
   mounted() {
     this.connect();
@@ -1128,10 +1175,13 @@ export default {
         this.requestAppConfig();
         this.requestWorldStateTemplates();
         this.requestPromptOutdatedCheck();
+        this.worldsStore.connect((message) => this.websocket?.send(JSON.stringify(message)));
       };
       this.websocket.onclose = (event) => {
         console.log('WebSocket connection closed', event);
         this.connected = false;
+        // the backend closes the connection's open world with it
+        this.worldsStore.disconnected();
         this.connecting = false;
         this.sceneActive = false;
         this.scene = {};
@@ -1894,6 +1944,11 @@ export default {
       return templateString;
     },
 
+    // load a world scene by its `world://` target, as Load Scene loads a file
+    loadWorldScene(target) {
+      this.resetViews();
+      this.$refs.sceneLanding.loadJsonSceneFromPath(target);
+    },
     resetViews() {
       if(this.$refs.worldStateManager)
         this.$refs.worldStateManager.reset()

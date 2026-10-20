@@ -326,3 +326,19 @@ def test_revision_handle_closed_after_block_raises(world):
     # the rejected call didn't sneak a row in outside the transaction
     assert len(rows) == 1
     assert rows[0]["value_json"] == '"Maren"'
+
+
+def test_present_defaults_to_year_one_and_round_trips(tmp_path):
+    world = World.create("Present", root=tmp_path)
+    try:
+        assert world.present() == WorldDate.of(1)
+        world.set_present(WorldDate.of(1000))
+        assert world.present() == WorldDate.of(1000)
+    finally:
+        world.close()
+
+    reopened = World.open(world.path)
+    try:
+        assert reopened.present() == WorldDate.of(1000)
+    finally:
+        reopened.close()

@@ -5,6 +5,7 @@ Provides MockClient, MockScene, and bootstrap functions used across
 multiple test modules (test_graphs, test_layered_history, etc.).
 """
 
+import asyncio
 import contextvars
 import os
 from collections import deque
@@ -135,6 +136,20 @@ def pytest_xdist_auto_num_workers(config):
         return 0
 
     return min(cpus, MAX_TEST_WORKERS)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _close_import_time_event_loop():
+    """Importing `talemate.prompts` runs `nest_asyncio.apply()`, which makes
+    and sets an event loop at import time. pytest-asyncio later sets its own
+    loop in its place, dropping the last reference to that one, which then
+    warns "unclosed event loop" from whichever async test runs first. Keep
+    hold of it for the session and close it at the end."""
+
+    loop = asyncio.get_event_loop_policy().get_event_loop()
+    yield
+    if not loop.is_running() and not loop.is_closed():
+        loop.close()
 
 
 @pytest.fixture(autouse=True, scope="session")
