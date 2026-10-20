@@ -202,6 +202,35 @@ async def test_add_fact_schedules_prose(plugin, client):
     assert len(client.prompt_history) == 1
 
 
+async def test_add_fact_prose_task_skips_quietly_if_thing_deleted(plugin, client):
+    """Review-round fix: a thing deleted while its prose task is still
+    queued (an edit schedules it in the background; the owner deletes the
+    thing before it runs) must not surface "Error generating world prose"
+    after a successful delete -- the task is skipped quietly."""
+
+    world, maren, _ = await _open_world_with_maren(plugin)
+
+    async with MockClientContext():
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "add_fact",
+                "thing_id": maren,
+                "category": "appearance",
+                "text": "A heron tattoo on her wrist.",
+                "valid_from": None,
+            }
+        )
+        assert plugin.tasks, "no prose task was scheduled"
+
+        await plugin.handle({"type": "worlds", "action": "delete_thing", "id": maren})
+        await _drain(plugin)
+
+    assert _replies(plugin, "prose_failed") == []
+    assert _last(plugin, "thing_deleted")["data"] == {"id": maren, "kind": "character"}
+    assert world.view().thing(maren) is None
+
+
 async def test_remove_fact_makes_prose_stale_and_regenerates(plugin, client):
     world, maren, _ = await _open_world_with_maren(plugin)
     tall = next(

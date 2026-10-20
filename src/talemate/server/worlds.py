@@ -503,7 +503,14 @@ class WorldsPlugin(Plugin):
         """Bring `thing_id`'s prose up to date at `at` in the background:
         the stale sections, or every section with `regenerate`. Answers
         `prose_updated {id}` when done. With no client to ask, the edit
-        stands and the prose is left stale."""
+        stands and the prose is left stale.
+
+        `thing_id` may be gone by the time this runs -- deleted while the
+        task sat queued, or (from `reposition_scene`) a character who's
+        since been removed from the world. With `regenerate=False` that's
+        skipped quietly rather than reported as "Error generating world
+        prose" after what was, from the owner's side, a successful
+        delete."""
 
         world = self._require_world()
         try:
@@ -521,6 +528,9 @@ class WorldsPlugin(Plugin):
         async def run() -> None:
             async with lock:
                 if not regenerate:
+                    if world.view(at).thing(thing_id) is None:
+                        log.info("worlds.prose_skipped", reason="thing deleted", id=thing_id)
+                        return
                     await prose_gen.ensure_prose(world, thing_id, at, client)
                     return
                 state = world.view(at).thing(thing_id)
