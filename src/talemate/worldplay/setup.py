@@ -301,13 +301,31 @@ async def _ask(
     return _reply_object(extracted["response"])
 
 
+def _setup_in(obj: Any) -> dict[str, Any] | None:
+    """`obj` itself, if it has a setup key, or the first dict value of
+    `obj` that does, searched recursively -- a reply that wraps the setup
+    in an outer key, e.g. `{"scene": {"player": ..., "intro": ...}}`."""
+
+    if not isinstance(obj, dict):
+        return None
+    if {"player", "characters", "intro"} & set(obj):
+        return obj
+    for value in obj.values():
+        found = _setup_in(value)
+        if found is not None:
+            return found
+    return None
+
+
 def _reply_object(reply: str) -> dict[str, Any]:
     """The setup object in the model's reply: the first JSON object (found
-    by `create.json_objects`) with a setup key in it."""
+    by `create.json_objects`) with a setup key in it, at the top level or
+    nested inside another object's value."""
 
     for obj in json_objects(reply):
-        if {"player", "characters", "intro"} & set(obj):
-            return obj
+        found = _setup_in(obj)
+        if found is not None:
+            return found
     raise ValueError(f"no scene setup found in the model's reply: {reply!r}")
 
 

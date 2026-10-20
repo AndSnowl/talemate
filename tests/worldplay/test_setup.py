@@ -195,6 +195,37 @@ async def test_plan_scene_uses_picks_and_index(world):
 
 
 @requires_chromadb
+async def test_plan_scene_finds_a_setup_wrapped_in_an_outer_object(world):
+    """Review-round fix: `create.json_objects` jumps past each top-level
+    object rather than descending into it (so a setup reply, itself one
+    top-level object, is found whole), but that means a reply that wraps
+    the setup in an outer key -- e.g. {"scene": {"player": ..., "intro":
+    ...}} -- no longer turns up as a nested top-level object the old
+    parser used to find. `_reply_object` must look inside dict values
+    when no top-level object has a setup key."""
+
+    ids = _river_world(world)
+    prompt = "Maren argues with Tobin about the river tolls"
+    wrapped_reply = json.dumps({"scene": json.loads(SETUP_REPLY)})
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(wrapped_reply)
+        setup = await plan_scene(
+            world,
+            prompt,
+            {"Maren": ids["vos"]},
+            None,
+            START,
+            client,
+            embedding_function=TrigramEmbeddingFunction(),
+        )
+
+    assert setup.player == SetupRef(thing_id=ids["vos"])
+    assert setup.goal == "Settle the toll dispute before the wardens arrive."
+
+
+@requires_chromadb
 async def test_plan_scene_player_from_picker(world):
     ids = _river_world(world)
 
