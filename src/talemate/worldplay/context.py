@@ -133,9 +133,7 @@ class WorldSceneContext:
                     self.world, thing_id, at, is_player=character.is_player
                 )
             except KeyError:
-                log.warning(
-                    "world scene character not in the world", thing_id=thing_id
-                )
+                log.warning("world scene character not in the world", thing_id=thing_id)
                 continue
             updated = character.model_copy(
                 update={

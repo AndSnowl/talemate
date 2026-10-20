@@ -529,7 +529,9 @@ class WorldsPlugin(Plugin):
             async with lock:
                 if not regenerate:
                     if world.view(at).thing(thing_id) is None:
-                        log.info("worlds.prose_skipped", reason="thing deleted", id=thing_id)
+                        log.info(
+                            "worlds.prose_skipped", reason="thing deleted", id=thing_id
+                        )
                         return
                     await prose_gen.ensure_prose(world, thing_id, at, client)
                     return
