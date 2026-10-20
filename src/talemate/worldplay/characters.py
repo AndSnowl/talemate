@@ -87,6 +87,37 @@ def _cached_section(
     return None
 
 
+def _change_not_yet_known(
+    entry: CachedProse | None, date_instant: int, source_rev: int
+) -> bool:
+    """Whether a timeline change dated at `date_instant`, written in
+    revision `source_rev`, could not have made it into the cached
+    `entry`'s text.
+
+    `entry=None` (nothing was ever cached) always qualifies. Otherwise,
+    either of two independent reasons does:
+
+    - it was written *after* the cache (`source_rev > entry.rev`),
+      whatever date it's dated at -- a later revision can backdate a
+      change into a stretch the cache already covers (e.g. a fact added
+      after the fact, dated inside an already-cached stretch);
+    - it's dated at or after what the cache's own stretch covers
+      (`entry.stretch_end`, when set -- `None` only for the thing's
+      current, still-open stretch, nothing to compare against there).
+
+    Either alone is enough; a stretch-end comparison alone (round 2's
+    rule) misses a change backdated into an already-cached span by a
+    later revision, and a revision comparison alone would miss a change
+    that's simply dated later than the cache, however old the revision
+    that added it."""
+
+    if entry is None:
+        return True
+    if source_rev > entry.rev:
+        return True
+    return entry.stretch_end is not None and date_instant >= entry.stretch_end.instant
+
+
 def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     """One line per appearance/background fact not yet reflected in the
     cached description, in story-time order, e.g. `"Since 314: Lost her
@@ -102,28 +133,36 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     taken at either one. The timeline doesn't have that hole, since it
     reports every change directly.
 
-    "Not yet reflected" means: dated on or after the cached entry's own
-    `stretch_end` (`_cached_section`'s return value -- the walk-back
-    already finds the most recent stretch that *is* cached, however stale
-    that makes it), and on or before `at` -- a change dated after `at`
-    is never reported, or it would leak the future. With nothing cached
-    at all, every dated change up to `at` counts (no lower bound). An
-    undated ("always") start or end isn't a reportable moment and is
-    skipped either way.
+    "Not yet reflected" is `_change_not_yet_known` (see its docstring for
+    the exact rule -- it's not just "dated after the cache's stretch
+    ends": a revision written after the cache counts too, whatever date
+    it backdates its change to). A change dated after `at` is never
+    reported either way, or it would leak the future. An undated
+    ("always") start or end isn't a reportable moment and is skipped.
 
-    A fact_id with a start, an end, or both inside that window gets
-    exactly one line: both -> "From ... until ...", only a start ->
-    "Since ...", only an end -> "Until ..." (its start was before the
-    window -- already part of the cached text)."""
+    With nothing cached at all, an undated-start appearance/background
+    fact still visible at `at` gets a plain line (no "Since"/"Until" --
+    there's no single date to attach), so a character with no prose yet
+    still has *some* description; an undated fact otherwise never
+    produces a timeline entry of its own to report.
+
+    A fact_id with a start, an end, or both not yet known gets exactly
+    one line: both -> "From ... until ...", only a start -> "Since ...",
+    only an end -> "Until ..." (its start was already known -- either
+    baked into the cached text, or, with nothing cached, not itself
+    newsworthy)."""
 
     at_instant = at.instant if at is not None else _FAR_FUTURE
-
     entry = _cached_section(world, thing_id, "description", at)
-    if entry is not None and entry.stretch_end is None:
-        # the cache is fresh for `at`'s own, still-open stretch -- nothing
-        # dated since could possibly exist
-        return []
-    report_from = entry.stretch_end.instant if entry is not None else None
+
+    lines: list[str] = []
+
+    if entry is None:
+        at_state = world.view(at).thing(thing_id)
+        if at_state is not None:
+            for fact in at_state.facts:
+                if fact.category in _DESCRIPTION_CATEGORIES and fact.valid_from is None:
+                    lines.append(fact.text)
 
     order: list[str] = []
     starts: dict[str, WorldDate] = {}
@@ -139,8 +178,8 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
             continue  # "always" -- not a reportable moment
         if change.date.instant > at_instant:
             continue  # never emit a change dated after `at`
-        if report_from is not None and change.date.instant < report_from:
-            continue  # already reflected in the cached prose
+        if not _change_not_yet_known(entry, change.date.instant, change.source_rev):
+            continue
 
         fact_id = change.fact_id
         if fact_id not in texts:
@@ -152,7 +191,6 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
             ends[fact_id] = change.date
 
     calendar = world.calendar
-    lines = []
     for fact_id in order:
         start, end, text = starts.get(fact_id), ends.get(fact_id), texts[fact_id]
         if start is not None and end is not None:

@@ -305,3 +305,109 @@ def test_since_lines_reports_fact_starting_and_ending_inside_window(world, visit
         world, visitor, WorldDate.of(320), is_player=False
     ).description
     assert "From 310 until 312: A cast on her arm." in description
+
+
+@pytest.fixture
+def blank_slate(world):
+    """Fix round 3 (a), the reviewer's repro: nothing dated at all yet,
+    so the thing's whole timeline is one `(None, None)` stretch -- cached
+    once while that's still true. A *later* revision then adds a dated
+    fact. The cached entry's own `stretch_end` is `None` (it really was
+    fresh when written), but the new fact was written after it, so it
+    must be reported regardless of what date it's dated at."""
+
+    with world.revision(Source.manual(note="create Nadia")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Nadia"})
+
+    world.prose().put(thing_id, "description", None, None, "A trader.")
+
+    with world.revision(Source.manual(note="Nadia loses an eye")) as rev:
+        rev.add_fact(
+            thing_id, "appearance", "Lost an eye.", valid_from=WorldDate.of(314)
+        )
+
+    return thing_id
+
+
+def test_since_lines_reports_change_written_after_an_open_cache(world, blank_slate):
+    """Fix round 3 (a): round 2's rule early-returned `[]` whenever the
+    cached entry's own `stretch_end` was `None`, treating "fresh for the
+    current, open stretch" and "stale, but was cached before this thing
+    had any dated changes at all" as the same thing. They aren't."""
+
+    assert since_lines(world, blank_slate, WorldDate.of(315)) == [
+        "Since 314: Lost an eye."
+    ]
+
+    description = character_from_world(
+        world, blank_slate, WorldDate.of(315), is_player=False
+    ).description
+    assert "Since 314: Lost an eye." in description
+
+
+@pytest.fixture
+def scarred_warden(world):
+    """Fix round 3 (b), the reviewer's repro: a fact added in a *later*
+    revision, dated *inside* a stretch that's already cached. Must still
+    be reported -- it wasn't known when the cache was written, regardless
+    of its own date falling before the stretch's end."""
+
+    with world.revision(Source.manual(note="create Tess")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Tess"})
+        rev.add_fact(
+            thing_id,
+            "background",
+            "Member of the Wardens.",
+            valid_from=WorldDate.of(305),
+            valid_until=WorldDate.of(316),
+        )
+
+    world.prose().put(
+        thing_id,
+        "description",
+        WorldDate.of(305),
+        WorldDate.of(316),
+        "A watchful member of the Wardens.",
+    )
+
+    with world.revision(Source.manual(note="Tess is scarred")) as rev:
+        rev.add_fact(thing_id, "appearance", "Scarred.", valid_from=WorldDate.of(310))
+
+    return thing_id
+
+
+def test_since_lines_reports_change_written_after_cache_dated_inside_stretch(
+    world, scarred_warden
+):
+    """Fix round 3 (b): round 2's rule compared only the change's own date
+    against the cached stretch's end (316), so "Scarred." at 310 -- inside
+    that stretch -- was never reported, even though it was written well
+    after the cache."""
+
+    assert since_lines(world, scarred_warden, WorldDate.of(312)) == [
+        "Since 310: Scarred."
+    ]
+
+    description = character_from_world(
+        world, scarred_warden, WorldDate.of(312), is_player=False
+    ).description
+    assert "Since 310: Scarred." in description
+
+
+def test_since_lines_includes_undated_facts_with_nothing_cached(world):
+    """Fix round 3: with nothing cached at all yet, an undated ("always")
+    appearance/background fact has no dated timeline entry of its own to
+    report -- without this, it would never appear in the description at
+    all. It's a plain line, with no "Since"/"Until" prefix, since there's
+    no single date to attach to it."""
+
+    with world.revision(Source.manual(note="create Yusuf")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Yusuf"})
+        rev.add_fact(thing_id, "background", "A former soldier.")
+
+    assert since_lines(world, thing_id, WorldDate.of(310)) == ["A former soldier."]
+
+    character = character_from_world(
+        world, thing_id, WorldDate.of(310), is_player=False
+    )
+    assert character.description == "A former soldier."
