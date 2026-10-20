@@ -263,3 +263,44 @@ def test_numbers_mix_of_two_races_of_one_species(world, heritage_world):
     # both parents reach Human's numbers, though lineage lists Human once
     assert result.lifespan == 80
     assert result.adult_age == 18
+
+
+def test_override_from_second_parent_race_of_shared_species(world, heritage_world):
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        hands = rev.add_fact(h.human, "physical", "Five-fingered hands.")
+        highlander = rev.create_thing(
+            "race", fields={"name": "Highlander", "species": h.human}
+        )
+        six = rev.add_fact(
+            highlander, "variation", "Six-fingered hands.", overrides=[hands]
+        )
+        mixed = rev.create_thing(
+            "mix", fields={"name": "Mixed", "parents": [h.lowlander, highlander]}
+        )
+
+    view = world.view()
+    # Human is listed once, under Lowlander, so it comes before Highlander
+    assert [layer.thing_id for layer in lineage(view, mixed)] == [
+        mixed,
+        h.lowlander,
+        h.human,
+        highlander,
+    ]
+    by_id = {item.fact.fact_id: item for item in inherited(view, mixed)}
+    assert by_id[hands].overridden_by == six
+    ids = [fact.fact_id for fact, _ in effective_facts(view, mixed)]
+    assert six in ids
+    assert hands not in ids
+
+
+def test_sibling_parent_does_not_override(world, heritage_world):
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        tusks = rev.add_fact(h.orc, "physical", "Tusks.")
+        rev.add_fact(h.lowlander, "variation", "No tusks.", overrides=[tusks])
+
+    # Lowlander doesn't inherit from Orc, so its override doesn't reach
+    # Orc's fact through the Half-orc mix
+    by_id = {item.fact.fact_id: item for item in inherited(world.view(), h.half_orc)}
+    assert by_id[tusks].overridden_by is None

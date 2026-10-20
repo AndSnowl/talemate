@@ -8,9 +8,10 @@ parent's chain in turn, a race's `species`, and last a character's
 and a missing or deleted target is skipped.
 
 Facts and numbers are resolved from those layers in code. A fact is
-dropped from the inherited set when a more specific layer's fact lists its
-`fact_id` in `overrides`. A number is the first one set along the chain;
-a mix with a number unset averages its two parents' resolved values.
+dropped from the inherited set when a fact of a layer that inherits from
+its layer (the thing's own included) lists its `fact_id` in `overrides`.
+A number is the first one set along the chain; a mix with a number unset
+averages its two parents' resolved values.
 
 Every read goes through the given `WorldView`, so a dated heritage change
 or a deleted ancestor follows the view's `(at, rev)`.
@@ -124,47 +125,74 @@ def lineage(view: WorldView, thing_id: str) -> list[Layer]:
     ]
 
 
+def _ancestors(states: list[ThingState]) -> dict[str, set[str]]:
+    """Each layer's id -> the ids of the layers it inherits from, by the
+    heritage links among `states` rather than by list position (a species
+    listed once under parent A is still an ancestor of parent B). The
+    thing itself inherits from every other layer, its culture included."""
+
+    by_id = {state.id: state for state in states}
+    ancestors: dict[str, set[str]] = {}
+    for state in states[1:]:
+        reached: set[str] = set()
+        stack = [state.id]
+        while stack:
+            for next_id in _next_ids(by_id[stack.pop()]):
+                if next_id in by_id and next_id not in reached:
+                    reached.add(next_id)
+                    stack.append(next_id)
+        reached.discard(state.id)
+        ancestors[state.id] = reached
+    if states:
+        ancestors[states[0].id] = {state.id for state in states[1:]}
+    return ancestors
+
+
 def _inherited_with_layers(
     view: WorldView, thing_id: str
 ) -> tuple[list[tuple[FactState, Layer]], list[tuple[InheritedFact, Layer]]]:
     """The thing's own facts and its inherited ones, each with its layer."""
 
-    own: list[tuple[FactState, Layer]] = []
-    inherited_facts: list[tuple[InheritedFact, Layer]] = []
-    # fact_id -> the most specific fact overriding it, from the layers
-    # already walked
+    states = _lineage_states(view, thing_id)
+    layers = [
+        Layer(thing_id=state.id, kind=state.kind, name=_name(state), depth=depth)
+        for depth, state in enumerate(states)
+    ]
+    ancestors = _ancestors(states)
+    fact_layer = {fact.fact_id: state.id for state in states for fact in state.facts}
+
+    # fact_id -> the most specific fact overriding it. A fact overrides
+    # only a target in a layer its own layer inherits from, so a sibling
+    # parent (or a less specific layer) can't drop it
     overriders: dict[str, str] = {}
-    for depth, state in enumerate(_lineage_states(view, thing_id)):
-        layer = Layer(
-            thing_id=state.id, kind=state.kind, name=_name(state), depth=depth
-        )
-        for fact in state.facts:
-            if depth == 0:
-                own.append((fact, layer))
-            else:
-                inherited_facts.append(
-                    (
-                        InheritedFact(
-                            fact=fact,
-                            source_id=state.id,
-                            source_kind=state.kind,
-                            source_name=layer.name,
-                            overridden_by=overriders.get(fact.fact_id),
-                        ),
-                        layer,
-                    )
-                )
-        # only a more specific layer overrides, so this layer's links take
-        # effect from the next one on
+    for state in states:
         for fact in state.facts:
             for target in fact.overrides:
-                overriders.setdefault(target, fact.fact_id)
+                if fact_layer.get(target) in ancestors[state.id]:
+                    overriders.setdefault(target, fact.fact_id)
+
+    own: list[tuple[FactState, Layer]] = []
+    inherited_facts: list[tuple[InheritedFact, Layer]] = []
+    for state, layer in zip(states, layers):
+        for fact in state.facts:
+            if layer.depth == 0:
+                own.append((fact, layer))
+                continue
+            item = InheritedFact(
+                fact=fact,
+                source_id=state.id,
+                source_kind=state.kind,
+                source_name=layer.name,
+                overridden_by=overriders.get(fact.fact_id),
+            )
+            inherited_facts.append((item, layer))
     return own, inherited_facts
 
 
 def inherited(view: WorldView, thing_id: str) -> list[InheritedFact]:
     """Every fact of the thing's less specific layers, in layer order, with
-    `overridden_by` set where a more specific layer's fact overrides it."""
+    `overridden_by` set where a fact of a layer inheriting from that one
+    overrides it."""
 
     _, inherited_facts = _inherited_with_layers(view, thing_id)
     return [item for item, _ in inherited_facts]
