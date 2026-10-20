@@ -66,7 +66,7 @@ def test_scene_create_get_list(world):
     assert [s.id for s in listed] == [id1, id2]
 
     with pytest.raises(ValueError):
-        scenes.update(id1, start=WorldDate.of(310))
+        scenes.update(id1, created_at="2000-01-01")
 
     with pytest.raises(KeyError):
         scenes.update("no-such-scene", name="x")
@@ -190,3 +190,28 @@ def test_save_writes_all_or_nothing_and_keeps_other_local_kinds(world):
             local_things=[{"local_id": "x" * 32, "kind": "place", "data": {}}],
             local_kinds={"character"},
         )
+
+
+def test_update_start_moves_the_scene_and_its_messages(world):
+    """Repositioning a scene in time (slice): only the start changes; every
+    message's date is the start plus its elapsed, so they move with it."""
+
+    scenes = world.scenes()
+    scene_id = scenes.create(
+        "Test Scene", WorldDate.of(313, 6, 1), state={"place_thing_id": "p1"}
+    )
+    assert scenes.get(scene_id).state == {"place_thing_id": "p1"}
+    scenes.replace_messages(
+        scene_id,
+        [MessageRecord(id="m1", seq=0, kind="time", data={}, elapsed="P2D")],
+    )
+
+    scenes.update(scene_id, start=WorldDate.of(320))
+
+    record = scenes.get(scene_id)
+    assert record.start == WorldDate.of(320)
+    assert record.state == {"place_thing_id": "p1"}
+    assert scenes.latest_end() == WorldDate.of(320).plus("P2D")
+
+    with pytest.raises(ValueError):
+        scenes.update(scene_id, start="320")

@@ -4,75 +4,12 @@ when it isn't importable, and only run for real under
 `guix shell -m manifest.scm zlib -- bash -c 'LD_LIBRARY_PATH=$GUIX_ENVIRONMENT/lib uv run --no-sync pytest tests/world'`.
 """
 
-import hashlib
-
-import pytest
-
 from talemate.world.dates import WorldDate
 from talemate.world.index import OPEN_END, OPEN_START, WorldIndex, index_documents
 from talemate.world.refs import ref
 from talemate.world.store import Source
 
-try:
-    import chromadb
-
-    _CHROMADB_IMPORT_ERROR: Exception | None = None
-except Exception as exc:  # pragma: no cover - import failure path
-    chromadb = None
-    _CHROMADB_IMPORT_ERROR = exc
-
-requires_chromadb = pytest.mark.skipif(
-    chromadb is None,
-    reason=f"chromadb is not importable in this environment: {_CHROMADB_IMPORT_ERROR}",
-)
-
-
-class _TrigramEmbeddingFunction:
-    """A deterministic, offline stand-in for a real embedding function:
-    hashes each character trigram of the input into one of 64 dimensions.
-    Implements the parts of chromadb 1.5.9's `EmbeddingFunction` protocol it
-    checks, so no deprecation warnings show."""
-
-    DIMS = 64
-
-    def __call__(self, input: list[str]) -> list[list[float]]:
-        return [self._embed(text) for text in input]
-
-    def _embed(self, text: str) -> list[float]:
-        vector = [0.0] * self.DIMS
-        padded = f"  {text.lower()}  "
-        for i in range(len(padded) - 2):
-            digest = hashlib.sha256(padded[i : i + 3].encode()).digest()
-            index = int.from_bytes(digest[:4], "big") % self.DIMS
-            sign = 1.0 if digest[4] % 2 == 0 else -1.0
-            vector[index] += sign
-        norm = sum(v * v for v in vector) ** 0.5
-        if norm == 0:
-            return vector
-        return [v / norm for v in vector]
-
-    def embed_query(self, input: list[str]) -> list[list[float]]:
-        return self(input)
-
-    @staticmethod
-    def name() -> str:
-        return "test-trigram"
-
-    def get_config(self) -> dict:
-        return {}
-
-    @staticmethod
-    def build_from_config(config: dict) -> "_TrigramEmbeddingFunction":
-        return _TrigramEmbeddingFunction()
-
-    def is_legacy(self) -> bool:
-        return False
-
-    def default_space(self) -> str:
-        return "cosine"
-
-    def supported_spaces(self) -> list[str]:
-        return ["cosine", "l2", "ip"]
+from world.embedding import TrigramEmbeddingFunction, chromadb, requires_chromadb
 
 
 def test_index_documents_one_per_fact_plus_header(world, maren):
@@ -127,7 +64,7 @@ def test_query_filters_by_date(world, maren):
     index = WorldIndex(
         world,
         client=chromadb.EphemeralClient(),
-        embedding_function=_TrigramEmbeddingFunction(),
+        embedding_function=TrigramEmbeddingFunction(),
     )
     index.rebuild()
 
@@ -143,7 +80,7 @@ def test_rebuild_is_idempotent(world, maren):
     index = WorldIndex(
         world,
         client=chromadb.EphemeralClient(),
-        embedding_function=_TrigramEmbeddingFunction(),
+        embedding_function=TrigramEmbeddingFunction(),
     )
 
     first = index.rebuild()
@@ -166,7 +103,7 @@ def _index(world):
     return WorldIndex(
         world,
         client=chromadb.EphemeralClient(),
-        embedding_function=_TrigramEmbeddingFunction(),
+        embedding_function=TrigramEmbeddingFunction(),
     )
 
 

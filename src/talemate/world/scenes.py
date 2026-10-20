@@ -23,9 +23,10 @@ from .dates import Precision, WorldDate
 log = structlog.get_logger("talemate.world.scenes")
 
 # the scene fields `SceneStore.update` is allowed to change, and how each
-# maps to a column (`state` is encoded to `state_json`; everything else is
-# written as-is under its own name)
-_UPDATABLE_FIELDS = {"name", "premise", "goal", "player_thing_id", "state"}
+# maps to a column (`state` is encoded to `state_json`, `start` is split
+# into `start_instant`/`start_precision`; everything else is written as-is
+# under its own name)
+_UPDATABLE_FIELDS = {"name", "start", "premise", "goal", "player_thing_id", "state"}
 
 
 def _now() -> str:
@@ -97,8 +98,10 @@ class SceneStore:
         goal: str = "",
         player_thing_id: str | None = None,
         continued_from: str | None = None,
+        state: dict[str, object] | None = None,
     ) -> str:
-        """Create a scene starting at `start`. Returns the new scene id."""
+        """Create a scene starting at `start`, with `state` (default
+        empty). Returns the new scene id."""
 
         scene_id = uuid.uuid4().hex
         now = _now()
@@ -117,7 +120,7 @@ class SceneStore:
                     premise,
                     goal,
                     player_thing_id,
-                    "{}",
+                    json.dumps(state or {}),
                     now,
                     now,
                     continued_from,
@@ -153,6 +156,13 @@ class SceneStore:
             if field == "state":
                 assignments.append("state_json = ?")
                 params.append(json.dumps(value))
+            elif field == "start":
+                if not isinstance(value, WorldDate):
+                    raise ValueError(f"start must be a WorldDate, not {value!r}")
+                assignments.append("start_instant = ?")
+                params.append(value.instant)
+                assignments.append("start_precision = ?")
+                params.append(value.precision.value)
             else:
                 assignments.append(f"{field} = ?")
                 params.append(value)
@@ -218,8 +228,10 @@ class SceneStore:
         )
 
     def update(self, scene_id: str, **fields: object) -> None:
-        """Update one or more of `name`, `premise`, `goal`,
-        `player_thing_id` or `state`, and bump `updated_at`. Raises
+        """Update one or more of `name`, `start`, `premise`, `goal`,
+        `player_thing_id` or `state`, and bump `updated_at`. Moving `start`
+        moves every message with it: a message's date is the start plus
+        its `elapsed`. Raises
         `ValueError` for any other field, `KeyError` if `scene_id` doesn't
         exist."""
 

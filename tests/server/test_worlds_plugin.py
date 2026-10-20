@@ -11,11 +11,22 @@ from types import SimpleNamespace
 import pytest
 
 import talemate.instance as instance
+from talemate.server.worlds import WorldsPlugin
+from talemate.tale_mate import Actor
 from talemate.world.dates import WorldDate
 from talemate.world.store import Source, World
-from talemate.server.worlds import WorldsPlugin
+from talemate.worldplay.characters import character_from_world
+from talemate.worldplay.context import WorldSceneContext
+from talemate.worldplay.persistence import WorldSceneRef
 
-from conftest import MockClient, MockClientContext, client_responses
+from conftest import (
+    MockClient,
+    MockClientContext,
+    MockScene,
+    bootstrap_scene,
+    client_responses,
+)
+from world.embedding import TrigramEmbeddingFunction, requires_chromadb
 
 
 class _Handler:
@@ -430,3 +441,184 @@ async def test_thing_actions_need_an_open_world(plugin):
     await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
     assert _replies(plugin, "list_things") == []
     assert "no world" in _last(plugin, "operation_done")["error"]["message"].lower()
+
+
+# --- scenes -------------------------------------------------------------------
+
+
+SETUP_REPLY = json.dumps(
+    {
+        "player": "Maren",
+        "characters": [{"name": "Daveth", "world": False, "facts": ["A smuggler."]}],
+        "place": {"name": "The Harbour", "world": True},
+        "goal": "Meet the smuggler.",
+        "intro": "Fog rolls over the harbour.",
+    }
+)
+
+
+@pytest.fixture
+def memory(monkeypatch):
+    """A memory agent whose embedding function is the offline fake."""
+
+    monkeypatch.setitem(
+        instance.AGENTS,
+        "memory",
+        SimpleNamespace(embedding_function=TrigramEmbeddingFunction()),
+    )
+
+
+async def test_match_names_and_list_scenes(plugin):
+    world, maren, harbour = await _open_world_with_maren(plugin)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "match_names",
+            "text": "maren's walk to the harbour",
+            "at": None,
+        }
+    )
+    matches = _last(plugin, "match_names")["data"]["matches"]
+    assert [(m["text"], m["candidates"][0]["id"]) for m in matches] == [
+        ("maren", maren),
+        ("the harbour", harbour),
+    ]
+
+    first = world.scenes().create("First", WorldDate.of(313))
+    await plugin.handle({"type": "worlds", "action": "list_scenes"})
+    scenes = _last(plugin, "list_scenes")["data"]["scenes"]
+    assert [s["id"] for s in scenes] == [first]
+    assert scenes[0]["start"]["label"] == "313"
+    assert scenes[0]["end"]["label"] == "313"
+
+
+@requires_chromadb
+async def test_plan_then_start_scene(plugin, client, memory):
+    world, maren, harbour = await _open_world_with_maren(plugin)
+
+    async with MockClientContext():
+        client_responses.get().append(SETUP_REPLY)
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "plan_scene",
+                "prompt": "Maren meets a smuggler at the harbour",
+                "picks": {"Maren": maren},
+                "player": None,
+                "start": WorldDate.of(313).model_dump(),
+            }
+        )
+        await _drain(plugin)
+
+    planned = _last(plugin, "plan_scene")["data"]
+    setup = planned["setup"]
+    assert setup["player"]["thing_id"] == maren
+    assert setup["place"]["thing_id"] == harbour
+    assert setup["start"]["label"] == "313"
+    assert planned["names"][maren] == "Maren"
+    json.dumps(plugin.websocket_handler.messages)
+
+    async with MockClientContext():
+        client_responses.get().append("Maren is tall and grey-eyed.")
+        await plugin.handle({"type": "worlds", "action": "start_scene", "setup": setup})
+        await _drain(plugin)
+
+    started = _last(plugin, "start_scene")["data"]
+    scene_id = started["scene_id"]
+    assert started["target"] == f"world://{world.path}|{scene_id}"
+    record = world.scenes().get(scene_id)
+    assert record.start == WorldDate.of(313)
+    assert record.player_thing_id == maren
+    assert record.state["intro"] == "Fog rolls over the harbour."
+    assert started["scene"]["goal"] == "Meet the smuggler."
+
+
+async def test_continue_scene(plugin, client):
+    world, maren, harbour = await _open_world_with_maren(plugin)
+    scenes = world.scenes()
+    old = scenes.create(
+        "First",
+        WorldDate.of(313),
+        player_thing_id=maren,
+        state={
+            "characters": [{"thing_id": maren, "active": True}],
+            "place_thing_id": harbour,
+        },
+    )
+
+    scene = MockScene()
+    bootstrap_scene(scene)
+    async with MockClientContext():
+        client_responses.get().append(SETUP_REPLY)
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "continue_scene",
+                "scene_id": old,
+                "goal_prompt": "Find the smuggler again",
+            }
+        )
+        await _drain(plugin)
+
+    setup = _last(plugin, "continue_scene")["data"]["setup"]
+    assert setup["continued_from"] == old
+    assert setup["player"]["thing_id"] == maren
+    assert setup["place"]["thing_id"] == harbour
+    assert setup["start"]["label"] == "313"
+
+
+async def test_reposition_scene_refreshes_loaded_scene(plugin):
+    """Ruling R4: a scene's start can move after play; nothing has reached
+    the world, so only the start changes, and a loaded scene's characters
+    follow the new date."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Vael"})
+    world = plugin.world
+    with world.revision(Source.manual(note="seed")) as rev:
+        mira = rev.create_thing(
+            "character",
+            {"name": "Mira", "born": WorldDate.of(290)},
+            valid_from=WorldDate.of(290),
+        )
+    scenes = world.scenes()
+    scene_id = scenes.create(
+        "River", WorldDate.of(313), state={"characters": [{"thing_id": mira}]}
+    )
+
+    # the scene as `load_world_scene` leaves it: its own world connection
+    loaded_world = World.open(world.path)
+    scene = MockScene()
+    bootstrap_scene(scene)
+    character = character_from_world(
+        loaded_world, mira, WorldDate.of(313), is_player=False
+    )
+    await scene.add_actor(
+        Actor(character=character, agent=instance.get_agent("conversation")),
+        commit_to_memory=False,
+    )
+    scene.active_characters.append(character.name)
+    scene.world_ref = WorldSceneRef(world_path=str(world.path), scene_id=scene_id)
+    scene.world_context = WorldSceneContext(
+        world=loaded_world, record=scenes.get(scene_id)
+    )
+    plugin.websocket_handler.scene = scene
+    assert scene.get_character("Mira").base_attributes["age"] == 23
+
+    try:
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "reposition_scene",
+                "scene_id": scene_id,
+                "start": WorldDate.of(320).model_dump(),
+            }
+        )
+
+        moved = _last(plugin, "reposition_scene")["data"]
+        assert moved["start"]["label"] == "320"
+        assert scenes.get(scene_id).start == WorldDate.of(320)
+        assert scene.world_context.record.start == WorldDate.of(320)
+        assert scene.get_character("Mira").base_attributes["age"] == 30
+    finally:
+        loaded_world.close()

@@ -25,6 +25,17 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `prose_failed`). `regenerate_prose {id, at}` regenerates every section.
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
+- Scenes: `match_names {text, at}` finds world thing names in a storyline
+  prompt. `plan_scene {prompt, picks, player, start}` and
+  `continue_scene {scene_id, goal_prompt}` run in the background and answer
+  with `{setup, names}` (the world things' names, for display), or
+  `plan_failed`/`continue_failed`; they write nothing. `start_scene {setup}`
+  (background too: it brings the characters' prose up to date) writes the
+  scene and answers `{scene_id, target, scene}` (or `start_failed`), where
+  `target` is the `world://` path the frontend then sends to `load_scene`.
+  `list_scenes` lists the world's scenes, newest first.
+  `reposition_scene {scene_id, start}` moves a scene's start date; if that
+  scene is the one loaded, its characters are rebuilt for the new date.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -43,6 +54,7 @@ from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
+from talemate.world.scenes import SceneRecord
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.create import (
@@ -50,6 +62,14 @@ from talemate.worldplay.create import (
     accept_preview,
     current_date,
     preview_thing,
+)
+from talemate.worldplay.persistence import world_target
+from talemate.worldplay.setup import (
+    SceneSetup,
+    continue_setup,
+    match_names,
+    plan_scene,
+    start_scene,
 )
 
 __all__ = ["WorldsPlugin"]
@@ -168,6 +188,33 @@ class SetFieldPayload(_ThingEdit):
 class RegenerateProsePayload(pydantic.BaseModel):
     id: str
     at: dict | None = None
+
+
+class MatchNamesPayload(pydantic.BaseModel):
+    text: str
+    at: dict | None = None
+
+
+class PlanScenePayload(pydantic.BaseModel):
+    prompt: str
+    # a `NameMatch.text` -> the thing id the owner picked for it
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    player: str | None = None
+    start: dict | None = None
+
+
+class StartScenePayload(pydantic.BaseModel):
+    setup: SceneSetup
+
+
+class ContinueScenePayload(pydantic.BaseModel):
+    scene_id: str
+    goal_prompt: str
+
+
+class RepositionScenePayload(pydantic.BaseModel):
+    scene_id: str
+    start: dict
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -330,6 +377,42 @@ class WorldsPlugin(Plugin):
                     }
                 )
         return scenes
+
+    def _scene_out(self, world: World, record: SceneRecord) -> dict:
+        calendar = world.calendar
+        messages = world.scenes().messages(record.id)
+        end = record.start.plus(messages[-1].elapsed) if messages else record.start
+        return {
+            "id": record.id,
+            "name": record.name,
+            "start": _date_out(calendar, record.start),
+            "end": _date_out(calendar, end),
+            "premise": record.premise,
+            "goal": record.goal,
+            "player_thing_id": record.player_thing_id,
+            "continued_from": record.continued_from,
+            "updated_at": record.updated_at,
+        }
+
+    def _setup_out(self, world: World, setup: SceneSetup) -> dict:
+        """A setup for the wire, with the names of the world things in it
+        (as of its start) for display."""
+
+        view = world.view(setup.start)
+        refs = [setup.player, *setup.characters]
+        if setup.place is not None:
+            refs.append(setup.place)
+        thing_ids = [ref.thing_id for ref in refs if ref.thing_id is not None]
+        return {
+            "setup": {
+                **setup.model_dump(mode="json"),
+                "start": _date_out(world.calendar, setup.start),
+            },
+            "names": {
+                thing_id: view.name_of(thing_id) or ""
+                for thing_id in [*thing_ids, *setup.pulled_in]
+            },
+        }
 
     # --- background tasks -------------------------------------------------
 
@@ -542,3 +625,105 @@ class WorldsPlugin(Plugin):
         payload = RegenerateProsePayload(**data)
         self._require_world()
         self._schedule_prose(payload.id, _date_in(payload.at), regenerate=True)
+
+    # --- scenes -----------------------------------------------------------
+
+    async def handle_match_names(self, data: dict):
+        payload = MatchNamesPayload(**data)
+        world = self._require_world()
+        matches = match_names(world, payload.text, _date_in(payload.at))
+        self._reply(
+            "match_names",
+            {"text": payload.text, "matches": [m.model_dump() for m in matches]},
+        )
+
+    async def handle_plan_scene(self, data: dict):
+        payload = PlanScenePayload(**data)
+        world = self._require_world()
+        client = self._client()
+        self._spawn(
+            plan_scene(
+                world,
+                payload.prompt,
+                payload.picks,
+                payload.player,
+                _date_in(payload.start),
+                client,
+            ),
+            self.create_task_done_callback(
+                "plan_scene",
+                "plan_failed",
+                "Error planning a world scene",
+                success_data=lambda setup: self._setup_out(world, setup),
+            ),
+        )
+
+    async def handle_start_scene(self, data: dict):
+        payload = StartScenePayload(**data)
+        world = self._require_world()
+        client = self._client()
+
+        def started(scene_id: str) -> dict:
+            record = world.scenes().get(scene_id)
+            assert record is not None
+            return {
+                "scene_id": scene_id,
+                "target": world_target(str(world.path), scene_id),
+                "scene": self._scene_out(world, record),
+            }
+
+        self._spawn(
+            start_scene(world, payload.setup, client),
+            self.create_task_done_callback(
+                "start_scene",
+                "start_failed",
+                "Error starting a world scene",
+                success_data=started,
+            ),
+        )
+
+    async def handle_list_scenes(self, data: dict):
+        world = self._require_world()
+        scenes = [self._scene_out(world, record) for record in world.scenes().list()]
+        self._reply("list_scenes", {"scenes": scenes})
+
+    async def handle_continue_scene(self, data: dict):
+        payload = ContinueScenePayload(**data)
+        world = self._require_world()
+        client = self._client()
+        self._spawn(
+            continue_setup(world, payload.scene_id, payload.goal_prompt, client),
+            self.create_task_done_callback(
+                "continue_scene",
+                "continue_failed",
+                "Error continuing a world scene",
+                success_data=lambda setup: self._setup_out(world, setup),
+            ),
+        )
+
+    async def handle_reposition_scene(self, data: dict):
+        """Move a scene's start date. In the slice nothing from a scene has
+        reached the world yet, so only the start changes; the messages move
+        with it. If the scene is the one loaded, its context follows."""
+
+        payload = RepositionScenePayload(**data)
+        world = self._require_world()
+        start = WorldDate.model_validate(payload.start)
+        store = world.scenes()
+        store.update(payload.scene_id, start=start)
+
+        scene = getattr(self.websocket_handler, "scene", None)
+        ref = getattr(scene, "world_ref", None)
+        context = getattr(scene, "world_context", None)
+        if (
+            ref is not None
+            and context is not None
+            and ref.scene_id == payload.scene_id
+            and Path(ref.world_path).resolve() == world.path.resolve()
+        ):
+            context.record = context.world.scenes().get(payload.scene_id)
+            await context.refresh_characters(scene)
+
+        record = store.get(payload.scene_id)
+        assert record is not None
+        self._reply("reposition_scene", self._scene_out(world, record))

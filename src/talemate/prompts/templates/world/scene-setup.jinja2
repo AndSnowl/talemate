@@ -1,0 +1,46 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+
+Seeded from scripts/dev/probe_scene_setup.py's SETUP_SYSTEM (8 of 8 on the
+owner's model). The reply keeps the probe's JSON shape; "facts" on an
+invented character or place, and "extras", are additions.
+-#}
+<|SECTION:TASK|>
+You plan the opening of a roleplay scene from a short storyline prompt and the world things already established. Reuse a named world thing whenever the prompt fits it, and invent only what the prompt needs beyond them -- flag each one honestly.
+
+Storyline prompt:
+{{ prompt }}
+
+The scene starts {{ start_label }}.
+{% if player_name %}
+The player plays {{ player_name }}. Use exactly that name for "player".
+{% endif %}
+{%- if summary %}
+This scene continues an earlier one. What happened there:
+{{ summary }}
+{% endif %}
+{%- if carried %}
+Still present from the earlier scene: {{ carried | join(", ") }}.
+{% endif %}
+{%- if world_things %}
+World:
+{% for label, things in world_things -%}
+{{ label }}:
+{% for thing in things -%}
+- {{ thing.name }}{% if thing.facts %}: {{ thing.facts | join(" ") }}{% endif %}
+{% endfor %}{% endfor %}{% endif %}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only a JSON object shaped {"player", "characters": [{"name", "world": true|false}], "place": {"name", "world": true|false}, "extras": [{"name", "facts"}], "goal", "intro"}, where "world" is true only for a character or place that matches one of the world things given, and false for one you invented.
+
+- "player": the name of the character the player plays.
+- "characters": the other characters in the scene, one person each. Give an invented character "facts": two or three short sentences about them.
+- "place": where the scene happens. Give an invented place "facts" too.
+- "extras": groups, crowds or creatures in the scene that aren't a single character (a patrol, a crew, a mob), with short "facts". Leave it empty if there are none.
+- "goal": what the scene is about, in one sentence.
+- "intro": the opening narration, one or two paragraphs, in the present tense.
+
+No commentary, no markdown fences.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}
