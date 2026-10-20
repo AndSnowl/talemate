@@ -265,7 +265,7 @@ def test_numbers_mix_of_two_races_of_one_species(world, heritage_world):
     assert result.adult_age == 18
 
 
-def test_override_from_second_parent_race_of_shared_species(world, heritage_world):
+def test_shared_species_override_ignores_parent_order(world, heritage_world):
     h = heritage_world
     with world.revision(Source.manual()) as rev:
         hands = rev.add_fact(h.human, "physical", "Five-fingered hands.")
@@ -278,6 +278,12 @@ def test_override_from_second_parent_race_of_shared_species(world, heritage_worl
         mixed = rev.create_thing(
             "mix", fields={"name": "Mixed", "parents": [h.lowlander, highlander]}
         )
+        reversed_mix = rev.create_thing(
+            "mix", fields={"name": "Mixed-r", "parents": [highlander, h.lowlander]}
+        )
+        ivo = rev.create_thing(
+            "character", fields={"name": "Ivo", "heritage": highlander}
+        )
 
     view = world.view()
     # Human is listed once, under Lowlander, so it comes before Highlander
@@ -287,11 +293,14 @@ def test_override_from_second_parent_race_of_shared_species(world, heritage_worl
         h.human,
         highlander,
     ]
-    by_id = {item.fact.fact_id: item for item in inherited(view, mixed)}
+    # either order, the mix reaches Human through Lowlander as well, so
+    # Highlander's override doesn't settle the blend
+    for mix in (mixed, reversed_mix):
+        by_id = {item.fact.fact_id: item for item in inherited(view, mix)}
+        assert by_id[hands].overridden_by is None
+    # a Highlander character reaches Human only through Highlander
+    by_id = {item.fact.fact_id: item for item in inherited(view, ivo)}
     assert by_id[hands].overridden_by == six
-    ids = [fact.fact_id for fact, _ in effective_facts(view, mixed)]
-    assert six in ids
-    assert hands not in ids
 
 
 def test_sibling_parent_does_not_override(world, heritage_world):
@@ -304,3 +313,57 @@ def test_sibling_parent_does_not_override(world, heritage_world):
     # Orc's fact through the Half-orc mix
     by_id = {item.fact.fact_id: item for item in inherited(world.view(), h.half_orc)}
     assert by_id[tusks].overridden_by is None
+
+
+def test_override_not_applied_when_target_reachable_another_way(world, heritage_world):
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        olive = rev.add_fact(h.lowlander, "physical", "Olive skin.")
+        grey = rev.add_fact(
+            h.half_orc, "physical", "Grey-green skin.", overrides=[olive]
+        )
+        quarter_orc = rev.create_thing(
+            "mix", fields={"name": "Quarter-orc", "parents": [h.lowlander, h.half_orc]}
+        )
+        tam = rev.create_thing(
+            "character", fields={"name": "Tam", "heritage": quarter_orc}
+        )
+
+    view = world.view()
+
+    # the Quarter-orc reaches Lowlander directly too, so Half-orc's override
+    # doesn't settle the blend; the quarter's own facts would
+    for thing_id in (quarter_orc, tam):
+        by_id = {item.fact.fact_id: item for item in inherited(view, thing_id)}
+        assert by_id[olive].overridden_by is None
+        ids = [fact.fact_id for fact, _ in effective_facts(view, thing_id)]
+        assert olive in ids
+        assert grey in ids
+
+    # a plain Half-orc character reaches Lowlander only through Half-orc
+    by_id = {item.fact.fact_id: item for item in inherited(view, h.brenna)}
+    assert by_id[olive].overridden_by == grey
+    assert olive not in [fact.fact_id for fact, _ in effective_facts(view, h.brenna)]
+
+
+def test_override_applied_when_every_path_passes_through_it(world, heritage_world):
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        hands = rev.add_fact(h.human, "physical", "Five-fingered hands.")
+        highlander = rev.create_thing(
+            "race", fields={"name": "Highlander", "species": h.human}
+        )
+        twin = rev.create_thing(
+            "mix", fields={"name": "Twin-blood", "parents": [h.lowlander, highlander]}
+        )
+        six = rev.add_fact(twin, "physical", "Six-fingered hands.", overrides=[hands])
+        grand = rev.create_thing(
+            "mix", fields={"name": "Grand", "parents": [twin, h.orc]}
+        )
+
+    view = world.view()
+    # both paths to Human (via Lowlander and via Highlander) go through
+    # Twin-blood
+    by_id = {item.fact.fact_id: item for item in inherited(view, grand)}
+    assert by_id[hands].overridden_by == six
+    assert hands not in [fact.fact_id for fact, _ in effective_facts(view, grand)]
