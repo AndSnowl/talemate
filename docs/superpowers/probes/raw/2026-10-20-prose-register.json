@@ -1,0 +1,86 @@
+[
+  {
+    "label": "A current / description",
+    "run": 0,
+    "words": 216,
+    "text": "Vasha stands on the weathered wooden railing of the dock at Frosthollow, his talons curling around the salt-bleached planks. The evening wind catches his breast feathers, ruffling the dense white down that insulates his broad chest, and he shifts his weight, the boards groaning faintly beneath him. His head turns in a slow, deliberate arc, those piercing blue eyes sweeping the harbor \u2014 scanning the last fishing boats pulling into port, the gulls wheeling overhead, the lantern light beginning to glow in the windows of the cliff-face nest-houses. The faintest edge of gray darkens the barbs of his primary feathers where they fold against his back, barely visible unless the light catches them just so, and the black crescents bordering his facial disc frame his disc like a mask, giving his expression a quiet intensity. His beak, dark as polished obsidian, rests closed, though his nostrils flare slightly with each breath, tasting the brine and woodsmoke of the harbor air. At three feet and five inches, he is not the largest owl-folk in Frosthollow, but his wingspan stretches nearly eight feet when fully outstretched, a fact the dock workers have learned to respect whenever he launches from this very railing. Right now he is still, watching, waiting \u2014 a pale shape against the darkening northern sky."
+  },
+  {
+    "label": "A current / description",
+    "run": 1,
+    "words": 225,
+    "text": "Vasha stands on the weathered wooden railing of the post office's upper balcony, his talons gripping the edge with a quiet, practiced ease. The late afternoon wind ruffles the long white feathers of his breast and stomach, and he turns his head slowly, those piercing blue eyes scanning the rooftops and chimneys of Frosthollow below. His ears \u2014 barely visible beneath the pale down of his facial disc \u2014 twitch at the sound of gulls wheeling overhead.\n\nHe is enormous by any standard, his broad body and thick neck giving him a solid, grounded presence even at rest. Nearly white from head to tail, he catches the gray-pink light of the setting sun, the faintest bars of gray and black visible only when his wings shift and the primary feathers spread wide. His wingspan, folded now, still drapes past either side of the railing.\n\nIn his left talon, he holds a leather pouch sealed with wax \u2014 a parcel he picked up from the sorting room below. It is cinched tight and light enough that he could carry it cross-country without effort. His black beak rests against it loosely, waiting.\n\nHe has been a postal carrier for eleven years now. His gaze drifts to the harbor, where the fishing boats are pulling in, and something in his stillness suggests he is thinking of his mother."
+  },
+  {
+    "label": "A current / personality",
+    "run": 0,
+    "words": 218,
+    "text": "Vasha stands at the edge of the cliff, his boots planted in the short grass, his hands tucked into the pockets of his coat. The wind presses the fabric against his lean frame, and he tilts his chin up, letting the cold air fill his lungs. His dark eyes track a hawk wheeling far below the cloudline \u2014 not with urgency, but with the patient attention of someone who has learned that the world reveals itself only to those who wait.\n\nHe does not speak. He rarely does, not because he has nothing to say, but because the silence around him feels like a living thing, textured and full. He has noticed the way the light bends through the mist rolling off the northern coast, the way it turns the sea into something silver and unreachable. He has noticed everything \u2014 the gulls banking in formation, the erosion along the stone face below, the single wildflower pushing through a crack in the rock.\n\nHis jaw tightens, almost imperceptibly. Somewhere beneath that watchful stillness, beneath the careful cataloguing of detail, there is a pull he has never named aloud. It lives in his chest like weather \u2014 restless, directional, pointed always toward the horizon.\n\nHe exhales slowly, and the breath becomes visible in the cold air, dissolving into nothing."
+  },
+  {
+    "label": "A current / personality",
+    "run": 1,
+    "words": 180,
+    "text": "Vasha stands at the edge of the dock, his boots planted where the weathered planks meet the sky. The wind pulls at his dark hair, and he lets it. His grey eyes follow the gulls not because he means to, but because his gaze always drifts upward eventually\u2014tracking the way their wings catch the light, the angle at which they bank toward the open sea.\n\nHe folds his arms across his chest. A habit. A wall built from years of learning that people hear words the moment they leave your mouth, but never quite hear the silence before them.\n\nToday, the northern horizon is a pale bruise of cloud and distance, and something in it pulls at him the way it always does\u2014a quiet, aching gravity that has nothing to do with falling. He breathes in the salt air and holds it, as though he could keep the ocean inside himself.\n\nHis hands are steady. His expression is still. But beneath that stillness, there is a restless thing that watches the horizon the way a bird watches an open window."
+  },
+  {
+    "label": "B strict / description",
+    "run": 0,
+    "words": 91,
+    "text": "Vasha is a large owl-folk of Frosthollow, standing three feet and five inches tall with a wingspan of approximately eight feet. His plumage is nearly all white, with faint gray and black markings on his primary flight feathers and the edges of his facial disc. His striking blue eyes provide excellent binocular vision. Born in the year 978, he was raised by his mother Yelena, a fisherwoman, in a nest-house built into a cliff overlooking the harbor. His strong black beak allows him to grip parcels and letters securely during flight."
+  },
+  {
+    "label": "B strict / description",
+    "run": 1,
+    "words": 90,
+    "text": "Vasha is a large owl-folk native to Frosthollow, standing three feet and five inches tall with a wingspan of approximately eight feet. His plumage is nearly all white, with faint gray and black markings on his primary flight feathers and the edges of his facial disc. His striking blue eyes provide excellent binocular vision. Born in 978, he was raised by his mother Yelena, a fisherwoman, in a nest-house built into a cliff overlooking the harbor. His strong black beak enables him to securely grip parcels and letters during flight."
+  },
+  {
+    "label": "B strict / personality (no background)",
+    "run": 0,
+    "words": 87,
+    "text": "Vasha is quiet and observant, often listening more than speaking. He notices details others miss, a habit born of a nature that prefers watching to participating. Beneath his reserved exterior lies a deep attachment to the open sky and a longing to fly beyond the northern coast\u2014an aspiration he rarely voices. He carries himself with a measured calm, though those who know him well may catch the way his gaze lingers on passing birds or how his expression softens when the wind picks up from the north."
+  },
+  {
+    "label": "B strict / personality (no background)",
+    "run": 1,
+    "words": 79,
+    "text": "Vasha is quiet and observant, preferring to listen rather than speak. He notices details that escape others, a habit born of long hours spent watching the world from a careful distance. Beneath his reserved exterior lies a deep attachment to the open sky and a quiet longing to fly beyond the northern coast one day. He carries this dream privately, without grand declarations, though it informs the way he moves through the world\u2014always glancing upward, always measuring the wind."
+  },
+  {
+    "label": "C strict / personality + background",
+    "run": 0,
+    "words": 55,
+    "text": "Vasha is quiet and observant, preferring to listen more than speak. He notices details others overlook, a habit honed by years of watching the harbor from his cliffside nest-house in Frosthollow. Beneath his reserved exterior lies a deep attachment to the open sky and a quiet longing to fly beyond the northern coast one day."
+  },
+  {
+    "label": "C strict / personality + background",
+    "run": 1,
+    "words": 46,
+    "text": "Vasha is quiet, observant, and reserved, preferring to listen rather than speak. He possesses a keen eye for detail that others often overlook. Beneath his composed exterior lies a deep attachment to the open sky and a longing to one day fly beyond the northern coast."
+  },
+  {
+    "label": "C strict / description, temp 0.8",
+    "run": 0,
+    "words": 98,
+    "text": "Vasha is a large owl-folk born in Frosthollow in the year 978. Standing three feet and five inches tall with a wingspan of approximately eight feet, he resembles a snowy owl, nearly all white with faint gray and black marking his primary flight feathers and the edges of his facial disc. His striking blue eyes provide excellent binocular vision. He possesses a strong black beak capable of gripping parcels and letters during flight. Raised by his mother Yelena, a fisherwoman, in a nest-house built into a cliff overlooking the harbor, Vasha grew up among Frosthollow's longstanding owl-folk community."
+  },
+  {
+    "label": "C strict / description, temp 0.8",
+    "run": 1,
+    "words": 85,
+    "text": "Vasha is a large owl-folk born in Frosthollow in the year 978, raised by his mother Yelena in a nest-house carved into the harbor cliff face. Standing three feet and five inches tall with an eight-foot wingspan, he resembles a snowy owl in appearance\u2014nearly all white plumage with faint gray and black markings on his primary flight feathers and facial disc edges. His striking blue eyes provide excellent binocular vision. He possesses a strong black beak capable of securely gripping parcels and letters during flight."
+  },
+  {
+    "label": "C strict / personality + background, temp 0.8",
+    "run": 0,
+    "words": 48,
+    "text": "Vasha is a quiet, observant owl-folk who listens more than he speaks. Beneath his reserved exterior lies a deep attachment to the open sky and a longing to one day fly beyond the northern coast. He notices details others miss, making him a keen observer of his surroundings."
+  },
+  {
+    "label": "C strict / personality + background, temp 0.8",
+    "run": 1,
+    "words": 106,
+    "text": "Vasha is quiet, observant, and reserved by nature, preferring to listen more than speak. He possesses a keen eye for detail, often noticing what others overlook. Beneath his composed exterior lies a deep attachment to the open sky and a quiet longing to one day fly beyond the northern coast, a dream he rarely voices. Raised by his mother Yelena in Frosthollow, he carries with him the steadiness of northern owl-folk who have long shared their lives with the humans of the harbor town. His large blue eyes and excellent vision serve both his work and his habit of watching the world with patient, unhurried attention."
+  }
+]
