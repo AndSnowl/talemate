@@ -3,7 +3,7 @@ import os
 import re
 import traceback
 import uuid
-from typing import Generator, Callable
+from typing import TYPE_CHECKING, Generator, Callable
 
 import isodate
 import structlog
@@ -59,6 +59,9 @@ from talemate.regenerate import regeneration_status
 from talemate.changelog import InMemoryChangelog
 from talemate.shared_context import SharedContext
 from talemate.scene_agent_settings import SceneAgentSettings
+
+if TYPE_CHECKING:
+    from talemate.worldplay.persistence import WorldSceneRef
 
 __all__ = [
     "Character",
@@ -170,6 +173,11 @@ class Scene(Emitter):
         self.memory_session_id = str(uuid.uuid4())[:10]
         self.restore_from = None
         self._changelog = None
+
+        # set for a scene played against a shared world: it saves to and
+        # loads from the world's database (`talemate.worldplay.persistence`)
+        # instead of a scene JSON file
+        self.world_ref: "WorldSceneRef | None" = None
 
         # has scene been saved before?
         self.saved = False
@@ -351,10 +359,13 @@ class Scene(Emitter):
 
     @property
     def save_dir(self):
-        saves_dir = os.path.join(
-            self.scenes_dir(),
-            self.project_name,
-        )
+        if self.world_ref is not None:
+            saves_dir = self.world_ref.scene_dir
+        else:
+            saves_dir = os.path.join(
+                self.scenes_dir(),
+                self.project_name,
+            )
 
         if not os.path.exists(saves_dir):
             os.makedirs(saves_dir)
@@ -363,6 +374,9 @@ class Scene(Emitter):
 
     @property
     def full_path(self):
+        if self.world_ref is not None:
+            return self.world_ref.target
+
         if not self.filename:
             return None
 
@@ -1868,7 +1882,22 @@ class Scene(Emitter):
     ):
         """
         Saves the scene data, conversation history, archived history, and characters to a json file.
+
+        A world-backed scene (`world_ref` set) saves into its world's
+        database instead, with no JSON file, changelog or shared context.
         """
+
+        if self.world_ref is not None:
+            from talemate.worldplay.persistence import save_world_scene
+
+            self.set_new_memory_session_id()
+            save_world_scene(self)
+            self.saved = True
+            if not auto:
+                emit("status", status="success", message="Saved scene")
+            self.emit_status()
+            await self.add_to_recent_scenes()
+            return
 
         if self.immutable_save and not save_as and not force:
             save_as = True

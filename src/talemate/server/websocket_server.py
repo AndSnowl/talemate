@@ -18,6 +18,7 @@ from talemate.files import list_scenes_directory, list_scenes_tree
 from talemate.load import load_scene, SceneInitialization
 from talemate.scene_assets import Asset, get_media_type_from_file_path, VIS_TYPE
 from talemate.scene_message import versions_payload_for
+from talemate.worldplay.persistence import WorldSceneRef
 from talemate.server import (
     agent_config,
     assistant,
@@ -154,6 +155,11 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
         file_name=None,
         scene_initialization: dict | None = None,
     ):
+        # a world scene can be named by its `WorldSceneRef` as well as by
+        # its `world://` target path
+        if isinstance(path_or_data, WorldSceneRef):
+            path_or_data = path_or_data.target
+
         try:
             if self.scene:
                 instance.get_agent("memory").close_db(self.scene)

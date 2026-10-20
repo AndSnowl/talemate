@@ -31,6 +31,16 @@ _DESCRIPTION_CATEGORIES = ("appearance", "background")
 
 _FAR_FUTURE = 10**15
 
+# the `Character` fields `character_from_world` derives from the world;
+# every other field is per-scene state (color, avatar, voice, details, ...)
+WORLD_DERIVED_FIELDS = (
+    "name",
+    "description",
+    "base_attributes",
+    "dialogue_instructions",
+    "example_dialogue",
+)
+
 
 def _stretch_index_containing(
     stretch_list: list[tuple[WorldDate | None, WorldDate | None]], at_instant: int

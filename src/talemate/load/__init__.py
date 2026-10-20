@@ -41,6 +41,8 @@ from talemate.shared_context import SharedContext
 from talemate.scene_agent_settings import AGENT_SETTINGS_DIRNAME, resolve_link_on_load
 from talemate.load.character_card import CharacterCardImportOptions
 from talemate.scene_assets import AssetTransfer
+from talemate.world.store import World
+from talemate.worldplay import persistence
 
 # Import character card functions
 from talemate.load.character_card import (
@@ -53,6 +55,7 @@ from talemate.load.character_card import (
 
 __all__ = [
     "load_scene",
+    "load_world_scene",
     "load_scene_from_zip",
     "load_character_from_image",
     "load_character_from_json",
@@ -229,6 +232,10 @@ async def load_scene(
 
                 return scene
 
+            if file_path.startswith(persistence.TARGET_PREFIX):
+                ref = persistence.parse_world_target(file_path)
+                return await load_world_scene(scene, ref.world_path, ref.scene_id)
+
             ext = os.path.splitext(file_path)[1].lower()
 
             # Character card import options from scene_initialization
@@ -284,6 +291,35 @@ async def load_scene(
             await scene.add_to_recent_scenes()
         if not exc:
             await scene.commit_to_memory()
+
+
+async def load_world_scene(scene: Scene, world_path: str, scene_id: str) -> Scene:
+    """
+    Load a world-backed scene from the world database at `world_path`,
+    through the same `load_scene_from_data` path a scene file takes. The
+    world stays open for the scene, on `scene.world_context`.
+    """
+
+    world = World.open(Path(world_path))
+    try:
+        record = world.scenes().get(scene_id)
+        if record is None:
+            raise KeyError(f"no such scene: {scene_id}")
+
+        # set first, so `save_dir` (nodes, assets, the voice library)
+        # already points inside the world while loading
+        scene.world_ref = persistence.WorldSceneRef(
+            world_path=world_path, scene_id=scene_id
+        )
+        scene_data = persistence.scene_data_from_world(world, record)
+        scene = await load_scene_from_data(scene, scene_data, name=scene_id)
+        persistence.attach_world_context(scene, world, record)
+    except BaseException:
+        scene.world_ref = None
+        world.close()
+        raise
+
+    return scene
 
 
 async def load_scene_from_data(

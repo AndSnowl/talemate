@@ -2,9 +2,9 @@
 narrator and actor prompts, and keeping a scene's active characters built
 fresh from the world as its clock moves.
 
-Nothing here is wired into normal scene play yet -- `connect` exists so a
-later task can call it, and does nothing to a scene that never gets a
-`scene.world_context`.
+Loading a world scene (`talemate.load.load_world_scene`) attaches the
+context and calls `connect`; a scene that never gets a
+`scene.world_context` is left alone.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
 
-from .characters import character_from_world
+from .characters import WORLD_DERIVED_FIELDS, character_from_world
 
 log = structlog.get_logger("talemate.worldplay.context")
 
@@ -106,11 +106,7 @@ class WorldSceneContext:
             )
             updated = character.model_copy(
                 update={
-                    "name": rebuilt.name,
-                    "description": rebuilt.description,
-                    "base_attributes": rebuilt.base_attributes,
-                    "dialogue_instructions": rebuilt.dialogue_instructions,
-                    "example_dialogue": rebuilt.example_dialogue,
+                    field: getattr(rebuilt, field) for field in WORLD_DERIVED_FIELDS
                 }
             )
 
