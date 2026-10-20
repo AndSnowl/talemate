@@ -243,7 +243,10 @@ def test_delete_a_thing_after_its_reference_check(app, page):
     thing.get_by_test_id("delete-thing").click()
     dialog = page.get_by_test_id("delete-dialog")
     dialog.wait_for(state="visible", timeout=TIMEOUT_MS)
-    assert "unknown" in dialog.get_by_test_id("delete-ramifications").inner_text()
+    ramifications = dialog.get_by_test_id("delete-ramifications").inner_text()
+    assert "unknown" in ramifications
+    # no undo in the app yet, so the dialog doesn't promise one
+    assert "no way to restore it from the app yet" in ramifications
     assert dialog.get_by_test_id("delete-no-references").is_visible()
     dialog.get_by_role("button", name="Delete").click()
 

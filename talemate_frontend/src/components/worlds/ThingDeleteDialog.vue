@@ -11,8 +11,8 @@
                     Anything that refers to it will show it as
                     <span class="unknown">⟨unknown⟩</span>, and scenes that use it will
                     load without it. Scenes open right now keep it until they're
-                    reloaded. The delete is kept in the world's history, so undoing that
-                    change brings it back.
+                    reloaded. It stays in the world's history, but there's no way to
+                    restore it from the app yet.
                 </p>
 
                 <div v-if="!total" class="text-body-2 text-muted" data-testid="delete-no-references">
