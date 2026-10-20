@@ -20,6 +20,7 @@ from talemate.util import replace_smart_quotes
 from talemate.world.dates import WorldDate
 from talemate.world.prose import CachedProse, stretches
 from talemate.world.store import World
+from talemate.world.timeline import TimelineEntry
 from talemate.world.view import ThingState
 
 log = structlog.get_logger("talemate.worldplay.characters")
@@ -87,122 +88,165 @@ def _cached_section(
     return None
 
 
-def _change_not_yet_known(
-    entry: CachedProse | None, date_instant: int, source_rev: int
+def _date_known(entry: CachedProse, date: WorldDate | None) -> bool:
+    """Whether the cached `entry`'s stretch covers a change dated `date`,
+    going by date alone: everything before its `stretch_end` (all of it,
+    for an open stretch). An undated change is never past a stretch end."""
+
+    return (
+        entry.stretch_end is None
+        or date is None
+        or date.instant < entry.stretch_end.instant
+    )
+
+
+def _not_yet_known(
+    entry: CachedProse | None, date: WorldDate | None, source_rev: int
 ) -> bool:
-    """Whether a timeline change dated at `date_instant`, written in
-    revision `source_rev`, could not have made it into the cached
-    `entry`'s text.
+    """Whether a timeline change dated `date`, written in revision
+    `source_rev`, could not have made it into the cached `entry`'s text.
 
     `entry=None` (nothing was ever cached) always qualifies. Otherwise,
     either of two independent reasons does:
 
     - it was written *after* the cache (`source_rev > entry.rev`),
-      whatever date it's dated at -- a later revision can backdate a
-      change into a stretch the cache already covers (e.g. a fact added
-      after the fact, dated inside an already-cached stretch);
-    - it's dated at or after what the cache's own stretch covers
-      (`entry.stretch_end`, when set -- `None` only for the thing's
-      current, still-open stretch, nothing to compare against there).
-
-    Either alone is enough; a stretch-end comparison alone (round 2's
-    rule) misses a change backdated into an already-cached span by a
-    later revision, and a revision comparison alone would miss a change
-    that's simply dated later than the cache, however old the revision
-    that added it."""
+      whatever its date -- a later revision can add an undated fact, or
+      backdate one into a stretch the cache already covers;
+    - it's dated at or after the cache's `stretch_end`, when that's set.
+    """
 
     if entry is None:
         return True
-    if source_rev > entry.rev:
-        return True
-    return entry.stretch_end is not None and date_instant >= entry.stretch_end.instant
+    return source_rev > entry.rev or not _date_known(entry, date)
+
+
+def _facts_at_rev(
+    world: World, thing_id: str, rev: int
+) -> dict[str, tuple[TimelineEntry, TimelineEntry | None]]:
+    """Each fact live for `thing_id` at `rev`, as its (start, end) timeline
+    entries -- end `None` for an open-ended fact. Empty if the thing
+    didn't exist yet at `rev`."""
+
+    try:
+        timeline = world.timeline(thing_id, rev=rev)
+    except KeyError:
+        return {}
+
+    # a fact's start always sorts before its end in a timeline
+    facts: dict[str, tuple[TimelineEntry, TimelineEntry | None]] = {}
+    for change in timeline:
+        if change.fact_id is None:
+            continue
+        if change.change == "fact_start":
+            facts[change.fact_id] = (change, None)
+        elif change.change == "fact_end":
+            facts[change.fact_id] = (facts[change.fact_id][0], change)
+    return facts
+
+
+def _same_date(a: WorldDate | None, b: WorldDate | None) -> bool:
+    if a is None or b is None:
+        return a is None and b is None
+    return bool(a.instant == b.instant)
 
 
 def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
-    """One line per appearance/background fact not yet reflected in the
+    """One line per appearance/background change not yet reflected in the
     cached description, in story-time order, e.g. `"Since 314: Lost her
-    left eye."`, `"Until 316: Member of the Wardens."`, or (started and
-    ended without the cache ever catching up) `"From 310 until 312: A cast
-    on her arm."`. Dates are formatted by the world's calendar.
+    left eye."`, `"Until 316: Member of the Wardens."`, `"From 310 until
+    312: A cast on her arm."`, or a plain `"Has a limp."` for an undated
+    fact. Dates are formatted by the world's calendar.
 
-    Driven from `World.timeline(thing_id)` -- every dated fact start/end
-    for the thing, regardless of story-time visibility at any one date --
-    rather than from what's visible in a `world.view(...)` snapshot. A
-    snapshot approach has a hole no pair of snapshots closes: a fact that
-    both starts and ends between two dates never appears in a snapshot
-    taken at either one. The timeline doesn't have that hole, since it
-    reports every change directly.
+    Driven from `World.timeline(thing_id)` -- every fact start/end for the
+    thing, regardless of story-time visibility at any one date -- since a
+    fact that both starts and ends between two dates never shows up in a
+    `world.view(...)` snapshot taken at either one.
 
-    "Not yet reflected" is `_change_not_yet_known` (see its docstring for
-    the exact rule -- it's not just "dated after the cache's stretch
-    ends": a revision written after the cache counts too, whatever date
-    it backdates its change to). A change dated after `at` is never
-    reported either way, or it would leak the future. An undated
-    ("always") start or end isn't a reportable moment and is skipped.
+    A change needs a line when it's dated at or before `at` (an undated
+    change counts as before) and `_not_yet_known` says the cached text
+    can't reflect it: nothing is cached, it was written after the cache,
+    or it's dated at or after the cache's `stretch_end`. Nothing dated
+    after `at` is ever reported, or it would leak the future.
 
-    With nothing cached at all, an undated-start appearance/background
-    fact still visible at `at` gets a plain line (no "Since"/"Until" --
-    there's no single date to attach), so a character with no prose yet
-    still has *some* description; an undated fact otherwise never
-    produces a timeline entry of its own to report.
+    An undated fact is only in the cached text if it existed when the
+    cache was written: one added by a later revision gets a plain line
+    (or "Until ..." once it has ended), as does every undated fact still
+    true at `at` when nothing is cached at all.
 
-    A fact_id with a start, an end, or both not yet known gets exactly
-    one line: both -> "From ... until ...", only a start -> "Since ...",
-    only an end -> "Until ..." (its start was already known -- either
-    baked into the cached text, or, with nothing cached, not itself
-    newsworthy)."""
+    Lineage: `correct_fact`/`end_fact` write a new version of a fact under
+    the same fact_id, with the revision that wrote it. When the version
+    live at the cache's `rev` was a description fact with the same start
+    and text, the prose already reflects that start, so only what changed
+    is news -- typically a new end, giving "Until ..." alone, never a
+    repeated "Since"/"From" for the start. A changed text (or start) makes
+    the fact news again, reported with its current dates.
+
+    Each fact_id gets at most one line: start and end both news -> "From
+    ... until ...", only the start -> "Since ..." (plain when undated),
+    only the end, or an undated start with an end -> "Until ..."."""
 
     at_instant = at.instant if at is not None else _FAR_FUTURE
     entry = _cached_section(world, thing_id, "description", at)
+    cached_facts = (
+        _facts_at_rev(world, thing_id, entry.rev) if entry is not None else {}
+    )
 
-    lines: list[str] = []
-
-    if entry is None:
-        at_state = world.view(at).thing(thing_id)
-        if at_state is not None:
-            for fact in at_state.facts:
-                if fact.category in _DESCRIPTION_CATEGORIES and fact.valid_from is None:
-                    lines.append(fact.text)
-
-    order: list[str] = []
-    starts: dict[str, WorldDate] = {}
-    ends: dict[str, WorldDate] = {}
-    texts: dict[str, str] = {}
-
-    for change in world.timeline(thing_id):
-        if change.change not in ("fact_start", "fact_end"):
-            continue
-        if change.category not in _DESCRIPTION_CATEGORIES:
-            continue
-        if change.date is None:
-            continue  # "always" -- not a reportable moment
-        if change.date.instant > at_instant:
-            continue  # never emit a change dated after `at`
-        if not _change_not_yet_known(entry, change.date.instant, change.source_rev):
-            continue
-
-        fact_id = change.fact_id
-        if fact_id not in texts:
-            order.append(fact_id)
-        texts[fact_id] = change.text
-        if change.change == "fact_start":
-            starts[fact_id] = change.date
-        else:
-            ends[fact_id] = change.date
+    def dated_by_at(date: WorldDate | None) -> bool:
+        return date is None or date.instant <= at_instant
 
     calendar = world.calendar
-    for fact_id in order:
-        start, end, text = starts.get(fact_id), ends.get(fact_id), texts[fact_id]
-        if start is not None and end is not None:
-            lines.append(
-                f"From {calendar.format(start)} until {calendar.format(end)}: {text}"
-            )
-        elif start is not None:
-            lines.append(f"Since {calendar.format(start)}: {text}")
-        else:
-            lines.append(f"Until {calendar.format(end)}: {text}")
+    # (lead date's instant, line) -- undated lines first
+    keyed: list[tuple[int, str]] = []
+    for fact_id, (start, end) in _facts_at_rev(
+        world, thing_id, world.head_rev()
+    ).items():
+        if start.category not in _DESCRIPTION_CATEGORIES:
+            continue
 
-    return lines
+        # the revisions that wrote this start and end, as far as the cached
+        # text is concerned: lineage carries an unchanged start (and end)
+        # back to the version that was live when the cache was written
+        start_rev = start.source_rev
+        end_rev = end.source_rev if end is not None else 0
+        old_start, old_end = cached_facts.get(fact_id, (None, None))
+        if (
+            old_start is not None
+            and old_start.category in _DESCRIPTION_CATEGORIES
+            and old_start.text == start.text
+            and _same_date(old_start.date, start.date)
+        ):
+            start_rev = old_start.source_rev
+            if end is not None and old_end is not None:
+                if _same_date(old_end.date, end.date):
+                    end_rev = old_end.source_rev
+
+        end_date = end.date if end is not None else None
+        ended = end_date is not None and dated_by_at(end_date)
+        start_news = dated_by_at(start.date) and _not_yet_known(
+            entry, start.date, start_rev
+        )
+        end_news = ended and _not_yet_known(entry, end_date, end_rev)
+
+        text = start.text or ""
+        if start_news and start.date is not None and end_date is not None and ended:
+            line = (
+                f"From {calendar.format(start.date)} until "
+                f"{calendar.format(end_date)}: {text}"
+            )
+            keyed.append((start.date.instant, line))
+        elif (start_news or end_news) and end_date is not None and ended:
+            keyed.append(
+                (end_date.instant, f"Until {calendar.format(end_date)}: {text}")
+            )
+        elif start_news and start.date is not None:
+            keyed.append(
+                (start.date.instant, f"Since {calendar.format(start.date)}: {text}")
+            )
+        elif start_news:
+            keyed.append((-_FAR_FUTURE, text))
+
+    keyed.sort(key=lambda pair: pair[0])
+    return [line for _, line in keyed]
 
 
 def _speech_facts(state: ThingState) -> tuple[list[str], list[str]]:

@@ -411,3 +411,105 @@ def test_since_lines_includes_undated_facts_with_nothing_cached(world):
         world, thing_id, WorldDate.of(310), is_player=False
     )
     assert character.description == "A former soldier."
+
+
+def test_since_lines_reports_undated_fact_written_after_an_open_cache(world):
+    """Fix round 4 (repro 7): an undated fact added by a revision written
+    after an open `(None, None)` cache isn't in the cached text, so it gets
+    a plain line -- an "always" fact is only baked into a cache that was
+    written after it."""
+
+    with world.revision(Source.manual(note="create Mo")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Mo"})
+        rev.add_fact(thing_id, "appearance", "Tall.")
+
+    world.prose().put(thing_id, "description", None, None, "Tall.")
+
+    with world.revision(Source.manual(note="Mo limps")) as rev:
+        rev.add_fact(thing_id, "appearance", "Has a limp.")
+
+    assert since_lines(world, thing_id, WorldDate.of(315)) == ["Has a limp."]
+    assert since_lines(world, thing_id, None) == ["Has a limp."]
+
+    description = character_from_world(
+        world, thing_id, WorldDate.of(315), is_player=False
+    ).description
+    assert description == "Tall.\nHas a limp."
+
+
+def test_since_lines_reports_undated_facts_written_after_a_bounded_cache(world):
+    """Fix round 4 (repro 7b): undated facts written after a `(305, 316)`
+    cache. One that ends at 314 is a plain line while it's still true, and
+    an "Until" line once it has ended."""
+
+    with world.revision(Source.manual(note="create Rin")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Rin"})
+        rev.add_fact(
+            thing_id,
+            "background",
+            "Warden.",
+            valid_from=WorldDate.of(305),
+            valid_until=WorldDate.of(316),
+        )
+
+    world.prose().put(
+        thing_id, "description", WorldDate.of(305), WorldDate.of(316), "A warden."
+    )
+
+    with world.revision(Source.manual(note="Rin limps, shaves")) as rev:
+        rev.add_fact(thing_id, "appearance", "Has a limp.")
+        rev.add_fact(thing_id, "appearance", "Bearded.", valid_until=WorldDate.of(314))
+
+    assert sorted(since_lines(world, thing_id, WorldDate.of(312))) == [
+        "Bearded.",
+        "Has a limp.",
+    ]
+    assert sorted(since_lines(world, thing_id, WorldDate.of(315))) == [
+        "Has a limp.",
+        "Until 314: Bearded.",
+    ]
+
+
+@pytest.fixture
+def ended_warden(world):
+    """Fix round 4 (repro 9): a fact from 305, cached in its open stretch;
+    a later revision ends it at 314 (`end_fact` writes a new version of
+    the same fact_id). The start was already in the cached prose."""
+
+    with world.revision(Source.manual(note="create Zia")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Zia"})
+        fact_id = rev.add_fact(
+            thing_id, "background", "Warden.", valid_from=WorldDate.of(305)
+        )
+
+    world.prose().put(thing_id, "description", WorldDate.of(305), None, "A warden.")
+
+    with world.revision(Source.manual(note="Zia leaves the Wardens")) as rev:
+        rev.end_fact(fact_id, WorldDate.of(314))
+
+    return thing_id, fact_id
+
+
+def test_since_lines_new_end_of_a_cached_fact_is_only_until(world, ended_warden):
+    """Fix round 4 (repro 9): only the new end is news; the start the prose
+    already reflects isn't re-emitted as "Since"/"From ... until"."""
+
+    thing_id, _ = ended_warden
+    assert since_lines(world, thing_id, WorldDate.of(315)) == ["Until 314: Warden."]
+    assert since_lines(world, thing_id, WorldDate.of(310)) == []
+
+
+def test_since_lines_corrected_text_of_a_cached_fact_is_reported(world, ended_warden):
+    """Fix round 4 (lineage): a text correction written after the cache is
+    news, reported with the fact's existing dates."""
+
+    thing_id, fact_id = ended_warden
+    with world.revision(Source.manual(note="reword")) as rev:
+        rev.correct_fact(fact_id, text="Captain of the Wardens.")
+
+    assert since_lines(world, thing_id, WorldDate.of(310)) == [
+        "Since 305: Captain of the Wardens."
+    ]
+    assert since_lines(world, thing_id, WorldDate.of(315)) == [
+        "From 305 until 314: Captain of the Wardens."
+    ]
