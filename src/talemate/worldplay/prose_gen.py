@@ -1,19 +1,28 @@
 """Prose generation and caching for world things.
 
-`render_section` asks the model for a present-tense descriptive profile of
-one section -- built from a list of facts, never from a continuing story --
+`render_section` asks the model for a reference-entry profile of one
+section -- built from a list of facts, never from a continuing story --
 and writes nothing. `generate_section` renders a thing's section from its
-facts at `at` and caches the result for the stretch of story time
-containing `at` (`World.prose()`, keyed the same way
-`talemate.world.prose.stretches` reports them). `ensure_prose` regenerates
-whatever section is stale. `create.py` reuses `render_section` for a
-preview that isn't in the world yet.
+facts at `at`, together with its other facts as background (for
+consistency only -- a section generated from one slice of a thing's facts
+must not drift off who it's about, e.g. a personality section turning an
+owl-folk courier human because only his personality facts were in view),
+and caches the result for the stretch of story time containing `at`
+(`World.prose()`, keyed the same way `talemate.world.prose.stretches`
+reports them). `ensure_prose` regenerates whatever section is stale.
+`create.py` reuses `render_section` for a preview that isn't in the world
+yet.
 
 A character has two sections: `description` (from its `appearance` and
 `background` facts) and `personality` (from its `personality` facts).
 Speech facts never go through here -- `characters.py` reads them straight
 into `dialogue_instructions` and `example_dialogue`, no prose needed. Every
 other kind has a single `description` section, from all of its facts.
+
+Prose is generated at the "analyze" kind, not "create": a reference entry
+is a factual restatement of known facts, not an invention, so it's asked
+for at the analytical preset's lower, more deterministic temperature
+rather than the creative preset `create-thing` (actual invention) uses.
 """
 
 from __future__ import annotations
@@ -45,6 +54,20 @@ _SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
 # prose.py's own "+infinity" for at=None
 _FAR_FUTURE = 10**15
 
+
+# reference prose is a factual restatement of existing facts, not an
+# invention -- the lower-temperature "analyze" kind (-> the analytical
+# preset) keeps the register closer to a character sheet than "create"
+# (-> creative_instruction) did; see
+# docs/superpowers/probes/2026-10-20-prose-register.md
+PROSE_PROMPT_KIND = "analyze"
+
+# the core thing fields, beyond its facts, worth naming in a section's
+# background -- when there are any -- so identity survives even when a
+# section's own facts say nothing about them (e.g. a personality section
+# with no appearance facts at all still knows it's writing about an owl,
+# not a human)
+_CORE_BACKGROUND_FIELDS: tuple[str, ...] = ("name", "born", "kind")
 
 NO_CLIENT_MESSAGE = "No AI client is configured for the creator agent"
 
@@ -78,6 +101,29 @@ def _facts_for_section(state: ThingState, section: str) -> list[str]:
     return [fact.text for fact in state.facts if fact.category in categories]
 
 
+def _background_for_section(state: ThingState, section: str) -> list[str]:
+    """The thing's other facts -- outside `section`'s own categories -- plus
+    its core fields (`name`, `born`, `kind`), when there are any. Given to
+    the model for consistency only, never to describe."""
+
+    categories = section_categories(state.kind, section)
+    background = [fact.text for fact in state.facts if fact.category not in categories]
+
+    for field in _CORE_BACKGROUND_FIELDS:
+        value = state.fields.get(field)
+        if not value:
+            continue
+        if field == "born":
+            born = value if isinstance(value, WorldDate) else WorldDate(**value)
+            background.append(f"Born in the year {born.to_datetime().year}.")
+        elif field == "kind":
+            background.append(f"A {value}.")
+        elif field == "name":
+            background.append(f"Named {value}.")
+
+    return background
+
+
 def stretch_containing(
     world: World, thing_id: str, at: WorldDate | None
 ) -> tuple[WorldDate | None, WorldDate | None]:
@@ -99,11 +145,18 @@ def stretch_containing(
 
 
 async def render_section(
-    kind: str, name: str, section: str, facts: list[str], client: Any
+    kind: str,
+    name: str,
+    section: str,
+    facts: list[str],
+    client: Any,
+    background: list[str] | None = None,
 ) -> str:
-    """Ask the model for `section`'s profile from `facts`, writing nothing.
-    With no facts at all there is nothing to describe, so no call is made
-    and the prose is empty."""
+    """Ask the model for `section`'s reference-entry profile from `facts`,
+    writing nothing. `background` is the thing's other facts, given for
+    consistency only -- the model is told not to describe them. With no
+    facts at all there is nothing to describe, so no call is made and the
+    prose is empty."""
 
     if not facts:
         return ""
@@ -112,9 +165,10 @@ async def render_section(
         _response, extracted = await Prompt.request(
             "world.thing-prose",
             client,
-            "create",
+            PROSE_PROMPT_KIND,
             vars={
                 "facts": facts,
+                "background": background or [],
                 "kind": kind,
                 "section": section,
                 "name": name,
@@ -122,11 +176,12 @@ async def render_section(
         )
     text: str = extracted["response"].strip()
 
-    # the template primes the response with the thing's name (to keep it
-    # third-person and on-topic); a generation that produced nothing comes
-    # back as just that name, which is reported as empty prose rather than
-    # a one-word profile
-    if text == name.strip():
+    # the template primes the response with "<name> is" (to keep it
+    # third-person, on-topic and in the reference-entry register); a
+    # generation that produced nothing comes back as just that prefix,
+    # which is reported as empty prose rather than a two-word profile
+    prefill = f"{name.strip()} is"
+    if text == prefill:
         text = ""
     return text
 
@@ -144,7 +199,8 @@ async def generate_section(
 
     name = view.name_of(thing_id) or ""
     facts = _facts_for_section(state, section)
-    text = await render_section(state.kind, name, section, facts, client)
+    background = _background_for_section(state, section)
+    text = await render_section(state.kind, name, section, facts, client, background)
 
     # cached at the revision the facts were read at (`view.rev`), not the
     # head when the model returns: a change written while the model was

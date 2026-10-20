@@ -357,13 +357,13 @@ async def test_start_scene_writes_scene_and_intro(world, loadable):
     client = MockClient("test")
     async with MockClientContext():
         # only Maren Vos has facts to describe: one prose call
-        _queue("Maren Vos has a heron tattoo.")
+        _queue("Maren Vos is marked by a heron tattoo.")
         scene_id = await start_scene(world, _setup(ids), client)
 
     assert len(client.prompt_history) == 1
     cache = world.prose()
     assert cache.get(ids["vos"], "description", START).text == (
-        "Maren Vos has a heron tattoo."
+        "Maren Vos is marked by a heron tattoo."
     )
     assert cache.stale(ids["vos"], "description", START) is False
 

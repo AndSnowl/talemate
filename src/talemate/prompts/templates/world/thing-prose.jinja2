@@ -3,12 +3,22 @@ Extractors:
   - response: AsIsExtractor()
 -#}
 <|SECTION:TASK|>
-Write a present-tense descriptive profile of {{ name }}'s {{ section }}, as a {{ kind }} in a story world.
-
-Known facts:
+Write the {{ section }} entry of a reference profile for {{ name }}, a {{ kind }} in a story world.
+{% if background %}
+Who the {{ kind }} is (for consistency only; do NOT describe these here):
+{% for fact in background -%}
+- {{ fact }}
+{% endfor %}
+{% endif %}
+Facts for this entry:
 {% for fact in facts -%}
 - {{ fact }}
 {% endfor %}
-Describe {{ name }} alone, as they are right now. No plot, no dialogue, no other characters acting -- only what is true about {{ name }}. A few sentences.
+Rules:
+- This is a reference entry like a character sheet or encyclopedia, NOT a scene.
+- Present tense, third person. State what is true; do not narrate a moment.
+- No setting, no actions happening right now, no dialogue, no other characters.
+- Use only the facts; keep their specific wording where natural; invent nothing new.
+- One paragraph, at most about 90 words.
 <|CLOSE_SECTION|>
-{{ set_prepared_response(name) }}
+{{ set_prepared_response(name + " is") }}

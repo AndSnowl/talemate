@@ -218,7 +218,7 @@ async def test_remove_fact_makes_prose_stale_and_regenerates(plugin, client):
             "Maren is tall, with one eye."
         )
 
-        client_responses.get().append("Maren has one eye.")
+        client_responses.get().append("Maren is left with one eye.")
         await plugin.handle(
             {
                 "type": "worlds",
@@ -231,7 +231,10 @@ async def test_remove_fact_makes_prose_stale_and_regenerates(plugin, client):
         assert "Tall and grey-eyed." not in [f["text"] for f in reply["facts"]]
         await _drain(plugin)
 
-    assert world.prose().get(maren, "description", None).text == "Maren has one eye."
+    assert (
+        world.prose().get(maren, "description", None).text
+        == "Maren is left with one eye."
+    )
     assert len(_replies(plugin, "prose_updated")) == 2
 
 

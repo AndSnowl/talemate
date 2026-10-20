@@ -97,6 +97,9 @@ async def test_preview_parses_facts(at_313):
     assert "`@`" not in create_prompt
     assert '"since": "YEAR"' in create_prompt
     assert "308" not in create_prompt
+    # an inherent trait (species, a born appearance, lifelong temperament)
+    # gets an open start rather than being dated to the present year
+    assert "inherent trait" in create_prompt
 
 
 async def test_preview_does_not_write(at_313):
@@ -150,12 +153,12 @@ async def test_preview_place_has_one_section(at_313):
         }
     )
     async with MockClientContext():
-        _queue(reply, "Lowmere sits half under water.")
+        _queue(reply, "Lowmere is half under water.")
         preview = await preview_thing(
             at_313, "place", "a half-flooded town", {}, client
         )
 
-    assert preview.prose == {"description": "Lowmere sits half under water."}
+    assert preview.prose == {"description": "Lowmere is half under water."}
     assert preview.facts[1].since == WorldDate.of(301)
 
 
