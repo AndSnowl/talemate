@@ -1,0 +1,32 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+You create a new {{ kind }} for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, the way Talemate's `@` action expands a rough action into a fleshed-out one. Keep everything the owner wrote.
+
+Keep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.
+
+Owner's prompt:
+{{ prompt }}
+{% if known_fields %}
+Already decided (use these as they are):
+{% for label, value in known_fields -%}
+- {{ label }}: {{ value }}
+{% endfor %}{% endif %}
+The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": {{ example_year }}}, {"category": "{{ categories[-1] }}", "text": "Another claim."}]}
+
+- "name": the {{ kind }}'s name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
+{% if kind == "character" -%}
+- "age": how old the character is now, in years, as a number.
+{% endif -%}
+- "facts": between {{ min_facts }} and {{ max_facts }} facts, one claim each. "category" is one of: {{ categories | join(", ") }}.
+- "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

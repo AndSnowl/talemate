@@ -1,16 +1,19 @@
 """Prose generation and caching for world things.
 
-The only module in `worldplay` that calls the model. `generate_section`
-asks it for a present-tense descriptive profile of one section -- built
-from the thing's facts, never from a continuing story -- and caches the
-result for the stretch of story time containing `at` (`World.prose()`,
-keyed the same way `talemate.world.prose.stretches` reports them).
-`ensure_prose` regenerates whatever section is stale.
+`render_section` asks the model for a present-tense descriptive profile of
+one section -- built from a list of facts, never from a continuing story --
+and writes nothing. `generate_section` renders a thing's section from its
+facts at `at` and caches the result for the stretch of story time
+containing `at` (`World.prose()`, keyed the same way
+`talemate.world.prose.stretches` reports them). `ensure_prose` regenerates
+whatever section is stale. `create.py` reuses `render_section` for a
+preview that isn't in the world yet.
 
-Two sections only: `description` (from the thing's `appearance` and
+A character has two sections: `description` (from its `appearance` and
 `background` facts) and `personality` (from its `personality` facts).
 Speech facts never go through here -- `characters.py` reads them straight
-into `dialogue_instructions` and `example_dialogue`, no prose needed.
+into `dialogue_instructions` and `example_dialogue`, no prose needed. Every
+other kind has a single `description` section, from all of its facts.
 """
 
 from __future__ import annotations
@@ -21,14 +24,15 @@ import structlog
 
 from talemate.prompts import Prompt
 from talemate.world.dates import WorldDate
+from talemate.world.kinds import get_kind
 from talemate.world.prose import stretches
 from talemate.world.store import World
 from talemate.world.view import ThingState
 
 log = structlog.get_logger("talemate.worldplay.prose_gen")
 
-# the two sections a thing's prose is split into, and the fact categories
-# each is generated from
+# a character's prose sections, and the fact categories each is generated
+# from; every other kind has one `description` section from all its facts
 SECTIONS: tuple[str, ...] = ("description", "personality")
 
 _SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
@@ -41,12 +45,28 @@ _SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
 _FAR_FUTURE = 10**15
 
 
+def sections_for(kind: str) -> tuple[str, ...]:
+    """The prose sections a thing of `kind` has."""
+
+    if kind == "character":
+        return SECTIONS
+    return ("description",)
+
+
+def section_categories(kind: str, section: str) -> tuple[str, ...]:
+    """The fact categories `section` of a `kind` thing is generated from."""
+
+    if kind == "character":
+        return _SECTION_CATEGORIES[section]
+    return tuple(get_kind(kind).categories)
+
+
 def _facts_for_section(state: ThingState, section: str) -> list[str]:
-    categories = _SECTION_CATEGORIES[section]
+    categories = section_categories(state.kind, section)
     return [fact.text for fact in state.facts if fact.category in categories]
 
 
-def _stretch_containing(
+def stretch_containing(
     world: World, thing_id: str, at: WorldDate | None
 ) -> tuple[WorldDate | None, WorldDate | None]:
     """The `(start, end)` stretch -- from `talemate.world.prose.stretches`
@@ -66,6 +86,38 @@ def _stretch_containing(
     return None, None
 
 
+async def render_section(
+    kind: str, name: str, section: str, facts: list[str], client: Any
+) -> str:
+    """Ask the model for `section`'s profile from `facts`, writing nothing.
+    With no facts at all there is nothing to describe, so no call is made
+    and the prose is empty."""
+
+    if not facts:
+        return ""
+
+    _response, extracted = await Prompt.request(
+        "world.thing-prose",
+        client,
+        "create",
+        vars={
+            "facts": facts,
+            "kind": kind,
+            "section": section,
+            "name": name,
+        },
+    )
+    text: str = extracted["response"].strip()
+
+    # the template primes the response with the thing's name (to keep it
+    # third-person and on-topic); a generation that produced nothing comes
+    # back as just that name, which is reported as empty prose rather than
+    # a one-word profile
+    if text == name.strip():
+        text = ""
+    return text
+
+
 async def generate_section(
     world: World, thing_id: str, section: str, at: WorldDate | None, client: Any
 ) -> str:
@@ -79,29 +131,13 @@ async def generate_section(
 
     name = view.name_of(thing_id) or ""
     facts = _facts_for_section(state, section)
+    text = await render_section(state.kind, name, section, facts, client)
 
-    _response, extracted = await Prompt.request(
-        "world.thing-prose",
-        client,
-        "create",
-        vars={
-            "facts": facts,
-            "kind": state.kind,
-            "section": section,
-            "name": name,
-        },
-    )
-    text = extracted["response"].strip()
-
-    # the template primes the response with the thing's name (to keep it
-    # third-person and on-topic); a generation that produced nothing comes
-    # back as just that name, which is reported as empty prose rather than
-    # a one-word profile
-    if text == name.strip():
-        text = ""
-
-    start, end = _stretch_containing(world, thing_id, at)
-    world.prose().put(thing_id, section, start, end, text)
+    # cached at the revision the facts were read at (`view.rev`), not the
+    # head when the model returns: a change written while the model was
+    # generating then still leaves this entry stale
+    start, end = stretch_containing(world, thing_id, at)
+    world.prose().put(thing_id, section, start, end, text, rev=view.rev)
     return text
 
 
@@ -111,7 +147,11 @@ async def ensure_prose(
     """Regenerate every section that's stale at `at` (`World.prose().stale`).
     A section with nothing cached yet counts as stale too."""
 
+    state = world.view(at).thing(thing_id)
+    if state is None:
+        raise KeyError(f"no such thing: {thing_id}")
+
     cache = world.prose()
-    for section in SECTIONS:
+    for section in sections_for(state.kind):
         if cache.stale(thing_id, section, at):
             await generate_section(world, thing_id, section, at, client)

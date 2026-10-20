@@ -36,6 +36,7 @@ from talemate.server import (
     package_manager,
     prompts,
     scene_assets as scene_assets_plugin,
+    worlds,
 )
 from talemate.server.scene_assets_batching import SceneAssetsBatchingMixin
 
@@ -55,6 +56,9 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
         self.input = None
         self.scene = Scene()
         self.out_queue = out_queue
+        # the fantasymate world the `worlds` router has open, one per
+        # connection (`talemate.world.World`, set by `WorldsPlugin`)
+        self.world = None
 
         # Initialize scene assets batching
         self._init_scene_assets_batching()
@@ -88,6 +92,7 @@ class WebsocketHandler(SceneAssetsBatchingMixin, Receiver):
             ),
             timeline.TimelinePlugin.router: timeline.TimelinePlugin(self),
             cultures.CulturesPlugin.router: cultures.CulturesPlugin(self),
+            worlds.WorldsPlugin.router: worlds.WorldsPlugin(self),
         }
 
         # unconveniently named function, this `connect` method is called

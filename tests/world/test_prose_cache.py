@@ -96,3 +96,73 @@ def test_stale_after_new_fact(world, maren):
         )
 
     assert cache.stale(maren.id, "appearance", WorldDate.of(310)) is True
+
+
+def _stretch_starting(world, maren, year):
+    return next(
+        (start, end)
+        for start, end in stretches(lambda: world, maren.id)
+        if start is not None and start.instant == WorldDate.of(year).instant
+    )
+
+
+def test_stale_after_fact_removed_inside_stretch(world, maren):
+    cache = world.prose()
+    start, end = _stretch_starting(world, maren, 314)
+    cache.put(maren.id, "description", start, end, "One-eyed.")
+    assert cache.stale(maren.id, "description", WorldDate.of(315)) is False
+
+    with world.revision(Source.manual(note="never lost it")) as rev:
+        rev.remove_fact(maren.eye)
+
+    # the prose still describes the removed fact, so it's stale
+    assert cache.stale(maren.id, "description", WorldDate.of(315)) is True
+
+
+def test_stale_after_removing_fact_that_started_before_stretch(world, maren):
+    # the tattoo starts at 304, before the (305, 314) stretch, but is
+    # visible all through it -- removing it changes that stretch's prose
+    cache = world.prose()
+    start, end = _warden_stretch(world, maren)
+    cache.put(maren.id, "description", start, end, "Tattooed warden.")
+
+    with world.revision(Source.manual(note="no tattoo")) as rev:
+        rev.remove_fact(maren.tattoo)
+
+    assert cache.stale(maren.id, "description", WorldDate.of(310)) is True
+
+
+def test_not_stale_after_removing_fact_that_ended_before_stretch(world, maren):
+    # the warden fact ended at 316, before the (317, None) stretch
+    cache = world.prose()
+    start, end = _stretch_starting(world, maren, 317)
+    cache.put(maren.id, "description", start, end, "The Grey.")
+
+    with world.revision(Source.manual(note="never a warden")) as rev:
+        rev.remove_fact(maren.warden)
+
+    assert cache.stale(maren.id, "description", WorldDate.of(318)) is False
+
+
+def test_stale_after_field_value_removed_inside_stretch(world, maren):
+    cache = world.prose()
+    start, end = _stretch_starting(world, maren, 317)
+    cache.put(maren.id, "description", start, end, "The Grey.")
+
+    with world.revision(Source.manual(note="not renamed")) as rev:
+        rev.remove_field_value(maren.id, "name", WorldDate.of(317))
+
+    assert cache.stale(maren.id, "description", WorldDate.of(318)) is True
+
+
+def test_put_records_given_rev(world, maren):
+    # an entry generated from an older revision's facts records that
+    # revision, so a change written since still shows as stale
+    cache = world.prose()
+    start, end = _stretch_starting(world, maren, 314)
+    cache.put(maren.id, "description", start, end, "Two eyes.", rev=maren.rev_created)
+
+    assert cache.get(maren.id, "description", WorldDate.of(315)).rev == (
+        maren.rev_created
+    )
+    assert cache.stale(maren.id, "description", WorldDate.of(315)) is True
