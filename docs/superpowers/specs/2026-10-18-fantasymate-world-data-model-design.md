@@ -201,6 +201,21 @@ the culture skill, can be created from a short prompt:
 - The owner accepts, regenerates, edits or retries.
 - The pipeline is prompt → facts → prose. Invention happens once, at creation.
 
+**Named things that don't exist yet** (owner, 2026-10-20; a later feature). Creation often
+invents other named people and places in its facts. For example, creating Vasha invented the
+postmaster Aldric, his mother Yelena and the town of Frosthollow. After creation:
+- These names are detected, in code against the world's names, or with the decision model for
+  "is this a named character or place?".
+- The owner is offered a full entry for each, seeded from the facts that mention it ("Aldric:
+  the human postmaster who runs the Frosthollow sorting office and depends on Vasha's
+  punctuality"), through the same create-from-prompt flow.
+- Once created, the mentioning facts are rewritten to reference the new thing by id
+  (`[[thing:<id>]]`), so the link survives renames.
+- Names the owner declines stay plain text.
+
+This is the world-tab counterpart of the inbox's "make real". It fits with plan B (inheritance
+already needs links between things) or phase 3.
+
 **Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
 layout relative to each other is known. The map must allow places that aren't placed yet, or that
 have unknown distances between them.
