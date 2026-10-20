@@ -554,6 +554,57 @@ async def test_thing_actions_need_an_open_world(plugin):
     assert "no world" in _last(plugin, "operation_done")["error"]["message"].lower()
 
 
+# --- delete -------------------------------------------------------------------
+
+
+async def test_thing_references_lists_what_uses_it(plugin):
+    world, maren, harbour = await _open_world_with_maren(plugin)
+    world.scenes().create("At the harbour", WorldDate.of(313), player_thing_id=maren)
+
+    await plugin.handle({"type": "worlds", "action": "thing_references", "id": maren})
+
+    reply = _last(plugin, "thing_references")["data"]
+    assert reply["id"] == maren
+    assert reply["name"] == "Maren"
+    assert reply["references"]["scenes"] == [
+        {
+            "scene_id": world.scenes().list()[0].id,
+            "name": "At the harbour",
+            "role": "player",
+        }
+    ]
+    assert reply["references"]["facts"] == []
+    assert reply["references"]["fields"] == []
+
+
+async def test_delete_thing_keeps_it_in_history(plugin):
+    world, maren, harbour = await _open_world_with_maren(plugin)
+    before = world.head_rev()
+
+    await plugin.handle({"type": "worlds", "action": "delete_thing", "id": maren})
+
+    assert _last(plugin, "thing_deleted")["data"] == {"id": maren, "kind": "character"}
+    listed = _last(plugin, "list_things")["data"]
+    assert listed == {"kind": "character", "things": []}
+    assert world.view().thing(maren) is None
+    # an ordinary manual revision: the thing is still there before it
+    assert world.view(rev=before).thing(maren) is not None
+    deleted = world.revisions()[-1]
+    assert deleted.source.kind == "manual"
+    assert deleted.source.note == "deleted Maren"
+
+
+async def test_delete_unknown_thing_is_refused(plugin):
+    world, *_ = await _open_world_with_maren(plugin)
+    before = world.head_rev()
+
+    await plugin.handle({"type": "worlds", "action": "delete_thing", "id": "0" * 32})
+
+    assert _replies(plugin, "thing_deleted") == []
+    assert _last(plugin, "operation_done")["error"]["message"]
+    assert world.head_rev() == before
+
+
 # --- scenes -------------------------------------------------------------------
 
 

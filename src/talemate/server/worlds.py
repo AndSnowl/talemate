@@ -28,6 +28,13 @@ through `signal_operation_failed` (an `operation_done` envelope with
   stale. `regenerate_prose {id, at}` regenerates every section.
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
+- Delete: `thing_references {id}` answers `{id, kind, name, references}`
+  (the facts, fields and scenes that use it, from
+  `talemate.worldplay.references`), writing nothing. `delete_thing {id}`
+  removes it in one manual revision noted "deleted <name>", so undoing
+  that revision restores it, and answers `thing_deleted {id, kind}` and
+  that kind's `list_things`. A loaded scene keeps playing with it until
+  it's reloaded.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`). `plan_scene {prompt, picks, new_names, player, start}` (picks
   and names treated as new always win over automatic matching) and
@@ -78,6 +85,7 @@ from talemate.worldplay.create import (
     preview_thing,
 )
 from talemate.worldplay.persistence import save_world_scene, world_target
+from talemate.worldplay.references import thing_references
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -157,6 +165,10 @@ class ListThingsPayload(pydantic.BaseModel):
 class GetThingPayload(pydantic.BaseModel):
     id: str
     at: dict | None = None
+
+
+class ThingIdPayload(pydantic.BaseModel):
+    id: str
 
 
 class PreviewPayload(pydantic.BaseModel):
@@ -602,6 +614,39 @@ class WorldsPlugin(Plugin):
         self._reply(
             "get_thing", self._thing_payload(world, payload.id, _date_in(payload.at))
         )
+
+    # --- delete -----------------------------------------------------------
+
+    async def handle_thing_references(self, data: dict):
+        payload = ThingIdPayload(**data)
+        world = self._require_world()
+        view = world.view()
+        state = view.thing(payload.id)
+        if state is None:
+            raise KeyError(f"no such thing: {payload.id}")
+        self._reply(
+            "thing_references",
+            {
+                "id": payload.id,
+                "kind": state.kind,
+                "name": view.name_of(payload.id) or "",
+                "references": thing_references(world, payload.id),
+            },
+        )
+
+    async def handle_delete_thing(self, data: dict):
+        payload = ThingIdPayload(**data)
+        world = self._require_world()
+        view = world.view()
+        state = view.thing(payload.id)
+        if state is None:
+            raise KeyError(f"no such thing: {payload.id}")
+        name = view.name_of(payload.id) or payload.id
+        with world.revision(Source.manual(note=f"deleted {name}")) as rev:
+            rev.remove_thing(payload.id)
+        log.info("worlds.thing_deleted", id=payload.id, kind=state.kind, name=name)
+        self._reply("thing_deleted", {"id": payload.id, "kind": state.kind})
+        await self.handle_list_things({"kind": state.kind})
 
     # --- create -----------------------------------------------------------
 

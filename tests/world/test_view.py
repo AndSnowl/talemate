@@ -188,3 +188,29 @@ def test_referencing_drops_ended_and_removed(world, maren):
 
     after_removal = world.view().referencing(maren.id)
     assert removed_fact not in {fact.fact_id for _, fact in after_removal}
+
+
+def test_referencing_any_date_keeps_ended_facts(world, maren):
+    with world.revision(Source.manual(note="Oskar owed Maren")) as rev:
+        oskar_id = rev.create_thing("character", fields={"name": "Oskar"})
+        ended_fact = rev.add_fact(
+            oskar_id,
+            "relationship",
+            f"Owed {ref(maren.id)} a debt.",
+            valid_from=WorldDate.of(300),
+            valid_until=WorldDate.of(310),
+        )
+        later_fact = rev.add_fact(
+            oskar_id,
+            "relationship",
+            f"Will serve {ref(maren.id)}.",
+            valid_from=WorldDate.of(400),
+        )
+
+    view = world.view(at=WorldDate.of(305))
+    assert {fact.fact_id for _, fact in view.referencing(maren.id)} == {ended_fact}
+    every_date = view.referencing(maren.id, any_date=True)
+    assert [(owner, fact.fact_id) for owner, fact in every_date] == [
+        (oskar_id, ended_fact),
+        (oskar_id, later_fact),
+    ]

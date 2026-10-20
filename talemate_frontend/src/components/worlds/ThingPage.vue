@@ -33,6 +33,16 @@
                     :loading="worlds.proseRegenerating === thing.id"
                     @click="worlds.regenerateProse()"
                 >Regenerate prose</v-btn>
+
+                <v-btn
+                    variant="outlined"
+                    size="small"
+                    color="danger"
+                    prepend-icon="mdi-delete"
+                    data-testid="delete-thing"
+                    :loading="!!worlds.pending.thing_references"
+                    @click="worlds.requestDelete()"
+                >Delete</v-btn>
             </template>
         </div>
 
@@ -112,6 +122,8 @@
                 </v-col>
             </v-row>
         </template>
+
+        <ThingDeleteDialog />
     </div>
 </template>
 
@@ -119,6 +131,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
+import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
 
 // fields shown elsewhere (the name), not shown in the slice (cultures), or
@@ -139,11 +152,11 @@ function cut(text, length = 28) {
 
 // A thing's page: core fields, the facts true at the viewing date (add,
 // edit, end), the generated prose with Regenerate, the "viewing as of"
-// date, a timeline strip of its dated changes and scenes, and the scenes
-// it appears in.
+// date, a timeline strip of its dated changes and scenes, the scenes it
+// appears in, and Delete (after a reference check and a confirmation).
 export default {
     name: 'ThingPage',
-    components: { ThingFactForm },
+    components: { ThingDeleteDialog, ThingFactForm },
     setup() {
         return { worlds: useWorldsStore() };
     },

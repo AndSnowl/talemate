@@ -220,3 +220,49 @@ def test_set_the_present_year(app, page):
     editor.get_by_label("Present year").fill("1200")
     editor.get_by_role("button", name="Set").click()
     present.filter(has_text="1200").wait_for(state="visible", timeout=TIMEOUT_MS)
+
+
+def test_delete_a_thing_after_its_reference_check(app, page):
+    """Deleting asks first: an unused thing goes on Delete; a thing a scene
+    uses lists that scene in the dialog before anything is deleted."""
+
+    name = _world_name("Ashfall")
+    spare = {"kind": "character", "name": "Vasha Two", "facts": []}
+    seed_fm_world(
+        app.root,
+        name,
+        present_year=318,
+        things=[MAREN, spare],
+        scenes=[{"name": "The Ferryman", "start": 312, "player": "Maren Vos"}],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+
+    # an unused thing: the dialog says what deleting does, and finds nothing
+    thing = _open_thing(page, "Vasha Two")
+    thing.get_by_test_id("delete-thing").click()
+    dialog = page.get_by_test_id("delete-dialog")
+    dialog.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "unknown" in dialog.get_by_test_id("delete-ramifications").inner_text()
+    assert dialog.get_by_test_id("delete-no-references").is_visible()
+    dialog.get_by_role("button", name="Delete").click()
+
+    # back on the kind list, without it
+    dialog.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    page.get_by_test_id("thing-card").filter(has_text="Maren Vos").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    page.get_by_test_id("thing-card").filter(has_text="Vasha Two").wait_for(
+        state="hidden", timeout=TIMEOUT_MS
+    )
+
+    # a thing a scene plays: the dialog lists the scene; Cancel keeps it
+    thing = _open_thing(page, "Maren Vos")
+    thing.get_by_test_id("delete-thing").click()
+    dialog.wait_for(state="visible", timeout=TIMEOUT_MS)
+    scenes = dialog.get_by_test_id("delete-ref-scenes")
+    scenes.get_by_text("The Ferryman").wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert dialog.get_by_test_id("delete-referenced").is_visible()
+    dialog.get_by_role("button", name="Cancel").click()
+    dialog.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    assert thing.get_by_test_id("thing-name").inner_text() == "Maren Vos"

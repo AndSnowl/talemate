@@ -22,6 +22,11 @@
 // setup step (`setupRequest`, `sceneSetup`). A started scene's reply lands
 // in `startedScene`; TalemateApp loads its `target` as Load Scene does.
 //
+// Deleting a thing: `requestDelete` asks for its references
+// (`thing_references`); the reply lands in `deleteCheck`, which the
+// confirmation dialog shows. `confirmDelete` deletes it; `thing_deleted`
+// closes the dialog and the thing page, back to the kind list.
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
@@ -95,6 +100,9 @@ function worldState() {
         setupError: null,
         // the last `start_scene` reply: `{scene_id, target, scene}`
         startedScene: null,
+        // the delete dialog's thing: the `thing_references` reply
+        // (`{id, kind, name, references: {facts, fields, scenes}}`)
+        deleteCheck: null,
         pending: {},
     };
 }
@@ -273,6 +281,7 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         closeThing() {
+            this.deleteCheck = null;
             this.selectedThingId = null;
             this.thing = null;
             this.thingAt = null;
@@ -282,6 +291,31 @@ export const useWorldsStore = defineStore('worlds', {
             if (this.selectedThingId) {
                 this.openThing(this.selectedThingId, at);
             }
+        },
+
+        // --- delete -------------------------------------------------------
+
+        // check what uses the open thing, then ask (the dialog opens on
+        // the reply)
+        requestDelete() {
+            if (!this.selectedThingId) {
+                return;
+            }
+            this.deleteCheck = null;
+            this.pending = { ...this.pending, thing_references: true };
+            this.request('thing_references', { id: this.selectedThingId });
+        },
+
+        cancelDelete() {
+            this.deleteCheck = null;
+        },
+
+        confirmDelete() {
+            if (!this.deleteCheck) {
+                return;
+            }
+            this.pending = { ...this.pending, delete_thing: true };
+            this.request('delete_thing', { id: this.deleteCheck.id });
         },
 
         // --- create -------------------------------------------------------
@@ -402,6 +436,19 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'list_scenes':
                     this.scenes = data.scenes;
                     break;
+                case 'thing_references':
+                    // dropped if another thing was opened meanwhile
+                    if (data.id === this.selectedThingId) {
+                        this.deleteCheck = data;
+                    }
+                    break;
+                case 'thing_deleted':
+                    this.clearPending('delete_thing');
+                    this.deleteCheck = null;
+                    if (data.id === this.selectedThingId) {
+                        this.closeThing();
+                    }
+                    break;
                 case 'match_names':
                     // a reply for text (or a date) since changed is dropped
                     if (
@@ -485,6 +532,9 @@ export const useWorldsStore = defineStore('worlds', {
                             this.error = message.error.message;
                         }
                         this.pending = {};
+                        // the failed request may be the delete (or its
+                        // check): close its dialog, so the error shows
+                        this.deleteCheck = null;
                         this.previewPending = false;
                         this.proseRegenerating = null;
                         this.setupPending = false;

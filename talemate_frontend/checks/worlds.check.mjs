@@ -487,6 +487,77 @@ check('an error with no setup step open stays on the page', () => {
     assert.equal(store.setupError, null);
 });
 
+const REFERENCES = {
+    facts: [{ thing_id: 't2', thing_name: 'Oskar', text: 'Owes Vasha a life-debt.' }],
+    fields: [],
+    scenes: [{ scene_id: 's1', name: 'The Ferryman', role: 'player' }],
+};
+
+check('delete checks the references, asks, then deletes and goes back to the list', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('t1');
+    store.handleMessage(reply('get_thing', { id: 't1', kind: 'character', name: 'Vasha' }));
+
+    store.requestDelete();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'thing_references', id: 't1' });
+    assert.equal(store.pending.thing_references, true);
+    assert.equal(store.deleteCheck, null);
+
+    store.handleMessage(reply('thing_references', { id: 't1', kind: 'character', name: 'Vasha', references: REFERENCES }));
+    assert.deepEqual(store.pending, {});
+    assert.equal(store.deleteCheck.name, 'Vasha');
+    assert.equal(store.deleteCheck.references.scenes[0].name, 'The Ferryman');
+
+    store.confirmDelete();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'delete_thing', id: 't1' });
+    assert.equal(store.pending.delete_thing, true);
+
+    store.handleMessage(reply('thing_deleted', { id: 't1', kind: 'character' }));
+    assert.deepEqual(store.pending, {});
+    assert.equal(store.deleteCheck, null);
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.thing, null);
+    store.handleMessage(reply('list_things', { kind: 'character', things: [] }));
+    assert.deepEqual(store.things.character, []);
+});
+
+check('cancelling a delete sends nothing more', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('t1');
+    store.requestDelete();
+    store.handleMessage(reply('thing_references', { id: 't1', kind: 'character', name: 'Vasha', references: REFERENCES }));
+    const count = sent.length;
+    store.cancelDelete();
+    assert.equal(store.deleteCheck, null);
+    assert.equal(sent.length, count);
+    assert.equal(store.selectedThingId, 't1');
+});
+
+check('a reference check for a thing no longer open is dropped', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('t1');
+    store.requestDelete();
+    store.openThing('t2');
+    store.handleMessage(reply('thing_references', { id: 't1', kind: 'character', name: 'Vasha', references: REFERENCES }));
+    assert.equal(store.deleteCheck, null);
+});
+
+check('a failed delete closes the dialog and shows the error', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('t1');
+    store.requestDelete();
+    store.handleMessage(reply('thing_references', { id: 't1', kind: 'character', name: 'Vasha', references: REFERENCES }));
+    store.confirmDelete();
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no such thing' } });
+    assert.equal(store.deleteCheck, null);
+    assert.equal(store.error, 'no such thing');
+    assert.equal(store.selectedThingId, 't1');
+});
+
 check('other routers are ignored', () => {
     const { store } = freshStore();
     store.handleMessage({ type: 'scene_status', data: {} });
