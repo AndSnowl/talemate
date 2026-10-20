@@ -51,6 +51,19 @@ function utf16Offset(text, codePoints) {
     return index;
 }
 
+// `plan_scene`'s `new_names`: the matched names (as written) the owner
+// treats as new, once each.
+export function newNamesPayload(matches, picks) {
+    const names = new Map();
+    for (const match of matches) {
+        const key = pickKey(match.text);
+        if (!names.has(key) && pickedId(match, picks) === NEW_THING) {
+            names.set(key, match.text);
+        }
+    }
+    return [...names.values()];
+}
+
 function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

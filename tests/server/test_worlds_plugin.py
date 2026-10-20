@@ -12,6 +12,7 @@ import pytest
 
 import talemate.instance as instance
 from talemate.server.worlds import WorldsPlugin
+from talemate.scene_message import NarratorMessage
 from talemate.tale_mate import Actor
 from talemate.world.dates import WorldDate
 from talemate.world.store import Source, World
@@ -707,6 +708,40 @@ async def test_fixed_setup_setting_answers_without_a_model(
     assert client.prompt_history == []
 
 
+async def test_plan_scene_owner_choices_win(plugin, tmp_path, monkeypatch):
+    """`plan_scene`'s picks beat an exact name match, and its `new_names`
+    are invented even when one world thing has that name."""
+
+    world, maren, _harbour = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual(note="seed")) as rev:
+        holt = rev.create_thing("character", {"name": "Maren Holt"})
+    fixed = tmp_path / "fixed-setup.json"
+    fixed.write_text(json.dumps({"player": "Maren", "characters": [], "intro": "."}))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(fixed))
+
+    async def plan(**extra):
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "plan_scene",
+                "prompt": "Maren goes fishing",
+                "start": WorldDate.of(313).model_dump(),
+                **extra,
+            }
+        )
+        await _drain(plugin)
+        return _last(plugin, "plan_scene")["data"]["setup"]
+
+    assert (await plan())["player"]["thing_id"] == maren
+    assert (await plan(picks={"Maren": holt}))["player"]["thing_id"] == holt
+    treated_new = await plan(new_names=["Maren"])
+    assert treated_new["player"] == {
+        "thing_id": None,
+        "local": {"name": "Maren", "facts": []},
+    }
+    assert treated_new["invented"] == ["Maren"]
+
+
 async def _loaded_river_scene(plugin, *, facts=()):
     """A world with Mira (born 290) and a scene "River" at 313 she's in,
     loaded the way `load_world_scene` leaves it: on its own world
@@ -829,5 +864,46 @@ async def test_reposition_scene_brings_prose_up_to_date(plugin, monkeypatch):
         assert scene.get_character("Mira").description == "Mira is tall and grey-eyed."
         # once for the new date, once more with the new prose
         assert len(emitted) == 2
+    finally:
+        loaded_world.close()
+
+
+async def test_continue_scene_saves_the_loaded_scene_first(plugin, monkeypatch):
+    """Continuing the loaded world scene saves it first, so the summary
+    covers messages not saved yet."""
+
+    world, _mira, scene_id, scene, loaded_world = await _loaded_river_scene(plugin)
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+    scene.history.append(NarratorMessage(message="The river rose overnight."))
+    summarized = []
+
+    async def summarize_events(text, *args, **kwargs):
+        summarized.append(text)
+        return "The river rose."
+
+    monkeypatch.setattr(
+        instance.get_agent("summarizer"), "summarize_events", summarize_events
+    )
+    fixed = loaded_world.path.parent / "fixed-setup.json"
+    fixed.write_text(json.dumps({"player": "Mira", "characters": [], "intro": "."}))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(fixed))
+
+    try:
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "continue_scene",
+                "scene_id": scene_id,
+                "goal_prompt": "Cross the river",
+            }
+        )
+        await _drain(plugin)
+
+        assert [m.data["message"] for m in world.scenes().messages(scene_id)] == [
+            "The river rose overnight."
+        ]
+        assert _last(plugin, "continue_scene")["data"]["setup"]["continued_from"] == (
+            scene_id
+        )
     finally:
         loaded_world.close()

@@ -136,7 +136,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
-import { NEW_THING, pickKey, pickedId, picksPayload, promptSegments } from './nameHighlights.js';
+import { NEW_THING, newNamesPayload, pickKey, pickedId, picksPayload, promptSegments } from './nameHighlights.js';
 import SceneSetupCards from './SceneSetupCards.vue';
 
 // how long typing pauses before the names are looked up
@@ -291,7 +291,13 @@ export default {
             if (!this.prompt.trim() || !this.validStart) {
                 return;
             }
-            this.worlds.planScene(this.prompt.trim(), picksPayload(this.matches, this.picks), this.player, this.start);
+            this.worlds.planScene(
+                this.prompt.trim(),
+                picksPayload(this.matches, this.picks),
+                this.player,
+                this.start,
+                newNamesPayload(this.matches, this.picks),
+            );
         },
         reset() {
             this.prompt = '';

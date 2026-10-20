@@ -170,9 +170,9 @@ export const useWorldsStore = defineStore('worlds', {
 
         // `picks`: a matched name (as written) -> thing id; `player` a
         // character id or null; `start` a date, or null for after the
-        // latest scene
-        planScene(prompt, picks = {}, player = null, start = null) {
-            this.requestSetup('plan_scene', { prompt, picks, player, start });
+        // latest scene; `newNames`: matched names treated as new
+        planScene(prompt, picks = {}, player = null, start = null, newNames = []) {
+            this.requestSetup('plan_scene', { prompt, picks, new_names: newNames, player, start });
         },
 
         continueScene(sceneId, goalPrompt) {

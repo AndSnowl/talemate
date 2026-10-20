@@ -29,8 +29,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
-  prompt. `plan_scene {prompt, picks, player, start}` and
-  `continue_scene {scene_id, goal_prompt}` run in the background and answer
+  prompt. `plan_scene {prompt, picks, new_names, player, start}` (picks
+  and names treated as new always win over automatic matching) and
+  `continue_scene {scene_id, goal_prompt}` (saving that scene first if
+  it's the one loaded) run in the background and answer
   with `{setup, names}` (the world things' names, for display), or
   `plan_failed`/`continue_failed`; they write nothing. `start_scene {setup}`
   (background too: it brings the characters' prose up to date) writes the
@@ -75,7 +77,7 @@ from talemate.worldplay.create import (
     current_date,
     preview_thing,
 )
-from talemate.worldplay.persistence import world_target
+from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -219,6 +221,8 @@ class PlanScenePayload(pydantic.BaseModel):
     prompt: str
     # a `NameMatch.text` -> the thing id the owner picked for it
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    # matched names the owner treats as new: always invented
+    new_names: list[str] = pydantic.Field(default_factory=list)
     player: str | None = None
     start: dict | None = None
 
@@ -706,6 +710,7 @@ class WorldsPlugin(Plugin):
                 _date_in(payload.start),
                 client,
                 reply=fixed,
+                new_names=payload.new_names,
             ),
             self.create_task_done_callback(
                 "plan_scene",
@@ -745,8 +750,14 @@ class WorldsPlugin(Plugin):
         self._reply("list_scenes", {"scenes": scenes})
 
     async def handle_continue_scene(self, data: dict):
+        """Plan the scene after `scene_id`. If that's the loaded scene, it's
+        saved first, so the summary covers what hasn't been saved yet."""
+
         payload = ContinueScenePayload(**data)
         world = self._require_world()
+        scene = self._loaded_scene(world, payload.scene_id)
+        if scene is not None:
+            save_world_scene(scene)
         fixed = self._fixed_setup()
         client = self._client() if fixed is None else None
         self._spawn(

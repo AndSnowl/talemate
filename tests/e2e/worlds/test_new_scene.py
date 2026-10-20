@@ -149,6 +149,21 @@ def test_names_highlight_and_repick(app, page, fixed_setup):
     setup.wait_for(state="hidden", timeout=TIMEOUT_MS)
     assert "bleakcap" in dialog.get_by_label("Storyline").input_value()
 
+    # treating a matched name as new turns it yellow, and it's invented
+    sallowford = dialog.get_by_test_id("name-match").filter(has_text="Sallowford")
+    sallowford.hover()
+    popover = page.get_by_test_id("name-popover").filter(has_text="Treat as new")
+    popover.get_by_text("Treat as new").click()
+    popover.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    assert "new" in sallowford.get_attribute("class")
+    dialog.get_by_role("button", name="Set up scene").click()
+    setup.get_by_test_id("setup-where").filter(has_text="invented").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    sent = _sent(page, "plan_scene")[-1]
+    assert sent["new_names"] == ["Sallowford"]
+    assert "Sallowford" not in sent["picks"]
+
 
 def test_setup_then_start_loads_scene(app, page, fixed_setup):
     name = _world_name("Reedmarch")

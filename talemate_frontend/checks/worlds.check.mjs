@@ -10,7 +10,7 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { useWorldsStore, parseWorldTarget, worldTarget } from '../src/stores/worlds.js';
-import { NEW_THING, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
+import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
 
 let passed = 0;
 const failures = [];
@@ -90,6 +90,8 @@ check('a name picks its best candidate until the owner picks another', () => {
 check('picks go out once per name, leaving out names treated as new', () => {
     assert.deepEqual(picksPayload(MATCHES, { maren: 'vos' }), { Maren: 'vos', Sallowford: 'sal' });
     assert.deepEqual(picksPayload(MATCHES, { maren: NEW_THING }), { Sallowford: 'sal' });
+    assert.deepEqual(newNamesPayload(MATCHES, { maren: NEW_THING }), ['Maren']);
+    assert.deepEqual(newNamesPayload(MATCHES, { maren: 'vos' }), []);
 });
 
 check('the prompt is cut into plain text, matched names and new names', () => {
@@ -282,9 +284,10 @@ const SETUP = { setup: { player: { thing_id: 'vos' }, start: dateOf(314), intro:
 check('plan, regenerate, edit and start a scene', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
-    store.planScene('Maren goes', { Maren: 'vos' }, null, dateOf(314));
+    store.planScene('Maren goes', { Maren: 'vos' }, null, dateOf(314), ['Tobin']);
     assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'plan_scene', prompt: 'Maren goes', picks: { Maren: 'vos' }, player: null, start: dateOf(314),
+        type: 'worlds', action: 'plan_scene', prompt: 'Maren goes', picks: { Maren: 'vos' },
+        new_names: ['Tobin'], player: null, start: dateOf(314),
     });
     assert.equal(store.setupPending, true);
     store.handleMessage(reply('plan_scene', SETUP));

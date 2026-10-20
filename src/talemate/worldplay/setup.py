@@ -23,6 +23,10 @@ and-setup.md) settled:
   resolved against the world in code;
 - a player picked in the UI always wins over the model's choice.
 
+The owner's choices always win over automatic matching: a name the owner
+picked a thing for resolves to that thing, and a name the owner treats as
+new (`new_names`) is always invented.
+
 For the browser tests, `plan_scene` and `continue_setup` take a ready-made
 model `reply` instead of asking the model (the websocket plugin's
 `TALEMATE_TEST_FIXED_SETUP`); everything after the model's answer runs as
@@ -331,31 +335,44 @@ def _entry(value: object) -> tuple[str, list[str]]:
     )
 
 
+def _is_new(key: str, new_names: frozenset[str]) -> bool:
+    """Whether the (normalised) name `key` is one the owner treats as new,
+    or starts with one ("Maren Ashdown" when "Maren" is new)."""
+
+    return any(key == new or key.startswith(new + " ") for new in new_names)
+
+
 def _resolve(
-    view: WorldView, name: str, kind: str, picks: dict[str, str]
+    view: WorldView,
+    name: str,
+    kind: str,
+    picks: dict[str, str],
+    new_names: frozenset[str] = frozenset(),
 ) -> str | None:
-    """The world thing of `kind` the model's `name` means: one with that
-    full name (a picked one first), a picked thing the owner's text or
-    first name matches, or the only thing of that kind with that first
-    name. `None` means invented."""
+    """The world thing of `kind` the model's `name` means. The owner's
+    choices come first: a name treated as new (`new_names`, normalised) is
+    invented, and a picked thing the owner's text, its name or its first
+    name matches is that thing. Then a thing with that full name, or the
+    only thing of that kind with that first name. `None` means invented."""
 
     key = _norm(name)
-    if not key:
+    if not key or _is_new(key, new_names):
         return None
     things = {
         state.id: _norm(view.name_of(state.id) or "") for state in view.things(kind)
     }
-    picked = [thing_id for thing_id in picks.values() if thing_id in things]
+
+    for text, thing_id in picks.items():
+        if thing_id in things and key in (
+            _norm(text),
+            things[thing_id],
+            things[thing_id].split(" ")[0],
+        ):
+            return thing_id
 
     exact = [thing_id for thing_id, thing_name in things.items() if thing_name == key]
     if exact:
-        return next((t for t in exact if t in picked), exact[0])
-
-    for text, thing_id in picks.items():
-        if thing_id in things and (
-            _norm(text) == key or things[thing_id].split(" ")[0] == key
-        ):
-            return thing_id
+        return exact[0]
 
     by_first = [
         t for t, thing_name in things.items() if thing_name.split(" ")[0] == key
@@ -364,12 +381,16 @@ def _resolve(
 
 
 def _ref(
-    view: WorldView, value: object, kind: str, picks: dict[str, str]
+    view: WorldView,
+    value: object,
+    kind: str,
+    picks: dict[str, str],
+    new_names: frozenset[str] = frozenset(),
 ) -> SetupRef | None:
     name, facts = _entry(value)
     if not name:
         return None
-    thing_id = _resolve(view, name, kind, picks)
+    thing_id = _resolve(view, name, kind, picks, new_names)
     if thing_id is not None:
         return SetupRef(thing_id=thing_id)
     return SetupRef(local=LocalThing(name=name, facts=facts))
@@ -403,6 +424,7 @@ def _setup_from_reply(
     player: SetupRef | None,
     start: WorldDate,
     prompt: str,
+    new_names: frozenset[str] = frozenset(),
 ) -> SceneSetup:
     """A `SceneSetup` from the model's reply, every name resolved against
     the world. A `player` given wins over the model's; the model's player
@@ -414,11 +436,13 @@ def _setup_from_reply(
         raw_characters = []
     characters = [
         ref
-        for ref in (_ref(view, value, "character", picks) for value in raw_characters)
+        for ref in (
+            _ref(view, value, "character", picks, new_names) for value in raw_characters
+        )
         if ref is not None
     ]
 
-    model_player = _ref(view, reply.get("player"), "character", picks)
+    model_player = _ref(view, reply.get("player"), "character", picks, new_names)
     if player is None:
         if model_player is None:
             if not characters:
@@ -437,7 +461,7 @@ def _setup_from_reply(
         if state is not None and state.kind == "character":
             _add_ref(cast, SetupRef(thing_id=thing_id), unless=player)
 
-    place = _ref(view, reply.get("place"), "place", picks)
+    place = _ref(view, reply.get("place"), "place", picks, new_names)
     picked_places = [
         thing_id
         for thing_id in picks.values()
@@ -482,10 +506,12 @@ async def plan_scene(
     *,
     embedding_function: Any = None,
     reply: dict[str, Any] | None = None,
+    new_names: list[str] | None = None,
 ) -> SceneSetup:
     """Plan a scene from the owner's storyline `prompt`. `picks` maps a
-    `NameMatch.text` to the thing the owner chose for it; `player` is the
-    owner's pick of who they play, if any. `start` defaults to the world's
+    `NameMatch.text` to the thing the owner chose for it, and `new_names`
+    are the matched names the owner treats as new (always invented);
+    `player` is the owner's pick of who they play, if any. `start` defaults to the world's
     current date (`create.current_date`). `embedding_function` is the
     index's, by default the memory agent's. A given `reply` stands in for
     the model's (no model or index is asked). Writes nothing to the world."""
@@ -524,6 +550,7 @@ async def plan_scene(
         player=SetupRef(thing_id=player) if player else None,
         start=start,
         prompt=prompt,
+        new_names=frozenset(_norm(name) for name in new_names or [] if name.strip()),
     )
     setup.pulled_in = [
         thing_id

@@ -238,6 +238,71 @@ async def test_plan_scene_start_defaults_to_now_without_an_index(world):
     assert setup.pulled_in == []
 
 
+async def test_plan_scene_pick_beats_an_exact_name(world):
+    """The owner's pick always wins: the model's "Maren" is the Maren the
+    owner picked, even though another thing is named exactly "Maren"."""
+
+    ids = _river_world(world)
+    with world.revision(Source.manual(note="setup")) as rev:
+        rev.create_thing("character", fields={"name": "Maren"})
+
+    setup = await plan_scene(
+        world,
+        "Maren goes fishing",
+        {"Maren": ids["holt"]},
+        None,
+        START,
+        None,
+        reply={"player": "Maren", "characters": [], "intro": "Dawn."},
+    )
+
+    assert setup.player == SetupRef(thing_id=ids["holt"])
+    assert setup.invented == []
+
+
+async def test_plan_scene_treats_new_names_as_invented(world):
+    """A name the owner treats as new is never resolved to a world thing,
+    even when exactly one thing has that (first) name."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        vos = rev.create_thing("character", fields={"name": "Maren Vos"})
+        tobin = rev.create_thing("character", fields={"name": "Tobin"})
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {"name": "Tobin", "facts": ["A stranger off the barge."]},
+            {"name": "Maren Vos"},
+        ],
+        "intro": "Dawn.",
+    }
+    setup = await plan_scene(
+        world,
+        "Maren meets Tobin",
+        {},
+        None,
+        START,
+        None,
+        reply=reply,
+        new_names=["maren", "Tobin"],
+    )
+
+    assert setup.player == SetupRef(local=LocalThing(name="Maren"))
+    # "Maren" is new, so the model's "Maren Vos" is not the world's either
+    assert setup.characters == [
+        SetupRef(local=LocalThing(name="Tobin", facts=["A stranger off the barge."])),
+        SetupRef(local=LocalThing(name="Maren Vos")),
+    ]
+    assert setup.invented == ["Maren", "Tobin", "Maren Vos"]
+
+    # without new names the same reply resolves to the world things
+    setup = await plan_scene(
+        world, "Maren meets Tobin", {}, None, START, None, reply=reply
+    )
+    assert setup.player == SetupRef(thing_id=vos)
+    assert SetupRef(thing_id=tobin) in setup.characters
+
+
 async def test_plan_scene_rejects_unknown_pick(world):
     _river_world(world)
     with pytest.raises(KeyError):
