@@ -25,6 +25,7 @@
     "litegraph.js": "^0.7.18",
     "lodash": "^4.17.21",
     "marked": "^15.0.12",
+    "pinia": "^4.0.3",
     "roboto-fontface": "*",
     "uuid": "^14.0.0",
     "vue": "^3.5",

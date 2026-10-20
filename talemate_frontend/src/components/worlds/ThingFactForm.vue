@@ -1,0 +1,74 @@
+<template>
+    <v-card variant="tonal" class="pa-3 fact-form" data-testid="fact-form">
+        <template v-if="form.mode === 'end'">
+            <div class="text-caption text-muted mb-2">The fact stops being true from this year on.</div>
+            <div class="d-flex align-center ga-2">
+                <v-text-field v-model.number="form.untilYear" label="Until year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
+                <v-btn color="accent" variant="flat" size="small" :loading="busy" :disabled="!validYear(form.untilYear)" @click="$emit('save')">End</v-btn>
+                <v-btn variant="text" size="small" :disabled="busy" @click="$emit('cancel')">Cancel</v-btn>
+            </div>
+        </template>
+        <template v-else>
+            <v-textarea v-model="form.text" label="Fact" rows="1" auto-grow density="compact" variant="outlined" hide-details class="mb-2"></v-textarea>
+            <div class="d-flex flex-wrap align-center ga-2">
+                <v-select v-model="form.category" label="Category" :items="categories" density="compact" variant="outlined" hide-details class="category"></v-select>
+                <v-text-field v-model.number="form.fromYear" label="From year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
+                <v-text-field v-model.number="form.untilYear" label="Until year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
+            </div>
+            <div class="text-caption text-muted mt-1">Leave a year empty for an open start or end.</div>
+            <div class="d-flex ga-2 mt-2">
+                <v-btn color="accent" variant="flat" size="small" :loading="busy" :disabled="!valid" @click="$emit('save')">Save</v-btn>
+                <v-btn variant="text" size="small" :disabled="busy" @click="$emit('cancel')">Cancel</v-btn>
+                <v-spacer></v-spacer>
+                <v-btn v-if="form.mode === 'edit'" variant="text" size="small" color="danger" prepend-icon="mdi-delete" :disabled="busy" @click="$emit('remove')">Remove</v-btn>
+            </div>
+        </template>
+    </v-card>
+</template>
+
+<script>
+// The inline form ThingPage opens to add, edit (correct) or end a fact. It
+// edits the `form` object ThingPage owns; ThingPage sends the change.
+function isYear(value) {
+    return Number.isInteger(value) && value >= 1 && value <= 9999;
+}
+
+function isEmpty(value) {
+    return value === null || value === undefined || value === '';
+}
+
+export default {
+    name: 'ThingFactForm',
+    props: {
+        form: { type: Object, required: true },
+        categories: { type: Array, required: true },
+        busy: { type: Boolean, default: false },
+    },
+    emits: ['save', 'cancel', 'remove'],
+    computed: {
+        valid() {
+            const { text, category, fromYear, untilYear } = this.form;
+            const yearOk = (value) => isEmpty(value) || isYear(value);
+            if (!text?.trim() || !category || !yearOk(fromYear) || !yearOk(untilYear)) {
+                return false;
+            }
+            return !(isYear(fromYear) && isYear(untilYear) && untilYear <= fromYear);
+        },
+    },
+    methods: {
+        validYear: isYear,
+    },
+};
+</script>
+
+<style scoped>
+.year {
+    flex: 1 1 140px;
+    max-width: 180px;
+}
+
+.category {
+    flex: 1 1 180px;
+    max-width: 240px;
+}
+</style>

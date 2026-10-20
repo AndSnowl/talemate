@@ -14,6 +14,8 @@ test is skipped, so the plain suite stays runnable without a browser.
 Fixtures:
 
 - ``app`` (session): one isolated app for the whole run, stopped at the end.
+  Its backend answers the `worlds` router's ``preview_thing`` from
+  ``<root>/e2e-fixed-preview.json`` (``seed.set_fixed_preview``), never a model.
 - ``browser_page``: a fresh browser context and blank page, closed after the test.
 - ``page``: ``browser_page`` opened on the app, onboarding wizard dismissed,
   with ``page.console_errors`` collecting console messages of type ``error``.
@@ -31,7 +33,7 @@ from pathlib import Path
 
 import pytest
 
-from e2e.seed import SOCKET_HOOK_JS, dismiss_onboarding
+from e2e.seed import FIXED_PREVIEW_FILE, SOCKET_HOOK_JS, dismiss_onboarding
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS_DIR = REPO_ROOT / ".test-artifacts"
@@ -88,7 +90,13 @@ def browser(chromium_path):
 @pytest.fixture(scope="session")
 def app(tmp_path_factory, chromium_path):
     # chromium_path first: without a browser, skip before starting an app.
-    info = talemate_app.start(root=tmp_path_factory.mktemp("app"))
+    root = tmp_path_factory.mktemp("app")
+    # The backend's `preview_thing` answers from this file instead of a model
+    # (seed.set_fixed_preview writes it). Set only for the backend's start:
+    # it inherits the environment then.
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(root / FIXED_PREVIEW_FILE))
+        info = talemate_app.start(root=root)
     try:
         yield info
     finally:

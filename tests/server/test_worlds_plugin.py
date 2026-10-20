@@ -437,6 +437,76 @@ async def test_preview_failure_is_reported(plugin, client):
     assert "no facts" in failed["message"]
 
 
+async def test_fixed_preview_setting_answers_without_a_model(
+    plugin, client, tmp_path, monkeypatch
+):
+    """TALEMATE_TEST_FIXED_PREVIEW (e2e only) names a file that
+    `preview_thing` answers from, with the request's kind, prompt and
+    fields, instead of asking the model."""
+
+    world, _, _ = await _open_world_with_maren(plugin)
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Oskar Dell",
+                "facts": [{"category": "background", "text": "A ferryman."}],
+                "prose": {"description": "A weathered ferryman.", "personality": ""},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+    born = WorldDate.of(270).model_dump(mode="json")
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "preview_thing",
+            "kind": "character",
+            "prompt": "a grizzled ferryman",
+            "fields": {"born": born},
+        }
+    )
+    await _drain(plugin)
+
+    preview = _last(plugin, "preview_thing")["data"]
+    assert preview["kind"] == "character"
+    assert preview["prompt"] == "a grizzled ferryman"
+    assert preview["fields"] == {"born": born}
+    assert preview["name"] == "Oskar Dell"
+    assert preview["prose"]["description"] == "A weathered ferryman."
+    assert client.prompt_history == []
+
+    await plugin.handle(
+        {"type": "worlds", "action": "accept_preview", "preview": preview}
+    )
+    assert _last(plugin, "accept_preview")["data"]["name"] == "Oskar Dell"
+
+
+async def test_edits_without_a_client_leave_prose_stale(plugin, monkeypatch):
+    """With no AI client on the creator agent, an edit stands and its prose
+    refresh is skipped; an explicit regenerate is refused."""
+
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+    world, maren, _ = await _open_world_with_maren(plugin)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "add_fact",
+            "thing_id": maren,
+            "category": "appearance",
+            "text": "A heron tattoo on her wrist.",
+        }
+    )
+    assert _last(plugin, "add_fact")["data"]["prose"]["description"]["stale"]
+    assert not plugin.tasks
+
+    await plugin.handle({"type": "worlds", "action": "regenerate_prose", "id": maren})
+    assert not plugin.tasks
+    assert "client" in _last(plugin, "operation_done")["error"]["message"].lower()
+
+
 async def test_thing_actions_need_an_open_world(plugin):
     await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
     assert _replies(plugin, "list_things") == []

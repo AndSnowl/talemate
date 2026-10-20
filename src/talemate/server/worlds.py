@@ -18,11 +18,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
 - Create: `preview_thing {kind, prompt, fields}` runs in the background and
   answers `preview_thing {preview}` or `preview_failed {message}`; it
   writes nothing. `accept_preview {preview}` writes it and answers with the
-  new thing.
+  new thing. For the browser tests only, `TALEMATE_TEST_FIXED_PREVIEW`
+  names a JSON file (`{name, facts, prose, fields?}`) that previews are
+  answered from instead of the model.
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
-  `prose_failed`). `regenerate_prose {id, at}` regenerates every section.
+  `prose_failed`); with no AI client the edit stands and the prose is left
+  stale. `regenerate_prose {id, at}` regenerates every section.
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
@@ -42,6 +45,8 @@ formatted with the world's calendar; `label` is ignored on the way in.
 """
 
 import asyncio
+import json
+import os
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -106,6 +111,10 @@ def _value_out(calendar: Calendar, value: object) -> object:
 
 # the present a new world starts at, unless the owner picks another year
 DEFAULT_PRESENT_YEAR = 1000
+
+# browser tests only: a JSON file `preview_thing` answers from (see the
+# module docstring)
+FIXED_PREVIEW_ENV = "TALEMATE_TEST_FIXED_PREVIEW"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -215,6 +224,21 @@ class ContinueScenePayload(pydantic.BaseModel):
 class RepositionScenePayload(pydantic.BaseModel):
     scene_id: str
     start: dict
+
+
+async def _fixed_preview(path: Path, payload: PreviewPayload) -> CreatePreview:
+    """The browser tests' stand-in for `preview_thing`: the preview in
+    `path`, for the request's kind, prompt and fields."""
+
+    fixed = json.loads(path.read_text(encoding="utf-8"))
+    return CreatePreview(
+        kind=payload.kind,
+        prompt=payload.prompt,
+        fields={**payload.fields, **fixed.get("fields", {})},
+        name=fixed["name"],
+        facts=fixed["facts"],
+        prose=fixed["prose"],
+    )
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -435,7 +459,11 @@ class WorldsPlugin(Plugin):
         try:
             client = self._client()
         except KeyError:
-            log.warning("worlds.prose_skipped", reason="no creator agent")
+            client = None
+        if client is None:
+            if regenerate:
+                raise ValueError("No AI client is set up to write the prose")
+            log.warning("worlds.prose_skipped", reason="no AI client")
             return None
 
         lock = self._prose_locks.setdefault(thing_id, asyncio.Lock())
@@ -542,9 +570,16 @@ class WorldsPlugin(Plugin):
     async def handle_preview_thing(self, data: dict):
         payload = PreviewPayload(**data)
         world = self._require_world()
-        client = self._client()
+        fixed = os.environ.get(FIXED_PREVIEW_ENV)
+        if fixed:
+            preview = _fixed_preview(Path(fixed), payload)
+        else:
+            client = self._client()
+            preview = preview_thing(
+                world, payload.kind, payload.prompt, payload.fields, client
+            )
         self._spawn(
-            preview_thing(world, payload.kind, payload.prompt, payload.fields, client),
+            preview,
             self.create_task_done_callback(
                 "preview_thing",
                 "preview_failed",

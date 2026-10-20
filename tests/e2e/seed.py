@@ -233,7 +233,9 @@ def _run_in_copy(root: Path, script: str, spec: dict) -> dict:
     root = Path(root)
     proc = _worker(root)
     proc.stdin.write(
-        json.dumps({"script": script, "spec": json.dumps(spec), "prefix": RESULT_PREFIX})
+        json.dumps(
+            {"script": script, "spec": json.dumps(spec), "prefix": RESULT_PREFIX}
+        )
         + "\n"
     )
     proc.stdin.flush()
@@ -348,6 +350,106 @@ def place_glossary(world: SeededWorld, entries: list[dict]) -> None:
         _PLACES_GLOSSARY_SCRIPT,
         {"world_dir": str(world.world_dir), "entries": list(entries)},
     )
+
+
+# Runs inside the copy: a fantasymate world (`talemate.world`) in the copy's
+# WORLDS_DIR, the folder the running app's `worlds` router lists.
+_FM_WORLD_SCRIPT = """
+import json, sys
+
+from talemate.path import WORLDS_DIR
+from talemate.world.dates import WorldDate
+from talemate.world.store import Source, World
+
+
+def _year(value):
+    return WorldDate.of(value) if value is not None else None
+
+
+spec = json.loads(sys.argv[1])
+world = World.create(spec["name"], root=WORLDS_DIR)
+try:
+    world.set_present(WorldDate.of(spec["present_year"]))
+    ids = {}
+    with world.revision(Source.manual(note="e2e seed")) as rev:
+        for thing in spec["things"]:
+            fields = {"name": thing["name"]}
+            if thing.get("born") is not None:
+                fields["born"] = WorldDate.of(thing["born"])
+            thing_id = rev.create_thing(thing["kind"], fields)
+            ids[thing["name"]] = thing_id
+            for fact in thing.get("facts") or []:
+                rev.add_fact(
+                    thing_id,
+                    fact["category"],
+                    fact["text"],
+                    valid_from=_year(fact.get("since")),
+                    valid_until=_year(fact.get("until")),
+                )
+    for scene in spec["scenes"]:
+        world.scenes().create(
+            scene["name"],
+            WorldDate.of(scene["start"]),
+            premise=scene.get("premise", ""),
+            player_thing_id=ids.get(scene.get("player")),
+        )
+    result = {"id": world.id, "path": str(world.path), "things": ids}
+finally:
+    world.close()
+print(RESULT_PREFIX + json.dumps(result))
+"""
+
+
+@dataclasses.dataclass
+class SeededFmWorld:
+    id: str
+    path: Path
+    # thing name -> thing id
+    things: dict[str, str]
+
+
+def seed_fm_world(
+    root: Path,
+    name: str,
+    *,
+    present_year: int = 1000,
+    things: list[dict] = (),
+    scenes: list[dict] = (),
+) -> SeededFmWorld:
+    """Create a fantasymate world (`talemate.world.World`) in the app's worlds folder.
+
+    ``things`` items are ``{"kind", "name", "born": year|None, "facts":
+    [{"category", "text", "since": year|None, "until": year|None}]}``,
+    written in one revision. ``scenes`` items are ``{"name", "start": year,
+    "premise"="", "player": thing name|None}``, created in the world's
+    scene store (with no messages).
+    """
+    result = _run_in_copy(
+        root,
+        _FM_WORLD_SCRIPT,
+        {
+            "name": name,
+            "present_year": present_year,
+            "things": list(things),
+            "scenes": list(scenes),
+        },
+    )
+    return SeededFmWorld(
+        id=result["id"], path=Path(result["path"]), things=result["things"]
+    )
+
+
+# The app's `worlds` router answers `preview_thing` from this file (in the
+# app root) instead of asking a model; the `app` fixture points the
+# backend's TALEMATE_TEST_FIXED_PREVIEW at it.
+FIXED_PREVIEW_FILE = "e2e-fixed-preview.json"
+
+
+def set_fixed_preview(root: Path, preview: dict) -> None:
+    """Make the app's next `preview_thing` replies ``preview``: ``{"name",
+    "facts": [{"category", "text", "since"?}], "prose": {section: text},
+    "fields"?}`` (the request's kind, prompt and fields fill the rest)."""
+    (Path(root) / FIXED_PREVIEW_FILE).write_text(json.dumps(preview))
 
 
 # Installed by the ``page`` fixture (context.add_init_script) before the app's
