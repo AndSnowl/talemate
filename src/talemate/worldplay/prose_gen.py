@@ -32,6 +32,7 @@ from typing import Any
 import structlog
 
 from talemate.prompts import Prompt
+from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import get_kind
 from talemate.world.prose import stretches
@@ -101,21 +102,33 @@ def _facts_for_section(state: ThingState, section: str) -> list[str]:
     return [fact.text for fact in state.facts if fact.category in categories]
 
 
-def _background_for_section(state: ThingState, section: str) -> list[str]:
+def background_for_section(
+    calendar: Calendar,
+    kind: str,
+    section: str,
+    facts: list[tuple[str, str]],
+    fields: dict[str, Any],
+) -> list[str]:
     """The thing's other facts -- outside `section`'s own categories -- plus
     its core fields (`name`, `born`, `kind`), when there are any. Given to
-    the model for consistency only, never to describe."""
+    the model for consistency only, never to describe.
 
-    categories = section_categories(state.kind, section)
-    background = [fact.text for fact in state.facts if fact.category not in categories]
+    `facts` is `(category, text)` pairs and `fields` the thing's raw field
+    values, rather than a `ThingState`, so this also serves `create.py`'s
+    `preview_thing`, previewing a thing that isn't in the world yet.
+    `born` is formatted by `calendar` (eras and all), the same as a built
+    `Character`'s own `born` label (`characters.py`)."""
+
+    categories = section_categories(kind, section)
+    background = [text for category, text in facts if category not in categories]
 
     for field in _CORE_BACKGROUND_FIELDS:
-        value = state.fields.get(field)
+        value = fields.get(field)
         if not value:
             continue
         if field == "born":
             born = value if isinstance(value, WorldDate) else WorldDate(**value)
-            background.append(f"Born in the year {born.to_datetime().year}.")
+            background.append(f"Born in {calendar.format(born)}.")
         elif field == "kind":
             background.append(f"A {value}.")
         elif field == "name":
@@ -199,7 +212,13 @@ async def generate_section(
 
     name = view.name_of(thing_id) or ""
     facts = _facts_for_section(state, section)
-    background = _background_for_section(state, section)
+    background = background_for_section(
+        world.calendar,
+        state.kind,
+        section,
+        [(fact.category, fact.text) for fact in state.facts],
+        state.fields,
+    )
     text = await render_section(state.kind, name, section, facts, client, background)
 
     # cached at the revision the facts were read at (`view.rev`), not the

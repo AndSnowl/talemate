@@ -338,12 +338,20 @@ async def preview_thing(
         # an age older than the calendar itself is clamped to year 1
         fields["born"] = WorldDate.of(max(1, now_year - age))
 
+    # the preview's own identity, for every section's background -- the
+    # same core fields `prose_gen.generate_section` reads off a `ThingState`
+    fact_pairs = [(f.category, f.text) for f in facts]
+    background_fields = {**fields, "name": name}
+
     prose: dict[str, str] = {}
     for section in prose_gen.sections_for(kind):
         categories = prose_gen.section_categories(kind, section)
         section_facts = [f.text for f in facts if f.category in categories]
+        background = prose_gen.background_for_section(
+            calendar, kind, section, fact_pairs, background_fields
+        )
         prose[section] = await prose_gen.render_section(
-            kind, name, section, section_facts, client
+            kind, name, section, section_facts, client, background
         )
 
     log.info("create.preview", kind=kind, name=name, facts=len(facts))

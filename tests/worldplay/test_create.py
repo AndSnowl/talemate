@@ -102,6 +102,30 @@ async def test_preview_parses_facts(at_313):
     assert "inherent trait" in create_prompt
 
 
+async def test_preview_prose_sections_get_identity_background(at_313):
+    """Review-round fix: `preview_thing` called `render_section` with no
+    `background`, so a section generated from one category of facts alone
+    could drift off who it's about (the owl-to-human drift `daf21459`
+    fixed for `regenerate_prose`/`generate_section`, which already passes
+    the thing's other facts and core fields as background). A preview has
+    facts and fields, not a `ThingState`, so the same background must come
+    from a helper both callers can use."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY, "Corvin Ash is lean and scarred.", "Corvin Ash is quiet.")
+        await preview_thing(at_313, "character", "a disgraced duelist", {}, client)
+
+    # [0] is the create call, [1] description, [2] personality
+    personality_prompt = str(client.prompt_history[2]["prompt"])
+    # the personality section's own facts don't mention his appearance or
+    # his name/born -- without identity background, nothing here would
+    assert "A long scar across his sword hand." in personality_prompt
+    assert "Named Corvin Ash." in personality_prompt
+    assert "Born in" in personality_prompt
+    assert "for consistency only" in personality_prompt
+
+
 async def test_preview_does_not_write(at_313):
     head = at_313.head_rev()
     client = MockClient("test")

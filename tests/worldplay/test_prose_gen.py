@@ -9,6 +9,7 @@ human. The fix gives each section the thing's other facts as background
 the reply with "<name> is" rather than just the name."""
 
 from talemate.prompts import Prompt
+from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
 from talemate.world.store import Source
 from talemate.worldplay import prose_gen
@@ -83,7 +84,35 @@ async def test_generate_section_background_includes_born(world):
         await prose_gen.generate_section(world, vasha, "personality", None, client)
 
     prompt = str(client.prompt_history[0]["prompt"])
-    assert "Born in the year 978." in prompt
+    assert "Born in 978." in prompt
+
+
+async def test_generate_section_background_born_uses_the_world_calendar(world):
+    """Review-round fix: the global constraint is that a date is always
+    formatted by the world's `Calendar` (eras and all), the way
+    `characters.py`'s own `born` label already is -- the background was
+    instead formatting it as a bare `to_datetime().year`, which skips the
+    era rename `Calendar.format` applies."""
+
+    world.set_calendar(
+        Calendar(eras=[Era(name="Age of Rivers", abbreviation="AR", start_year=300)])
+    )
+    with world.revision(Source.manual(note="setup")) as rev:
+        vasha = rev.create_thing(
+            "character", fields={"name": "Vasha", "born": WorldDate.of(305)}
+        )
+        rev.add_fact(vasha, "appearance", "A large owl-like creature.")
+        rev.add_fact(vasha, "personality", "Quiet and observant.")
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("Vasha is quiet and observant.")
+        await prose_gen.generate_section(world, vasha, "personality", None, client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    # 305 is the 6th year of the Age of Rivers (start_year=300)
+    assert "Born in 6 AR." in prompt
+    assert "305" not in prompt
 
 
 async def test_generate_section_uses_the_analyze_kind(world):
