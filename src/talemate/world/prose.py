@@ -7,9 +7,8 @@ field value or fact start/end, as `World.timeline` reports them. Like
 `rev_removed` and `ProseCache` writes it in plain transactions, not through
 `World.revision`. `rev` here is the revision an entry was generated from
 (`World.head_rev()` at the time it was cached, unless the caller says
-otherwise), used only to tell whether it's gone stale: a change dated in the
-stretch that was added after `rev`, or a row visible in the stretch that was
-retired after it, makes the entry stale.
+otherwise), used only to tell whether it's gone stale: a row visible in the
+stretch that was added or retired after `rev` makes the entry stale.
 
 `TimelineSource` is a `Protocol`, not `World` itself: this module only needs
 a thing's timeline and the current head revision, and spelling that
@@ -204,13 +203,14 @@ class ProseCache:
         else:
             self._conn.execute("COMMIT")
 
-    def _retired_in_stretch_since(self, thing_id: str, cached: CachedProse) -> bool:
-        """Whether a field value or fact of `thing_id` that was visible
-        somewhere in the cached stretch has been retired (removed, corrected
-        or undone) since `cached.rev`. A retired row is gone from the
-        timeline, so `stale` can't see it there. "Visible in the stretch"
-        means its span overlaps the stretch: a fact that started before the
-        stretch and runs through it was in that stretch's prose too."""
+    def _changed_in_stretch_since(self, thing_id: str, cached: CachedProse) -> bool:
+        """Whether a field value or fact of `thing_id` visible somewhere in
+        the cached stretch was added, or retired (removed, corrected or
+        undone), after `cached.rev`. "Visible in the stretch" means its span
+        overlaps the stretch, not just that its start falls inside it: a
+        fact that started before the stretch and runs through it is in that
+        stretch's prose too. A retired row is gone from the timeline, so the
+        timeline check in `stale` can't see it; this catches both."""
 
         start = (
             cached.stretch_start.instant if cached.stretch_start is not None else None
@@ -222,24 +222,26 @@ class ProseCache:
         ends_after_start = "(valid_until IS NULL OR ? IS NULL OR valid_until > ?)"
 
         fact = self._conn.execute(
-            "SELECT 1 FROM facts WHERE thing_id = ? AND rev_removed > ? "
+            "SELECT 1 FROM facts WHERE thing_id = ? "
+            "AND (rev_added > ? OR rev_removed > ?) "
             f"AND {starts_before_end} AND {ends_after_start} LIMIT 1",
-            (thing_id, cached.rev, end, end, start, start),
+            (thing_id, cached.rev, cached.rev, end, end, start, start),
         ).fetchone()
         if fact is not None:
             return True
         value = self._conn.execute(
-            "SELECT 1 FROM field_values WHERE thing_id = ? AND rev_removed > ? "
+            "SELECT 1 FROM field_values WHERE thing_id = ? "
+            "AND (rev_added > ? OR rev_removed > ?) "
             f"AND {starts_before_end} LIMIT 1",
-            (thing_id, cached.rev, end, end),
+            (thing_id, cached.rev, cached.rev, end, end),
         ).fetchone()
         return value is not None
 
     def stale(self, thing_id: str, section: str, at: WorldDate | None) -> bool:
         """`True` if there's no cached entry for the stretch containing
         `at`, its `rev` predates the newest timeline change inside that
-        stretch, or a row visible in that stretch was retired after its
-        `rev`."""
+        stretch, or a row visible in that stretch was added or retired
+        after its `rev`."""
 
         cached = self.get(thing_id, section, at)
         if cached is None:
@@ -251,4 +253,4 @@ class ProseCache:
         )
         if cached.rev < newest:
             return True
-        return self._retired_in_stretch_since(thing_id, cached)
+        return self._changed_in_stretch_since(thing_id, cached)

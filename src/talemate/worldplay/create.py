@@ -17,7 +17,8 @@ The reply parser is built around the create probe's findings
 - `since` is accepted only as a year of the world's calendar, no later than
   now; anything else ("childhood", "ten years ago", an off-calendar year)
   is an open start;
-- a character's age becomes its born year, against the world's current date.
+- a character's age becomes its born year (at least year 1), against the
+  world's current date: the later of its latest scene and its present.
 
 The model's own idea of which facts it invented isn't asked for: the probe
 showed it can't be relied on.
@@ -86,10 +87,13 @@ class CreatePreview(BaseModel):
 
 
 def current_date(world: World) -> WorldDate:
-    """The world's "now": where its latest scene got to, or year 1 for a
-    world with no scenes yet (the same default scene setup uses)."""
+    """The world's "now": the later of where its latest scene got to and
+    the world's present (`World.present`), so things made before any scene
+    exists still sit at a sensible date."""
 
-    return world.scenes().latest_end() or WorldDate.of(1)
+    present = world.present()
+    latest = world.scenes().latest_end()
+    return latest if latest is not None and latest > present else present
 
 
 def _era_at(calendar: Calendar, year: int) -> Era | None:
@@ -314,8 +318,8 @@ async def preview_thing(
     name = fields.get("name") or name or _fallback_name(prompt)
     fields.pop("name", None)
     if kind == "character" and "born" not in fields and age is not None:
-        if 0 <= age < now_year:
-            fields["born"] = WorldDate.of(now_year - age)
+        # an age older than the calendar itself is clamped to year 1
+        fields["born"] = WorldDate.of(max(1, now_year - age))
 
     prose: dict[str, str] = {}
     for section in prose_gen.sections_for(kind):

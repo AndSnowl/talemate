@@ -5,7 +5,10 @@ answered with `{"type": "worlds", "action": <a>, "data": {...}}`. Errors go
 through `signal_operation_failed` (an `operation_done` envelope with
 `error.message`), writing nothing.
 
-- Worlds: `list_worlds`, `create_world {name}`, `open_world {path}`. The
+- Worlds: `list_worlds`, `create_world {name, present_year}`,
+  `open_world {path}`, `get_present`, `set_present {year}`. A world's
+  present (default year 1000) is the date things are created at before
+  any scene has moved past it. The
   open world is held on the websocket handler (`handler.world`), one per
   connection, and closed when the connection goes.
 - Things: `list_things {kind}`, `get_thing {id, at}`. A thing's payload
@@ -81,8 +84,13 @@ def _value_out(calendar: Calendar, value: object) -> object:
 # --- payloads -----------------------------------------------------------------
 
 
+# the present a new world starts at, unless the owner picks another year
+DEFAULT_PRESENT_YEAR = 1000
+
+
 class CreateWorldPayload(pydantic.BaseModel):
     name: str
+    present_year: int = DEFAULT_PRESENT_YEAR
 
     @pydantic.field_validator("name")
     @classmethod
@@ -94,6 +102,10 @@ class CreateWorldPayload(pydantic.BaseModel):
 
 class OpenWorldPayload(pydantic.BaseModel):
     path: str
+
+
+class SetPresentPayload(pydantic.BaseModel):
+    year: int
 
 
 class ListThingsPayload(pydantic.BaseModel):
@@ -219,6 +231,16 @@ class WorldsPlugin(Plugin):
             "path": str(world.path),
             "head_rev": world.head_rev(),
             "calendar": calendar.model_dump(mode="json"),
+            **self._present_info(world),
+        }
+
+    def _present_info(self, world: World) -> dict:
+        """The world's present, and the "now" creation uses (the later of
+        the present and where the latest scene got to)."""
+
+        calendar = world.calendar
+        return {
+            "present": _date_out(calendar, world.present()),
             "now": _date_out(calendar, current_date(world)),
         }
 
@@ -388,7 +410,10 @@ class WorldsPlugin(Plugin):
 
     async def handle_create_world(self, data: dict):
         payload = CreateWorldPayload(**data)
+        # validated before anything is written: years run 1-9999
+        present = WorldDate.of(payload.present_year)
         world = World.create(payload.name, root=self.root)
+        world.set_present(present)
         self._set_world(world)
         self._reply("create_world", self._world_info(world))
 
@@ -400,6 +425,15 @@ class WorldsPlugin(Plugin):
         world = World.open(path)
         self._set_world(world)
         self._reply("open_world", self._world_info(world))
+
+    async def handle_get_present(self, data: dict):
+        self._reply("get_present", self._present_info(self._require_world()))
+
+    async def handle_set_present(self, data: dict):
+        payload = SetPresentPayload(**data)
+        world = self._require_world()
+        world.set_present(WorldDate.of(payload.year))
+        self._reply("set_present", self._present_info(world))
 
     # --- things -----------------------------------------------------------
 

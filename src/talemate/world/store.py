@@ -588,6 +588,19 @@ class World:
     def set_calendar(self, calendar: Calendar) -> None:
         self._set_meta("calendar", calendar.model_dump_json())
 
+    def present(self) -> WorldDate:
+        """The world's "present": the in-world date its owner is working
+        at when no scene says otherwise (creating things before any scene
+        exists, for one). Year 1 until `set_present` is called."""
+
+        try:
+            return WorldDate.model_validate_json(self._meta("present"))
+        except KeyError:
+            return WorldDate.of(1)
+
+    def set_present(self, date: WorldDate) -> None:
+        self._set_meta("present", date.model_dump_json())
+
     def head_rev(self) -> int:
         row = self._conn.execute("SELECT MAX(rev) FROM revisions").fetchone()
         return row[0] or 0

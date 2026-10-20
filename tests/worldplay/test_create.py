@@ -216,6 +216,38 @@ def test_parse_since_uses_the_current_era():
     assert facts[2].since is None
 
 
+async def test_preview_in_a_world_with_no_scenes_uses_its_present(world):
+    world.set_present(WorldDate.of(1000))
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY, "Lean.", "Quiet.")
+        preview = await preview_thing(world, "character", "a duelist", {}, client)
+
+    assert preview.fields["born"] == WorldDate.of(1000 - 41)
+    assert "year 1000" in str(client.prompt_history[0]["prompt"])
+    # 305 is a year before now: kept
+    assert preview.facts[0].since == WorldDate.of(305)
+
+
+async def test_set_present_moves_creations_now(at_313):
+    # a present later than the latest scene wins
+    at_313.set_present(WorldDate.of(400))
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY, "Lean.", "Quiet.")
+        preview = await preview_thing(at_313, "character", "a duelist", {}, client)
+    assert preview.fields["born"] == WorldDate.of(400 - 41)
+
+
+async def test_derived_born_is_at_least_year_one(world):
+    world.set_present(WorldDate.of(20))
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(DUELIST_REPLY, "Lean.", "Quiet.")
+        preview = await preview_thing(world, "character", "a duelist", {}, client)
+    assert preview.fields["born"] == WorldDate.of(1)
+
+
 def test_accept_writes_one_revision(at_313):
     preview = CreatePreview(
         kind="character",

@@ -268,6 +268,106 @@ async def test_correct_end_and_set_field(plugin, client):
     assert len(_replies(plugin, "prose_updated")) == 3
 
 
+async def test_correct_fact_dates_unset_keeps_null_opens(plugin, client):
+    world, maren, _ = await _open_world_with_maren(plugin)
+    eye = next(
+        f.fact_id for f in world.view().thing(maren).facts if f.text.startswith("Lost")
+    )
+
+    def eye_row():
+        return next(
+            e
+            for e in world.timeline(maren)
+            if e.fact_id == eye and e.change == "fact_start"
+        )
+
+    async with MockClientContext():
+        # valid_from left out: kept at 314
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "correct_fact",
+                "thing_id": maren,
+                "fact_id": eye,
+                "valid_until": WorldDate.of(330).model_dump(),
+            }
+        )
+        assert eye_row().date == WorldDate.of(314)
+        fact = next(
+            f
+            for f in world.view(WorldDate.of(320)).thing(maren).facts
+            if f.fact_id == eye
+        )
+        assert fact.valid_until == WorldDate.of(330)
+
+        # valid_from sent as null: the start is opened ("always")
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "correct_fact",
+                "thing_id": maren,
+                "fact_id": eye,
+                "valid_from": None,
+            }
+        )
+        await _drain(plugin)
+
+    assert eye_row().date is None
+    fact = next(
+        f for f in world.view(WorldDate.of(320)).thing(maren).facts if f.fact_id == eye
+    )
+    assert fact.valid_from is None
+    # valid_until left out the second time: still 330
+    assert fact.valid_until == WorldDate.of(330)
+
+
+async def test_present_defaults_and_can_be_set(plugin, client):
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Vael"})
+    created = _last(plugin, "create_world")["data"]
+    assert created["present"]["label"] == "1000"
+    assert created["now"]["label"] == "1000"
+
+    await plugin.handle(
+        {"type": "worlds", "action": "create_world", "name": "Old", "present_year": 313}
+    )
+    assert _last(plugin, "create_world")["data"]["present"]["label"] == "313"
+
+    await plugin.handle({"type": "worlds", "action": "set_present", "year": 320})
+    assert _last(plugin, "set_present")["data"]["present"]["label"] == "320"
+    await plugin.handle({"type": "worlds", "action": "get_present"})
+    got = _last(plugin, "get_present")["data"]
+    assert got["present"]["label"] == "320"
+    assert got["now"]["label"] == "320"
+    assert plugin.world.present() == WorldDate.of(320)
+
+
+async def test_set_present_moves_preview_now(plugin, client):
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Vael"})
+    await plugin.handle({"type": "worlds", "action": "set_present", "year": 500})
+    reply = json.dumps(
+        {
+            "name": "Tam",
+            "age": 60,
+            "facts": [{"category": "background", "text": "A ferryman."}],
+        }
+    )
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        client_responses.get().append("Tam ferries.")
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "preview_thing",
+                "kind": "character",
+                "prompt": "an old ferryman",
+                "fields": {},
+            }
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_thing")["data"]
+    assert preview["fields"]["born"] == WorldDate.of(440).model_dump(mode="json")
+
+
 async def test_preview_then_accept(plugin, client):
     world, _, _ = await _open_world_with_maren(plugin)
     head = world.head_rev()

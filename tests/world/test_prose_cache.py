@@ -166,3 +166,18 @@ def test_put_records_given_rev(world, maren):
         maren.rev_created
     )
     assert cache.stale(maren.id, "description", WorldDate.of(315)) is True
+
+
+def test_stale_after_adding_fact_dated_before_stretch(world, maren):
+    # a fact dated 300, added after the (305, 314) stretch was cached, is
+    # visible all through that stretch
+    cache = world.prose()
+    start, end = _warden_stretch(world, maren)
+    cache.put(maren.id, "description", start, end, "The warden.")
+
+    with world.revision(Source.manual(note="an old scar")) as rev:
+        rev.add_fact(
+            maren.id, "appearance", "A scar on her chin.", valid_from=WorldDate.of(300)
+        )
+
+    assert cache.stale(maren.id, "description", WorldDate.of(310)) is True
