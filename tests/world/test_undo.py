@@ -38,6 +38,27 @@ def test_undo_restores_corrected_fact(world, maren):
     assert _fact_texts(world, maren.id)[maren.laugh] == "A quick laugh."
 
 
+def test_undo_restores_override_links(world):
+    with world.revision(Source.manual()) as rev:
+        species_id = rev.create_thing("species", fields={"name": "Elf"})
+        species_fact_id = rev.add_fact(species_id, "physical", "Pointed ears.")
+        c = rev.create_thing("character", fields={"name": "Aria"})
+        override_fact_id = rev.add_fact(
+            c, "appearance", "Rounded ears.", overrides=[species_fact_id]
+        )
+
+    with world.revision(Source.manual()) as rev:
+        rev.remove_fact(override_fact_id)
+        removed = rev.rev
+
+    report = world.undo([removed])
+
+    assert report.reverted == 1
+    state = world.view().thing(c)
+    assert state.facts[0].fact_id == override_fact_id
+    assert state.facts[0].overrides == [species_fact_id]
+
+
 def test_undo_lists_later_edited_rows(world, maren):
     with world.revision(Source.manual()) as rev:
         fact_id = rev.add_fact(maren.id, "background", "Sailed the northern sea.")

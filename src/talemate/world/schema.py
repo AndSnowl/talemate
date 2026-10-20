@@ -29,7 +29,7 @@ import structlog
 
 log = structlog.get_logger("talemate.world.schema")
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 MIGRATIONS: list[str] = [
     # 0 -> 1
@@ -167,6 +167,15 @@ MIGRATIONS: list[str] = [
         edited INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (thing_id, section, stretch_start)
     );
+    """,
+    # 2 -> 3
+    """
+    CREATE TABLE fact_overrides (
+        row_id INTEGER NOT NULL REFERENCES facts,
+        fact_id TEXT NOT NULL
+    );
+
+    CREATE INDEX idx_fact_overrides_fact_id ON fact_overrides (fact_id);
     """,
 ]
 

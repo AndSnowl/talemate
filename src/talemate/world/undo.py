@@ -2,8 +2,8 @@
 
 Nothing is deleted or updated in place. Undo retires live rows and restores
 earlier ones as copies whose `rev_added` is the undo revision (facts keep
-their `fact_id`, and the copy gets the original's `fact_refs`). The full
-history stays viewable.
+their `fact_id`, and the copy gets the original's `fact_refs` and
+`fact_overrides`). The full history stays viewable.
 
 Every undo leaves reversal links (the reversing-entry pattern, as in
 accounting reversals or `git revert`): its revision records the revisions it
@@ -399,6 +399,11 @@ def _apply(
             conn.execute(
                 "INSERT INTO fact_refs (row_id, thing_id) "
                 "SELECT ?, thing_id FROM fact_refs WHERE row_id = ?",
+                (cur.lastrowid, row["row_id"]),
+            )
+            conn.execute(
+                "INSERT INTO fact_overrides (row_id, fact_id) "
+                "SELECT ?, fact_id FROM fact_overrides WHERE row_id = ?",
                 (cur.lastrowid, row["row_id"]),
             )
 

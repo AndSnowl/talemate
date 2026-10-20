@@ -74,6 +74,7 @@ class FactState(BaseModel):
     valid_until: WorldDate | None
     source_rev: int
     refs: list[str]
+    overrides: list[str] = []
 
 
 class ThingState(BaseModel):
@@ -201,20 +202,29 @@ class WorldView:
         at_instant = self._at_instant()
         rows = self._conn.execute(
             f"""
-            SELECT f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
-                   f.from_precision, f.valid_until, f.until_precision, f.rev_added
+            SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
+                   f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+                   fo.fact_id AS override_fact_id
             FROM facts f
             JOIN things t ON t.id = f.thing_id AND {things_filter}
+            LEFT JOIN fact_overrides fo ON fo.row_id = f.row_id
             WHERE f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
               AND (f.valid_from IS NULL OR f.valid_from <= ?)
               AND (f.valid_until IS NULL OR f.valid_until > ?)
-            ORDER BY f.thing_id, f.valid_from ASC, f.fact_id ASC
+            ORDER BY f.thing_id, f.valid_from ASC, f.fact_id ASC, fo.rowid ASC
             """,
             (*things_params, self.rev, self.rev, at_instant, at_instant),
         ).fetchall()
 
+        facts_by_row: dict[int, FactState] = {}
         for row in rows:
-            result.setdefault(row["thing_id"], []).append(_fact_state_from_row(row))
+            state = facts_by_row.get(row["row_id"])
+            if state is None:
+                state = _fact_state_from_row(row)
+                facts_by_row[row["row_id"]] = state
+                result.setdefault(row["thing_id"], []).append(state)
+            if row["override_fact_id"] is not None:
+                state.overrides.append(row["override_fact_id"])
         return result
 
     def thing(self, thing_id: str) -> ThingState | None:
