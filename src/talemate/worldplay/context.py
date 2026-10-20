@@ -110,6 +110,11 @@ class WorldSceneContext:
         characters whose prose has gone stale stay stale until something
         else (not this) regenerates it.
 
+        A character whose world thing has since been deleted is left as
+        it is, with a warning logged -- the same thing
+        `persistence._character_data` does on load -- rather than failing
+        every time-passage signal from here on.
+
         Only the world-derived fields (name, description, base attributes,
         dialogue instructions, example dialogue) are replaced --
         `character.model_copy(update=...)` keeps everything per-scene
@@ -123,9 +128,15 @@ class WorldSceneContext:
             if thing_id is None:
                 continue
 
-            rebuilt = character_from_world(
-                self.world, thing_id, at, is_player=character.is_player
-            )
+            try:
+                rebuilt = character_from_world(
+                    self.world, thing_id, at, is_player=character.is_player
+                )
+            except KeyError:
+                log.warning(
+                    "world scene character not in the world", thing_id=thing_id
+                )
+                continue
             updated = character.model_copy(
                 update={
                     field: getattr(rebuilt, field) for field in WORLD_DERIVED_FIELDS

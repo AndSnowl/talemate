@@ -142,6 +142,50 @@ async def test_since_lines_after_time_passage(world):
 
 
 @pytest.mark.asyncio
+async def test_refresh_characters_keeps_existing_when_thing_deleted(world):
+    """Review-round fix: `agent.world_state.time` fires `refresh_characters`
+    for every active character on every time skip (and
+    `server/worlds.py`'s `_refresh_loaded` calls it directly from
+    `reposition_scene`). A character whose world thing has since been
+    deleted must not blow up that signal -- `character_from_world` raises
+    KeyError for it, so the actor keeps its last-built character, with a
+    warning logged (the same pattern `persistence._character_data` uses
+    on load)."""
+
+    with world.revision(Source.manual(note="create Mira")) as rev:
+        thing_id = rev.create_thing("character", fields={"name": "Mira"})
+
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(313, 12, 15))
+    record = scenes.get(scene_id)
+
+    scene = MockScene()
+    bootstrap_scene(scene)
+
+    character = character_from_world(world, thing_id, record.start, is_player=False)
+
+    conversation = instance.get_agent("conversation")
+    actor = Actor(character=character, agent=conversation)
+    actor.scene = scene
+    scene.actors.append(actor)
+    scene.active_characters.append(character.name)
+    scene.character_data[character.name] = character
+
+    scene.world_context = WorldSceneContext(world=world, record=record)
+    connect(scene)
+
+    with world.revision(Source.manual(note="deleted Mira")) as rev:
+        rev.remove_thing(thing_id)
+
+    world_state = instance.get_agent("world_state")
+    await world_state.advance_time("P30D")  # must not raise
+
+    assert actor.character is character
+    assert actor.agent.character is character
+    assert scene.get_character("Mira") is character
+
+
+@pytest.mark.asyncio
 async def test_connect_does_not_leak_between_scenes(world):
     """Fix round 1 / Critical 3: `connect` used to add a per-scene closure
     that was never disconnected, so a second scene's signal traffic would
