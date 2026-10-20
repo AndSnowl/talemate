@@ -32,6 +32,8 @@ log = structlog.get_logger("talemate.world.prose")
 # an instant past the proleptic-Gregorian range (years 1-9999), used as
 # "+infinity" for at=None, mirroring view.py's _FAR_FUTURE
 _FAR_FUTURE = 10**15
+# "-infinity", for an open (NULL) stretch start when comparing bounds
+_FAR_PAST = -_FAR_FUTURE
 
 
 class TimelineSource(Protocol):
@@ -130,14 +132,18 @@ class ProseCache:
         self, thing_id: str, section: str, at: WorldDate | None
     ) -> CachedProse | None:
         """The cached entry for the stretch containing `at` (`None` means
-        the open, "now" stretch), or `None` if there isn't one."""
+        the open, "now" stretch), or `None` if there isn't one. `put`
+        keeps a thing's stretches from overlapping, but should two rows
+        still match, the most specific one wins: the latest start, an open
+        (NULL) start last."""
 
         at_instant = at.instant if at is not None else _FAR_FUTURE
         row = self._conn.execute(
             "SELECT stretch_start, stretch_end, rev, text, edited FROM prose_cache "
             "WHERE thing_id = ? AND section = ? "
             "AND (stretch_start IS NULL OR stretch_start <= ?) "
-            "AND (stretch_end IS NULL OR stretch_end > ?)",
+            "AND (stretch_end IS NULL OR stretch_end > ?) "
+            "ORDER BY stretch_start IS NULL, stretch_start DESC LIMIT 1",
             (thing_id, section, at_instant, at_instant),
         ).fetchone()
         if row is None:
@@ -162,7 +168,11 @@ class ProseCache:
         rev: int | None = None,
     ) -> None:
         """Cache `text` for the stretch `[stretch_start, stretch_end)`,
-        replacing whatever was cached for that stretch before. `rev` is the
+        replacing whatever was cached for that stretch before. Cached rows
+        of the same thing and section that overlap it are clipped to the
+        part outside it (or dropped, when nothing is left): a new dated
+        change splits a stretch, and the old text stays right only for the
+        part before (or after) the new one. `rev` is the
         revision `text` was generated from; `None` means `head_rev()` now.
         Passing the revision the facts were read at keeps a change written
         while the text was being generated from going unnoticed."""
@@ -174,15 +184,7 @@ class ProseCache:
 
         self._conn.execute("BEGIN IMMEDIATE")
         try:
-            # `stretch_start` can be NULL ("always"), and SQLite's primary
-            # key doesn't dedupe NULLs against each other the way a NOT
-            # NULL key would, so the old row (if any) is found and replaced
-            # by hand instead of relying on `INSERT ... ON CONFLICT`.
-            self._conn.execute(
-                "DELETE FROM prose_cache WHERE thing_id = ? AND section = ? "
-                "AND ((stretch_start IS NULL AND ? IS NULL) OR stretch_start = ?)",
-                (thing_id, section, start_instant, start_instant),
-            )
+            self._clip_overlaps(thing_id, section, start_instant, end_instant)
             self._conn.execute(
                 "INSERT INTO prose_cache "
                 "(thing_id, section, stretch_start, stretch_end, rev, text, edited) "
@@ -202,6 +204,63 @@ class ProseCache:
             raise
         else:
             self._conn.execute("COMMIT")
+
+    def _clip_overlaps(
+        self,
+        thing_id: str,
+        section: str,
+        start_instant: int | None,
+        end_instant: int | None,
+    ) -> None:
+        """Cut `[start_instant, end_instant)` out of every cached row of
+        `thing_id`'s `section` that overlaps it, inside `put`'s
+        transaction. A row covering the whole range is split in two."""
+
+        new_start = start_instant if start_instant is not None else _FAR_PAST
+        new_end = end_instant if end_instant is not None else _FAR_FUTURE
+        rows = self._conn.execute(
+            "SELECT stretch_start, stretch_end, rev, text, edited FROM prose_cache "
+            "WHERE thing_id = ? AND section = ? "
+            "AND (stretch_start IS NULL OR ? IS NULL OR stretch_start < ?) "
+            "AND (stretch_end IS NULL OR ? IS NULL OR stretch_end > ?)",
+            (thing_id, section, end_instant, end_instant, start_instant, start_instant),
+        ).fetchall()
+
+        for row in rows:
+            # `stretch_start` can be NULL ("always"), and SQLite's primary
+            # key doesn't dedupe NULLs against each other, so a row is
+            # matched by hand rather than by `=`
+            self._conn.execute(
+                "DELETE FROM prose_cache WHERE thing_id = ? AND section = ? "
+                "AND ((stretch_start IS NULL AND ? IS NULL) OR stretch_start = ?)",
+                (thing_id, section, row["stretch_start"], row["stretch_start"]),
+            )
+            old_start = (
+                row["stretch_start"] if row["stretch_start"] is not None else _FAR_PAST
+            )
+            old_end = (
+                row["stretch_end"] if row["stretch_end"] is not None else _FAR_FUTURE
+            )
+            pieces: list[tuple[int | None, int | None]] = []
+            if old_start < new_start:
+                pieces.append((row["stretch_start"], start_instant))
+            if old_end > new_end:
+                pieces.append((end_instant, row["stretch_end"]))
+            for piece_start, piece_end in pieces:
+                self._conn.execute(
+                    "INSERT INTO prose_cache "
+                    "(thing_id, section, stretch_start, stretch_end, rev, text, "
+                    "edited) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        thing_id,
+                        section,
+                        piece_start,
+                        piece_end,
+                        row["rev"],
+                        row["text"],
+                        row["edited"],
+                    ),
+                )
 
     def _changed_in_stretch_since(self, thing_id: str, cached: CachedProse) -> bool:
         """Whether a field value or fact of `thing_id` visible somewhere in

@@ -7,6 +7,8 @@ import pytest
 from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import Precision, WorldDate
 from talemate.world.store import Source
+from talemate.worldplay import prose_gen
+from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.create import (
     CreatePreview,
     PreviewFact,
@@ -90,6 +92,11 @@ async def test_preview_parses_facts(at_313):
     assert "a disgraced duelist" in create_prompt
     assert "appearance, personality, background" in create_prompt
     assert "year 313" in create_prompt
+    # no Talemate jargon the model can't know, and an example `since` that
+    # can't be copied as a real year
+    assert "`@`" not in create_prompt
+    assert '"since": "YEAR"' in create_prompt
+    assert "308" not in create_prompt
 
 
 async def test_preview_does_not_write(at_313):
@@ -187,6 +194,19 @@ def test_parse_ignores_the_placeholder_name():
     name, _, facts = parse_create_reply(reply, "lore", Calendar(), 313)
     assert name is None
     assert facts[0].text == "A treaty."
+
+
+def test_parse_rejects_the_example_since_placeholder():
+    reply = json.dumps(
+        {
+            "name": "Ivo",
+            "facts": [
+                {"category": "general", "text": "Copied.", "since": "YEAR"},
+            ],
+        }
+    )
+    _name, _age, facts = parse_create_reply(reply, "character", Calendar(), 313)
+    assert facts[0].since is None
 
 
 def test_parse_unknown_category_falls_back():
@@ -309,3 +329,52 @@ def test_accept_rejects_an_invalid_fact_without_writing(at_313):
     with pytest.raises(ValueError):
         accept_preview(at_313, preview)
     assert at_313.head_rev() == head
+
+
+async def test_regenerated_prose_wins_after_a_fact_at_a_new_year(at_313):
+    """The accepted preview's prose covers the open stretch. A fact dated at
+    a new year splits it; the prose regenerated for the new open stretch is
+    what "now" reads from then on, with no since line repeating it, and
+    nothing is regenerated twice."""
+
+    preview = CreatePreview(
+        kind="character",
+        prompt="a smith",
+        fields={},
+        name="Ivo",
+        facts=[
+            PreviewFact(category="appearance", text="Broad shoulders."),
+            PreviewFact(category="personality", text="Calm."),
+        ],
+        prose={"description": "Ivo is broad.", "personality": "Ivo is calm."},
+    )
+    thing_id = accept_preview(at_313, preview)
+    with at_313.revision(Source.manual(note="a scar")) as rev:
+        rev.add_fact(
+            thing_id,
+            "appearance",
+            "A scar from the forge.",
+            valid_from=WorldDate.of(312),
+        )
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("Ivo is broad, with a forge scar.", "Ivo is still calm.")
+        await prose_gen.ensure_prose(at_313, thing_id, None, client)
+        assert len(client.prompt_history) == 2
+        # fresh now: a second pass asks for nothing
+        await prose_gen.ensure_prose(at_313, thing_id, None, client)
+        assert len(client.prompt_history) == 2
+
+    cache = at_313.prose()
+    latest = cache.get(thing_id, "description", None)
+    assert latest.text == "Ivo is broad, with a forge scar."
+    assert cache.stale(thing_id, "description", None) is False
+    assert cache.get(thing_id, "personality", None).text == "Ivo is still calm."
+    earlier = cache.get(thing_id, "description", WorldDate.of(311))
+    assert "scar" not in earlier.text
+
+    character = character_from_world(
+        at_313, thing_id, WorldDate.of(313), is_player=False
+    )
+    assert character.description == "Ivo is broad, with a forge scar."

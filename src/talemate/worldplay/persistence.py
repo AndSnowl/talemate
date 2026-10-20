@@ -184,14 +184,19 @@ def _message_records(scene: "Scene") -> list[MessageRecord]:
     return records
 
 
-def save_world_scene(scene: "Scene") -> None:
+def save_world_scene(scene: "Scene") -> bool:
     """Write `scene` into its world's database (`scene.world_ref`), in one
     transaction: name, state, premise, goal, player, messages and
     scene-local characters. Keys already in the record's `state` that
     `serialize` doesn't produce (scene setup's place and pulled-in lore),
-    and local things that aren't characters, are kept."""
+    and local things that aren't characters, are kept. Returns `False`,
+    writing nothing, for a scene whose world was already closed
+    (`close_world_scene`)."""
 
     ref: WorldSceneRef = scene.world_ref
+    if getattr(scene, "world_closed", False):
+        log.warning("save_world_scene skipped, world closed", scene_id=ref.scene_id)
+        return False
     context: WorldSceneContext | None = getattr(scene, "world_context", None)
     world = context.world if context is not None else World.open(Path(ref.world_path))
     try:
@@ -230,6 +235,7 @@ def save_world_scene(scene: "Scene") -> None:
         if context is not None:
             context.record = store.get(ref.scene_id)
         log.info("save_world_scene", scene_id=ref.scene_id, messages=len(scene.history))
+        return True
     finally:
         if context is None:
             world.close()
@@ -328,8 +334,12 @@ def attach_world_context(scene: "Scene", world: World, record: SceneRecord) -> N
 def close_world_scene(scene: "Scene | None") -> None:
     """Close the world connection a loaded world scene holds open (on
     `scene.world_context`), when the scene is replaced or unloaded. Does
-    nothing for any other scene."""
+    nothing for any other scene. The context is cleared and the scene
+    marked closed, so a save that comes in late (an auto-save still on its
+    way) is skipped rather than written through a closed connection."""
 
     context: WorldSceneContext | None = getattr(scene, "world_context", None)
     if context is not None:
         context.world.close()
+        scene.world_context = None
+        scene.world_closed = True

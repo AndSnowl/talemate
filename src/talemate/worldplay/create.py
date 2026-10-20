@@ -280,6 +280,7 @@ async def preview_thing(
 
     if kind not in CREATE_KINDS:
         raise ValueError(f"can't create a {kind!r} from a prompt")
+    prose_gen.require_client(client)
     kind_spec = get_kind(kind)
     fields = dict(fields or {})
     for field, value in fields.items():
@@ -304,7 +305,6 @@ async def preview_thing(
             "now_label": calendar.format(now),
             "now_year": shown_now,
             "era": era.name if era is not None else "",
-            "example_year": max(1, shown_now - 5),
             "month_names": calendar.month_names,
             "min_facts": MIN_FACTS,
             "max_facts": MAX_FACTS,

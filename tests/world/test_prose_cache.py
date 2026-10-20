@@ -181,3 +181,101 @@ def test_stale_after_adding_fact_dated_before_stretch(world, maren):
         )
 
     assert cache.stale(maren.id, "description", WorldDate.of(310)) is True
+
+
+def _ivo(world):
+    """A character with no dated changes: one open stretch, (None, None)."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        return rev.create_thing("character", fields={"name": "Ivo"})
+
+
+def test_a_new_stretch_clips_the_cached_one_it_overlaps(world):
+    """A fact at a new date splits the open stretch. The prose generated
+    for the new open stretch wins at "now", and the old text keeps only the
+    part before the new date, where it's still right."""
+
+    thing_id = _ivo(world)
+    cache = world.prose()
+    cache.put(thing_id, "description", None, None, "A plain man.")
+
+    with world.revision(Source.manual(note="a scar")) as rev:
+        rev.add_fact(
+            thing_id,
+            "appearance",
+            "A scar on his cheek.",
+            valid_from=WorldDate.of(1003),
+        )
+    assert cache.stale(thing_id, "description", None) is True
+
+    cache.put(thing_id, "description", WorldDate.of(1003), None, "A man with a scar.")
+
+    now = cache.get(thing_id, "description", None)
+    assert now.text == "A man with a scar."
+    assert cache.stale(thing_id, "description", None) is False
+    assert cache.get(thing_id, "description", WorldDate.of(1005)).text == (
+        "A man with a scar."
+    )
+
+    earlier = cache.get(thing_id, "description", WorldDate.of(1001))
+    assert earlier.text == "A plain man."
+    assert earlier.stretch_start is None
+    assert earlier.stretch_end.instant == WorldDate.of(1003).instant
+    assert cache.stale(thing_id, "description", WorldDate.of(1001)) is False
+
+    # the old text never comes back at "now", and no rows pile up
+    rows = world._conn.execute(
+        "SELECT COUNT(*) FROM prose_cache WHERE thing_id = ?", (thing_id,)
+    ).fetchone()[0]
+    assert rows == 2
+
+
+def test_a_stretch_inside_a_cached_one_splits_it(world):
+    thing_id = _ivo(world)
+    cache = world.prose()
+    cache.put(thing_id, "description", None, None, "Old.")
+    cache.put(thing_id, "description", WorldDate.of(1003), WorldDate.of(1005), "Mid.")
+
+    assert cache.get(thing_id, "description", WorldDate.of(1001)).text == "Old."
+    assert cache.get(thing_id, "description", WorldDate.of(1004)).text == "Mid."
+    later = cache.get(thing_id, "description", WorldDate.of(1006))
+    assert later.text == "Old."
+    assert later.stretch_start.instant == WorldDate.of(1005).instant
+    assert later.stretch_end is None
+    assert cache.get(thing_id, "description", None).text == "Old."
+
+
+def test_a_stretch_covering_cached_ones_replaces_them(world):
+    thing_id = _ivo(world)
+    cache = world.prose()
+    cache.put(thing_id, "description", None, WorldDate.of(1003), "Before.")
+    cache.put(thing_id, "description", WorldDate.of(1003), None, "After.")
+    cache.put(thing_id, "description", None, None, "Whole.")
+
+    assert cache.get(thing_id, "description", WorldDate.of(1001)).text == "Whole."
+    assert cache.get(thing_id, "description", None).text == "Whole."
+    rows = world._conn.execute(
+        "SELECT COUNT(*) FROM prose_cache WHERE thing_id = ?", (thing_id,)
+    ).fetchone()[0]
+    assert rows == 1
+
+
+def test_get_prefers_the_latest_starting_overlap(world):
+    """Rows left overlapping (cached before puts clipped them) resolve to
+    the most specific one: the latest start, an open start last."""
+
+    thing_id = _ivo(world)
+    rev = world.head_rev()
+    for start, text in [(WorldDate.of(1003).instant, "Newer."), (None, "Older.")]:
+        world._conn.execute(
+            "INSERT INTO prose_cache "
+            "(thing_id, section, stretch_start, stretch_end, rev, text, edited) "
+            "VALUES (?, 'description', ?, NULL, ?, ?, 0)",
+            (thing_id, start, rev, text),
+        )
+
+    cache = world.prose()
+    assert cache.get(thing_id, "description", None).text == "Newer."
+    assert cache.get(thing_id, "description", WorldDate.of(1004)).text == "Newer."
+    assert cache.get(thing_id, "description", WorldDate.of(1001)).text == "Older."
+    assert cache.stale(thing_id, "description", None) is False

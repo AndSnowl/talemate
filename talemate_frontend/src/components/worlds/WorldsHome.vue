@@ -77,8 +77,23 @@
                         <v-btn size="small" variant="flat" color="accent" prepend-icon="mdi-movie-open-plus" @click="newScene = true">New scene</v-btn>
                         <v-btn size="small" variant="tonal" color="accent" prepend-icon="mdi-earth-box" @click="$emit('open-world-tab')">Browse world</v-btn>
                     </div>
-                    <div class="text-caption text-muted mb-4">
-                        Present: <span class="world-date">{{ formatDate(worlds.calendar, worlds.currentWorld.present) }}</span>
+                    <div class="text-caption text-muted mb-4 d-flex align-center flex-wrap ga-2">
+                        <span>Present: <span class="world-date" data-testid="world-present">{{ formatDate(worlds.calendar, worlds.currentWorld.present) }}</span></span>
+                        <v-menu v-model="presentOpen" :close-on-content-click="false" location="bottom start">
+                            <template #activator="{ props }">
+                                <v-btn v-bind="props" icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit present year" data-testid="edit-present" @click="fillPresent"></v-btn>
+                            </template>
+                            <v-card class="pa-3" min-width="240" data-testid="present-editor">
+                                <div class="text-caption text-muted mb-2">New things are dated at the present until a scene moves past it.</div>
+                                <v-form @submit.prevent="setPresent">
+                                    <v-text-field v-model.number="presentYear" label="Present year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details></v-text-field>
+                                    <div class="d-flex ga-2 mt-3">
+                                        <v-btn type="submit" color="accent" variant="flat" size="small" :disabled="!validPresent" :loading="!!worlds.pending.set_present">Set</v-btn>
+                                        <v-btn variant="text" size="small" @click="presentOpen = false">Cancel</v-btn>
+                                    </div>
+                                </v-form>
+                            </v-card>
+                        </v-menu>
                     </div>
 
                     <div class="text-overline text-muted">Scenes</div>
@@ -114,14 +129,19 @@
 
 <script>
 import { useWorldsStore, worldTarget } from '@/stores/worlds.js';
-import { formatDate } from './worldDates.js';
+import { dateParts, formatDate } from './worldDates.js';
 import NewSceneDialog from './NewSceneDialog.vue';
 import SceneStartDate from './SceneStartDate.vue';
 
 // The Worlds home: list worlds, create one, open one, and play the open
 // world's scenes, or start a new one from a prompt. Play asks TalemateApp
 // to load the scene's `world://` target, the same way Load Scene loads a
-// file. Each scene's start date can be moved from its card.
+// file. Each scene's start date can be moved from its card, and the
+// world's present year set beside its name.
+
+function isYear(value) {
+    return Number.isInteger(value) && value >= 1 && value <= 9999;
+}
 
 export default {
     name: 'WorldsHome',
@@ -139,11 +159,16 @@ export default {
             newYear: 1000,
             openingPath: null,
             newScene: false,
+            presentOpen: false,
+            presentYear: null,
         };
     },
     computed: {
         validYear() {
-            return Number.isInteger(this.newYear) && this.newYear >= 1 && this.newYear <= 9999;
+            return isYear(this.newYear);
+        },
+        validPresent() {
+            return isYear(this.presentYear);
         },
     },
     watch: {
@@ -173,6 +198,16 @@ export default {
             }
             this.worlds.createWorld(this.newName.trim(), this.newYear);
             this.newName = '';
+        },
+        fillPresent() {
+            this.presentYear = dateParts(this.worlds.currentWorld.present).year;
+        },
+        setPresent() {
+            if (!this.validPresent) {
+                return;
+            }
+            this.worlds.setPresent(this.presentYear);
+            this.presentOpen = false;
         },
         play(scene) {
             this.$emit('play-scene', worldTarget(this.worlds.currentWorld.path, scene.id));

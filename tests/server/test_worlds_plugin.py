@@ -15,6 +15,7 @@ from talemate.server.worlds import WorldsPlugin
 from talemate.scene_message import NarratorMessage
 from talemate.tale_mate import Actor
 from talemate.world.dates import WorldDate
+from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source, World
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.context import WorldSceneContext
@@ -508,6 +509,42 @@ async def test_edits_without_a_client_leave_prose_stale(plugin, monkeypatch):
     assert "client" in _last(plugin, "operation_done")["error"]["message"].lower()
 
 
+@pytest.mark.parametrize(
+    "request_data",
+    [
+        {"action": "plan_scene", "prompt": "Maren goes", "player": None},
+        {"action": "continue_scene", "scene_id": "SCENE", "goal_prompt": "Onward"},
+        {"action": "preview_thing", "kind": "character", "prompt": "a smith"},
+    ],
+)
+async def test_model_actions_say_when_no_ai_client_is_configured(
+    plugin, monkeypatch, tmp_path, request_data
+):
+    """As in the browser tests: no client, and the fixed-reply settings
+    naming files that aren't there (no test has written one)."""
+
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(tmp_path / "no-setup.json"))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(tmp_path / "no-preview.json"))
+    world, _maren, _harbour = await _open_world_with_maren(plugin)
+    scene_id = world.scenes().create("First", WorldDate.of(313))
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+
+    data = {
+        key: scene_id if value == "SCENE" else value
+        for key, value in request_data.items()
+    }
+    await plugin.handle({"type": "worlds", **data})
+    await _drain(plugin)
+
+    failed = {
+        "plan_scene": "plan_failed",
+        "continue_scene": "continue_failed",
+        "preview_thing": "preview_failed",
+    }[data["action"]]
+    message = _last(plugin, failed)["message"]
+    assert message == "No AI client is configured for the creator agent"
+
+
 async def test_thing_actions_need_an_open_world(plugin):
     await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
     assert _replies(plugin, "list_things") == []
@@ -571,6 +608,28 @@ async def test_match_names_and_list_scenes(plugin):
     assert [s["id"] for s in scenes] == [first]
     assert scenes[0]["start"]["label"] == "313"
     assert scenes[0]["end"]["label"] == "313"
+
+
+async def test_scene_end_keeps_the_start_date_when_no_time_passed(plugin):
+    """A scene whose messages took no time ends on its start date, to the
+    same precision: no midnight stamp in the label, and the world's "now"
+    stays a plain year."""
+
+    world, _maren, _harbour = await _open_world_with_maren(plugin)
+    scene_id = world.scenes().create("First", WorldDate.of(1313))
+    world.scenes().replace_messages(
+        scene_id,
+        [MessageRecord(id="m1", seq=0, kind="narration", data={}, elapsed="PT0S")],
+    )
+
+    await plugin.handle({"type": "worlds", "action": "list_scenes"})
+    scene = _last(plugin, "list_scenes")["data"]["scenes"][0]
+    assert scene["end"] == scene["start"]
+    assert scene["end"]["precision"] == "year"
+
+    await plugin.handle({"type": "worlds", "action": "get_present"})
+    now = _last(plugin, "get_present")["data"]["now"]
+    assert (now["precision"], now["label"]) == ("year", scene["start"]["label"])
 
 
 @requires_chromadb

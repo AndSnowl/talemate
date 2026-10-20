@@ -14,6 +14,10 @@
 // opening (or creating) a world clears the preview, the scene setup and
 // every spinner itself.
 //
+// The open world's `now` (where creation dates things) moves with its
+// scenes, so every scene listing, and every moved scene, asks for it again
+// (`get_present`).
+//
 // Scenes: the new-scene dialog and "continue in a new scene" share one
 // setup step (`setupRequest`, `sceneSetup`). A started scene's reply lands
 // in `startedScene`; TalemateApp loads its `target` as Load Scene does.
@@ -166,8 +170,25 @@ export const useWorldsStore = defineStore('worlds', {
             Object.assign(this, worldState());
         },
 
+        // `get_present` along with them: a scene that started, continued or
+        // moved can change the world's `now`
         listScenes() {
             this.request('list_scenes');
+            this.refreshPresent();
+        },
+
+        refreshPresent() {
+            this.request('get_present');
+        },
+
+        // the open world's present year (things are created at it before
+        // any scene has moved past it)
+        setPresent(year) {
+            if (!this.currentWorld) {
+                return;
+            }
+            this.pending = { ...this.pending, set_present: true };
+            this.request('set_present', { year });
         },
 
         // --- scenes -------------------------------------------------------
@@ -417,6 +438,7 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'reposition_scene':
                     this.scenes = this.scenes.map((scene) => (scene.id === data.id ? data : scene));
+                    this.refreshPresent();
                     break;
                 case 'preview_thing':
                     if (this.previewPending) {
@@ -455,8 +477,13 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'operation_done':
                     if (message.error) {
                         // the failed request can't be told apart, so every
-                        // spinner stops
-                        this.error = message.error.message;
+                        // spinner stops. While the setup step waits, the
+                        // error shows in its dialog, not behind it.
+                        if (this.setupPending || this.pending.start_scene) {
+                            this.setupError = message.error.message;
+                        } else {
+                            this.error = message.error.message;
+                        }
                         this.pending = {};
                         this.previewPending = false;
                         this.proseRegenerating = null;

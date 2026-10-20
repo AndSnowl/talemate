@@ -178,6 +178,9 @@ class Scene(Emitter):
         # loads from the world's database (`talemate.worldplay.persistence`)
         # instead of a scene JSON file
         self.world_ref: "WorldSceneRef | None" = None
+        # set once the world it played against is closed (the scene was
+        # replaced or unloaded): a late save is then skipped
+        self.world_closed = False
 
         # has scene been saved before?
         self.saved = False
@@ -1896,7 +1899,8 @@ class Scene(Emitter):
                     copy_name=copy_name,
                 )
             self.set_new_memory_session_id()
-            save_world_scene(self)
+            if not save_world_scene(self):
+                return
             self.saved = True
             if not auto:
                 emit("status", status="success", message="Saved scene")

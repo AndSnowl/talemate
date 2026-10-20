@@ -488,3 +488,24 @@ async def test_websocket_closes_the_world_when_the_scene_is_replaced(
 
     with pytest.raises(sqlite3.ProgrammingError):
         loaded_world.scenes().get(scene_id)
+
+
+@pytest.mark.asyncio
+async def test_a_save_after_the_world_is_closed_is_a_no_op(world, scenes_dir):
+    """Closing a replaced scene's world clears `scene.world_context`; an
+    auto-save that comes in late is logged and skipped rather than writing
+    through a closed connection."""
+
+    from talemate.worldplay.persistence import close_world_scene
+
+    scene, scene_id = await _world_scene(world)
+    await scene.save()
+    loaded = await _reload(world, scene_id)
+    loaded.history.append(NarratorMessage("Too late."))
+
+    close_world_scene(loaded)
+    assert loaded.world_context is None
+
+    await loaded.save(auto=True)
+    assert world.scenes().messages(scene_id) == []
+    assert not any(scenes_dir.iterdir())

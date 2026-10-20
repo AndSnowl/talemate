@@ -50,11 +50,11 @@ from talemate.character import Character
 from talemate.prompts import Prompt
 from talemate.world.dates import WorldDate
 from talemate.world.index import IndexDoc, WorldIndex
-from talemate.world.scenes import MessageRecord, SceneRecord
+from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.store import World
 from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
-from talemate.worldplay.context import LOCAL_PLACE_KIND, scene_date
+from talemate.worldplay.context import LOCAL_PLACE_KIND
 from talemate.worldplay.create import current_date
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
@@ -516,6 +516,8 @@ async def plan_scene(
     index's, by default the memory agent's. A given `reply` stands in for
     the model's (no model or index is asked). Writes nothing to the world."""
 
+    if reply is None:
+        prose_gen.require_client(client)
     start = start or current_date(world)
     view = world.view(start)
 
@@ -754,17 +756,15 @@ async def continue_setup(
     brings in join the carried ones. A given `reply` stands in for the
     model's, and the summary is left empty (no summarizer is asked)."""
 
+    if reply is None:
+        prose_gen.require_client(client)
     store = world.scenes()
     record = store.get(scene_id)
     if record is None:
         raise KeyError(f"no such scene: {scene_id}")
 
     messages = store.messages(scene_id)
-    start = scene_date(record, messages[-1].elapsed if messages else "PT0S")
-    if start.instant == record.start.instant:
-        # no time passed: keep the start's own precision ("PT0S" has a time
-        # part, so adding it would make the date exact)
-        start = record.start
+    start = scene_end(record.start, messages[-1].elapsed) if messages else record.start
     view = world.view(start)
 
     player, characters, place, extras = _carried(record, store.local_things(scene_id))

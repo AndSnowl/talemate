@@ -29,6 +29,16 @@ log = structlog.get_logger("talemate.world.scenes")
 _UPDATABLE_FIELDS = {"name", "start", "premise", "goal", "player_thing_id", "state"}
 
 
+def scene_end(start: WorldDate, elapsed: str) -> WorldDate:
+    """Where a scene that started at `start` got to after `elapsed` (an
+    ISO-8601 duration, a message's `elapsed`). When no time passed, the
+    start itself, to its own precision: "PT0S" has a time part, and adding
+    it would turn a plain date into an exact midnight."""
+
+    end = start.plus(elapsed)
+    return start if end.instant == start.instant else end
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -299,7 +309,7 @@ class SceneStore:
         ]
 
     def latest_end(self) -> WorldDate | None:
-        """The latest `start.plus(elapsed)` over every scene's last
+        """The latest `scene_end(start, elapsed)` over every scene's last
         message, or the scene's own `start` if it has none yet. `None` if
         there are no scenes at all."""
 
@@ -321,7 +331,7 @@ class SceneStore:
                 "ORDER BY seq DESC LIMIT 1",
                 (row["id"],),
             ).fetchone()
-            end = start.plus(last["elapsed"]) if last is not None else start
+            end = scene_end(start, last["elapsed"]) if last is not None else start
             if latest is None or end > latest:
                 latest = end
         return latest

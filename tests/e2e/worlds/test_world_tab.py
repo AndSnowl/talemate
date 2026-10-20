@@ -202,3 +202,21 @@ def test_create_box_preview_accept(app, page, fixed_preview):
     page.get_by_test_id("thing-card").filter(has_text="Oskar Dell").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
+
+
+def test_set_the_present_year(app, page):
+    """A world made outside the Worlds home can sit at year 1; its present
+    year is set from the open world."""
+
+    name = _world_name("Tarn")
+    seed_fm_world(app.root, name, present_year=1)
+    _open_world(page, name)
+    present = page.get_by_test_id("world-present")
+    present.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert present.inner_text() == "1"
+
+    page.get_by_test_id("edit-present").click()
+    editor = page.get_by_test_id("present-editor")
+    editor.get_by_label("Present year").fill("1200")
+    editor.get_by_role("button", name="Set").click()
+    present.filter(has_text="1200").wait_for(state="visible", timeout=TIMEOUT_MS)

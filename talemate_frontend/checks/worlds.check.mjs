@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 
 import { createPinia, setActivePinia } from 'pinia';
 
-import { dateOf, dateParts, ageAt, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
+import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { useWorldsStore, parseWorldTarget, worldTarget } from '../src/stores/worlds.js';
 import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
 
@@ -65,6 +65,28 @@ check('spanLabel', () => {
     assert.equal(spanLabel(null, label(304), null), '304 →');
     assert.equal(spanLabel(null, label(305), label(316)), '305 → 316');
     assert.equal(spanLabel(null, null, label(316)), '→ 316');
+});
+
+check('daysInMonth knows month lengths and leap years', () => {
+    assert.equal(daysInMonth(1001, 1), 31);
+    assert.equal(daysInMonth(1001, 4), 30);
+    assert.equal(daysInMonth(1001, 2), 28);
+    assert.equal(daysInMonth(1004, 2), 29);
+    assert.equal(daysInMonth(1000, 2), 28);
+    assert.equal(daysInMonth(1200, 2), 29);
+    // years 1-99 aren't read as 1900-1999
+    assert.equal(daysInMonth(4, 2), 29);
+});
+
+check('clampDay keeps a day inside its month', () => {
+    assert.equal(clampDay(1001, 2, 31), 28);
+    assert.equal(clampDay(1004, 2, 30), 29);
+    assert.equal(clampDay(1001, 4, 31), 30);
+    assert.equal(clampDay(1001, 1, 31), 31);
+    assert.equal(clampDay(1001, 1, 0), 1);
+    // nothing to clamp without a month or a day
+    assert.equal(clampDay(1001, null, 31), 31);
+    assert.equal(clampDay(1001, 2, null), null);
 });
 
 // --- name highlights ----------------------------------------------------------
@@ -155,7 +177,7 @@ check('opening a world lists its things and scenes', () => {
     store.handleMessage(reply('open_world', WORLD));
     assert.equal(store.currentWorld.name, 'Vael');
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(sent.map((m) => m.kind || m.action), ['character', 'place', 'lore', 'list_scenes']);
+    assert.deepEqual(sent.map((m) => m.kind || m.action), ['character', 'place', 'lore', 'list_scenes', 'get_present']);
     store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 'p1', kind: 'place', name: 'Sallowford' }] }));
     assert.equal(store.things.place[0].name, 'Sallowford');
     assert.deepEqual(store.things.character, []);
@@ -364,7 +386,7 @@ check('plan, regenerate, edit and start a scene', () => {
     assert.equal(store.sceneSetup, null);
     assert.equal(store.setupRequest, null);
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_scenes' });
+    assert.deepEqual(sent.slice(-2).map((m) => m.action), ['list_scenes', 'get_present']);
 });
 
 check('a failed start keeps the setup and stops its spinner', () => {
@@ -413,6 +435,56 @@ check('repositioning a scene replaces it in the list', () => {
     store.handleMessage(reply('reposition_scene', { id: 's1', start: dateOf(320) }));
     assert.deepEqual(store.scenes.map((scene) => scene.start), [dateOf(320), dateOf(300)]);
     assert.deepEqual(store.pending, {});
+    // a moved scene can move "now"
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_present' });
+});
+
+check('listing scenes refreshes the world\'s now', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.listScenes();
+    assert.deepEqual(sent.slice(-2).map((m) => m.action), ['list_scenes', 'get_present']);
+    store.handleMessage(reply('get_present', { present: dateOf(1000), now: dateOf(1004) }));
+    assert.deepEqual(store.currentWorld.now, dateOf(1004));
+    assert.equal(store.currentWorld.name, 'Vael');
+});
+
+check('setPresent sets the open world\'s present year', () => {
+    const { store, sent } = freshStore();
+    store.setPresent(1200);
+    assert.equal(sent.length, 1, 'no world open: nothing sent');
+    store.handleMessage(reply('open_world', { ...WORLD, present: dateOf(1), now: dateOf(1) }));
+    store.setPresent(1200);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'set_present', year: 1200 });
+    assert.equal(store.pending.set_present, true);
+    store.handleMessage(reply('set_present', { present: dateOf(1200), now: dateOf(1200) }));
+    assert.deepEqual(store.currentWorld.present, dateOf(1200));
+    assert.deepEqual(store.currentWorld.now, dateOf(1200));
+    assert.deepEqual(store.pending, {});
+});
+
+check('an error while setting up a scene shows in its dialog', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.planScene('Maren goes');
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'No world is open' } });
+    assert.equal(store.setupError, 'No world is open');
+    assert.equal(store.setupPending, false);
+    // and a failed start the same way
+    store.planScene('Maren goes');
+    store.handleMessage(reply('plan_scene', SETUP));
+    store.startScene();
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'bad setup' } });
+    assert.equal(store.setupError, 'bad setup');
+    assert.deepEqual(store.pending, {});
+});
+
+check('an error with no setup step open stays on the page', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'boom' } });
+    assert.equal(store.error, 'boom');
+    assert.equal(store.setupError, null);
 });
 
 check('other routers are ignored', () => {

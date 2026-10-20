@@ -24,6 +24,22 @@ export function dateOf(year, month = null, day = null) {
     return { instant: Math.round((ms - EPOCH_MS) / 1000), precision };
 }
 
+// The number of days in `month` (1-12) of `year`, proleptic Gregorian.
+export function daysInMonth(year, month) {
+    // day 0 of the next month is this month's last day
+    const last = new Date(utcMillis(year, month, 0));
+    return last.getUTCDate();
+}
+
+// `day` kept inside `month` of `year` (1 up to the month's length); left
+// as it is when there's no month or no day to clamp.
+export function clampDay(year, month, day) {
+    if (!month || day == null || day === '') {
+        return day;
+    }
+    return Math.min(Math.max(day, 1), daysInMonth(year, month));
+}
+
 // `{year, month, day}` (month 1-12) of a wire date.
 export function dateParts(date) {
     const d = new Date(EPOCH_MS + date.instant * 1000);

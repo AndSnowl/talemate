@@ -45,6 +45,17 @@ _SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
 _FAR_FUTURE = 10**15
 
 
+NO_CLIENT_MESSAGE = "No AI client is configured for the creator agent"
+
+
+def require_client(client: Any) -> None:
+    """Refuse to ask the model with no client, in words the owner can act
+    on rather than a `NoneType` error from deep inside the prompt."""
+
+    if client is None:
+        raise ValueError(NO_CLIENT_MESSAGE)
+
+
 def sections_for(kind: str) -> tuple[str, ...]:
     """The prose sections a thing of `kind` has."""
 

@@ -224,6 +224,20 @@ def test_continue_scene_offers_setup(app, page, fixed_setup):
     assert setup.get_by_role("button", name="Start").is_visible()
 
 
+def test_a_failed_setup_shows_in_the_dialog(app, page):
+    """With no fixed reply and no AI client, setting up a scene fails, and
+    says why inside the open dialog."""
+
+    name = _world_name("Fenwick")
+    seed_fm_world(app.root, name, present_year=314, things=[MAREN_VOS])
+    _open_world(page, name)
+    dialog = _new_scene_dialog(page, "Maren Vos goes looking for bleakcap.")
+    dialog.get_by_role("button", name="Set up scene").click()
+    dialog.locator(".v-alert").filter(
+        has_text="No AI client is configured for the creator agent"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+
+
 def test_edit_scene_start_date(app, page):
     name = _world_name("Ashford")
     seed_fm_world(
@@ -243,6 +257,18 @@ def test_edit_scene_start_date(app, page):
     editor.get_by_label("Year").fill("316")
     editor.get_by_role("button", name="Move").click()
     start.filter(has_text="316").wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    # a day past the month's end moves back to its last day
+    start.click()
+    editor.wait_for(state="visible", timeout=TIMEOUT_MS)
+    month = editor.locator(".v-select .v-field")
+    month.wait_for(state="visible", timeout=TIMEOUT_MS)
+    month.click()
+    page.get_by_role("option", name="February").click()
+    day = editor.get_by_label("Day")
+    day.fill("31")
+    day.blur()
+    assert day.input_value() == "29"
 
 
 def test_move_start_from_the_scene_view(app, page, fixed_setup):

@@ -68,7 +68,7 @@ from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
-from talemate.world.scenes import SceneRecord
+from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.create import (
@@ -241,6 +241,18 @@ class RepositionScenePayload(pydantic.BaseModel):
     start: dict
 
 
+def _fixed_file(env: str) -> Path | None:
+    """The browser tests' fixed-reply file named by `env`, if it's set and
+    a test has written the file; `None` otherwise, so a request with no
+    fixed reply goes to the model (or says there's no client) as usual."""
+
+    name = os.environ.get(env)
+    if not name:
+        return None
+    path = Path(name)
+    return path if path.exists() else None
+
+
 async def _fixed_preview(path: Path, payload: PreviewPayload) -> CreatePreview:
     """The browser tests' stand-in for `preview_thing`: the preview in
     `path`, for the request's kind, prompt and fields. Async so it runs
@@ -308,10 +320,10 @@ class WorldsPlugin(Plugin):
     def _fixed_setup(self) -> dict | None:
         """The browser tests' fixed scene-setup reply, or `None` normally."""
 
-        path = os.environ.get(FIXED_SETUP_ENV)
-        if not path:
+        path = _fixed_file(FIXED_SETUP_ENV)
+        if path is None:
             return None
-        return json.loads(Path(path).read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def _reply(self, action: str, data: Any) -> None:
         self.websocket_handler.queue_put(
@@ -429,7 +441,9 @@ class WorldsPlugin(Plugin):
     def _scene_out(self, world: World, record: SceneRecord) -> dict:
         calendar = world.calendar
         messages = world.scenes().messages(record.id)
-        end = record.start.plus(messages[-1].elapsed) if messages else record.start
+        end = (
+            scene_end(record.start, messages[-1].elapsed) if messages else record.start
+        )
         return {
             "id": record.id,
             "name": record.name,
@@ -594,9 +608,9 @@ class WorldsPlugin(Plugin):
     async def handle_preview_thing(self, data: dict):
         payload = PreviewPayload(**data)
         world = self._require_world()
-        fixed = os.environ.get(FIXED_PREVIEW_ENV)
-        if fixed:
-            preview = _fixed_preview(Path(fixed), payload)
+        fixed = _fixed_file(FIXED_PREVIEW_ENV)
+        if fixed is not None:
+            preview = _fixed_preview(fixed, payload)
         else:
             client = self._client()
             preview = preview_thing(

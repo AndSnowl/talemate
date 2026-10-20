@@ -3,8 +3,8 @@ import sqlite3
 import pytest
 
 from talemate.world import schema
-from talemate.world.dates import WorldDate
-from talemate.world.scenes import MessageRecord
+from talemate.world.dates import Precision, WorldDate
+from talemate.world.scenes import MessageRecord, scene_end
 
 
 def _v1_connection() -> sqlite3.Connection:
@@ -134,6 +134,35 @@ def test_latest_end(world):
     # scene A starts later than scene B even accounting for B's longer
     # elapsed time, so A's end is the latest
     assert scenes.latest_end() == WorldDate.of(300).plus("P1D")
+
+
+def test_latest_end_keeps_the_start_precision_when_no_time_passed(world):
+    """A last message at "PT0S" has a time part but adds nothing: the end
+    is the start date as it was, not an exact midnight."""
+
+    scenes = world.scenes()
+    scene_id = scenes.create("A", WorldDate.of(1000))
+    scenes.replace_messages(
+        scene_id,
+        [MessageRecord(id="m1", seq=0, kind="narration", data={}, elapsed="PT0S")],
+    )
+    assert scenes.latest_end() == WorldDate.of(1000)
+    assert scenes.latest_end().precision == Precision.YEAR
+
+    # time that did pass is still exact
+    scenes.replace_messages(
+        scene_id,
+        [MessageRecord(id="m1", seq=0, kind="narration", data={}, elapsed="PT2H")],
+    )
+    assert scenes.latest_end().precision == Precision.EXACT
+
+
+def test_scene_end(world):
+    start = WorldDate.of(1000, 3)
+    assert scene_end(start, "PT0S") == start
+    assert scene_end(start, "P0D") == start
+    assert scene_end(start, "P1D") == start.plus("P1D")
+    assert scene_end(start, "PT1M").precision == Precision.EXACT
 
 
 def test_save_writes_all_or_nothing_and_keeps_other_local_kinds(world):
