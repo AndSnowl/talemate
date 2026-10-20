@@ -201,6 +201,19 @@ the culture skill, can be created from a short prompt:
 - The owner accepts, regenerates, edits or retries.
 - The pipeline is prompt → facts → prose. Invention happens once, at creation.
 
+**Deleting a thing** (owner, 2026-10-20). Every kind of thing, now and in future, can be deleted
+from its page.
+- **The reference check.** Before deleting, the app lists everything that uses the thing:
+  - other things' facts that reference it;
+  - fields that point at it (parent place, owner, culture, species, race…);
+  - scenes that use it as a character, the place or pulled-in lore.
+- **The confirmation.** An "are you sure?" dialog always appears, whether or not anything
+  references the thing. It explains the effects: references render as unknown, and scenes load
+  without it.
+- **History is kept.** A delete is an ordinary manual revision, so the thing stays in the
+  world's history and can be restored by undoing that revision.
+- **Open scenes** keep playing with the deleted thing until they're reloaded. (My call.)
+
 **Named things that don't exist yet** (owner, 2026-10-20; a later feature). Creation often
 invents other named people and places in its facts. For example, creating Vasha invented the
 postmaster Aldric, his mother Yelena and the town of Frosthollow. After creation:
