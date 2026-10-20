@@ -22,6 +22,12 @@ The reply parser is built around the create probe's findings
 
 The model's own idea of which facts it invented isn't asked for: the probe
 showed it can't be relied on.
+
+`json_objects` decodes with `strict=False`: a model sometimes puts a real
+line break inside a string (a paragraph break in an "intro") instead of
+escaping it, and a strict decoder rejects the whole object over that one
+control character. `worldplay.setup` shares this parser rather than its
+own copy.
 """
 
 from __future__ import annotations
@@ -148,13 +154,18 @@ def _parse_since(value: object, calendar: Calendar, now_year: int) -> WorldDate 
 # --- the reply ---------------------------------------------------------------
 
 
-def _json_objects(text: str) -> list[dict[str, Any]]:
-    """Every complete top-level JSON object in `text`, in order. An object
-    that doesn't parse (a reply cut off mid-object) is skipped, and the scan
-    carries on inside it, so the complete facts of a truncated list are
-    still found."""
+def json_objects(text: str) -> list[dict[str, Any]]:
+    """Every complete top-level JSON object in `text`, in order. The
+    decoder is non-strict, so a raw line break inside a string (the model
+    writing a real paragraph break instead of escaping it as "\\n") doesn't
+    throw the whole object out. An object that doesn't parse (a reply cut
+    off mid-object) is skipped, and the scan carries on inside it, so the
+    complete facts of a truncated list are still found.
 
-    decoder = json.JSONDecoder()
+    Shared with `worldplay.setup`, whose `_reply_object` picks the one
+    object shaped like a scene setup out of what this returns."""
+
+    decoder = json.JSONDecoder(strict=False)
     found: list[dict[str, Any]] = []
     index = 0
     while (index := text.find("{", index)) != -1:
@@ -196,7 +207,7 @@ def parse_create_reply(
     name: str | None = None
     age: int | None = None
     fact_objects: list[dict[str, Any]] = []
-    for obj in _json_objects(reply):
+    for obj in json_objects(reply):
         if isinstance(obj.get("facts"), list):
             if isinstance(obj.get("name"), str):
                 name = obj["name"]

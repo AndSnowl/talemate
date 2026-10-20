@@ -3,6 +3,7 @@ storyline prompt plus the world, starting it, and continuing in a new
 scene."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -65,6 +66,13 @@ def _river_world(world):
         treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
         rev.add_fact(treaty, "general", "River tolls are paid at the pillars.")
     return {"vos": vos, "holt": holt, "tobin": tobin, "stag": stag, "treaty": treaty}
+
+
+DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "worldplay"
+
+
+def _read_data(name: str) -> str:
+    return (DATA_DIR / name).read_text()
 
 
 SETUP_REPLY = json.dumps(
@@ -301,6 +309,54 @@ async def test_plan_scene_treats_new_names_as_invented(world):
     )
     assert setup.player == SetupRef(thing_id=vos)
     assert SetupRef(thing_id=tobin) in setup.characters
+
+
+async def test_plan_scene_accepts_raw_line_breaks_in_reply(world):
+    """Regression: a model reply whose "intro" has a real paragraph break
+    (a raw newline, not "\\n") instead of escaping it is still a valid
+    setup -- the owner's acceptance run hit this with the exact reply in
+    tests/data/worldplay/accept-fix-4-reply.txt."""
+
+    reply_text = _read_data("accept-fix-4-reply.txt")
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply_text)
+        setup = await plan_scene(
+            world,
+            "Vasha the mail courier faces the Colonel",
+            {},
+            None,
+            START,
+            client,
+        )
+
+    assert setup.player == SetupRef(local=LocalThing(name="Vasha"))
+    assert {c.local.name for c in setup.characters} == {
+        "Colonel Maren Duskhollow",
+        "Postmaster Brenn Ashwick",
+    }
+    duskhollow = next(
+        c for c in setup.characters if c.local.name == "Colonel Maren Duskhollow"
+    )
+    assert duskhollow.local.facts and "crimson uniform" in duskhollow.local.facts[0]
+    ashwick = next(
+        c for c in setup.characters if c.local.name == "Postmaster Brenn Ashwick"
+    )
+    assert ashwick.local.facts and "Kalmara Postal Hall" in ashwick.local.facts[0]
+
+    # the test world doesn't have this place, so it's invented even though
+    # the model flagged it as a world thing
+    assert setup.place is not None
+    assert setup.place.thing_id is None
+    assert setup.place.local.name == "Kalmara Postal Hall"
+    assert "sorting floor" in setup.place.local.facts[0]
+
+    assert setup.goal.startswith("Vasha must decide")
+    assert setup.intro.startswith("The sorting room hums")
+    # the paragraph break survived
+    assert "\n\n" in setup.intro
+    assert setup.intro.endswith("and stays there.")
 
 
 async def test_plan_scene_rejects_unknown_pick(world):

@@ -212,6 +212,20 @@ def test_parse_rejects_the_example_since_placeholder():
     assert facts[0].since is None
 
 
+def test_parse_accepts_a_raw_line_break_in_fact_text():
+    """Regression: a model reply with a real newline inside a fact's
+    "text" string (instead of an escaped "\\n") is still parsed, the same
+    bug the scene-setup reply parser hit (accept-fix-4)."""
+
+    reply = (
+        '{"name": "Mira", "facts": [{"category": "background", '
+        '"text": "Born in the hills.\nRaised by wolves."}]}'
+    )
+    name, _, facts = parse_create_reply(reply, "character", Calendar(), 313)
+    assert name == "Mira"
+    assert facts[0].text == "Born in the hills.\nRaised by wolves."
+
+
 def test_parse_unknown_category_falls_back():
     reply = json.dumps({"facts": [{"category": "rumour", "text": "Said to be shady."}]})
     _, _, facts = parse_create_reply(reply, "place", Calendar(), 313)

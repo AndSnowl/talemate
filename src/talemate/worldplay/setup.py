@@ -37,7 +37,6 @@ Invented things stay scene-local: nothing here writes to the world.
 
 from __future__ import annotations
 
-import json
 import re
 import uuid
 from typing import Any
@@ -56,7 +55,7 @@ from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.context import LOCAL_PLACE_KIND
-from talemate.worldplay.create import current_date
+from talemate.worldplay.create import current_date, json_objects
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
 log = structlog.get_logger("talemate.worldplay.setup")
@@ -303,20 +302,12 @@ async def _ask(
 
 
 def _reply_object(reply: str) -> dict[str, Any]:
-    """The setup object in the model's reply: the first JSON object with a
-    setup key in it."""
+    """The setup object in the model's reply: the first JSON object (found
+    by `create.json_objects`) with a setup key in it."""
 
-    decoder = json.JSONDecoder()
-    index = 0
-    while (index := reply.find("{", index)) != -1:
-        try:
-            obj, _end = decoder.raw_decode(reply, index)
-        except json.JSONDecodeError:
-            index += 1
-            continue
-        if isinstance(obj, dict) and {"player", "characters", "intro"} & set(obj):
+    for obj in json_objects(reply):
+        if {"player", "characters", "intro"} & set(obj):
             return obj
-        index += 1
     raise ValueError(f"no scene setup found in the model's reply: {reply!r}")
 
 
