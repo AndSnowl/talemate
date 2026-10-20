@@ -295,29 +295,11 @@
 - [ ] **Step 4: Run** `pytest tests/worldplay -q`. Expected: PASS.
 - [ ] **Step 5: Commit**: `feat(worldplay): invented scene characters carry a heritage`.
 
-### Task 8: Importing a culture file
+### Task 8: (dropped — cultures moved to the next slice, owner 2026-10-20)
 
-**Files:**
-- Create: `src/talemate/worldplay/culture_import.py`.
-- Modify: `src/talemate/world/kinds.py` (culture gains `source_id: text`).
-- Test: `tests/worldplay/test_culture_import.py`.
+No work. See the spec's "Cultures: moved to the next slice".
 
-**Interfaces:**
-- Produces: `import_culture(world: World, data: dict) -> str`, which takes a parsed `<id>.culture.json` and returns the culture thing id.
-  - The source id is `slugify(culture.id or culture.name)`, as in `cultures/exchange.py`.
-  - **Re-import** of the same `source_id` updates that thing in one revision: it sets `name` and `language`, and replaces the facts that came from the import. Those facts carry `origin={"by": "culture_import"}`; others are kept.
-  - **Mapping:** `description` becomes one `general` fact, each `customs` entry a `customs` fact, and a non-empty `food` a `food` fact. Holidays, glossary, places and renderings are ignored.
-
-- [ ] **Step 1: Write the failing tests** against `tests/e2e/cultures/data/`'s sample culture file:
-  - `test_import_culture_facts`;
-  - `test_reimport_replaces_imported_facts_only`;
-  - `test_import_rejects_non_culture_json` (`ValueError`).
-- [ ] **Step 2: Run** `pytest tests/worldplay/test_culture_import.py -q`. Expected: FAIL.
-- [ ] **Step 3: Implement**, validating with `talemate.cultures.models.Culture`.
-- [ ] **Step 4: Run** the tests. Expected: PASS.
-- [ ] **Step 5: Commit**: `feat(worldplay): import a culture file into the world`.
-
-### Task 9: Router: heritage pages, overrides, the mix lookup and culture import
+### Task 9: Router: heritage pages, overrides and the mix lookup
 
 **Files:**
 - Modify:
@@ -326,7 +308,7 @@
 - Test: `tests/server/test_worlds_plugin.py`, `tests/worldplay/test_references.py`.
 
 **Interfaces:**
-- Consumes: Tasks 2, 5, 6 and 8.
+- Consumes: Tasks 2, 5 and 6.
 - Produces:
   - **New keys in the `_thing_payload` reply:**
     - `"inherited"`: `[{fact_id, category, rendered, source_id, source_kind, source_name, overridden_by}]`;
@@ -339,8 +321,7 @@
     - `override_fact {thing_id, overridden_fact_id, text, category, at}`: adds an own fact linked to the inherited one, then replies like `add_fact`;
     - `list_heritage {}` replies `[{id, kind, name, species_ids}]` for the picker;
     - `find_mix {parents: [a, b]}` replies `{mix_id: str | null}`;
-    - `import_culture {content: str}` takes JSON text from an upload and replies with the culture's thing payload. Bad JSON gives the `import_failed` error.
-  - `list_things` accepts the kinds `species`, `race`, `mix` and `culture`.
+  - `list_things` accepts the kinds `species`, `race` and `mix`.
   - The delete reference check counts a mix's `parents` and a character's `heritage`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -349,13 +330,12 @@
   - `test_override_fact_action`.
   - `test_find_mix_either_order`.
   - `test_list_heritage`.
-  - `test_import_culture_action`.
   - `test_references_count_parents_and_heritage`.
   - `test_member_scenes_in_referenced_in`.
 - [ ] **Step 2: Run** `pytest tests/server/test_worlds_plugin.py tests/worldplay/test_references.py -q`. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the full plain suite. Expected: 0 failed.
-- [ ] **Step 5: Commit**: `feat(worlds): heritage payloads, override, mix lookup and culture import actions`.
+- [ ] **Step 5: Commit**: `feat(worlds): heritage payloads, override and mix lookup actions`.
 
 ### Task 10: Frontend: species, race and mix pages, and the Inherited section
 
@@ -374,7 +354,7 @@
 **Interfaces:**
 - Consumes: Task 9's payload keys and actions.
 - Produces, following the approved mockup (spec, "The pages"):
-  - **`worldKinds.js`** adds Species (`mdi-dna`), Race and Mix. Races and mixes are not listed at the top level of the World tab; they're reached from their species page. Cultures become openable but read-only, with no add, edit or create.
+  - **`worldKinds.js`** adds Species (`mdi-dna`), Race and Mix. Races and mixes are not listed at the top level of the World tab; they're reached from their species page.
   - **`ThingNumbers.vue`:** lifespan, adulthood and measures, editable on species, race and mix pages through `set_field`. A race or mix page shows an unset value as the inherited value, dimmed.
   - **`ThingInherited.vue`:** on character, race and mix pages:
     - facts dimmed, with a source chip that links to the source page;
@@ -393,7 +373,7 @@
 - [ ] **Step 4: Run** `grep -rn` over `tests/ai` for changed test ids, then the full browser suite with `-n 4`. Expected: PASS.
 - [ ] **Step 5: Commit**: `feat(worlds): species, race and mix pages with inherited facts`.
 
-### Task 11: Frontend: the heritage picker, mix-first creation and culture import
+### Task 11: Frontend: the heritage picker and mix-first creation
 
 **Files:**
 - Modify: `CreateBox.vue`, `talemate_frontend/src/stores/worlds.js`, `WorldTab.vue`.
@@ -401,25 +381,22 @@
 - Test: `tests/e2e/worlds/test_heritage_create.py`.
 
 **Interfaces:**
-- Consumes: `list_heritage`, `find_mix`, `preview_thing` with `fields.heritage`/`fields.parents`, and `import_culture`.
+- Consumes: `list_heritage`, `find_mix`, and `preview_thing` with `fields.heritage`/`fields.parents`.
 - Produces:
   - **`HeritagePicker.vue`:** one or two parents, each searchable over `list_heritage`. It sits above the prompt for characters. A world species named in the prompt pre-fills it, using `match_names` results filtered to heritage kinds.
   - **The mix-first flow:**
     - with two parents, `find_mix` runs first;
     - **a mix exists:** it becomes `heritage`;
     - **no mix:** the create box switches to drafting a mix of those parents, with a notice: "This heritage needs a mix entry first, so every character of it shares one body plan." Accepting the mix returns to the character create box, with the prompt kept and `heritage` set to the new mix. Cancelling returns there with the parents still picked.
-  - **Culture picker** (optional) for characters.
   - **Race and mix creation:** from their species page ("+ New race" and "+ New mix"), which opens the create box with `species` or one parent pre-set.
-  - **An "Import culture file" button** on the Cultures list, which sends the file text to `import_culture`.
 
 - [ ] **Step 1: Write the failing browser tests**, using `TALEMATE_TEST_FIXED_PREVIEW` fixtures:
   - `test_two_parents_without_mix_drafts_mix_first`: picking Lowlander and Orc shows the mix draft, accepting it returns to the character box with Half-orc picked, and the prompt text is unchanged.
   - `test_two_parents_with_mix_uses_it`.
-  - `test_import_culture_file`.
 - [ ] **Step 2: Run** the tests. Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the full browser suite with `-n 4`. Expected: PASS.
-- [ ] **Step 5: Commit**: `feat(worlds): heritage picker, mix-first creation and culture import`.
+- [ ] **Step 5: Commit**: `feat(worlds): heritage picker and mix-first creation`.
 
 ### Task 12: End to end with the mock model, and the play probe
 
