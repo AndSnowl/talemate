@@ -312,9 +312,13 @@ def test_edit_linked_fact_keeps_links_and_makes_stubs(app, page):
         state="visible", timeout=TIMEOUT_MS
     )
     assert fact.get_by_test_id("linked-stub").filter(has_text="Moscavia").count() == 1
+    # the old link goes by position; a partial match like it would stay plain
     sent = _sent(page, "correct_fact")[-1]
     assert sent["text"] == "Many nest along the Moscavia border, near Iron Gate."
-    assert sent["picks"] == {"Moscavia": world.things["Tsardom of Moscavia"]}
+    assert sent["spans"] == [
+        {"start": 20, "end": 28, "ref": world.things["Tsardom of Moscavia"]}
+    ]
+    assert "picks" not in sent
     made = _wait_sent(page, "make_stub")
     assert (made["text"], made["kind"]) == ("Iron Gate", "place")
 
@@ -327,7 +331,7 @@ FERRY = {
     "facts": [
         {
             "category": "description",
-            "text": "Run by [[@Maren Vos|Maren]] these days.",
+            "text": "Run by [[@Maren Vos|Maren]] these days, not Maren Holt.",
         }
     ],
 }
@@ -353,10 +357,57 @@ def test_repoint_link_keeps_words(app, page):
     card.get_by_role("button", name="Re-point…").click()
     _search_and_pick(page, "holt", "Maren Holt")
 
-    # the same words, now meaning the other Maren
-    sent = _wait_sent(page, "correct_fact")
-    assert sent["text"] == f"Run by [[thing:{holt}|Maren]] these days."
-    fact = _fact(ferry, "Run by Maren these days.")
-    expect(fact.get_by_test_id("linked-ref")).to_have_text("Maren")
-    fact.get_by_test_id("linked-ref").click()
+    # that one reference, now meaning the other Maren; the known name
+    # written plain stays plain
+    sent = _wait_sent(page, "repoint_ref")
+    assert (sent["occurrence"], sent["to_id"]) == (0, holt)
+    fact = _fact(ferry, "Run by Maren these days, not Maren Holt.")
+    link = fact.get_by_test_id("linked-ref")
+    expect(link).to_have_count(1)
+    expect(link).to_have_text("Maren")
+    link.click()
+    _opened(page, "Maren Holt")
+
+
+ROWERS = {
+    "kind": "place",
+    "name": "Rowing Club",
+    "facts": [
+        {
+            "category": "description",
+            "text": "[[@Maren Vos|Maren]] rowed with [[@Maren Holt|Maren]].",
+        }
+    ],
+}
+
+
+def test_edit_keeps_same_name_links_apart(app, page):
+    name = _world_name("Rowers")
+    world = seed_fm_world(
+        app.root, name, present_year=1026, things=[MAREN_VOS, MAREN_HOLT, ROWERS]
+    )
+    vos, holt = world.things["Maren Vos"], world.things["Maren Holt"]
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    club = _open_thing(page, "Rowing Club")
+
+    # two links written "Maren", to two Marens, each kept by its place
+    _fact(club, "rowed with").get_by_role("button", name="Edit fact").click()
+    form = club.get_by_test_id("fact-form")
+    text = form.get_by_label("Fact", exact=True)
+    expect(text).to_have_value("Maren rowed with Maren.")
+    text.fill("Maren rowed hard with Maren.")
+    form.get_by_role("button", name="Save").click()
+
+    fact = _fact(club, "Maren rowed hard with Maren.")
+    links = fact.get_by_test_id("linked-ref")
+    expect(links).to_have_count(2)
+    sent = _sent(page, "correct_fact")[-1]
+    assert sent["spans"] == [
+        {"start": 0, "end": 5, "ref": vos},
+        {"start": 22, "end": 27, "ref": holt},
+    ]
+    links.nth(1).click()
     _opened(page, "Maren Holt")

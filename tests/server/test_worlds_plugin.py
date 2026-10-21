@@ -1846,6 +1846,144 @@ async def test_fact_edits_leave_names_treated_as_new_plain(plugin, monkeypatch):
     )
 
 
+async def test_make_stub_leaves_a_name_treated_as_new_plain(plugin, monkeypatch):
+    """Making a stub of one phrase links that phrase only: a known name the
+    owner left plain in the same fact (treat as new) stays plain."""
+
+    s = await _open_stub_world(plugin)
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "add_fact",
+            "thing_id": s.maren,
+            "category": "background",
+            "text": "Orphaned near The Harbour on the Night of Feathers.",
+            "new_names": ["The Harbour"],
+        }
+    )
+    fact = next(
+        f
+        for f in _last(plugin, "add_fact")["data"]["facts"]
+        if f["rendered"].startswith("Orphaned")
+    )
+    assert fact["text"] == "Orphaned near The Harbour on the Night of Feathers."
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.maren,
+            "fact_id": fact["fact_id"],
+            "text": "Night of Feathers",
+            "kind": "event",
+        }
+    )
+    night = next(t for t in s.world.view().things("event"))
+    made = next(
+        f
+        for f in _last(plugin, "make_stub")["data"]["facts"]
+        if f["fact_id"] == fact["fact_id"]
+    )
+    assert made["text"] == (
+        f"Orphaned near The Harbour on the {ref(night.id, 'Night of Feathers')}."
+    )
+
+
+async def test_repoint_ref_swaps_one_link_only(plugin, monkeypatch):
+    """`repoint_ref` points the n-th reference of a fact at another thing,
+    keeping its words, and leaves everything else as it was: a known name
+    written plain stays plain."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(
+            s.maren,
+            "background",
+            f"Sailed from {ref(s.tsardom, 'Moscavia')} past The Harbour"
+            f" to {ref(s.tsardom, 'Moscavia')}.",
+        )
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "repoint_ref",
+            "thing_id": s.maren,
+            "fact_id": fact_id,
+            "occurrence": 1,
+            "to_id": s.harbour,
+        }
+    )
+    assert world.head_rev() == head + 1
+    fact = next(
+        f
+        for f in _last(plugin, "repoint_ref")["data"]["facts"]
+        if f["fact_id"] == fact_id
+    )
+    assert fact["text"] == (
+        f"Sailed from {ref(s.tsardom, 'Moscavia')} past The Harbour"
+        f" to {ref(s.harbour, 'Moscavia')}."
+    )
+
+    # no such reference, or a thing that isn't there: refused
+    head = world.head_rev()
+    for occurrence, to_id in ((5, s.harbour), (0, "f" * 32)):
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "repoint_ref",
+                "thing_id": s.maren,
+                "fact_id": fact_id,
+                "occurrence": occurrence,
+                "to_id": to_id,
+            }
+        )
+        assert "error" in _last(plugin, "operation_done")
+    assert world.head_rev() == head
+
+
+async def test_fact_spans_keep_same_name_links_apart(plugin, monkeypatch):
+    """A fact form's `spans` link their words positionally, before picks and
+    automatic matching: two links written "Maren" keep their own targets,
+    and a third, plain "Maren" follows the name-keyed pick."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="marens")) as rev:
+        vos = rev.create_thing("character", {"name": "Maren Vos"})
+        holt = rev.create_thing("character", {"name": "Maren Holt"})
+        fact_id = rev.add_fact(
+            s.harbour,
+            "history",
+            f"{ref(vos, 'Maren')} rowed with {ref(holt, 'Maren')}.",
+        )
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "correct_fact",
+            "thing_id": s.harbour,
+            "fact_id": fact_id,
+            "text": "Maren rowed with Maren past Maren's dock.",
+            "spans": [
+                {"start": 0, "end": 5, "ref": vos},
+                {"start": 17, "end": 22, "ref": holt},
+            ],
+            "picks": {"Maren": s.maren},
+        }
+    )
+    fact = next(
+        f
+        for f in _last(plugin, "correct_fact")["data"]["facts"]
+        if f["fact_id"] == fact_id
+    )
+    assert fact["text"] == (
+        f"{ref(vos, 'Maren')} rowed with {ref(holt, 'Maren')}"
+        f" past {ref(s.maren, 'Maren')}'s dock."
+    )
+
+
 async def test_make_stub_action(plugin, monkeypatch):
     s = await _open_stub_world(plugin)
     world = s.world
@@ -1877,9 +2015,8 @@ async def test_make_stub_action(plugin, monkeypatch):
     assert fact["segments"] == [
         _plain("Orphaned on the "),
         {"text": "Night of Feathers", "ref": night.id, "stub": True},
-        _plain(" in "),
-        {"text": "Moscavia", "ref": s.tsardom, "stub": True},
-        _plain("."),
+        # only the phrase asked for is linked: the rest is left as it was
+        _plain(" in Moscavia."),
     ]
     assert {"id": night.id, "name": "Night of Feathers", "kind": "event"} in reply[
         "named_stubs"

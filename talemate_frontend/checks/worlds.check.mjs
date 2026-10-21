@@ -28,14 +28,16 @@ import {
     NEW_THING,
     factEditState,
     linkPayload,
+    locateLinks,
     matchState,
     newNamesPayload,
     pickedId,
     picksPayload,
     promptSegments,
+    refOccurrence,
     repicks,
-    repointedText,
     searchReferences,
+    spansPayload,
 } from '../src/components/worlds/nameHighlights.js';
 import { STUB_KINDS, TOP_KINDS, canExpand, expandNote, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
@@ -250,27 +252,71 @@ check('references, unknown phrases and stubs-to-be show in the prompt', () => {
     assert.deepEqual(dropped.map((s) => s.state || null), [null]);
 });
 
-check('a linked fact is edited as it reads, its links kept as references', () => {
+check('a linked fact is edited as it reads, each link kept by position', () => {
     const segments = [
-        { text: 'Most nest along the ', ref: null, stub: false },
+        { text: 'Maren', ref: VOS_ID, stub: false },
+        { text: ' met Maren and ', ref: null, stub: false },
+        { text: 'Maren', ref: HOLT_ID, stub: false },
+        { text: ' near ', ref: null, stub: false },
         { text: 'Moscavia', ref: TS_ID, stub: true },
-        { text: ' border, near Iron Gate.', ref: null, stub: false },
+        { text: '.', ref: null, stub: false },
     ];
-    const raw = `Most nest along the [[thing:${TS_ID}|Moscavia]] border, near Iron Gate.`;
-    assert.deepEqual(factEditState(segments, raw), {
-        text: 'Most nest along the Moscavia border, near Iron Gate.',
-        refs: { moscavia: { id: TS_ID, text: 'Moscavia' } },
-    });
+    const raw = `[[thing:${VOS_ID}|Maren]] met Maren and [[thing:${HOLT_ID}|Maren]] near [[thing:${TS_ID}|Moscavia]].`;
+    const state = factEditState(segments, raw);
+    assert.equal(state.text, 'Maren met Maren and Maren near Moscavia.');
+    // the n-th time its words are written in the text
+    assert.deepEqual(state.links, [
+        { text: 'Maren', ref: VOS_ID, nth: 0 },
+        { text: 'Maren', ref: HOLT_ID, nth: 2 },
+        { text: 'Moscavia', ref: TS_ID, nth: 0 },
+    ]);
     // a link to an ignored stub reads as plain words, but is kept
-    const ignoredRaw = `Raised by [[thing:${VOS_ID}|Aldric]].`;
-    assert.deepEqual(factEditState([{ text: 'Raised by Aldric.', ref: null, stub: false }], ignoredRaw, [VOS_ID]), {
-        text: 'Raised by Aldric.',
-        refs: { aldric: { id: VOS_ID, text: 'Aldric' } },
-    });
-    assert.deepEqual(factEditState([], 'plain', []), { text: 'plain', refs: {} });
+    const ignoredRaw = `Raised by [[thing:${VOS_ID}|Aldric]] near Aldric's.`;
+    assert.deepEqual(factEditState([{ text: "Raised by Aldric near Aldric's.", ref: null, stub: false }], ignoredRaw, [VOS_ID]).links, [
+        { text: 'Aldric', ref: VOS_ID, nth: 0 },
+    ]);
+    assert.deepEqual(factEditState([], 'plain', []), { text: 'plain', links: [] });
 });
 
-check('re-pointing a link swaps its thing and keeps its words', () => {
+check('links are found again in the edited text, and sent as code-point spans', () => {
+    const links = [
+        { text: 'Maren', ref: VOS_ID, nth: 0 },
+        { text: 'Maren', ref: HOLT_ID, nth: 2 },
+        { text: 'Moscavia', ref: TS_ID, nth: 0 },
+    ];
+    const text = '🌙 Maren met Maren and Maren, far from Moscovy.';
+    const located = locateLinks(text, links);
+    assert.deepEqual(located.map((l) => [text.slice(l.start, l.end), l.ref.id]), [['Maren', VOS_ID], ['Maren', HOLT_ID]]);
+    assert.deepEqual(spansPayload(text, located, {}), [
+        { start: 2, end: 7, ref: VOS_ID },
+        { start: 22, end: 27, ref: HOLT_ID },
+    ]);
+    // a name the owner re-picked or treats as new isn't kept by position
+    assert.deepEqual(spansPayload(text, located, { maren: NEW_THING }), []);
+    // whole words only
+    assert.deepEqual(locateLinks('Marenhall', [{ text: 'Maren', ref: VOS_ID, nth: 0 }]), []);
+});
+
+check('existing links show as matched, a same-place match attached', () => {
+    const text = 'Maren met Maren.';
+    const linked = [{ start: 10, end: 15, ref: { id: 'holt', text: 'Maren' } }];
+    const matches = [
+        { start: 0, end: 5, text: 'Maren', candidates: [HOLT, VOS] },
+        { start: 10, end: 15, text: 'Maren', candidates: [HOLT, VOS] },
+    ];
+    const segments = promptSegments(text, matches, {}, [], { linked });
+    assert.deepEqual(segments.map((s) => [s.text, s.state || null, s.linked ? s.ref.id : null]), [
+        ['Maren', 'matched', null],
+        [' met ', null, null],
+        ['Maren', 'matched', 'holt'],
+        ['.', null, null],
+    ]);
+    assert.equal(segments[2].match, matches[1]);
+    const asNew = promptSegments(text, matches, { maren: NEW_THING }, [], { linked });
+    assert.equal(asNew[2].state, 'new');
+});
+
+check("re-pointing names the link's place among the fact's references", () => {
     const raw = `[[thing:${VOS_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${TS_ID}]].`;
     const segments = [
         { text: 'Maren', ref: VOS_ID, stub: false },
@@ -280,20 +326,21 @@ check('re-pointing a link swaps its thing and keeps its words', () => {
         { text: 'Tsardom of Moscavia', ref: TS_ID, stub: true },
         { text: '.', ref: null, stub: false },
     ];
-    assert.equal(
-        repointedText(raw, segments, 2, HOLT_ID),
-        `[[thing:${VOS_ID}|Maren]] met [[thing:${HOLT_ID}|Maren Vos]] and [[thing:${TS_ID}]].`,
-    );
-    assert.equal(
-        repointedText(raw, segments, 0, HOLT_ID),
-        `[[thing:${HOLT_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${TS_ID}]].`,
-    );
-    // a reference with no shown text keeps the words it rendered as
-    assert.equal(
-        repointedText(raw, segments, 4, HOLT_ID),
-        `[[thing:${VOS_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${HOLT_ID}|Tsardom of Moscavia]].`,
-    );
-    assert.equal(repointedText(raw, segments, 1, HOLT_ID), null);
+    assert.equal(refOccurrence(raw, segments, 0), 0);
+    assert.equal(refOccurrence(raw, segments, 2), 1);
+    assert.equal(refOccurrence(raw, segments, 4), 2);
+    assert.equal(refOccurrence(raw, segments, 1), null);
+    // a reference that renders plain (an ignored stub) still counts
+    const withIgnored = `[[thing:${HOLT_ID}|Aldric]] and [[thing:${VOS_ID}|Maren]].`;
+    assert.equal(refOccurrence(withIgnored, [{ text: 'Aldric and ', ref: null }, { text: 'Maren', ref: VOS_ID }, { text: '.', ref: null }], 1), 1);
+});
+
+check('before the names are looked up, the owner\'s own picks still go out', () => {
+    const text = 'Maren went to Sallowford.';
+    assert.deepEqual(linkPayload([], { maren: 'vos', sallowford: NEW_THING, gone: 'x' }, {}, text), {
+        picks: { Maren: 'vos' },
+        newNames: ['Sallowford'],
+    });
 });
 
 check('the reference search: names holding the query, starting ones first', () => {
@@ -1192,12 +1239,28 @@ check('expanding a stub asks for its suggestion; previews carry the names', () =
     assert.deepEqual(sent.at(-1).picks, { Moscavia: 's1' });
     store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {}, matching_stub_id: 'k1' }));
 
-    // accepting into a stub; the re-pick fetches the stub to teach it the name
+    // accepting into a stub; once accepted, the re-pick fetches the stub
+    // to teach it the name
     sent.length = 0;
     store.acceptPreview({ name: 'Kalmara' }, { intoStub: 'k1' });
-    assert.equal(sent[0].action, 'accept_preview');
+    assert.deepEqual(sent.map((m) => m.action), ['accept_preview']);
     assert.equal(sent[0].into_stub, 'k1');
-    assert.deepEqual(sent[1], { type: 'worlds', action: 'get_thing', id: 's1', at: null });
+    store.handleMessage(reply('accept_preview', { id: 'k1', kind: 'place', name: 'Kalmara' }));
+    assert.ok(sent.some((m) => m.action === 'get_thing' && m.id === 's1' && m.at === null));
+});
+
+check('fact edits carry spans; re-pointing sends one reference', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    store.correctFact('f1', { text: 'Maren met Maren.' }, { spans: [{ start: 0, end: 5, ref: 'vos' }] });
+    assert.deepEqual(sent.at(-1).spans, [{ start: 0, end: 5, ref: 'vos' }]);
+    store.repointRef('f1', 2, 'holt');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'repoint_ref', thing_id: 'owl', at: null, fact_id: 'f1', occurrence: 2, to_id: 'holt',
+    });
+    store.handleMessage(reply('repoint_ref', { id: 'owl', kind: 'species', facts: [] }));
+    assert.equal(store.pending.repoint_ref, undefined);
 });
 
 check('another name is added once the thing is fetched, unless it has it', () => {

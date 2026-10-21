@@ -118,7 +118,10 @@ let nextId = 0;
 // - with `offerStubs`, an unknown capitalised phrase is dotted too, and its
 //   popover offers to make it a stub of a kind (`stubs`, `[{text, kind}]`;
 //   the owner of the box makes them);
-// - `invented` names (the last scene setup's) show as new.
+// - `invented` names (the last scene setup's) show as new;
+// - an edited fact's existing links (`linked`, `locateLinks` spans) show
+//   as matched to their own things, whatever the name would match; the
+//   popover re-picks or treats the words as new by name, as for a match.
 // Right-clicking opens `ReferenceMenu`: Cut, Copy, Paste and Add
 // reference…, which inserts the thing's name at the cursor and records a
 // reference for it (`refs`: pickKey -> `{id, text}`), so it links there.
@@ -143,6 +146,8 @@ export default {
         dense: { type: Boolean, default: false },
         disabled: { type: Boolean, default: false },
         invented: { type: Array, default: () => [] },
+        // `[{start, end, ref: {id, text}}]`: links kept by position
+        linked: { type: Array, default: () => [] },
         offerStubs: { type: Boolean, default: false },
         // thing ids Add reference never offers
         exclude: { type: Array, default: () => [] },
@@ -176,6 +181,7 @@ export default {
                 refs: this.refs,
                 unknown: this.unknown,
                 stubs: this.stubs,
+                linked: this.linked,
             });
         },
         stubKinds() {
@@ -239,6 +245,11 @@ export default {
             return choices;
         },
         chosenId(segment) {
+            if (segment.linked) {
+                const picked = this.picks[pickKey(segment.text)];
+                const offered = picked && (picked === NEW_THING || this.choicesOf(segment).some((c) => c.id === picked));
+                return offered ? picked : segment.ref.id;
+            }
             if (segment.match) {
                 return pickedId(segment.match, this.picks, this.refs);
             }
@@ -246,7 +257,7 @@ export default {
         },
         pick(segment, id) {
             const key = pickKey(segment.text);
-            if (!segment.match && id === NEW_THING) {
+            if (!segment.match && !segment.linked && id === NEW_THING) {
                 // a reference with no match behind it: just dropped
                 const { [key]: _gone, ...refs } = this.refs;
                 this.$emit('update:refs', refs);

@@ -14,6 +14,12 @@ that thing's own names plain: a thing never links to itself. Names the
 owner treats as new (`as_new`, `is_new`) never link to what the world
 already has, and `make_stubs` never reuses an existing thing for one.
 
+Edits that must change nothing but what they name don't run `link_text`:
+`link_spans` links given spans of plain text (a fact form's existing
+links, each to its own thing, by position), `link_phrase` links one plain
+phrase (a stub just made of it), and `repoint_ref` points one reference at
+another thing, keeping its words.
+
 `make_stubs` makes one stub per new name a generation lists, unless the
 world (or the same call) already has that name: one name invented twice
 is one stub with two mentions. `existing_id` is the same reuse rule on its
@@ -39,14 +45,18 @@ from talemate.world.view import WorldView
 log = structlog.get_logger("talemate.worldplay.links")
 
 __all__ = [
+    "LinkSpan",
     "NewName",
     "clean_aka",
     "existing_id",
     "is_new",
+    "link_phrase",
+    "link_spans",
     "link_text",
     "make_stubs",
     "name_key",
     "name_keys",
+    "repoint_ref",
 ]
 
 # the kind a new name gets when the model gave none we know
@@ -232,6 +242,70 @@ def link_text(
         end = existing.end()
     out.append(_link_plain(view, text[end:], chosen, owner, as_new))
     return "".join(out)
+
+
+# ---------------------------------------------------------------------------
+# targeted links
+
+
+class LinkSpan(BaseModel):
+    """A span of plain text (code-point offsets) to link to `ref`."""
+
+    start: int
+    end: int
+    ref: str
+
+
+def link_spans(text: str, spans: list[LinkSpan]) -> str:
+    """`text` with each span made a reference to its thing, keeping its
+    words. Raises `ValueError` for an empty, out-of-range or overlapping
+    span, or one that touches an existing reference."""
+
+    taken = [(m.start(), m.end()) for m in REF_PATTERN.finditer(text)]
+    out: list[str] = []
+    end = 0
+    for span in sorted(spans, key=lambda span: span.start):
+        if not 0 <= span.start < span.end <= len(text) or span.start < end:
+            raise ValueError(f"a link can't span {span.start}-{span.end}")
+        if any(span.start < t_end and t_start < span.end for t_start, t_end in taken):
+            raise ValueError("a link can't overlap a reference")
+        out.append(text[end : span.start])
+        out.append(ref(span.ref, text[span.start : span.end]))
+        end = span.end
+    out.append(text[end:])
+    return "".join(out)
+
+
+def link_phrase(text: str, phrase: str, thing_id: str) -> str:
+    """`text` with the first whole-word occurrence of `phrase` outside any
+    reference made a reference to `thing_id`, keeping its words; nothing
+    else changes. Raises `ValueError` if there's none."""
+
+    pattern = re.compile(
+        r"(?<!\w)" + r"\s+".join(map(re.escape, phrase.split())) + r"(?!\w)"
+    )
+    plain_from = 0
+    for found in [*REF_PATTERN.finditer(text), None]:
+        plain_to = found.start() if found is not None else len(text)
+        hit = pattern.search(text, plain_from, plain_to)
+        if hit is not None:
+            return text[: hit.start()] + ref(thing_id, hit.group(0)) + text[hit.end() :]
+        if found is not None:
+            plain_from = found.end()
+    raise ValueError(f"the text doesn't name {phrase!r} to link")
+
+
+def repoint_ref(text: str, occurrence: int, to_id: str, rendered: str) -> str:
+    """`text` with its `occurrence`-th reference (0-based, in order)
+    pointing at `to_id`, keeping its shown words (`rendered`, the words a
+    reference without any rendered as). Raises `ValueError` if there's no
+    such reference."""
+
+    for index, found in enumerate(REF_PATTERN.finditer(text)):
+        if index == occurrence:
+            shown = found.group(2) or rendered
+            return text[: found.start()] + ref(to_id, shown) + text[found.end() :]
+    raise ValueError(f"no reference {occurrence} to re-point")
 
 
 # ---------------------------------------------------------------------------

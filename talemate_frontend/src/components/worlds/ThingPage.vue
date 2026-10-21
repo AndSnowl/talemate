@@ -207,7 +207,7 @@ import { useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { HERITAGE_KINDS, INHERITING_KINDS, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
-import { factEditState, linkPayload, repicks, repointedText } from './nameHighlights.js';
+import { factEditState, linkPayload, locateLinks, refOccurrence, repicks, spansPayload } from './nameHighlights.js';
 import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
 import NamedStubs from './NamedStubs.vue';
@@ -260,12 +260,14 @@ function cut(text, length = 28) {
 // inherits, each fact open to an override; a species page its races and
 // mixes. Facts, inherited facts and prose show their names linked
 // (`LinkedText`), and an own fact's link can be re-pointed at another
-// thing, keeping its words; the page lists its other names (`ThingAka`)
-// and the stubs its facts named (`NamedStubs`). The fact form edits a
-// fact's words as they read, its links kept as references to the same
-// things (`factEditState`); saving sends them as picks, teaches the
-// things the owner re-picked their names as written, and then makes the
-// stubs the owner asked for (`make_stub`, once the fact exists). A stub's
+// thing (`repoint_ref`: that one reference, its words kept, nothing else
+// changed); the page lists its other names (`ThingAka`) and the stubs its
+// facts named (`NamedStubs`). The fact form edits a fact's words as they
+// read, its links kept by position (`factEditState`): saving sends them
+// as `spans`, each to its own thing, then the owner's picks and names
+// treated as new. Once the save is answered, the things the owner
+// re-picked are taught their names as written, and the stubs the owner
+// asked for are made (`make_stub`, which links just that phrase). A stub's
 // page has no prose: its card (kind, Expand, Ignore) and what mentions it
 // instead.
 export default {
@@ -292,8 +294,9 @@ export default {
             asOfMonth: null,
             // the open fact form: {mode: 'add'|'edit'|'end', factId?, ...}
             form: null,
-            // stubs to make once the saved fact's reply is in: {factId
-            // (null: the fact the reply adds), known (fact ids before), stubs}
+            // what follows a save once its reply is in: {factId (null: the
+            // fact the reply adds), known (fact ids before), stubs to make,
+            // names (re-picks) to teach}
             afterSave: null,
             // the name being edited: {text, sent}
             rename: null,
@@ -423,7 +426,7 @@ export default {
         thing(thing, before) {
             // another thing, or the reply to the form's own edit
             if (this.afterSave && this.form?.sent && thing?.id === before?.id) {
-                this.makeStubs(thing);
+                this.afterSaved(thing);
             }
             if (!thing || thing.id !== before?.id || this.form?.sent) {
                 this.form = null;
@@ -530,10 +533,10 @@ export default {
             return factEditState(fact.segments, fact.text || fact.rendered || '', ignored);
         },
         startAdd() {
-            this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, stubs: [] };
+            this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
         },
         startEdit(fact) {
-            const { text, refs } = this.editState(fact);
+            const { text, links } = this.editState(fact);
             this.form = {
                 mode: 'edit',
                 factId: fact.fact_id,
@@ -544,13 +547,13 @@ export default {
                 original: fact,
                 originalText: text,
                 picks: {},
-                refs,
-                originalRefs: JSON.stringify(refs),
+                refs: {},
+                links,
                 stubs: [],
             };
         },
         startOverride(fact) {
-            const { text, refs } = this.editState(fact);
+            const { text, links } = this.editState(fact);
             this.form = {
                 mode: 'override',
                 factId: fact.fact_id,
@@ -558,7 +561,8 @@ export default {
                 text,
                 replaces: `${fact.source_name}'s “${fact.rendered}”`,
                 picks: {},
-                refs,
+                refs: {},
+                links,
                 stubs: [],
             };
         },
@@ -569,10 +573,20 @@ export default {
             const form = this.form;
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
             const matches = form.mode === 'end' ? [] : this.worlds.matchesFor(form.text, this.worlds.thingAt);
-            const links = form.mode === 'end' ? null : linkPayload(matches, form.picks || {}, form.refs || {});
+            let links = null;
             if (form.mode !== 'end') {
-                this.afterSave = form.stubs?.length
-                    ? { factId: form.mode === 'edit' ? form.factId : null, known: this.thing.facts.map((fact) => fact.fact_id), stubs: form.stubs }
+                const picks = form.picks || {};
+                const byName = linkPayload(matches, picks, form.refs || {}, form.text);
+                const spans = spansPayload(form.text, locateLinks(form.text, form.links || []), picks);
+                links = { ...byName, spans };
+                const names = repicks(matches, picks).filter((repick) => repick.id !== this.thing.id);
+                this.afterSave = form.stubs?.length || names.length
+                    ? {
+                        factId: form.mode === 'edit' ? form.factId : null,
+                        known: this.thing.facts.map((fact) => fact.fact_id),
+                        stubs: form.stubs || [],
+                        names,
+                    }
                     : null;
             }
             if (form.mode === 'add') {
@@ -585,7 +599,7 @@ export default {
                 const original = form.original;
                 const changes = {};
                 // the words, or what they link to, changed
-                const relinked = Object.keys(form.picks).length > 0 || JSON.stringify(form.refs) !== form.originalRefs;
+                const relinked = Object.keys(form.picks).length > 0 || Object.keys(form.refs).length > 0;
                 if (form.text.trim() !== form.originalText || relinked) {
                     changes.text = form.text.trim();
                 }
@@ -603,27 +617,24 @@ export default {
                 if (!Object.keys(changes).length) {
                     // only stubs to make, if any: the fact is as it was
                     if (this.afterSave) {
-                        this.makeStubs(this.thing);
+                        this.afterSaved(this.thing);
                     }
                     this.form = null;
                     return;
                 }
                 this.worlds.correctFact(form.factId, changes, 'text' in changes ? links : {});
             }
-            if (links) {
-                for (const repick of repicks(matches, form.picks || {})) {
-                    if (repick.id !== this.thing.id) {
-                        this.worlds.addOtherName(repick.id, repick.name);
-                    }
-                }
-            }
             this.form = { ...form, sent: true };
         },
-        // make the stubs the saved fact asked for (`afterSave`), now that
-        // `thing` holds it: the fact edited, or the one the reply added
-        makeStubs(thing) {
+        // what follows a save (`afterSave`), now that `thing` holds it:
+        // the re-picked things learn their names, and the stubs are made in
+        // the fact edited, or the one the reply added
+        afterSaved(thing) {
             const pending = this.afterSave;
             this.afterSave = null;
+            for (const repick of pending.names) {
+                this.worlds.addOtherName(repick.id, repick.name);
+            }
             const fact = pending.factId
                 ? thing.facts.find((f) => f.fact_id === pending.factId)
                 : thing.facts.find((f) => !pending.known.includes(f.fact_id));
@@ -639,9 +650,9 @@ export default {
         // `segments[index]` of the own fact `fact` now links `to`, its
         // words kept
         repointLink(fact, { index, to }) {
-            const text = repointedText(fact.text, fact.segments, index, to);
-            if (text && text !== fact.text) {
-                this.worlds.correctFact(fact.fact_id, { text });
+            const occurrence = refOccurrence(fact.text, fact.segments, index);
+            if (occurrence !== null && to !== fact.segments[index].ref) {
+                this.worlds.repointRef(fact.fact_id, occurrence, to);
             }
         },
         removeFact(fact) {

@@ -34,8 +34,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   and `named_stubs` (`{id, name, kind}` of the stubs its facts link to).
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
-  ignored stub) and links that phrase in the fact, answering like
-  `correct_fact`. `list_stubs {include_ignored}` answers `{stubs: [{id, name, kind, first_mentioned:
+  ignored stub) and links that phrase in the fact (its first plain
+  occurrence, nothing else), answering like `correct_fact`. `list_stubs {include_ignored}` answers `{stubs: [{id, name, kind, first_mentioned:
   {thing_id, name}, mentions, ignored}]}`. `ignore_stub {id, ignored}` and
   `change_stub_kind {id, kind}` answer with the stub's payload.
   `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
@@ -73,11 +73,17 @@ through `signal_operation_failed` (an `operation_done` envelope with
   that kind's `list_things`. A loaded scene keeps playing with it until
   it's reloaded.
 - Fact text written by hand (`add_fact`, `correct_fact`, `override_fact`,
-  each taking `picks` and `new_names`) is linked before it's written
-  (`worldplay.links.link_text`): the names of entries and stubs, and the
-  picks, become references keeping the words written; the thing's own
-  names, and names the owner treats as new, stay plain, and unknown
-  phrases are never made stubs.
+  each taking `picks`, `new_names` and `spans`) is linked before it's
+  written: first the `spans` (`[{start, end, ref}]`, code points: a fact
+  form's existing links, by position, so two links of the same words keep
+  their own targets), then (`worldplay.links.link_text`) the names of
+  entries and stubs, and the picks, in the rest, keeping the words
+  written; the thing's own names, and names the owner treats as new, stay
+  plain, and unknown phrases are never made stubs.
+  `repoint_ref {thing_id, fact_id, occurrence, to_id, at}` points one
+  reference of a fact (the `occurrence`-th in its text) at another thing,
+  keeping its words and changing nothing else; it answers like
+  `correct_fact`.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -141,7 +147,15 @@ from talemate.worldplay.create import (
     preview_inherited,
     preview_thing,
 )
-from talemate.worldplay.links import NewName, link_text, make_stubs
+from talemate.worldplay.links import (
+    LinkSpan,
+    NewName,
+    link_phrase,
+    link_spans,
+    link_text,
+    make_stubs,
+    repoint_ref,
+)
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
@@ -265,6 +279,8 @@ class AddFactPayload(_ThingEdit):
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
     # names written in the text the owner treats as new: left plain
     new_names: list[str] = pydantic.Field(default_factory=list)
+    # spans of the text linked by position (code points), before the rest
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
 
 
 class CorrectFactPayload(_ThingEdit):
@@ -276,6 +292,14 @@ class CorrectFactPayload(_ThingEdit):
     valid_until: dict | None = None
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
     new_names: list[str] = pydantic.Field(default_factory=list)
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
+
+
+class RepointRefPayload(_ThingEdit):
+    fact_id: str
+    # which reference of the fact's text, 0-based, in order
+    occurrence: int
+    to_id: str
 
 
 class MakeStubPayload(_ThingEdit):
@@ -314,6 +338,7 @@ class OverrideFactPayload(_ThingEdit):
     category: str
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
     new_names: list[str] = pydantic.Field(default_factory=list)
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
 
 
 class FindMixPayload(pydantic.BaseModel):
@@ -504,10 +529,6 @@ class _Links:
                     }
                 )
         return found
-
-
-def _ref_count(text: str, thing_id: str) -> int:
-    return sum(1 for found in REF_PATTERN.finditer(text) if found.group(1) == thing_id)
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -923,15 +944,25 @@ class WorldsPlugin(Plugin):
         picks: dict[str, str],
         at: WorldDate | None,
         new_names: list[str] | None = None,
+        spans: list[LinkSpan] | None = None,
     ) -> str:
         """Hand-written fact text with its names linked, as things are
-        named at `at` (`links.link_text`): entries, stubs and the owner's
-        `picks`, never `thing_id` itself, nor a name the owner treats as
-        new (`new_names`). Unknown phrases stay as they are."""
+        named at `at`: first the `spans` (a fact form's existing links, by
+        position, `links.link_spans`), then (`links.link_text`) entries,
+        stubs and the owner's `picks` in the rest, never `thing_id` itself,
+        nor a name the owner treats as new (`new_names`). A span to
+        `thing_id` or to a thing that isn't there stays plain. Unknown
+        phrases stay as they are."""
 
+        view = world.view(at)
+        kept = [
+            span
+            for span in spans or []
+            if span.ref != thing_id and view.thing(span.ref) is not None
+        ]
         return link_text(
-            world.view(at),
-            text,
+            view,
+            link_spans(text, kept),
             picks=picks,
             owner=thing_id,
             as_new=new_names or (),
@@ -1122,8 +1153,9 @@ class WorldsPlugin(Plugin):
     async def handle_make_stub(self, data: dict):
         """Make a stub named `text` (or reuse the thing already named so,
         reviving an ignored stub) and link that phrase in the fact,
-        answering like `correct_fact`. A phrase the fact doesn't hold,
-        written with a capital outside any reference, is refused, writing
+        answering like `correct_fact`. Only the first occurrence of the
+        phrase outside any reference is linked; nothing else in the fact
+        changes. A phrase the fact doesn't hold that way is refused, writing
         nothing."""
 
         payload = MakeStubPayload(**data)
@@ -1145,16 +1177,11 @@ class WorldsPlugin(Plugin):
             if reused is not None and reused.stub_ignored:
                 # the owner asked for it by name: it's no longer ignored
                 rev.set_field(stub_id, "stub", {"ignored": False}, None)
-            # the revision's own view holds the stub just made
-            text = link_text(
-                world.view(at),
-                old_text,
-                new_names={phrase: stub_id},
-                owner=payload.thing_id,
+            # only the phrase is linked: the rest of the fact stays as the
+            # owner left it (a name treated as new stays plain)
+            rev.correct_fact(
+                payload.fact_id, text=link_phrase(old_text, phrase, stub_id)
             )
-            if _ref_count(text, stub_id) <= _ref_count(old_text, stub_id):
-                raise ValueError(f"the fact doesn't name {phrase!r} to link")
-            rev.correct_fact(payload.fact_id, text=text)
         log.info("worlds.stub_made", id=stub_id, name=phrase, kind=payload.kind)
         self._edited("make_stub", payload.thing_id, at)
 
@@ -1240,6 +1267,7 @@ class WorldsPlugin(Plugin):
             payload.picks,
             _date_in(payload.valid_from) or _date_in(payload.at),
             payload.new_names,
+            payload.spans,
         )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(
@@ -1269,6 +1297,7 @@ class WorldsPlugin(Plugin):
                 payload.picks,
                 _date_in(payload.valid_from) or _date_in(payload.at),
                 payload.new_names,
+                payload.spans,
             )
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
@@ -1278,6 +1307,37 @@ class WorldsPlugin(Plugin):
                 **dates,
             )
         self._edited("correct_fact", payload.thing_id, _date_in(payload.at))
+
+    async def handle_repoint_ref(self, data: dict):
+        """Point one reference of an own fact (its `occurrence`-th, in the
+        raw text) at `to_id`, keeping its words; nothing else in the fact
+        changes. Answers like `correct_fact`."""
+
+        payload = RepointRefPayload(**data)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        fact = self._require_fact_of(world, payload.thing_id, payload.fact_id)
+        view = world.view(at)
+        if view.thing(payload.to_id) is None:
+            raise KeyError(f"no such thing: {payload.to_id}")
+        if payload.to_id == payload.thing_id:
+            raise ValueError("a fact can't reference its own thing")
+        text = fact.text or ""
+        old = next(
+            (
+                found
+                for index, found in enumerate(REF_PATTERN.finditer(text))
+                if index == payload.occurrence
+            ),
+            None,
+        )
+        rendered = (
+            "".join(seg.text for seg in view.segments(old.group(0))) if old else ""
+        )
+        new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
+        with world.revision(Source.manual()) as rev:
+            rev.correct_fact(payload.fact_id, text=new_text)
+        self._edited("repoint_ref", payload.thing_id, at)
 
     async def handle_end_fact(self, data: dict):
         payload = EndFactPayload(**data)
@@ -1321,7 +1381,13 @@ class WorldsPlugin(Plugin):
                 f"{payload.thing_id} doesn't inherit fact {payload.overridden_fact_id}"
             )
         text = self._linked(
-            world, payload.thing_id, payload.text, payload.picks, at, payload.new_names
+            world,
+            payload.thing_id,
+            payload.text,
+            payload.picks,
+            at,
+            payload.new_names,
+            payload.spans,
         )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(

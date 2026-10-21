@@ -71,9 +71,11 @@
 //
 // Names in what the owner writes: `match_names` replies keep the
 // `unknown` phrases too (`unknownFor`). Fact edits and previews take
-// `picks` and `newNames` (see nameHighlights.js `linkPayload`), sent only
-// when there are any. `makeStub` makes a stub of a phrase in a fact.
-// `referenceTargets` is what Add reference searches: every entry and
+// `picks` and `newNames` (see nameHighlights.js `linkPayload`), and a
+// fact form's `spans` (its existing links, by position), sent only when
+// there are any. `makeStub` makes a stub of a phrase in a fact, and
+// `repointRef` points one reference of a fact at another thing; neither
+// touches the rest of the fact. `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
@@ -284,13 +286,14 @@ export function previewSegments(text, newNames = []) {
 }
 
 // replies to these clear their own spinner (`pending[action]`)
-const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub'];
+const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref'];
 
-// `{picks, new_names}` for a request, leaving out the empty ones
-function linkFields(picks = {}, newNames = []) {
+// `{picks, new_names, spans}` for a request, leaving out the empty ones
+function linkFields(picks = {}, newNames = [], spans = []) {
     return {
         ...(Object.keys(picks).length ? { picks } : {}),
         ...(newNames.length ? { new_names: newNames } : {}),
+        ...(spans.length ? { spans } : {}),
     };
 }
 
@@ -710,7 +713,7 @@ export const useWorldsStore = defineStore('worlds', {
         // character): the new thing lands in `accepted` instead
         // `intoStub`: "fill the stub instead", the stub a preview made
         // without one fills. The owner's re-picks are taught to their
-        // things now.
+        // things once it's accepted (the `accept_preview` reply).
         acceptPreview(changes = {}, { open = true, intoStub = null } = {}) {
             if (!this.preview) {
                 return;
@@ -722,9 +725,6 @@ export const useWorldsStore = defineStore('worlds', {
                 preview: { ...this.preview, ...changes },
                 ...(intoStub ? { into_stub: intoStub } : {}),
             });
-            for (const repick of this.previewRequest?.repicks || []) {
-                this.addOtherName(repick.id, repick.name);
-            }
         },
 
         // mark the preview's inherited fact `factId` as replaced by its own
@@ -754,16 +754,22 @@ export const useWorldsStore = defineStore('worlds', {
             this.request(action, { thing_id: this.selectedThingId, at: this.thingAt, ...data });
         },
 
-        // `links`: `{picks, newNames}` for the text's names
-        addFact(category, text, validFrom = null, validUntil = null, { picks = {}, newNames = [] } = {}) {
-            this.edit('add_fact', { category, text, valid_from: validFrom, valid_until: validUntil, ...linkFields(picks, newNames) });
+        // `links`: `{picks, newNames, spans}` for the text's names
+        addFact(category, text, validFrom = null, validUntil = null, { picks = {}, newNames = [], spans = [] } = {}) {
+            this.edit('add_fact', { category, text, valid_from: validFrom, valid_until: validUntil, ...linkFields(picks, newNames, spans) });
         },
 
         // `changes` holds only what changes: text, category, valid_from,
         // valid_until (a null date makes that end open); `links` as
         // addFact's, for a changed text
-        correctFact(factId, changes, { picks = {}, newNames = [] } = {}) {
-            this.edit('correct_fact', { fact_id: factId, ...changes, ...linkFields(picks, newNames) });
+        correctFact(factId, changes, { picks = {}, newNames = [], spans = [] } = {}) {
+            this.edit('correct_fact', { fact_id: factId, ...changes, ...linkFields(picks, newNames, spans) });
+        },
+
+        // point the `occurrence`-th reference of the open thing's fact
+        // `factId` at `toId`, keeping its words
+        repointRef(factId, occurrence, toId) {
+            this.edit('repoint_ref', { fact_id: factId, occurrence, to_id: toId });
         },
 
         // make `text`, a phrase in the open thing's fact `factId`, a stub
@@ -788,8 +794,8 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // an own fact replacing the inherited fact `factId`
-        overrideFact(factId, category, text, { picks = {}, newNames = [] } = {}) {
-            this.edit('override_fact', { overridden_fact_id: factId, category, text, ...linkFields(picks, newNames) });
+        overrideFact(factId, category, text, { picks = {}, newNames = [], spans = [] } = {}) {
+            this.edit('override_fact', { overridden_fact_id: factId, category, text, ...linkFields(picks, newNames, spans) });
         },
 
         // `value`: a number field's number, or `measures`' list of
@@ -1007,6 +1013,10 @@ export const useWorldsStore = defineStore('worlds', {
                     }
                     break;
                 case 'accept_preview':
+                    // the owner's re-picks teach their things the names
+                    for (const repick of this.previewRequest?.repicks || []) {
+                        this.addOtherName(repick.id, repick.name);
+                    }
                     this.preview = null;
                     this.previewRequest = null;
                     this.expanding = null;

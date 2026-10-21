@@ -3,7 +3,17 @@ the names a generation invents."""
 
 from talemate.world.refs import ref
 from talemate.world.store import Source
-from talemate.worldplay.links import NewName, link_text, make_stubs
+import pytest
+
+from talemate.worldplay.links import (
+    LinkSpan,
+    NewName,
+    link_phrase,
+    link_spans,
+    link_text,
+    make_stubs,
+    repoint_ref,
+)
 
 
 def _aka(name: str, tag: str = "common", everyday: bool = False) -> dict:
@@ -348,3 +358,63 @@ def test_names_treated_as_new_never_link_or_reuse(world):
     assert link_text(
         after, "The Owl-folk fly.", new_names=made, as_new=["Owl-folk"]
     ) == (f"The {ref(stub, 'Owl-folk')} fly.")
+
+
+A = "a" * 32
+B = "b" * 32
+C = "c" * 32
+
+
+def test_link_spans_link_each_span_to_its_own_thing():
+    """Spans (code-point offsets into plain text) become references keeping
+    their words, each to its own thing, so two of the same name keep their
+    own targets; the rest stays as written."""
+
+    text = "Maren rowed with Maren past Maren's dock."
+    spans = [LinkSpan(start=17, end=22, ref=B), LinkSpan(start=0, end=5, ref=A)]
+    assert link_spans(text, spans) == (
+        f"{ref(A, 'Maren')} rowed with {ref(B, 'Maren')} past Maren's dock."
+    )
+    assert link_spans("🌙 Maren", [LinkSpan(start=2, end=7, ref=A)]) == (
+        f"🌙 {ref(A, 'Maren')}"
+    )
+    # overlapping, empty, out-of-range or ref-crossing spans are refused
+    for bad in (
+        [LinkSpan(start=0, end=5, ref=A), LinkSpan(start=3, end=8, ref=B)],
+        [LinkSpan(start=4, end=4, ref=A)],
+        [LinkSpan(start=30, end=99, ref=A)],
+    ):
+        with pytest.raises(ValueError):
+            link_spans(text, bad)
+    with pytest.raises(ValueError):
+        link_spans(f"{ref(A, 'Maren')} met", [LinkSpan(start=2, end=10, ref=B)])
+
+
+def test_link_phrase_links_only_that_phrase():
+    text = (
+        f"Near The Harbour, on the Night of Feathers, by {ref(A, 'Night of Feathers')}."
+    )
+    # the first plain occurrence (outside any reference), nothing else
+    assert link_phrase(text, "Night of Feathers", B) == (
+        f"Near The Harbour, on the {ref(B, 'Night of Feathers')},"
+        f" by {ref(A, 'Night of Feathers')}."
+    )
+    # whole words only; a phrase the text doesn't hold plain is refused
+    with pytest.raises(ValueError):
+        link_phrase("Harbourside", "Harbour", B)
+    with pytest.raises(ValueError):
+        link_phrase(f"by {ref(A, 'Kremova')}", "Kremova", B)
+
+
+def test_repoint_ref_swaps_one_reference_keeping_its_words():
+    text = f"{ref(A, 'Maren')} met {ref(A, 'Maren')} and {ref(C)} near Maren."
+    assert repoint_ref(text, 1, B, "unused") == (
+        f"{ref(A, 'Maren')} met {ref(B, 'Maren')} and {ref(C)} near Maren."
+    )
+    # a reference with no shown text keeps the words it rendered as
+    assert repoint_ref(text, 2, B, "Tsardom of Moscavia") == (
+        f"{ref(A, 'Maren')} met {ref(A, 'Maren')} and"
+        f" {ref(B, 'Tsardom of Moscavia')} near Maren."
+    )
+    with pytest.raises(ValueError):
+        repoint_ref(text, 3, B, "x")

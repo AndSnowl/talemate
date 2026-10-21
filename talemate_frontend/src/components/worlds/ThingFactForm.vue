@@ -15,6 +15,7 @@
                 v-model:picks="form.picks"
                 v-model:refs="form.refs"
                 v-model:stubs="form.stubs"
+                :linked="linked"
                 label="Fact"
                 :rows="1"
                 dense
@@ -43,6 +44,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import { locateLinks } from './nameHighlights.js';
 import NameHighlightInput from './NameHighlightInput.vue';
 
 // The inline form ThingPage opens to add, edit (correct) or end a fact, or
@@ -50,8 +52,9 @@ import NameHighlightInput from './NameHighlightInput.vue';
 // dated). It edits the `form` object ThingPage owns; ThingPage sends the
 // change. The text is a `NameHighlightInput` (its names highlighted, open
 // to re-picks, Add reference and "make a stub"), holding the fact's words
-// as they read, with its links kept as `form.refs`; `form.picks` and
-// `form.stubs` are the owner's choices.
+// as they read, with its links kept by position (`form.links`, found again
+// in the text as it's edited); `form.picks`, `form.refs` (Add reference)
+// and `form.stubs` are the owner's choices.
 function isYear(value) {
     return Number.isInteger(value) && value >= 1 && value <= 9999;
 }
@@ -73,6 +76,10 @@ export default {
         return { worlds: useWorldsStore() };
     },
     computed: {
+        // the fact's existing links, where its text now has them
+        linked() {
+            return locateLinks(this.form.text || '', this.form.links || []);
+        },
         // a thing's facts never reference the thing itself
         exclude() {
             return this.worlds.selectedThingId ? [this.worlds.selectedThingId] : [];

@@ -204,7 +204,7 @@ export default {
             if (!this.prompt.trim() || !this.validStart) {
                 return;
             }
-            const links = linkPayload(this.matches, this.picks, this.refs);
+            const links = linkPayload(this.matches, this.picks, this.refs, this.prompt);
             this.worlds.planScene(this.prompt.trim(), links.picks, this.player, this.start, links.newNames);
         },
         reset() {

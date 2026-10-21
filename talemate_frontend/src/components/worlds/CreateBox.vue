@@ -567,14 +567,15 @@ export default {
             this.requestPreview();
         },
         requestPreview() {
-            const links = linkPayload(this.matches, this.picks, this.refs);
-            // the stub being expanded isn't context for itself
+            const links = linkPayload(this.matches, this.picks, this.refs, this.prompt);
+            // the stub being expanded isn't context for itself, and learns
+            // no other name from its own prompt
             const stubId = this.fromStub?.id;
             links.picks = Object.fromEntries(Object.entries(links.picks).filter(([, id]) => id !== stubId));
             this.worlds.previewThing(this.kind, this.prompt.trim(), this.fields(), stubId || null, {
                 picks: links.picks,
                 newNames: links.newNames,
-                repicks: repicks(this.matches, this.picks),
+                repicks: repicks(this.matches, this.picks).filter((repick) => repick.id !== stubId),
             });
         },
         // `intoStub`: fill that stub instead of making a new thing
