@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 import structlog
@@ -560,6 +561,10 @@ def parse_names(reply: str) -> tuple[list[dict[str, Any]], list[NewName]]:
     for item in raw_names if isinstance(raw_names, list) else []:
         if not isinstance(item, dict) or not isinstance(item.get("name"), str):
             continue
+        if "tag" in item or "everyday" in item:
+            # an `aka` object of an entry that was cut off, which the
+            # fallback found on its own: no name of its own
+            continue
         name = " ".join(item["name"].split())
         if not name.strip(" ."):
             continue
@@ -647,7 +652,11 @@ def _written_forms(
 
 
 def _new_names(
-    view: WorldView, listed: list[NewName], texts: list[str], own_names: list[str]
+    view: WorldView,
+    listed: list[NewName],
+    texts: list[str],
+    own_names: list[str],
+    picked: Sequence[str] = (),
 ) -> list[NewName]:
     """The reply's listed names that become stubs on accept, by the
     connections probe's merge rule
@@ -661,6 +670,9 @@ def _new_names(
       in part keeps that part as a `written` form;
     - a name already in the world (`existing_id`, or a whole `find_names`
       match) is dropped: linking finds it;
+    - a name the owner picked an entry for in the prompt (`picked`, the
+      picks' written names), as listed or in a form the facts write it
+      in, is dropped: the owner's pick wins, and linking uses it;
     - a name listed twice, or once in full and once as the form the facts
       write it in, is one entry (the first listed).
 
@@ -668,13 +680,14 @@ def _new_names(
     stubs."""
 
     own = {name_key(name) for name in own_names if name.strip()}
+    picks = {name_key(written) for written in picked if written.strip()}
     kept: list[NewName] = []
     # the names, and written forms, of the names kept so far
     claimed: set[str] = set()
     for item in listed:
         kind = item.kind or FALLBACK_KIND
         key = name_key(item.name)
-        if kind not in NAME_KINDS or not key or key in own or key in claimed:
+        if not key or kind not in NAME_KINDS or key in own | claimed | picks:
             continue
         if _known_in_view(view, item.name, kind):
             continue
@@ -682,7 +695,7 @@ def _new_names(
         if forms is None:
             log.debug("create.name_unused", name=item.name)
             continue
-        if any(name_key(form) in claimed for form in forms):
+        if any(name_key(form) in claimed | picks for form in forms):
             continue
         kept.append(NewName(name=item.name, kind=kind, aka=item.aka, written=forms))
         claimed |= {key, *map(name_key, forms)}
@@ -1173,7 +1186,9 @@ async def preview_thing(
     own_names = [name, *(str(entry["name"]) for entry in aka)]
     if stub is not None:
         own_names.append(view.name_of(stub.id) or "")
-    new_names = _new_names(view, listed, [f.text for f in facts], own_names)
+    new_names = _new_names(
+        view, listed, [f.text for f in facts], own_names, list(picks)
+    )
     if kind == "character" and "born" not in fields and age is not None:
         # an age older than the calendar itself is clamped to year 1
         fields["born"] = WorldDate.of(max(1, now_year - age))
@@ -1299,10 +1314,15 @@ def accept_preview(
       stub instead") -- writes into that thing and keeps its id: its kind
       (`into_stub` may have another), name, fields and other names are set,
       the facts added, and the stub marker (ignored or not) removed, so
-      every mention becomes a normal link. A deleted stub, or a full entry,
-      is refused with `ValueError` before anything is written.
+      every mention becomes a normal link. A deleted stub, a full entry, or
+      an `into_stub` other than the preview's own `stub_id`, is refused
+      with `ValueError` before anything is written.
     - Otherwise a new thing is created."""
 
+    if into_stub is not None and preview.stub_id not in (None, into_stub):
+        raise ValueError(
+            f"the preview expands the stub {preview.stub_id}, not {into_stub}"
+        )
     target = preview.stub_id or into_stub
     view = world.view()
     stub = _live_stub(view, target) if target is not None else None

@@ -1657,3 +1657,79 @@ async def test_expand_mix_stub_gets_context_blocks(probe_world):
     assert "About those" not in prompt
     assert '"names": [{"name": "...", "kind": "place", "aka": []}]' in prompt
     assert preview.stub_id == stub
+
+
+async def test_picked_names_never_become_stubs(at_1020):
+    """The owner's picks win: a listed name the owner matched in the prompt
+    (written unlike the entry's name or other names) is no new stub."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        court = rev.create_thing("lore", fields={"name": "Court of Tides"})
+        rev.add_fact(court, "general", "It meets under the bay.")
+    reply = json.dumps(
+        {
+            "name": "Bayreach",
+            "facts": [
+                {"category": "general", "text": "The Sunken Court rules Bayreach."}
+            ],
+            "names": [
+                {"name": "Sunken Court", "kind": "lore"},
+                {"name": "The Sunken Court", "kind": "lore"},
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Bayreach is wet.")
+        preview = await preview_thing(
+            world,
+            "place",
+            "a bay town ruled by the Sunken Court",
+            {},
+            client,
+            picks={"the Sunken Court": court},
+        )
+    assert preview.new_names == []
+
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    assert [s for s in view.things() if s.is_stub] == []
+    [fact] = view.thing(thing_id).facts
+    assert _linked_ids(view, fact.text) == [court]
+
+
+def test_parse_names_skips_a_cut_off_entrys_aka():
+    from talemate.worldplay.create import parse_names
+
+    reply = (
+        '{"name": "Port", "facts": [{"category": "general", "text": "Busy."}], '
+        '"names": [{"name": "Vesna", "kind": "place", "aka": []}, '
+        '{"name": "Kremova Port", "kind": "place", "aka": [{"name": "Krem", '
+        '"tag": "common", "everyday": true}'
+    )
+    _aka, names = parse_names(reply)
+    assert [n.name for n in names] == ["Vesna"]
+
+
+async def test_accept_refuses_two_different_stubs(at_1020):
+    world = at_1020
+    tsardom, _owls = _owl_world(world)
+    with world.revision(Source.manual(note="other")) as rev:
+        other = rev.create_thing(
+            "place", fields={"name": "Elsewhere", "stub": {"ignored": False}}
+        )
+    preview = CreatePreview(
+        kind="place",
+        prompt="x",
+        name="Tsardom of Moscavia",
+        facts=[PreviewFact(category="general", text="Cold.")],
+        prose={},
+        stub_id=tsardom,
+    )
+    head = world.head_rev()
+    with pytest.raises(ValueError):
+        accept_preview(world, preview, into_stub=other)
+    assert world.head_rev() == head
+    # the same stub twice is fine
+    assert accept_preview(world, preview, into_stub=tsardom) == tsardom
