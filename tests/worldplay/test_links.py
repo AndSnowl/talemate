@@ -427,3 +427,62 @@ def test_repoint_ref_swaps_one_reference_keeping_its_words():
     )
     with pytest.raises(ValueError):
         repoint_ref(text, 3, B, "x")
+
+
+def test_make_stubs_reuses_a_heritage_whose_name_holds_it(world):
+    """A listed "Owl-folk" while the species "Owl-folk of Moscavia" exists
+    is that species: no duplicate stub, and the text links to it."""
+
+    with world.revision(Source.manual(note="species")) as rev:
+        owls = rev.create_thing("species", fields={"name": "Owl-folk of Moscavia"})
+        rev.create_thing("place", fields={"name": "Owl Rock"})
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [
+                NewName(name="Owl-folk", kind="species"),
+                # only heritage holds heritage: a place's name isn't a race
+                NewName(name="Owl", kind="race"),
+            ],
+        )
+        linked = link_text(view, "Owl-folk nest in its towers.", new_names=made)
+    assert made["Owl-folk"] == owls
+    assert made["Owl"] != owls
+    assert linked == f"{ref(owls, 'Owl-folk')} nest in its towers."
+
+
+def test_make_stubs_drops_a_lowercase_leading_the(world):
+    """A new stub listed "the Kremlin" is named "Kremlin", so a bare
+    "Kremlin" links to it later; "the Kremlin" still maps to it as
+    written."""
+
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [
+                NewName(name="the Kremlin", kind="place"),
+                NewName(name="The Hermitage", kind="place"),
+            ],
+        )
+        linked = link_text(view, "Behind the Kremlin walls.", new_names=made)
+    kremlin = made["the Kremlin"]
+    view = world.view(None)
+    assert view.name_of(kremlin) == "Kremlin"
+    # a capital "The" is part of the name as written
+    assert view.name_of(made["The Hermitage"]) == "The Hermitage"
+    assert linked == f"Behind {ref(kremlin, 'the Kremlin')} walls."
+    assert link_text(view, "Kremlin walls.") == f"{ref(kremlin, 'Kremlin')} walls."
+
+
+def test_new_names_never_link_inside_a_hyphenated_word(world):
+    """A new stub "Owl" doesn't link the "Owl" of "Owl-folk"."""
+
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(rev, view, [NewName(name="Owl", kind="lore")])
+        linked = link_text(view, "Owl-folk and an Owl.", new_names=made)
+    assert linked == f"Owl-folk and an {ref(made['Owl'], 'Owl')}."

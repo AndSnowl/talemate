@@ -124,16 +124,18 @@ _Span = tuple[int, int, str]
 
 def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
     """Every whole-word occurrence of a picked or new name (normalised key
-    to thing id) in `text`. A name written with a capital matches only text
-    written with one, so a stub "Hope" never links "I hope"."""
+    to thing id) in `text`, a hyphenated word counting as one. A name
+    written with a capital matches only text written with one, so a stub
+    "Hope" never links "I hope"."""
 
     spans: list[_Span] = []
     for key, thing_id in chosen.items():
         words = key.split()
         if not words:
             continue
+        # a hyphen joins a word: "Owl" isn't in "Owl-folk"
         pattern = re.compile(
-            r"(?<!\w)" + r"\s+".join(map(re.escape, words)) + r"(?!\w)",
+            r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])",
             re.IGNORECASE,
         )
         for hit in pattern.finditer(text):
@@ -374,35 +376,54 @@ def _contains(key: str, part: str) -> bool:
     return re.search(r"(?<![\w-])" + re.escape(part) + r"(?![\w-])", key) is not None
 
 
-def _reuse(known: list[_Known], key: str, kind: str) -> str | None:
+def _reuse(
+    known: list[_Known], key: str, kind: str, *, held: bool = False
+) -> str | None:
     """The thing a new name means already, if any: one with that name or
     other name (whatever its kind: the world's kind wins), else the one
     whose longest name the new name contains, when both are a species,
-    race or mix ("Moscavian Owl-folk" is the Owl-folk). Other kinds reuse
+    race or mix ("Moscavian Owl-folk" is the Owl-folk). With `held`, a
+    species, race or mix name held whole by just one other's name is that
+    one too ("Owl-folk" is the Owl-folk of Moscavia). Other kinds reuse
     only an exact name: "Lake Solnech" isn't the town called "Solnech"."""
 
     for thing in known:
         if key in thing.keys:
             return thing.id
+    if kind not in HERITAGE_KINDS:
+        return None
+    heritages = [thing for thing in known if thing.kind in HERITAGE_KINDS]
     best: tuple[int, str] | None = None
-    for thing in known:
-        if kind not in HERITAGE_KINDS or thing.kind not in HERITAGE_KINDS:
-            continue
+    for thing in heritages:
         for part in thing.keys:
             if _contains(key, part) and (best is None or len(part) > best[0]):
                 best = (len(part), thing.id)
-    return best[1] if best else None
+    if best is not None:
+        return best[1]
+    if held:
+        holders = {
+            thing.id
+            for thing in heritages
+            if any(_contains(part, key) for part in thing.keys)
+        }
+        if len(holders) == 1:
+            return holders.pop()
+    return None
 
 
-def existing_id(view: WorldView, name: str, kind: str) -> str | None:
+def existing_id(
+    view: WorldView, name: str, kind: str, *, held: bool = False
+) -> str | None:
     """The thing `name` (of `kind`) already means in `view`, by the rule
     `make_stubs` reuses things by: a main or other name, ignoring case and
     a leading article, whatever its kind; or, for a species, race or mix,
-    the species, race or mix whose name it contains. `None` when it's
-    new."""
+    the species, race or mix whose name it contains -- or, with `held`,
+    the only one whose name holds it. `None` when it's new."""
 
     key = name_key(" ".join(name.split()))
-    return _reuse(_known_things(view), key, _norm(kind)) if key else None
+    if not key:
+        return None
+    return _reuse(_known_things(view), key, _norm(kind), held=held)
 
 
 def name_keys(view: WorldView, skip: str | None = None) -> set[str]:
@@ -456,9 +477,12 @@ def make_stubs(
     A name that `view` (or an earlier name in `names`) already has, as a
     main or other name and ignoring case and a leading article, reuses that
     entry or stub, as does a species, race or mix name containing the name
-    of another species, race or mix. Any
-    other name becomes a thing of its kind (`lore` for a kind we don't
-    know) with its name, other names and `stub={"ignored": False}`.
+    of another species, race or mix, or held whole by just one's name
+    ("Owl-folk" for the Owl-folk of Moscavia). Any other name becomes a
+    thing of its kind (`lore` for a kind we don't know) with its name,
+    other names and `stub={"ignored": False}`; a lowercase leading "the"
+    isn't part of a new stub's name ("the Kremlin" makes "Kremlin"), though
+    it still maps as written.
 
     A name the owner treats as new (`fresh`, by `is_new`) never reuses a
     thing `view` has, only one an earlier name in `names` made."""
@@ -478,22 +502,24 @@ def make_stubs(
 
         forms = [" ".join(form.split()) for form in new.written]
         pool = made_here if is_new(written, fresh) else known
-        thing_id = _reuse(pool, key, kind)
+        thing_id = _reuse(pool, key, kind, held=True)
         if thing_id is not None:
             for form in (written, *forms):
                 made.setdefault(form, thing_id)
             continue
 
+        words = written.split()
+        name = " ".join(words[1:]) if len(words) > 1 and words[0] == "the" else written
         taken = {k for thing in known for k in thing.keys}
-        aka = clean_aka(new.aka, written, taken)
+        aka = clean_aka(new.aka, name, taken)
         thing_id = rev.create_thing(
-            kind, fields={"name": written, "aka": aka, "stub": {"ignored": False}}
+            kind, fields={"name": name, "aka": aka, "stub": {"ignored": False}}
         )
         others = [str(entry["name"]) for entry in aka]
         thing = _Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)])
         known.append(thing)
         made_here.append(thing)
-        for name in (written, *others, *forms):
-            made.setdefault(name, thing_id)
+        for mapped in (written, name, *others, *forms):
+            made.setdefault(mapped, thing_id)
         log.debug("make_stubs.created", name=written, kind=kind, id=thing_id)
     return made
