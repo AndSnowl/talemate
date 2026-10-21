@@ -13,7 +13,8 @@ export function pickKey(text) {
 }
 
 // The thing id picked for `match`: the owner's pick, else the best
-// candidate. `NEW_THING` when the owner treats the name as new.
+// candidate. `NEW_THING` when the owner treats the name as new, and for a
+// suggested (partial) match the owner hasn't picked a thing for.
 export function pickedId(match, picks) {
     const picked = picks[pickKey(match.text)];
     if (picked === NEW_THING) {
@@ -21,6 +22,9 @@ export function pickedId(match, picks) {
     }
     if (picked && match.candidates.some((candidate) => candidate.id === picked)) {
         return picked;
+    }
+    if (match.suggested) {
+        return NEW_THING;
     }
     return match.candidates[0]?.id || NEW_THING;
 }
@@ -52,12 +56,14 @@ function utf16Offset(text, codePoints) {
 }
 
 // `plan_scene`'s `new_names`: the matched names (as written) the owner
-// treats as new, once each.
+// treats as new, once each. A suggested match left alone isn't one: the
+// model may still resolve it.
 export function newNamesPayload(matches, picks) {
     const names = new Map();
     for (const match of matches) {
         const key = pickKey(match.text);
-        if (!names.has(key) && pickedId(match, picks) === NEW_THING) {
+        const untouched = match.suggested && !(key in picks);
+        if (!names.has(key) && !untouched && pickedId(match, picks) === NEW_THING) {
             names.set(key, match.text);
         }
     }

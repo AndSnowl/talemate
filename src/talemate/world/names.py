@@ -14,10 +14,11 @@ trailing `'s` allowed and longer names tried first:
   match, offered after any real one.
 
 A stub whose name is a common word ("Hope") mustn't link the "hope" in
-"I hope", so a stub, like a suggestion, matches only text written with a
-capital letter (a leading article may stay lowercase: "the Drowned
-Stag"). A stub the owner ignored isn't matched at all. Other entries
-match in any case, as scene setup always has.
+"I hope", so a stub, like another name ("the Pier") or a suggestion,
+matches only text written with a capital letter (a leading article may
+stay lowercase: "the Drowned Stag"). A stub the owner ignored isn't
+matched at all. The main name (and a character's first name) of an
+entry that isn't a stub matches in any case, as scene setup always has.
 
 `unknown_proper_phrases` finds the capitalised phrases no match covers
 ("Yelena", "Night of Feathers"), as suggestions for new stubs. Without a
@@ -75,6 +76,26 @@ _PRONOUNS = {
     "theirs",
 }
 
+# capitalised words that are never part of an unknown phrase
+_NEVER_NAMES = {
+    "I",
+    *("Monday Tuesday Wednesday Thursday Friday Saturday Sunday".split()),
+    *(
+        "January February March April May June July August September "
+        "October November December"
+    ).split(),
+}
+
+# common sentence openers, dropped from the front of a sentence's first
+# phrase ("Then Yelena went" gives "Yelena")
+_SENTENCE_OPENERS = set(
+    (
+        "then but when after and so if as while before since yet now there "
+        "here this that later soon still once until though although because "
+        "meanwhile suddenly finally perhaps maybe or nor for"
+    ).split()
+)
+
 # how a candidate ranks among others for the same text: lower is better
 _RANKS: dict[str, int] = {"name": 0, "aka": 1, "first_name": 2, "partial": 9}
 # added to the ranks of things that only share a longer name's first word
@@ -85,7 +106,7 @@ _FIRST_WORD_RANK = 3
 _WORD = re.compile(r"[^\W\d_][\w-]*(?:['’]\w+)*")
 _POSSESSIVE = re.compile(r"['’]s$", re.IGNORECASE)
 # what may stand between a sentence's end and its first word
-_OPENERS = " \t\"'“”‘’([{*_"
+_LEAD_INS = " \t\"'“”‘’([{*_"
 _SENTENCE_ENDS = ".!?\n"
 
 
@@ -238,7 +259,11 @@ def _capitalised(written: str) -> bool:
 
 
 def _needs_capital(candidate: NameCandidate) -> bool:
-    return candidate.stub or candidate.via == "partial"
+    """Only a main name (or a character's first name) of a thing that
+    isn't a stub matches in any case; a stub, another name ("the Pier")
+    or a partial needs a capital."""
+
+    return candidate.stub or candidate.via in ("aka", "partial")
 
 
 def find_names(view: WorldView, text: str) -> list[NameMatch]:
@@ -297,7 +322,7 @@ def _sentence_initial(text: str, start: int) -> bool:
     """Whether the word at `start` opens `text` or a sentence in it."""
 
     i = start
-    while i > 0 and text[i - 1] in _OPENERS:
+    while i > 0 and text[i - 1] in _LEAD_INS:
         i -= 1
     return i == 0 or text[i - 1] in _SENTENCE_ENDS
 
@@ -307,8 +332,9 @@ def unknown_proper_phrases(view: WorldView, text: str) -> list[Unknown]:
     (suggested ones included) covers, without a trailing `'s` or leading
     articles. A run may cross lowercase "of" and "the" ("Night of the
     Feathers"). A sentence's capitalised first word on its own, a lone
-    pronoun and a lone article are left out, and "I" never starts or joins
-    a run."""
+    pronoun and a lone article are left out, and so is a common opener
+    ("Then", "But") in front of a sentence's first phrase. "I" (and its
+    contractions), days and months never start or join a run."""
 
     covered = [(m.start, m.end) for m in find_names(view, text)]
 
@@ -319,11 +345,17 @@ def unknown_proper_phrases(view: WorldView, text: str) -> list[Unknown]:
         end = hit.start() + possessive.start() if possessive else hit.end()
         words.append((hit.start(), end, possessive is not None))
 
+    def base(i: int) -> str:
+        """Word `i` without a contraction ("I'm" is "I")."""
+
+        start, end, _ = words[i]
+        return re.split(r"['’]", text[start:end], maxsplit=1)[0]
+
     def is_cap(i: int) -> bool:
         start, end, _ = words[i]
         # "I" is capitalised anywhere, so it says nothing about a name
         return (
-            text[start:end] != "I"
+            base(i) not in _NEVER_NAMES
             and text[start].isupper()
             and not any(start < c_end and c_start < end for c_start, c_end in covered)
         )
@@ -366,13 +398,15 @@ def unknown_proper_phrases(view: WorldView, text: str) -> list[Unknown]:
         initial = _sentence_initial(text, words[run[0]][0])
         if len(run) == 1 and initial:
             continue
+        if initial and base(run[0]).casefold() in _SENTENCE_OPENERS:
+            run.pop(0)
         while run and text[words[run[0]][0] : words[run[0]][1]].casefold() in ARTICLES:
             run.pop(0)
         if not run:
             continue
         start, end = words[run[0]][0], words[run[-1]][1]
         phrase = text[start:end]
-        if len(run) == 1 and phrase.casefold() in _PRONOUNS:
+        if len(run) == 1 and base(run[0]).casefold() in _PRONOUNS:
             continue
         phrases.append(Unknown(start=start, end=end, text=phrase))
     return phrases

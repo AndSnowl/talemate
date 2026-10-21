@@ -101,6 +101,21 @@ def test_common_word_name_needs_a_capital(world):
     assert [m.candidates[0].id for m in find_names(view, "down the river")] == [river]
 
 
+def test_other_names_need_a_capital(world):
+    with world.revision(Source.manual()) as rev:
+        pier = rev.create_thing(
+            "place", fields={"name": "Grey Pier", "aka": [_aka("the Pier")]}
+        )
+    view = world.view(None)
+
+    assert find_names(view, "walked to the pier") == []
+    (match,) = find_names(view, "walked to the Pier")
+    assert match.text == "the Pier"
+    assert [(c.id, c.via) for c in match.candidates] == [(pier, "aka")]
+    # the main name still matches in any case
+    assert _texts(find_names(view, "walked to grey pier")) == ["grey pier"]
+
+
 def test_ignored_stub_not_matched(world):
     with world.revision(Source.manual()) as rev:
         rev.create_thing(
@@ -159,6 +174,20 @@ def test_unknown_phrases(world):
     assert [
         u.text for u in unknown_proper_phrases(view, "The Drowned Stag stood empty")
     ] == ["Drowned Stag"]
+    # a sentence's opening word isn't part of the name after it
+    assert [u.text for u in unknown_proper_phrases(view, "Then Yelena went home.")] == [
+        "Yelena"
+    ]
+    assert [u.text for u in unknown_proper_phrases(view, "But Vasha said no.")] == [
+        "Vasha"
+    ]
+    # contractions of "I", days and months are never names
+    assert unknown_proper_phrases(view, "she said I'm fine and I'll go") == []
+    assert unknown_proper_phrases(view, "she said I’d go") == []
+    assert unknown_proper_phrases(view, "on Monday in March") == []
+    assert [
+        u.text for u in unknown_proper_phrases(view, "since Monday Vasha Brin waited")
+    ] == ["Vasha Brin"]
 
 
 def test_unknown_phrases_skip_matches(world):

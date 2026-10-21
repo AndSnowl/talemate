@@ -120,6 +120,18 @@ check('a name picks its best candidate until the owner picks another', () => {
     assert.equal(pickedId(MATCHES[0], { maren: NEW_THING }), NEW_THING);
 });
 
+check('a suggested (partial) match is never picked unless the owner picks it', () => {
+    const tsardom = { id: 'ts', name: 'Tsardom of Moscavia', kind: 'place', via: 'partial' };
+    const suggested = { start: 0, end: 8, text: 'Moscavia', candidates: [tsardom], suggested: true };
+    assert.equal(pickedId(suggested, {}), NEW_THING);
+    assert.equal(pickedId(suggested, { moscavia: 'ts' }), 'ts');
+    // left alone, it's neither a pick nor a name treated as new
+    assert.deepEqual(picksPayload([suggested], {}), {});
+    assert.deepEqual(newNamesPayload([suggested], {}), []);
+    assert.deepEqual(picksPayload([suggested], { moscavia: 'ts' }), { Moscavia: 'ts' });
+    assert.deepEqual(newNamesPayload([suggested], { moscavia: NEW_THING }), ['Moscavia']);
+});
+
 check('picks go out once per name, leaving out names treated as new', () => {
     assert.deepEqual(picksPayload(MATCHES, { maren: 'vos' }), { Maren: 'vos', Sallowford: 'sal' });
     assert.deepEqual(picksPayload(MATCHES, { maren: NEW_THING }), { Sallowford: 'sal' });
