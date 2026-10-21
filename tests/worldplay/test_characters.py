@@ -618,3 +618,23 @@ def test_character_sheet_with_deleted_species(world, heritage_world):
     assert "life_stage" not in character.base_attributes
     assert "Wings" not in character.description
     assert since_lines(world, vasha, WorldDate.of(1000)) == []
+
+
+def test_since_lines_for_switch_to_an_older_race(world, heritage_world):
+    """Fix round 1: a race that already existed when the prose was cached,
+    but wasn't in the character's lineage then, is news in full -- its
+    facts being older than the cache doesn't put them in the cached text."""
+
+    vasha = heritage_world.vasha
+    with world.revision(Source.manual()) as rev:
+        tawny = rev.create_thing(
+            "race", fields={"name": "Tawny", "species": heritage_world.owl_folk}
+        )
+        rev.add_fact(tawny, "variation", "Brown plumage.")
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(vasha, "heritage", tawny, WorldDate.of(990))
+
+    assert since_lines(world, vasha, WorldDate.of(1000)) == ["Tawny: Brown plumage."]
+    # still a Snowy before the switch, as the cached prose already says
+    assert since_lines(world, vasha, WorldDate.of(985)) == []

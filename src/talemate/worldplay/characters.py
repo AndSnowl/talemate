@@ -254,7 +254,9 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     `physical` and `variation` facts, a culture's dress) get lines too,
     worded the same and prefixed with their source's name, e.g. `"Since
     500: Owl-folk: live to about 60 years."`. Overridden ones get none.
-    Own lines come before inherited ones of the same date.
+    Own lines come before inherited ones of the same date. A layer that
+    wasn't in the lineage when the description was cached counts as never
+    cached, so all of its facts dated by `at` get lines.
 
     Driven from `World.timeline(thing_id)` -- every fact start/end for the
     thing, regardless of story-time visibility at any one date -- since a
@@ -293,14 +295,21 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
         for item in heritage.inherited(view, thing_id)
         if item.overridden_by is not None
     )
+    # the layers the cached text was written with; a layer the character
+    # has come to inherit from since (a heritage switch to a race that
+    # already existed) is news in full, however old its facts are
+    cached_layers = (
+        set(lineage_ids(world, thing_id, at, entry.rev)) if entry is not None else set()
+    )
     by_kind = inherited_categories("description")
     for layer in heritage.lineage(view, thing_id):
         categories = by_kind.get(layer.kind, ())
         if layer.depth == 0 or not categories:
             continue
         prefix = f"{layer.name}: " if layer.name else ""
+        layer_entry = entry if layer.thing_id in cached_layers else None
         keyed += _change_lines(
-            world, layer.thing_id, categories, entry, at, prefix, overridden
+            world, layer.thing_id, categories, layer_entry, at, prefix, overridden
         )
 
     # a stable sort, so own lines stay ahead of inherited ones on a date
