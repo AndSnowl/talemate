@@ -39,7 +39,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
   `prose_failed`); with no AI client the edit stands and the prose is left
-  stale. `regenerate_prose {id, at}` regenerates every section.
+  stale. `regenerate_prose {id, at, section?}` regenerates that one
+  section (answering `prose_updated {id, section}`), or every section.
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
 - Delete: `thing_references {id}` answers `{id, kind, name, references}`
@@ -258,6 +259,8 @@ class SetFieldPayload(_ThingEdit):
 class RegenerateProsePayload(pydantic.BaseModel):
     id: str
     at: dict | None = None
+    # one section to regenerate; every section when left out
+    section: str | None = None
 
 
 class MatchNamesPayload(pydantic.BaseModel):
@@ -612,12 +615,18 @@ class WorldsPlugin(Plugin):
         return task
 
     def _schedule_prose(
-        self, thing_id: str, at: WorldDate | None, *, regenerate: bool = False
+        self,
+        thing_id: str,
+        at: WorldDate | None,
+        *,
+        regenerate: bool = False,
+        section: str | None = None,
     ) -> asyncio.Task | None:
         """Bring `thing_id`'s prose up to date at `at` in the background:
-        the stale sections, or every section with `regenerate`. Answers
-        `prose_updated {id}` when done. With no client to ask, the edit
-        stands and the prose is left stale.
+        the stale sections, or with `regenerate` every section (just
+        `section`, if given). Answers `prose_updated {id}` (with `section`,
+        if given) when done. With no client to ask, the edit stands and
+        the prose is left stale.
 
         `thing_id` may be gone by the time this runs -- deleted while the
         task sat queued, or (from `reposition_scene`) a character who's
@@ -652,19 +661,19 @@ class WorldsPlugin(Plugin):
                 state = world.view(at).thing(thing_id)
                 if state is None:
                     raise KeyError(f"no such thing: {thing_id}")
-                for section in prose_gen.sections_for(state.kind):
-                    await prose_gen.generate_section(
-                        world, thing_id, section, at, client
-                    )
+                sections = (section,) if section else prose_gen.sections_for(state.kind)
+                for name in sections:
+                    await prose_gen.generate_section(world, thing_id, name, at, client)
 
+        done = {"id": thing_id, **({"section": section} if section else {})}
         return self._spawn(
             run(),
             self.create_task_done_callback(
                 "prose_updated",
                 "prose_failed",
                 "Error generating world prose",
-                success_data={"id": thing_id},
-                failure_data={"id": thing_id},
+                success_data=done,
+                failure_data=done,
             ),
         )
 
@@ -913,8 +922,17 @@ class WorldsPlugin(Plugin):
 
     async def handle_regenerate_prose(self, data: dict):
         payload = RegenerateProsePayload(**data)
-        self._require_world()
-        self._schedule_prose(payload.id, _date_in(payload.at), regenerate=True)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        if payload.section is not None:
+            state = world.view(at).thing(payload.id)
+            if state is None:
+                raise KeyError(f"no such thing: {payload.id}")
+            if payload.section not in prose_gen.sections_for(state.kind):
+                raise ValueError(
+                    f"a {state.kind} has no {payload.section!r} prose section"
+                )
+        self._schedule_prose(payload.id, at, regenerate=True, section=payload.section)
 
     # --- scenes -----------------------------------------------------------
 

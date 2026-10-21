@@ -268,6 +268,59 @@ async def test_remove_fact_makes_prose_stale_and_regenerates(plugin, client):
     assert len(_replies(plugin, "prose_updated")) == 2
 
 
+async def test_regenerate_one_prose_section(plugin, client):
+    """`regenerate_prose` with a `section` rewrites only that section; the
+    others keep their cached text."""
+
+    world, maren, _ = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(maren, "personality", "Dry and patient.")
+
+    async with MockClientContext():
+        client_responses.get().extend(["Maren is tall.", "Maren is patient."])
+        await plugin.handle(
+            {"type": "worlds", "action": "regenerate_prose", "id": maren}
+        )
+        await _drain(plugin)
+
+        client_responses.get().append("Maren is patient, and dry with it.")
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "regenerate_prose",
+                "id": maren,
+                "section": "personality",
+            }
+        )
+        await _drain(plugin)
+
+    prose = world.prose()
+    assert prose.get(maren, "description", None).text == "Maren is tall."
+    assert prose.get(maren, "personality", None).text == (
+        "Maren is patient, and dry with it."
+    )
+    assert _last(plugin, "prose_updated")["data"] == {
+        "id": maren,
+        "section": "personality",
+    }
+
+
+async def test_regenerate_refuses_a_section_the_kind_lacks(plugin, client):
+    world, _, harbour = await _open_world_with_maren(plugin)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "regenerate_prose",
+            "id": harbour,
+            "section": "personality",
+        }
+    )
+
+    assert "personality" in _last(plugin, "operation_done")["error"]["message"]
+    assert not plugin.tasks
+
+
 async def test_correct_end_and_set_field(plugin, client):
     world, maren, _ = await _open_world_with_maren(plugin)
     tall = next(
