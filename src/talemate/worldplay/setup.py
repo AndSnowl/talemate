@@ -11,11 +11,14 @@ to play.
   world index. It writes nothing.
 - `start_scene` writes a planned setup as a new world scene.
 - A stub the setup uses -- picked, resolved as a character or the place,
-  or pulled in as lore, ignored or not -- is filled out: planning previews
-  it (`create.preview_thing` with its `stub_id`, once per stub) and
-  `start_scene` accepts the previews before writing the scene, so the
-  scene plays the full entries. Cancelling leaves the stubs as they were.
-  A culture stub can't be expanded yet and stays a stub.
+  or named in the reply's goal or intro, ignored or not -- is filled out:
+  planning previews it (`create.preview_thing` with its `stub_id`, once
+  per stub) and `start_scene` accepts the previews before writing the
+  scene, so the scene plays the full entries. Cancelling leaves the stubs
+  as they were. A stub the index merely finds is neither shown nor pulled
+  in. A culture stub can't be expanded yet, and a race or mix stub has no
+  species or parents to fill it from: those stay stubs, and so does one
+  whose preview fails.
 - `continue_setup` plans the next scene from where an earlier one ended.
 
 What the scene-setup probe (docs/superpowers/probes/2026-10-19-world-create-
@@ -508,11 +511,32 @@ def _setup_from_reply(
 # --- stubs ---------------------------------------------------------------------
 
 
+# stub kinds setup never fills: a culture can't be expanded yet, and a
+# race needs its species and a mix its parents, which a stub has none of
+_UNFILLED_STUB_KINDS = ("race", "mix")
+
+
+def _stubs_named(view: WorldView, setup: SceneSetup) -> list[str]:
+    """The stubs (not ignored) the setup's goal and intro name in full,
+    in order: lore the scene uses, so it's pulled in and filled out."""
+
+    text = "\n".join((setup.goal, setup.intro))
+    return _dedupe(
+        [
+            match.candidates[0].id
+            for match in find_names(view, text)
+            if not match.suggested and match.candidates[0].stub
+        ]
+    )
+
+
 def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
     """The stubs `setup` uses that can be filled out, each once, in setup
-    order: the player, the characters, the place, then the pulled-in lore.
-    Ignored stubs too: using one revives it. A culture stub can't be
-    expanded yet: it's left out (logged) and stays a stub."""
+    order: the player, the characters, the place, then the pulled-in lore
+    (picked, or named in the reply; a stub the index merely found isn't
+    pulled in). Ignored stubs too: using one revives it. A culture stub
+    can't be expanded yet, and a race or mix stub has no species or
+    parents to fill it from: those are left out (logged) and stay stubs."""
 
     view = world.view()
     refs = [setup.player, *setup.characters]
@@ -524,13 +548,13 @@ def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
         state = view.thing(thing_id)
         if state is None or not state.is_stub:
             continue
-        if state.kind not in CREATE_KINDS:
+        if state.kind not in CREATE_KINDS or state.kind in _UNFILLED_STUB_KINDS:
             log.info(
                 "setup.stub_skipped",
                 stub_id=thing_id,
                 name=view.name_of(thing_id),
                 kind=state.kind,
-                reason=f"a {state.kind} stub can't be expanded yet",
+                reason=f"a {state.kind} stub can't be filled out from setup",
             )
             continue
         stub_ids.append(thing_id)
@@ -541,8 +565,9 @@ async def _stub_previews(
     world: World, setup: SceneSetup, client: Any
 ) -> list[CreatePreview]:
     """A preview filling out each stub `setup` uses (`stubs_to_fill`), made
-    from the stub's suggested prompt and what its mentions say. With no
-    `client` (the browser tests' fixed setup) no stub is previewed."""
+    from the stub's suggested prompt and what its mentions say. A stub
+    whose preview fails is logged and left a stub; the plan goes on. With
+    no `client` (the browser tests' fixed setup) no stub is previewed."""
 
     stub_ids = stubs_to_fill(world, setup)
     if client is None:
@@ -555,8 +580,8 @@ async def _stub_previews(
     for stub_id in stub_ids:
         state = view.thing(stub_id)
         assert state is not None
-        previews.append(
-            await preview_thing(
+        try:
+            preview = await preview_thing(
                 world,
                 state.kind,
                 suggested_prompt(view, stub_id),
@@ -564,7 +589,15 @@ async def _stub_previews(
                 client,
                 stub_id=stub_id,
             )
-        )
+        except Exception as exc:
+            log.warning(
+                "setup.stub_preview_failed",
+                stub_id=stub_id,
+                name=view.name_of(stub_id),
+                error=str(exc),
+            )
+            continue
+        previews.append(preview)
     return previews
 
 
@@ -625,9 +658,16 @@ async def plan_scene(
     hits = (
         _index_hits(world, prompt, start, embedding_function) if reply is None else []
     )
+    # a stub the index happens to find is no lore the scene uses: only a
+    # picked one, or one the reply uses, is
+    hit_ids = [
+        hit.thing_id
+        for hit in hits
+        if (state := view.thing(hit.thing_id)) is not None and not state.is_stub
+    ]
     shown = [
         thing_id
-        for thing_id in _dedupe([*chosen, *(hit.thing_id for hit in hits)])
+        for thing_id in _dedupe([*chosen, *hit_ids])
         if view.thing(thing_id) is not None
     ]
 
@@ -652,7 +692,7 @@ async def plan_scene(
     )
     setup.pulled_in = [
         thing_id
-        for thing_id in shown
+        for thing_id in _dedupe([*shown, *_stubs_named(view, setup)])
         if (state := view.thing(thing_id)) is not None
         and state.kind not in ("character", "place")
     ]
