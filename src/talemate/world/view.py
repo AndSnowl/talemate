@@ -301,14 +301,17 @@ class WorldView:
         return row is not None
 
     def _main_names(self, thing_id: str) -> set[str]:
-        """Every main name the thing has on its timeline at `rev`, whatever
-        story date it holds from, casefolded."""
+        """Every main name the thing has had up to `rev`, whatever story
+        date it holds from, casefolded. Retired rows count too: a rename
+        made as a correction (same `valid_from`) retires the old name, and
+        a link written with it should still follow. A name whose revision
+        was undone counts as well, which at worst makes a link written with
+        it read as the current name."""
 
         rows = self._conn.execute(
             "SELECT value_json FROM field_values "
-            "WHERE thing_id = ? AND field = 'name' "
-            "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
-            (thing_id, self.rev, self.rev),
+            "WHERE thing_id = ? AND field = 'name' AND rev_added <= ?",
+            (thing_id, self.rev),
         ).fetchall()
         return {cast(str, json.loads(row["value_json"])).casefold() for row in rows}
 

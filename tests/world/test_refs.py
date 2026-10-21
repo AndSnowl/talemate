@@ -64,6 +64,20 @@ def test_rename_updates_full_name_links_only(world):
     assert earlier.render(short) == "Moscavia"
 
 
+def test_rename_by_correction_updates_full_name_links(world):
+    """The app renames by correcting the name in effect (same valid_from),
+    which retires the old name row; a link written with it still follows."""
+
+    t, _ = _moscavia(world)
+    full = ref(t, "Tsardom of Moscavia")
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(t, "name", "Moscavian Empire", None)
+    assert world.view().render(full) == "Moscavian Empire"
+    assert world.view().render(ref(t, "Moscavia")) == "Moscavia"
+    # a view from before the rename still reads the old name
+    assert world.view(rev=world.head_rev() - 1).render(full) == "Tsardom of Moscavia"
+
+
 def test_deleted_target_renders_shown_text(world):
     t, _ = _moscavia(world)
     with world.revision(Source.manual()) as rev:
