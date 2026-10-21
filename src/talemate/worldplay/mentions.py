@@ -12,7 +12,9 @@ prompt that expands a stub and for what the create box shows the owner:
   entries first; and "About those", the key facts of the first 3 of those
   entries, up to 8 each. A species, race or mix's key facts are its
   physical, instinct and origin facts, then its variation and general
-  ones; any other kind's follow its own category order (not probed);
+  ones, and its origin facts are never cut by the cap (they're history,
+  often of the very place being expanded); any other kind's follow its
+  own category order (not probed);
 - `mention_context`: the same, as one `(heading, facts)` group per
   mentioning entry. An entry with an everyday name is headed "Owl-folk
   (species, usually called Owls)", as the probe's recommendation (d) names
