@@ -51,6 +51,17 @@
 // `setPreviewOverride` marks one as replaced by one of the preview's own
 // facts before accepting.
 //
+// Stubs (names mentioned but not made yet): `stubs` is `list_stubs`'s list,
+// ignored ones included (the Stubs tab filters them), asked for again
+// whenever an edit, an accept, a delete or a started scene may have made,
+// filled or re-counted one. `ignoreStub` and `changeStubKind` answer with
+// the stub's page; the open page, if it's another thing, is fetched again,
+// since its links to the stub change with it. `expandStub` leaves the page
+// for the stub's kind, whose create box then expands it (`expanding`):
+// the preview carries the stub's id, and accepting fills the stub in place.
+// Other names: `setAka` writes the whole `aka` list (`set_field` "aka");
+// `akaAdded`, `akaChanged`, `akaEveryday` and `akaRemoved` make the list.
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
@@ -164,6 +175,100 @@ export function pageAfterDelete(thing, heritage, openedFrom) {
     return null;
 }
 
+// An `aka` entry as the backend keeps it, `everyday` always set.
+function akaEntry(entry) {
+    return { name: entry.name, tag: entry.tag === 'proper' ? 'proper' : 'common', everyday: !!entry.everyday };
+}
+
+function cleanName(name) {
+    return (name || '').split(/\s+/).filter(Boolean).join(' ');
+}
+
+// `aka` with another name (tagged `tag`, not everyday); unchanged for a
+// blank name, or one it (or the main name `mainName`) already has.
+export function akaAdded(aka, name, tag = 'common', mainName = '') {
+    const clean = cleanName(name);
+    const taken = [mainName, ...aka.map((entry) => entry.name)].map((n) => cleanName(n).toLowerCase());
+    if (!clean || taken.includes(clean.toLowerCase())) {
+        return aka;
+    }
+    return [...aka.map(akaEntry), { name: clean, tag, everyday: false }];
+}
+
+// `aka` with entry `index` renamed and/or retagged (`{name?, tag?}`); a
+// name tagged proper is no longer the everyday one. A blank name, or one
+// another entry has, leaves it unchanged.
+export function akaChanged(aka, index, changes) {
+    const entries = aka.map(akaEntry);
+    const entry = { ...entries[index] };
+    if ('name' in changes) {
+        const clean = cleanName(changes.name);
+        const taken = entries.some((other, i) => i !== index && other.name.toLowerCase() === clean.toLowerCase());
+        if (!clean || taken) {
+            return aka;
+        }
+        entry.name = clean;
+    }
+    if ('tag' in changes) {
+        entry.tag = changes.tag;
+        if (entry.tag !== 'common') {
+            entry.everyday = false;
+        }
+    }
+    entries[index] = entry;
+    return entries;
+}
+
+// `aka` with entry `index` made the everyday name (only a common one can
+// be, and only one is), or no longer it if it was.
+export function akaEveryday(aka, index) {
+    const target = akaEntry(aka[index]);
+    const on = !target.everyday && target.tag === 'common';
+    return aka.map((entry, i) => ({ ...akaEntry(entry), everyday: on && i === index }));
+}
+
+export function akaRemoved(aka, index) {
+    return aka.filter((_entry, i) => i !== index).map(akaEntry);
+}
+
+function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A preview fact's text as `LinkedText` segments: the names it invents
+// (`newNames`, the preview's `new_names`: each name, the ways the text
+// writes it and its other names) marked `fresh`, since they become stubs
+// on accept; the rest plain. Earliest match first, then the longest.
+export function previewSegments(text, newNames = []) {
+    const spans = [];
+    for (const found of newNames) {
+        const spellings = [found.name, ...(found.written || []), ...(found.aka || []).map((entry) => entry.name)];
+        for (const spelling of spellings.filter(Boolean)) {
+            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, 'gu');
+            for (const match of text.matchAll(pattern)) {
+                spans.push({ start: match.index, end: match.index + match[0].length, kind: found.kind });
+            }
+        }
+    }
+    spans.sort((a, b) => a.start - b.start || b.end - a.end);
+    const segments = [];
+    let at = 0;
+    for (const span of spans) {
+        if (span.start < at) {
+            continue;
+        }
+        if (span.start > at) {
+            segments.push({ text: text.slice(at, span.start), ref: null, stub: false });
+        }
+        segments.push({ text: text.slice(span.start, span.end), ref: null, stub: false, fresh: true, kind: span.kind });
+        at = span.end;
+    }
+    if (at < text.length) {
+        segments.push({ text: text.slice(at), ref: null, stub: false });
+    }
+    return segments;
+}
+
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact'];
 
@@ -219,6 +324,11 @@ function worldState() {
         // the delete dialog's thing: the `thing_references` reply
         // (`{id, kind, name, references: {facts, fields, scenes}}`)
         deleteCheck: null,
+        // `list_stubs`'s `{id, name, kind, first_mentioned, mentions,
+        // ignored}`, ignored ones included
+        stubs: [],
+        // the stub the create box of its kind expands: `{id, kind, name}`
+        expanding: null,
         pending: {},
     };
 }
@@ -255,6 +365,8 @@ export const useWorldsStore = defineStore('worlds', {
                 .filter(Boolean);
             return [...species, entry].map(({ id: linkId, name }) => ({ id: linkId, name }));
         },
+        // a stub's `list_stubs` entry, or null
+        stubInfo: (state) => (id) => state.stubs.find((stub) => stub.id === id) || null,
     },
 
     actions: {
@@ -457,18 +569,20 @@ export const useWorldsStore = defineStore('worlds', {
 
         // --- create -------------------------------------------------------
 
-        previewThing(kind, prompt, fields = {}) {
-            this.previewRequest = { kind, prompt, fields };
+        // `stubId`: the stub the preview expands (its kind's create box
+        // opened from it)
+        previewThing(kind, prompt, fields = {}, stubId = null) {
+            this.previewRequest = { kind, prompt, fields, stubId };
             this.preview = null;
             this.previewError = null;
             this.previewPending = true;
-            this.request('preview_thing', { kind, prompt, fields });
+            this.request('preview_thing', { kind, prompt, fields, ...(stubId ? { stub_id: stubId } : {}) });
         },
 
         regeneratePreview() {
             const req = this.previewRequest;
             if (req) {
-                this.previewThing(req.kind, req.prompt, req.fields);
+                this.previewThing(req.kind, req.prompt, req.fields, req.stubId);
             }
         },
 
@@ -483,6 +597,48 @@ export const useWorldsStore = defineStore('worlds', {
         cancelPreview() {
             this.discardPreview();
             this.previewRequest = null;
+        },
+
+        // --- stubs --------------------------------------------------------
+
+        listStubs() {
+            this.request('list_stubs', { include_ignored: true });
+        },
+
+        ignoreStub(id, ignored = true) {
+            this.pending = { ...this.pending, ignore_stub: true };
+            this.request('ignore_stub', { id, ignored });
+        },
+
+        changeStubKind(id, kind) {
+            this.pending = { ...this.pending, change_stub_kind: true };
+            this.request('change_stub_kind', { id, kind });
+        },
+
+        // open the create box of `stub`'s kind (`{id, kind, name}`) to
+        // expand it, leaving the page (and any other preview) behind
+        expandStub(stub) {
+            this.cancelPreview();
+            this.closeThing();
+            this.expanding = { id: stub.id, kind: stub.kind, name: stub.name };
+        },
+
+        stopExpanding() {
+            this.expanding = null;
+        },
+
+        // the open thing's page asked for again, as of the date it's viewed at
+        refreshThing() {
+            if (this.selectedThingId) {
+                this.request('get_thing', { id: this.selectedThingId, at: this.thingAt });
+            }
+        },
+
+        // every kind's list (a create or a scene start may make stubs of any)
+        listAllThings() {
+            for (const kind of LISTED_KINDS) {
+                this.listThings(kind);
+            }
         },
 
         // `open: false` keeps the page where it is (the mix drafted for a
@@ -554,6 +710,11 @@ export const useWorldsStore = defineStore('worlds', {
             this.edit('set_field', { field, value, ...(validFrom === undefined ? {} : { valid_from: validFrom }) });
         },
 
+        // the open thing's other names: the whole list
+        setAka(aka) {
+            this.setField('aka', aka);
+        },
+
         // a correction of the open thing's name (see the module comment)
         renameThing(name) {
             if (!this.thing) {
@@ -581,9 +742,8 @@ export const useWorldsStore = defineStore('worlds', {
         worldOpened(info) {
             this.resetWorld();
             this.currentWorld = info;
-            for (const kind of LISTED_KINDS) {
-                this.listThings(kind);
-            }
+            this.listAllThings();
+            this.listStubs();
             this.listScenes();
         },
 
@@ -627,6 +787,29 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'list_heritage':
                     this.heritage = data.things;
                     break;
+                case 'list_stubs':
+                    this.stubs = data.stubs;
+                    break;
+                case 'ignore_stub':
+                case 'change_stub_kind': {
+                    const before = this.stubInfo(data.id);
+                    if (data.id === this.selectedThingId) {
+                        this.thing = data;
+                    } else {
+                        // the open page's links to the stub change with it
+                        this.refreshThing();
+                    }
+                    if (this.expanding?.id === data.id) {
+                        this.expanding = { ...this.expanding, kind: data.kind };
+                    }
+                    for (const kind of new Set([before?.kind, data.kind])) {
+                        if (LISTED_KINDS.includes(kind)) {
+                            this.listThings(kind);
+                        }
+                    }
+                    this.listStubs();
+                    break;
+                }
                 case 'get_thing':
                     if (data.id === this.selectedThingId) {
                         this.thing = data;
@@ -644,6 +827,7 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'thing_deleted':
                     this.clearPending('delete_thing');
                     this.deleteCheck = null;
+                    this.listStubs();
                     if (data.id === this.selectedThingId) {
                         const back = pageAfterDelete(this.thing, this.heritage, this.openedFrom);
                         this.closeThing();
@@ -681,6 +865,9 @@ export const useWorldsStore = defineStore('worlds', {
                     this.closeSetup();
                     this.startedScene = data;
                     this.listScenes();
+                    // the stubs the setup used are filled in now
+                    this.listAllThings();
+                    this.listStubs();
                     break;
                 case 'start_failed':
                     this.setupError = message.message;
@@ -705,6 +892,7 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'accept_preview':
                     this.preview = null;
                     this.previewRequest = null;
+                    this.expanding = null;
                     if (this.acceptOpens) {
                         this.openedFrom = this.selectedThingId;
                         this.selectedThingId = data.id;
@@ -714,7 +902,9 @@ export const useWorldsStore = defineStore('worlds', {
                         this.accepted = { id: data.id, kind: data.kind, name: data.name };
                     }
                     this.acceptOpens = true;
-                    this.listThings(data.kind);
+                    // the names its facts invent are stubs now, of any kind
+                    this.listStubs();
+                    this.listAllThings();
                     break;
                 case 'find_mix':
                     // a reply for parents since changed is dropped
@@ -766,6 +956,8 @@ export const useWorldsStore = defineStore('worlds', {
                 default:
                     if (EDIT_ACTIONS.includes(action) && data.id === this.selectedThingId) {
                         this.thing = data;
+                        // a linked fact (or a new name) changes the stubs' mentions
+                        this.listStubs();
                         if (action === 'set_field') {
                             this.listThings(data.kind);
                         }

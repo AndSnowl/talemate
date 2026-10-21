@@ -41,6 +41,30 @@
             </v-card>
         </div>
 
+        <template v-if="stubPreviews.length">
+            <div class="text-subtitle-2 mt-3 mb-2">Stubs this scene fills in</div>
+            <div class="cards stub-cards">
+                <v-card
+                    v-for="preview in stubPreviews"
+                    :key="preview.stub_id"
+                    variant="flat"
+                    class="setup-card stub-preview pa-3"
+                    data-testid="setup-stub-preview"
+                >
+                    <div class="d-flex align-center flex-wrap ga-1 mb-1">
+                        <span class="card-title mb-0">{{ preview.name }}</span>
+                        <v-chip size="x-small" label variant="tonal" color="muted">{{ preview.kind }}</v-chip>
+                        <v-chip size="x-small" label variant="tonal" color="foreign">will be filled in</v-chip>
+                    </div>
+                    <div v-for="(fact, index) in preview.facts" :key="index" class="stub-fact">
+                        <span class="text-caption text-muted">{{ fact.category }}:</span>
+                        <LinkedText :segments="previewSegments(fact.text, preview.new_names)" :text="fact.text" />
+                    </div>
+                </v-card>
+            </div>
+            <div class="text-caption text-muted mt-1">Written to the world when the scene starts; cancelling leaves them stubs.</div>
+        </template>
+
         <div v-if="planned.intro" class="intro mt-3 pa-3">
             <div class="card-title">Opens with</div>
             <div class="prose">{{ planned.intro }}</div>
@@ -55,16 +79,20 @@
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
+import { previewSegments, useWorldsStore } from '@/stores/worlds.js';
 import { formatDate } from './worldDates.js';
+import LinkedText from './LinkedText.vue';
 
 // The setup step before play, shared by the new-scene dialog and "continue
 // in a new scene": who, where, when, the goal, what was pulled in from the
 // world and what was invented, with Start, Regenerate and Edit (back to the
 // prompt). Shows the store's setup for `action` (plan_scene or
-// continue_scene) only, so each dialog shows its own.
+// continue_scene) only, so each dialog shows its own. The stubs the setup
+// uses come as previews (`stub_previews`), each marked "will be filled
+// in": they're written when the scene starts.
 export default {
     name: 'SceneSetupCards',
+    components: { LinkedText },
     props: {
         action: { type: String, required: true },
     },
@@ -84,9 +112,13 @@ export default {
         starting() {
             return !!this.worlds.pending.start_scene;
         },
+        stubPreviews() {
+            return this.planned?.stub_previews || [];
+        },
     },
     methods: {
         formatDate,
+        previewSegments,
         refName(ref) {
             if (ref.thing_id) {
                 return this.names[ref.thing_id] || ref.thing_id;
@@ -116,6 +148,15 @@ export default {
     font-size: 12px;
     font-weight: 600;
     margin-bottom: 4px;
+}
+
+.stub-preview {
+    border: 1px dashed rgb(var(--v-theme-foreign));
+}
+
+.stub-fact {
+    line-height: 1.4;
+    margin-top: 2px;
 }
 
 .prose {

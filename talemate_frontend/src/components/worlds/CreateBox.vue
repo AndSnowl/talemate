@@ -1,6 +1,10 @@
 <template>
     <v-card variant="flat" class="create-box pa-3 mb-4" data-testid="create-box">
-        <div class="text-subtitle-2 mb-1">New {{ info.singular }}</div>
+        <div class="d-flex align-center ga-2 mb-1">
+            <span class="text-subtitle-2">New {{ info.singular }}</span>
+            <span v-if="fromStub" class="text-caption text-muted" data-testid="from-stub">from stub “{{ fromStub.name }}”</span>
+            <v-btn v-if="fromStub" icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Not from the stub" :disabled="busy" @click="notFromStub"></v-btn>
+        </div>
 
         <div v-if="speciesName" class="text-caption text-muted mb-2">Race of {{ speciesName }}</div>
         <HeritagePicker
@@ -42,6 +46,36 @@
                 v-model="parentId"
                 label="Inside (place)"
                 :items="parentOptions"
+                item-title="name"
+                item-value="id"
+                clearable
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="picker picker-wide"
+                :disabled="busy"
+            ></v-select>
+            <template v-if="kind === 'event'">
+                <v-text-field
+                    v-for="field in ['when', 'until']"
+                    :key="field"
+                    v-model.number="eventYears[field]"
+                    :label="field === 'when' ? 'When (year)' : 'Until (year)'"
+                    type="number"
+                    min="1"
+                    max="9999"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="picker"
+                    :disabled="busy"
+                ></v-text-field>
+            </template>
+            <v-select
+                v-if="kind === 'event' || kind === 'item'"
+                v-model="linkedId"
+                :label="kind === 'event' ? 'Place' : 'Owner (character)'"
+                :items="kind === 'event' ? parentOptions : ownerOptions"
                 item-title="name"
                 item-value="id"
                 clearable
@@ -104,7 +138,7 @@
 
             <div class="text-caption text-muted text-uppercase mt-2">Facts</div>
             <div v-for="(fact, index) in preview.facts" :key="index" class="fact d-flex align-center ga-2">
-                <span class="flex-grow-1">{{ fact.text }}</span>
+                <span class="flex-grow-1"><LinkedText :segments="previewSegments(fact.text, preview.new_names)" :text="fact.text" /></span>
                 <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
                 <span class="fact-date">{{ fact.since ? formatDate(worlds.calendar, fact.since) + ' →' : 'always' }}</span>
             </div>
@@ -162,10 +196,11 @@
 </template>
 
 <script>
-import { defaultOverrideIndex, heritageFromMatches, sameParents, useWorldsStore } from '@/stores/worlds.js';
+import { defaultOverrideIndex, heritageFromMatches, previewSegments, sameParents, useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import HeritagePicker from './HeritagePicker.vue';
+import LinkedText from './LinkedText.vue';
 
 const PLACEHOLDERS = {
     character: 'A grizzled ferryman who owes the Wardens more than money…',
@@ -174,7 +209,14 @@ const PLACEHOLDERS = {
     species: 'Owl-folk: small feathered people with wings instead of arms…',
     race: 'The largest of them, white-plumaged, from the frozen north…',
     mix: 'Anything the blend should settle; the parents are enough to start from…',
+    event: 'The night the river froze solid and the ferries stopped…',
+    item: 'A tarnished ferryman’s bell said to wake the drowned…',
 };
+
+// a year field as a wire date, or null when unset or out of range
+function yearDate(year) {
+    return Number.isInteger(year) && year >= 1 && year <= 9999 ? dateOf(year) : null;
+}
 
 
 // how long the prompt rests before its names are looked up
@@ -194,9 +236,14 @@ const MATCH_DEBOUNCE_MS = 400;
 // comes back with it picked. A mix box refuses parents
 // that already have a mix. `preset` fixes a race's `species` or a mix's
 // first parent (the species page's "+ New race" and "+ New mix").
+//
+// Expanding a stub (`worlds.expanding`, of this box's kind) starts the box
+// from it: the prompt starts as the stub's name, and the preview carries
+// the stub's id, so accepting fills the stub in place. An event's picks
+// are its years and place, an item's its owner.
 export default {
     name: 'CreateBox',
-    components: { HeritagePicker },
+    components: { HeritagePicker, LinkedText },
     props: {
         kind: { type: String, required: true },
         // `{species}` for a race, `{parents}` for a mix
@@ -226,6 +273,10 @@ export default {
             mixDraft: false,
             accepting: false,
             matchTimer: null,
+            // an event's `when`/`until` years
+            eventYears: { when: null, until: null },
+            // an event's place, or an item's owner
+            linkedId: null,
         };
     },
     computed: {
@@ -237,6 +288,14 @@ export default {
         },
         parentOptions() {
             return this.worlds.things.place || [];
+        },
+        ownerOptions() {
+            return this.worlds.things.character || [];
+        },
+        // the stub this box expands
+        fromStub() {
+            const stub = this.worlds.expanding;
+            return stub && stub.kind === this.kind ? stub : null;
         },
         // the store's preview request is this box's
         mine() {
@@ -264,7 +323,7 @@ export default {
             return this.kind === 'race' ? this.heritageName(this.preset.species) : '';
         },
         canCreate() {
-            if (this.busy || this.mixDraft || !this.validBorn) {
+            if (this.busy || this.mixDraft || !this.validYears) {
                 return false;
             }
             if (this.kind === 'mix') {
@@ -284,12 +343,20 @@ export default {
         ownFactItems() {
             return (this.preview?.facts || []).map((fact, index) => ({ title: fact.text, value: index }));
         },
-        validBorn() {
-            const year = this.bornYear;
-            return year === null || year === '' || (Number.isInteger(year) && year >= 1 && year <= 9999);
+        validYears() {
+            const valid = (year) => year === null || year === '' || (Number.isInteger(year) && year >= 1 && year <= 9999);
+            return valid(this.bornYear) && valid(this.eventYears.when) && valid(this.eventYears.until);
         },
     },
     watch: {
+        fromStub: {
+            handler(stub, before) {
+                if (stub && stub.id !== before?.id) {
+                    this.prompt = stub.name;
+                }
+            },
+            immediate: true,
+        },
         // immediate: the box is keyed by kind, so it remounts (switching
         // kinds and back) with a preview already there
         preview: {
@@ -302,9 +369,13 @@ export default {
         // changes): start the box afresh
         'worlds.previewRequest'(request, before) {
             if (!request && before?.kind === this.kind) {
-                this.prompt = '';
+                // expanding a stub drops the box's old preview: it starts
+                // from the stub
+                this.prompt = this.fromStub?.name || '';
                 this.bornYear = null;
                 this.parentId = null;
+                this.eventYears = { when: null, until: null };
+                this.linkedId = null;
                 this.parents = [...(this.preset.parents || [])];
                 this.pickTouched = false;
             }
@@ -355,6 +426,14 @@ export default {
     },
     methods: {
         formatDate,
+        previewSegments,
+        // the box goes on as a plain one: a preview made from the stub goes
+        notFromStub() {
+            if (this.mine) {
+                this.worlds.cancelPreview();
+            }
+            this.worlds.stopExpanding();
+        },
         heritageName(id) {
             return this.worlds.heritage.find((item) => item.id === id)?.name || '';
         },
@@ -375,6 +454,17 @@ export default {
             if (this.kind === 'mix') {
                 fields.parents = [...this.parents];
             }
+            if (this.kind === 'event') {
+                for (const field of ['when', 'until']) {
+                    const date = yearDate(this.eventYears[field]);
+                    if (date) {
+                        fields[field] = date;
+                    }
+                }
+            }
+            if ((this.kind === 'event' || this.kind === 'item') && this.linkedId) {
+                fields[this.kind === 'event' ? 'place' : 'owner'] = this.linkedId;
+            }
             return fields;
         },
         // two parents look for their mix first (see the component comment)
@@ -391,7 +481,7 @@ export default {
             this.requestPreview();
         },
         requestPreview() {
-            this.worlds.previewThing(this.kind, this.prompt.trim(), this.fields());
+            this.worlds.previewThing(this.kind, this.prompt.trim(), this.fields(), this.fromStub?.id || null);
         },
         accept() {
             this.accepting = this.stay;
@@ -400,6 +490,9 @@ export default {
         cancel() {
             if (this.mine) {
                 this.worlds.cancelPreview();
+            }
+            if (this.fromStub) {
+                this.worlds.stopExpanding();
             }
             this.$emit('cancel');
         },

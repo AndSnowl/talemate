@@ -46,6 +46,7 @@
                 </v-menu>
 
                 <v-btn
+                    v-if="!thing.stub"
                     variant="outlined"
                     size="small"
                     prepend-icon="mdi-refresh"
@@ -71,6 +72,11 @@
         </div>
 
         <template v-else>
+            <div v-if="thing.stub" class="stub-panel pa-3 mb-4" data-testid="stub-panel">
+                <div class="text-subtitle-2 mb-1">A stub</div>
+                <StubCard :stub="stubOfPage" on-page />
+            </div>
+
             <div class="timeline-strip d-flex flex-wrap align-center ga-1 mb-4" data-testid="timeline-strip">
                 <v-chip
                     v-for="(point, index) in timelinePoints"
@@ -102,6 +108,7 @@
                         <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
                     <ThingNumbers v-if="isHeritage" />
+                    <ThingAka />
 
                     <div class="d-flex align-center mt-4 mb-1">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
@@ -117,7 +124,7 @@
                     <template v-for="fact in thing.facts" :key="fact.fact_id">
                         <div class="fact d-flex align-center ga-2" data-testid="fact-row">
                             <span class="flex-grow-1">
-                                {{ fact.rendered }}
+                                <LinkedText :segments="fact.segments" :text="fact.rendered" />
                                 <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
                             </span>
                             <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
@@ -141,10 +148,20 @@
                         @cancel="form = null"
                     />
                     <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
+                    <NamedStubs :stubs="thing.named_stubs || []" />
                 </v-col>
 
                 <v-col cols="12" md="6">
-                    <div v-for="(prose, section) in thing.prose" :key="section" class="mb-3">
+                    <div v-if="thing.stub" data-testid="stub-mentions-list">
+                        <div class="text-overline text-muted">Mentioned in</div>
+                        <div v-if="!thing.mentions.length" class="text-body-2 text-muted">Nothing mentions it now.</div>
+                        <div v-for="mention in thing.mentions" :key="mention.fact_id" class="fact" data-testid="stub-mention">
+                            <a class="thing-link" href="#" @click.prevent="worlds.openThing(mention.owner_id)">{{ mention.owner_name }}</a>
+                            <span class="text-caption text-muted"> ({{ mention.category }})</span>:
+                            {{ mention.text }}
+                        </div>
+                    </div>
+                    <div v-for="(prose, section) in proseShown" :key="section" class="mb-3">
                         <div class="d-flex align-center ga-2">
                             <span class="text-overline text-muted">{{ section }} (generated)</span>
                             <v-chip v-if="prose.stale" size="x-small" label variant="tonal" color="warning">out of date</v-chip>
@@ -162,7 +179,7 @@
                             >Regenerate</v-btn>
                         </div>
                         <div class="prose pa-3">
-                            <span v-if="prose.text">{{ prose.text }}</span>
+                            <LinkedText v-if="prose.text" :segments="(thing.prose_segments || {})[section]" :text="prose.text" />
                             <span v-else class="text-muted">Not written yet.</span>
                         </div>
                     </div>
@@ -191,6 +208,10 @@ import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js
 import { HERITAGE_KINDS, INHERITING_KINDS, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
 import HeritageSections from './HeritageSections.vue';
+import LinkedText from './LinkedText.vue';
+import NamedStubs from './NamedStubs.vue';
+import StubCard from './StubCard.vue';
+import ThingAka from './ThingAka.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
 import ThingInherited from './ThingInherited.vue';
@@ -236,10 +257,24 @@ function cut(text, length = 28) {
 // A species, race or mix page has its numbers, and what references it in
 // place of the scenes. A character, race or mix page shows what it
 // inherits, each fact open to an override; a species page its races and
-// mixes.
+// mixes. Facts, inherited facts and prose show their names linked
+// (`LinkedText`); the page lists its other names (`ThingAka`) and the stubs
+// its facts named (`NamedStubs`). A stub's page has no prose: its card
+// (kind, Expand, Ignore) and what mentions it instead.
 export default {
     name: 'ThingPage',
-    components: { HeritageSections, ThingDeleteDialog, ThingFactForm, ThingInherited, ThingNumbers, ThingReferencedIn },
+    components: {
+        HeritageSections,
+        LinkedText,
+        NamedStubs,
+        StubCard,
+        ThingAka,
+        ThingDeleteDialog,
+        ThingFactForm,
+        ThingInherited,
+        ThingNumbers,
+        ThingReferencedIn,
+    },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -285,6 +320,20 @@ export default {
         },
         proseSectionCount() {
             return Object.keys(this.thing?.prose || {}).length;
+        },
+        // a stub has nothing written yet to make prose from
+        proseShown() {
+            return this.thing?.stub ? {} : this.thing?.prose || {};
+        },
+        stubOfPage() {
+            const thing = this.thing;
+            return {
+                id: thing.id,
+                name: thing.name,
+                kind: thing.kind,
+                mentions: (thing.mentions || []).length,
+                ignored: !!thing.stub?.ignored,
+            };
         },
         editing() {
             return EDIT_ACTIONS.some((action) => this.worlds.pending[action]);
@@ -590,6 +639,11 @@ export default {
     color: rgb(var(--v-theme-muted));
     min-width: 80px;
     text-align: right;
+}
+
+.stub-panel {
+    border: 1px dashed rgb(var(--v-theme-foreign));
+    border-radius: 6px;
 }
 
 .prose {

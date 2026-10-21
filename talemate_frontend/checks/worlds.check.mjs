@@ -10,17 +10,22 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import {
+    akaAdded,
+    akaChanged,
+    akaEveryday,
+    akaRemoved,
     currentNameFrom,
     defaultOverrideIndex,
     heritageFromMatches,
     pageAfterDelete,
     parseWorldTarget,
+    previewSegments,
     sameParents,
     useWorldsStore,
     worldTarget,
 } from '../src/stores/worlds.js';
 import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
-import { TOP_KINDS, overrideCategory } from '../src/components/worlds/worldKinds.js';
+import { STUB_KINDS, TOP_KINDS, canExpand, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
 let passed = 0;
@@ -215,6 +220,18 @@ function freshStore() {
 const reply = (action, data, extra = {}) => ({ type: 'worlds', action, data, ...extra });
 const WORLD = { id: 'w1', name: 'Vael', path: '/worlds/w1', calendar: {}, present: dateOf(1000), now: dateOf(1000) };
 
+// every kind's listing, as opening a world, an accept or a started scene asks
+const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore'];
+const STUBS_REQUEST = { type: 'worlds', action: 'list_stubs', include_ignored: true };
+
+// whether `sent` asked for the stubs and every kind's listing
+function listedEverything(sent) {
+    assert.ok(sent.some((m) => m.action === 'list_stubs' && m.include_ignored === true));
+    for (const kind of ALL_KINDS) {
+        assert.ok(sent.some((m) => m.action === 'list_things' && m.kind === kind), kind);
+    }
+}
+
 check('connect lists the worlds', () => {
     const { sent } = freshStore();
     assert.deepEqual(sent, [{ type: 'worlds', action: 'list_worlds' }]);
@@ -231,7 +248,7 @@ check('opening a world lists its things and scenes', () => {
     assert.deepEqual(store.pending, {});
     assert.deepEqual(
         sent.map((m) => m.kind || m.action),
-        ['character', 'species', 'race', 'mix', 'place', 'lore', 'list_scenes', 'get_present'],
+        [...ALL_KINDS, 'list_stubs', 'list_scenes', 'get_present'],
     );
     store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 'p1', kind: 'place', name: 'Sallowford' }] }));
     assert.equal(store.things.place[0].name, 'Sallowford');
@@ -275,7 +292,8 @@ check('a preview, then accept, opens the new thing', () => {
     assert.equal(store.preview, null);
     assert.equal(store.selectedThingId, 't1');
     assert.equal(store.thing.name, 'Oskar Dell');
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'character' });
+    // the names its facts invented are stubs now, of any kind
+    listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
 check('a failed preview shows its message', () => {
@@ -490,7 +508,9 @@ check('plan, regenerate, edit and start a scene', () => {
     assert.equal(store.sceneSetup, null);
     assert.equal(store.setupRequest, null);
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(sent.slice(-2).map((m) => m.action), ['list_scenes', 'get_present']);
+    assert.deepEqual(sent.slice(-(ALL_KINDS.length + 3), -(ALL_KINDS.length + 1)).map((m) => m.action), ['list_scenes', 'get_present']);
+    // the stubs the setup used are filled in now
+    listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
 check('a failed start keeps the setup and stops its spinner', () => {
@@ -712,7 +732,7 @@ check('a mix drafted for a character is accepted without opening its page', () =
     assert.deepEqual(store.accepted, { id: 'm1', kind: 'mix', name: 'Half-orc' });
     assert.equal(store.selectedThingId, null);
     assert.equal(store.previewRequest, null);
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'mix' });
+    listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
     // the next accept opens its page again
     store.previewThing('character', 'a smith', { heritage: 'm1' });
     store.handleMessage(reply('preview_thing', { kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', facts: [], prose: {} }));
@@ -849,6 +869,145 @@ check('other routers are ignored', () => {
     store.handleMessage({ type: 'scene_status', data: {} });
     store.handleMessage({ type: 'worlds', action: 'list_worlds', data: { worlds: [WORLD] } });
     assert.equal(store.worlds.length, 1);
+});
+
+// --- connections: kinds, other names, preview names, stubs ------------------
+
+check('events and items are kinds of their own; a culture stub waits', () => {
+    const top = TOP_KINDS.map((k) => k.kind);
+    assert.ok(top.includes('event') && top.includes('item'));
+    assert.ok(STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race'));
+    assert.equal(canExpand('culture'), false);
+    assert.equal(canExpand('place'), true);
+});
+
+check('other names: add, retag, the everyday pick and remove', () => {
+    const owls = { name: 'Moscavian Owls', tag: 'common', everyday: false };
+    let aka = akaAdded([], '  Moscavian   Owls ', 'common', 'Owl-folk');
+    assert.deepEqual(aka, [owls]);
+    // a blank name, a name it has, or the main name: unchanged
+    assert.equal(akaAdded(aka, ' ', 'common'), aka);
+    assert.equal(akaAdded(aka, 'moscavian owls', 'proper'), aka);
+    assert.equal(akaAdded(aka, 'owl-folk', 'proper', 'Owl-folk'), aka);
+    aka = akaAdded(aka, 'Strigine Folk', 'proper');
+    // only a common name can be everyday, and only one
+    assert.deepEqual(akaEveryday(aka, 1), aka.map((entry) => ({ ...entry, everyday: false })));
+    aka = akaEveryday(aka, 0);
+    assert.deepEqual(aka.map((entry) => entry.everyday), [true, false]);
+    aka = akaAdded(aka, 'Owls', 'common');
+    aka = akaEveryday(aka, 2);
+    assert.deepEqual(aka.map((entry) => entry.everyday), [false, false, true]);
+    assert.deepEqual(akaEveryday(aka, 2).map((entry) => entry.everyday), [false, false, false]);
+    // tagged proper, it's no longer the everyday one
+    const retagged = akaChanged(aka, 2, { tag: 'proper' });
+    assert.deepEqual(retagged[2], { name: 'Owls', tag: 'proper', everyday: false });
+    assert.equal(akaChanged(aka, 2, { name: 'strigine folk' }), aka);
+    assert.equal(akaChanged(aka, 2, { name: '  ' }), aka);
+    assert.equal(akaChanged(aka, 2, { name: 'The Owls' })[2].name, 'The Owls');
+    assert.deepEqual(akaRemoved(aka, 0).map((entry) => entry.name), ['Strigine Folk', 'Owls']);
+    // an entry missing `everyday` (as the AI may write it) gets it
+    assert.deepEqual(akaAdded([{ name: 'Owls', tag: 'common' }], 'Strix', 'proper')[0], { name: 'Owls', tag: 'common', everyday: false });
+});
+
+check('a preview marks the names it invents, whole words only', () => {
+    const names = [
+        { name: 'Tsardom of Moscavia', kind: 'place', aka: [{ name: 'Moscavia', tag: 'common' }], written: [] },
+        { name: 'The Night of Feathers', kind: 'event', aka: [], written: ['Night of Feathers'] },
+    ];
+    const text = 'Born in the Tsardom of Moscavia after the Night of Feathers; Moscavians call it Moscavia.';
+    const segments = previewSegments(text, names);
+    assert.equal(segments.map((s) => s.text).join(''), text);
+    assert.deepEqual(
+        segments.filter((s) => s.fresh).map((s) => [s.text, s.kind]),
+        [['Tsardom of Moscavia', 'place'], ['Night of Feathers', 'event'], ['Moscavia', 'place']],
+    );
+    assert.deepEqual(previewSegments('No names here.', names), [{ text: 'No names here.', ref: null, stub: false }]);
+    assert.deepEqual(previewSegments('', names), []);
+});
+
+const STUB = { id: 's1', name: 'Tsardom of Moscavia', kind: 'place', first_mentioned: { thing_id: 'owl', name: 'Owl-folk' }, mentions: 1, ignored: false };
+
+check('ignoring a stub from another page refreshes that page, the lists and the stubs', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_stubs', { stubs: [STUB] }));
+    assert.deepEqual(store.stubInfo('s1'), STUB);
+    assert.equal(store.stubInfo('nope'), null);
+    store.openThing('owl');
+    store.handleMessage(reply('get_thing', { id: 'owl', kind: 'species' }));
+    sent.length = 0;
+    store.ignoreStub('s1');
+    assert.deepEqual(sent, [{ type: 'worlds', action: 'ignore_stub', id: 's1', ignored: true }]);
+    assert.equal(store.pending.ignore_stub, true);
+    store.handleMessage(reply('ignore_stub', { id: 's1', kind: 'place', stub: { ignored: true } }));
+    assert.equal(store.thing.id, 'owl');
+    assert.deepEqual(store.pending, {});
+    assert.deepEqual(sent.slice(1), [
+        { type: 'worlds', action: 'get_thing', id: 'owl', at: null },
+        { type: 'worlds', action: 'list_things', kind: 'place' },
+        STUBS_REQUEST,
+    ]);
+    // on the stub's own page, the reply is the page
+    store.openThing('s1');
+    store.handleMessage(reply('ignore_stub', { id: 's1', kind: 'place', stub: { ignored: false } }));
+    assert.deepEqual(store.thing.stub, { ignored: false });
+});
+
+check("a stub's new kind lists the old kind and the new", () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_stubs', { stubs: [STUB] }));
+    sent.length = 0;
+    store.changeStubKind('s1', 'event');
+    store.handleMessage(reply('change_stub_kind', { id: 's1', kind: 'event', stub: { ignored: false } }));
+    assert.deepEqual(sent, [
+        { type: 'worlds', action: 'change_stub_kind', id: 's1', kind: 'event' },
+        { type: 'worlds', action: 'list_things', kind: 'place' },
+        { type: 'worlds', action: 'list_things', kind: 'event' },
+        STUBS_REQUEST,
+    ]);
+    // a culture stub isn't listed with the kinds
+    sent.length = 0;
+    store.handleMessage(reply('list_stubs', { stubs: [{ ...STUB, kind: 'event' }] }));
+    store.handleMessage(reply('change_stub_kind', { id: 's1', kind: 'culture', stub: { ignored: false } }));
+    assert.deepEqual(sent, [{ type: 'worlds', action: 'list_things', kind: 'event' }, STUBS_REQUEST]);
+});
+
+check('expanding a stub previews with its id, and accepting ends it', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    store.expandStub(STUB);
+    assert.equal(store.selectedThingId, null);
+    assert.deepEqual(store.expanding, { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' });
+    store.previewThing('place', 'Tsardom of Moscavia', {}, 's1');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'preview_thing', kind: 'place', prompt: 'Tsardom of Moscavia', fields: {}, stub_id: 's1',
+    });
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' }));
+    store.regeneratePreview();
+    assert.equal(sent.at(-1).stub_id, 's1');
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' }));
+    store.acceptPreview();
+    store.handleMessage(reply('accept_preview', { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' }));
+    assert.equal(store.expanding, null);
+    assert.equal(store.selectedThingId, 's1');
+    // a plain preview sends no stub id
+    store.previewThing('place', 'a town');
+    assert.equal('stub_id' in sent.at(-1), false);
+});
+
+check('other names are written whole, and an edit re-lists the stubs', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    const aka = [{ name: 'Moscavian Owls', tag: 'common', everyday: false }];
+    store.setAka(aka);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'set_field', thing_id: 'owl', at: null, field: 'aka', value: aka });
+    sent.length = 0;
+    store.handleMessage(reply('set_field', { id: 'owl', kind: 'species', aka }));
+    assert.deepEqual(store.thing.aka, aka);
+    assert.deepEqual(sent, [STUBS_REQUEST, { type: 'worlds', action: 'list_things', kind: 'species' }]);
 });
 
 if (failures.length) {
