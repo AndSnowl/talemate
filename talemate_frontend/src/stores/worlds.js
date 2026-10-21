@@ -59,8 +59,10 @@
 // since its links to the stub change with it. `expandStub` leaves the page
 // for the stub's kind, whose create box then expands it (`expanding`):
 // the preview carries the stub's id, and accepting fills the stub in place.
-// Expanding also asks for `stub_suggestion`, the create box's starting
-// prompt and the mention context (`stubSuggestion`). A preview of a new
+// Expanding over an unaccepted preview asks first (`expandAsk`, answered
+// by `confirmExpand` or `keepPreview`). Expanding also asks for
+// `stub_suggestion`, the create box's starting prompt and the mention
+// context (`stubSuggestion`). A preview of a new
 // thing named like a stub of its kind (`matching_stub_id`) can be accepted
 // into that stub instead (`acceptPreview(changes, {intoStub})`).
 // Other names: `setAka` writes the whole `aka` list (`set_field` "aka");
@@ -354,6 +356,9 @@ function worldState() {
         stubs: [],
         // the stub the create box of its kind expands: `{id, kind, name}`
         expanding: null,
+        // a stub to expand once the owner agrees to drop the unaccepted
+        // preview: `{id, kind, name}`
+        expandAsk: null,
         // the last `stub_suggestion` reply: `{id, prompt, context}`
         stubSuggestion: null,
         // thing id -> the other names to add to it once it's fetched
@@ -682,13 +687,34 @@ export const useWorldsStore = defineStore('worlds', {
 
         // open the create box of `stub`'s kind (`{id, kind, name}`) to
         // expand it, leaving the page (and any other preview) behind; its
-        // suggested prompt is asked for
-        expandStub(stub) {
+        // suggested prompt is asked for. An unaccepted preview isn't
+        // dropped unasked: the stub waits in `expandAsk` for the owner to
+        // `confirmExpand` or `keepPreview`.
+        expandStub(stub, { discard = false } = {}) {
+            const target = { id: stub.id, kind: stub.kind, name: stub.name };
+            if (this.preview && !discard) {
+                this.expandAsk = target;
+                return;
+            }
+            this.expandAsk = null;
             this.cancelPreview();
             this.closeThing();
-            this.expanding = { id: stub.id, kind: stub.kind, name: stub.name };
+            this.expanding = target;
             this.stubSuggestion = null;
             this.request('stub_suggestion', { id: stub.id });
+        },
+
+        // the owner agreed to drop the preview: expand the stub waiting
+        confirmExpand() {
+            const stub = this.expandAsk;
+            if (stub) {
+                this.expandStub(stub, { discard: true });
+            }
+        },
+
+        // the owner keeps the preview: the stub isn't expanded
+        keepPreview() {
+            this.expandAsk = null;
         },
 
         stopExpanding() {

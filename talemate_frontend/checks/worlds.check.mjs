@@ -1245,6 +1245,42 @@ check('expanding a stub previews with its id, and accepting ends it', () => {
     assert.equal('stub_id' in sent.at(-1), false);
 });
 
+check('expanding a stub over an unaccepted preview asks first', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('place', 'a town');
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {} }));
+    sent.length = 0;
+
+    // the preview is kept, and the owner is asked
+    store.expandStub(STUB);
+    assert.deepEqual(store.expandAsk, { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' });
+    assert.equal(store.expanding, null);
+    assert.equal(store.preview.name, 'Kalmara');
+    assert.deepEqual(sent, []);
+
+    // keeping it changes nothing
+    store.keepPreview();
+    assert.equal(store.expandAsk, null);
+    assert.equal(store.preview.name, 'Kalmara');
+    assert.equal(store.expanding, null);
+
+    // discarding it expands the stub
+    store.expandStub(STUB);
+    store.confirmExpand();
+    assert.equal(store.expandAsk, null);
+    assert.equal(store.preview, null);
+    assert.deepEqual(store.expanding, { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'stub_suggestion', id: 's1' });
+
+    // with no preview open, nothing is asked
+    const fresh = freshStore();
+    fresh.store.handleMessage(reply('open_world', WORLD));
+    fresh.store.expandStub(STUB);
+    assert.equal(fresh.store.expandAsk, null);
+    assert.equal(fresh.store.expanding.id, 's1');
+});
+
 check('other names are written whole, and an edit re-lists the stubs', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));

@@ -242,3 +242,50 @@ def test_setup_cards_show_stub_previews(app, page, fixed_setup, fixed_preview):
     text = stub.inner_text()
     assert "will be filled in" in text
     assert "A ferrywoman of the Vasel." in text
+
+
+KALMARA_PREVIEW = {
+    "name": "Kalmara",
+    "facts": [{"category": "description", "text": "A river port."}],
+    "prose": {"description": "A river port."},
+}
+
+
+def test_expanding_over_a_preview_asks_first(app, page, fixed_preview):
+    """Expanding a stub while a preview waits to be accepted asks before
+    dropping it: keeping it changes nothing; discarding it expands."""
+
+    name = _world_name("Kalmara")
+    seed_fm_world(app.root, name, present_year=1026, things=[YELENA, OLD_RITE, VASHA])
+    _open_world(page, name)
+    _world_tab(page)
+
+    page.get_by_test_id("kind-place").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_label("Describe it").fill("a river port")
+    fixed_preview(KALMARA_PREVIEW)
+    box.get_by_role("button", name="Create").click()
+    preview = page.get_by_test_id("create-preview")
+    preview.wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    def expand_yelena():
+        row = _stubs_tab(page).get_by_test_id("stub-row").filter(has_text="Yelena")
+        row.get_by_role("button", name="Expand").click()
+        dialog = page.get_by_test_id("expand-ask")
+        dialog.wait_for(state="visible", timeout=TIMEOUT_MS)
+        assert "Kalmara" in dialog.inner_text()
+        return dialog
+
+    expand_yelena().get_by_role("button", name="Keep the preview").click()
+    page.get_by_test_id("expand-ask").wait_for(state="hidden", timeout=TIMEOUT_MS)
+    page.get_by_test_id("kind-place").click()
+    preview = page.get_by_test_id("create-preview")
+    preview.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "A river port." in preview.inner_text()
+
+    expand_yelena().get_by_role("button", name="Discard and expand").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("from-stub").filter(has_text="Yelena").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert page.get_by_test_id("create-preview").count() == 0

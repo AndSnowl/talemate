@@ -36,6 +36,7 @@
         </div>
 
         <div class="main flex-grow-1 pa-4">
+            <ExpandAskDialog />
             <v-alert v-if="worlds.error" type="error" variant="tonal" density="compact" class="mb-3" closable @click:close="worlds.clearError()">
                 {{ worlds.error }}
             </v-alert>
@@ -90,6 +91,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { STUBS_TAB, TOP_KINDS, kindInfo } from './worldKinds.js';
 import CreateBox from './CreateBox.vue';
+import ExpandAskDialog from './ExpandAskDialog.vue';
 import StubsTab from './StubsTab.vue';
 import ThingPage from './ThingPage.vue';
 
@@ -101,7 +103,7 @@ import ThingPage from './ThingPage.vue';
 // switches to its kind, whose create box takes it up.
 export default {
     name: 'WorldTab',
-    components: { CreateBox, StubsTab, ThingPage },
+    components: { CreateBox, ExpandAskDialog, StubsTab, ThingPage },
     setup() {
         return { worlds: useWorldsStore() };
     },
