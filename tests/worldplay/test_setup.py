@@ -398,6 +398,81 @@ async def test_plan_scene_rejects_unknown_pick(world):
         )
 
 
+# --- heritage -----------------------------------------------------------------
+
+
+async def test_setup_invented_character_heritage(world, heritage_world):
+    """Task 7: an invented character's "heritage" names Snowy; the local
+    thing keeps its id, and the started scene's local character description
+    carries Snowy's effective physical/variation facts (here, the plumage
+    fact), with its instinct facts as the personality."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "world": False,
+                "facts": ["A quiet trader."],
+                "heritage": "snowy",
+            }
+        ],
+        "intro": "Dawn breaks over the river.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+
+    rill = next(c for c in setup.characters if c.local is not None)
+    assert rill.local.name == "Rill"
+    assert rill.local.heritage_id == heritage_world.snowy
+
+    async with MockClientContext():
+        scene_id = await start_scene(world, setup, MockClient("test"))
+
+    local = {
+        thing["data"]["name"]: thing for thing in world.scenes().local_things(scene_id)
+    }
+    rill_data = local["Rill"]["data"]
+    assert "A quiet trader." in rill_data["description"]
+    # Snowy's own facts, plus what it inherits from Owl-folk
+    assert "White plumage." in rill_data["description"]
+    assert "Yellow eyes." in rill_data["description"]
+    assert "Wings in place of arms." in rill_data["description"]
+    assert rill_data["base_attributes"]["personality"] == "Hunts at dusk."
+    assert rill_data["world_heritage_id"] == heritage_world.snowy
+
+
+async def test_setup_unknown_heritage_ignored(world, heritage_world):
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {"name": "Rill", "facts": ["A quiet trader."], "heritage": "Dragonkin"}
+        ],
+        "intro": "Dawn.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+
+    rill = next(c for c in setup.characters if c.local is not None)
+    assert rill.local.heritage_id is None
+
+
+async def test_setup_prompt_lists_heritages(world, heritage_world):
+    """The setup prompt's `heritages` var names the species and races, each
+    race labelled with its species."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({"player": "Anyone", "characters": [], "intro": "Dawn."}))
+        await plan_scene(world, "Anyone arrives", {}, None, START, client)
+
+    sent = str(client.prompt_history[0]["prompt"])
+    assert "Owl-folk" in sent
+    assert "Snowy (Owl-folk)" in sent
+
+
 # --- starting -----------------------------------------------------------------
 
 

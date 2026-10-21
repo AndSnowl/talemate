@@ -888,7 +888,7 @@ async def test_plan_scene_owner_choices_win(plugin, tmp_path, monkeypatch):
     treated_new = await plan(new_names=["Maren"])
     assert treated_new["player"] == {
         "thing_id": None,
-        "local": {"name": "Maren", "facts": []},
+        "local": {"name": "Maren", "facts": [], "heritage_id": None},
     }
     assert treated_new["invented"] == ["Maren"]
 

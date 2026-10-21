@@ -61,6 +61,7 @@
         "visual_finalizers": [],
         "visual_rules": null,
         "voice": null,
+        "world_heritage_id": null,
         "world_local_id": null,
         "world_thing_id": null
       },
@@ -85,6 +86,7 @@
         "visual_finalizers": [],
         "visual_rules": null,
         "voice": null,
+        "world_heritage_id": null,
         "world_local_id": null,
         "world_thing_id": null
       }

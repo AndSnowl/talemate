@@ -70,6 +70,11 @@ class Character(pydantic.BaseModel):
     # (`talemate.worldplay.persistence`)
     world_local_id: str | None = None
 
+    # the species, race or mix (`talemate.world`) an invented character was
+    # given at scene setup, kept for a later make-real
+    # (`talemate.worldplay.setup`)
+    world_heritage_id: str | None = None
+
     # dialogue instructions and examples
     dialogue_instructions: str | None = pydantic.Field(
         default=None,

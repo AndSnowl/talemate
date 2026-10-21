@@ -21,7 +21,13 @@ and-setup.md) settled:
   their facts are where the story sees them;
 - the model's own `world: true|false` flag is not trusted: every name is
   resolved against the world in code;
-- a player picked in the UI always wins over the model's choice.
+- a player picked in the UI always wins over the model's choice;
+- an invented character may carry a `heritage`, one of the `heritages`
+  (species, race or mix names) the prompt is given; an unknown name is
+  ignored. `start_scene` gives it a description made from its own facts
+  plus its heritage's effective physical/variation facts, and an
+  instinct-based `personality`, so the inherited body reaches play; the
+  heritage id is kept on the local character for a later make-real.
 
 The owner's choices always win over automatic matching: a name the owner
 picked a thing for resolves to that thing, and a name the owner treats as
@@ -47,8 +53,10 @@ from pydantic import BaseModel, Field, model_validator
 import talemate.instance as instance
 from talemate.character import Character
 from talemate.prompts import Prompt
+from talemate.world import heritage
 from talemate.world.dates import WorldDate
 from talemate.world.index import IndexDoc, WorldIndex
+from talemate.world.kinds import HERITAGE_KINDS
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.store import World
 from talemate.world.view import WorldView
@@ -105,6 +113,9 @@ class LocalThing(BaseModel):
 
     name: str
     facts: list[str] = Field(default_factory=list)
+    # a character's heritage (species, race or mix), picked from the
+    # `heritages` the setup prompt offers; kept for a later make-real
+    heritage_id: str | None = None
 
 
 class SetupRef(BaseModel):
@@ -272,6 +283,41 @@ def _world_things(view: WorldView, thing_ids: list[str]) -> list[tuple[str, list
     return [(_KIND_LABELS.get(kind, kind.capitalize()), groups[kind]) for kind in kinds]
 
 
+def _heritages(view: WorldView) -> list[str]:
+    """Species, race and mix names for the setup prompt's `heritages` var,
+    a race labelled with its species ("Snowy (Owl-folk)")."""
+
+    names: list[str] = []
+    for kind in HERITAGE_KINDS:
+        for state in view.things(kind):
+            name = view.name_of(state.id) or ""
+            if not name:
+                continue
+            if kind == "race":
+                species_id = state.fields.get("species")
+                species_name = (
+                    view.name_of(species_id) if isinstance(species_id, str) else None
+                )
+                name = f"{name} ({species_name})" if species_name else name
+            names.append(name)
+    return names
+
+
+def _heritage_id(view: WorldView, name: str | None) -> str | None:
+    """The species, race or mix named `name` (matched case-insensitively
+    against its own name, not the `heritages` display label). `None` for
+    no name or one that matches nothing."""
+
+    if not isinstance(name, str) or not name.strip():
+        return None
+    key = _norm(name)
+    for kind in HERITAGE_KINDS:
+        for state in view.things(kind):
+            if _norm(view.name_of(state.id) or "") == key:
+                return state.id
+    return None
+
+
 async def _ask(
     world: World,
     view: WorldView,
@@ -296,6 +342,7 @@ async def _ask(
                 "summary": summary,
                 "carried": carried or [],
                 "world_things": _world_things(view, shown),
+                "heritages": _heritages(view),
             },
         )
     return _reply_object(extracted["response"])
@@ -329,20 +376,25 @@ def _reply_object(reply: str) -> dict[str, Any]:
     raise ValueError(f"no scene setup found in the model's reply: {reply!r}")
 
 
-def _entry(value: object) -> tuple[str, list[str]]:
-    """`(name, facts)` from a reply entry: an object, or a bare name."""
+def _entry(value: object) -> tuple[str, list[str], str | None]:
+    """`(name, facts, heritage)` from a reply entry: an object, or a bare
+    name. `heritage` is the reply's raw `"heritage"` name, unresolved."""
 
     if isinstance(value, str):
-        return value.strip(), []
+        return value.strip(), [], None
     if not isinstance(value, dict):
-        return "", []
+        return "", [], None
     name = value.get("name")
     facts = value.get("facts")
     if isinstance(facts, str):
         facts = [facts]
+    heritage_name = value.get("heritage")
     return (
         name.strip() if isinstance(name, str) else "",
         [f.strip() for f in facts or [] if isinstance(f, str) and f.strip()],
+        heritage_name.strip()
+        if isinstance(heritage_name, str) and heritage_name.strip()
+        else None,
     )
 
 
@@ -398,13 +450,16 @@ def _ref(
     picks: dict[str, str],
     new_names: frozenset[str] = frozenset(),
 ) -> SetupRef | None:
-    name, facts = _entry(value)
+    name, facts, heritage_name = _entry(value)
     if not name:
         return None
     thing_id = _resolve(view, name, kind, picks, new_names)
     if thing_id is not None:
         return SetupRef(thing_id=thing_id)
-    return SetupRef(local=LocalThing(name=name, facts=facts))
+    local = LocalThing(name=name, facts=facts)
+    if kind == "character":
+        local.heritage_id = _heritage_id(view, heritage_name)
+    return SetupRef(local=local)
 
 
 def _same(a: SetupRef, b: SetupRef) -> bool:
@@ -484,7 +539,7 @@ def _setup_from_reply(
     raw_extras = reply.get("extras")
     extras = []
     for value in raw_extras if isinstance(raw_extras, list) else []:
-        name, facts = _entry(value)
+        name, facts, _heritage_name = _entry(value)
         if name:
             extras.append(LocalThing(name=name, facts=facts))
 
@@ -590,6 +645,21 @@ def _scene_name(setup: SceneSetup) -> str:
     return text or "New scene"
 
 
+def _heritage_facts(view: WorldView, heritage_id: str) -> tuple[list[str], list[str]]:
+    """`(physical/variation, instinct)` effective fact texts of
+    `heritage_id` (its own facts, then what it inherits, overrides already
+    applied), rendered so `[[thing:id]]` references read as names."""
+
+    physical: list[str] = []
+    instinct: list[str] = []
+    for fact, _layer in heritage.effective_facts(view, heritage_id):
+        if fact.category in ("physical", "variation"):
+            physical.append(view.render(fact.text))
+        elif fact.category == "instinct":
+            instinct.append(view.render(fact.text))
+    return physical, instinct
+
+
 async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     """Write `setup` as a new world scene and return its id. The world
     characters' prose is brought up to date at the start first, so the
@@ -617,10 +687,21 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             continue
         assert ref.local is not None
         local_id = uuid.uuid4().hex
+        description_facts = list(ref.local.facts)
+        base_attributes: dict[str, object] = {}
+        if ref.local.heritage_id is not None:
+            physical, instinct = _heritage_facts(
+                world.view(setup.start), ref.local.heritage_id
+            )
+            description_facts += physical
+            if instinct:
+                base_attributes["personality"] = " ".join(instinct)
         character = Character(
             name=ref.local.name,
-            description=" ".join(ref.local.facts),
+            description=" ".join(description_facts),
+            base_attributes=base_attributes,
             is_player=position == 0,
+            world_heritage_id=ref.local.heritage_id,
         )
         entries.append({"local_id": local_id, "active": True})
         local_things.append(
