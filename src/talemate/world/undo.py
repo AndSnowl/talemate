@@ -27,7 +27,9 @@ uncovered (undoing T1 and T2 of T1, N, T2 leaves N's value, quietly). A
 value or fact that can't come back because its thing was removed later
 counts as removed later. A thing whose creation is being undone is kept,
 with its rows, when a later revision outside the targets added rows to it
-or referenced it (from a fact, a `thing` field or a `shares` field).
+or referenced it (from a fact, a `thing` field or a `shares` field). A
+stub's kind change is kept the same way when a later revision outside the
+targets gave it a value or fact the other kind has no room for.
 
 An undo that changes nothing writes no revision, so re-undoing an undone
 revision is a quiet no-op.
@@ -263,13 +265,59 @@ class _Planner:
             return True
         return False
 
+    def _keeps_kind(self, slot: Slot, live: sqlite3.Row, want: sqlite3.Row) -> bool:
+        """For a stub whose kind change is being undone (`live` and `want`
+        differ in kind): report it if a later revision outside the targets
+        added a live value or fact that `want`'s kind has no room for, such
+        as a place's `parent` on what would go back to being lore."""
+
+        if live["kind"] == want["kind"]:
+            return False
+        kind = KINDS[want["kind"]]
+        types = {spec.name: spec.type for spec in kind.fields}
+        old_types = {spec.name: spec.type for spec in KINDS[live["kind"]].fields}
+        thing_id = cast(str, slot[1])
+        since = min(self.history.touched(slot) & self.closure)
+
+        misfits: list[tuple[Table, sqlite3.Row]] = [
+            ("field_values", row)
+            for row in self.conn.execute(
+                "SELECT * FROM field_values WHERE thing_id = ? AND rev_removed IS NULL",
+                (thing_id,),
+            )
+            if types.get(row["field"]) != old_types[row["field"]]
+        ]
+        misfits += [
+            ("facts", row)
+            for row in self.conn.execute(
+                "SELECT * FROM facts WHERE thing_id = ? AND rev_removed IS NULL",
+                (thing_id,),
+            )
+            if row["category"] not in kind.categories
+        ]
+        later = [
+            rev
+            for table, row in misfits
+            if (rev := self._later_write(table, row, since)) is not None
+        ]
+        if later:
+            self._conflict(slot, CHANGED_LATER, min(later))
+            return True
+        return False
+
     # -- planning ------------------------------------------------------------
 
     def plan_thing(self, slot: Slot) -> None:
         live = self.history.live_row(slot)
         want = self.after.state(slot)
-        if (live is not None and want is None and self._keeps_creation(slot)) or (
-            self._changed_later(slot, self.after.latest(slot))
+        if (
+            (live is not None and want is None and self._keeps_creation(slot))
+            or self._changed_later(slot, self.after.latest(slot))
+            or (
+                live is not None
+                and want is not None
+                and self._keeps_kind(slot, live, want)
+            )
         ):
             # kept as it is, along with all its values and facts
             self.blocked_things.add(cast(str, slot[1]))

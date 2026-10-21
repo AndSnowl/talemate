@@ -2,6 +2,13 @@
 
 A `KindSpec` names a kind's fields and the fact categories it accepts.
 `KINDS` is the whole catalog; adding a kind later is one entry here.
+
+Every kind also has two fields of its own:
+- `aka`, its other names: a list of `{"name": str, "tag": "proper" |
+  "common", "everyday": bool}`, with at most one everyday name, which must
+  be a common one. The main name (`name`) is always the most proper;
+- `stub`, present while the thing is a stub (a name mentioned but not made
+  yet): `{"ignored": bool}`.
 """
 
 import re
@@ -30,8 +37,16 @@ class KindSpec(BaseModel):
     categories: list[str]
 
 
+# the fields every kind has, after its own
+_SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (("aka", "json"), ("stub", "json"))
+
+AKA_TAGS: tuple[str, ...] = ("proper", "common")
+
+
 def _fields(*pairs: tuple[str, FieldType]) -> list[FieldSpec]:
-    return [FieldSpec(name=name, type=type_) for name, type_ in pairs]
+    return [
+        FieldSpec(name=name, type=type_) for name, type_ in (*pairs, *_SHARED_FIELDS)
+    ]
 
 
 _HERITAGE_CATEGORIES = ["origin", "physical", "instinct", "variation", "general"]
@@ -206,6 +221,10 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
     elif spec.type == "json":
         if field == "measures":
             _validate_measures(field, value)
+        elif field == "aka":
+            _validate_aka(field, value)
+        elif field == "stub":
+            _validate_stub(field, value)
         # otherwise any JSON-serializable value is accepted
 
 
@@ -226,3 +245,37 @@ def _validate_measures(field: str, value: object) -> None:
                 f"{field!r} entries must be "
                 '{"name": str, "min": number, "max": number, "unit": str}'
             )
+
+
+def _validate_aka(field: str, value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list of other names")
+    everyday = 0
+    for entry in value:
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"name", "tag", "everyday"}
+            or not isinstance(entry["name"], str)
+            or not entry["name"].strip()
+            or entry["tag"] not in AKA_TAGS
+            or not isinstance(entry["everyday"], bool)
+        ):
+            raise ValueError(
+                f"{field!r} entries must be "
+                '{"name": str, "tag": "proper" | "common", "everyday": bool}'
+            )
+        if entry["everyday"]:
+            if entry["tag"] != "common":
+                raise ValueError(f"{field!r}: the everyday name must be common")
+            everyday += 1
+    if everyday > 1:
+        raise ValueError(f"{field!r} may have at most one everyday name")
+
+
+def _validate_stub(field: str, value: object) -> None:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"ignored"}
+        or not isinstance(value["ignored"], bool)
+    ):
+        raise ValueError(f'{field!r} must be {{"ignored": bool}}')

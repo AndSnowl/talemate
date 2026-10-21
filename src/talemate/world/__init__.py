@@ -11,7 +11,7 @@ from .schema import SCHEMA_VERSION
 from .store import Revision, RevisionInfo, Source, World, WorldInfo
 from .timeline import TimelineEntry
 from .undo import UndoConflict, UndoReport
-from .view import FactState, ThingState, WorldView
+from .view import FactState, Segment, ThingState, WorldView
 
 __all__ = [
     "Calendar",
@@ -48,6 +48,7 @@ __all__ = [
     "UndoConflict",
     "UndoReport",
     "FactState",
+    "Segment",
     "ThingState",
     "WorldView",
 ]

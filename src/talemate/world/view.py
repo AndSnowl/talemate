@@ -83,6 +83,27 @@ class ThingState(BaseModel):
     fields: dict[str, object]
     facts: list[FactState]
 
+    @property
+    def is_stub(self) -> bool:
+        """Whether the thing carries the stub marker at this view."""
+
+        return "stub" in self.fields
+
+    @property
+    def stub_ignored(self) -> bool:
+        """Whether the thing is a stub the owner chose to ignore."""
+
+        marker = self.fields.get("stub")
+        return isinstance(marker, dict) and marker.get("ignored") is True
+
+
+class Segment(BaseModel):
+    """A run of rendered text: plain (`ref` is `None`) or a link to the
+    thing `ref`."""
+
+    text: str
+    ref: str | None
+
 
 class WorldView:
     """A snapshot of a world as of `(at, rev)`. Built by `World.view`; not
@@ -272,19 +293,79 @@ class WorldView:
 
         return self._name_at(thing_id, self._at_instant())
 
+    def _is_live(self, thing_id: str) -> bool:
+        things_filter, things_params = self._live_things_filter("", thing_id=thing_id)
+        row = self._conn.execute(
+            f"SELECT 1 FROM things WHERE {things_filter}", things_params
+        ).fetchone()
+        return row is not None
+
+    def _main_names(self, thing_id: str) -> set[str]:
+        """Every main name the thing has on its timeline at `rev`, whatever
+        story date it holds from, casefolded."""
+
+        rows = self._conn.execute(
+            "SELECT value_json FROM field_values "
+            "WHERE thing_id = ? AND field = 'name' "
+            "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)",
+            (thing_id, self.rev, self.rev),
+        ).fetchall()
+        return {cast(str, json.loads(row["value_json"])).casefold() for row in rows}
+
+    def _resolve(self, match: re.Match[str]) -> Segment:
+        """What one reference renders as, and the thing it links to (`None`
+        when its target doesn't exist at `rev`)."""
+
+        thing_id, shown = match.group(1), match.group(2)
+        live = self._is_live(thing_id)
+        if shown is not None:
+            if not live:
+                return Segment(text=shown, ref=None)
+            if shown.casefold() not in self._main_names(thing_id):
+                return Segment(text=shown, ref=thing_id)
+
+        name = self._name_at(thing_id, self._at_instant())
+        if name is None:
+            name = self._name_at(thing_id, _FAR_FUTURE)
+        if name is None:
+            return Segment(text=shown or UNKNOWN_NAME, ref=None)
+        return Segment(text=name, ref=thing_id if live else None)
+
     def render(self, text: str) -> str:
-        """Replace each `[[thing:<id>]]` reference in `text` with that
-        thing's name: at `at` if it has one there, otherwise its latest name
-        visible at `rev`, otherwise `⟨unknown⟩`."""
+        """Replace each reference in `text` with the words it reads as.
 
-        def replace(match: re.Match[str]) -> str:
-            thing_id = match.group(1)
-            name = self._name_at(thing_id, self._at_instant())
-            if name is None:
-                name = self._name_at(thing_id, _FAR_FUTURE)
-            return name if name is not None else UNKNOWN_NAME
+        `[[thing:<id>]]` reads as that thing's name: at `at` if it has one
+        there, otherwise its latest name visible at `rev`, otherwise
+        `⟨unknown⟩`. `[[thing:<id>|<shown>]]` reads as its shown text,
+        unless that is (ignoring case) a main name the thing has ever had on
+        its timeline, when it reads as the name, so a link written with the
+        full name follows a rename; a target that doesn't exist at `rev`
+        reads as the shown text."""
 
-        return REF_PATTERN.sub(replace, text)
+        return REF_PATTERN.sub(lambda match: self._resolve(match).text, text)
+
+    def segments(self, text: str) -> list[Segment]:
+        """`text` rendered as `render` does, split into plain runs and runs
+        that link to a live thing, in order; adjacent plain runs are
+        merged."""
+
+        result: list[Segment] = []
+
+        def add(segment: Segment) -> None:
+            if not segment.text:
+                return
+            if result and segment.ref is None and result[-1].ref is None:
+                result[-1] = Segment(text=result[-1].text + segment.text, ref=None)
+            else:
+                result.append(segment)
+
+        end = 0
+        for match in REF_PATTERN.finditer(text):
+            add(Segment(text=text[end : match.start()], ref=None))
+            add(self._resolve(match))
+            end = match.end()
+        add(Segment(text=text[end:], ref=None))
+        return result
 
     def referencing(
         self, thing_id: str, *, any_date: bool = False
