@@ -367,3 +367,36 @@ def test_override_applied_when_every_path_passes_through_it(world, heritage_worl
     by_id = {item.fact.fact_id: item for item in inherited(view, grand)}
     assert by_id[hands].overridden_by == six
     assert hands not in [fact.fact_id for fact, _ in effective_facts(view, grand)]
+
+
+def test_both_parents_override_a_shared_species_fact(world, heritage_world):
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        plumage = rev.add_fact(
+            h.owl_folk, "physical", "Plumage ranges from brown to grey."
+        )
+        white = rev.add_fact(
+            h.snowy, "variation", "White plumage.", overrides=[plumage]
+        )
+        barred = rev.create_thing(
+            "race", fields={"name": "Barred", "species": h.owl_folk}
+        )
+        striped = rev.add_fact(
+            barred, "variation", "Barred plumage.", overrides=[plumage]
+        )
+        mixed = rev.create_thing(
+            "mix", fields={"name": "Snowy-barred", "parents": [h.snowy, barred]}
+        )
+        wren = rev.create_thing("character", fields={"name": "Wren", "heritage": mixed})
+
+    view = world.view()
+    # every path to Owl-folk passes through Snowy or Barred, and both
+    # override the plumage fact, so the blend never sees it
+    for thing_id in (mixed, wren):
+        by_id = {item.fact.fact_id: item for item in inherited(view, thing_id)}
+        assert by_id[plumage].overridden_by == white
+        ids = [fact.fact_id for fact, _ in effective_facts(view, thing_id)]
+        assert plumage not in ids
+        assert white in ids
+        assert striped in ids
+        assert h.wings in ids

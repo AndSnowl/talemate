@@ -8,9 +8,9 @@ parent's chain in turn, a race's `species`, and last a character's
 and a missing or deleted target is skipped.
 
 Facts and numbers are resolved from those layers in code. A fact is
-dropped from the inherited set when it's listed in `overrides` by a fact
-of a layer that every inheritance path to it passes through (the thing's
-own facts override anything).
+dropped from the inherited set when it's listed in `overrides` by facts
+of layers that every inheritance path to it passes through one of (the
+thing's own facts override anything).
 A number is the first one set along the chain; a mix with a number unset
 averages its two parents' resolved values.
 
@@ -126,12 +126,13 @@ def lineage(view: WorldView, thing_id: str) -> list[Layer]:
     ]
 
 
-def _reachable(states: list[ThingState], without: str | None) -> set[str]:
+def _reachable(states: list[ThingState], avoiding: set[str]) -> set[str]:
     """The layer ids reachable from the thing (`states[0]`) by the
-    heritage links among `states`, never stepping onto `without`. The
-    thing reaches its culture directly."""
+    heritage links among `states`, never stepping onto a layer in
+    `avoiding` (nothing, when the thing itself is in it). The thing
+    reaches its culture directly."""
 
-    if not states:
+    if not states or states[0].id in avoiding:
         return set()
     by_id = {state.id: state for state in states}
     root = states[0]
@@ -145,28 +146,10 @@ def _reachable(states: list[ThingState], without: str | None) -> set[str]:
         if state is root and culture is not None:
             next_ids.append(culture)
         for next_id in next_ids:
-            if next_id in by_id and next_id != without and next_id not in reached:
+            if next_id in by_id and next_id not in avoiding and next_id not in reached:
                 reached.add(next_id)
                 stack.append(by_id[next_id])
     return reached
-
-
-def _dominators(states: list[ThingState]) -> dict[str, set[str]]:
-    """Each layer id -> the layer ids it dominates: the ones the thing
-    reaches only through it, by every inheritance path. The thing itself
-    dominates every other layer. A species listed once under a mix's
-    parent A still counts as dominated by parent B's race when B is the
-    only way there, while a layer the thing also reaches some other way
-    isn't dominated by either route."""
-
-    everything = _reachable(states, None)
-    dominated: dict[str, set[str]] = {}
-    for state in states:
-        if state is states[0]:
-            dominated[state.id] = everything - {state.id}
-        else:
-            dominated[state.id] = everything - _reachable(states, state.id) - {state.id}
-    return dominated
 
 
 def _inherited_with_layers(
@@ -179,19 +162,29 @@ def _inherited_with_layers(
         Layer(thing_id=state.id, kind=state.kind, name=_name(state), depth=depth)
         for depth, state in enumerate(states)
     ]
-    dominated = _dominators(states)
     fact_layer = {fact.fact_id: state.id for state in states for fact in state.facts}
 
-    # fact_id -> the most specific fact overriding it. A fact overrides
-    # only a target in a layer its own layer dominates, so a sibling
-    # parent, a less specific layer, or a route the thing can bypass
-    # (a Quarter-orc's direct Lowlander parent, past Half-orc) can't drop it
-    overriders: dict[str, str] = {}
+    # fact_id -> the layers (other than its own) with a fact overriding
+    # it, most specific first, and the first such fact
+    overriding_layers: dict[str, list[str]] = {}
+    first_overrider: dict[str, str] = {}
     for state in states:
         for fact in state.facts:
             for target in fact.overrides:
-                if fact_layer.get(target) in dominated[state.id]:
-                    overriders.setdefault(target, fact.fact_id)
+                if fact_layer.get(target) in (None, state.id):
+                    continue
+                overriding_layers.setdefault(target, []).append(state.id)
+                first_overrider.setdefault(target, fact.fact_id)
+
+    # a target is dropped when the thing can't reach its layer without
+    # passing through an overriding layer: a sibling parent, a less
+    # specific layer, or a route the thing can bypass (a Quarter-orc's
+    # direct Lowlander parent, past Half-orc) doesn't drop it, while two
+    # parents that both override their shared species' fact do
+    overriders: dict[str, str] = {}
+    for target, layer_ids in overriding_layers.items():
+        if fact_layer[target] not in _reachable(states, set(layer_ids)):
+            overriders[target] = first_overrider[target]
 
     own: list[tuple[FactState, Layer]] = []
     inherited_facts: list[tuple[InheritedFact, Layer]] = []
@@ -213,8 +206,9 @@ def _inherited_with_layers(
 
 def inherited(view: WorldView, thing_id: str) -> list[InheritedFact]:
     """Every fact of the thing's less specific layers, in layer order, with
-    `overridden_by` set where a fact of a layer that every inheritance path
-    to that one passes through overrides it."""
+    `overridden_by` set where facts of layers that every inheritance path
+    to that one passes through one of override it (the most specific of
+    them is named)."""
 
     _, inherited_facts = _inherited_with_layers(view, thing_id)
     return [item for item, _ in inherited_facts]
