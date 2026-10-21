@@ -696,14 +696,18 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             continue
         assert ref.local is not None
         local_id = uuid.uuid4().hex
-        # own_facts (never the heritage's) is kept alongside the character,
-        # so a later `continue_setup` can rebuild the invented character
-        # without the heritage's facts already baked into `description`
-        # (`_carried.local_thing`) and re-derive them fresh instead of
-        # duplicating them
         own_facts = list(ref.local.facts)
         description_facts = list(own_facts)
         base_attributes: dict[str, object] = {}
+        # `world_own_facts` is set only alongside a heritage: it's what
+        # lets `_carried` rebuild the invented character later without the
+        # heritage's facts already baked into `description`
+        # (`character.world_own_facts`), so a later `start_scene` can
+        # re-derive them fresh instead of duplicating them. A `Character`
+        # field, not a plain dict key, so it survives a save in between
+        # (`persistence._character_entries` re-dumps from the live,
+        # already-loaded `Character`, which has no other way to carry it).
+        heritage_own_facts: list[str] = []
         if ref.local.heritage_id is not None:
             physical, instinct = _heritage_facts(
                 world.view(setup.start), ref.local.heritage_id
@@ -711,19 +715,21 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             description_facts += physical
             if instinct:
                 base_attributes["personality"] = " ".join(instinct)
+            heritage_own_facts = own_facts
         character = Character(
             name=ref.local.name,
             description=" ".join(description_facts),
             base_attributes=base_attributes,
             is_player=position == 0,
             world_heritage_id=ref.local.heritage_id,
+            world_own_facts=heritage_own_facts,
         )
         entries.append({"local_id": local_id, "active": True})
         local_things.append(
             {
                 "local_id": local_id,
                 "kind": LOCAL_CHARACTER_KIND,
-                "data": {**character.model_dump(mode="json"), "facts": own_facts},
+                "data": character.model_dump(mode="json"),
             }
         )
 
@@ -786,6 +792,17 @@ def _carried(
     def local_thing(data: dict[str, Any]) -> LocalThing:
         heritage_id = data.get("world_heritage_id") or data.get("heritage_id")
         heritage_id = heritage_id if isinstance(heritage_id, str) else None
+        # a heritage-bearing character's own facts, kept apart from the
+        # heritage's (`Character.world_own_facts`) -- `description`
+        # already has the heritage's facts baked in, which `start_scene`
+        # would otherwise re-derive on top of and duplicate
+        own_facts = data.get("world_own_facts")
+        if heritage_id is not None and isinstance(own_facts, list):
+            return LocalThing(
+                name=data["name"],
+                facts=[f for f in own_facts if isinstance(f, str)],
+                heritage_id=heritage_id,
+            )
         if isinstance(data.get("facts"), list):
             return LocalThing(
                 name=data["name"], facts=data["facts"], heritage_id=heritage_id

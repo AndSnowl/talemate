@@ -19,7 +19,11 @@ from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source
 from talemate.worldplay.context import world_context_block
 from talemate.worldplay.create import current_date
-from talemate.worldplay.persistence import close_world_scene, world_target
+from talemate.worldplay.persistence import (
+    close_world_scene,
+    save_world_scene,
+    world_target,
+)
 from talemate.worldplay.setup import (
     LocalThing,
     SceneSetup,
@@ -520,6 +524,64 @@ async def test_continue_setup_carries_heritage(world, heritage_world):
     )
     async with MockClientContext():
         old_id = await start_scene(world, setup, MockClient("test"))
+
+    continued = await continue_setup(
+        world,
+        old_id,
+        "next",
+        None,
+        reply={"player": "Maren", "characters": [], "goal": "g", "intro": "i"},
+    )
+    async with MockClientContext():
+        new_id = await start_scene(world, continued, MockClient("test"))
+
+    local = {
+        thing["data"]["name"]: thing for thing in world.scenes().local_things(new_id)
+    }
+    rill_data = local["Rill"]["data"]
+    assert rill_data["world_heritage_id"] == heritage_world.snowy
+    assert rill_data["base_attributes"]["personality"] == "Hunts at dusk."
+    assert "A quiet trader." in rill_data["description"]
+    assert rill_data["description"].count("White plumage.") == 1
+    assert rill_data["description"].count("Yellow eyes.") == 1
+    assert rill_data["description"].count("Wings in place of arms.") == 1
+
+
+async def test_continue_setup_carries_heritage_through_a_save(
+    world, heritage_world, loadable
+):
+    """Fix round 2: the normal path is start -> play (which autosaves via
+    `save_world_scene`) -> continue, not start -> continue straight off.
+    `save_world_scene`'s `_character_entries` re-dumps the scene-local
+    character from the live, loaded `Character`, which must still carry
+    its own facts separately from the heritage's for the fix to survive
+    that round-trip -- not just the raw local-thing data `start_scene`
+    first wrote, which `test_continue_setup_carries_heritage` checks."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "facts": ["A quiet trader."],
+                "heritage": "snowy",
+            }
+        ],
+        "intro": "Dawn breaks over the river.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+    async with MockClientContext():
+        old_id = await start_scene(world, setup, MockClient("test"))
+
+    scene = MockScene()
+    bootstrap_scene(scene)
+    loaded = await load_scene(scene, world_target(str(world.path), old_id))
+    try:
+        save_world_scene(loaded)
+    finally:
+        close_world_scene(loaded)
 
     continued = await continue_setup(
         world,

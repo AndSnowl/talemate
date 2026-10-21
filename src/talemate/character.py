@@ -75,6 +75,12 @@ class Character(pydantic.BaseModel):
     # (`talemate.worldplay.setup`)
     world_heritage_id: str | None = None
 
+    # set alongside `world_heritage_id`: the invented character's own
+    # facts, apart from the heritage's, so a later `continue_setup` can
+    # re-derive the heritage's facts without finding them already baked
+    # into `description` and duplicating them (`talemate.worldplay.setup`)
+    world_own_facts: list[str] = pydantic.Field(default_factory=list)
+
     # dialogue instructions and examples
     dialogue_instructions: str | None = pydantic.Field(
         default=None,
