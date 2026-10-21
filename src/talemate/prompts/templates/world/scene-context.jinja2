@@ -1,15 +1,18 @@
 [world]
+{% if everyday -%}
+In narration and dialogue, call things by their everyday names: where a name is followed by "usually called ...", use that name, and keep the full name for formal moments.
+{% endif -%}
 {% if goal -%}
 Goal: {{ goal }}
 {% endif -%}
 {% if place -%}
-Place: {{ place.name }}
+Place: {{ place.name }}{% if place.everyday %} (usually called {{ place.everyday }}){% endif %}
 {% for fact in place.facts -%}
 - {{ fact }}
 {% endfor -%}
 {% endif -%}
 {% for entry in lore %}
-{{ entry.name }}
+{{ entry.name }}{% if entry.everyday %} (usually called {{ entry.everyday }}){% endif %}
 {% for fact in entry.facts -%}
 - {{ fact }}
 {% endfor %}

@@ -1334,6 +1334,78 @@ async def test_fixed_setup_setting_answers_without_a_model(
     assert client.prompt_history == []
 
 
+async def test_setup_carries_stub_previews_and_fills_them_on_start(
+    plugin, client, tmp_path, monkeypatch
+):
+    """The setup payload carries a preview for each stub it uses
+    (`stub_previews`); sent back on Start, they fill the stubs, keeping
+    their ids. In the browser tests the fixed preview stands in for each;
+    a culture stub is left as it is."""
+
+    world, _maren, _harbour = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        weir = rev.create_thing(
+            "place", {"name": "The Weir", "stub": {"ignored": True}}
+        )
+        salt = rev.create_thing(
+            "culture", {"name": "Saltfolk", "stub": {"ignored": False}}
+        )
+    setup_file = tmp_path / "fixed-setup.json"
+    setup_file.write_text(
+        json.dumps(
+            {
+                "player": "Maren",
+                "characters": [],
+                "place": {"name": "The Weir"},
+                "goal": "Mend the weir.",
+                "intro": "Water roars.",
+            }
+        )
+    )
+    preview_file = tmp_path / "fixed-preview.json"
+    preview_file.write_text(
+        json.dumps(
+            {
+                "name": "ignored: the stub's own name wins",
+                "facts": [{"category": "description", "text": "A broken dam."}],
+                "prose": {"description": "A broken dam."},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(setup_file))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(preview_file))
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "plan_scene",
+            "prompt": "Maren mends the Weir among the Saltfolk",
+            "picks": {"Saltfolk": salt},
+            "player": None,
+            "start": WorldDate.of(313).model_dump(),
+        }
+    )
+    await _drain(plugin)
+    setup = _last(plugin, "plan_scene")["data"]["setup"]
+    assert setup["place"]["thing_id"] == weir
+    assert [p["stub_id"] for p in setup["stub_previews"]] == [weir]
+    assert setup["stub_previews"][0]["name"] == "The Weir"
+    assert world.head_rev() == head
+
+    await plugin.handle({"type": "worlds", "action": "start_scene", "setup": setup})
+    await _drain(plugin)
+    scene_id = _last(plugin, "start_scene")["data"]["scene_id"]
+    view = world.view(None)
+    state = view.thing(weir)
+    assert not state.is_stub
+    assert [fact.text for fact in state.facts] == ["A broken dam."]
+    assert view.thing(salt).is_stub
+    assert world.scenes().get(scene_id).state["place_thing_id"] == weir
+    assert client.prompt_history == []
+
+
 async def test_plan_scene_owner_choices_win(plugin, tmp_path, monkeypatch):
     """`plan_scene`'s picks beat an exact name match, and its `new_names`
     are invented even when one world thing has that name."""

@@ -858,3 +858,201 @@ async def test_continue_setup_drops_carried_thing_that_was_deleted(world):
     # starting the continued scene must not choke on the deleted carry-over
     new_id = await start_scene(world, setup, None)
     assert new_id
+
+
+# --- stubs ----------------------------------------------------------------------
+
+
+def _stubs(world, *, ignored: bool = False):
+    """Stubs a scene can use: Aldric (a character), Frosthollow (a place),
+    the Order of the Heron (lore) and the Saltfolk (a culture, which
+    can't be expanded yet). Returns their ids by short name."""
+
+    marker = {"ignored": ignored}
+    with world.revision(Source.manual(note="stubs")) as rev:
+        aldric = rev.create_thing(
+            "character", fields={"name": "Aldric", "stub": dict(marker)}
+        )
+        frost = rev.create_thing(
+            "place", fields={"name": "Frosthollow", "stub": dict(marker)}
+        )
+        order = rev.create_thing(
+            "lore", fields={"name": "Order of the Heron", "stub": dict(marker)}
+        )
+        salt = rev.create_thing(
+            "culture", fields={"name": "Saltfolk", "stub": dict(marker)}
+        )
+    return {"aldric": aldric, "frost": frost, "order": order, "salt": salt}
+
+
+STUB_SETUP_REPLY = {
+    "player": "Maren Vos",
+    "characters": [{"name": "Aldric", "world": True}, {"name": "Tobin"}],
+    "place": {"name": "Frosthollow", "world": True},
+    "goal": "Find the heron order's ledger.",
+    "intro": "Snow drifts against the door.",
+}
+
+
+def _created(name: str, category: str, text: str) -> str:
+    return json.dumps(
+        {"name": name, "facts": [{"category": category, "text": text}], "names": []}
+    )
+
+
+def _queue_stub_previews() -> None:
+    """The model's answers for previewing Aldric, Frosthollow and the
+    Order, in that order: each create reply, then its prose."""
+
+    _queue(
+        _created("Aldric", "background", "A ferryman who keeps the heron ledger."),
+        # no personality facts: no personality prose
+        "Aldric is a weathered ferryman.",
+        _created("Frosthollow", "description", "A snowbound village on the weir."),
+        "Frosthollow sits under snow.",
+        _created("Order of the Heron", "general", "Keepers of the river ledgers."),
+        "The Order keeps the ledgers.",
+    )
+
+
+async def _plan_with_stubs(world, ids, stubs, client):
+    return await plan_scene(
+        world,
+        "Maren meets Aldric in Frosthollow about the Order of the Heron and the Saltfolk",
+        {
+            "Aldric": stubs["aldric"],
+            "Order of the Heron": stubs["order"],
+            "Saltfolk": stubs["salt"],
+        },
+        ids["vos"],
+        START,
+        client,
+        reply=STUB_SETUP_REPLY,
+    )
+
+
+async def test_plan_scene_previews_named_stub(world):
+    """Each stub the setup uses -- a character (picked and named by the
+    model), the place and picked lore -- gets one preview, made from its
+    own kind and name; a culture stub is left alone; nothing is written."""
+
+    ids = _river_world(world)
+    stubs = _stubs(world)
+    head = world.head_rev()
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue_stub_previews()
+        setup = await _plan_with_stubs(world, ids, stubs, client)
+
+    assert SetupRef(thing_id=stubs["aldric"]) in setup.characters
+    assert setup.place == SetupRef(thing_id=stubs["frost"])
+    assert set(setup.pulled_in) == {stubs["order"], stubs["salt"]}
+
+    previews = {p.stub_id: p for p in setup.stub_previews}
+    # one each, Aldric too, though he was both picked and named
+    assert [p.stub_id for p in setup.stub_previews] == [
+        stubs["aldric"],
+        stubs["frost"],
+        stubs["order"],
+    ]
+    assert previews[stubs["aldric"]].kind == "character"
+    assert previews[stubs["aldric"]].name == "Aldric"
+    assert previews[stubs["frost"]].facts[0].text == (
+        "A snowbound village on the weir."
+    )
+    assert previews[stubs["order"]].kind == "lore"
+    # the culture stub can't be expanded yet: no preview, and no failure
+    assert stubs["salt"] not in previews
+
+    # planning wrote nothing: the stubs are still stubs
+    assert world.head_rev() == head
+    view = world.view(None)
+    assert all(view.thing(thing_id).is_stub for thing_id in stubs.values())
+
+
+async def test_start_scene_fills_stub_and_keeps_id(world):
+    ids = _river_world(world)
+    stubs = _stubs(world)
+    async with MockClientContext():
+        _queue_stub_previews()
+        setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
+
+    # the setup goes over the wire and back on Start
+    setup = SceneSetup.model_validate(json.loads(setup.model_dump_json()))
+    async with MockClientContext():
+        scene_id = await start_scene(world, setup, MockClient("test"))
+
+    view = world.view(None)
+    for short in ("aldric", "frost", "order"):
+        state = view.thing(stubs[short])
+        assert not state.is_stub, short
+        assert state.facts, short
+    assert view.thing(stubs["frost"]).facts[0].text == (
+        "A snowbound village on the weir."
+    )
+    # the culture stub stays as it was
+    assert view.thing(stubs["salt"]).is_stub
+
+    record = world.scenes().get(scene_id)
+    assert record.state["place_thing_id"] == stubs["frost"]
+    assert stubs["aldric"] in [e.get("thing_id") for e in record.state["characters"]]
+    block = world_context_block(world, record, START)
+    assert "A snowbound village on the weir." in block
+    assert "Keepers of the river ledgers." in block
+
+
+async def test_cancelled_setup_leaves_stub(world):
+    ids = _river_world(world)
+    stubs = _stubs(world)
+    head = world.head_rev()
+    async with MockClientContext():
+        _queue_stub_previews()
+        setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
+    assert setup.stub_previews
+
+    # the owner cancels: start_scene is never called
+    assert world.head_rev() == head
+    view = world.view(None)
+    for thing_id in stubs.values():
+        state = view.thing(thing_id)
+        assert state.is_stub
+        assert state.facts == []
+    assert world.scenes().list() == []
+
+
+async def test_ignored_stub_revived_by_setup(world):
+    ids = _river_world(world)
+    stubs = _stubs(world, ignored=True)
+    async with MockClientContext():
+        _queue_stub_previews()
+        setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
+    # ignored stubs are previewed too
+    assert {p.stub_id for p in setup.stub_previews} == {
+        stubs["aldric"],
+        stubs["frost"],
+        stubs["order"],
+    }
+
+    async with MockClientContext():
+        await start_scene(world, setup, MockClient("test"))
+
+    view = world.view(None)
+    state = view.thing(stubs["aldric"])
+    assert not state.is_stub
+    assert not state.stub_ignored
+    assert view.thing(stubs["salt"]).stub_ignored
+
+
+async def test_plan_scene_without_client_leaves_stubs(world):
+    """The browser tests' fixed setup has no client: no stub previews, and
+    starting leaves the stubs as stubs."""
+
+    ids = _river_world(world)
+    stubs = _stubs(world)
+    setup = await _plan_with_stubs(world, ids, stubs, None)
+    assert setup.stub_previews == []
+
+    await start_scene(world, setup, None)
+    view = world.view(None)
+    assert all(view.thing(thing_id).is_stub for thing_id in stubs.values())

@@ -85,9 +85,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `continue_scene {scene_id, goal_prompt}` (saving that scene first if
   it's the one loaded) run in the background and answer
   with `{setup, names}` (the world things' names, for display), or
-  `plan_failed`/`continue_failed`; they write nothing. `start_scene {setup}`
-  (background too: it brings the characters' prose up to date) writes the
-  scene and answers `{scene_id, target, scene}` (or `start_failed`), where
+  `plan_failed`/`continue_failed`; they write nothing. The setup's
+  `stub_previews` (`CreatePreview` dumps) fill out the stubs it uses.
+  `start_scene {setup}` (background too: it brings the characters' prose
+  up to date) writes the stub previews into their stubs, then the scene, and
+  answers `{scene_id, target, scene}` (or `start_failed`), where
   `target` is the `world://` path the frontend then sends to `load_scene`.
   `list_scenes` lists the world's scenes, newest first.
   `reposition_scene {scene_id, start}` moves a scene's start date; if that
@@ -98,7 +100,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   file holding a scene-setup model reply (`{player, characters, place,
   goal, intro, extras?}`) that `plan_scene` and `continue_scene` use
   instead of asking any model; `start_scene` then leaves the prose as it
-  is.
+  is. With `TALEMATE_TEST_FIXED_PREVIEW` set as well, each stub the setup
+  uses gets the fixed preview; without it, stubs stay stubs.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -147,6 +150,7 @@ from talemate.worldplay.setup import (
     match_names,
     plan_scene,
     start_scene,
+    stubs_to_fill,
 )
 
 __all__ = ["WorldsPlugin"]
@@ -797,6 +801,31 @@ class WorldsPlugin(Plugin):
             },
         }
 
+    async def _planned(self, world: World, planning: Coroutine) -> SceneSetup:
+        """`planning`'s setup. In the browser tests (a fixed setup, so no
+        client to preview stubs with), the fixed preview, if there is one,
+        stands in for each stub's preview, as `preview_thing` would."""
+
+        setup = await planning
+        fixed = _fixed_file(FIXED_PREVIEW_ENV)
+        if fixed is None or setup.stub_previews:
+            return setup
+        view = world.view()
+        setup.stub_previews = [
+            await _fixed_preview(
+                fixed,
+                PreviewPayload(
+                    kind=state.kind,
+                    prompt=suggested_prompt(view, stub_id),
+                    stub_id=stub_id,
+                ),
+                view,
+            )
+            for stub_id in stubs_to_fill(world, setup)
+            if (state := view.thing(stub_id)) is not None
+        ]
+        return setup
+
     # --- background tasks -------------------------------------------------
 
     def _spawn(self, coro: Coroutine, callback) -> asyncio.Task:
@@ -1325,17 +1354,18 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         fixed = self._fixed_setup()
         client = self._client() if fixed is None else None
+        planning = plan_scene(
+            world,
+            payload.prompt,
+            payload.picks,
+            payload.player,
+            _date_in(payload.start),
+            client,
+            reply=fixed,
+            new_names=payload.new_names,
+        )
         self._spawn(
-            plan_scene(
-                world,
-                payload.prompt,
-                payload.picks,
-                payload.player,
-                _date_in(payload.start),
-                client,
-                reply=fixed,
-                new_names=payload.new_names,
-            ),
+            self._planned(world, planning) if fixed is not None else planning,
             self.create_task_done_callback(
                 "plan_scene",
                 "plan_failed",
@@ -1384,10 +1414,11 @@ class WorldsPlugin(Plugin):
             save_world_scene(scene)
         fixed = self._fixed_setup()
         client = self._client() if fixed is None else None
+        planning = continue_setup(
+            world, payload.scene_id, payload.goal_prompt, client, reply=fixed
+        )
         self._spawn(
-            continue_setup(
-                world, payload.scene_id, payload.goal_prompt, client, reply=fixed
-            ),
+            self._planned(world, planning) if fixed is not None else planning,
             self.create_task_done_callback(
                 "continue_scene",
                 "continue_failed",

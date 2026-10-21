@@ -366,3 +366,63 @@ async def test_connect_does_not_leak_between_scenes(world):
         i for i in emission_a.dynamic_instructions if i.title == "World"
     ]
     assert len(world_instructions) == 1
+
+
+EVERYDAY_LINE = (
+    "In narration and dialogue, call things by their everyday names: where a "
+    'name is followed by "usually called ...", use that name, and keep the '
+    "full name for formal moments."
+)
+
+
+def test_context_block_uses_everyday_name(world):
+    """A place or lore entry with an everyday name is shown "<main>
+    (usually called <everyday>)", and the block opens with the line asking
+    for everyday names (connections probe, recommendation (d))."""
+
+    aka = [
+        {"name": "Moscavia", "tag": "common", "everyday": True},
+        {"name": "The Owl Throne", "tag": "proper", "everyday": False},
+    ]
+    with world.revision(Source.manual(note="setup")) as rev:
+        place_id = rev.create_thing("place", fields={"name": "Barrowford"})
+        rev.add_fact(place_id, "description", "A river town on the Vesna.")
+        tsardom = rev.create_thing(
+            "lore", fields={"name": "Tsardom of Moscavia", "aka": aka}
+        )
+        rev.add_fact(tsardom, "general", "Ruled by the Tsar.")
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(310))
+    scenes.update(scene_id, state={"place_thing_id": place_id, "pulled_in": [tsardom]})
+
+    block = world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
+    lines = block.splitlines()
+    assert lines[0] == "[world]"
+    assert lines[1] == EVERYDAY_LINE
+    assert "Place: Barrowford\n" in block
+    assert "Tsardom of Moscavia (usually called Moscavia)\n" in block
+
+    # with no everyday name anywhere, no line
+    with world.revision(Source.manual(note="no aka")) as rev:
+        rev.set_field(tsardom, "aka", [], None)
+    block = world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
+    assert EVERYDAY_LINE not in block
+    assert "usually called" not in block
+
+
+def test_context_block_everyday_name_of_the_place(world):
+    with world.revision(Source.manual(note="setup")) as rev:
+        place_id = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "aka": [{"name": "Moscavia", "tag": "common", "everyday": True}],
+            },
+        )
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(310))
+    scenes.update(scene_id, state={"place_thing_id": place_id})
+
+    block = world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
+    assert "Place: Tsardom of Moscavia (usually called Moscavia)" in block
+    assert EVERYDAY_LINE in block

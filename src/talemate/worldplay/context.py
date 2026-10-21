@@ -26,6 +26,7 @@ from talemate.prompts import Prompt
 from talemate.world import heritage
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS
+from talemate.world.names import everyday_name
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
 from talemate.world.view import WorldView
@@ -166,7 +167,13 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     place is the world thing `record.state["place_thing_id"]` or, when the
     scene invented its place, the scene-local place thing
     `record.state["place_local_id"]` (its name and facts); the lore entries
-    are `record.state["pulled_in"]`."""
+    are `record.state["pulled_in"]`.
+
+    A place or lore entry with an everyday name is shown "<main> (usually
+    called <everyday>)", and the block then opens with a line asking for
+    everyday names in narration and dialogue: the connections probe
+    (docs/superpowers/probes/2026-10-21-connections.md, probe 4) found the
+    plain heading kept the full name every time."""
 
     view = world.view(at)
 
@@ -178,6 +185,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
         if place_state is not None:
             place = {
                 "name": view.name_of(place_thing_id) or "",
+                "everyday": everyday_name(place_state),
                 "facts": [view.render(fact.text) for fact in place_state.facts],
             }
     elif place_local_id:
@@ -194,6 +202,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
             data = local["data"]
             place = {
                 "name": str(data.get("name") or ""),
+                "everyday": None,
                 "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
@@ -205,6 +214,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
         lore.append(
             {
                 "name": view.name_of(lore_thing_id) or "",
+                "everyday": everyday_name(lore_state),
                 "facts": [view.render(fact.text) for fact in lore_state.facts],
             }
         )
@@ -216,6 +226,9 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "goal": record.goal,
                 "place": place,
                 "lore": lore,
+                "everyday": any(
+                    entry["everyday"] for entry in [*([place] if place else []), *lore]
+                ),
                 "cast": _cast(world, record, view),
             },
         )

@@ -10,6 +10,12 @@ to play.
   owner's picks rendered at the scene's date, and the closest hits from the
   world index. It writes nothing.
 - `start_scene` writes a planned setup as a new world scene.
+- A stub the setup uses -- picked, resolved as a character or the place,
+  or pulled in as lore, ignored or not -- is filled out: planning previews
+  it (`create.preview_thing` with its `stub_id`, once per stub) and
+  `start_scene` accepts the previews before writing the scene, so the
+  scene plays the full entries. Cancelling leaves the stubs as they were.
+  A culture stub can't be expanded yet and stays a stub.
 - `continue_setup` plans the next scene from where an earlier one ended.
 
 What the scene-setup probe (docs/superpowers/probes/2026-10-19-world-create-
@@ -39,7 +45,8 @@ model `reply` instead of asking the model (the websocket plugin's
 `TALEMATE_TEST_FIXED_SETUP`); everything after the model's answer runs as
 usual.
 
-Invented things stay scene-local: nothing here writes to the world.
+Invented things stay scene-local. Planning writes nothing to the world;
+starting writes only the stub previews (and the scene).
 """
 
 from __future__ import annotations
@@ -66,7 +73,15 @@ from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.context import LOCAL_PLACE_KIND
-from talemate.worldplay.create import current_date, json_objects
+from talemate.worldplay.create import (
+    CREATE_KINDS,
+    CreatePreview,
+    accept_preview,
+    current_date,
+    json_objects,
+    preview_thing,
+)
+from talemate.worldplay.mentions import suggested_prompt
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
 log = structlog.get_logger("talemate.worldplay.setup")
@@ -134,6 +149,9 @@ class SceneSetup(BaseModel):
     prompt: str = ""
     summary: str = ""
     continued_from: str | None = None
+    # the stubs the setup uses, filled out: written to the world (each
+    # into its stub, keeping the id) when the scene starts
+    stub_previews: list[CreatePreview] = Field(default_factory=list)
 
 
 # --- name matching -----------------------------------------------------------
@@ -487,6 +505,90 @@ def _setup_from_reply(
     return setup
 
 
+# --- stubs ---------------------------------------------------------------------
+
+
+def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
+    """The stubs `setup` uses that can be filled out, each once, in setup
+    order: the player, the characters, the place, then the pulled-in lore.
+    Ignored stubs too: using one revives it. A culture stub can't be
+    expanded yet: it's left out (logged) and stays a stub."""
+
+    view = world.view()
+    refs = [setup.player, *setup.characters]
+    if setup.place is not None:
+        refs.append(setup.place)
+    thing_ids = [ref.thing_id for ref in refs if ref.thing_id is not None]
+    stub_ids = []
+    for thing_id in _dedupe([*thing_ids, *setup.pulled_in]):
+        state = view.thing(thing_id)
+        if state is None or not state.is_stub:
+            continue
+        if state.kind not in CREATE_KINDS:
+            log.info(
+                "setup.stub_skipped",
+                stub_id=thing_id,
+                name=view.name_of(thing_id),
+                kind=state.kind,
+                reason=f"a {state.kind} stub can't be expanded yet",
+            )
+            continue
+        stub_ids.append(thing_id)
+    return stub_ids
+
+
+async def _stub_previews(
+    world: World, setup: SceneSetup, client: Any
+) -> list[CreatePreview]:
+    """A preview filling out each stub `setup` uses (`stubs_to_fill`), made
+    from the stub's suggested prompt and what its mentions say. With no
+    `client` (the browser tests' fixed setup) no stub is previewed."""
+
+    stub_ids = stubs_to_fill(world, setup)
+    if client is None:
+        if stub_ids:
+            log.info("setup.stubs_not_previewed", reason="no client", stubs=stub_ids)
+        return []
+
+    view = world.view()
+    previews = []
+    for stub_id in stub_ids:
+        state = view.thing(stub_id)
+        assert state is not None
+        previews.append(
+            await preview_thing(
+                world,
+                state.kind,
+                suggested_prompt(view, stub_id),
+                {},
+                client,
+                stub_id=stub_id,
+            )
+        )
+    return previews
+
+
+def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
+    """Write each stub preview into its stub, keeping the id. A stub
+    deleted since planning refuses the start before anything is written;
+    one already filled out (by hand, in the meantime) is left as it is."""
+
+    view = world.view()
+    todo = []
+    for preview in previews:
+        if preview.stub_id is None:
+            raise ValueError(f"not a stub preview: {preview.name}")
+        state = view.thing(preview.stub_id)
+        if state is None:
+            raise ValueError(f"the stub was deleted: {preview.name}")
+        if not state.is_stub:
+            log.info("setup.stub_already_filled", stub_id=preview.stub_id)
+            continue
+        todo.append(preview)
+    for preview in todo:
+        accept_preview(world, preview)
+
+
 # --- planning ------------------------------------------------------------------
 
 
@@ -554,11 +656,13 @@ async def plan_scene(
         if (state := view.thing(thing_id)) is not None
         and state.kind not in ("character", "place")
     ]
+    setup.stub_previews = await _stub_previews(world, setup, client)
     log.info(
         "setup.plan",
         characters=len(setup.characters),
         pulled_in=len(setup.pulled_in),
         invented=len(setup.invented),
+        stub_previews=len(setup.stub_previews),
     )
     return setup
 
@@ -594,7 +698,11 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     scene's character sheets are fresh; with no `client` (the browser
     tests) it's left as it is. The intro is the scene's intro, the
     narration Talemate opens the scene with; invented characters, the
-    place and extras become scene-local things."""
+    place and extras become scene-local things. The setup's stub previews
+    are written to the world first, each into its stub
+    (`_accept_stub_previews`), so the scene uses the full entries."""
+
+    _accept_stub_previews(world, setup.stub_previews)
 
     refs: list[SetupRef] = []
     for ref in [setup.player, *setup.characters]:
@@ -876,5 +984,6 @@ async def continue_setup(
         }
     )
     setup.invented = _invented(setup)
+    setup.stub_previews = await _stub_previews(world, setup, client)
     log.info("setup.continue", scene_id=scene_id, characters=len(cast))
     return setup
