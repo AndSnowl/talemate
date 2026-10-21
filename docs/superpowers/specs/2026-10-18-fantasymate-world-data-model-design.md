@@ -588,6 +588,15 @@ choices, branching), not this.
   the owner when an output irritates them. A good early candidate is a world-aware version of
   dynamic story v2's random-story mode.
 - **Python, not Lisp/Scheme** (owner): the app is Python, and it will be shared.
+- **The player's action comes first** (owner, 2026-10-21). In plan B's run, `@` actions were
+  followed less faithfully than in stock Talemate. Parts of an action were ignored, and the
+  surrounding context got pulled in instead: the player's character turned curious because their
+  personality says so, while the action said they were deliberately ignoring the thing, and gave a
+  reason. The goal is to describe in simple terms what the character thinks and does, and get
+  prose that fits the story. That means a careful balance: follow the action, and add colour of
+  the model's own around it. Tuning this belongs in the runner work, where the loop and the
+  context are open to edit. Probes of play should check how well actions are followed, not just
+  whether the world is consistent.
 - **Generators are moddable too** (owner, 2026-10-20). World-level generators follow the same
   model as runners:
   - create from a prompt (`worldplay/create.py`, with the template `world/create-thing.jinja2`);
