@@ -143,7 +143,11 @@ def _by_entry(found: list[Mention]) -> list[list[Mention]]:
 
 def _key_facts(view: WorldView, owner_id: str, skip: set[str]) -> list[str]:
     """Up to `KEY_FACTS` of the entry's facts at the view's date, rendered,
-    in its key category order, leaving out the fact ids in `skip`."""
+    in its key category order, leaving out the fact ids in `skip`. A
+    species', race's or mix's origin facts are never cut: they're history,
+    often of the very place being expanded (the connections flow run lost a
+    "capital in Moscow" origin fact to the cap, and the country expanded
+    from its stub put its capital elsewhere)."""
 
     state = view.thing(owner_id)
     if state is None:
@@ -157,7 +161,10 @@ def _key_facts(view: WorldView, owner_id: str, skip: set[str]) -> list[str]:
         (fact for fact in state.facts if fact.fact_id not in skip),
         key=lambda fact: rank.get(fact.category, len(order)),
     )
-    return [view.render(fact.text) for fact in facts[:KEY_FACTS]]
+    kept = facts[:KEY_FACTS]
+    if state.kind in HERITAGE_KINDS:
+        kept += [fact for fact in facts[KEY_FACTS:] if fact.category == "origin"]
+    return [view.render(fact.text) for fact in kept]
 
 
 def gather_mentions(view: WorldView, thing_id: str) -> MentionContext:

@@ -228,3 +228,29 @@ def test_context_names_carry_everyday_names(world):
     gathered = gather_mentions(view, tsardom)
     assert gathered.mentioned[0].owner_everyday == "Owls"
     assert gathered.about[0].everyday == "Owls"
+
+
+def test_heritage_origin_facts_outlast_the_cap(world):
+    """A heritage's origin facts are history -- often of the very place
+    being expanded -- so the key-fact cap never cuts them: the connections
+    flow run (docs/superpowers/probes/2026-10-21-connections-flow.md) lost
+    the species' "capital in Moscow" origin fact to the cap, and the
+    Tsardom expanded from its stub put its capital elsewhere."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsardom = rev.create_thing(
+            "place", fields={"name": "Tsardom of Moscavia", "stub": {"ignored": False}}
+        )
+        owls = rev.create_thing("species", fields={"name": "Owl-folk"})
+        rev.add_fact(owls, "origin", ORIGIN.format(tsardom=ref(tsardom)))
+        for n in range(5):
+            rev.add_fact(owls, "physical", f"Physical {n}.")
+        for n in range(3):
+            rev.add_fact(owls, "instinct", f"Instinct {n}.")
+        rev.add_fact(owls, "origin", "Origin: Moscavia's capital was Moscow.")
+        rev.add_fact(owls, "general", "General: hollow bones.")
+
+    [(_, facts)] = mention_context(world.view(None), tsardom)
+    # the mention, the first 8 key facts, then the origin fact the cap cut;
+    # the general fact stays cut
+    assert _heads(facts[1:]) == [*["Physical"] * 5, *["Instinct"] * 3, "Origin:"]
