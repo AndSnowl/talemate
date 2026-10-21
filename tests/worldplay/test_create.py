@@ -728,6 +728,48 @@ async def test_preview_character_maps_override_labels(probe_world):
     assert "Heritage: Snowy, Owl-folk." in description_prompt
 
 
+async def test_preview_personality_excludes_inherited_physical(probe_world):
+    """Review-round fix: `_preview_prose`'s `exclude_by_kind` branch (the
+    personality background leaving out an inherited `physical`/`variation`
+    fact) had no test exercising it with any inherited fact actually
+    present. The preview inherits Snowy's and Owl-folk's own facts, none of
+    them overridden here, so both an un-overridden inherited physical fact
+    ("the largest owl-folk") and the overridden one ("bright yellow eyes")
+    must be absent from the personality prompt, while the inherited
+    instinct facts and the heritage line -- not excluded -- still get
+    through (acceptance probe:
+    docs/superpowers/probes/2026-10-21-personality-and-actions.md)."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            _reply("heritage-character-snowy-reply.txt"),
+            "Thistledown is white.",
+            "Thistledown is chatty.",
+        )
+        await preview_thing(
+            probe_world.world,
+            "character",
+            "A Snowy owl-folk courier with blue eyes, twenty-two, who carries "
+            "letters between mountain villages and talks too much.",
+            {"heritage": probe_world.snowy},
+            client,
+        )
+
+    # [0] is the create call, [1] description, [2] personality
+    personality_prompt = str(client.prompt_history[2]["prompt"])
+    # an inherited physical fact that isn't overridden by this preview
+    assert "the largest owl-folk" not in personality_prompt
+    # the one the preview does override -- absent either way, but still
+    # worth checking since it was the review's own example
+    assert "bright yellow eyes" not in personality_prompt
+    # instinct facts aren't excluded -- they're personality's own inherited
+    # category -- and the heritage line keeps identity in view
+    assert "Owl-folk are instinctively crepuscular" in personality_prompt
+    assert "hunt by day as readily as by dusk" in personality_prompt
+    assert "Heritage: Snowy, Owl-folk." in personality_prompt
+
+
 async def test_preview_lists_what_it_inherits(probe_world):
     """The preview carries the inherited facts the model was shown, with
     their real fact ids, so the owner can mark one as overridden before
