@@ -120,8 +120,9 @@ let nextId = 0;
 //   the owner of the box makes them);
 // - `invented` names (the last scene setup's) show as new;
 // - an edited fact's existing links (`linked`, `locateLinks` spans) show
-//   as matched to their own things, whatever the name would match; the
-//   popover re-picks or treats the words as new by name, as for a match.
+//   as matched to their own things, whatever the name would match; a
+//   re-pick or "treat as new" in their popover changes that link alone
+//   (`pick-link {index, id}`), never the other words like it.
 // Right-clicking opens `ReferenceMenu`: Cut, Copy, Paste and Add
 // reference…, which inserts the thing's name at the cursor and records a
 // reference for it (`refs`: pickKey -> `{id, text}`), so it links there.
@@ -154,7 +155,7 @@ export default {
         // how long typing rests before the names are looked up
         debounce: { type: Number, default: 300 },
     },
-    emits: ['update:modelValue', 'update:picks', 'update:refs', 'update:stubs'],
+    emits: ['update:modelValue', 'update:picks', 'update:refs', 'update:stubs', 'pick-link'],
     setup() {
         return { worlds: useWorldsStore(), NEW_THING };
     },
@@ -238,17 +239,18 @@ export default {
         choicesOf(segment) {
             const choices = segment.match ? [...segment.match.candidates] : [];
             const ref = segment.ref || this.refs[pickKey(segment.text)];
-            if (ref && !choices.some((choice) => choice.id === ref.id)) {
-                const target = this.worlds.referenceTargets.find((t) => t.id === ref.id);
-                choices.unshift({ id: ref.id, name: target?.name || ref.text, kind: target?.kind || '', stub: !!target?.stub });
+            // a link's thing, and the one it had when the form opened
+            for (const id of [ref?.id, ref?.was]) {
+                if (id && id !== NEW_THING && !choices.some((choice) => choice.id === id)) {
+                    const target = this.worlds.referenceTargets.find((t) => t.id === id);
+                    choices.unshift({ id, name: target?.name || ref.text, kind: target?.kind || '', stub: !!target?.stub });
+                }
             }
             return choices;
         },
         chosenId(segment) {
             if (segment.linked) {
-                const picked = this.picks[pickKey(segment.text)];
-                const offered = picked && (picked === NEW_THING || this.choicesOf(segment).some((c) => c.id === picked));
-                return offered ? picked : segment.ref.id;
+                return segment.ref.id;
             }
             if (segment.match) {
                 return pickedId(segment.match, this.picks, this.refs);
@@ -257,7 +259,11 @@ export default {
         },
         pick(segment, id) {
             const key = pickKey(segment.text);
-            if (!segment.match && !segment.linked && id === NEW_THING) {
+            if (segment.linked) {
+                this.$emit('pick-link', { index: segment.linkIndex, id });
+                return;
+            }
+            if (!segment.match && id === NEW_THING) {
                 // a reference with no match behind it: just dropped
                 const { [key]: _gone, ...refs } = this.refs;
                 this.$emit('update:refs', refs);

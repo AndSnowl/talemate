@@ -27,6 +27,7 @@ import {
 import {
     NEW_THING,
     factEditState,
+    factLinkPayload,
     linkPayload,
     locateLinks,
     matchState,
@@ -37,7 +38,6 @@ import {
     refOccurrence,
     repicks,
     searchReferences,
-    spansPayload,
 } from '../src/components/worlds/nameHighlights.js';
 import { STUB_KINDS, TOP_KINDS, canExpand, expandNote, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
@@ -276,6 +276,11 @@ check('a linked fact is edited as it reads, each link kept by position', () => {
         { text: 'Aldric', ref: VOS_ID, nth: 0 },
     ]);
     assert.deepEqual(factEditState([], 'plain', []), { text: 'plain', links: [] });
+    // an ignored link with no shown words doesn't lose the ones after it
+    const noShown = `[[thing:${HOLT_ID}]] met [[thing:${VOS_ID}|Aldric]].`;
+    assert.deepEqual(factEditState([{ text: 'Old Holt met Aldric.', ref: null, stub: false }], noShown, [HOLT_ID, VOS_ID]).links, [
+        { text: 'Aldric', ref: VOS_ID, nth: 0 },
+    ]);
 });
 
 check('links are found again in the edited text, and sent as code-point spans', () => {
@@ -286,20 +291,56 @@ check('links are found again in the edited text, and sent as code-point spans', 
     ];
     const text = '🌙 Maren met Maren and Maren, far from Moscovy.';
     const located = locateLinks(text, links);
-    assert.deepEqual(located.map((l) => [text.slice(l.start, l.end), l.ref.id]), [['Maren', VOS_ID], ['Maren', HOLT_ID]]);
-    assert.deepEqual(spansPayload(text, located, {}), [
-        { start: 2, end: 7, ref: VOS_ID },
-        { start: 22, end: 27, ref: HOLT_ID },
-    ]);
-    // a name the owner re-picked or treats as new isn't kept by position
-    assert.deepEqual(spansPayload(text, located, { maren: NEW_THING }), []);
+    assert.deepEqual(located.map((l) => [text.slice(l.start, l.end), l.ref.id, l.index]), [['Maren', VOS_ID, 0], ['Maren', HOLT_ID, 1]]);
+    assert.deepEqual(factLinkPayload(text, [], {}, {}, links), {
+        picks: {},
+        newNames: [],
+        spans: [
+            { start: 2, end: 7, ref: VOS_ID },
+            { start: 22, end: 27, ref: HOLT_ID },
+        ],
+    });
     // whole words only
     assert.deepEqual(locateLinks('Marenhall', [{ text: 'Maren', ref: VOS_ID, nth: 0 }]), []);
 });
 
+check("a pick on a plain name leaves the links of the same words theirs", () => {
+    const links = [
+        { text: 'Maren', ref: VOS_ID, nth: 0 },
+        { text: 'Maren', ref: HOLT_ID, nth: 1 },
+    ];
+    const text = 'Maren rowed with Maren and Maren.';
+    const matches = [0, 17, 27].map((start) => ({ start, end: start + 5, text: 'Maren', candidates: [HOLT, VOS] }));
+    assert.deepEqual(factLinkPayload(text, matches, { maren: 'vos' }, {}, links), {
+        picks: { Maren: 'vos' },
+        newNames: [],
+        spans: [
+            { start: 0, end: 5, ref: VOS_ID },
+            { start: 17, end: 22, ref: HOLT_ID },
+        ],
+    });
+    // a link re-picked, or treated as new (kept plain: a null ref),
+    // changes that link alone
+    const changed = [{ ...links[0], ref: 'x' }, { ...links[1], ref: NEW_THING }];
+    assert.deepEqual(factLinkPayload(text, matches, {}, {}, changed), {
+        picks: { Maren: 'holt' },
+        newNames: [],
+        spans: [
+            { start: 0, end: 5, ref: 'x' },
+            { start: 17, end: 22, ref: null },
+        ],
+    });
+});
+
+check('spans count in the very text sent', () => {
+    const links = [{ text: 'Maren', ref: VOS_ID, nth: 0 }];
+    const sent = '  Maren rowed.  '.trim();
+    assert.deepEqual(factLinkPayload(sent, [], {}, {}, links).spans, [{ start: 0, end: 5, ref: VOS_ID }]);
+});
+
 check('existing links show as matched, a same-place match attached', () => {
     const text = 'Maren met Maren.';
-    const linked = [{ start: 10, end: 15, ref: { id: 'holt', text: 'Maren' } }];
+    const linked = [{ start: 10, end: 15, index: 0, ref: { id: 'holt', text: 'Maren' } }];
     const matches = [
         { start: 0, end: 5, text: 'Maren', candidates: [HOLT, VOS] },
         { start: 10, end: 15, text: 'Maren', candidates: [HOLT, VOS] },
@@ -312,8 +353,11 @@ check('existing links show as matched, a same-place match attached', () => {
         ['.', null, null],
     ]);
     assert.equal(segments[2].match, matches[1]);
-    const asNew = promptSegments(text, matches, { maren: NEW_THING }, [], { linked });
+    assert.equal(segments[2].linkIndex, 0);
+    // a link turned to new by the owner shows new; a name pick doesn't touch it
+    const asNew = promptSegments(text, matches, {}, [], { linked: [{ ...linked[0], ref: { id: NEW_THING, text: 'Maren' } }] });
     assert.equal(asNew[2].state, 'new');
+    assert.equal(promptSegments(text, matches, { maren: NEW_THING }, [], { linked })[2].state, 'matched');
 });
 
 check("re-pointing names the link's place among the fact's references", () => {

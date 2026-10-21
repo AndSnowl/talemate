@@ -16,6 +16,7 @@
                 v-model:refs="form.refs"
                 v-model:stubs="form.stubs"
                 :linked="linked"
+                @pick-link="pickLink"
                 label="Fact"
                 :rows="1"
                 dense
@@ -95,6 +96,10 @@ export default {
     },
     methods: {
         validYear: isYear,
+        // the owner re-picked one existing link (or turned it to new)
+        pickLink({ index, id }) {
+            this.form.links = this.form.links.map((link, i) => (i === index ? { ...link, ref: id } : link));
+        },
     },
 };
 </script>

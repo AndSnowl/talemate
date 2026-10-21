@@ -398,16 +398,29 @@ def test_edit_keeps_same_name_links_apart(app, page):
     form = club.get_by_test_id("fact-form")
     text = form.get_by_label("Fact", exact=True)
     expect(text).to_have_value("Maren rowed with Maren.")
-    text.fill("Maren rowed hard with Maren.")
+    text.fill(" Maren rowed hard with Maren and Maren.")
+
+    # picking a thing for the third, plain Maren picks it for that name,
+    # leaving the two links theirs
+    marks = form.get_by_test_id("name-match")
+    expect(marks).to_have_count(3)
+    marks.nth(2).hover()
+    popover = page.get_by_test_id("name-popover").last
+    popover.wait_for(state="visible", timeout=TIMEOUT_MS)
+    popover.get_by_test_id("name-candidate").filter(has_text="Maren Vos").click()
+    popover.wait_for(state="hidden", timeout=TIMEOUT_MS)
     form.get_by_role("button", name="Save").click()
 
-    fact = _fact(club, "Maren rowed hard with Maren.")
+    # the text is sent trimmed, its spans counted in it
+    fact = _fact(club, "Maren rowed hard with Maren and Maren.")
     links = fact.get_by_test_id("linked-ref")
-    expect(links).to_have_count(2)
+    expect(links).to_have_count(3)
     sent = _sent(page, "correct_fact")[-1]
+    assert sent["text"] == "Maren rowed hard with Maren and Maren."
     assert sent["spans"] == [
         {"start": 0, "end": 5, "ref": vos},
         {"start": 22, "end": 27, "ref": holt},
     ]
+    assert sent["picks"] == {"Maren": vos}
     links.nth(1).click()
     _opened(page, "Maren Holt")

@@ -1965,10 +1965,11 @@ async def test_fact_spans_keep_same_name_links_apart(plugin, monkeypatch):
             "action": "correct_fact",
             "thing_id": s.harbour,
             "fact_id": fact_id,
-            "text": "Maren rowed with Maren past Maren's dock.",
+            "text": "Maren rowed with Maren past Maren's dock, and Maren.",
             "spans": [
                 {"start": 0, "end": 5, "ref": vos},
                 {"start": 17, "end": 22, "ref": holt},
+                {"start": 46, "end": 51, "ref": None},
             ],
             "picks": {"Maren": s.maren},
         }
@@ -1978,10 +1979,35 @@ async def test_fact_spans_keep_same_name_links_apart(plugin, monkeypatch):
         for f in _last(plugin, "correct_fact")["data"]["facts"]
         if f["fact_id"] == fact_id
     )
+    # a span with no ref keeps its words plain, whatever the picks say
     assert fact["text"] == (
         f"{ref(vos, 'Maren')} rowed with {ref(holt, 'Maren')}"
-        f" past {ref(s.maren, 'Maren')}'s dock."
+        f" past {ref(s.maren, 'Maren')}'s dock, and Maren."
     )
+
+
+async def test_make_stub_refuses_the_owner_itself(plugin, monkeypatch):
+    """A stub of the fact's own thing's name would be a link to itself:
+    refused, writing nothing."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(s.harbour, "history", "The Harbour flooded once.")
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.harbour,
+            "fact_id": fact_id,
+            "text": "The Harbour",
+            "kind": "place",
+        }
+    )
+    assert "error" in _last(plugin, "operation_done")
+    assert world.head_rev() == head
 
 
 async def test_make_stub_action(plugin, monkeypatch):

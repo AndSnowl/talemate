@@ -76,7 +76,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   each taking `picks`, `new_names` and `spans`) is linked before it's
   written: first the `spans` (`[{start, end, ref}]`, code points: a fact
   form's existing links, by position, so two links of the same words keep
-  their own targets), then (`worldplay.links.link_text`) the names of
+  their own targets; a span with a null `ref` keeps its words plain), then (`worldplay.links.link_text`) the names of
   entries and stubs, and the picks, in the rest, keeping the words
   written; the thing's own names, and names the owner treats as new, stay
   plain, and unknown phrases are never made stubs.
@@ -151,7 +151,6 @@ from talemate.worldplay.links import (
     LinkSpan,
     NewName,
     link_phrase,
-    link_spans,
     link_text,
     make_stubs,
     repoint_ref,
@@ -947,25 +946,28 @@ class WorldsPlugin(Plugin):
         spans: list[LinkSpan] | None = None,
     ) -> str:
         """Hand-written fact text with its names linked, as things are
-        named at `at`: first the `spans` (a fact form's existing links, by
-        position, `links.link_spans`), then (`links.link_text`) entries,
-        stubs and the owner's `picks` in the rest, never `thing_id` itself,
-        nor a name the owner treats as new (`new_names`). A span to
-        `thing_id` or to a thing that isn't there stays plain. Unknown
-        phrases stay as they are."""
+        named at `at` (`links.link_text`): first the `spans` (a fact form's
+        existing links, by position: each to its own thing, or kept plain),
+        then entries, stubs and the owner's `picks` in the rest, never
+        `thing_id` itself, nor a name the owner treats as new
+        (`new_names`). A span to `thing_id`, or to a thing that isn't
+        there, keeps its words plain. Unknown phrases stay as they are."""
 
         view = world.view(at)
         kept = [
             span
+            if span.ref is None
+            or (span.ref != thing_id and view.thing(span.ref) is not None)
+            else LinkSpan(start=span.start, end=span.end)
             for span in spans or []
-            if span.ref != thing_id and view.thing(span.ref) is not None
         ]
         return link_text(
             view,
-            link_spans(text, kept),
+            text,
             picks=picks,
             owner=thing_id,
             as_new=new_names or (),
+            spans=kept,
         )
 
     @staticmethod
@@ -1173,6 +1175,8 @@ class WorldsPlugin(Plugin):
                 rev, world.view(at), [NewName(name=phrase, kind=payload.kind)]
             )
             stub_id = made[phrase]
+            if stub_id == payload.thing_id:
+                raise ValueError(f"{phrase!r} is this thing's own name")
             reused = world.view(at).thing(stub_id)
             if reused is not None and reused.stub_ignored:
                 # the owner asked for it by name: it's no longer ignored

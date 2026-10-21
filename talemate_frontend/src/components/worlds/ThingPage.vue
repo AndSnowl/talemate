@@ -207,7 +207,7 @@ import { useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { HERITAGE_KINDS, INHERITING_KINDS, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
-import { factEditState, linkPayload, locateLinks, refOccurrence, repicks, spansPayload } from './nameHighlights.js';
+import { NEW_THING, factEditState, factLinkPayload, refOccurrence, repicks } from './nameHighlights.js';
 import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
 import NamedStubs from './NamedStubs.vue';
@@ -528,9 +528,11 @@ export default {
             this.rename = { ...this.rename, sent: true };
         },
         // the words and links of `fact` (own or inherited), for its form
+        // (each link remembers the thing it had: `was`)
         editState(fact) {
             const ignored = this.worlds.stubs.filter((stub) => stub.ignored).map((stub) => stub.id);
-            return factEditState(fact.segments, fact.text || fact.rendered || '', ignored);
+            const state = factEditState(fact.segments, fact.text || fact.rendered || '', ignored);
+            return { ...state, links: state.links.map((link) => ({ ...link, was: link.ref })) };
         },
         startAdd() {
             this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
@@ -573,13 +575,19 @@ export default {
             const form = this.form;
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
             const matches = form.mode === 'end' ? [] : this.worlds.matchesFor(form.text, this.worlds.thingAt);
+            // what's sent is the trimmed text: the spans count in it
+            const text = form.mode === 'end' ? '' : form.text.trim();
             let links = null;
             if (form.mode !== 'end') {
                 const picks = form.picks || {};
-                const byName = linkPayload(matches, picks, form.refs || {}, form.text);
-                const spans = spansPayload(form.text, locateLinks(form.text, form.links || []), picks);
-                links = { ...byName, spans };
-                const names = repicks(matches, picks).filter((repick) => repick.id !== this.thing.id);
+                links = factLinkPayload(text, matches, picks, form.refs || {}, form.links || []);
+                // re-picks by name, and of one link
+                const names = [
+                    ...repicks(matches, picks),
+                    ...(form.links || [])
+                        .filter((link) => link.ref !== link.was && link.ref !== NEW_THING)
+                        .map((link) => ({ id: link.ref, name: link.text })),
+                ].filter((repick) => repick.id !== this.thing.id);
                 this.afterSave = form.stubs?.length || names.length
                     ? {
                         factId: form.mode === 'edit' ? form.factId : null,
@@ -590,18 +598,20 @@ export default {
                     : null;
             }
             if (form.mode === 'add') {
-                this.worlds.addFact(form.category, form.text.trim(), year(form.fromYear), year(form.untilYear), links);
+                this.worlds.addFact(form.category, text, year(form.fromYear), year(form.untilYear), links);
             } else if (form.mode === 'override') {
-                this.worlds.overrideFact(form.factId, form.category, form.text.trim(), links);
+                this.worlds.overrideFact(form.factId, form.category, text, links);
             } else if (form.mode === 'end') {
                 this.worlds.endFact(form.factId, dateOf(form.untilYear));
             } else {
                 const original = form.original;
                 const changes = {};
                 // the words, or what they link to, changed
-                const relinked = Object.keys(form.picks).length > 0 || Object.keys(form.refs).length > 0;
-                if (form.text.trim() !== form.originalText || relinked) {
-                    changes.text = form.text.trim();
+                const relinked = Object.keys(form.picks).length > 0
+                    || Object.keys(form.refs).length > 0
+                    || form.links.some((link) => link.ref !== link.was);
+                if (text !== form.originalText || relinked) {
+                    changes.text = text;
                 }
                 if (form.category !== original.category) {
                     changes.category = form.category;

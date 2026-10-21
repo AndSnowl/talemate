@@ -122,9 +122,10 @@ function nameSpans(text, names) {
 // unknown phrases), `{text, unknown, state: 'unknown'}`, or `state:
 // 'stub'` once the owner asked for it to be made a stub (`stubs`, `[{text,
 // kind}]`). An existing link of an edited fact (`linked`, from
-// `locateLinks`) is `{text, ref, linked: true, match, state}`, its match
-// (one at the very same place) attached, and wins over anything else
-// there: 'matched', or 'new' once the owner treats its words as new.
+// `locateLinks`) is `{text, ref, linked: true, linkIndex, match, state}`,
+// its match (one at the very same place) attached, and wins over anything
+// else there: 'matched', or 'new' once the owner turned that link to new
+// (its ref `NEW_THING`); name picks don't touch it.
 // Overlapping spans keep the earlier one, then the longer. `matches` and
 // `unknown` are `match_names` items for this very `text`.
 export function promptSegments(text, matches, picks, inventedNames = [], { refs = {}, unknown = [], stubs = [], linked = [] } = {}) {
@@ -134,7 +135,7 @@ export function promptSegments(text, matches, picks, inventedNames = [], { refs 
         ...link,
         linked: true,
         match: matches.find((match) => offset(match.start) === link.start && offset(match.end) === link.end) || null,
-        state: picks[pickKey(link.ref.text)] === NEW_THING ? 'new' : 'matched',
+        state: link.ref.id === NEW_THING ? 'new' : 'matched',
     }));
     const free = (span) => !linkedSpans.some((link) => span.start < link.end && link.start < span.end);
     const matchSpans = matches.map((match) => ({
@@ -189,6 +190,7 @@ export function promptSegments(text, matches, picks, inventedNames = [], { refs 
         }
         if (span.linked) {
             segment.linked = true;
+            segment.linkIndex = span.index;
         }
         segments.push(segment);
         at = span.end;
@@ -291,27 +293,46 @@ export function factEditState(segments, rawText = '', ignoredIds = []) {
     }
     const ignored = new Set(ignoredIds);
     if (ignored.size) {
-        // walk the raw text along the rendered one
+        // walk the raw text along the rendered one; after a reference whose
+        // rendered words aren't known (one with no shown text that doesn't
+        // render as a link), the walk finds its place again from the
+        // words that follow
         let rendered = 0;
         let raw = 0;
+        let lost = false;
         for (const ref of rawText.matchAll(REF_PATTERN)) {
             const plain = rawText.slice(raw, ref.index);
-            if (!text.startsWith(plain, rendered)) {
-                break;
-            }
-            rendered += plain.length;
-            const live = found.find((link) => link.start === rendered && link.ref === ref[1]);
-            if (live) {
-                rendered += live.text.length;
-            } else if (ref[2] && text.startsWith(ref[2], rendered)) {
-                if (ignored.has(ref[1])) {
-                    found.push({ start: rendered, text: ref[2], ref: ref[1] });
+            if (!lost) {
+                if (!text.startsWith(plain, rendered)) {
+                    break;
                 }
-                rendered += ref[2].length;
-            } else {
-                break;
+                rendered += plain.length;
+            } else if (plain) {
+                const at = text.indexOf(plain, rendered);
+                if (at < 0) {
+                    break;
+                }
+                rendered = at + plain.length;
+                lost = false;
             }
             raw = ref.index + ref[0].length;
+            const live = found.find((link) => link.ref === ref[1] && (lost ? link.start >= rendered : link.start === rendered));
+            if (live) {
+                rendered = live.start + live.text.length;
+                lost = false;
+            } else if (ref[2]) {
+                const at = lost ? text.indexOf(ref[2], rendered) : text.startsWith(ref[2], rendered) ? rendered : -1;
+                if (at < 0) {
+                    break;
+                }
+                if (ignored.has(ref[1])) {
+                    found.push({ start: at, text: ref[2], ref: ref[1] });
+                }
+                rendered = at + ref[2].length;
+                lost = false;
+            } else {
+                lost = true;
+            }
         }
     }
     found.sort((a, b) => a.start - b.start);
@@ -323,30 +344,37 @@ export function factEditState(segments, rawText = '', ignoredIds = []) {
     return { text, links };
 }
 
-// `links` (`factEditState`'s) found again in `text`: each at the `nth`
-// time its words are written, as `{start, end, ref: {id, text}}` (JS
-// offsets), in order; one no longer written that often is gone, and of two
-// at one place the first stays.
+// `links` (`factEditState`'s, each `ref` maybe changed by the owner since:
+// another thing, or `NEW_THING` to keep its words plain) found again in
+// `text`: each at the `nth` time its words are written, as `{start, end,
+// index, ref: {id, text}}` (JS offsets; `index` into `links`), in order;
+// one no longer written that often is gone, and of two at one place the
+// first stays.
 export function locateLinks(text, links) {
     const located = [];
-    for (const link of links) {
+    links.forEach((link, index) => {
         const start = occurrences(text, link.text)[link.nth];
         if (start !== undefined) {
-            located.push({ start, end: start + link.text.length, ref: { id: link.ref, text: link.text } });
+            located.push({ start, end: start + link.text.length, index, ref: { id: link.ref, text: link.text, was: link.was } });
         }
-    }
+    });
     located.sort((a, b) => a.start - b.start);
     return located.filter((link, index) => index === 0 || link.start >= located[index - 1].end);
 }
 
-// A fact edit's `spans`: the `located` links as `{start, end, ref}` in
-// code points (as the backend counts), leaving out words the owner
-// re-picked or treats as new (`picks`), which go by name instead.
-export function spansPayload(text, located, picks) {
+// What a fact edit sends for `text` (exactly the text sent): its existing
+// `links` as positional `spans` (`{start, end, ref}` in code points, as the
+// backend counts; a link the owner turned to new has a null `ref`, keeping
+// its words plain), which the backend applies first, then `linkPayload`'s
+// name-keyed `picks` and `newNames` for the rest of the text.
+export function factLinkPayload(text, matches, picks, refs, links) {
     const codePoints = (index) => [...text.slice(0, index)].length;
-    return located
-        .filter((link) => !(pickKey(link.ref.text) in picks))
-        .map((link) => ({ start: codePoints(link.start), end: codePoints(link.end), ref: link.ref.id }));
+    const spans = locateLinks(text, links).map((link) => ({
+        start: codePoints(link.start),
+        end: codePoints(link.end),
+        ref: link.ref.id === NEW_THING ? null : link.ref.id,
+    }));
+    return { ...linkPayload(matches, picks, refs, text), spans };
 }
 
 // Which reference of a fact's raw text (0-based, in order) its rendered

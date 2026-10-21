@@ -9,7 +9,6 @@ from talemate.worldplay.links import (
     LinkSpan,
     NewName,
     link_phrase,
-    link_spans,
     link_text,
     make_stubs,
     repoint_ref,
@@ -365,17 +364,25 @@ B = "b" * 32
 C = "c" * 32
 
 
-def test_link_spans_link_each_span_to_its_own_thing():
-    """Spans (code-point offsets into plain text) become references keeping
-    their words, each to its own thing, so two of the same name keep their
-    own targets; the rest stays as written."""
+def test_link_text_spans_link_or_keep_their_words_first(world):
+    """Spans (code-point offsets) link their words to their own thing (or,
+    with no ref, keep them plain) before anything else: two of the same
+    name keep their own targets, a span kept plain stays plain whatever
+    picks say, and the rest is linked as usual."""
 
-    text = "Maren rowed with Maren past Maren's dock."
-    spans = [LinkSpan(start=17, end=22, ref=B), LinkSpan(start=0, end=5, ref=A)]
-    assert link_spans(text, spans) == (
-        f"{ref(A, 'Maren')} rowed with {ref(B, 'Maren')} past Maren's dock."
+    _owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+    text = "Maren rowed with Maren past Maren and Moscavia, not Moscavia."
+    spans = [
+        LinkSpan(start=17, end=22, ref=B),
+        LinkSpan(start=0, end=5, ref=A),
+        LinkSpan(start=52, end=60, ref=None),
+    ]
+    assert link_text(view, text, picks={"Maren": C}, spans=spans) == (
+        f"{ref(A, 'Maren')} rowed with {ref(B, 'Maren')} past {ref(C, 'Maren')}"
+        f" and {ref(tsardom, 'Moscavia')}, not Moscavia."
     )
-    assert link_spans("🌙 Maren", [LinkSpan(start=2, end=7, ref=A)]) == (
+    assert link_text(view, "🌙 Maren", spans=[LinkSpan(start=2, end=7, ref=A)]) == (
         f"🌙 {ref(A, 'Maren')}"
     )
     # overlapping, empty, out-of-range or ref-crossing spans are refused
@@ -385,9 +392,11 @@ def test_link_spans_link_each_span_to_its_own_thing():
         [LinkSpan(start=30, end=99, ref=A)],
     ):
         with pytest.raises(ValueError):
-            link_spans(text, bad)
+            link_text(view, "Maren rowed with Maren.", spans=bad)
     with pytest.raises(ValueError):
-        link_spans(f"{ref(A, 'Maren')} met", [LinkSpan(start=2, end=10, ref=B)])
+        link_text(
+            view, f"{ref(A, 'Maren')} met", spans=[LinkSpan(start=2, end=10, ref=B)]
+        )
 
 
 def test_link_phrase_links_only_that_phrase():
