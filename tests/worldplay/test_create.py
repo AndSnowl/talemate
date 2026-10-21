@@ -1169,7 +1169,7 @@ async def test_accept_makes_stubs_and_links_facts(at_1020):
     assert '"aka": [{"name": "...", "tag": "common", "everyday": true}]' in prompt
     assert '"names": [{"name": "...", "kind": "place", "aka": []}]' in prompt
     assert '"names": after the facts, every proper name your facts use' in prompt
-    assert "a people's adjective such as \"Moscavian\" on its own" in prompt
+    assert 'a people\'s adjective such as "Moscavian" on its own' in prompt
     assert (
         '"Moscavia" means Tsardom of Moscavia (place, usually called Moscavia):'
         in prompt
