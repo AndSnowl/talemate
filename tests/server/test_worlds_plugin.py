@@ -2285,14 +2285,15 @@ async def test_preview_with_stub_id_and_accept_into_stub(plugin, client):
             {
                 "type": "worlds",
                 "action": "preview_thing",
-                "kind": "culture",
+                # the stub's own kind decides, whatever is asked
+                "kind": "lore",
                 "prompt": "Feather Rite",
                 "fields": {},
                 "stub_id": rite,
             }
         )
         await _drain(plugin)
-    assert "culture" in _last(plugin, "preview_failed")["message"]
+    assert "a culture stub can't be expanded" in str(_last(plugin, "preview_failed"))
 
 
 async def test_preview_names_treated_as_new(plugin, client):
@@ -2403,6 +2404,24 @@ async def test_fixed_preview_expands_and_offers_stubs(plugin, tmp_path, monkeypa
 
     offered = await preview()
     assert (offered["stub_id"], offered["matching_stub_id"]) == (None, s.tsardom)
+
+    # a culture stub can't be expanded, fixed preview or not
+    with s.world.revision(Source.manual(note="culture")) as rev:
+        rite = rev.create_thing(
+            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
+        )
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "preview_thing",
+            "kind": "lore",
+            "prompt": "a rite",
+            "fields": {},
+            "stub_id": rite,
+        }
+    )
+    await _drain(plugin)
+    assert "a culture stub can't be expanded" in str(_last(plugin, "preview_failed"))
     await plugin.handle(
         {
             "type": "worlds",

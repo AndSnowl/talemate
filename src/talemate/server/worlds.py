@@ -140,6 +140,7 @@ from talemate.world.view import Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import age_in_years
 from talemate.worldplay.create import (
+    CREATE_KINDS,
     CreatePreview,
     accept_preview,
     current_date,
@@ -411,8 +412,10 @@ async def _fixed_preview(
     """The browser tests' stand-in for `preview_thing`: the preview in
     `path`, for the request's kind, prompt, fields and picks, listing what
     they inherit in `view` as the real one does. With a `stub_id` it takes
-    the stub's kind and name and carries its mention context; without one,
-    a live stub of the same kind and name is offered as `matching_stub_id`.
+    the stub's kind and name and carries its mention context, refusing a
+    stub of a kind that can't be expanded as the real one does; without
+    one, a live stub of the same kind and name is offered as
+    `matching_stub_id`.
     Async so it runs through the same background task and reply path as
     the real one."""
 
@@ -424,6 +427,8 @@ async def _fixed_preview(
     if payload.stub_id is not None:
         if stub is None or not stub.is_stub:
             raise ValueError(f"not a stub: {payload.stub_id}")
+        if stub.kind not in CREATE_KINDS:
+            raise ValueError(f"a {stub.kind} stub can't be expanded yet")
         kind = stub.kind
         name = view.name_of(stub.id) or name
         context = mention_context(view, stub.id)
