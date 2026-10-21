@@ -56,7 +56,9 @@ def scene_date(record: SceneRecord, scene_ts: str) -> WorldDate:
 
 def _heritage_name(view: WorldView, heritage_id: str) -> str:
     """`Snowy, a race of Owl-folk`, `Half-orc, a mix of Lowlander and Orc`,
-    `Owl-folk, a species`: a heritage thing as a cast line names it."""
+    `Owl-folk, a species`: a heritage thing as a cast line names it. A
+    name missing at the view's date (a deleted parent, a heritage not yet
+    named) is left out rather than shown blank."""
 
     state = view.thing(heritage_id)
     name = view.name_of(heritage_id) or ""
@@ -65,13 +67,17 @@ def _heritage_name(view: WorldView, heritage_id: str) -> str:
     if state.kind == "race":
         species = state.fields.get("species")
         species_name = view.name_of(species) if isinstance(species, str) else None
-        return f"{name}, a race of {species_name}" if species_name else name
-    if state.kind == "mix":
+        kind = f"a race of {species_name}" if species_name else ""
+    elif state.kind == "mix":
         parents = [
-            view.name_of(parent) or "" for parent in state.fields.get("parents") or []
+            parent_name
+            for parent in state.fields.get("parents") or []
+            if isinstance(parent, str) and (parent_name := view.name_of(parent))
         ]
-        return f"{name}, a mix of {' and '.join(parents)}"
-    return f"{name}, a {state.kind}"
+        kind = f"a mix of {' and '.join(parents)}" if parents else ""
+    else:
+        kind = f"a {state.kind}"
+    return ", ".join(part for part in (name, kind) if part)
 
 
 def _traits(

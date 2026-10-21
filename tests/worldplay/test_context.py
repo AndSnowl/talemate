@@ -108,6 +108,54 @@ def test_world_context_block_lists_heritage_bodies(world, heritage_world):
     assert later.count("Grows a winter ruff.") == 2
 
 
+def test_world_context_block_names_heritage_without_missing_names(
+    world, heritage_world
+):
+    """Final review: a mix whose parent was deleted names only the parent
+    that's left, and a heritage with no name of its own at the scene's
+    date isn't shown as "(, a race of ...)"."""
+
+    h = heritage_world
+    with world.revision(Source.manual(note="setup")) as rev:
+        lowlander = rev.create_thing("race", fields={"name": "Lowlander"})
+        orc = rev.create_thing("species", fields={"name": "Orc"})
+        half_orc = rev.create_thing(
+            "mix", fields={"name": "Half-orc", "parents": [lowlander, orc]}
+        )
+        rev.add_fact(half_orc, "physical", "Small tusks.")
+        brenna = rev.create_thing(
+            "character", fields={"name": "Brenna", "heritage": half_orc}
+        )
+        nameless = rev.create_thing("race", fields={"species": h.owl_folk})
+        rev.set_field(nameless, "name", "Tawny", WorldDate.of(2000))
+        kit = rev.create_thing(
+            "character", fields={"name": "Kit", "heritage": nameless}
+        )
+    with world.revision(Source.manual(note="drop orc")) as rev:
+        rev.remove_thing(orc)
+
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(999), goal="Cross the river")
+    scenes.update(
+        scene_id,
+        state={
+            "characters": [
+                {"thing_id": brenna, "active": True},
+                {"thing_id": kit, "active": True},
+            ]
+        },
+    )
+    block = world_context_block(world, scenes.get(scene_id), WorldDate.of(999))
+    lines = block.splitlines()
+
+    assert any(
+        line.startswith("- Brenna (Half-orc, a mix of Lowlander):") for line in lines
+    )
+    assert any(line.startswith("- Kit (a race of Owl-folk):") for line in lines)
+    assert " and )" not in block
+    assert "(," not in block
+
+
 @pytest.mark.asyncio
 async def test_inject_adds_world_instruction(world):
     with world.revision(Source.manual(note="setup")) as rev:

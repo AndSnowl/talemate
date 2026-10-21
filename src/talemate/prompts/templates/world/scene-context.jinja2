@@ -17,7 +17,7 @@ Place: {{ place.name }}
 {% if cast %}
 Who is here, by heritage (keep every description and action true to these bodies and instincts):
 {% for member in cast -%}
-- {{ member.name }} ({{ member.heritage }}):{% for fact in member.body %} {{ fact }}{% endfor %}{% if member.instincts %} Instincts:{% for fact in member.instincts %} {{ fact }}{% endfor %}{% endif %}
+- {{ member.name }}{% if member.heritage %} ({{ member.heritage }}){% endif %}:{% for fact in member.body %} {{ fact }}{% endfor %}{% if member.instincts %} Instincts:{% for fact in member.instincts %} {{ fact }}{% endfor %}{% endif %}
 {% endfor -%}
 {% endif -%}
 [end of world]
