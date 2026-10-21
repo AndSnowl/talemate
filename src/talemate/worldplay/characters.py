@@ -335,7 +335,7 @@ def _speech_facts(state: ThingState) -> tuple[list[str], list[str]]:
     return dialogue_instructions, example_dialogue
 
 
-def _age_in_years(born: WorldDate, at: WorldDate) -> int:
+def age_in_years(born: WorldDate, at: WorldDate) -> int:
     """Full years elapsed from `born` to `at`, allowing for the birthday
     not having happened yet this year (a naive `at.year - born.year`
     overcounts by one for every date before it)."""
@@ -388,7 +388,7 @@ def character_from_world(
 
     born = state.fields.get("born")
     if born is not None:
-        age = _age_in_years(born, at)
+        age = age_in_years(born, at)
         base_attributes["age"] = age
         base_attributes["born"] = world.calendar.format(born)
         stage, _past_lifespan = heritage.life_stage(

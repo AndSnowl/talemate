@@ -5,9 +5,10 @@ human-readable entries for the delete dialog:
 
 - other things' facts that reference it (`[[thing:<id>]]`), on any story
   date;
-- other things' `thing` and `shares` fields that point at it, on any story
-  date (a value set once and since replaced still renders as unknown on
-  the dates it held);
+- other things' `thing`, `things` and `shares` fields that point at it
+  (a character's `heritage`, a race's `species`, a mix's `parents`, ...),
+  on any story date (a value set once and since replaced still renders as
+  unknown on the dates it held);
 - scenes that use it as the player, a character, the place or pulled-in
   lore.
 """
@@ -27,6 +28,8 @@ __all__ = ["thing_references"]
 def _points_at(field_type: str, value: object, thing_id: str) -> bool:
     if field_type == "thing":
         return value == thing_id
+    if field_type == "things" and isinstance(value, list):
+        return thing_id in value
     if field_type == "shares" and isinstance(value, list):
         return any(
             isinstance(share, dict) and share.get("thing_id") == thing_id

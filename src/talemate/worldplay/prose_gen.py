@@ -330,12 +330,12 @@ async def ensure_prose(
     cache = world.prose()
     for section in sections_for(state.kind):
         if cache.stale(
-            thing_id, section, at, _staleness_also(world, thing_id, section, at)
+            thing_id, section, at, staleness_also(world, thing_id, section, at)
         ):
             await generate_section(world, thing_id, section, at, client)
 
 
-def _staleness_also(
+def staleness_also(
     world: World, thing_id: str, section: str, at: WorldDate | None
 ) -> list[str]:
     """The lineage ids to check `section`'s cached prose against: today's,
