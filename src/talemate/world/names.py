@@ -79,6 +79,8 @@ _PRONOUNS = {
 # capitalised words that are never part of an unknown phrase
 _NEVER_NAMES = {
     "I",
+    "AM",
+    "PM",
     *("Monday Tuesday Wednesday Thursday Friday Saturday Sunday".split()),
     *(
         "January February March April May June July August September "
@@ -92,9 +94,13 @@ _SENTENCE_OPENERS = set(
     (
         "then but when after and so if as while before since yet now there "
         "here this that later soon still once until though although because "
-        "meanwhile suddenly finally perhaps maybe or nor for"
+        "meanwhile suddenly finally perhaps maybe or nor for "
+        "on in at by from some every each most many all"
     ).split()
 )
+
+# abbreviations whose full stop doesn't end a run ("Cathedral of St. Sophia")
+_ABBREVIATIONS = {"St"}
 
 # how a candidate ranks among others for the same text: lower is better
 _RANKS: dict[str, int] = {"name": 0, "aka": 1, "first_name": 2, "partial": 9}
@@ -105,6 +111,9 @@ _FIRST_WORD_RANK = 3
 # "Yelena's")
 _WORD = re.compile(r"[^\W\d_][\w-]*(?:['’]\w+)*")
 _POSSESSIVE = re.compile(r"['’]s$", re.IGNORECASE)
+# what joins a possessive to the next word of the same name ("Cairn's Bend",
+# "Bishops' Council"): the possessive's own ending, then whitespace
+_POSSESSIVE_GAP = re.compile(r"['’][sS]?\s+")
 # what may stand between a sentence's end and its first word
 _LEAD_INS = " \t\"'“”‘’([{*_"
 _SENTENCE_ENDS = ".!?\n"
@@ -333,17 +342,24 @@ def unknown_proper_phrases(view: WorldView, text: str) -> list[Unknown]:
     articles. A run may cross lowercase "of" and "the" ("Night of the
     Feathers"). A sentence's capitalised first word on its own, a lone
     pronoun and a lone article are left out, and so is a common opener
-    ("Then", "But") in front of a sentence's first phrase. "I" (and its
-    contractions), days and months never start or join a run."""
+    ("Then", "But", "On", "Some") in front of a sentence's first phrase.
+    A run goes on across a possessive into another capitalised word
+    ("Cairn's Bend", "Bishops' Council") and past the full stop of "St.".
+    "I" (and its contractions), "AM", "PM", days and months never start or
+    join a run."""
 
     covered = [(m.start, m.end) for m in find_names(view, text)]
 
-    # (start, end, possessive) of each word, any `'s` cut off
+    # (start, end, possessive) of each word, any `'s` cut off; a plural's
+    # possessive ("Bishops'") counts too
     words: list[tuple[int, int, bool]] = []
     for hit in _WORD.finditer(text):
         possessive = _POSSESSIVE.search(hit.group(0))
         end = hit.start() + possessive.start() if possessive else hit.end()
-        words.append((hit.start(), end, possessive is not None))
+        plural_possessive = hit.group(0)[-1] in "sS" and text[
+            hit.end() : hit.end() + 1
+        ] in ("'", "’")
+        words.append((hit.start(), end, possessive is not None or plural_possessive))
 
     def base(i: int) -> str:
         """Word `i` without a contraction ("I'm" is "I")."""
@@ -361,10 +377,31 @@ def unknown_proper_phrases(view: WorldView, text: str) -> list[Unknown]:
         )
 
     def adjacent(i: int) -> bool:
-        """Whether word `i` follows word `i - 1` across whitespace only."""
+        """Whether word `i` follows word `i - 1` across whitespace only, or
+        across the full stop of an abbreviation ("St. Sophia")."""
+
+        prev_start, prev_end, prev_possessive = words[i - 1]
+        gap = text[prev_end : words[i][0]]
+        if prev_possessive:
+            return False
+        if gap.isspace():
+            return True
+        return (
+            text[prev_start:prev_end] in _ABBREVIATIONS
+            and gap[:1] == "."
+            and gap[1:].isspace()
+        )
+
+    def joins_possessive(i: int) -> bool:
+        """Whether word `i` is a capitalised word right after a possessive
+        word `i - 1`, as one name ("Cairn's Bend")."""
 
         _, prev_end, prev_possessive = words[i - 1]
-        return not prev_possessive and text[prev_end : words[i][0]].isspace()
+        return (
+            prev_possessive
+            and _POSSESSIVE_GAP.fullmatch(text[prev_end : words[i][0]]) is not None
+            and is_cap(i)
+        )
 
     phrases: list[Unknown] = []
     i = 0
@@ -374,7 +411,7 @@ def unknown_proper_phrases(view: WorldView, text: str) -> list[Unknown]:
             continue
         run = [i]
         j = i + 1
-        while j < len(words) and adjacent(j):
+        while j < len(words) and (adjacent(j) or joins_possessive(j)):
             if is_cap(j):
                 run.append(j)
                 j += 1

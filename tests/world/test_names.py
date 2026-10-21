@@ -223,3 +223,34 @@ def test_everyday_name(world):
     assert everyday_name(view.thing(tsardom)) == "Moscavia"
     assert everyday_name(view.thing(plain)) is None
     assert everyday_name(view.thing(bare)) is None
+
+
+def test_unknown_phrases_probe_noise(world):
+    """The noise Task 3's probe found in the code rule's suggestions."""
+
+    view = world.view(None)
+
+    def texts(text: str) -> list[str]:
+        return [u.text for u in unknown_proper_phrases(view, text)]
+
+    # more sentence openers ("Some", "On", ...) drop off a sentence's first phrase
+    assert texts("Some Lakewardens fish at night.") == ["Lakewardens"]
+    assert texts("On the Night of Feathers they woke.") == ["Night of Feathers"]
+    assert texts("Every Lakewood village floats. In Moscavia it snows.") == [
+        "Lakewood",
+        "Moscavia",
+    ]
+    # a run goes on across an inner possessive into another capitalised word
+    assert texts("She was born at Cairn's Bend.") == ["Cairn's Bend"]
+    assert texts("He sat on the Bishops' Council for years.") == ["Bishops' Council"]
+    found = unknown_proper_phrases(view, "rest at Yelena's Rest tonight")
+    assert [(u.text, u.start, u.end) for u in found] == [("Yelena's Rest", 8, 21)]
+    # ...but a possessive in front of a lowercase word still ends the run
+    assert texts("It was Yelena's boat.") == ["Yelena"]
+    # AM and PM are never names
+    assert texts("the bells ring at 6 AM and 9 PM daily") == []
+    assert texts("at 6 AM Vasha Brin left") == ["Vasha Brin"]
+    # "St." stays inside a run
+    assert texts("they prayed in the Cathedral of St. Sophia.") == [
+        "Cathedral of St. Sophia"
+    ]
