@@ -229,6 +229,33 @@ postmaster Aldric, his mother Yelena and the town of Frosthollow. After creation
 This is the world-tab counterpart of the inbox's "make real". It fits with plan B (inheritance
 already needs links between things) or phase 3.
 
+**Connections between entries** (owner, 2026-10-21, after plan B's acceptance run). The owner
+fills in a world by following details from one entry to the next. For example, the owl-folk's
+origin says everyone in the "Tsardom of Moscavia" turned into owls one day, so the natural next
+step is to make the Tsardom as a place, and that place's facts then mention "Moscavian Owls".
+The aim is strong, deliberate links between entries, flowing from one section to the next, with
+context that crosses sections as naturally as species context already reaches characters.
+- **Names in facts are found and shown.** When a fact names something:
+  - **if it exists,** it's highlighted and linked by id, and its facts can be used as context
+    when generating.
+  - **if it doesn't exist yet,** it's highlighted as something to make next.
+- **Stubs.** One generation can name many new things, more than the owner wants to fill in at
+  once. Each new name becomes a **stub**: a lesser entry in its kind's list, showing where it was
+  first mentioned. The owner can expand a stub later. A scene can use one too: a prompt that
+  mentions staying at an inn in a town whose facts created an "inn" stub picks that stub up and
+  fills it out.
+- **Create prompts reuse the scene prompt's name matching.** That means highlighting with
+  selectable references and "treat as new". A place prompt that says "Moscavian Owls" then
+  resolves to the existing species, instead of the model inventing a new one inside the place's
+  facts.
+- **Adding a reference by hand.** A right-click "Add reference" menu opens a small search in
+  place to insert a reference to any entry. It works everywhere text is written, alongside the
+  automatic matching.
+- **Much later: asking the AI about your world.** This may need an instruct model.
+
+Where this goes in the phase order is the owner's call. It overlaps with "Named things that
+don't exist yet" above and with mention records (plan D).
+
 **Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
 layout relative to each other is known. The map must allow places that aren't placed yet, or that
 have unknown distances between them.
