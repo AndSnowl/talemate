@@ -3,7 +3,8 @@
 Date: 2026-10-20. Model: koboldcpp, Skyfall-31B-v4.2-i1-Q4_K_M, temperature 0.8, prefill `{`, calls run one at a time (8–35 s each). Plan B, Task 4: settles the wording of the create templates for Tasks 6 and 7.
 
 - Script: `scripts/dev/probe_heritage_create.py` (`--variant a|b|c|d`, `--only`, `--entries`).
-- Raw output: `raw/2026-10-20-heritage-create.json`. It has all 72 calls, each with its variant, reply, label map and analysis. Each case's first run keeps the full prompt.
+- Raw output: `raw/2026-10-20-heritage-create.json`. It has all 78 calls, each with its variant, reply, label map and analysis. Each case's first run keeps the full prompt.
+- **A correction:** the first race run of variant d (`run5-d-race.json`) still had variant c's task sentence ("…with that species fact's label in \"overrides\"") while its FORMAT section asked for `no_longer_true`. Those 6 calls are marked `superseded` in the raw JSON. The race cases were re-run with the recommended wording (`run7-d-race.json`), and only that run is counted below.
 
 ## Setup
 
@@ -42,7 +43,7 @@ Date: 2026-10-20. Model: koboldcpp, Skyfall-31B-v4.2-i1-Q4_K_M, temperature 0.8,
 
 ## Results
 
-**Parse rate:** 71 of 72 calls parsed whole, and none were cut off. The one failure, variant d (Snowy character run 2), broke one fact object (`"text", "since": 812: "…"`). The shared parser still recovers 9 of its 10 fact objects, but the top-level `no_longer_true` list is lost with the wrapper. Fact counts mostly stayed inside the asked range. The exceptions were one variant-a species reply with 14 (the parser caps at 12) and four mix replies with 9 or 10 when 5–8 were asked.
+**Parse rate:** 71 of 72 counted calls parsed whole (the 6 superseded ones also parsed), and none were cut off. The one failure, variant d (Snowy character run 2), broke one fact object (`"text", "since": 812: "…"`). The shared parser still recovers 9 of its 10 fact objects, but the top-level `no_longer_true` list is lost with the wrapper. Fact counts mostly stayed inside the asked range. The exceptions were one variant-a species reply with 14 (the parser caps at 12) and four mix replies with 9 or 10 when 5–8 were asked.
 
 ### 1. Species (Owl-folk)
 
@@ -67,17 +68,19 @@ Date: 2026-10-20. Model: koboldcpp, Skyfall-31B-v4.2-i1-Q4_K_M, temperature 0.8,
 | Snowy: spurious | 1 (facial disc) | 0 | 1 (instinct) | 0 |
 | Highlander: spurious | 1 (hair/eyes) | 0 | 0 | 0 |
 
+The d column is the re-run with the recommended wording. The superseded d run, with the mismatched task sentence, gave the same: 3/3, 0 spurious.
+
 - **Per-fact overrides miss on races.** The model writes a plumage fact like "camouflage against snow rather than forest bark", which plainly replaces F4, then leaves `overrides` empty. The prompt check of variant c didn't help (1/3).
-- **The top-level list caught it every time.** Asking "which species facts are now untrue?" after the facts got 3/3 with nothing spurious. The word-overlap attach put F4 on the race's plumage fact in all three runs, once heritage names ("owl", "folk") are left out of the overlap.
+- **The top-level list caught it every time.** Asking "which species facts are now untrue?" after the facts got 3/3 with nothing spurious, in both d runs (6/6). The word-overlap attach put F4 on the race's plumage fact in all six, once heritage names ("owl", "folk") are left out of the overlap.
 
 **Numbers:**
 - **The race narrows or extends the measures sensibly.** Snowy came out at height 4–5 ft (the species is 3–4; "the largest") and wingspan 8–10 ft; Highlander at 6–6.5 ft against Human's 5–6.5.
-- **But it often restates unchanged numbers.** Snowy repeated lifespan 70 and adult 12 in 2 runs of b, and one run gave height 3–4 and wingspan 7–9, the species' own ranges. Highlander gave 75/18 once.
+- **But it often restates unchanged numbers.** Snowy repeated lifespan 70 and adult 12 in 2 runs of b. Two runs (c run 1 and the re-run's d run 0) gave height 3–4 and wingspan 7–9, the species' own ranges. Highlander gave 75/18 once.
 - **Highlander invented a longer life three times:** 80/18 twice and 85/20. That's plausible, but nothing in the prompt asked for it.
 
 **Consistency with the species:** every race kept the species' body: wings and no arms, talons, facial disc. Snowy facts added snowshoe-feathered feet, dense down and a shift toward daytime hunting.
 
-**Culture leakage:** before the customs line (variants a and b), Highlander facts drifted into clan halls, governing elders, stone settlements and oral tradition. With the line (c and d), only one fact in six runs mentioned songs.
+**Culture leakage:** before the customs line (variants a and b), Highlander facts drifted into clan halls, governing elders, stone settlements and oral tradition. With the line (c and both d runs), 1 Highlander fact in 9 runs mentioned songs, and 1 Snowy fact (re-run d) mentioned southern cultures prizing their plumage.
 
 ### 3. Mixes
 

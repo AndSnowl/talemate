@@ -5733,7 +5733,8 @@
         "override_spurious": []
       },
       "variant": "d",
-      "file": "run5-d-race.json"
+      "file": "run5-d-race.json",
+      "superseded": "stale: its TASK section still said 'with that species fact's label in \"overrides\"' while FORMAT asked for no_longer_true; re-run with the recommended wording as file run7-d-race.json"
     },
     {
       "label": "race / Snowy in Owl-folk",
@@ -5830,7 +5831,8 @@
         "override_spurious": []
       },
       "variant": "d",
-      "file": "run5-d-race.json"
+      "file": "run5-d-race.json",
+      "superseded": "stale: its TASK section still said 'with that species fact's label in \"overrides\"' while FORMAT asked for no_longer_true; re-run with the recommended wording as file run7-d-race.json"
     },
     {
       "label": "race / Snowy in Owl-folk",
@@ -5933,7 +5935,8 @@
         "override_spurious": []
       },
       "variant": "d",
-      "file": "run5-d-race.json"
+      "file": "run5-d-race.json",
+      "superseded": "stale: its TASK section still said 'with that species fact's label in \"overrides\"' while FORMAT asked for no_longer_true; re-run with the recommended wording as file run7-d-race.json"
     },
     {
       "label": "race / Highlander in Human",
@@ -6013,7 +6016,8 @@
         "override_spurious": []
       },
       "variant": "d",
-      "file": "run5-d-race.json"
+      "file": "run5-d-race.json",
+      "superseded": "stale: its TASK section still said 'with that species fact's label in \"overrides\"' while FORMAT asked for no_longer_true; re-run with the recommended wording as file run7-d-race.json"
     },
     {
       "label": "race / Highlander in Human",
@@ -6093,7 +6097,8 @@
         "override_spurious": []
       },
       "variant": "d",
-      "file": "run5-d-race.json"
+      "file": "run5-d-race.json",
+      "superseded": "stale: its TASK section still said 'with that species fact's label in \"overrides\"' while FORMAT asked for no_longer_true; re-run with the recommended wording as file run7-d-race.json"
     },
     {
       "label": "race / Highlander in Human",
@@ -6166,7 +6171,8 @@
         "override_spurious": []
       },
       "variant": "d",
-      "file": "run5-d-race.json"
+      "file": "run5-d-race.json",
+      "superseded": "stale: its TASK section still said 'with that species fact's label in \"overrides\"' while FORMAT asked for no_longer_true; re-run with the recommended wording as file run7-d-race.json"
     },
     {
       "label": "character / Snowy, blue eyes",
@@ -7484,6 +7490,524 @@
       },
       "variant": "d",
       "file": "run6-d.json"
+    },
+    {
+      "label": "race / Snowy in Owl-folk",
+      "run": 0,
+      "seconds": 12.4,
+      "prompt": "<|SECTION:TASK|>\nYou create a new race of the Owl-folk species for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out. Keep everything the owner wrote.\n\nEvery member of the race already has the Owl-folk facts below. Write only what sets this race apart from other Owl-folk: never restate a species fact. Keep the race consistent with its species: it has the same kind of body, varied.\n\nInstincts are inborn tendencies; leave learned customs out (settlements, government, crafts), they belong to cultures.\n\nBefore writing, check every detail of the owner's prompt against the species facts. Each detail a species fact contradicts (another colour, another size, a missing trait) gets a fact of its own, and that species fact goes in \"no_longer_true\".\n\nOwner's prompt:\nSnowy: the largest owl-folk, white-plumaged, from the frozen north.\n\nOwl-folk numbers: lifespan 70 years, adult at 12, height 3-4 ft, wingspan 7-9 ft.\nOwl-folk facts (inherited):\n- F1 (Owl-folk, physical): Owl-folk are fully feathered, with a pair of wings in place of arms.\n- F2 (Owl-folk, physical): Owl-folk have a round facial disc, a hooked beak and large forward-facing eyes.\n- F3 (Owl-folk, physical): Owl-folk have taloned feet that serve as hands for fine work.\n- F4 (Owl-folk, physical): Owl-folk plumage is mottled brown and grey, for camouflage against bark.\n- F5 (Owl-folk, physical): Owl-folk have light, hollow bones and can turn their heads nearly all the way around.\n- F6 (Owl-folk, instinct): Owl-folk are instinctively crepuscular, most alert at dusk and dawn, and freeze motionless when startled.\n\nThe world's calendar: it is now 3 Rainmoot 812 AE, year 812 of the Age of Embers. The months are Frostwane, Thawmonth, Rainmoot, Greening, Highsun, Goldfall, Harvest, Leafturn, Mistmonth, Darkening, Deepcold, Yearsend.\n<|CLOSE_SECTION|>\n<|SECTION:FORMAT|>\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"measures\": [{\"name\": \"wingspan\", \"min\": 0, \"max\": 0, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"physical\", \"text\": \"One claim, in a full sentence.\"}, {\"category\": \"variation\", \"text\": \"Another claim.\"}], \"no_longer_true\": []}\n\n- \"name\": the race's name. Use the prompt's name if it gives one.\n- \"lifespan\", \"adult_age\" and \"measures\": give each only where this race differs from Owl-folk (a measure narrower or outside the species' range); leave out any that is the same, it is inherited. lifespan and adult_age are years, as numbers; each measure is {\"name\", \"min\", \"max\", \"unit\"}, using the species' measure names.\n- The 0s in the example are placeholders: give real numbers that fit this race and the owner's prompt.\n- \"facts\": between 4 and 8 facts, one claim each, only what is specific to this race. \"category\" is one of: origin, physical, instinct, variation, general.\n- \"no_longer_true\": after the facts, the labels of the species facts that are untrue for this race now that your facts hold, such as [\"F4\"]. An inherited fact your facts only add detail to stays true and isn't listed; an empty list is fine when nothing changes.\n- Leave \"since\" out: these facts describe the race for as long as it has existed, and are never dated.\n\nNo commentary, no markdown fences, just the JSON object.\n<|CLOSE_SECTION|>",
+      "labels": {
+        "F1": "owl-1",
+        "F2": "owl-2",
+        "F3": "owl-3",
+        "F4": "owl-4",
+        "F5": "owl-5",
+        "F6": "owl-6"
+      },
+      "reply": "{ \"name\": \"Snowy Owl-folk\", \"measures\": [{\"name\": \"height\", \"min\": 3, \"max\": 4, \"unit\": \"ft\"}, {\"name\": \"wingspan\", \"min\": 7, \"max\": 9, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"origin\", \"text\": \"The Snowy Owl-folk originated in the frozen northern reaches of the continent, where endless winter blankets the land in snow and ice.\"}, {\"category\": \"physical\", \"text\": \"Snowy Owl-folk are the largest of all Owl-folk, standing between three and four feet tall with a wingspan ranging from seven to nine feet.\"}, {\"category\": \"physical\", \"text\": \"Their plumage is pure white with dense, soft down feathers that insulate against bitter cold, breaking the brown-and-grey camouflage pattern common to southern Owl-folk.\"}, {\"category\": \"physical\", \"text\": \"Snowy Owl-folk possess thick, feathered foot coverings that extend past their talons, functioning as natural snowshoes and allowing them to traverse deep snow without sinking.\"}, {\"category\": \"instinct\", \"text\": \"While retaining the crepuscular alertness shared by all Owl-folk, Snowy Owl-folk also instinctively orient toward open, treeless expanses rather than forested areas, as their habitat offers few trees.\"}, {\"category\": \"variation\", \"text\": \"Their facial discs are slightly broader and more deeply cupped than those of other Owl-folk, helping to funnel sound in the echo-prone ice fields where they hunt.\"}, {\"category\": \"general\", \"text\": \"Snowy Owl-folk are rare and highly valued by southern cultures for their prized white plumage, which has led to centuries of trade disputes over hunting rights in border territories.\"}], \"no_longer_true\": [\"F4\"] }",
+      "analysis": {
+        "parsed": true,
+        "name": "Snowy Owl-folk",
+        "age": null,
+        "measures": [
+          {
+            "name": "height",
+            "min": 3,
+            "max": 4,
+            "unit": "ft"
+          },
+          {
+            "name": "wingspan",
+            "min": 7,
+            "max": 9,
+            "unit": "ft"
+          }
+        ],
+        "facts": [
+          {
+            "category": "origin",
+            "text": "The Snowy Owl-folk originated in the frozen northern reaches of the continent, where endless winter blankets the land in snow and ice.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Snowy Owl-folk are the largest of all Owl-folk, standing between three and four feet tall with a wingspan ranging from seven to nine feet.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their plumage is pure white with dense, soft down feathers that insulate against bitter cold, breaking the brown-and-grey camouflage pattern common to southern Owl-folk.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Snowy Owl-folk possess thick, feathered foot coverings that extend past their talons, functioning as natural snowshoes and allowing them to traverse deep snow without sinking.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "instinct",
+            "text": "While retaining the crepuscular alertness shared by all Owl-folk, Snowy Owl-folk also instinctively orient toward open, treeless expanses rather than forested areas, as their habitat offers few trees.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "Their facial discs are slightly broader and more deeply cupped than those of other Owl-folk, helping to funnel sound in the echo-prone ice fields where they hunt.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "general",
+            "text": "Snowy Owl-folk are rare and highly valued by southern cultures for their prized white plumage, which has led to centuries of trade disputes over hunting rights in border territories.",
+            "since": null,
+            "overrides": []
+          }
+        ],
+        "fact_count": 7,
+        "bad_categories": [],
+        "unknown_override_labels": [],
+        "no_longer_true": [
+          "F4"
+        ],
+        "attached": {
+          "owl-4": 2
+        },
+        "overridden": [
+          "owl-4"
+        ],
+        "override_correct": [
+          "owl-4"
+        ],
+        "override_missed": [],
+        "override_spurious": []
+      },
+      "variant": "d",
+      "file": "run7-d-race.json"
+    },
+    {
+      "label": "race / Snowy in Owl-folk",
+      "run": 1,
+      "seconds": 11.3,
+      "prompt": "(same as run 0 of race / Snowy in Owl-folk / variant d, run7)",
+      "labels": {
+        "F1": "owl-1",
+        "F2": "owl-2",
+        "F3": "owl-3",
+        "F4": "owl-4",
+        "F5": "owl-5",
+        "F6": "owl-6"
+      },
+      "reply": "{ \"name\": \"Snowy\", \"measures\": [{\"name\": \"height\", \"min\": 4, \"max\": 5, \"unit\": \"ft\"}, {\"name\": \"wingspan\", \"min\": 8, \"max\": 10, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"origin\", \"text\": \"The Snowy trace their lineage to the frozen forests and ice-sheathed mountains of the northern reaches, where blizzards howl for months and the trees grow stunted and pale.\"}, {\"category\": \"physical\", \"text\": \"Their plumage is pure white, with dense, downy feathers that insulate against biting cold, and subtle patterns of grey and pale blue along the flight feathers that break up their silhouette against snow.\"}, {\"category\": \"physical\", \"text\": \"Their taloned feet are broad and heavily feathered to the base of each talon, functioning as natural snowshoes that distribute their weight across soft powder.\"}, {\"category\": \"instinct\", \"text\": \"Snowy instinctively favor hunting at night rather than at dusk and dawn, taking advantage of the long polar darkness where they are better adapted than most creatures.\"}, {\"category\": \"variation\", \"text\": \"Their eyes are a pale, luminous gold instead of the more common dark brown or amber found in southern owl-folk.\"}, {\"category\": \"variation\", \"text\": \"Their facial discs are wider and flatter relative to their head size, and the plumage framing them is a soft, silvery grey rather than the brown typical of their kind.\"}, {\"category\": \"general\", \"text\": \"Snowy are renowned among owl-folk for their deep, resonant calls that carry vast distances across open snowfields, serving as a form of long-range communication between roosts.\"}], \"no_longer_true\": [\"F4\"] }",
+      "analysis": {
+        "parsed": true,
+        "name": "Snowy",
+        "age": null,
+        "measures": [
+          {
+            "name": "height",
+            "min": 4,
+            "max": 5,
+            "unit": "ft"
+          },
+          {
+            "name": "wingspan",
+            "min": 8,
+            "max": 10,
+            "unit": "ft"
+          }
+        ],
+        "facts": [
+          {
+            "category": "origin",
+            "text": "The Snowy trace their lineage to the frozen forests and ice-sheathed mountains of the northern reaches, where blizzards howl for months and the trees grow stunted and pale.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their plumage is pure white, with dense, downy feathers that insulate against biting cold, and subtle patterns of grey and pale blue along the flight feathers that break up their silhouette against snow.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their taloned feet are broad and heavily feathered to the base of each talon, functioning as natural snowshoes that distribute their weight across soft powder.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "instinct",
+            "text": "Snowy instinctively favor hunting at night rather than at dusk and dawn, taking advantage of the long polar darkness where they are better adapted than most creatures.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "Their eyes are a pale, luminous gold instead of the more common dark brown or amber found in southern owl-folk.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "Their facial discs are wider and flatter relative to their head size, and the plumage framing them is a soft, silvery grey rather than the brown typical of their kind.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "general",
+            "text": "Snowy are renowned among owl-folk for their deep, resonant calls that carry vast distances across open snowfields, serving as a form of long-range communication between roosts.",
+            "since": null,
+            "overrides": []
+          }
+        ],
+        "fact_count": 7,
+        "bad_categories": [],
+        "unknown_override_labels": [],
+        "no_longer_true": [
+          "F4"
+        ],
+        "attached": {
+          "owl-4": 1
+        },
+        "overridden": [
+          "owl-4"
+        ],
+        "override_correct": [
+          "owl-4"
+        ],
+        "override_missed": [],
+        "override_spurious": []
+      },
+      "variant": "d",
+      "file": "run7-d-race.json"
+    },
+    {
+      "label": "race / Snowy in Owl-folk",
+      "run": 2,
+      "seconds": 10.5,
+      "prompt": "(same as run 0 of race / Snowy in Owl-folk / variant d, run7)",
+      "labels": {
+        "F1": "owl-1",
+        "F2": "owl-2",
+        "F3": "owl-3",
+        "F4": "owl-4",
+        "F5": "owl-5",
+        "F6": "owl-6"
+      },
+      "reply": "{ \"name\": \"Snowy Owl-folk\", \"measures\": [{\"name\": \"height\", \"min\": 4, \"max\": 5, \"unit\": \"ft\"}, {\"name\": \"wingspan\", \"min\": 8, \"max\": 10, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"origin\", \"text\": \"The Snowy Owl-folk are native to the frozen northern reaches of the continent, dwelling in tundra, ice fields, and the edges of perpetual glaciers.\"}, {\"category\": \"physical\", \"text\": \"Their plumage is uniformly white, providing camouflage against snow and ice rather than bark and stone.\"}, {\"category\": \"physical\", \"text\": \"Their taloned feet are thickly feathered between the toes and along the upper surface, acting as natural insulation against extreme cold.\"}, {\"category\": \"physical\", \"text\": \"Their facial disc is broad and pale, with a ring of dark feathers around the large forward-facing eyes, which are adapted to the long polar nights.\"}, {\"category\": \"instinct\", \"text\": \"In winter, Snowy Owl-folk instinctively gather into close communal roosts on cliff faces, sharing body heat to survive temperatures that would otherwise prove lethal.\"}, {\"category\": \"variation\", \"text\": \"Their hollow bones are proportionally thicker than those of southern Owl-folk, giving them a slightly heavier build without sacrificing flight ability.\"}, {\"category\": \"general\", \"text\": \"Snowy Owl-folk have developed a keener sense of hearing than their southern relatives, an adaptation to navigating featureless snowscapes where visual landmarks are scarce.\"}], \"no_longer_true\": [\"F4\"] }",
+      "analysis": {
+        "parsed": true,
+        "name": "Snowy Owl-folk",
+        "age": null,
+        "measures": [
+          {
+            "name": "height",
+            "min": 4,
+            "max": 5,
+            "unit": "ft"
+          },
+          {
+            "name": "wingspan",
+            "min": 8,
+            "max": 10,
+            "unit": "ft"
+          }
+        ],
+        "facts": [
+          {
+            "category": "origin",
+            "text": "The Snowy Owl-folk are native to the frozen northern reaches of the continent, dwelling in tundra, ice fields, and the edges of perpetual glaciers.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their plumage is uniformly white, providing camouflage against snow and ice rather than bark and stone.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their taloned feet are thickly feathered between the toes and along the upper surface, acting as natural insulation against extreme cold.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their facial disc is broad and pale, with a ring of dark feathers around the large forward-facing eyes, which are adapted to the long polar nights.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "instinct",
+            "text": "In winter, Snowy Owl-folk instinctively gather into close communal roosts on cliff faces, sharing body heat to survive temperatures that would otherwise prove lethal.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "Their hollow bones are proportionally thicker than those of southern Owl-folk, giving them a slightly heavier build without sacrificing flight ability.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "general",
+            "text": "Snowy Owl-folk have developed a keener sense of hearing than their southern relatives, an adaptation to navigating featureless snowscapes where visual landmarks are scarce.",
+            "since": null,
+            "overrides": []
+          }
+        ],
+        "fact_count": 7,
+        "bad_categories": [],
+        "unknown_override_labels": [],
+        "no_longer_true": [
+          "F4"
+        ],
+        "attached": {
+          "owl-4": 1
+        },
+        "overridden": [
+          "owl-4"
+        ],
+        "override_correct": [
+          "owl-4"
+        ],
+        "override_missed": [],
+        "override_spurious": []
+      },
+      "variant": "d",
+      "file": "run7-d-race.json"
+    },
+    {
+      "label": "race / Highlander in Human",
+      "run": 0,
+      "seconds": 9.2,
+      "prompt": "<|SECTION:TASK|>\nYou create a new race of the Human species for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out. Keep everything the owner wrote.\n\nEvery member of the race already has the Human facts below. Write only what sets this race apart from other Human: never restate a species fact. Keep the race consistent with its species: it has the same kind of body, varied.\n\nInstincts are inborn tendencies; leave learned customs out (settlements, government, crafts), they belong to cultures.\n\nBefore writing, check every detail of the owner's prompt against the species facts. Each detail a species fact contradicts (another colour, another size, a missing trait) gets a fact of its own, and that species fact goes in \"no_longer_true\".\n\nOwner's prompt:\nHighlanders: tall, pale, red-haired humans of the northern hills.\n\nHuman numbers: lifespan 75 years, adult at 18, height 5-6.5 ft.\nHuman facts (inherited):\n- F1 (Human, physical): Humans have smooth, nearly hairless skin, with hair growing mainly on the head.\n- F2 (Human, physical): Humans have rounded ears, small flat teeth and no tusks, claws or feathers.\n- F3 (Human, physical): Humans have brown, black, fair or red hair and brown, grey, blue or green eyes.\n- F4 (Human, instinct): Humans instinctively seek company and grow restless when kept alone for long.\n\nThe world's calendar: it is now 3 Rainmoot 812 AE, year 812 of the Age of Embers. The months are Frostwane, Thawmonth, Rainmoot, Greening, Highsun, Goldfall, Harvest, Leafturn, Mistmonth, Darkening, Deepcold, Yearsend.\n<|CLOSE_SECTION|>\n<|SECTION:FORMAT|>\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"measures\": [{\"name\": \"wingspan\", \"min\": 0, \"max\": 0, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"physical\", \"text\": \"One claim, in a full sentence.\"}, {\"category\": \"variation\", \"text\": \"Another claim.\"}], \"no_longer_true\": []}\n\n- \"name\": the race's name. Use the prompt's name if it gives one.\n- \"lifespan\", \"adult_age\" and \"measures\": give each only where this race differs from Human (a measure narrower or outside the species' range); leave out any that is the same, it is inherited. lifespan and adult_age are years, as numbers; each measure is {\"name\", \"min\", \"max\", \"unit\"}, using the species' measure names.\n- The 0s in the example are placeholders: give real numbers that fit this race and the owner's prompt.\n- \"facts\": between 4 and 8 facts, one claim each, only what is specific to this race. \"category\" is one of: origin, physical, instinct, variation, general.\n- \"no_longer_true\": after the facts, the labels of the species facts that are untrue for this race now that your facts hold, such as [\"F4\"]. An inherited fact your facts only add detail to stays true and isn't listed; an empty list is fine when nothing changes.\n- Leave \"since\" out: these facts describe the race for as long as it has existed, and are never dated.\n\nNo commentary, no markdown fences, just the JSON object.\n<|CLOSE_SECTION|>",
+      "labels": {
+        "F1": "human-1",
+        "F2": "human-2",
+        "F3": "human-3",
+        "F4": "human-4"
+      },
+      "reply": "{ \"name\": \"Highlander\", \"measures\": [{\"name\": \"height\", \"min\": 6, \"max\": 6.5, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"origin\", \"text\": \"The Highlanders descended from the first human settlers of the northern hills, where they adapted over generations to the cold and thin mountain air.\"}, {\"category\": \"physical\", \"text\": \"Every Highlander is born with hair that ranges from copper to deep crimson, and their skin is fair and freckled, reflecting their ancestors' long sojourn in the pale northern sun.\"}, {\"category\": \"physical\", \"text\": \"Highlander eyes are most commonly found in shades of grey and green, with blue occurring less frequently.\"}, {\"category\": \"physical\", \"text\": \"Their builds are lean and long-limbed, with broad shoulders and narrow waists that speak to a life spent navigating steep terrain.\"}, {\"category\": \"instinct\", \"text\": \"Highlanders instinctively read the wind and sky for changes in weather, developing an acute sensitivity to atmospheric pressure from earliest childhood.\"}, {\"category\": \"variation\", \"text\": \"While all Highlanders share the red hair and pale complexion that marks them plainly, the shade of red and the density of freckling vary widely, and some families carry a rare gene for darker auburn tones.\"}], \"no_longer_true\": [] }",
+      "analysis": {
+        "parsed": true,
+        "name": "Highlander",
+        "age": null,
+        "measures": [
+          {
+            "name": "height",
+            "min": 6,
+            "max": 6.5,
+            "unit": "ft"
+          }
+        ],
+        "facts": [
+          {
+            "category": "origin",
+            "text": "The Highlanders descended from the first human settlers of the northern hills, where they adapted over generations to the cold and thin mountain air.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Every Highlander is born with hair that ranges from copper to deep crimson, and their skin is fair and freckled, reflecting their ancestors' long sojourn in the pale northern sun.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Highlander eyes are most commonly found in shades of grey and green, with blue occurring less frequently.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their builds are lean and long-limbed, with broad shoulders and narrow waists that speak to a life spent navigating steep terrain.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "instinct",
+            "text": "Highlanders instinctively read the wind and sky for changes in weather, developing an acute sensitivity to atmospheric pressure from earliest childhood.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "While all Highlanders share the red hair and pale complexion that marks them plainly, the shade of red and the density of freckling vary widely, and some families carry a rare gene for darker auburn tones.",
+            "since": null,
+            "overrides": []
+          }
+        ],
+        "fact_count": 6,
+        "bad_categories": [],
+        "unknown_override_labels": [],
+        "no_longer_true": [],
+        "overridden": [],
+        "override_correct": [],
+        "override_missed": [],
+        "override_spurious": []
+      },
+      "variant": "d",
+      "file": "run7-d-race.json"
+    },
+    {
+      "label": "race / Highlander in Human",
+      "run": 1,
+      "seconds": 9.6,
+      "prompt": "(same as run 0 of race / Highlander in Human / variant d, run7)",
+      "labels": {
+        "F1": "human-1",
+        "F2": "human-2",
+        "F3": "human-3",
+        "F4": "human-4"
+      },
+      "reply": "{ \"name\": \"Highlanders\", \"measures\": [], \"facts\": [ { \"category\": \"origin\", \"text\": \"Highlanders are a race of humans native to the northern hilllands, where they have lived since the earliest days of the Age of Embers.\" }, { \"category\": \"physical\", \"text\": \"Highlanders are consistently tall among humans, with most standing between six and six and a half feet.\" }, { \"category\": \"physical\", \"text\": \"Highlanders have fair, pale skin that tans easily in sunlight but burns readily in sustained exposure.\" }, { \"category\": \"physical\", \"text\": \"Red hair is the dominant trait among Highlanders, though shades of auburn, copper, and dark chestnut also appear.\" }, { \"category\": \"physical\", \"text\": \"Highlanders' eyes tend toward grey and pale blue, with green occurring less frequently than in other human populations.\" }, { \"category\": \"physical\", \"text\": \"Highlanders are lean and long-limbed, built for navigating steep terrain and enduring cold winds.\" }, { \"category\": \"variation\", \"text\": \"While red hair is overwhelmingly common, a small minority of Highlanders carry the genes for dark brown or black hair, producing striking contrasts against their pale skin.\" }, { \"category\": \"instinct\", \"text\": \"Highlanders share the same instinctive need for social company as all humans, but prolonged isolation in their hillside homes can produce a particular form of melancholy they call the 'hill-sickness.'\" } ], \"no_longer_true\": [] }",
+      "analysis": {
+        "parsed": true,
+        "name": "Highlanders",
+        "age": null,
+        "measures": [],
+        "facts": [
+          {
+            "category": "origin",
+            "text": "Highlanders are a race of humans native to the northern hilllands, where they have lived since the earliest days of the Age of Embers.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Highlanders are consistently tall among humans, with most standing between six and six and a half feet.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Highlanders have fair, pale skin that tans easily in sunlight but burns readily in sustained exposure.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Red hair is the dominant trait among Highlanders, though shades of auburn, copper, and dark chestnut also appear.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Highlanders' eyes tend toward grey and pale blue, with green occurring less frequently than in other human populations.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Highlanders are lean and long-limbed, built for navigating steep terrain and enduring cold winds.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "While red hair is overwhelmingly common, a small minority of Highlanders carry the genes for dark brown or black hair, producing striking contrasts against their pale skin.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "instinct",
+            "text": "Highlanders share the same instinctive need for social company as all humans, but prolonged isolation in their hillside homes can produce a particular form of melancholy they call the 'hill-sickness.'",
+            "since": null,
+            "overrides": []
+          }
+        ],
+        "fact_count": 8,
+        "bad_categories": [],
+        "unknown_override_labels": [],
+        "no_longer_true": [],
+        "overridden": [],
+        "override_correct": [],
+        "override_missed": [],
+        "override_spurious": []
+      },
+      "variant": "d",
+      "file": "run7-d-race.json"
+    },
+    {
+      "label": "race / Highlander in Human",
+      "run": 2,
+      "seconds": 9.1,
+      "prompt": "(same as run 0 of race / Highlander in Human / variant d, run7)",
+      "labels": {
+        "F1": "human-1",
+        "F2": "human-2",
+        "F3": "human-3",
+        "F4": "human-4"
+      },
+      "reply": "{ \"name\": \"Highlander\", \"measures\": [{\"name\": \"height\", \"min\": 6, \"max\": 6.5, \"unit\": \"ft\"}], \"facts\": [{\"category\": \"origin\", \"text\": \"The Highlanders descended from settlers who migrated into the northern hill country centuries ago, where they adapted to harsh winters and thin mountain air.\"}, {\"category\": \"physical\", \"text\": \"Highlander skin is characteristically pale, ranging from cream to light rose, a trait selected for by generations of overcast skies and limited sun exposure.\"}, {\"category\": \"physical\", \"text\": \"Almost all Highlanders have red hair, from copper-bright to dark auburn, though rare exceptions produce strawberry blonde or even flaxen tones.\"}, {\"category\": \"physical\", \"text\": \"Their eyes tend toward cooler colours: grey, pale blue, or muted green are far more common than brown among their kind.\"}, {\"category\": \"instinct\", \"text\": \"Highlanders feel a deep, instinctive pull toward open skies and ridgelines, an unease that settles over them when confined for too long in enclosed spaces like deep caves or subterranean halls.\"}, {\"category\": \"variation\", \"text\": \"While all Highlanders share the broad racial traits, individuals vary considerably in build\u2014some are lean and angular, others broad-shouldered and thick-limbed, adapted to the different labours of hill life.\"}], \"no_longer_true\": [] }",
+      "analysis": {
+        "parsed": true,
+        "name": "Highlander",
+        "age": null,
+        "measures": [
+          {
+            "name": "height",
+            "min": 6,
+            "max": 6.5,
+            "unit": "ft"
+          }
+        ],
+        "facts": [
+          {
+            "category": "origin",
+            "text": "The Highlanders descended from settlers who migrated into the northern hill country centuries ago, where they adapted to harsh winters and thin mountain air.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Highlander skin is characteristically pale, ranging from cream to light rose, a trait selected for by generations of overcast skies and limited sun exposure.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Almost all Highlanders have red hair, from copper-bright to dark auburn, though rare exceptions produce strawberry blonde or even flaxen tones.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "physical",
+            "text": "Their eyes tend toward cooler colours: grey, pale blue, or muted green are far more common than brown among their kind.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "instinct",
+            "text": "Highlanders feel a deep, instinctive pull toward open skies and ridgelines, an unease that settles over them when confined for too long in enclosed spaces like deep caves or subterranean halls.",
+            "since": null,
+            "overrides": []
+          },
+          {
+            "category": "variation",
+            "text": "While all Highlanders share the broad racial traits, individuals vary considerably in build\u2014some are lean and angular, others broad-shouldered and thick-limbed, adapted to the different labours of hill life.",
+            "since": null,
+            "overrides": []
+          }
+        ],
+        "fact_count": 6,
+        "bad_categories": [],
+        "unknown_override_labels": [],
+        "no_longer_true": [],
+        "overridden": [],
+        "override_correct": [],
+        "override_missed": [],
+        "override_spurious": []
+      },
+      "variant": "d",
+      "file": "run7-d-race.json"
     }
   ],
   "world_entries": {
@@ -8167,5 +8691,6 @@
         ]
       }
     }
-  }
+  },
+  "note": "Race variant d was run twice: run5-d-race.json (superseded, mismatched task sentence) and run7-d-race.json (the recommended wording). Count only run7 for race/d."
 }
