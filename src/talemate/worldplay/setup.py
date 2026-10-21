@@ -3,7 +3,8 @@ to play.
 
 - `match_names` finds world thing names in the prompt as the owner types,
   so the screen can highlight them and let the owner pick which thing each
-  one means. Plain string matching, as the slice spec says.
+  one means. Plain string matching, as the slice spec says, by the shared
+  name index (`world.names`).
 - `plan_scene` asks the model (`world/scene-setup`, seeded from the
   scene-setup probe's prompt) who, where and what, given the prompt, the
   owner's picks rendered at the scene's date, and the closest hits from the
@@ -43,7 +44,6 @@ Invented things stay scene-local: nothing here writes to the world.
 
 from __future__ import annotations
 
-import re
 import uuid
 from typing import Any
 
@@ -57,6 +57,9 @@ from talemate.world import heritage
 from talemate.world.dates import WorldDate
 from talemate.world.index import IndexDoc, WorldIndex
 from talemate.world.kinds import HERITAGE_KINDS
+
+# `NameCandidate` and `NameMatch` are re-exported: they were scene setup's
+from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
@@ -78,9 +81,6 @@ INDEX_HITS = 8
 # (the place's, `LOCAL_PLACE_KIND`, lives in context.py, which reads it)
 LOCAL_EXTRA_KIND = "extra"
 
-# leading words never matched on their own as a character's first name
-_ARTICLES = {"the", "a", "an"}
-
 # the message kinds whose text goes into a continued scene's summary
 _SUMMARIZED_KINDS = {"narrator", "character", "scene"}
 
@@ -90,22 +90,6 @@ _SCENE_NAME_LENGTH = 60
 
 
 # --- models ------------------------------------------------------------------
-
-
-class NameCandidate(BaseModel):
-    id: str
-    name: str
-    kind: str
-
-
-class NameMatch(BaseModel):
-    """One name found in the prompt: its span, the text as written (without
-    a trailing `'s`), and the things it could mean, best first."""
-
-    start: int
-    end: int
-    text: str
-    candidates: list[NameCandidate]
 
 
 class LocalThing(BaseModel):
@@ -159,77 +143,12 @@ def _norm(text: str) -> str:
     return " ".join(text.split()).casefold()
 
 
-def _name_aliases(view: WorldView) -> dict[str, list[tuple[int, NameCandidate]]]:
-    """Every matchable alias (normalised) and the things it names, with a
-    rank: 0 for a thing's full name, 1 for a character's first name."""
-
-    aliases: dict[str, list[tuple[int, NameCandidate]]] = {}
-    for state in view.things():
-        name = " ".join((view.name_of(state.id) or "").split())
-        if not name:
-            continue
-        candidate = NameCandidate(id=state.id, name=name, kind=state.kind)
-        aliases.setdefault(name.casefold(), []).append((0, candidate))
-        words = name.split()
-        first = words[0].casefold()
-        if state.kind == "character" and len(words) > 1 and first not in _ARTICLES:
-            aliases.setdefault(first, []).append((1, candidate))
-    return aliases
-
-
-def _candidates(
-    aliases: dict[str, list[tuple[int, NameCandidate]]], key: str
-) -> list[NameCandidate]:
-    """The things `key` could mean, best first: full-name matches, then
-    characters it's the first name of, then (for a multi-word name) others
-    sharing its first word, so the owner can pick a different one."""
-
-    ranked = list(aliases.get(key, []))
-    first = key.split()[0]
-    if first != key:
-        ranked += [(rank + 2, c) for rank, c in aliases.get(first, [])]
-    seen: set[str] = set()
-    found: list[NameCandidate] = []
-    for _rank, candidate in sorted(ranked, key=lambda rc: (rc[0], rc[1].name)):
-        if candidate.id not in seen:
-            seen.add(candidate.id)
-            found.append(candidate)
-    return found
-
-
 def match_names(world: World, text: str, at: WorldDate | None) -> list[NameMatch]:
     """Every world thing name in `text`, as the things are named at `at`:
-    case-insensitive, whole words, a character's first name on its own
-    too, and a trailing `'s` allowed. Longer names are tried first, so
-    overlapping names match once ("Maren Vos" never also as "Maren")."""
+    the shared name index's `find_names` (main and other names, a
+    character's first name on its own, stubs, partial suggestions)."""
 
-    aliases = _name_aliases(world.view(at))
-    if not aliases:
-        return []
-
-    alternatives = sorted(aliases, key=len, reverse=True)
-    pattern = re.compile(
-        r"(?<!\w)("
-        + "|".join(r"\s+".join(map(re.escape, alias.split())) for alias in alternatives)
-        + r")(?:['’]s)?(?!\w)",
-        re.IGNORECASE,
-    )
-
-    matches: list[NameMatch] = []
-    for found in pattern.finditer(text):
-        key = _norm(found.group(1))
-        if key not in aliases:
-            # a case mapping regex and casefold disagree on: not a match
-            continue
-        matches.append(
-            NameMatch(
-                start=found.start(1),
-                end=found.end(1),
-                text=found.group(1),
-                candidates=_candidates(aliases, key),
-            )
-        )
-    return matches
+    return find_names(world.view(at), text)
 
 
 # --- the index -------------------------------------------------------------
