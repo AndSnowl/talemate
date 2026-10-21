@@ -596,7 +596,10 @@ choices, branching), not this.
   prose that fits the story. That means a careful balance: follow the action, and add colour of
   the model's own around it. Tuning this belongs in the runner work, where the loop and the
   context are open to edit. Probes of play should check how well actions are followed, not just
-  whether the world is consistent.
+  whether the world is consistent. A probe found the cast lines weren't the cause: stock Talemate
+  passes an `@` action as a weak "(Instructions for X's next part…)" line inside a task that
+  invites a new in-character action, so following actions well needs a dedicated action-to-prose
+  prompt in a runner (see docs/superpowers/probes/2026-10-21-personality-and-actions.md).
 - **Generators are moddable too** (owner, 2026-10-20). World-level generators follow the same
   model as runners:
   - create from a prompt (`worldplay/create.py`, with the template `world/create-thing.jinja2`);
