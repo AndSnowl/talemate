@@ -2,8 +2,9 @@
 
 `link_text` turns the names `world.names.find_names` finds in a piece of
 text into references that keep the words written: "Moscavia's border"
-becomes `[[thing:<id>|Moscavia's]] border`, which renders back to the same
-words. The owner's picks and the stubs just made (`new_names`) link too,
+becomes `[[thing:<id>|Moscavia]]'s border`, which renders back to the
+same words; a possessive stays outside the reference, so a full name with
+one still follows a rename. The owner's picks and the stubs just made (`new_names`) link too,
 and win over the automatic match. A suggested (partial) match is left as
 plain text unless picked, and text already inside a reference is never
 touched.
@@ -33,9 +34,6 @@ __all__ = ["NewName", "link_text", "make_stubs"]
 
 # the kind a new name gets when the model gave none we know
 FALLBACK_KIND = "lore"
-
-# a trailing possessive, kept inside the reference's shown text
-_POSSESSIVE = re.compile(r"['’]s(?!\w)", re.IGNORECASE)
 
 
 class NewName(BaseModel):
@@ -72,13 +70,8 @@ def _capitalised(written: str) -> bool:
 # link_text
 
 
-# (start, end including any `'s`, thing id)
+# (start, end, thing id): a name's span, without any `'s`
 _Span = tuple[int, int, str]
-
-
-def _possessive_end(text: str, end: int) -> int:
-    hit = _POSSESSIVE.match(text, end)
-    return hit.end() if hit else end
 
 
 def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
@@ -98,7 +91,7 @@ def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
         for hit in pattern.finditer(text):
             if _norm(hit.group(0)) != key or not _capitalised(hit.group(0)):
                 continue
-            spans.append((hit.start(), _possessive_end(text, hit.end()), thing_id))
+            spans.append((hit.start(), hit.end(), thing_id))
     return spans
 
 
@@ -110,12 +103,8 @@ def _link_plain(view: WorldView, text: str, chosen: dict[str, str]) -> str:
         thing_id = chosen.get(_norm(match.text))
         if thing_id is None and not match.suggested:
             thing_id = match.candidates[0].id
-        end = _possessive_end(text, match.end)
-        if thing_id is not None:
-            matched.append((match.start, end, thing_id))
-        else:
-            # a suggestion left alone still holds its words
-            matched.append((match.start, end, ""))
+        # a suggestion left alone still holds its words
+        matched.append((match.start, match.end, thing_id or ""))
 
     # a picked or new name inside a longer name ("Maren" in "Maren Vos")
     # leaves that name to its own match
@@ -155,7 +144,8 @@ def link_text(
     new_names: dict[str, str] | None = None,
 ) -> str:
     """`text` with every name in it linked to its thing, keeping the words
-    written (with any `'s`) as the reference's shown text.
+    written as the reference's shown text (a trailing `'s` stays outside
+    it).
 
     - `picks` maps a written name to the thing the owner picked for it; it
       wins over the automatic match, and links a suggested match too;
@@ -215,17 +205,16 @@ def _contains(key: str, part: str) -> bool:
 def _reuse(known: list[_Known], key: str, kind: str) -> str | None:
     """The thing a new name means already, if any: one with that name or
     other name (whatever its kind: the world's kind wins), else the one
-    whose longest name the new name contains, when the kinds agree or both
-    are a species, race or mix ("Moscavian Owl-folk" is the Owl-folk)."""
+    whose longest name the new name contains, when both are a species,
+    race or mix ("Moscavian Owl-folk" is the Owl-folk). Other kinds reuse
+    only an exact name: "Lake Solnech" isn't the town called "Solnech"."""
 
     for thing in known:
         if key in thing.keys:
             return thing.id
     best: tuple[int, str] | None = None
     for thing in known:
-        if thing.kind != kind and not (
-            kind in HERITAGE_KINDS and thing.kind in HERITAGE_KINDS
-        ):
+        if kind not in HERITAGE_KINDS or thing.kind not in HERITAGE_KINDS:
             continue
         for part in thing.keys:
             if _contains(key, part) and (best is None or len(part) > best[0]):
@@ -267,8 +256,8 @@ def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str
 
     A name that `view` (or an earlier name in `names`) already has, as a
     main or other name and ignoring case and a leading article, reuses that
-    entry or stub, as does a name containing one of a thing of the same
-    kind (a species or race may contain any heritage kind's name). Any
+    entry or stub, as does a species, race or mix name containing the name
+    of another species, race or mix. Any
     other name becomes a thing of its kind (`lore` for a kind we don't
     know) with its name, other names and `stub={"ignored": False}`."""
 

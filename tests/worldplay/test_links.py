@@ -38,7 +38,8 @@ def test_link_text_keeps_words(world):
     view = world.view(None)
 
     linked = link_text(view, "Moscavia's border")
-    assert linked == ref(tsardom, "Moscavia's") + " border"
+    # the possessive stays outside the reference
+    assert linked == ref(tsardom, "Moscavia") + "'s border"
     assert view.render(linked) == "Moscavia's border"
 
     text = "The Owl-folk of the Tsardom of Moscavia; I hope Moscavian Owls fly."
@@ -48,6 +49,13 @@ def test_link_text_keeps_words(world):
         f"I hope {ref(owls, 'Moscavian Owls')} fly."
     )
     assert view.render(linked) == text
+
+    # a full name's possessive follows a rename
+    full = link_text(view, "the Tsardom of Moscavia's border")
+    assert full == "the " + ref(tsardom, "Tsardom of Moscavia") + "'s border"
+    with world.revision(Source.manual(note="rename")) as rev:
+        rev.set_field(tsardom, "name", "Moscavian Empire", None)
+    assert world.view(None).render(full) == "the Moscavian Empire's border"
 
 
 def test_link_text_leaves_references_alone(world):
@@ -172,16 +180,28 @@ def test_make_stubs_reuses_existing_name(world):
     ]
 
 
-def test_make_stubs_containment_needs_a_matching_kind(world):
+def test_make_stubs_containment_is_for_heritage_only(world):
     owls, tsardom, _hope = _moscavia_world(world)
+    with world.revision(Source.manual(note="town")) as rev:
+        town = rev.create_thing(
+            "place",
+            fields={"name": "Solnechni Gorod", "aka": [_aka("Solnech", everyday=True)]},
+        )
+        frost = rev.create_thing("place", fields={"name": "Frosthollow"})
     with world.revision(Source.manual(note="stubs")) as rev:
         made = make_stubs(
             rev,
             world.view(None),
             [
-                # a place containing a place's name is that place
+                # a species or race containing a heritage name is that entry
+                NewName(name="Moscavian Owl-folk", kind="species"),
+                NewName(name="Snowy Owl-folk", kind="race"),
+                # a place containing a place's name (or other name) is a new
+                # place
+                NewName(name="Lake Solnech", kind="place"),
+                NewName(name="Frosthollow Bridge", kind="place"),
                 NewName(name="Moscavia Proper", kind="place"),
-                # but an event containing a place's name isn't
+                # an event containing a place's name isn't that place
                 NewName(name="Siege of Moscavia", kind="event"),
                 # nor is a species containing a place's name
                 NewName(name="Moscavia Owls", kind="species"),
@@ -189,9 +209,22 @@ def test_make_stubs_containment_needs_a_matching_kind(world):
                 NewName(name="Owl-folkish Kin", kind="species"),
             ],
         )
-    assert made["Moscavia Proper"] == tsardom
-    new = {made["Siege of Moscavia"], made["Moscavia Owls"], made["Owl-folkish Kin"]}
-    assert len(new) == 3 and not new & {owls, tsardom}
+    assert made["Moscavian Owl-folk"] == made["Snowy Owl-folk"] == owls
+    new = [
+        made[name]
+        for name in (
+            "Lake Solnech",
+            "Frosthollow Bridge",
+            "Moscavia Proper",
+            "Siege of Moscavia",
+            "Moscavia Owls",
+            "Owl-folkish Kin",
+        )
+    ]
+    assert len(set(new)) == 6 and not set(new) & {owls, tsardom, town, frost}
+    view = world.view(None)
+    assert all(view.thing(thing_id).is_stub for thing_id in new)
+    assert view.thing(made["Lake Solnech"]).kind == "place"
 
 
 def test_make_stubs_unknown_kind_is_lore(world):
