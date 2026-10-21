@@ -254,3 +254,22 @@ def test_unknown_phrases_probe_noise(world):
     assert texts("they prayed in the Cathedral of St. Sophia.") == [
         "Cathedral of St. Sophia"
     ]
+
+
+def test_title_words_are_no_first_name(world):
+    """A leading title isn't a character's first name: "Tsar Alexei II" is
+    "Alexei" on his own, never "Tsar", so "the tsar" links nothing."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsar = rev.create_thing("character", fields={"name": "Tsar Alexei II"})
+        prince = rev.create_thing("character", fields={"name": "Grand Prince Dmitri I"})
+    view = world.view(None)
+
+    assert find_names(view, "The tsar spoke; the Tsar's court; Grand words") == []
+    matches = find_names(view, "Alexei met Dmitri.")
+    assert [(m.text, m.candidates[0].id, m.suggested) for m in matches] == [
+        ("Alexei", tsar, False),
+        ("Dmitri", prince, False),
+    ]
+    # a title word isn't suggested on its own either
+    assert find_names(view, "The Prince waited.") == []

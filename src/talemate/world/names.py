@@ -8,10 +8,11 @@ trailing `'s` allowed and longer names tried first:
 
 - every thing's main name and every one of its other names (`aka`);
 - a character's first name on its own ("Maren" for "Maren Vos"), unless
-  it's a leading article;
+  it's a leading article; a leading title (`TITLE_WORDS`) is skipped, so
+  "Tsar Alexei II" is "Alexei", never "Tsar";
 - one capitalised word of five or more letters from a multi-word main
-  name ("Moscavia" for "Tsardom of Moscavia"). That's only a *suggested*
-  match, offered after any real one.
+  name ("Moscavia" for "Tsardom of Moscavia"), but no title word. That's
+  only a *suggested* match, offered after any real one.
 
 A stub whose name is a common word ("Hope") mustn't link the "hope" in
 "I hope", so a stub, like another name ("the Pier") or a suggestion,
@@ -42,6 +43,19 @@ Via = Literal["name", "aka", "first_name", "partial"]
 # leading words never matched on their own as a character's first name,
 # and stripped from the front of an unknown phrase
 ARTICLES = {"the", "a", "an"}
+
+# words of rank or address that may open a character's name ("Tsar Alexei
+# II", "Grand Prince Dmitri I"): never a first name, never suggested alone
+TITLE_WORDS = set(
+    (
+        "tsar tsarina tsaritsa czar king queen prince princess grand duke "
+        "duchess archduke archduchess emperor empress lord lady sir dame "
+        "count countess baron baroness earl khan sultan emir shah regent "
+        "boyar voivode hetman saint st father mother brother sister bishop "
+        "archbishop patriarch abbot abbess captain general admiral marshal "
+        "commander chancellor master mistress elder high dr mr mrs ms"
+    ).split()
+)
 
 # the shortest word of a longer name that's suggested on its own
 PARTIAL_MIN_LETTERS = 5
@@ -178,19 +192,39 @@ def _letters(word: str) -> int:
 
 def _partial_words(name: str, kind: str) -> list[str]:
     """The words of a multi-word main name suggested on their own:
-    capitalised, five letters or more, and not a character's first name
-    (that's a real match already)."""
+    capitalised, five letters or more, no title word, and not a
+    character's first name (that's a real match already)."""
 
     words = name.split()
     if len(words) < 2:
         return []
+    first = _first_name(words) if kind == "character" else None
     return [
         word
-        for i, word in enumerate(words)
+        for word in words
         if word[:1].isupper()
         and _letters(word) >= PARTIAL_MIN_LETTERS
-        and not (kind == "character" and i == 0)
+        and word != first
+        and _title_key(word) not in TITLE_WORDS
     ]
+
+
+def _title_key(word: str) -> str:
+    return word.casefold().rstrip(".")
+
+
+def _first_name(words: list[str]) -> str | None:
+    """A character's first name among the words of its (multi-word) name:
+    the first word past any leading titles ("Alexei" in "Tsar Alexei II").
+    `None` for a one-word name, one opening with an article, or one of
+    titles only."""
+
+    if len(words) < 2 or words[0].casefold() in ARTICLES:
+        return None
+    rest = list(words)
+    while rest and _title_key(rest[0]) in TITLE_WORDS:
+        rest.pop(0)
+    return rest[0] if rest else None
 
 
 Aliases = dict[str, list[tuple[int, NameCandidate]]]
@@ -223,12 +257,9 @@ def _aliases(view: WorldView) -> Aliases:
             if isinstance(other, str):
                 add(other, state, name, "aka")
         words = name.split()
-        if (
-            state.kind == "character"
-            and len(words) > 1
-            and words[0].casefold() not in ARTICLES
-        ):
-            add(words[0], state, name, "first_name")
+        first = _first_name(words) if state.kind == "character" else None
+        if first is not None:
+            add(first, state, name, "first_name")
         for word in _partial_words(name, state.kind):
             add(word, state, name, "partial")
     return aliases
