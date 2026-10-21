@@ -55,13 +55,14 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { WORLD_KINDS, kindInfo } from './worldKinds.js';
+import { TOP_KINDS, kindInfo } from './worldKinds.js';
 import CreateBox from './CreateBox.vue';
 import ThingPage from './ThingPage.vue';
 
-// The World tab: the kind list (Characters, Places, Lore; Cultures are
-// made through the culture skill), that kind's create box and its cards,
-// or the open thing's page.
+// The World tab: the kind list (Characters, Species, Places, Lore;
+// Cultures are made through the culture skill; races and mixes are reached
+// from their species page), that kind's create box and its cards, or the
+// open thing's page.
 export default {
     name: 'WorldTab',
     components: { CreateBox, ThingPage },
@@ -71,7 +72,7 @@ export default {
     data() {
         return {
             kind: 'character',
-            kinds: WORLD_KINDS,
+            kinds: TOP_KINDS,
         };
     },
     computed: {

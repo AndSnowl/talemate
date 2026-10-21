@@ -11,6 +11,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import { useWorldsStore, parseWorldTarget, worldTarget } from '../src/stores/worlds.js';
 import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
+import { TOP_KINDS, overrideCategory } from '../src/components/worlds/worldKinds.js';
+import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
 let passed = 0;
 const failures = [];
@@ -150,6 +152,35 @@ check('world scene targets', () => {
     assert.equal(parseWorldTarget(null), null);
 });
 
+// --- heritage kinds and numbers ------------------------------------------------
+
+check('races and mixes are reached from their species, not listed at the top', () => {
+    const top = TOP_KINDS.map((k) => k.kind);
+    assert.ok(top.includes('species'));
+    assert.ok(!top.includes('race') && !top.includes('mix'));
+});
+
+check("an override takes a category the thing's kind accepts", () => {
+    assert.equal(overrideCategory('character', 'physical'), 'appearance');
+    assert.equal(overrideCategory('character', 'variation'), 'appearance');
+    assert.equal(overrideCategory('character', 'instinct'), 'personality');
+    assert.equal(overrideCategory('character', 'origin'), 'background');
+    assert.equal(overrideCategory('character', 'appearance'), 'appearance');
+    // a race or mix keeps the species' category
+    assert.equal(overrideCategory('race', 'instinct'), 'instinct');
+    assert.equal(overrideCategory('mix', 'variation'), 'variation');
+});
+
+check('numbers show plain, ranges collapse when min and max agree', () => {
+    assert.equal(formatNumber(70), '70');
+    assert.equal(formatNumber(67.5), '67.5');
+    assert.equal(formatNumber(66.66666), '66.7');
+    assert.equal(rangeText({ min: 7, max: 9, unit: 'ft' }), '7–9 ft');
+    assert.equal(rangeText({ min: 9, max: 9, unit: 'ft' }), '9 ft');
+    assert.deepEqual(ownMeasures({}), []);
+    assert.deepEqual(ownMeasures({ measures: [{ name: 'height' }] }), [{ name: 'height' }]);
+});
+
 // --- the store ---------------------------------------------------------------
 
 function freshStore() {
@@ -177,7 +208,10 @@ check('opening a world lists its things and scenes', () => {
     store.handleMessage(reply('open_world', WORLD));
     assert.equal(store.currentWorld.name, 'Vael');
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(sent.map((m) => m.kind || m.action), ['character', 'place', 'lore', 'list_scenes', 'get_present']);
+    assert.deepEqual(
+        sent.map((m) => m.kind || m.action),
+        ['character', 'species', 'race', 'mix', 'place', 'lore', 'list_scenes', 'get_present'],
+    );
     store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 'p1', kind: 'place', name: 'Sallowford' }] }));
     assert.equal(store.things.place[0].name, 'Sallowford');
     assert.deepEqual(store.things.character, []);
@@ -249,6 +283,55 @@ check('edits carry the viewing date and replace the thing', () => {
     // another thing's reply doesn't replace the page
     store.handleMessage(reply('get_thing', { id: 't2' }));
     assert.equal(store.thing.id, 't1');
+});
+
+check('a heritage listing asks for list_heritage; links run species first', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    sent.length = 0;
+    store.handleMessage(reply('list_things', { kind: 'place', things: [] }));
+    assert.deepEqual(sent, []);
+    store.handleMessage(reply('list_things', { kind: 'race', things: [] }));
+    assert.deepEqual(sent, [{ type: 'worlds', action: 'list_heritage' }]);
+    store.handleMessage(reply('list_heritage', {
+        things: [
+            { id: 'owl', kind: 'species', name: 'Owl-folk', species_ids: ['owl'] },
+            { id: 'human', kind: 'species', name: 'Human', species_ids: ['human'] },
+            { id: 'snowy', kind: 'race', name: 'Snowy', species_ids: ['owl'] },
+            { id: 'half', kind: 'mix', name: 'Half-owl', species_ids: ['owl', 'human'] },
+        ],
+    }));
+    const names = (id) => store.heritageLinks(id).map((link) => link.name);
+    assert.deepEqual(names('snowy'), ['Owl-folk', 'Snowy']);
+    assert.deepEqual(names('owl'), ['Owl-folk']);
+    assert.deepEqual(names('half'), ['Owl-folk', 'Human', 'Half-owl']);
+    assert.deepEqual(names('gone'), []);
+    assert.deepEqual(store.heritageLinks('snowy')[0], { id: 'owl', name: 'Owl-folk' });
+});
+
+check('an override and a number edit go out as edits and replace the thing', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('vasha');
+    store.overrideFact('f-eyes', 'appearance', 'Blue eyes');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'override_fact', thing_id: 'vasha', at: null,
+        overridden_fact_id: 'f-eyes', category: 'appearance', text: 'Blue eyes',
+    });
+    assert.equal(store.pending.override_fact, true);
+    store.handleMessage(reply('override_fact', { id: 'vasha', kind: 'character', facts: [{ text: 'Blue eyes' }] }));
+    assert.equal(store.thing.facts[0].text, 'Blue eyes');
+    assert.deepEqual(store.pending, {});
+
+    store.openThing('snowy');
+    store.setField('lifespan', 65);
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'set_field', thing_id: 'snowy', at: null, field: 'lifespan', value: 65,
+    });
+    store.handleMessage(reply('set_field', { id: 'snowy', kind: 'race', fields: { lifespan: 65 } }));
+    assert.equal(store.thing.fields.lifespan, 65);
+    // the kind's listing is refreshed, and with it the heritage list
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'race' });
 });
 
 check('prose_updated refetches the thing at its date', () => {

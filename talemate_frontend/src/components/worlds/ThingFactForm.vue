@@ -9,13 +9,16 @@
             </div>
         </template>
         <template v-else>
+            <div v-if="form.mode === 'override'" class="text-caption text-muted mb-2">Replaces {{ form.replaces }}</div>
             <v-textarea v-model="form.text" label="Fact" rows="1" auto-grow density="compact" variant="outlined" hide-details class="mb-2"></v-textarea>
             <div class="d-flex flex-wrap align-center ga-2">
                 <v-select v-model="form.category" label="Category" :items="categories" density="compact" variant="outlined" hide-details class="category"></v-select>
-                <v-text-field v-model.number="form.fromYear" label="From year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
-                <v-text-field v-model.number="form.untilYear" label="Until year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
+                <template v-if="form.mode !== 'override'">
+                    <v-text-field v-model.number="form.fromYear" label="From year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
+                    <v-text-field v-model.number="form.untilYear" label="Until year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
+                </template>
             </div>
-            <div class="text-caption text-muted mt-1">Leave a year empty for an open start or end.</div>
+            <div v-if="form.mode !== 'override'" class="text-caption text-muted mt-1">Leave a year empty for an open start or end.</div>
             <div class="d-flex ga-2 mt-2">
                 <v-btn color="accent" variant="flat" size="small" :loading="busy" :disabled="!valid" @click="$emit('save')">Save</v-btn>
                 <v-btn variant="text" size="small" :disabled="busy" @click="$emit('cancel')">Cancel</v-btn>
@@ -27,8 +30,10 @@
 </template>
 
 <script>
-// The inline form ThingPage opens to add, edit (correct) or end a fact. It
-// edits the `form` object ThingPage owns; ThingPage sends the change.
+// The inline form ThingPage opens to add, edit (correct) or end a fact, or
+// to override an inherited one (text and category only: an override isn't
+// dated). It edits the `form` object ThingPage owns; ThingPage sends the
+// change.
 function isYear(value) {
     return Number.isInteger(value) && value >= 1 && value <= 9999;
 }

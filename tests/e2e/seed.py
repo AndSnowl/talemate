@@ -373,9 +373,16 @@ try:
     ids = {}
     with world.revision(Source.manual(note="e2e seed")) as rev:
         for thing in spec["things"]:
-            fields = {"name": thing["name"]}
+            fields = {"name": thing["name"], **(thing.get("fields") or {})}
             if thing.get("born") is not None:
                 fields["born"] = WorldDate.of(thing["born"])
+            # a link names an earlier thing (or a list of them)
+            for field, names in (thing.get("links") or {}).items():
+                fields[field] = (
+                    [ids[name] for name in names]
+                    if isinstance(names, list)
+                    else ids[names]
+                )
             thing_id = rev.create_thing(thing["kind"], fields)
             ids[thing["name"]] = thing_id
             for fact in thing.get("facts") or []:
@@ -418,9 +425,12 @@ def seed_fm_world(
 ) -> SeededFmWorld:
     """Create a fantasymate world (`talemate.world.World`) in the app's worlds folder.
 
-    ``things`` items are ``{"kind", "name", "born": year|None, "facts":
+    ``things`` items are ``{"kind", "name", "born": year|None, "fields":
+    {field: value}|None, "links": {field: name | [names]}|None, "facts":
     [{"category", "text", "since": year|None, "until": year|None}]}``,
-    written in one revision. ``scenes`` items are ``{"name", "start": year,
+    written in one revision, in order. A link names things listed before
+    it (e.g. a race's ``{"species": "Owl-folk"}``) and is written as their
+    ids. ``scenes`` items are ``{"name", "start": year,
     "premise"="", "player": thing name|None}``, created in the world's
     scene store (with no messages).
     """

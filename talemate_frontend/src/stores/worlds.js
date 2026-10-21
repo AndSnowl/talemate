@@ -27,11 +27,16 @@
 // confirmation dialog shows. `confirmDelete` deletes it; `thing_deleted`
 // closes the dialog and the thing page, back to the kind list.
 //
+// Heritage: every listing of a species, race or mix asks for
+// `list_heritage` too, so `heritage` (each with its `species_ids`) stays in
+// step for the character page's heritage links. `overrideFact` adds an own
+// fact replacing an inherited one; it answers like any edit.
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
 
-import { LISTED_KINDS } from '../components/worlds/worldKinds.js';
+import { HERITAGE_KINDS, LISTED_KINDS } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
 
@@ -65,7 +70,7 @@ export function parseWorldTarget(path) {
 }
 
 // replies to these clear their own spinner (`pending[action]`)
-const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field'];
+const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact'];
 
 function emptyThings() {
     return Object.fromEntries(LISTED_KINDS.map((kind) => [kind, []]));
@@ -75,6 +80,9 @@ function worldState() {
     // everything that belongs to the open world
     return {
         things: emptyThings(),
+        // every species, race and mix: `list_heritage`'s `{id, kind, name,
+        // species_ids}`
+        heritage: [],
         // the thing page: which thing, its payload, and the date it's viewed as of
         selectedThingId: null,
         thing: null,
@@ -125,6 +133,19 @@ export const useWorldsStore = defineStore('worlds', {
         matchesFor: (state) => (text, at) => {
             const found = state.nameMatches;
             return found && found.text === text && sameDate(found.at, at) ? found.matches : [];
+        },
+        // a heritage thing's lineage as links, most general first: its
+        // species, then itself unless it is one (`[]` for an unknown id)
+        heritageLinks: (state) => (id) => {
+            const entry = state.heritage.find((item) => item.id === id);
+            if (!entry) {
+                return [];
+            }
+            const species = entry.species_ids
+                .filter((speciesId) => speciesId !== id)
+                .map((speciesId) => state.heritage.find((item) => item.id === speciesId))
+                .filter(Boolean);
+            return [...species, entry].map(({ id: linkId, name }) => ({ id: linkId, name }));
         },
     },
 
@@ -271,6 +292,10 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('list_things', { kind });
         },
 
+        listHeritage() {
+            this.request('list_heritage');
+        },
+
         openThing(id, at = null) {
             this.selectedThingId = id;
             this.thingAt = at;
@@ -375,6 +400,17 @@ export const useWorldsStore = defineStore('worlds', {
             this.edit('remove_fact', { fact_id: factId });
         },
 
+        // an own fact replacing the inherited fact `factId`
+        overrideFact(factId, category, text) {
+            this.edit('override_fact', { overridden_fact_id: factId, category, text });
+        },
+
+        // `value`: a number field's number, or `measures`' list of
+        // `{name, min, max, unit}`
+        setField(field, value) {
+            this.edit('set_field', { field, value });
+        },
+
         regenerateProse() {
             if (!this.selectedThingId) {
                 return;
@@ -427,6 +463,12 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'list_things':
                     this.things = { ...this.things, [data.kind]: data.things };
+                    if (HERITAGE_KINDS.includes(data.kind)) {
+                        this.listHeritage();
+                    }
+                    break;
+                case 'list_heritage':
+                    this.heritage = data.things;
                     break;
                 case 'get_thing':
                     if (data.id === this.selectedThingId) {
