@@ -1056,3 +1056,34 @@ async def test_plan_scene_without_client_leaves_stubs(world):
     await start_scene(world, setup, None)
     view = world.view(None)
     assert all(view.thing(thing_id).is_stub for thing_id in stubs.values())
+
+
+async def test_start_scene_refuses_a_stub_deleted_since_planning(world):
+    """A stub deleted after planning refuses the start before anything is
+    written; one filled out by hand in the meantime is left as it is."""
+
+    ids = _river_world(world)
+    stubs = _stubs(world)
+    async with MockClientContext():
+        _queue_stub_previews()
+        setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
+
+    with world.revision(Source.manual(note="filled by hand")) as rev:
+        rev.remove_field_value(stubs["frost"], "stub", None)
+        rev.add_fact(stubs["frost"], "description", "Written by hand.")
+        rev.remove_thing(stubs["order"])
+    head = world.head_rev()
+    with pytest.raises(ValueError, match="deleted"):
+        await start_scene(world, setup, None)
+    assert world.head_rev() == head
+    assert world.view(None).thing(stubs["aldric"]).is_stub
+
+    # without the deleted one, the hand-filled entry is kept as written
+    setup.stub_previews = [
+        p for p in setup.stub_previews if p.stub_id != stubs["order"]
+    ]
+    setup.pulled_in = [stubs["salt"]]
+    await start_scene(world, setup, None)
+    view = world.view(None)
+    assert not view.thing(stubs["aldric"]).is_stub
+    assert [f.text for f in view.thing(stubs["frost"]).facts] == ["Written by hand."]
