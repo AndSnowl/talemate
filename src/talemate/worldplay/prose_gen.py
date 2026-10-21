@@ -19,6 +19,24 @@ Speech facts never go through here -- `characters.py` reads them straight
 into `dialogue_instructions` and `example_dialogue`, no prose needed. Every
 other kind has a single `description` section, from all of its facts.
 
+A thing's heritage (`talemate.world.heritage`) feeds in too, with
+overrides applied. A character's sections add the inherited facts
+`inherited_categories` maps to them -- a species', race's or mix's
+`physical` and `variation` facts to `description`, `instinct` to
+`personality`, and a culture's dress, customs and beliefs -- and every
+other inherited fact goes to the background. A race or mix gets all its
+inherited facts as background. Since an ancestor's change changes the
+prose, stretches and staleness follow the thing's lineage (`lineage_ids`).
+
+`personality`'s background leaves the body out: the character's own
+`appearance` facts, and whatever `inherited_categories("description")`
+maps as inherited (a species', race's or mix's `physical` and
+`variation`, a culture's `dress`), are left out of it entirely. Giving
+the model appearance in view, even "for consistency only", made it
+restate the body instead of writing personality; `description`'s own
+background is unaffected (acceptance probe:
+docs/superpowers/probes/2026-10-21-personality-and-actions.md).
+
 Prose is generated at the "analyze" kind, not "create": a reference entry
 is a factual restatement of known facts, not an invention, so it's asked
 for at the analytical preset's lower, more deterministic temperature
@@ -32,12 +50,13 @@ from typing import Any
 import structlog
 
 from talemate.prompts import Prompt
+from talemate.world import heritage
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import get_kind
+from talemate.world.kinds import HERITAGE_KINDS, get_kind
 from talemate.world.prose import stretches
 from talemate.world.store import World
-from talemate.world.view import ThingState
+from talemate.world.view import ThingState, WorldView
 from talemate.worldplay.ai import world_ai_call
 
 log = structlog.get_logger("talemate.worldplay.prose_gen")
@@ -49,6 +68,18 @@ SECTIONS: tuple[str, ...] = ("description", "personality")
 _SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
     "description": ("appearance", "background"),
     "personality": ("personality",),
+}
+
+# the inherited fact categories a character's section adds to its own, by
+# the source layer's kind: a heritage layer's (species, race or mix) ...
+_HERITAGE_SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "description": ("physical", "variation"),
+    "personality": ("instinct",),
+}
+# ... and a culture's -- customs shape behaviour, so they're personality
+_CULTURE_SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
+    "description": ("dress",),
+    "personality": ("customs", "belief"),
 }
 
 # an instant past the proleptic-Gregorian range, mirroring view.py's and
@@ -97,9 +128,78 @@ def section_categories(kind: str, section: str) -> tuple[str, ...]:
     return tuple(get_kind(kind).categories)
 
 
-def _facts_for_section(state: ThingState, section: str) -> list[str]:
-    categories = section_categories(state.kind, section)
-    return [fact.text for fact in state.facts if fact.category in categories]
+def inherited_categories(section: str) -> dict[str, tuple[str, ...]]:
+    """The inherited fact categories a character's `section` adds to its
+    own, by the kind of layer they're inherited from."""
+
+    categories = {
+        kind: _HERITAGE_SECTION_CATEGORIES[section] for kind in HERITAGE_KINDS
+    }
+    categories["culture"] = _CULTURE_SECTION_CATEGORIES[section]
+    return categories
+
+
+def lineage_ids(
+    world: World, thing_id: str, at: WorldDate | None, rev: int | None = None
+) -> list[str]:
+    """The ids of the layers `thing_id` inherits from (`heritage.lineage`,
+    the thing itself left out) as of `(at, rev)` -- the `also` every
+    `stretches`/`stale` call for the thing passes, so a change to an
+    ancestor counts as a change to the thing."""
+
+    return [
+        layer.thing_id
+        for layer in heritage.lineage(world.view(at, rev), thing_id)
+        if layer.depth > 0
+    ]
+
+
+def _section_facts(
+    view: WorldView, state: ThingState, section: str
+) -> tuple[list[str], list[str]]:
+    """`section`'s facts -- the thing's own facts in its categories, then,
+    for a character, the inherited facts `inherited_categories` adds -- and
+    the rest of its inherited facts, for the background. Overridden facts
+    are left out of both.
+
+    `personality`'s background also drops whatever `description` maps as
+    inherited (a species', race's or mix's `physical` and `variation`
+    facts, and a culture's `dress`) -- giving the model appearance in view
+    made it narrate the body instead of writing personality (acceptance
+    probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md).
+    `description`'s own background is unaffected."""
+
+    own_categories = section_categories(state.kind, section)
+    by_kind = inherited_categories(section) if state.kind == "character" else {}
+    exclude_by_kind = (
+        inherited_categories("description") if section == "personality" else {}
+    )
+
+    facts: list[str] = []
+    inherited_background: list[str] = []
+    for fact, layer in heritage.effective_facts(view, state.id):
+        if layer.depth == 0:
+            if fact.category in own_categories:
+                facts.append(fact.text)
+        elif fact.category in by_kind.get(layer.kind, ()):
+            facts.append(fact.text)
+        elif fact.category in exclude_by_kind.get(layer.kind, ()):
+            continue
+        else:
+            inherited_background.append(fact.text)
+    return facts, inherited_background
+
+
+def _heritage_line(view: WorldView, thing_id: str) -> list[str]:
+    """`["Heritage: Snowy, Owl-folk."]`, naming the race, mix and species
+    the thing descends from, or nothing when it has none."""
+
+    names = [
+        layer.name
+        for layer in heritage.lineage(view, thing_id)
+        if layer.depth > 0 and layer.kind in HERITAGE_KINDS and layer.name
+    ]
+    return [f"Heritage: {', '.join(names)}."] if names else []
 
 
 def background_for_section(
@@ -108,19 +208,29 @@ def background_for_section(
     section: str,
     facts: list[tuple[str, str]],
     fields: dict[str, Any],
+    inherited: list[str] | None = None,
 ) -> list[str]:
-    """The thing's other facts -- outside `section`'s own categories -- plus
-    its core fields (`name`, `born`, `kind`), when there are any. Given to
-    the model for consistency only, never to describe.
+    """The thing's other facts -- outside `section`'s own categories --
+    then `inherited` (lines from its heritage, already left out of the
+    section's own facts), plus its core fields (`name`, `born`, `kind`),
+    when there are any. Given to the model for consistency only, never to
+    describe.
 
     `facts` is `(category, text)` pairs and `fields` the thing's raw field
     values, rather than a `ThingState`, so this also serves `create.py`'s
     `preview_thing`, previewing a thing that isn't in the world yet.
     `born` is formatted by `calendar` (eras and all), the same as a built
-    `Character`'s own `born` label (`characters.py`)."""
+    `Character`'s own `born` label (`characters.py`).
 
-    categories = section_categories(kind, section)
+    `personality` also drops the thing's own `appearance` facts, for the
+    same reason `_section_facts` drops the inherited physical/variation
+    ones; `description`'s background is unaffected."""
+
+    categories = set(section_categories(kind, section))
+    if section == "personality":
+        categories.add("appearance")
     background = [text for category, text in facts if category not in categories]
+    background.extend(inherited or [])
 
     for field in _CORE_BACKGROUND_FIELDS:
         value = fields.get(field)
@@ -140,12 +250,14 @@ def background_for_section(
 def stretch_containing(
     world: World, thing_id: str, at: WorldDate | None
 ) -> tuple[WorldDate | None, WorldDate | None]:
-    """The `(start, end)` stretch -- from `talemate.world.prose.stretches`
-    -- that contains `at`. The last, open-ended stretch always matches, so
-    this never falls through without a result."""
+    """The `(start, end)` stretch -- from `talemate.world.prose.stretches`,
+    following the thing's lineage as of `at` -- that contains `at`. The
+    last, open-ended stretch always matches, so this never falls through
+    without a result."""
 
     at_instant = at.instant if at is not None else _FAR_FUTURE
-    for start, end in stretches(lambda: world, thing_id):
+    also = lineage_ids(world, thing_id, at)
+    for start, end in stretches(lambda: world, thing_id, also):
         start_instant = start.instant if start is not None else None
         end_instant = end.instant if end is not None else None
         if (start_instant is None or start_instant <= at_instant) and (
@@ -202,8 +314,9 @@ async def render_section(
 async def generate_section(
     world: World, thing_id: str, section: str, at: WorldDate | None, client: Any
 ) -> str:
-    """Generate `section`'s prose from the thing's facts at `at`, cache it
-    for the stretch containing `at`, and return the text."""
+    """Generate `section`'s prose from the thing's facts at `at` and what
+    it inherits then, cache it for the stretch containing `at`, and return
+    the text."""
 
     view = world.view(at)
     state = view.thing(thing_id)
@@ -211,13 +324,14 @@ async def generate_section(
         raise KeyError(f"no such thing: {thing_id}")
 
     name = view.name_of(thing_id) or ""
-    facts = _facts_for_section(state, section)
+    facts, inherited_background = _section_facts(view, state, section)
     background = background_for_section(
         world.calendar,
         state.kind,
         section,
         [(fact.category, fact.text) for fact in state.facts],
         state.fields,
+        _heritage_line(view, thing_id) + inherited_background,
     )
     text = await render_section(state.kind, name, section, facts, client, background)
 
@@ -232,8 +346,9 @@ async def generate_section(
 async def ensure_prose(
     world: World, thing_id: str, at: WorldDate | None, client: Any
 ) -> None:
-    """Regenerate every section that's stale at `at` (`World.prose().stale`).
-    A section with nothing cached yet counts as stale too."""
+    """Regenerate every section that's stale at `at` (`World.prose().stale`),
+    for the thing or anything in its lineage. A section with nothing cached
+    yet counts as stale too."""
 
     state = world.view(at).thing(thing_id)
     if state is None:
@@ -241,5 +356,21 @@ async def ensure_prose(
 
     cache = world.prose()
     for section in sections_for(state.kind):
-        if cache.stale(thing_id, section, at):
+        if cache.stale(
+            thing_id, section, at, staleness_also(world, thing_id, section, at)
+        ):
             await generate_section(world, thing_id, section, at, client)
+
+
+def staleness_also(
+    world: World, thing_id: str, section: str, at: WorldDate | None
+) -> list[str]:
+    """The lineage ids to check `section`'s cached prose against: today's,
+    plus the ones it had when the prose was cached, so an ancestor deleted
+    since (gone from today's lineage) still counts as a change."""
+
+    also = lineage_ids(world, thing_id, at)
+    cached = world.prose().get(thing_id, section, at)
+    if cached is not None:
+        also += lineage_ids(world, thing_id, at, cached.rev)
+    return list(dict.fromkeys(also))

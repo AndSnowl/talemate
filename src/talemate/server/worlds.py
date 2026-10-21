@@ -12,20 +12,35 @@ through `signal_operation_failed` (an `operation_done` envelope with
   open world is held on the websocket handler (`handler.world`), one per
   connection, and closed when the connection goes.
 - Things: `list_things {kind}`, `get_thing {id, at}`. A thing's payload
-  holds its fields, the facts visible at `at`, its cached prose per
-  section (with whether it's stale), its whole timeline and the scenes it
-  appears in.
+  holds its fields, the facts visible at `at` (each with the inherited
+  facts it `overrides`), its cached prose per section (with whether it's
+  stale, following its lineage), its whole timeline and the scenes it
+  appears in. From `talemate.world.heritage` it adds what it inherits
+  (`inherited`, each with what overrides it), its resolved `numbers`, a
+  character's `life_stage` (from `born`, at `at` or else the world's
+  "now"), and, on a species page, its `races` and `mixes`.
+  `referenced_in` is what `thing_references` reports, plus
+  `member_scenes`: the scenes with a member character (one whose lineage
+  includes the thing) in them.
+- Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
+  at}` adds an own fact that overrides an inherited one and answers like
+  `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
+  species_ids}]}`, every species, race and mix, for the heritage picker.
+  `find_mix {parents: [a, b]}` answers `{parents, mix_id}`, the mix of
+  those two parents in either order (`null` if there's none yet).
 - Create: `preview_thing {kind, prompt, fields}` runs in the background and
   answers `preview_thing {preview}` or `preview_failed {message}`; it
   writes nothing. `accept_preview {preview}` writes it and answers with the
   new thing. For the browser tests only, `TALEMATE_TEST_FIXED_PREVIEW`
   names a JSON file (`{name, facts, prose, fields?}`) that previews are
-  answered from instead of the model.
+  answered from instead of the model (listing what the request's fields
+  inherit, as a real preview does).
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
   `prose_failed`); with no AI client the edit stands and the prose is left
-  stale. `regenerate_prose {id, at}` regenerates every section.
+  stale. `regenerate_prose {id, at, section?}` regenerates that one
+  section (answering `prose_updated {id, section}`), or every section.
   Prose tasks for one thing run one at a time, in order, so a later edit's
   check always sees what the earlier task cached.
 - Delete: `thing_references {id}` answers `{id, kind, name, references}`
@@ -73,15 +88,20 @@ import structlog
 import talemate.instance as instance
 from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
+from talemate.world import heritage
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
+from talemate.world.kinds import HERITAGE_KINDS
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
+from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
+from talemate.worldplay.characters import age_in_years
 from talemate.worldplay.create import (
     CreatePreview,
     accept_preview,
     current_date,
+    preview_inherited,
     preview_thing,
 )
 from talemate.worldplay.persistence import save_world_scene, world_target
@@ -213,6 +233,23 @@ class RemoveFactPayload(_ThingEdit):
     fact_id: str
 
 
+class OverrideFactPayload(_ThingEdit):
+    overridden_fact_id: str
+    text: str
+    category: str
+
+
+class FindMixPayload(pydantic.BaseModel):
+    parents: list[str]
+
+    @pydantic.field_validator("parents")
+    @classmethod
+    def _two(cls, value: list[str]) -> list[str]:
+        if len(value) != 2:
+            raise ValueError("a mix has two parents")
+        return value
+
+
 class SetFieldPayload(_ThingEdit):
     field: str
     value: Any
@@ -222,6 +259,8 @@ class SetFieldPayload(_ThingEdit):
 class RegenerateProsePayload(pydantic.BaseModel):
     id: str
     at: dict | None = None
+    # one section to regenerate; every section when left out
+    section: str | None = None
 
 
 class MatchNamesPayload(pydantic.BaseModel):
@@ -265,19 +304,24 @@ def _fixed_file(env: str) -> Path | None:
     return path if path.exists() else None
 
 
-async def _fixed_preview(path: Path, payload: PreviewPayload) -> CreatePreview:
+async def _fixed_preview(
+    path: Path, payload: PreviewPayload, view: WorldView
+) -> CreatePreview:
     """The browser tests' stand-in for `preview_thing`: the preview in
-    `path`, for the request's kind, prompt and fields. Async so it runs
+    `path`, for the request's kind, prompt and fields, listing what they
+    inherit in `view` as the real one does. Async so it runs
     through the same background task and reply path as the real one."""
 
     fixed = json.loads(path.read_text(encoding="utf-8"))
+    fields = {**payload.fields, **fixed.get("fields", {})}
     return CreatePreview(
         kind=payload.kind,
         prompt=payload.prompt,
-        fields={**payload.fields, **fixed.get("fields", {})},
+        fields=fields,
         name=fixed["name"],
         facts=fixed["facts"],
         prose=fixed["prose"],
+        inherited=preview_inherited(view, payload.kind, fields),
     )
 
 
@@ -379,8 +423,21 @@ class WorldsPlugin(Plugin):
                 "valid_from": _date_out(calendar, fact.valid_from),
                 "valid_until": _date_out(calendar, fact.valid_until),
                 "source_rev": fact.source_rev,
+                "overrides": list(fact.overrides),
             }
             for fact in state.facts
+        ]
+        inherited = [
+            {
+                "fact_id": item.fact.fact_id,
+                "category": item.fact.category,
+                "rendered": view.render(item.fact.text),
+                "source_id": item.source_id,
+                "source_kind": item.source_kind,
+                "source_name": item.source_name,
+                "overridden_by": item.overridden_by,
+            }
+            for item in heritage.inherited(view, thing_id)
         ]
 
         cache = world.prose()
@@ -389,7 +446,12 @@ class WorldsPlugin(Plugin):
             cached = cache.get(thing_id, section, at)
             prose[section] = {
                 "text": cached.text if cached is not None else None,
-                "stale": cache.stale(thing_id, section, at),
+                "stale": cache.stale(
+                    thing_id,
+                    section,
+                    at,
+                    prose_gen.staleness_also(world, thing_id, section, at),
+                ),
                 "edited": cached.edited if cached is not None else False,
             }
 
@@ -418,29 +480,84 @@ class WorldsPlugin(Plugin):
                 for field, value in state.fields.items()
             },
             "facts": facts,
+            "inherited": inherited,
+            "numbers": heritage.numbers(view, thing_id).model_dump(),
+            "life_stage": self._life_stage(world, view, state, at),
+            **self._species_members(state, view),
             "prose": prose,
             "timeline": timeline,
-            "appears_in": self._appears_in(world, thing_id),
+            "appears_in": self._appears_in(world, [thing_id]),
+            "referenced_in": {
+                **thing_references(world, thing_id),
+                "member_scenes": self._appears_in(
+                    world, heritage.members(view, thing_id)
+                ),
+            },
         }
 
-    def _appears_in(self, world: World, thing_id: str) -> list[dict]:
-        """The scenes `thing_id` takes part in: as the player, a character,
-        the place, or pulled-in lore."""
+    @staticmethod
+    def _life_stage(
+        world: World, view: WorldView, state: ThingState, at: WorldDate | None
+    ) -> dict | None:
+        """A character's life stage at `at` (the world's "now" when `at`
+        is unset), from its `born` and its resolved numbers; `None` with
+        no `born`, no numbers to go by, or not born yet at `at`."""
+
+        born = state.fields.get("born")
+        if state.kind != "character" or not isinstance(born, WorldDate):
+            return None
+        age = age_in_years(born, at if at is not None else current_date(world))
+        if age < 0:
+            return None
+        stage, past_lifespan = heritage.life_stage(
+            age, heritage.numbers(view, state.id)
+        )
+        if stage is None:
+            return None
+        return {"stage": stage, "past_lifespan": past_lifespan}
+
+    @staticmethod
+    def _species_members(state: ThingState, view: WorldView) -> dict:
+        """A species page's races and mixes (a mix listed on every species
+        it descends from), by name; empty lists for any other kind."""
+
+        found: dict[str, list[dict]] = {"races": [], "mixes": []}
+        if state.kind != "species":
+            return found
+        for kind, key in (("race", "races"), ("mix", "mixes")):
+            found[key] = sorted(
+                (
+                    {"id": other.id, "name": view.name_of(other.id) or ""}
+                    for other in view.things(kind)
+                    if state.id in heritage.species_of(view, other.id)
+                ),
+                key=lambda entry: entry["name"],
+            )
+        return found
+
+    def _appears_in(self, world: World, thing_ids: list[str]) -> list[dict]:
+        """The scenes any of `thing_ids` takes part in: as the player, a
+        character, the place, or pulled-in lore. Each scene once."""
 
         calendar = world.calendar
+        wanted = set(thing_ids)
         scenes = []
+        if not wanted:
+            return scenes
         for record in world.scenes().list():
             state = record.state
             characters = state.get("characters") or []
-            if (
-                record.player_thing_id == thing_id
-                or state.get("place_thing_id") == thing_id
-                or thing_id in (state.get("pulled_in") or [])
-                or any(
-                    isinstance(entry, dict) and entry.get("thing_id") == thing_id
+            in_scene = {
+                record.player_thing_id,
+                state.get("place_thing_id"),
+                *(state.get("pulled_in") or []),
+                *(
+                    entry.get("thing_id")
                     for entry in characters
-                )
-            ):
+                    if isinstance(entry, dict)
+                ),
+            }
+            if wanted & in_scene:
                 scenes.append(
                     {
                         "id": record.id,
@@ -498,12 +615,18 @@ class WorldsPlugin(Plugin):
         return task
 
     def _schedule_prose(
-        self, thing_id: str, at: WorldDate | None, *, regenerate: bool = False
+        self,
+        thing_id: str,
+        at: WorldDate | None,
+        *,
+        regenerate: bool = False,
+        section: str | None = None,
     ) -> asyncio.Task | None:
         """Bring `thing_id`'s prose up to date at `at` in the background:
-        the stale sections, or every section with `regenerate`. Answers
-        `prose_updated {id}` when done. With no client to ask, the edit
-        stands and the prose is left stale.
+        the stale sections, or with `regenerate` every section (just
+        `section`, if given). Answers `prose_updated {id}` (with `section`,
+        if given) when done. With no client to ask, the edit stands and
+        the prose is left stale.
 
         `thing_id` may be gone by the time this runs -- deleted while the
         task sat queued, or (from `reposition_scene`) a character who's
@@ -538,19 +661,19 @@ class WorldsPlugin(Plugin):
                 state = world.view(at).thing(thing_id)
                 if state is None:
                     raise KeyError(f"no such thing: {thing_id}")
-                for section in prose_gen.sections_for(state.kind):
-                    await prose_gen.generate_section(
-                        world, thing_id, section, at, client
-                    )
+                sections = (section,) if section else prose_gen.sections_for(state.kind)
+                for name in sections:
+                    await prose_gen.generate_section(world, thing_id, name, at, client)
 
+        done = {"id": thing_id, **({"section": section} if section else {})}
         return self._spawn(
             run(),
             self.create_task_done_callback(
                 "prose_updated",
                 "prose_failed",
                 "Error generating world prose",
-                success_data={"id": thing_id},
-                failure_data={"id": thing_id},
+                success_data=done,
+                failure_data=done,
             ),
         )
 
@@ -620,6 +743,31 @@ class WorldsPlugin(Plugin):
         ]
         self._reply("list_things", {"kind": payload.kind, "things": things})
 
+    async def handle_list_heritage(self, data: dict):
+        view = self._require_world().view()
+        things = [
+            {
+                "id": state.id,
+                "kind": state.kind,
+                "name": view.name_of(state.id) or "",
+                "species_ids": heritage.species_of(view, state.id),
+            }
+            for kind in HERITAGE_KINDS
+            for state in sorted(
+                view.things(kind), key=lambda state: view.name_of(state.id) or ""
+            )
+        ]
+        self._reply("list_heritage", {"things": things})
+
+    async def handle_find_mix(self, data: dict):
+        payload = FindMixPayload(**data)
+        view = self._require_world().view()
+        a, b = payload.parents
+        self._reply(
+            "find_mix",
+            {"parents": payload.parents, "mix_id": heritage.find_mix(view, a, b)},
+        )
+
     async def handle_get_thing(self, data: dict):
         payload = GetThingPayload(**data)
         world = self._require_world()
@@ -667,7 +815,7 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         fixed = _fixed_file(FIXED_PREVIEW_ENV)
         if fixed is not None:
-            preview = _fixed_preview(fixed, payload)
+            preview = _fixed_preview(fixed, payload, world.view())
         else:
             client = self._client()
             preview = preview_thing(
@@ -751,10 +899,40 @@ class WorldsPlugin(Plugin):
             )
         self._edited("set_field", payload.thing_id, _date_in(payload.at))
 
+    async def handle_override_fact(self, data: dict):
+        payload = OverrideFactPayload(**data)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        inherited_ids = {
+            item.fact.fact_id
+            for item in heritage.inherited(world.view(at), payload.thing_id)
+        }
+        if payload.overridden_fact_id not in inherited_ids:
+            raise KeyError(
+                f"{payload.thing_id} doesn't inherit fact {payload.overridden_fact_id}"
+            )
+        with world.revision(Source.manual()) as rev:
+            rev.add_fact(
+                payload.thing_id,
+                payload.category,
+                payload.text,
+                overrides=[payload.overridden_fact_id],
+            )
+        self._edited("override_fact", payload.thing_id, at)
+
     async def handle_regenerate_prose(self, data: dict):
         payload = RegenerateProsePayload(**data)
-        self._require_world()
-        self._schedule_prose(payload.id, _date_in(payload.at), regenerate=True)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        if payload.section is not None:
+            state = world.view(at).thing(payload.id)
+            if state is None:
+                raise KeyError(f"no such thing: {payload.id}")
+            if payload.section not in prose_gen.sections_for(state.kind):
+                raise ValueError(
+                    f"a {state.kind} has no {payload.section!r} prose section"
+                )
+        self._schedule_prose(payload.id, at, regenerate=True, section=payload.section)
 
     # --- scenes -----------------------------------------------------------
 

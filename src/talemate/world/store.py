@@ -221,6 +221,33 @@ class Revision:
                 [(row_id, ref_id) for ref_id in refs],
             )
 
+    def _check_overrides(self, overrides: list[str]) -> None:
+        """Raise `ValueError` unless every id in `overrides` is a fact live
+        at this revision."""
+
+        for fact_id in overrides:
+            try:
+                self._live_fact(fact_id)
+            except KeyError:
+                raise ValueError(
+                    f"overrides an unknown or removed fact: {fact_id}"
+                ) from None
+
+    def _write_fact_overrides(self, row_id: int, overrides: list[str]) -> None:
+        if overrides:
+            self._conn.executemany(
+                "INSERT INTO fact_overrides (row_id, fact_id) VALUES (?, ?)",
+                [(row_id, fact_id) for fact_id in overrides],
+            )
+
+    def _live_fact_overrides(self, row_id: int) -> list[str]:
+        return [
+            row[0]
+            for row in self._conn.execute(
+                "SELECT fact_id FROM fact_overrides WHERE row_id = ?", (row_id,)
+            )
+        ]
+
     def _retire_field_value(
         self, thing_id: str, field: str, from_instant: int | None
     ) -> bool:
@@ -316,8 +343,11 @@ class Revision:
         valid_from: WorldDate | None = None,
         valid_until: WorldDate | None = None,
         origin: dict[str, object] | None = None,
+        overrides: list[str] | None = None,
     ) -> str:
-        """Add a fact version for `thing_id`. Returns the new `fact_id`."""
+        """Add a fact version for `thing_id`. `overrides` names the facts
+        (by stable `fact_id`) this one supersedes; each must be live at
+        this revision (`ValueError` otherwise). Returns the new `fact_id`."""
 
         kind = self._require_thing(thing_id)
         kind_spec = get_kind(kind)
@@ -326,6 +356,8 @@ class Revision:
 
         self._check_span(valid_from, valid_until)
         self._check_refs(text)
+        overrides = overrides or []
+        self._check_overrides(overrides)
 
         fact_id = uuid.uuid4().hex
         from_instant, from_precision = _date_parts(valid_from)
@@ -350,7 +382,9 @@ class Revision:
                 self.rev,
             ),
         )
-        self._write_fact_refs(cast(int, cur.lastrowid), text)
+        row_id = cast(int, cur.lastrowid)
+        self._write_fact_refs(row_id, text)
+        self._write_fact_overrides(row_id, overrides)
         return fact_id
 
     @_require_open
@@ -362,12 +396,15 @@ class Revision:
         category: str | None = None,
         valid_from: object = _UNSET,
         valid_until: object = _UNSET,
+        overrides: list[str] | None = None,
     ) -> None:
         """Retire the live version of `fact_id` and add a new version with
         the same `fact_id`, copying over any part left unspecified. `text`
         and `category` are never legitimately `None`, so `None` there means
         "unspecified"; `valid_from`/`valid_until` use a sentinel instead,
-        since `None` is a legitimate value for them (an open end)."""
+        since `None` is a legitimate value for them (an open end).
+        `overrides` is `None` to copy the live version's override links, or
+        a list (possibly empty) to replace them."""
 
         live = self._live_fact(fact_id)
 
@@ -383,6 +420,11 @@ class Revision:
             if valid_until is _UNSET
             else cast("WorldDate | None", valid_until)
         )
+        new_overrides = (
+            self._live_fact_overrides(live["row_id"])
+            if overrides is None
+            else overrides
+        )
 
         kind = self._thing_kind(live["thing_id"])
         kind_spec = get_kind(kind)
@@ -391,6 +433,7 @@ class Revision:
 
         self._check_span(new_from, new_until)
         self._check_refs(new_text)
+        self._check_overrides(new_overrides)
 
         self._conn.execute(
             "UPDATE facts SET rev_removed = ? WHERE row_id = ?",
@@ -418,7 +461,9 @@ class Revision:
                 self.rev,
             ),
         )
-        self._write_fact_refs(cast(int, cur.lastrowid), new_text)
+        row_id = cast(int, cur.lastrowid)
+        self._write_fact_refs(row_id, new_text)
+        self._write_fact_overrides(row_id, new_overrides)
 
     @_require_open
     def end_fact(self, fact_id: str, until: WorldDate) -> None:

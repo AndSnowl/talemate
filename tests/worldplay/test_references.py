@@ -93,3 +93,24 @@ def test_scenes_that_use_it(world):
     assert thing_references(world, hollow)["scenes"] == [
         {"scene_id": cast, "name": "At the Quay", "role": "lore"},
     ]
+
+
+def test_references_count_parents_and_heritage(world):
+    with world.revision(Source.manual(note="seed")) as rev:
+        human = rev.create_thing("species", {"name": "Human"})
+        orc = rev.create_thing("species", {"name": "Orc"})
+        lowlander = rev.create_thing("race", {"name": "Lowlander", "species": human})
+        half_orc = rev.create_thing(
+            "mix", {"name": "Half-orc", "parents": [lowlander, orc]}
+        )
+        brenna = rev.create_thing("character", {"name": "Brenna", "heritage": half_orc})
+
+    assert thing_references(world, orc)["fields"] == [
+        {"thing_id": half_orc, "thing_name": "Half-orc", "field": "parents"},
+    ]
+    assert thing_references(world, lowlander)["fields"] == [
+        {"thing_id": half_orc, "thing_name": "Half-orc", "field": "parents"},
+    ]
+    assert thing_references(world, half_orc)["fields"] == [
+        {"thing_id": brenna, "thing_name": "Brenna", "field": "heritage"},
+    ]

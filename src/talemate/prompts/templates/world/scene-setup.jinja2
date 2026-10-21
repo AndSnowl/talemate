@@ -23,6 +23,9 @@ This scene continues an earlier one. What happened there:
 {%- if carried %}
 Still present from the earlier scene: {{ carried | join(", ") }}.
 {% endif %}
+{%- if heritages %}
+Heritages the owner can give an invented character: {{ heritages | join(", ") }}. Add "heritage": "<name>" to an invented character who has one; leave it out otherwise.
+{% endif %}
 {%- if world_things %}
 World:
 {% for label, things in world_things -%}
@@ -32,10 +35,10 @@ World:
 {% endfor %}{% endfor %}{% endif %}
 <|CLOSE_SECTION|>
 <|SECTION:FORMAT|>
-Reply with only a JSON object shaped {"player", "characters": [{"name", "world": true|false}], "place": {"name", "world": true|false}, "extras": [{"name", "facts"}], "goal", "intro"}, where "world" is true only for a character or place that matches one of the world things given, and false for one you invented.
+Reply with only a JSON object shaped {"player", "characters": [{"name", "world": true|false, "heritage"}], "place": {"name", "world": true|false}, "extras": [{"name", "facts"}], "goal", "intro"}, where "world" is true only for a character or place that matches one of the world things given, and false for one you invented.
 
 - "player": the name of the character the player plays.
-- "characters": the other characters in the scene, one person each. Give an invented character "facts": two or three short sentences about them.
+- "characters": the other characters in the scene, one person each. Give an invented character "facts": two or three short sentences about them. If an invented character belongs to one of the heritages above, give its name as "heritage" too.
 - "place": where the scene happens. Give an invented place "facts" too.
 - "extras": groups, crowds or creatures in the scene that aren't a single character (a patrol, a crew, a mob), with short "facts". Leave it empty if there are none.
 - "goal": what the scene is about, in one sentence.

@@ -11,7 +11,7 @@ Evidence used:
 
 ## Intent
 
-A character should only need what makes them unique. What they share with their people comes from their species, race and culture. The owner's finished-product picture is a world with two or more intelligent species (humans being one), races within each, and characters made from them. Plan B makes that possible:
+A character should only need what makes them unique. What they share with their people comes from their species and race, and later their culture. The owner's finished-product picture is a world with two or more intelligent species (humans being one), races within each, and characters made from them. Plan B makes that possible:
 - the owner makes species and races, and mixes between them;
 - characters inherit their facts;
 - creation and play use the inheritance.
@@ -61,7 +61,7 @@ A new kind, `race`, with a core field `species`. It lives inside its species' pa
 
 ### Mixes
 
-A new kind, `mix`, with core fields `parents` (exactly two) and `species` (derived from the parents, for listing).
+A new kind, `mix`, with one core field of its own, `parents` (exactly two). It has no `species` field: the species it descends from are read from its parents when needed (`heritage.species_of`), for instance to list it on each species' page.
 - **Parents:** each is a species, a race or another mix. That's how a quarter-orc's parent can be a Half-orc mix.
 - **Placement:** a mix is listed on **both** parent species' pages, in a **Mixes** section next to Races in the same area. The owner chose a separate section to keep them organised.
 - **Facts and numbers,** the same as a race. A mix's facts describe the blend itself (for example, Half-orcs have tusks of half an inch to an inch).
@@ -88,7 +88,7 @@ Characters get a `heritage` core field instead of the main spec's separate `spec
   - a race's fact can override its species' fact, such as Snowy "white plumage" over a species-wide plumage fact;
   - a mix's fact can override either parent's, such as Half-owl's settled body over Owl-folk's "wings in place of arms" and Human's hands.
 
-  Race and mix pages get the same **Inherited** section and **Override** button as character pages. Drafting a race or mix from a prompt marks overrides the same way character creation does (probe 1 covers it). A character inherits through a mix with the mix's overrides already applied, so a Half-owl never carries both bodies.
+  Race and mix pages get the same **Inherited** section and **Override** button as character pages. Drafting a race or mix from a prompt marks overrides the same way character creation does (probe 1 covers it). A character inherits through a mix with the mix's overrides already applied, so a Half-owl never carries both bodies. An inherited fact is dropped when every route to its layer passes through a layer that overrides it: when both parents of a Snowy × Barred mix override Owl-folk's plumage fact, the mix doesn't inherit it, while a parent the mix also reaches some other way (a Quarter-orc's direct Lowlander parent, past Half-orc) keeps its facts.
 - **Dates apply through inheritance:** what a character inherits is read as of the scene's date. A species fact dated 500 reaches a character only in scenes set after 500.
 - **Stale prose:**
   - a character's prose goes stale when anything it inherits changes, not just its own facts;
@@ -121,22 +121,19 @@ Every new kind can be created from a short prompt, the way characters, places an
 - **Species:** from a prompt. It produces facts and numbers. *My call:* it doesn't produce races automatically; the owner adds those from the species page.
 - **Race:** from inside the species page. The species' facts are background, and the race fills in what's specific.
 - **Mix:** from the two parents, plus an optional prompt. This is also the step the character create box sends the owner to when they pick two parents with no mix yet. Accepting returns them to the character's create box, with the mix as the heritage.
-- **Character:** pick the heritage, and optionally a culture, first, then write the prompt. The AI gets the inherited facts as background:
+- **Character:** pick the heritage first, then write the prompt. The AI gets the inherited facts as background:
   - it writes only what's unique to the character;
   - it marks overrides.
 
   The prompt's own wording still wins, as today. *My call:* the heritage picker sits above the prompt in the create box. When the prompt names a species the world has, it pre-fills the picker, using the same name matching as scene setup.
 
-### Cultures, minimally
+### Cultures: moved to the next slice
 
-Culture things come into the world database only as far as inheritance needs.
-- **Import:** from the culture skill's `<id>.culture.json` file (`src/talemate/cultures/exchange.py` format) into the existing `culture` kind:
-  - name and language as fields;
-  - description, customs and food as facts in the matching categories.
+The owner decided on 2026-10-20 to move cultures out of plan B. Species already show inheritance working from species to race, mix and character, and culture-to-character inheritance comes in the next slice. The owner's direction for that slice:
+- **Cultures become ordinary fact-based entries,** created from a description in the World tab like species. The local model (Skyfall) writes their customs, beliefs, food and dress facts and their prose, which it does well.
+- **The culture-file import handles only the language.** The language is the technical artifact: sounds, word rules and the lexicon. A precise instruction-following model is better at it, whether Claude outside the app or a local instruct model such as Qwen. The owner wants Qwen tested before the design settles, and accepts the friction of switching models for that step.
 
-  Holidays, glossary, places and renderings aren't imported.
-- **Characters:** can have a culture, and inherit its facts with the lowest priority.
-- **The culture page is read-only.** Making and editing cultures in the World tab, the glossary, naming and the culture review are phase 4. The owner agreed to this.
+Plan B keeps what's already built: the lineage code treats a character's `culture` field as the last layer, so cultures slot in without rework.
 
 ### Characters invented by scene setup
 
@@ -153,7 +150,7 @@ Probe 3 includes an invented character.
 - The character sheet the agents read (`worldplay/characters.py`) is built from the character's facts plus their inherited facts, as of the scene's date, with overrides applied.
 - **Prose sections map the categories:**
   - the character's `description` takes their own appearance and background facts, plus inherited `physical` and `variation` facts;
-  - `personality` takes their own personality facts plus inherited `instinct` facts, together with the culture's customs.
+  - `personality` takes their own personality facts plus inherited `instinct` facts, together with the culture's customs once cultures arrive (the code path is ready in plan B).
 
   *My call:* culture customs go in `personality` and not `description`, because they shape behaviour.
 - **No extra LLM calls on ordinary turns.** Inheritance is resolved in code.
@@ -161,7 +158,7 @@ Probe 3 includes an invented character.
 ## Non-goals (later)
 
 - **Names:** the repeated-name problem (Maren and Brenna everywhere) waits for the cultures' name pool in phase 4. The owner noted it doesn't show up in scenes, only in isolated creation.
-- **Cultures in the World tab:** making and editing them, the glossary, naming and the culture review are phase 4.
+- **Cultures:** fact-based cultures, the language-only import and culture-to-character inheritance in the UI are the next slice (see "Cultures: moved to the next slice"). The glossary, naming and the culture review stay in phase 4.
 - **Automatic conflict detection** between own and inherited facts: the decision model, in plan F.
 - **More than two parents,** and free-form fractions.
 - **Detecting a species named in a story message:** mention records, in plan D.

@@ -2,6 +2,13 @@
 narrator and actor prompts, and keeping a scene's active characters built
 fresh from the world as its clock moves.
 
+The World instruction names who is here by heritage, with each one's body
+and instincts (`_cast`), resolved in code as of the scene's date. The
+narrator's prompts carry no character sheets -- only what long-term memory
+happens to retrieve -- and the heritage play probe
+(docs/superpowers/probes/2026-10-20-heritage-play.md) found it writing
+owl-folk with hands, fingers and hair when nothing reminded it.
+
 Loading a world scene (`talemate.load.load_world_scene`) attaches the
 context and calls `connect`; a scene that never gets a
 `scene.world_context` is left alone.
@@ -16,16 +23,26 @@ import structlog
 import talemate.emit.async_signals as async_signals
 from talemate.agents.base import DynamicInstruction
 from talemate.prompts import Prompt
+from talemate.world import heritage
 from talemate.world.dates import WorldDate
+from talemate.world.kinds import HERITAGE_KINDS
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
+from talemate.world.view import WorldView
 
 from .characters import WORLD_DERIVED_FIELDS, character_from_world
 
 log = structlog.get_logger("talemate.worldplay.context")
 
-# the scene-local thing kind of a place invented for a scene
+# the scene-local thing kinds of a place and a character invented for a
+# scene (`persistence` re-exports the character's)
 LOCAL_PLACE_KIND = "place"
+LOCAL_CHARACTER_KIND = "character"
+
+# the heritage fact categories the cast lines carry: the body, then how
+# the kind behaves
+_BODY_CATEGORIES = ("physical", "variation")
+_INSTINCT_CATEGORIES = ("instinct",)
 
 SECTION_TITLE = "World"
 
@@ -37,9 +54,115 @@ def scene_date(record: SceneRecord, scene_ts: str) -> WorldDate:
     return record.start.plus(scene_ts)
 
 
+def _heritage_name(view: WorldView, heritage_id: str) -> str:
+    """`Snowy, a race of Owl-folk`, `Half-orc, a mix of Lowlander and Orc`,
+    `Owl-folk, a species`: a heritage thing as a cast line names it. A
+    name missing at the view's date (a deleted parent, a heritage not yet
+    named) is left out rather than shown blank."""
+
+    state = view.thing(heritage_id)
+    name = view.name_of(heritage_id) or ""
+    if state is None:
+        return name
+    if state.kind == "race":
+        species = state.fields.get("species")
+        species_name = view.name_of(species) if isinstance(species, str) else None
+        kind = f"a race of {species_name}" if species_name else ""
+    elif state.kind == "mix":
+        parents = [
+            parent_name
+            for parent in state.fields.get("parents") or []
+            if isinstance(parent, str) and (parent_name := view.name_of(parent))
+        ]
+        kind = f"a mix of {' and '.join(parents)}" if parents else ""
+    else:
+        kind = f"a {state.kind}"
+    return ", ".join(part for part in (name, kind) if part)
+
+
+def _traits(
+    view: WorldView, thing_id: str, character: bool
+) -> tuple[list[str], list[str]]:
+    """`(body, instincts)` fact texts as of `view`, overrides applied, in
+    layer order: of the heritage `thing_id` itself and what it inherits
+    or, for a `character`, of its heritage layers, led by the character's
+    own facts that override one of them (her black eyes, in place of her
+    kind's yellow ones)."""
+
+    body: list[str] = []
+    instincts: list[str] = []
+    for fact, layer in heritage.effective_facts(view, thing_id):
+        if character and layer.depth == 0:
+            if fact.overrides:
+                body.append(view.render(fact.text))
+            continue
+        if layer.kind not in HERITAGE_KINDS:
+            continue
+        if fact.category in _BODY_CATEGORIES:
+            body.append(view.render(fact.text))
+        elif fact.category in _INSTINCT_CATEGORIES:
+            instincts.append(view.render(fact.text))
+    return body, instincts
+
+
+def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
+    """The scene's player and active characters that have a heritage, each
+    as `{"name", "heritage", "body", "instincts"}`, all as of `view`: a
+    world character's heritage, with its own overrides, or an invented
+    one's `world_heritage_id`, from the heritage alone (as
+    `setup.start_scene` described it). A heritage that's gone from the
+    world leaves its character out."""
+
+    local = {
+        thing["local_id"]: thing["data"]
+        for thing in world.scenes().local_things(record.id)
+        if thing["kind"] == LOCAL_CHARACTER_KIND and isinstance(thing["data"], dict)
+    }
+    entries = [
+        entry
+        for entry in record.state.get("characters") or []
+        if isinstance(entry, dict)
+    ]
+    if record.player_thing_id and not any(
+        entry.get("thing_id") == record.player_thing_id for entry in entries
+    ):
+        entries.insert(0, {"thing_id": record.player_thing_id, "active": True})
+
+    cast: list[dict] = []
+    for entry in entries:
+        if not entry.get("active", True):
+            continue
+        thing_id = entry.get("thing_id")
+        if thing_id:
+            state = view.thing(thing_id)
+            heritage_id = state.fields.get("heritage") if state is not None else None
+            name = view.name_of(thing_id) or ""
+            source, character = thing_id, True
+        else:
+            data = local.get(entry.get("local_id") or "", {})
+            heritage_id = data.get("world_heritage_id")
+            name = str(data.get("name") or "")
+            source, character = heritage_id, False
+        if not isinstance(heritage_id, str) or view.thing(heritage_id) is None:
+            continue
+        body, instincts = _traits(view, source, character)
+        if not body and not instincts:
+            continue
+        cast.append(
+            {
+                "name": name,
+                "heritage": _heritage_name(view, heritage_id),
+                "body": body,
+                "instincts": instincts,
+            }
+        )
+    return cast
+
+
 def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
     """The "World" instruction's content: the scene's goal, its current
-    place, and whatever lore has been pulled into it, all as of `at`. The
+    place, whatever lore has been pulled into it, and who is here by
+    heritage (`_cast`), all as of `at`. The
     place is the world thing `record.state["place_thing_id"]` or, when the
     scene invented its place, the scene-local place thing
     `record.state["place_local_id"]` (its name and facts); the lore entries
@@ -89,7 +212,12 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     return str(
         Prompt.get(
             "world.scene-context",
-            vars={"goal": record.goal, "place": place, "lore": lore},
+            vars={
+                "goal": record.goal,
+                "place": place,
+                "lore": lore,
+                "cast": _cast(world, record, view),
+            },
         )
     )
 

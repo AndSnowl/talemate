@@ -9,8 +9,19 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
-import { useWorldsStore, parseWorldTarget, worldTarget } from '../src/stores/worlds.js';
+import {
+    currentNameFrom,
+    defaultOverrideIndex,
+    heritageFromMatches,
+    pageAfterDelete,
+    parseWorldTarget,
+    sameParents,
+    useWorldsStore,
+    worldTarget,
+} from '../src/stores/worlds.js';
 import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
+import { TOP_KINDS, overrideCategory } from '../src/components/worlds/worldKinds.js';
+import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
 let passed = 0;
 const failures = [];
@@ -150,6 +161,35 @@ check('world scene targets', () => {
     assert.equal(parseWorldTarget(null), null);
 });
 
+// --- heritage kinds and numbers ------------------------------------------------
+
+check('races and mixes are reached from their species, not listed at the top', () => {
+    const top = TOP_KINDS.map((k) => k.kind);
+    assert.ok(top.includes('species'));
+    assert.ok(!top.includes('race') && !top.includes('mix'));
+});
+
+check("an override takes a category the thing's kind accepts", () => {
+    assert.equal(overrideCategory('character', 'physical'), 'appearance');
+    assert.equal(overrideCategory('character', 'variation'), 'appearance');
+    assert.equal(overrideCategory('character', 'instinct'), 'personality');
+    assert.equal(overrideCategory('character', 'origin'), 'background');
+    assert.equal(overrideCategory('character', 'appearance'), 'appearance');
+    // a race or mix keeps the species' category
+    assert.equal(overrideCategory('race', 'instinct'), 'instinct');
+    assert.equal(overrideCategory('mix', 'variation'), 'variation');
+});
+
+check('numbers show plain, ranges collapse when min and max agree', () => {
+    assert.equal(formatNumber(70), '70');
+    assert.equal(formatNumber(67.5), '67.5');
+    assert.equal(formatNumber(66.66666), '66.7');
+    assert.equal(rangeText({ min: 7, max: 9, unit: 'ft' }), '7–9 ft');
+    assert.equal(rangeText({ min: 9, max: 9, unit: 'ft' }), '9 ft');
+    assert.deepEqual(ownMeasures({}), []);
+    assert.deepEqual(ownMeasures({ measures: [{ name: 'height' }] }), [{ name: 'height' }]);
+});
+
 // --- the store ---------------------------------------------------------------
 
 function freshStore() {
@@ -177,7 +217,10 @@ check('opening a world lists its things and scenes', () => {
     store.handleMessage(reply('open_world', WORLD));
     assert.equal(store.currentWorld.name, 'Vael');
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(sent.map((m) => m.kind || m.action), ['character', 'place', 'lore', 'list_scenes', 'get_present']);
+    assert.deepEqual(
+        sent.map((m) => m.kind || m.action),
+        ['character', 'species', 'race', 'mix', 'place', 'lore', 'list_scenes', 'get_present'],
+    );
     store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 'p1', kind: 'place', name: 'Sallowford' }] }));
     assert.equal(store.things.place[0].name, 'Sallowford');
     assert.deepEqual(store.things.character, []);
@@ -249,6 +292,55 @@ check('edits carry the viewing date and replace the thing', () => {
     // another thing's reply doesn't replace the page
     store.handleMessage(reply('get_thing', { id: 't2' }));
     assert.equal(store.thing.id, 't1');
+});
+
+check('a heritage listing asks for list_heritage; links run species first', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    sent.length = 0;
+    store.handleMessage(reply('list_things', { kind: 'place', things: [] }));
+    assert.deepEqual(sent, []);
+    store.handleMessage(reply('list_things', { kind: 'race', things: [] }));
+    assert.deepEqual(sent, [{ type: 'worlds', action: 'list_heritage' }]);
+    store.handleMessage(reply('list_heritage', {
+        things: [
+            { id: 'owl', kind: 'species', name: 'Owl-folk', species_ids: ['owl'] },
+            { id: 'human', kind: 'species', name: 'Human', species_ids: ['human'] },
+            { id: 'snowy', kind: 'race', name: 'Snowy', species_ids: ['owl'] },
+            { id: 'half', kind: 'mix', name: 'Half-owl', species_ids: ['owl', 'human'] },
+        ],
+    }));
+    const names = (id) => store.heritageLinks(id).map((link) => link.name);
+    assert.deepEqual(names('snowy'), ['Owl-folk', 'Snowy']);
+    assert.deepEqual(names('owl'), ['Owl-folk']);
+    assert.deepEqual(names('half'), ['Owl-folk', 'Human', 'Half-owl']);
+    assert.deepEqual(names('gone'), []);
+    assert.deepEqual(store.heritageLinks('snowy')[0], { id: 'owl', name: 'Owl-folk' });
+});
+
+check('an override and a number edit go out as edits and replace the thing', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('vasha');
+    store.overrideFact('f-eyes', 'appearance', 'Blue eyes');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'override_fact', thing_id: 'vasha', at: null,
+        overridden_fact_id: 'f-eyes', category: 'appearance', text: 'Blue eyes',
+    });
+    assert.equal(store.pending.override_fact, true);
+    store.handleMessage(reply('override_fact', { id: 'vasha', kind: 'character', facts: [{ text: 'Blue eyes' }] }));
+    assert.equal(store.thing.facts[0].text, 'Blue eyes');
+    assert.deepEqual(store.pending, {});
+
+    store.openThing('snowy');
+    store.setField('lifespan', 65);
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'set_field', thing_id: 'snowy', at: null, field: 'lifespan', value: 65,
+    });
+    store.handleMessage(reply('set_field', { id: 'snowy', kind: 'race', fields: { lifespan: 65 } }));
+    assert.equal(store.thing.fields.lifespan, 65);
+    // the kind's listing is refreshed, and with it the heritage list
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'race' });
 });
 
 check('prose_updated refetches the thing at its date', () => {
@@ -556,6 +648,188 @@ check('a failed delete closes the dialog and shows the error', () => {
     assert.equal(store.deleteCheck, null);
     assert.equal(store.error, 'no such thing');
     assert.equal(store.selectedThingId, 't1');
+});
+
+// --- heritage in the create box ---------------------------------------------
+
+const HERITAGE = [
+    { id: 'human', kind: 'species', name: 'Human', species_ids: ['human'] },
+    { id: 'orc', kind: 'species', name: 'Orc', species_ids: ['orc'] },
+    { id: 'low', kind: 'race', name: 'Lowlander', species_ids: ['human'] },
+];
+const named = (text, ...ids) => ({ text, start: 0, end: 0, candidates: ids.map((id) => ({ id, name: text, kind: '' })) });
+
+check('a prompt pre-fills the heritage it names, a race over its species', () => {
+    assert.equal(heritageFromMatches([named('human', 'human'), named('Lowlander', 'low')], HERITAGE), 'low');
+    assert.equal(heritageFromMatches([named('orc', 'orc'), named('Lowlander', 'low')], HERITAGE), 'orc');
+    // names that aren't heritage things (a character) are passed over
+    assert.equal(heritageFromMatches([named('Maren', 'c1'), named('orc', 'orc')], HERITAGE), 'orc');
+    assert.equal(heritageFromMatches([named('Maren', 'c1')], HERITAGE), null);
+});
+
+check('find_mix answers the parents asked about, in either order', () => {
+    assert.ok(sameParents(['a', 'b'], ['b', 'a']));
+    assert.ok(!sameParents(['a', 'b'], ['a', 'c']));
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.findMix(['low', 'orc']);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'find_mix', parents: ['low', 'orc'] });
+    // a reply for other parents is dropped
+    store.handleMessage(reply('find_mix', { parents: ['human', 'orc'], mix_id: null }));
+    assert.equal(store.mixFound, null);
+    store.handleMessage(reply('find_mix', { parents: ['orc', 'low'], mix_id: 'm1' }));
+    assert.deepEqual(store.mixFound, { parents: ['orc', 'low'], mix_id: 'm1' });
+    assert.equal(store.mixLookup, null);
+});
+
+check('a failed mix lookup stops waiting', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.findMix(['low', 'orc']);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no' } });
+    assert.equal(store.mixLookup, null);
+});
+
+check('a mix drafted for a character is accepted without opening its page', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('mix', '', { parents: ['low', 'orc'] });
+    store.handleMessage(reply('preview_thing', { kind: 'mix', prompt: '', fields: {}, name: 'Half-orc', facts: [], prose: {} }));
+    store.acceptPreview({ name: 'Half-orc' }, { open: false });
+    store.handleMessage(reply('accept_preview', { id: 'm1', kind: 'mix', name: 'Half-orc' }));
+    assert.deepEqual(store.accepted, { id: 'm1', kind: 'mix', name: 'Half-orc' });
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.previewRequest, null);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'mix' });
+    // the next accept opens its page again
+    store.previewThing('character', 'a smith', { heritage: 'm1' });
+    store.handleMessage(reply('preview_thing', { kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', facts: [], prose: {} }));
+    store.acceptPreview({ name: 'Gorra' });
+    store.handleMessage(reply('accept_preview', { id: 'c1', kind: 'character', name: 'Gorra' }));
+    assert.equal(store.selectedThingId, 'c1');
+});
+
+check('cancelling a preview forgets its request', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('mix', '', { parents: ['low', 'orc'] });
+    store.cancelPreview();
+    assert.equal(store.previewRequest, null);
+    assert.equal(store.previewPending, false);
+    store.handleMessage(reply('preview_thing', { name: 'late' }));
+    assert.equal(store.preview, null);
+});
+
+check('marking an inherited fact overridden moves it to one own fact', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('character', 'a smith', { heritage: 'low' });
+    const preview = {
+        kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', prose: {},
+        facts: [
+            { category: 'personality', text: 'Quick to anger.', overrides: [] },
+            { category: 'appearance', text: 'Tall.', overrides: [] },
+            { category: 'appearance', text: 'Green skin.', overrides: [] },
+        ],
+        inherited: [{ fact_id: 'f1', source: 'Lowlander', source_id: 'low', category: 'physical', text: 'Short.' }],
+    };
+    store.handleMessage(reply('preview_thing', preview));
+    // a physical fact is overridden by the first appearance fact
+    assert.equal(defaultOverrideIndex(store.preview, preview.inherited[0]), 1);
+    assert.equal(defaultOverrideIndex({ ...preview, facts: [] }, preview.inherited[0]), -1);
+    store.setPreviewOverride('f1', 1);
+    assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], ['f1'], []]);
+    store.setPreviewOverride('f1', 2);
+    assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], [], ['f1']]);
+    store.acceptPreview({ name: 'Gorra' });
+    assert.deepEqual(sent.at(-1).preview.facts[2].overrides, ['f1']);
+    store.setPreviewOverride('f1', null);
+    assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], [], []]);
+});
+
+check('one prose section regenerates on its own', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('t1');
+    store.regenerateProse('personality');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'regenerate_prose', id: 't1', at: null, section: 'personality' });
+    assert.equal(store.proseRegenerating, 't1');
+    assert.equal(store.proseRegeneratingSection, 'personality');
+    store.handleMessage(reply('prose_updated', { id: 't1', section: 'personality' }));
+    assert.equal(store.proseRegenerating, null);
+    assert.equal(store.proseRegeneratingSection, null);
+    // the whole-page button still regenerates every section
+    store.regenerateProse();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'regenerate_prose', id: 't1', at: null });
+    assert.equal(store.proseRegeneratingSection, null);
+});
+
+const NAME_TIMELINE = [
+    { date: null, change: 'field', field: 'name', value: 'Lowlander' },
+    { date: dateOf(380), change: 'fact_start', field: null, value: null },
+    { date: dateOf(400), change: 'field', field: 'name', value: 'Dalesfolk' },
+];
+
+check('a rename corrects the name in effect at the viewing date', () => {
+    assert.equal(currentNameFrom(NAME_TIMELINE, null).instant, dateOf(400).instant);
+    assert.equal(currentNameFrom(NAME_TIMELINE, dateOf(350)), null);
+    assert.equal(currentNameFrom([], null), null);
+
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('r1', dateOf(350));
+    store.handleMessage(reply('get_thing', { id: 'r1', kind: 'race', name: 'Lowlander', at: dateOf(350), timeline: NAME_TIMELINE }));
+    store.renameThing('Vale-folk');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'set_field', thing_id: 'r1', at: dateOf(350), field: 'name', value: 'Vale-folk', valid_from: null,
+    });
+    store.viewThingAt(null);
+    store.handleMessage(reply('get_thing', { id: 'r1', kind: 'race', name: 'Dalesfolk', at: null, timeline: NAME_TIMELINE }));
+    store.renameThing('Dales');
+    const { label: _label, ...from } = dateOf(400);
+    assert.deepEqual(sent.at(-1).valid_from, { instant: from.instant, precision: from.precision });
+    // the reply refreshes the kind's list, and with it the heritage list
+    store.handleMessage(reply('set_field', { id: 'r1', kind: 'race', name: 'Dales' }));
+    assert.equal(store.thing.name, 'Dales');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'race' });
+    store.handleMessage(reply('list_things', { kind: 'race', things: [{ id: 'r1', kind: 'race', name: 'Dales' }] }));
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_heritage' });
+});
+
+const DELETE_HERITAGE = [
+    { id: 'hum', kind: 'species', name: 'Human', species_ids: ['hum'] },
+    { id: 'orc', kind: 'species', name: 'Orc', species_ids: ['orc'] },
+    { id: 'low', kind: 'race', name: 'Lowlander', species_ids: ['hum'] },
+    { id: 'mix', kind: 'mix', name: 'Half-orc', species_ids: ['hum', 'orc'] },
+];
+
+check('after a delete, a race or mix goes back to its species page', () => {
+    const race = { id: 'low', kind: 'race', fields: { species: 'hum' } };
+    const mix = { id: 'mix', kind: 'mix', fields: { parents: ['low', 'orc'] } };
+    assert.equal(pageAfterDelete(race, DELETE_HERITAGE, null), 'hum');
+    // the species page the mix was opened from, if it's one of the mix's
+    assert.equal(pageAfterDelete(mix, DELETE_HERITAGE, 'orc'), 'orc');
+    // else its first parent's species
+    assert.equal(pageAfterDelete(mix, DELETE_HERITAGE, 'c1'), 'hum');
+    assert.equal(pageAfterDelete(mix, DELETE_HERITAGE, null), 'hum');
+    assert.equal(pageAfterDelete({ ...mix, fields: { parents: ['orc', 'low'] } }, DELETE_HERITAGE, null), 'orc');
+    // other kinds go back to the list
+    assert.equal(pageAfterDelete({ id: 'c1', kind: 'character', fields: {} }, DELETE_HERITAGE, 'hum'), null);
+    assert.equal(pageAfterDelete({ id: 'hum', kind: 'species', fields: {} }, DELETE_HERITAGE, null), null);
+
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_heritage', { things: DELETE_HERITAGE }));
+    store.openThing('orc');
+    store.openThing('mix');
+    store.handleMessage(reply('get_thing', mix));
+    store.requestDelete();
+    store.handleMessage(reply('thing_references', { id: 'mix', kind: 'mix', name: 'Half-orc', references: REFERENCES }));
+    store.confirmDelete();
+    store.handleMessage(reply('thing_deleted', { id: 'mix', kind: 'mix' }));
+    assert.equal(store.selectedThingId, 'orc');
+    assert.equal(store.deleteCheck, null);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_thing', id: 'orc', at: null });
 });
 
 check('other routers are ignored', () => {

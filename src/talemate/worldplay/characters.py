@@ -9,6 +9,11 @@ a fact changes, nothing regenerates it on the spot. `since_lines` covers
 that gap: it finds whichever cached stretch *is* fresh enough to use, then
 walks the thing's full timeline for everything dated since, so the
 character sheet still tells the whole story even with stale prose.
+
+Inheritance is resolved here in code, as of the scene's date: the stretches
+follow the character's lineage (`prose_gen.lineage_ids`), the since lines
+cover the description facts it inherits, its life stage comes from its
+heritage's numbers, and a deleted ancestor simply drops out of the lineage.
 """
 
 from __future__ import annotations
@@ -17,11 +22,13 @@ import structlog
 
 from talemate.character import Character
 from talemate.util import replace_smart_quotes
+from talemate.world import heritage
 from talemate.world.dates import WorldDate
 from talemate.world.prose import CachedProse, stretches
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
 from talemate.world.view import ThingState
+from talemate.worldplay.prose_gen import inherited_categories, lineage_ids
 
 log = structlog.get_logger("talemate.worldplay.characters")
 
@@ -84,7 +91,7 @@ def _cached_section(
     the return value itself, not any field on it."""
 
     cache = world.prose()
-    stretch_list = stretches(lambda: world, thing_id)
+    stretch_list = stretches(lambda: world, thing_id, lineage_ids(world, thing_id, at))
     at_instant = at.instant if at is not None else _FAR_FUTURE
     index = _stretch_index_containing(stretch_list, at_instant)
 
@@ -160,12 +167,96 @@ def _same_date(a: WorldDate | None, b: WorldDate | None) -> bool:
     return bool(a.instant == b.instant)
 
 
+def _change_lines(
+    world: World,
+    thing_id: str,
+    categories: tuple[str, ...],
+    entry: CachedProse | None,
+    at: WorldDate | None,
+    prefix: str = "",
+    skip: frozenset[str] = frozenset(),
+) -> list[tuple[int, str]]:
+    """`since_lines`' lines for the facts of `thing_id` -- the character
+    itself, or a layer it inherits from -- in `categories`, against the
+    cached `entry`, as `(lead date's instant, line)` pairs, undated lines
+    keyed first. `prefix` leads each line's text; fact ids in `skip` get
+    no line."""
+
+    at_instant = at.instant if at is not None else _FAR_FUTURE
+    cached_facts = (
+        _facts_at_rev(world, thing_id, entry.rev) if entry is not None else {}
+    )
+
+    def dated_by_at(date: WorldDate | None) -> bool:
+        return date is None or date.instant <= at_instant
+
+    calendar = world.calendar
+    keyed: list[tuple[int, str]] = []
+    for fact_id, (start, end) in _facts_at_rev(
+        world, thing_id, world.head_rev()
+    ).items():
+        if start.category not in categories or fact_id in skip:
+            continue
+
+        # the revisions that wrote this start and end, as far as the cached
+        # text is concerned: lineage carries an unchanged start (and end)
+        # back to the version that was live when the cache was written
+        start_rev = start.source_rev
+        end_rev = end.source_rev if end is not None else 0
+        old_start, old_end = cached_facts.get(fact_id, (None, None))
+        if (
+            old_start is not None
+            and old_start.category in categories
+            and old_start.text == start.text
+            and _same_date(old_start.date, start.date)
+        ):
+            start_rev = old_start.source_rev
+            if end is not None and old_end is not None:
+                if _same_date(old_end.date, end.date):
+                    end_rev = old_end.source_rev
+
+        end_date = end.date if end is not None else None
+        ended = end_date is not None and dated_by_at(end_date)
+        start_news = dated_by_at(start.date) and _not_yet_known(
+            entry, start.date, start_rev
+        )
+        end_news = ended and _not_yet_known(entry, end_date, end_rev)
+
+        text = prefix + (start.text or "")
+        if start_news and start.date is not None and end_date is not None and ended:
+            line = (
+                f"From {calendar.format(start.date)} until "
+                f"{calendar.format(end_date)}: {text}"
+            )
+            keyed.append((start.date.instant, line))
+        elif (start_news or end_news) and end_date is not None and ended:
+            keyed.append(
+                (end_date.instant, f"Until {calendar.format(end_date)}: {text}")
+            )
+        elif start_news and start.date is not None:
+            keyed.append(
+                (start.date.instant, f"Since {calendar.format(start.date)}: {text}")
+            )
+        elif start_news:
+            keyed.append((-_FAR_FUTURE, text))
+    return keyed
+
+
 def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     """One line per appearance/background change not yet reflected in the
     cached description, in story-time order, e.g. `"Since 314: Lost her
     left eye."`, `"Until 316: Member of the Wardens."`, `"From 310 until
     312: A cast on her arm."`, or a plain `"Has a limp."` for an undated
     fact. Dates are formatted by the world's calendar.
+
+    The description facts the thing inherits as of `at`
+    (`prose_gen.inherited_categories`: a species', race's or mix's
+    `physical` and `variation` facts, a culture's dress) get lines too,
+    worded the same and prefixed with their source's name, e.g. `"Since
+    500: Owl-folk: live to about 60 years."`. Overridden ones get none.
+    Own lines come before inherited ones of the same date. A layer that
+    wasn't in the lineage when the description was cached counts as never
+    cached, so all of its facts dated by `at` get lines.
 
     Driven from `World.timeline(thing_id)` -- every fact start/end for the
     thing, regardless of story-time visibility at any one date -- since a
@@ -195,66 +286,36 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     ... until ...", only the start -> "Since ..." (plain when undated),
     only the end, or an undated start with an end -> "Until ..."."""
 
-    at_instant = at.instant if at is not None else _FAR_FUTURE
     entry = _cached_section(world, thing_id, "description", at)
-    cached_facts = (
-        _facts_at_rev(world, thing_id, entry.rev) if entry is not None else {}
+    keyed = _change_lines(world, thing_id, _DESCRIPTION_CATEGORIES, entry, at)
+
+    view = world.view(at)
+    overridden = frozenset(
+        item.fact.fact_id
+        for item in heritage.inherited(view, thing_id)
+        if item.overridden_by is not None
     )
-
-    def dated_by_at(date: WorldDate | None) -> bool:
-        return date is None or date.instant <= at_instant
-
-    calendar = world.calendar
-    # (lead date's instant, line) -- undated lines first
-    keyed: list[tuple[int, str]] = []
-    for fact_id, (start, end) in _facts_at_rev(
-        world, thing_id, world.head_rev()
-    ).items():
-        if start.category not in _DESCRIPTION_CATEGORIES:
+    # the layers the cached text was written with, as of a date inside the
+    # entry's own stretch (`at` can be past it, after a dated heritage
+    # change); a layer the character has come to inherit from since (a
+    # heritage switch to a race that already existed) is news in full,
+    # however old its facts are
+    cached_layers: set[str] = set()
+    if entry is not None:
+        written_at = _probe_within(entry.stretch_start, entry.stretch_end)
+        cached_layers = set(lineage_ids(world, thing_id, written_at, entry.rev))
+    by_kind = inherited_categories("description")
+    for layer in heritage.lineage(view, thing_id):
+        categories = by_kind.get(layer.kind, ())
+        if layer.depth == 0 or not categories:
             continue
-
-        # the revisions that wrote this start and end, as far as the cached
-        # text is concerned: lineage carries an unchanged start (and end)
-        # back to the version that was live when the cache was written
-        start_rev = start.source_rev
-        end_rev = end.source_rev if end is not None else 0
-        old_start, old_end = cached_facts.get(fact_id, (None, None))
-        if (
-            old_start is not None
-            and old_start.category in _DESCRIPTION_CATEGORIES
-            and old_start.text == start.text
-            and _same_date(old_start.date, start.date)
-        ):
-            start_rev = old_start.source_rev
-            if end is not None and old_end is not None:
-                if _same_date(old_end.date, end.date):
-                    end_rev = old_end.source_rev
-
-        end_date = end.date if end is not None else None
-        ended = end_date is not None and dated_by_at(end_date)
-        start_news = dated_by_at(start.date) and _not_yet_known(
-            entry, start.date, start_rev
+        prefix = f"{layer.name}: " if layer.name else ""
+        layer_entry = entry if layer.thing_id in cached_layers else None
+        keyed += _change_lines(
+            world, layer.thing_id, categories, layer_entry, at, prefix, overridden
         )
-        end_news = ended and _not_yet_known(entry, end_date, end_rev)
 
-        text = start.text or ""
-        if start_news and start.date is not None and end_date is not None and ended:
-            line = (
-                f"From {calendar.format(start.date)} until "
-                f"{calendar.format(end_date)}: {text}"
-            )
-            keyed.append((start.date.instant, line))
-        elif (start_news or end_news) and end_date is not None and ended:
-            keyed.append(
-                (end_date.instant, f"Until {calendar.format(end_date)}: {text}")
-            )
-        elif start_news and start.date is not None:
-            keyed.append(
-                (start.date.instant, f"Since {calendar.format(start.date)}: {text}")
-            )
-        elif start_news:
-            keyed.append((-_FAR_FUTURE, text))
-
+    # a stable sort, so own lines stay ahead of inherited ones on a date
     keyed.sort(key=lambda pair: pair[0])
     return [line for _, line in keyed]
 
@@ -277,7 +338,7 @@ def _speech_facts(state: ThingState) -> tuple[list[str], list[str]]:
     return dialogue_instructions, example_dialogue
 
 
-def _age_in_years(born: WorldDate, at: WorldDate) -> int:
+def age_in_years(born: WorldDate, at: WorldDate) -> int:
     """Full years elapsed from `born` to `at`, allowing for the birthday
     not having happened yet this year (a naive `at.year - born.year`
     overcounts by one for every date before it)."""
@@ -304,16 +365,40 @@ def character_from_world(
 
     description_entry = _cached_section(world, thing_id, "description", at)
     description_text = description_entry.text if description_entry is not None else ""
+    # a safety net for overrides missed when the character was created
+    # (the local model skips some deep-layer ones): the agents read that
+    # the character's own traits win over anything inherited
+    inherits = any(
+        layer.depth > 0 for _, layer in heritage.effective_facts(view, thing_id)
+    )
+    own_traits_line = (
+        f"Where {name}'s own traits differ from those of their kind, "
+        f"{name}'s own traits hold."
+        if inherits
+        else ""
+    )
     description = "\n".join(
-        part for part in [description_text, *since_lines(world, thing_id, at)] if part
+        part
+        for part in [
+            description_text,
+            *since_lines(world, thing_id, at),
+            own_traits_line,
+        ]
+        if part
     )
 
     base_attributes: dict[str, object] = {}
 
     born = state.fields.get("born")
     if born is not None:
-        base_attributes["age"] = _age_in_years(born, at)
+        age = age_in_years(born, at)
+        base_attributes["age"] = age
         base_attributes["born"] = world.calendar.format(born)
+        stage, _past_lifespan = heritage.life_stage(
+            age, heritage.numbers(view, thing_id)
+        )
+        if stage is not None:
+            base_attributes["life_stage"] = stage
 
     personality_entry = _cached_section(world, thing_id, "personality", at)
     if personality_entry is not None and personality_entry.text:

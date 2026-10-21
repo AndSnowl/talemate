@@ -19,7 +19,11 @@ from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source
 from talemate.worldplay.context import world_context_block
 from talemate.worldplay.create import current_date
-from talemate.worldplay.persistence import close_world_scene, world_target
+from talemate.worldplay.persistence import (
+    close_world_scene,
+    save_world_scene,
+    world_target,
+)
 from talemate.worldplay.setup import (
     LocalThing,
     SceneSetup,
@@ -396,6 +400,209 @@ async def test_plan_scene_rejects_unknown_pick(world):
         await plan_scene(
             world, "Maren", {"Maren": "no-such-thing"}, None, START, MockClient("t")
         )
+
+
+# --- heritage -----------------------------------------------------------------
+
+
+async def test_setup_invented_character_heritage(world, heritage_world):
+    """Task 7: an invented character's "heritage" names Snowy; the local
+    thing keeps its id, and the started scene's local character description
+    carries Snowy's effective physical/variation facts (here, the plumage
+    fact), with its instinct facts as the personality."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "world": False,
+                "facts": ["A quiet trader."],
+                "heritage": "snowy",
+            }
+        ],
+        "intro": "Dawn breaks over the river.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+
+    rill = next(c for c in setup.characters if c.local is not None)
+    assert rill.local.name == "Rill"
+    assert rill.local.heritage_id == heritage_world.snowy
+
+    async with MockClientContext():
+        scene_id = await start_scene(world, setup, MockClient("test"))
+
+    local = {
+        thing["data"]["name"]: thing for thing in world.scenes().local_things(scene_id)
+    }
+    rill_data = local["Rill"]["data"]
+    assert "A quiet trader." in rill_data["description"]
+    # Snowy's own facts, plus what it inherits from Owl-folk
+    assert "White plumage." in rill_data["description"]
+    assert "Yellow eyes." in rill_data["description"]
+    assert "Wings in place of arms." in rill_data["description"]
+    assert rill_data["base_attributes"]["personality"] == "Hunts at dusk."
+    assert rill_data["world_heritage_id"] == heritage_world.snowy
+
+
+async def test_setup_unknown_heritage_ignored(world, heritage_world):
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {"name": "Rill", "facts": ["A quiet trader."], "heritage": "Dragonkin"}
+        ],
+        "intro": "Dawn.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+
+    rill = next(c for c in setup.characters if c.local is not None)
+    assert rill.local.heritage_id is None
+
+
+async def test_setup_prompt_lists_heritages(world, heritage_world):
+    """The setup prompt's `heritages` var names the species and races, each
+    race labelled with its species."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({"player": "Anyone", "characters": [], "intro": "Dawn."}))
+        await plan_scene(world, "Anyone arrives", {}, None, START, client)
+
+    sent = str(client.prompt_history[0]["prompt"])
+    assert "Owl-folk" in sent
+    assert "Snowy (Owl-folk)" in sent
+
+
+async def test_setup_heritage_annotated_name_matches(world, heritage_world):
+    """Fix round 1, finding 2: the prompt shows a race as "Snowy
+    (Owl-folk)", and a local model tends to echo exactly what it's shown,
+    so that annotated form must resolve too, not just the bare name."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "facts": ["A quiet trader."],
+                "heritage": "Snowy (Owl-folk)",
+            }
+        ],
+        "intro": "Dawn.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+
+    rill = next(c for c in setup.characters if c.local is not None)
+    assert rill.local.heritage_id == heritage_world.snowy
+
+
+async def test_continue_setup_carries_heritage(world, heritage_world):
+    """Fix round 1, finding 1: a heritage-bearing invented character's
+    `world_heritage_id` and inherited personality must survive a
+    `continue_setup` -> `start_scene` round, and the inherited facts must
+    appear exactly once in the new description (not duplicated on top of
+    what the first `start_scene` already appended)."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "facts": ["A quiet trader."],
+                "heritage": "snowy",
+            }
+        ],
+        "intro": "Dawn breaks over the river.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+    async with MockClientContext():
+        old_id = await start_scene(world, setup, MockClient("test"))
+
+    continued = await continue_setup(
+        world,
+        old_id,
+        "next",
+        None,
+        reply={"player": "Maren", "characters": [], "goal": "g", "intro": "i"},
+    )
+    async with MockClientContext():
+        new_id = await start_scene(world, continued, MockClient("test"))
+
+    local = {
+        thing["data"]["name"]: thing for thing in world.scenes().local_things(new_id)
+    }
+    rill_data = local["Rill"]["data"]
+    assert rill_data["world_heritage_id"] == heritage_world.snowy
+    assert rill_data["base_attributes"]["personality"] == "Hunts at dusk."
+    assert "A quiet trader." in rill_data["description"]
+    assert rill_data["description"].count("White plumage.") == 1
+    assert rill_data["description"].count("Yellow eyes.") == 1
+    assert rill_data["description"].count("Wings in place of arms.") == 1
+
+
+async def test_continue_setup_carries_heritage_through_a_save(
+    world, heritage_world, loadable
+):
+    """Fix round 2: the normal path is start -> play (which autosaves via
+    `save_world_scene`) -> continue, not start -> continue straight off.
+    `save_world_scene`'s `_character_entries` re-dumps the scene-local
+    character from the live, loaded `Character`, which must still carry
+    its own facts separately from the heritage's for the fix to survive
+    that round-trip -- not just the raw local-thing data `start_scene`
+    first wrote, which `test_continue_setup_carries_heritage` checks."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "facts": ["A quiet trader."],
+                "heritage": "snowy",
+            }
+        ],
+        "intro": "Dawn breaks over the river.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+    async with MockClientContext():
+        old_id = await start_scene(world, setup, MockClient("test"))
+
+    scene = MockScene()
+    bootstrap_scene(scene)
+    loaded = await load_scene(scene, world_target(str(world.path), old_id))
+    try:
+        save_world_scene(loaded)
+    finally:
+        close_world_scene(loaded)
+
+    continued = await continue_setup(
+        world,
+        old_id,
+        "next",
+        None,
+        reply={"player": "Maren", "characters": [], "goal": "g", "intro": "i"},
+    )
+    async with MockClientContext():
+        new_id = await start_scene(world, continued, MockClient("test"))
+
+    local = {
+        thing["data"]["name"]: thing for thing in world.scenes().local_things(new_id)
+    }
+    rill_data = local["Rill"]["data"]
+    assert rill_data["world_heritage_id"] == heritage_world.snowy
+    assert rill_data["base_attributes"]["personality"] == "Hunts at dusk."
+    assert "A quiet trader." in rill_data["description"]
+    assert rill_data["description"].count("White plumage.") == 1
+    assert rill_data["description"].count("Yellow eyes.") == 1
+    assert rill_data["description"].count("Wings in place of arms.") == 1
 
 
 # --- starting -----------------------------------------------------------------

@@ -25,13 +25,37 @@
 // Deleting a thing: `requestDelete` asks for its references
 // (`thing_references`); the reply lands in `deleteCheck`, which the
 // confirmation dialog shows. `confirmDelete` deletes it; `thing_deleted`
-// closes the dialog and the thing page, back to the kind list.
+// closes the dialog and the thing page: a race or mix goes back to its
+// species page (`pageAfterDelete`), anything else to the kind list.
+//
+// Renaming: `renameThing` sends `set_field` "name", correcting the name
+// value in effect at the viewing date (`currentNameFrom`) rather than
+// adding a dated one; the reply refreshes the kind's list (and so the
+// heritage list), so cards and links show the new name.
+//
+// Prose: `regenerateProse()` rewrites every section, and
+// `regenerateProse(section)` just that one (`proseRegeneratingSection`).
+//
+// Heritage: every listing of a species, race or mix asks for
+// `list_heritage` too, so `heritage` (each with its `species_ids`) stays in
+// step for the character page's heritage links. `overrideFact` adds an own
+// fact replacing an inherited one; it answers like any edit.
+//
+// Creating with a heritage: the create box's picker takes one or two
+// parents. Two parents always go through a mix: `findMix` asks
+// `find_mix`, and its reply (`mixFound`) says whether that mix exists. With
+// none, the box drafts the mix first: `acceptPreview(changes, {open:
+// false})` accepts it without opening its page and leaves the new thing in
+// `accepted`, so the character's box can carry on with it. A preview lists
+// the inherited facts it was made with (`preview.inherited`);
+// `setPreviewOverride` marks one as replaced by one of the preview's own
+// facts before accepting.
 //
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
 
-import { LISTED_KINDS } from '../components/worlds/worldKinds.js';
+import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
 
@@ -64,8 +88,84 @@ export function parseWorldTarget(path) {
     return { worldPath: rest.slice(0, sep), sceneId: rest.slice(sep + 1) };
 }
 
+// Whether two parent pairs are the same two ids, in either order.
+export function sameParents(a, b) {
+    return a.length === 2 && b.length === 2 && ((a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0]));
+}
+
+// The heritage a prompt's `match_names` matches name, for pre-filling the
+// picker: the first species, race or mix named, preferring a race or mix
+// over its own species ("a Snowy owl-folk" is Snowy). Null if none.
+export function heritageFromMatches(matches, heritage) {
+    const byId = new Map(heritage.map((item) => [item.id, item]));
+    const named = [];
+    for (const match of matches) {
+        const found = match.candidates.find((candidate) => byId.has(candidate.id));
+        if (found && !named.includes(found.id)) {
+            named.push(found.id);
+        }
+    }
+    const ancestors = new Set(
+        named.flatMap((id) => byId.get(id).species_ids.filter((speciesId) => speciesId !== id)),
+    );
+    return named.find((id) => !ancestors.has(id)) || null;
+}
+
+// Which of a preview's own facts replaces the inherited fact `row` when the
+// owner marks it: the first of the category an override of it would take,
+// else the first own fact (-1 when there are none).
+export function defaultOverrideIndex(preview, row) {
+    const category = overrideCategory(preview.kind, row.category);
+    const index = preview.facts.findIndex((fact) => fact.category === category);
+    return index >= 0 ? index : preview.facts.length ? 0 : -1;
+}
+
+// The `valid_from` of `timeline`'s name value in effect at `at` (null for
+// the latest), as a wire date without its label; null for an undated one.
+// Renaming corrects that value in place.
+export function currentNameFrom(timeline, at) {
+    // the timeline runs in date order, undated first: the last name value
+    // on or before `at` is the one in effect
+    const until = at ? at.instant : Infinity;
+    let from = null;
+    for (const entry of timeline || []) {
+        if (entry.change === 'field' && entry.field === 'name' && (!entry.date || entry.date.instant <= until)) {
+            from = entry.date ? { instant: entry.date.instant, precision: entry.date.precision } : null;
+        }
+    }
+    return from;
+}
+
+// A heritage thing's species id: itself for a species, else the first of
+// its `species_ids` that isn't itself (null if unknown).
+function speciesOf(heritage, id) {
+    const entry = heritage.find((item) => item.id === id);
+    if (!entry) {
+        return null;
+    }
+    return entry.kind === 'species' ? entry.id : entry.species_ids.find((speciesId) => speciesId !== id) || null;
+}
+
+// The page to open once `thing` is deleted: a race's species; a mix's
+// species page it was opened from (`openedFrom`), else its first parent's
+// species. Null (back to the kind list) for any other kind.
+export function pageAfterDelete(thing, heritage, openedFrom) {
+    if (thing?.kind === 'race') {
+        return thing.fields?.species || null;
+    }
+    if (thing?.kind === 'mix') {
+        const mixSpecies = heritage.find((item) => item.id === thing.id)?.species_ids || [];
+        if (openedFrom && mixSpecies.includes(openedFrom)) {
+            return openedFrom;
+        }
+        const first = (thing.fields?.parents || [])[0];
+        return first ? speciesOf(heritage, first) : null;
+    }
+    return null;
+}
+
 // replies to these clear their own spinner (`pending[action]`)
-const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field'];
+const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact'];
 
 function emptyThings() {
     return Object.fromEntries(LISTED_KINDS.map((kind) => [kind, []]));
@@ -75,8 +175,14 @@ function worldState() {
     // everything that belongs to the open world
     return {
         things: emptyThings(),
+        // every species, race and mix: `list_heritage`'s `{id, kind, name,
+        // species_ids}`
+        heritage: [],
         // the thing page: which thing, its payload, and the date it's viewed as of
         selectedThingId: null,
+        // the thing page open before this one (a deleted mix goes back to
+        // the species page it came from)
+        openedFrom: null,
         thing: null,
         thingAt: null,
         scenes: [],
@@ -85,8 +191,18 @@ function worldState() {
         previewPending: false,
         preview: null,
         previewError: null,
-        // the id of the thing whose prose is being regenerated
+        // the parents a `find_mix` is out for, and the last reply taken
+        // (`{parents, mix_id}`)
+        mixLookup: null,
+        mixFound: null,
+        // whether the next accepted preview opens its page; when it doesn't,
+        // the new thing (`{id, kind, name}`) lands in `accepted`
+        acceptOpens: true,
+        accepted: null,
+        // the id of the thing whose prose is being regenerated, and the one
+        // section asked for (null: every section)
         proseRegenerating: null,
+        proseRegeneratingSection: null,
         // the new-scene prompt's names: the lookup in flight (`{text, at}`),
         // and the last `match_names` reply taken (`{text, at, matches}`).
         // A new lookup drops the old reply, so stale spans never show.
@@ -125,6 +241,19 @@ export const useWorldsStore = defineStore('worlds', {
         matchesFor: (state) => (text, at) => {
             const found = state.nameMatches;
             return found && found.text === text && sameDate(found.at, at) ? found.matches : [];
+        },
+        // a heritage thing's lineage as links, most general first: its
+        // species, then itself unless it is one (`[]` for an unknown id)
+        heritageLinks: (state) => (id) => {
+            const entry = state.heritage.find((item) => item.id === id);
+            if (!entry) {
+                return [];
+            }
+            const species = entry.species_ids
+                .filter((speciesId) => speciesId !== id)
+                .map((speciesId) => state.heritage.find((item) => item.id === speciesId))
+                .filter(Boolean);
+            return [...species, entry].map(({ id: linkId, name }) => ({ id: linkId, name }));
         },
     },
 
@@ -271,7 +400,14 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('list_things', { kind });
         },
 
+        listHeritage() {
+            this.request('list_heritage');
+        },
+
         openThing(id, at = null) {
+            if (id !== this.selectedThingId) {
+                this.openedFrom = this.selectedThingId;
+            }
             this.selectedThingId = id;
             this.thingAt = at;
             if (this.thing?.id !== id) {
@@ -282,6 +418,7 @@ export const useWorldsStore = defineStore('worlds', {
 
         closeThing() {
             this.deleteCheck = null;
+            this.openedFrom = null;
             this.selectedThingId = null;
             this.thing = null;
             this.thingAt = null;
@@ -342,12 +479,42 @@ export const useWorldsStore = defineStore('worlds', {
             this.previewPending = false;
         },
 
-        acceptPreview(changes = {}) {
+        // forget the preview and its request (its box closed)
+        cancelPreview() {
+            this.discardPreview();
+            this.previewRequest = null;
+        },
+
+        // `open: false` keeps the page where it is (the mix drafted for a
+        // character): the new thing lands in `accepted` instead
+        acceptPreview(changes = {}, { open = true } = {}) {
             if (!this.preview) {
                 return;
             }
+            this.acceptOpens = open;
+            this.accepted = null;
             this.pending = { ...this.pending, accept_preview: true };
             this.request('accept_preview', { preview: { ...this.preview, ...changes } });
+        },
+
+        // mark the preview's inherited fact `factId` as replaced by its own
+        // fact at `index` (null: not replaced)
+        setPreviewOverride(factId, index) {
+            if (!this.preview) {
+                return;
+            }
+            const facts = this.preview.facts.map((fact, i) => {
+                const overrides = (fact.overrides || []).filter((id) => id !== factId);
+                return { ...fact, overrides: i === index ? [...overrides, factId] : overrides };
+            });
+            this.preview = { ...this.preview, facts };
+        },
+
+        // the mix of two parents, if the world has one (`mixFound`)
+        findMix(parents) {
+            this.mixFound = null;
+            this.mixLookup = { parents };
+            this.request('find_mix', { parents });
         },
 
         // --- edits (each answers with the thing as of `thingAt`) -----------
@@ -375,12 +542,38 @@ export const useWorldsStore = defineStore('worlds', {
             this.edit('remove_fact', { fact_id: factId });
         },
 
-        regenerateProse() {
+        // an own fact replacing the inherited fact `factId`
+        overrideFact(factId, category, text) {
+            this.edit('override_fact', { overridden_fact_id: factId, category, text });
+        },
+
+        // `value`: a number field's number, or `measures`' list of
+        // `{name, min, max, unit}`. `validFrom`, if given, is the dated
+        // value to correct (left out: the undated one).
+        setField(field, value, validFrom = undefined) {
+            this.edit('set_field', { field, value, ...(validFrom === undefined ? {} : { valid_from: validFrom }) });
+        },
+
+        // a correction of the open thing's name (see the module comment)
+        renameThing(name) {
+            if (!this.thing) {
+                return;
+            }
+            this.setField('name', name, currentNameFrom(this.thing.timeline, this.thingAt));
+        },
+
+        // `section`: just that one; left out, every section
+        regenerateProse(section = null) {
             if (!this.selectedThingId) {
                 return;
             }
             this.proseRegenerating = this.selectedThingId;
-            this.request('regenerate_prose', { id: this.selectedThingId, at: this.thingAt });
+            this.proseRegeneratingSection = section;
+            this.request('regenerate_prose', {
+                id: this.selectedThingId,
+                at: this.thingAt,
+                ...(section ? { section } : {}),
+            });
         },
 
         // --- replies ------------------------------------------------------
@@ -427,6 +620,12 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'list_things':
                     this.things = { ...this.things, [data.kind]: data.things };
+                    if (HERITAGE_KINDS.includes(data.kind)) {
+                        this.listHeritage();
+                    }
+                    break;
+                case 'list_heritage':
+                    this.heritage = data.things;
                     break;
                 case 'get_thing':
                     if (data.id === this.selectedThingId) {
@@ -446,7 +645,11 @@ export const useWorldsStore = defineStore('worlds', {
                     this.clearPending('delete_thing');
                     this.deleteCheck = null;
                     if (data.id === this.selectedThingId) {
+                        const back = pageAfterDelete(this.thing, this.heritage, this.openedFrom);
                         this.closeThing();
+                        if (back) {
+                            this.openThing(back);
+                        }
                     }
                     break;
                 case 'match_names':
@@ -502,14 +705,28 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'accept_preview':
                     this.preview = null;
                     this.previewRequest = null;
-                    this.selectedThingId = data.id;
-                    this.thingAt = null;
-                    this.thing = data;
+                    if (this.acceptOpens) {
+                        this.openedFrom = this.selectedThingId;
+                        this.selectedThingId = data.id;
+                        this.thingAt = null;
+                        this.thing = data;
+                    } else {
+                        this.accepted = { id: data.id, kind: data.kind, name: data.name };
+                    }
+                    this.acceptOpens = true;
                     this.listThings(data.kind);
+                    break;
+                case 'find_mix':
+                    // a reply for parents since changed is dropped
+                    if (this.mixLookup && sameParents(this.mixLookup.parents, data.parents)) {
+                        this.mixFound = data;
+                        this.mixLookup = null;
+                    }
                     break;
                 case 'prose_updated':
                     if (this.proseRegenerating === data.id) {
                         this.proseRegenerating = null;
+                        this.proseRegeneratingSection = null;
                     }
                     if (data.id === this.selectedThingId) {
                         this.request('get_thing', { id: data.id, at: this.thingAt });
@@ -518,6 +735,7 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'prose_failed':
                     if (this.proseRegenerating === data?.id) {
                         this.proseRegenerating = null;
+                        this.proseRegeneratingSection = null;
                     }
                     this.error = message.message;
                     break;
@@ -537,9 +755,12 @@ export const useWorldsStore = defineStore('worlds', {
                         this.deleteCheck = null;
                         this.previewPending = false;
                         this.proseRegenerating = null;
+                        this.proseRegeneratingSection = null;
                         this.setupPending = false;
-                        // the failed request may be the name lookup
+                        // the failed request may be the name or mix lookup
                         this.nameLookup = null;
+                        this.mixLookup = null;
+                        this.acceptOpens = true;
                     }
                     break;
                 default:

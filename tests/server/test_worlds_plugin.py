@@ -17,6 +17,7 @@ from talemate.tale_mate import Actor
 from talemate.world.dates import WorldDate
 from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source, World
+from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.context import WorldSceneContext
 from talemate.worldplay.persistence import WorldSceneRef
@@ -267,6 +268,59 @@ async def test_remove_fact_makes_prose_stale_and_regenerates(plugin, client):
     assert len(_replies(plugin, "prose_updated")) == 2
 
 
+async def test_regenerate_one_prose_section(plugin, client):
+    """`regenerate_prose` with a `section` rewrites only that section; the
+    others keep their cached text."""
+
+    world, maren, _ = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(maren, "personality", "Dry and patient.")
+
+    async with MockClientContext():
+        client_responses.get().extend(["Maren is tall.", "Maren is patient."])
+        await plugin.handle(
+            {"type": "worlds", "action": "regenerate_prose", "id": maren}
+        )
+        await _drain(plugin)
+
+        client_responses.get().append("Maren is patient, and dry with it.")
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "regenerate_prose",
+                "id": maren,
+                "section": "personality",
+            }
+        )
+        await _drain(plugin)
+
+    prose = world.prose()
+    assert prose.get(maren, "description", None).text == "Maren is tall."
+    assert prose.get(maren, "personality", None).text == (
+        "Maren is patient, and dry with it."
+    )
+    assert _last(plugin, "prose_updated")["data"] == {
+        "id": maren,
+        "section": "personality",
+    }
+
+
+async def test_regenerate_refuses_a_section_the_kind_lacks(plugin, client):
+    world, _, harbour = await _open_world_with_maren(plugin)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "regenerate_prose",
+            "id": harbour,
+            "section": "personality",
+        }
+    )
+
+    assert "personality" in _last(plugin, "operation_done")["error"]["message"]
+    assert not plugin.tasks
+
+
 async def test_correct_end_and_set_field(plugin, client):
     world, maren, _ = await _open_world_with_maren(plugin)
     tall = next(
@@ -311,6 +365,43 @@ async def test_correct_end_and_set_field(plugin, client):
     assert fact.valid_until == WorldDate.of(320)
     assert _last(plugin, "set_field")["data"]["name"] == "Maren Vos"
     assert len(_replies(plugin, "prose_updated")) == 3
+
+
+async def test_rename_corrects_the_name_in_effect(plugin, client):
+    """A rename is `set_field` "name" at the `valid_from` of the name in
+    effect (what the thing page sends): it corrects that value in place,
+    leaving an earlier name as it was, and the kind's list shows it."""
+
+    world, maren, _ = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(maren, "name", "Maren Holt", WorldDate.of(316))
+    timeline = [e for e in world.timeline(maren) if e.field == "name"]
+    renamed_at = timeline[-1].date
+    assert renamed_at == WorldDate.of(316)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "set_field",
+            "thing_id": maren,
+            "field": "name",
+            "value": "Maren Dell",
+            "valid_from": renamed_at.model_dump(),
+        }
+    )
+    await _drain(plugin)
+
+    assert _last(plugin, "set_field")["data"]["name"] == "Maren Dell"
+    assert world.view(WorldDate.of(315)).name_of(maren) == "Maren"
+    assert [e.value for e in world.timeline(maren) if e.field == "name"] == [
+        "Maren",
+        "Maren Dell",
+    ]
+    await plugin.handle(
+        {"type": "worlds", "action": "list_things", "kind": "character"}
+    )
+    names = [t["name"] for t in _last(plugin, "list_things")["data"]["things"]]
+    assert names == ["Maren Dell"]
 
 
 async def test_correct_fact_dates_unset_keeps_null_opens(plugin, client):
@@ -517,6 +608,51 @@ async def test_fixed_preview_setting_answers_without_a_model(
     assert _last(plugin, "accept_preview")["data"]["name"] == "Oskar Dell"
 
 
+async def test_fixed_preview_lists_what_it_inherits(plugin, tmp_path, monkeypatch):
+    """The fixed preview carries the inherited facts of its heritage, like
+    the real one, so the browser tests can mark one as overridden."""
+
+    h = await _open_heritage_world(plugin)
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Gorra",
+                "facts": [{"category": "appearance", "text": "Small tusks."}],
+                "prose": {"description": "Gorra.", "personality": ""},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "preview_thing",
+            "kind": "character",
+            "prompt": "a half-orc smith",
+            "fields": {"heritage": h.half_orc},
+        }
+    )
+    await _drain(plugin)
+
+    preview = _last(plugin, "preview_thing")["data"]
+    assert [(row["fact_id"], row["source"]) for row in preview["inherited"]] == [
+        (h.short, "Lowlander"),
+        (h.bare_skin, "Human"),
+        (h.tusks, "Orc"),
+    ]
+
+    # an override the owner marked in the preview is written on accept
+    preview["facts"][0]["overrides"] = [h.tusks]
+    await plugin.handle(
+        {"type": "worlds", "action": "accept_preview", "preview": preview}
+    )
+    gorra = _last(plugin, "accept_preview")["data"]
+    tusks = next(row for row in gorra["inherited"] if row["fact_id"] == h.tusks)
+    assert tusks["overridden_by"] is not None
+
+
 async def test_edits_without_a_client_leave_prose_stale(plugin, monkeypatch):
     """With no AI client on the creator agent, an edit stands and its prose
     refresh is skipped; an explicit regenerate is refused."""
@@ -632,6 +768,340 @@ async def test_delete_unknown_thing_is_refused(plugin):
     assert _replies(plugin, "thing_deleted") == []
     assert _last(plugin, "operation_done")["error"]["message"]
     assert world.head_rev() == before
+
+
+# --- heritage -----------------------------------------------------------------
+
+
+class _Heritage(SimpleNamespace):
+    pass
+
+
+async def _open_heritage_world(plugin):
+    """Human and Orc species, the Lowlander race of Human, a Half-orc mix
+    of Lowlander and Orc, and Brenna, a Lowlander born 920 whose tattoos
+    override Human's bare skin. The world's present is 1000."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Vael"})
+    world = plugin.world
+    h = _Heritage(world=world)
+    with world.revision(Source.manual(note="heritage")) as rev:
+        h.human = rev.create_thing(
+            "species",
+            {
+                "name": "Human",
+                "lifespan": 75,
+                "adult_age": 18,
+                "measures": [{"name": "height", "min": 5, "max": 6.5, "unit": "ft"}],
+            },
+        )
+        h.bare_skin = rev.add_fact(h.human, "physical", "Humans have bare skin.")
+        h.orc = rev.create_thing(
+            "species", {"name": "Orc", "lifespan": 60, "adult_age": 14}
+        )
+        h.tusks = rev.add_fact(h.orc, "physical", "Orcs have tusks.")
+        h.lowlander = rev.create_thing(
+            "race", {"name": "Lowlander", "species": h.human}
+        )
+        h.short = rev.add_fact(h.lowlander, "physical", "Lowlanders are short.")
+        h.half_orc = rev.create_thing(
+            "mix", {"name": "Half-orc", "parents": [h.lowlander, h.orc]}
+        )
+        h.brenna = rev.create_thing(
+            "character",
+            {"name": "Brenna", "born": WorldDate.of(920), "heritage": h.lowlander},
+        )
+        h.tattoos = rev.add_fact(
+            h.brenna, "appearance", "Tattooed all over.", overrides=[h.bare_skin]
+        )
+    return h
+
+
+async def _get_thing(plugin, thing_id, at=None):
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "get_thing",
+            "id": thing_id,
+            "at": at.model_dump() if at is not None else None,
+        }
+    )
+    return _last(plugin, "get_thing")["data"]
+
+
+async def test_thing_payload_inherited_and_numbers(plugin):
+    h = await _open_heritage_world(plugin)
+
+    thing = await _get_thing(plugin, h.brenna)
+
+    assert thing["inherited"] == [
+        {
+            "fact_id": h.short,
+            "category": "physical",
+            "rendered": "Lowlanders are short.",
+            "source_id": h.lowlander,
+            "source_kind": "race",
+            "source_name": "Lowlander",
+            "overridden_by": None,
+        },
+        {
+            "fact_id": h.bare_skin,
+            "category": "physical",
+            "rendered": "Humans have bare skin.",
+            "source_id": h.human,
+            "source_kind": "species",
+            "source_name": "Human",
+            "overridden_by": h.tattoos,
+        },
+    ]
+    # the race sets no numbers: the species' resolve through it
+    assert thing["numbers"] == {
+        "lifespan": 75,
+        "adult_age": 18,
+        "measures": {"height": {"min": 5, "max": 6.5, "unit": "ft"}},
+    }
+    assert [f["overrides"] for f in thing["facts"]] == [[h.bare_skin]]
+    # at the world's present (1000) she's 80: elder, and past the lifespan
+    assert thing["life_stage"] == {"stage": "elder", "past_lifespan": True}
+    json.dumps(thing)
+
+    assert (await _get_thing(plugin, h.brenna, WorldDate.of(940)))["life_stage"] == {
+        "stage": "adult",
+        "past_lifespan": False,
+    }
+    assert (await _get_thing(plugin, h.brenna, WorldDate.of(932)))["life_stage"] == {
+        "stage": "child",
+        "past_lifespan": False,
+    }
+    # a thing with no `born` has no life stage
+    assert (await _get_thing(plugin, h.lowlander))["life_stage"] is None
+
+
+async def test_thing_payload_stale_follows_lineage(plugin):
+    h = await _open_heritage_world(plugin)
+    world = h.world
+    for section in ("description", "personality"):
+        start, end = prose_gen.stretch_containing(world, h.brenna, None)
+        world.prose().put(
+            h.brenna, section, start, end, "Brenna.", rev=world.head_rev()
+        )
+    assert (await _get_thing(plugin, h.brenna))["prose"]["description"][
+        "stale"
+    ] is False
+
+    # a change to her species makes her prose stale
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(h.human, "instinct", "Humans seek company.")
+    assert (await _get_thing(plugin, h.brenna))["prose"]["description"]["stale"] is True
+
+
+async def test_thing_payload_with_deleted_ancestor(plugin):
+    h = await _open_heritage_world(plugin)
+    world = h.world
+    start, end = prose_gen.stretch_containing(world, h.brenna, None)
+    world.prose().put(
+        h.brenna, "description", start, end, "Brenna.", rev=world.head_rev()
+    )
+
+    await plugin.handle({"type": "worlds", "action": "delete_thing", "id": h.lowlander})
+    thing = await _get_thing(plugin, h.brenna)
+
+    # the race and the species reached through it are gone from her page
+    assert thing["inherited"] == []
+    assert thing["numbers"] == {"lifespan": None, "adult_age": None, "measures": {}}
+    assert thing["life_stage"] is None
+    # deleting an ancestor counts as a change to her prose
+    assert thing["prose"]["description"]["stale"] is True
+
+
+async def test_species_payload_lists_races_and_mixes(plugin):
+    h = await _open_heritage_world(plugin)
+
+    human = await _get_thing(plugin, h.human)
+    assert human["races"] == [{"id": h.lowlander, "name": "Lowlander"}]
+    # a mix is listed on every species it descends from
+    assert human["mixes"] == [{"id": h.half_orc, "name": "Half-orc"}]
+
+    orc = await _get_thing(plugin, h.orc)
+    assert orc["races"] == []
+    assert orc["mixes"] == [{"id": h.half_orc, "name": "Half-orc"}]
+
+    lowlander = await _get_thing(plugin, h.lowlander)
+    assert lowlander["races"] == [] and lowlander["mixes"] == []
+
+    await plugin.handle({"type": "worlds", "action": "list_things", "kind": "species"})
+    listed = _last(plugin, "list_things")["data"]
+    assert {t["name"] for t in listed["things"]} == {"Human", "Orc"}
+    for kind, name in (("race", "Lowlander"), ("mix", "Half-orc")):
+        await plugin.handle({"type": "worlds", "action": "list_things", "kind": kind})
+        assert [t["name"] for t in _last(plugin, "list_things")["data"]["things"]] == [
+            name
+        ]
+
+
+async def test_override_fact_action(plugin):
+    h = await _open_heritage_world(plugin)
+    world = h.world
+    before = world.head_rev()
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "override_fact",
+            "thing_id": h.brenna,
+            "overridden_fact_id": h.short,
+            "text": "Brenna is tall for a Lowlander.",
+            "category": "appearance",
+            "at": None,
+        }
+    )
+
+    assert world.head_rev() == before + 1
+    reply = _last(plugin, "override_fact")["data"]
+    assert reply["id"] == h.brenna
+    tall = next(f for f in reply["facts"] if f["text"].startswith("Brenna is tall"))
+    assert tall["overrides"] == [h.short]
+    short = next(f for f in reply["inherited"] if f["fact_id"] == h.short)
+    assert short["overridden_by"] == tall["fact_id"]
+
+
+async def test_override_fact_refuses_a_fact_not_inherited(plugin):
+    h = await _open_heritage_world(plugin)
+    world = h.world
+    before = world.head_rev()
+
+    # Orc isn't in a Lowlander's lineage
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "override_fact",
+            "thing_id": h.brenna,
+            "overridden_fact_id": h.tusks,
+            "text": "No tusks.",
+            "category": "appearance",
+            "at": None,
+        }
+    )
+
+    assert _replies(plugin, "override_fact") == []
+    assert _last(plugin, "operation_done")["error"]["message"]
+    assert world.head_rev() == before
+
+
+async def test_find_mix_either_order(plugin):
+    h = await _open_heritage_world(plugin)
+
+    for parents in ([h.lowlander, h.orc], [h.orc, h.lowlander]):
+        await plugin.handle(
+            {"type": "worlds", "action": "find_mix", "parents": parents}
+        )
+        assert _last(plugin, "find_mix")["data"] == {
+            "parents": parents,
+            "mix_id": h.half_orc,
+        }
+
+    await plugin.handle(
+        {"type": "worlds", "action": "find_mix", "parents": [h.human, h.orc]}
+    )
+    assert _last(plugin, "find_mix")["data"]["mix_id"] is None
+
+
+async def test_list_heritage(plugin):
+    h = await _open_heritage_world(plugin)
+
+    await plugin.handle({"type": "worlds", "action": "list_heritage"})
+
+    assert _last(plugin, "list_heritage")["data"] == {
+        "things": [
+            {
+                "id": h.human,
+                "kind": "species",
+                "name": "Human",
+                "species_ids": [h.human],
+            },
+            {"id": h.orc, "kind": "species", "name": "Orc", "species_ids": [h.orc]},
+            {
+                "id": h.lowlander,
+                "kind": "race",
+                "name": "Lowlander",
+                "species_ids": [h.human],
+            },
+            {
+                "id": h.half_orc,
+                "kind": "mix",
+                "name": "Half-orc",
+                "species_ids": [h.human, h.orc],
+            },
+        ]
+    }
+
+
+async def test_member_scenes_in_referenced_in(plugin):
+    h = await _open_heritage_world(plugin)
+    scenes = h.world.scenes()
+    # Brenna is both the player and a character here: listed once
+    played = scenes.create(
+        "The Ferry",
+        WorldDate.of(990),
+        player_thing_id=h.brenna,
+        state={"characters": [{"thing_id": h.brenna}]},
+    )
+    scenes.create("Elsewhere", WorldDate.of(991))
+
+    human = await _get_thing(plugin, h.human)
+
+    referenced = human["referenced_in"]
+    assert referenced["member_scenes"] == [
+        {
+            "id": played,
+            "name": "The Ferry",
+            "start": referenced["member_scenes"][0]["start"],
+        }
+    ]
+    assert referenced["member_scenes"][0]["start"]["label"] == "990"
+    # the race that names it as its species
+    assert referenced["fields"] == [
+        {"thing_id": h.lowlander, "thing_name": "Lowlander", "field": "species"}
+    ]
+    assert referenced["facts"] == [] and referenced["scenes"] == []
+
+
+async def test_preview_race_through_router(plugin, client):
+    h = await _open_heritage_world(plugin)
+    reply = json.dumps(
+        {
+            "name": "Hillfolk",
+            "facts": [{"category": "physical", "text": "Hillfolk are stocky."}],
+            "no_longer_true": [],
+        }
+    )
+
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        client_responses.get().append("The Hillfolk are stocky humans.")
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "preview_thing",
+                "kind": "race",
+                "prompt": "stocky hill people",
+                "fields": {"species": h.human},
+            }
+        )
+        await _drain(plugin)
+
+    preview = _last(plugin, "preview_thing")["data"]
+    assert preview["name"] == "Hillfolk"
+    assert preview["fields"]["species"] == h.human
+
+    await plugin.handle(
+        {"type": "worlds", "action": "accept_preview", "preview": preview}
+    )
+    accepted = _last(plugin, "accept_preview")["data"]
+    assert accepted["kind"] == "race"
+    assert accepted["fields"]["species"] == h.human
+    assert [f["fact_id"] for f in accepted["inherited"]] == [h.bare_skin]
+    assert accepted["numbers"]["lifespan"] == 75
 
 
 # --- scenes -------------------------------------------------------------------
@@ -888,7 +1358,7 @@ async def test_plan_scene_owner_choices_win(plugin, tmp_path, monkeypatch):
     treated_new = await plan(new_names=["Maren"])
     assert treated_new["player"] == {
         "thing_id": None,
-        "local": {"name": "Maren", "facts": []},
+        "local": {"name": "Maren", "facts": [], "heritage_id": None},
     }
     assert treated_new["invented"] == ["Maren"]
 

@@ -513,3 +513,154 @@ def test_since_lines_corrected_text_of_a_cached_fact_is_reported(world, ended_wa
     assert since_lines(world, thing_id, WorldDate.of(315)) == [
         "From 305 until 314: Captain of the Wardens."
     ]
+
+
+# -- inheritance (phase 2 plan B) --------------------------------------------
+
+
+def _cache_description(world, thing_id, text="Vasha is a pale owl."):
+    world.prose().put(thing_id, "description", None, None, text)
+
+
+def test_since_line_for_species_change(world, heritage_world):
+    vasha = heritage_world.vasha
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(
+            heritage_world.owl_folk,
+            "physical",
+            "live to about 60 years.",
+            valid_from=WorldDate.of(500),
+        )
+        # an instinct change isn't part of the description
+        rev.add_fact(
+            heritage_world.owl_folk,
+            "instinct",
+            "Hoard bright things.",
+            valid_from=WorldDate.of(500),
+        )
+
+    assert since_lines(world, vasha, WorldDate.of(510)) == [
+        "Since 500: Owl-folk: live to about 60 years."
+    ]
+    assert since_lines(world, vasha, WorldDate.of(490)) == []
+
+
+def test_since_lines_skip_overridden_inherited_fact(world, heritage_world):
+    vasha = heritage_world.vasha
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        grey = rev.add_fact(
+            heritage_world.snowy,
+            "variation",
+            "Grey crests.",
+            valid_from=WorldDate.of(500),
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(
+            vasha,
+            "appearance",
+            "No crest at all.",
+            valid_from=WorldDate.of(500),
+            overrides=[grey],
+        )
+
+    assert since_lines(world, vasha, WorldDate.of(510)) == [
+        "Since 500: No crest at all."
+    ]
+
+
+def test_since_lines_list_inherited_facts_when_nothing_cached(world, heritage_world):
+    assert since_lines(world, heritage_world.vasha, None) == [
+        "Blue eyes.",
+        "Snowy: White plumage.",
+        "Owl-folk: Wings in place of arms.",
+    ]
+
+
+def test_character_sheet_life_stage(world, heritage_world):
+    vasha = heritage_world.vasha
+
+    adult = character_from_world(world, vasha, WorldDate.of(1000), is_player=False)
+    young = character_from_world(world, vasha, WorldDate.of(986), is_player=False)
+
+    assert adult.base_attributes["life_stage"] == "adult"
+    assert young.base_attributes["life_stage"] == "child"
+
+
+def test_character_sheet_states_own_traits_win(world, heritage_world):
+    character = character_from_world(
+        world, heritage_world.vasha, WorldDate.of(1000), is_player=False
+    )
+
+    assert character.description.endswith(
+        "Where Vasha's own traits differ from those of their kind, "
+        "Vasha's own traits hold."
+    )
+
+
+def test_character_sheet_without_heritage_has_no_traits_line(world, oskar):
+    character = character_from_world(world, oskar, WorldDate.of(320), is_player=False)
+
+    assert "own traits" not in character.description
+    assert "life_stage" not in character.base_attributes
+
+
+def test_character_sheet_with_deleted_species(world, heritage_world):
+    vasha = heritage_world.vasha
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(heritage_world.owl_folk)
+
+    character = character_from_world(world, vasha, WorldDate.of(1000), is_player=False)
+
+    # Snowy sets no numbers of its own, so with Owl-folk gone there's no stage
+    assert "life_stage" not in character.base_attributes
+    assert "Wings" not in character.description
+    assert since_lines(world, vasha, WorldDate.of(1000)) == []
+
+
+def test_since_lines_for_switch_to_an_older_race(world, heritage_world):
+    """Fix round 1: a race that already existed when the prose was cached,
+    but wasn't in the character's lineage then, is news in full -- its
+    facts being older than the cache doesn't put them in the cached text."""
+
+    vasha = heritage_world.vasha
+    with world.revision(Source.manual()) as rev:
+        tawny = rev.create_thing(
+            "race", fields={"name": "Tawny", "species": heritage_world.owl_folk}
+        )
+        rev.add_fact(tawny, "variation", "Brown plumage.")
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(vasha, "heritage", tawny, WorldDate.of(990))
+
+    assert since_lines(world, vasha, WorldDate.of(1000)) == ["Tawny: Brown plumage."]
+    # still a Snowy before the switch, as the cached prose already says
+    assert since_lines(world, vasha, WorldDate.of(985)) == []
+
+
+def test_since_lines_after_a_dated_heritage_change_past_the_cache(
+    world, heritage_world
+):
+    """Final review: the prose cached for the stretch before a dated
+    heritage change was written with the old lineage, so the new layer is
+    news once the clock passes the change -- even though the change was
+    already in the store when the prose was cached."""
+
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        human = rev.create_thing("species", fields={"name": "Human"})
+        rev.add_fact(human, "physical", "Two hands.")
+        kit = rev.create_thing("character", fields={"name": "Kit", "heritage": human})
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(kit, "heritage", h.owl_folk, WorldDate.of(400))
+    # a scene in 390 caches the stretch that ends at the change
+    world.prose().put(
+        kit, "description", None, WorldDate.of(400), "A human with two hands."
+    )
+
+    assert since_lines(world, kit, WorldDate.of(390)) == []
+    assert since_lines(world, kit, WorldDate.of(401)) == [
+        "Owl-folk: Wings in place of arms."
+    ]

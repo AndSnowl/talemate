@@ -43,7 +43,7 @@ from talemate.world.scenes import MessageRecord, SceneRecord
 from talemate.world.store import World
 
 from .characters import WORLD_DERIVED_FIELDS, character_from_world
-from .context import WorldSceneContext, connect, scene_date
+from .context import LOCAL_CHARACTER_KIND, WorldSceneContext, connect, scene_date
 
 if TYPE_CHECKING:
     from talemate.character import Character
@@ -64,8 +64,8 @@ _NOT_IN_STATE = (
     "creative_nodes_filename",
 )
 
-# the scene-local thing kind a save owns, and rewrites
-LOCAL_CHARACTER_KIND = "character"
+# the scene-local thing kind a save owns, and rewrites: `LOCAL_CHARACTER_KIND`,
+# defined in context.py, which reads it for the World block's cast
 
 # per-scene fields of a world character: everything but what the world
 # gives it, and `is_player`, which comes from the record's `player_thing_id`

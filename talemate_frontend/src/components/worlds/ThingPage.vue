@@ -3,7 +3,26 @@
         <div class="d-flex align-center flex-wrap ga-2 mb-2">
             <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" @click="worlds.closeThing()">Back</v-btn>
             <template v-if="thing">
-                <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
+                <div v-if="rename" class="d-flex align-center ga-2" data-testid="rename-field">
+                    <v-text-field
+                        v-model="rename.text"
+                        label="Name"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        autofocus
+                        class="rename-input"
+                        :disabled="rename.sent"
+                        @keydown.enter="saveRename"
+                        @keydown.esc="rename = null"
+                    ></v-text-field>
+                    <v-btn color="accent" variant="flat" size="small" :loading="rename.sent" :disabled="!rename.text.trim()" @click="saveRename">Save</v-btn>
+                    <v-btn variant="text" size="small" :disabled="rename.sent" @click="rename = null">Cancel</v-btn>
+                </div>
+                <template v-else>
+                    <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
+                    <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
+                </template>
                 <v-chip size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon">{{ thing.kind }}</v-chip>
                 <v-spacer></v-spacer>
 
@@ -30,7 +49,8 @@
                     variant="outlined"
                     size="small"
                     prepend-icon="mdi-refresh"
-                    :loading="worlds.proseRegenerating === thing.id"
+                    :loading="worlds.proseRegenerating === thing.id && !worlds.proseRegeneratingSection"
+                    :disabled="worlds.proseRegenerating === thing.id"
                     @click="worlds.regenerateProse()"
                 >Regenerate prose</v-btn>
 
@@ -69,14 +89,22 @@
 
             <v-row>
                 <v-col cols="12" md="6">
-                    <div v-for="field in shownFields" :key="field.name" class="field d-flex ga-2" :data-testid="'field-' + field.name">
+                    <div v-for="field in shownFields" :key="field.name" class="field d-flex align-center flex-wrap ga-2" :data-testid="'field-' + field.name">
                         <span class="field-label">{{ field.label }}</span>
-                        <a v-if="field.thingId" class="thing-link" href="#" @click.prevent="worlds.openThing(field.thingId)">{{ field.text }}</a>
-                        <span v-else>{{ field.text }}</span>
+                        <span v-if="field.links">
+                            <template v-for="(link, index) in field.links" :key="link.id">
+                                <span v-if="index" class="text-muted"> · </span>
+                                <a class="thing-link" href="#" @click.prevent="worlds.openThing(link.id)">{{ link.name }}</a>
+                            </template>
+                        </span>
+                        <span v-else :class="{ 'text-muted': field.deleted }">{{ field.text }}</span>
+                        <v-chip v-if="field.pastLifespan" size="x-small" label variant="tonal" color="warning" prepend-icon="mdi-alert" data-testid="past-lifespan">past lifespan</v-chip>
+                        <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
+                    <ThingNumbers v-if="isHeritage" />
 
                     <div class="d-flex align-center mt-4 mb-1">
-                        <span class="text-overline text-muted">Facts</span>
+                        <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
                         <v-spacer></v-spacer>
                         <v-btn v-if="!form || form.factId" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
                     </div>
@@ -88,7 +116,10 @@
                     <div v-if="!thing.facts.length" class="text-body-2 text-muted">No facts true at this date.</div>
                     <template v-for="fact in thing.facts" :key="fact.fact_id">
                         <div class="fact d-flex align-center ga-2" data-testid="fact-row">
-                            <span class="flex-grow-1">{{ fact.rendered }}</span>
+                            <span class="flex-grow-1">
+                                {{ fact.rendered }}
+                                <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
+                            </span>
                             <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
                             <span class="fact-date">{{ spanLabel(worlds.calendar, fact.valid_from, fact.valid_until) }}</span>
                             <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(fact)"></v-btn>
@@ -98,6 +129,18 @@
                             <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(fact)" />
                         </div>
                     </template>
+
+                    <ThingInherited
+                        v-if="showInherited"
+                        :inherited="thing.inherited"
+                        :form="form"
+                        :categories="categories"
+                        :busy="editing"
+                        @override="startOverride"
+                        @save="saveForm"
+                        @cancel="form = null"
+                    />
+                    <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
                 </v-col>
 
                 <v-col cols="12" md="6">
@@ -105,6 +148,18 @@
                         <div class="d-flex align-center ga-2">
                             <span class="text-overline text-muted">{{ section }} (generated)</span>
                             <v-chip v-if="prose.stale" size="x-small" label variant="tonal" color="warning">out of date</v-chip>
+                            <v-spacer></v-spacer>
+                            <v-btn
+                                v-if="proseSectionCount > 1"
+                                variant="text"
+                                size="x-small"
+                                prepend-icon="mdi-refresh"
+                                :aria-label="'Regenerate ' + section"
+                                :data-testid="'regenerate-' + section"
+                                :loading="worlds.proseRegenerating === thing.id && worlds.proseRegeneratingSection === section"
+                                :disabled="worlds.proseRegenerating === thing.id"
+                                @click="worlds.regenerateProse(section)"
+                            >Regenerate</v-btn>
                         </div>
                         <div class="prose pa-3">
                             <span v-if="prose.text">{{ prose.text }}</span>
@@ -112,13 +167,16 @@
                         </div>
                     </div>
 
-                    <div class="text-overline text-muted">Appears in</div>
-                    <div v-if="!thing.appears_in.length" class="text-body-2 text-muted">No scenes yet.</div>
-                    <div v-else class="d-flex flex-wrap ga-2">
-                        <v-chip v-for="scene in thing.appears_in" :key="scene.id" size="small" variant="tonal" color="scene" prepend-icon="mdi-movie-open" @click="viewAt(scene.start)">
-                            {{ scene.name }}&nbsp;<span class="text-muted">· {{ formatDate(worlds.calendar, scene.start) }}</span>
-                        </v-chip>
-                    </div>
+                    <ThingReferencedIn v-if="isHeritage" :references="thing.referenced_in" @view-at="viewAt" />
+                    <template v-else>
+                        <div class="text-overline text-muted">Appears in</div>
+                        <div v-if="!thing.appears_in.length" class="text-body-2 text-muted">No scenes yet.</div>
+                        <div v-else class="d-flex flex-wrap ga-2">
+                            <v-chip v-for="scene in thing.appears_in" :key="scene.id" size="small" variant="tonal" color="scene" prepend-icon="mdi-movie-open" @click="viewAt(scene.start)">
+                                {{ scene.name }}&nbsp;<span class="text-muted">· {{ formatDate(worlds.calendar, scene.start) }}</span>
+                            </v-chip>
+                        </div>
+                    </template>
                 </v-col>
             </v-row>
         </template>
@@ -130,17 +188,36 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
-import { kindInfo } from './worldKinds.js';
+import { HERITAGE_KINDS, INHERITING_KINDS, kindInfo, overrideCategory } from './worldKinds.js';
+import { formatNumber } from './worldNumbers.js';
+import HeritageSections from './HeritageSections.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
+import ThingInherited from './ThingInherited.vue';
+import ThingNumbers from './ThingNumbers.vue';
+import ThingReferencedIn from './ThingReferencedIn.vue';
 
-// fields shown elsewhere (the name), not shown in the slice (cultures), or
-// not for reading (voice, colour)
-const HIDDEN_FIELDS = ['name', 'culture', 'cultures', 'voice', 'color'];
+// fields shown elsewhere (the name; a heritage kind's numbers), not shown
+// in the slice (cultures), or not for reading (voice, colour)
+const HIDDEN_FIELDS = ['name', 'culture', 'cultures', 'voice', 'color', 'lifespan', 'adult_age', 'measures'];
 
-const FIELD_LABELS = { born: 'Born', kind: 'Kind', parent: 'Inside', owner: 'Owner', place: 'Place', when: 'When', until: 'Until' };
+const FIELD_LABELS = {
+    born: 'Born',
+    kind: 'Kind',
+    parent: 'Inside',
+    owner: 'Owner',
+    place: 'Place',
+    when: 'When',
+    until: 'Until',
+    heritage: 'Heritage',
+    species: 'Species',
+    parents: 'Parents',
+    origin: 'Origin',
+};
 
-const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact'];
+const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'override_fact'];
+
+const THING_ID = /^[0-9a-f]{32}$/;
 
 function yearOf(date) {
     return date ? dateParts(date).year : null;
@@ -150,13 +227,19 @@ function cut(text, length = 28) {
     return text.length > length ? text.slice(0, length - 1).trimEnd() + '…' : text;
 }
 
-// A thing's page: core fields, the facts true at the viewing date (add,
-// edit, end), the generated prose with Regenerate, the "viewing as of"
+// A thing's page: its name (renamed in place), core fields, the facts true
+// at the viewing date (add, edit, end), the generated prose with
+// Regenerate (every section, or one of a character's), the "viewing as of"
 // date, a timeline strip of its dated changes and scenes, the scenes it
 // appears in, and Delete (after a reference check and a confirmation).
+// A character's heritage shows as links, with its life stage by its age.
+// A species, race or mix page has its numbers, and what references it in
+// place of the scenes. A character, race or mix page shows what it
+// inherits, each fact open to an override; a species page its races and
+// mixes.
 export default {
     name: 'ThingPage',
-    components: { ThingDeleteDialog, ThingFactForm },
+    components: { HeritageSections, ThingDeleteDialog, ThingFactForm, ThingInherited, ThingNumbers, ThingReferencedIn },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -167,6 +250,8 @@ export default {
             asOfMonth: null,
             // the open fact form: {mode: 'add'|'edit'|'end', factId?, ...}
             form: null,
+            // the name being edited: {text, sent}
+            rename: null,
         };
     },
     computed: {
@@ -179,6 +264,14 @@ export default {
         categories() {
             return this.info?.categories || [];
         },
+        isHeritage() {
+            return HERITAGE_KINDS.includes(this.thing?.kind);
+        },
+        // a kind that inherits, with something to inherit (a character
+        // without heritage has none)
+        showInherited() {
+            return INHERITING_KINDS.includes(this.thing?.kind) && !!this.thing.inherited?.length;
+        },
         // the date the page shows: its own, or the world's "now" for latest
         viewingDate() {
             return this.thing?.at || this.worlds.currentWorld?.now || null;
@@ -189,6 +282,9 @@ export default {
         monthOptions() {
             const names = this.worlds.calendar?.month_names || [];
             return names.map((title, index) => ({ title, value: index + 1 }));
+        },
+        proseSectionCount() {
+            return Object.keys(this.thing?.prose || {}).length;
         },
         editing() {
             return EDIT_ACTIONS.some((action) => this.worlds.pending[action]);
@@ -203,12 +299,24 @@ export default {
                 const field = { name, label: FIELD_LABELS[name] || name };
                 if (typeof value === 'object' && 'instant' in value) {
                     field.text = formatDate(calendar, value);
-                    if (name === 'born' && this.viewingDate) {
-                        field.text += ` (age ${ageAt(value, this.viewingDate)})`;
+                    if (name === 'born') {
+                        Object.assign(field, this.bornDetails(value));
                     }
-                } else if (typeof value === 'string' && /^[0-9a-f]{32}$/.test(value)) {
-                    field.thingId = value;
-                    field.text = this.thingName(value);
+                } else if (name === 'heritage' && typeof value === 'string') {
+                    // a deleted target has no page to open: plain text
+                    const links = this.worlds.heritageLinks(value);
+                    if (links.length) {
+                        field.links = links;
+                    } else if (this.findThing(value)) {
+                        field.links = [this.link(value)];
+                    } else {
+                        field.text = '(deleted)';
+                        field.deleted = true;
+                    }
+                } else if (typeof value === 'string' && THING_ID.test(value)) {
+                    field.links = [this.link(value)];
+                } else if (Array.isArray(value) && value.length && value.every((item) => THING_ID.test(item))) {
+                    field.links = value.map((id) => this.link(id));
                 } else {
                     field.text = String(value);
                 }
@@ -258,11 +366,20 @@ export default {
             if (!thing || thing.id !== before?.id || this.form?.sent) {
                 this.form = null;
             }
+            if (!thing || thing.id !== before?.id || this.rename?.sent) {
+                this.rename = null;
+            }
         },
         editing(now) {
             // the edit failed (no reply replaced the thing): keep the form
             if (!now && this.form?.sent) {
                 this.form = { ...this.form, sent: false };
+            }
+        },
+        // the rename failed (no reply replaced the thing): keep it open
+        'worlds.pending.set_field'(now) {
+            if (!now && this.rename?.sent) {
+                this.rename = { ...this.rename, sent: false };
             }
         },
     },
@@ -272,14 +389,45 @@ export default {
         validYear(year) {
             return Number.isInteger(year) && year >= 1 && year <= 9999;
         },
-        thingName(id) {
+        link(id) {
+            return { id, name: this.thingName(id) };
+        },
+        // a born field's age at the viewing date and the life stage (with
+        // the lifespan it's measured against, flagged when past it)
+        bornDetails(born) {
+            let text = formatDate(this.worlds.calendar, born);
+            if (this.viewingDate) {
+                text += ` · age ${ageAt(born, this.viewingDate)}`;
+            }
+            const stage = this.thing.life_stage;
+            if (stage) {
+                text += ` · ${stage.stage}`;
+            }
+            const lifespan = this.thing.numbers?.lifespan;
+            return {
+                text,
+                pastLifespan: !!stage?.past_lifespan,
+                note: stage && lifespan != null ? `(lifespan ~${formatNumber(lifespan)})` : null,
+            };
+        },
+        // what an own fact overrides, as "Snowy: Yellow eyes."
+        overrideNotes(fact) {
+            return (fact.overrides || [])
+                .map((id) => (this.thing.inherited || []).find((item) => item.fact_id === id))
+                .filter(Boolean)
+                .map((item) => `${item.source_name}: ${item.rendered}`);
+        },
+        findThing(id) {
             for (const list of Object.values(this.worlds.things)) {
                 const found = list.find((thing) => thing.id === id);
                 if (found) {
-                    return found.name;
+                    return found;
                 }
             }
-            return id.slice(0, 8);
+            return null;
+        },
+        thingName(id) {
+            return this.findThing(id)?.name ?? id.slice(0, 8);
         },
         openAsOf() {
             const parts = this.viewingDate ? dateParts(this.viewingDate) : null;
@@ -297,6 +445,21 @@ export default {
             const at = date ? { instant: date.instant, precision: date.precision } : null;
             this.worlds.viewThingAt(at);
         },
+        startRename() {
+            this.rename = { text: this.thing.name, sent: false };
+        },
+        saveRename() {
+            const name = this.rename?.text.trim();
+            if (!name || this.rename.sent) {
+                return;
+            }
+            if (name === this.thing.name) {
+                this.rename = null;
+                return;
+            }
+            this.worlds.renameThing(name);
+            this.rename = { ...this.rename, sent: true };
+        },
         startAdd() {
             this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null };
         },
@@ -311,6 +474,15 @@ export default {
                 original: fact,
             };
         },
+        startOverride(fact) {
+            this.form = {
+                mode: 'override',
+                factId: fact.fact_id,
+                category: overrideCategory(this.thing.kind, fact.category),
+                text: fact.rendered,
+                replaces: `${fact.source_name}'s “${fact.rendered}”`,
+            };
+        },
         startEnd(fact) {
             this.form = { mode: 'end', factId: fact.fact_id, untilYear: yearOf(this.viewingDate) };
         },
@@ -319,6 +491,8 @@ export default {
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
             if (form.mode === 'add') {
                 this.worlds.addFact(form.category, form.text.trim(), year(form.fromYear), year(form.untilYear));
+            } else if (form.mode === 'override') {
+                this.worlds.overrideFact(form.factId, form.category, form.text.trim());
             } else if (form.mode === 'end') {
                 this.worlds.endFact(form.factId, dateOf(form.untilYear));
             } else {
@@ -360,6 +534,10 @@ export default {
     color: rgb(var(--v-theme-accent));
 }
 
+.rename-input {
+    min-width: 260px;
+}
+
 .world-date {
     color: rgb(var(--v-theme-date));
 }
@@ -381,6 +559,12 @@ export default {
 .field-label {
     min-width: 80px;
     font-weight: 600;
+    color: rgb(var(--v-theme-muted));
+}
+
+.override-note {
+    margin-left: 6px;
+    font-size: 11px;
     color: rgb(var(--v-theme-muted));
 }
 

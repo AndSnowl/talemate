@@ -2,8 +2,8 @@
 
 Nothing is deleted or updated in place. Undo retires live rows and restores
 earlier ones as copies whose `rev_added` is the undo revision (facts keep
-their `fact_id`, and the copy gets the original's `fact_refs`). The full
-history stays viewable.
+their `fact_id`, and the copy gets the original's `fact_refs` and
+`fact_overrides`). The full history stays viewable.
 
 Every undo leaves reversal links (the reversing-entry pattern, as in
 accounting reversals or `git revert`): its revision records the revisions it
@@ -55,14 +55,15 @@ CHANGED_LATER = "changed again in a later revision"
 REMOVED_LATER = "removed in a later revision"
 REFERENCED_LATER = "referenced in a later revision"
 
-# the names of fields that can hold a thing id (`thing` or `shares`) on
-# some kind; each row's own kind decides whether its field really does
+# the names of fields that can hold a thing id (`thing`, `things` or
+# `shares`) on some kind; each row's own kind decides whether its field
+# really does
 _REF_FIELD_NAMES = sorted(
     {
         spec.name
         for kind in KINDS.values()
         for spec in kind.fields
-        if spec.type in ("thing", "shares")
+        if spec.type in ("thing", "things", "shares")
     }
 )
 
@@ -191,9 +192,9 @@ class _Planner:
     def _later_reference(self, thing_id: str, since: int) -> int | None:
         """The earliest later change after `since` (see `_later_write`)
         behind a live reference to `thing_id`: a fact mentioning it, a
-        `thing` field holding its id, or a `shares` field naming it. A
-        reference an undo restored counts by its origin, so a redo brings
-        back its power to keep the thing."""
+        `thing` field holding its id, a `things` field listing it, or a
+        `shares` field naming it. A reference an undo restored counts by its
+        origin, so a redo brings back its power to keep the thing."""
 
         revs = [
             self._later_write("facts", row, since)
@@ -218,9 +219,13 @@ class _Planner:
         for row in rows:
             spec = next(f for f in KINDS[row["kind"]].fields if f.name == row["field"])
             value = json.loads(row["value_json"])
-            if (spec.type == "thing" and value == thing_id) or (
-                spec.type == "shares"
-                and any(share["thing_id"] == thing_id for share in value)
+            if (
+                (spec.type == "thing" and value == thing_id)
+                or (spec.type == "things" and thing_id in value)
+                or (
+                    spec.type == "shares"
+                    and any(share["thing_id"] == thing_id for share in value)
+                )
             ):
                 revs.append(self._later_write("field_values", row, since))
 
@@ -399,6 +404,11 @@ def _apply(
             conn.execute(
                 "INSERT INTO fact_refs (row_id, thing_id) "
                 "SELECT ?, thing_id FROM fact_refs WHERE row_id = ?",
+                (cur.lastrowid, row["row_id"]),
+            )
+            conn.execute(
+                "INSERT INTO fact_overrides (row_id, fact_id) "
+                "SELECT ?, fact_id FROM fact_overrides WHERE row_id = ?",
                 (cur.lastrowid, row["row_id"]),
             )
 

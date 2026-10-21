@@ -229,6 +229,32 @@ postmaster Aldric, his mother Yelena and the town of Frosthollow. After creation
 This is the world-tab counterpart of the inbox's "make real". It fits with plan B (inheritance
 already needs links between things) or phase 3.
 
+**Connections between entries** (owner, 2026-10-21, after plan B's acceptance run). The owner
+fills in a world by following details from one entry to the next. For example, the owl-folk's
+origin says everyone in the "Tsardom of Moscavia" turned into owls one day, so the natural next
+step is to make the Tsardom as a place, and that place's facts then mention "Moscavian Owls".
+The aim is strong, deliberate links between entries, flowing from one section to the next, with
+context that crosses sections as naturally as species context already reaches characters.
+- **Names in facts are found and shown.** When a fact names something:
+  - **if it exists,** it's highlighted and linked by id, and its facts can be used as context
+    when generating.
+  - **if it doesn't exist yet,** it's highlighted as something to make next.
+- **Stubs.** One generation can name many new things, more than the owner wants to fill in at
+  once. Each new name becomes a **stub**: a lesser entry in its kind's list, showing where it was
+  first mentioned. The owner can expand a stub later. A scene can use one too: a prompt that
+  mentions staying at an inn in a town whose facts created an "inn" stub picks that stub up and
+  fills it out.
+- **Create prompts reuse the scene prompt's name matching.** That means highlighting with
+  selectable references and "treat as new". A place prompt that says "Moscavian Owls" then
+  resolves to the existing species, instead of the model inventing a new one inside the place's
+  facts.
+- **Adding a reference by hand.** A right-click "Add reference" menu opens a small search in
+  place to insert a reference to any entry. It works everywhere text is written, alongside the
+  automatic matching.
+- **Much later: asking the AI about your world.** This may need an instruct model.
+
+**Order:** the owner decided (2026-10-21) that Connections is the next slice after plan B, ahead of cultures, because every section relies on it. It takes in "Named things that don't exist yet" above, and it overlaps with mention records (plan D).
+
 **Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
 layout relative to each other is known. The map must allow places that aren't placed yet, or that
 have unknown distances between them.
@@ -562,6 +588,18 @@ choices, branching), not this.
   the owner when an output irritates them. A good early candidate is a world-aware version of
   dynamic story v2's random-story mode.
 - **Python, not Lisp/Scheme** (owner): the app is Python, and it will be shared.
+- **The player's action comes first** (owner, 2026-10-21). In plan B's run, `@` actions were
+  followed less faithfully than in stock Talemate. Parts of an action were ignored, and the
+  surrounding context got pulled in instead: the player's character turned curious because their
+  personality says so, while the action said they were deliberately ignoring the thing, and gave a
+  reason. The goal is to describe in simple terms what the character thinks and does, and get
+  prose that fits the story. That means a careful balance: follow the action, and add colour of
+  the model's own around it. Tuning this belongs in the runner work, where the loop and the
+  context are open to edit. Probes of play should check how well actions are followed, not just
+  whether the world is consistent. A probe found the cast lines weren't the cause: stock Talemate
+  passes an `@` action as a weak "(Instructions for X's next part…)" line inside a task that
+  invites a new in-character action, so following actions well needs a dedicated action-to-prose
+  prompt in a runner (see docs/superpowers/probes/2026-10-21-personality-and-actions.md).
 - **Generators are moddable too** (owner, 2026-10-20). World-level generators follow the same
   model as runners:
   - create from a prompt (`worldplay/create.py`, with the template `world/create-thing.jinja2`);

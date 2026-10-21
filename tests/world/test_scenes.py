@@ -27,7 +27,7 @@ def test_migration_2_from_v1():
 
     schema.apply(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == schema.SCHEMA_VERSION
     for table in ("scenes", "scene_messages", "scene_things", "prose_cache"):
         # raises if the table doesn't exist
         conn.execute(f"SELECT * FROM {table}")

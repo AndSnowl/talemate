@@ -40,6 +40,122 @@ def test_world_context_block_has_goal_place_lore(world):
     assert "Signed after the flood of 301." in block
 
 
+def test_world_context_block_lists_heritage_bodies(world, heritage_world):
+    """The heritage play probe (docs/superpowers/probes/2026-10-20-
+    heritage-play.md): the narrator's prompts carry no character sheets,
+    so the World block names each character's heritage with its body and
+    instincts, resolved in code as of the scene's date -- a world
+    character's with its own overrides applied, an invented one's from
+    the heritage it was given. A character with no heritage isn't listed,
+    and neither is a culture's lore."""
+
+    h = heritage_world
+    with world.revision(Source.manual(note="later")) as rev:
+        rev.add_fact(
+            h.owl_folk,
+            "physical",
+            "Grows a winter ruff.",
+            valid_from=WorldDate.of(1000),
+        )
+
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(999), goal="Cross the river")
+    scenes.update(
+        scene_id,
+        state={
+            "characters": [
+                {"thing_id": h.vasha, "active": True},
+                {"local_id": "rill", "active": True},
+                {"local_id": "ilse", "active": True},
+            ]
+        },
+    )
+    scenes.set_local_things(
+        scene_id,
+        [
+            {
+                "local_id": "rill",
+                "kind": "character",
+                "data": {"name": "Rill", "world_heritage_id": h.snowy},
+            },
+            {"local_id": "ilse", "kind": "character", "data": {"name": "Ilse"}},
+        ],
+    )
+    record = scenes.get(scene_id)
+
+    block = world_context_block(world, record, WorldDate.of(999))
+    vasha, rill = (
+        line for line in block.splitlines() if line.startswith(("- Vasha", "- Rill"))
+    )
+
+    assert vasha.startswith("- Vasha (Snowy, a race of Owl-folk)")
+    assert "Blue eyes." in vasha
+    assert "White plumage." in vasha
+    assert "Wings in place of arms." in vasha
+    assert "Yellow eyes." not in vasha
+    assert "Hunts at dusk." in vasha
+    assert "Name their boats." not in block
+    assert "winter ruff" not in block
+
+    assert rill.startswith("- Rill (Snowy, a race of Owl-folk)")
+    assert "Yellow eyes." in rill
+    assert "Wings in place of arms." in rill
+    assert "Hunts at dusk." in rill
+    assert "Ilse" not in block
+
+    # the scene's clock passes the dated species fact: the cast follows
+    later = world_context_block(world, record, WorldDate.of(1000))
+    assert later.count("Grows a winter ruff.") == 2
+
+
+def test_world_context_block_names_heritage_without_missing_names(
+    world, heritage_world
+):
+    """Final review: a mix whose parent was deleted names only the parent
+    that's left, and a heritage with no name of its own at the scene's
+    date isn't shown as "(, a race of ...)"."""
+
+    h = heritage_world
+    with world.revision(Source.manual(note="setup")) as rev:
+        lowlander = rev.create_thing("race", fields={"name": "Lowlander"})
+        orc = rev.create_thing("species", fields={"name": "Orc"})
+        half_orc = rev.create_thing(
+            "mix", fields={"name": "Half-orc", "parents": [lowlander, orc]}
+        )
+        rev.add_fact(half_orc, "physical", "Small tusks.")
+        brenna = rev.create_thing(
+            "character", fields={"name": "Brenna", "heritage": half_orc}
+        )
+        nameless = rev.create_thing("race", fields={"species": h.owl_folk})
+        rev.set_field(nameless, "name", "Tawny", WorldDate.of(2000))
+        kit = rev.create_thing(
+            "character", fields={"name": "Kit", "heritage": nameless}
+        )
+    with world.revision(Source.manual(note="drop orc")) as rev:
+        rev.remove_thing(orc)
+
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(999), goal="Cross the river")
+    scenes.update(
+        scene_id,
+        state={
+            "characters": [
+                {"thing_id": brenna, "active": True},
+                {"thing_id": kit, "active": True},
+            ]
+        },
+    )
+    block = world_context_block(world, scenes.get(scene_id), WorldDate.of(999))
+    lines = block.splitlines()
+
+    assert any(
+        line.startswith("- Brenna (Half-orc, a mix of Lowlander):") for line in lines
+    )
+    assert any(line.startswith("- Kit (a race of Owl-folk):") for line in lines)
+    assert " and )" not in block
+    assert "(," not in block
+
+
 @pytest.mark.asyncio
 async def test_inject_adds_world_instruction(world):
     with world.revision(Source.manual(note="setup")) as rev:
