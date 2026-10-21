@@ -61,7 +61,7 @@ A new kind, `race`, with a core field `species`. It lives inside its species' pa
 
 ### Mixes
 
-A new kind, `mix`, with core fields `parents` (exactly two) and `species` (derived from the parents, for listing).
+A new kind, `mix`, with one core field of its own, `parents` (exactly two). It has no `species` field: the species it descends from are read from its parents when needed (`heritage.species_of`), for instance to list it on each species' page.
 - **Parents:** each is a species, a race or another mix. That's how a quarter-orc's parent can be a Half-orc mix.
 - **Placement:** a mix is listed on **both** parent species' pages, in a **Mixes** section next to Races in the same area. The owner chose a separate section to keep them organised.
 - **Facts and numbers,** the same as a race. A mix's facts describe the blend itself (for example, Half-orcs have tusks of half an inch to an inch).
@@ -88,7 +88,7 @@ Characters get a `heritage` core field instead of the main spec's separate `spec
   - a race's fact can override its species' fact, such as Snowy "white plumage" over a species-wide plumage fact;
   - a mix's fact can override either parent's, such as Half-owl's settled body over Owl-folk's "wings in place of arms" and Human's hands.
 
-  Race and mix pages get the same **Inherited** section and **Override** button as character pages. Drafting a race or mix from a prompt marks overrides the same way character creation does (probe 1 covers it). A character inherits through a mix with the mix's overrides already applied, so a Half-owl never carries both bodies.
+  Race and mix pages get the same **Inherited** section and **Override** button as character pages. Drafting a race or mix from a prompt marks overrides the same way character creation does (probe 1 covers it). A character inherits through a mix with the mix's overrides already applied, so a Half-owl never carries both bodies. An inherited fact is dropped when every route to its layer passes through a layer that overrides it: when both parents of a Snowy × Barred mix override Owl-folk's plumage fact, the mix doesn't inherit it, while a parent the mix also reaches some other way (a Quarter-orc's direct Lowlander parent, past Half-orc) keeps its facts.
 - **Dates apply through inheritance:** what a character inherits is read as of the scene's date. A species fact dated 500 reaches a character only in scenes set after 500.
 - **Stale prose:**
   - a character's prose goes stale when anything it inherits changes, not just its own facts;
