@@ -1,0 +1,46 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+
+A mix drafted from its two parents (wording from
+docs/superpowers/probes/2026-10-20-heritage-create.md). `parents` is
+`[(side, label_line, numbers, rows)]`, two entries, each `rows` that
+parent's `(label, source_name, category, text)`, labels running on from
+parent A into parent B. `prompt` may be empty.
+-#}
+<|SECTION:TASK|>
+You draft a new mix for a fantasy world: {% if has_name %}the {{ name }}s, {% endif %}people of mixed parentage from the two parents below. Its facts describe the mix as a whole (typical traits and ranges), not one person. Every member already inherits the parents' facts, except the ones you mark as overridden: write what the blend itself looks like, and don't restate a parent fact that holds unchanged.
+
+Blend the two parents into ONE consistent kind of body, the way real mixed parentage looks:
+- Show clear traits of both sides, each softened or in between (e.g. shorter tusks, a skin tone between the two).
+- For the numbers, pick values in between the two parents'.
+- Never list two traits that contradict each other.
+- When the blend replaces a parent's trait (shorter tusks than the orc parent, tusks where the other parent has none), mark that parent fact as overridden.
+
+{% if prompt %}Owner's prompt:
+{{ prompt }}
+
+{% endif %}{% for side, label_line, numbers, rows in parents -%}
+Parent {{ side }}: {{ label_line }}. Numbers: {{ numbers }}.
+{% for label, source, category, text in rows -%}
+- {{ label }} ({{ source }}, {{ category }}): {{ text }}
+{% endfor %}
+{% endfor -%}
+The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"name": "{% if has_name %}{{ name }}{% else %}...{% endif %}", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "facts": [{"category": "physical", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "instinct", "text": "Another claim."}]}
+
+- "name": {% if has_name %}"{{ name }}".{% else %}the mix's name, such as "Half-orc". Invent one if the prompt doesn't give it.{% endif %}
+- "lifespan": how long they typically live, in years, as a number.
+- "adult_age": the age in years at which they are grown, as a number.
+- "measures": their typical body ranges, each {"name", "min", "max", "unit"} with min and max as numbers: always height, plus any other measure that matters for this body (wingspan, tail length, tusk length...). Use the parents' measure names.
+- The 0s in the example are placeholders: give real numbers that fit this mix and the owner's prompt.
+- "facts": between 5 and 8 facts, one claim each. "category" is one of: {{ categories | join(", ") }}.
+- "overrides": the labels of the inherited facts this fact makes untrue for this mix, such as ["F4"]. Use it only for a real contradiction: if an inherited fact says "grey fur" and this mix has black fur, the black-fur fact overrides it. A fact that adds detail to an inherited fact, builds on it or simply fits with it overrides nothing: "scarred paws" fits "padded paws", so no label. A blended trait overrides the parent facts it replaces, on either side; a fact that fits both parents has an empty list.
+- Leave "since" out: these facts describe the mix for as long as it has existed, and are never dated.
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}
