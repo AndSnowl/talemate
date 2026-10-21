@@ -239,13 +239,14 @@ def _heritage_label(view: WorldView, state: ThingState) -> str:
 
 
 def _heritages(view: WorldView) -> list[str]:
-    """Species, race and mix names for the setup prompt's `heritages` var."""
+    """Species, race and mix names for the setup prompt's `heritages` var.
+    A stub, ignored or not, has nothing to inherit and isn't offered."""
 
     labels = [
         label
         for kind in HERITAGE_KINDS
         for state in view.things(kind)
-        if (label := _heritage_label(view, state))
+        if not state.is_stub and (label := _heritage_label(view, state))
     ]
     return labels
 

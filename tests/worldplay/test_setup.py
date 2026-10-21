@@ -477,6 +477,29 @@ async def test_setup_prompt_lists_heritages(world, heritage_world):
     assert "Snowy (Owl-folk)" in sent
 
 
+async def test_setup_prompt_leaves_stub_heritages_out(world, heritage_world):
+    """A heritage stub, ignored or not, has nothing to inherit: it isn't
+    offered to the setup model."""
+
+    with world.revision(Source.manual(note="stubs")) as rev:
+        rev.create_thing(
+            "species", fields={"name": "Fox-kin", "stub": {"ignored": False}}
+        )
+        rev.create_thing(
+            "race", fields={"name": "Ashen Folk", "stub": {"ignored": True}}
+        )
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({"player": "Anyone", "characters": [], "intro": "Dawn."}))
+        await plan_scene(world, "Anyone arrives", {}, None, START, client)
+
+    sent = str(client.prompt_history[0]["prompt"])
+    assert "Snowy (Owl-folk)" in sent
+    assert "Fox-kin" not in sent
+    assert "Ashen Folk" not in sent
+
+
 async def test_setup_heritage_annotated_name_matches(world, heritage_world):
     """Fix round 1, finding 2: the prompt shows a race as "Snowy
     (Owl-folk)", and a local model tends to echo exactly what it's shown,
