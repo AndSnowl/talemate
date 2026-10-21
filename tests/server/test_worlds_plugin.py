@@ -367,6 +367,43 @@ async def test_correct_end_and_set_field(plugin, client):
     assert len(_replies(plugin, "prose_updated")) == 3
 
 
+async def test_rename_corrects_the_name_in_effect(plugin, client):
+    """A rename is `set_field` "name" at the `valid_from` of the name in
+    effect (what the thing page sends): it corrects that value in place,
+    leaving an earlier name as it was, and the kind's list shows it."""
+
+    world, maren, _ = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(maren, "name", "Maren Holt", WorldDate.of(316))
+    timeline = [e for e in world.timeline(maren) if e.field == "name"]
+    renamed_at = timeline[-1].date
+    assert renamed_at == WorldDate.of(316)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "set_field",
+            "thing_id": maren,
+            "field": "name",
+            "value": "Maren Dell",
+            "valid_from": renamed_at.model_dump(),
+        }
+    )
+    await _drain(plugin)
+
+    assert _last(plugin, "set_field")["data"]["name"] == "Maren Dell"
+    assert world.view(WorldDate.of(315)).name_of(maren) == "Maren"
+    assert [e.value for e in world.timeline(maren) if e.field == "name"] == [
+        "Maren",
+        "Maren Dell",
+    ]
+    await plugin.handle(
+        {"type": "worlds", "action": "list_things", "kind": "character"}
+    )
+    names = [t["name"] for t in _last(plugin, "list_things")["data"]["things"]]
+    assert names == ["Maren Dell"]
+
+
 async def test_correct_fact_dates_unset_keeps_null_opens(plugin, client):
     world, maren, _ = await _open_world_with_maren(plugin)
     eye = next(
