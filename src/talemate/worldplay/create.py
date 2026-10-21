@@ -92,6 +92,7 @@ from talemate.worldplay.links import (
     NewName,
     clean_aka,
     existing_id,
+    is_new,
     link_text,
     make_stubs,
     name_key,
@@ -228,6 +229,9 @@ class CreatePreview(BaseModel):
     # the owner's picks for names written in the prompt (written name ->
     # thing id); they win when the facts are linked too
     picks: dict[str, str] = Field(default_factory=dict)
+    # names written in the prompt the owner treats as new: never linked to
+    # the world's thing of that name, and a stub of their own if listed
+    treated_as_new: list[str] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -657,6 +661,7 @@ def _new_names(
     texts: list[str],
     own_names: list[str],
     picked: Sequence[str] = (),
+    as_new: Sequence[str] = (),
 ) -> list[NewName]:
     """The reply's listed names that become stubs on accept, by the
     connections probe's merge rule
@@ -669,7 +674,8 @@ def _new_names(
     - a name the facts (`texts`) don't use is dropped; one they write only
       in part keeps that part as a `written` form;
     - a name already in the world (`existing_id`, or a whole `find_names`
-      match) is dropped: linking finds it;
+      match) is dropped: linking finds it. A name the owner treats as new
+      (`as_new`, by `links.is_new`) is kept all the same;
     - a name the owner picked an entry for in the prompt (`picked`, the
       picks' written names), as listed or in a form the facts write it
       in, is dropped: the owner's pick wins, and linking uses it;
@@ -689,7 +695,7 @@ def _new_names(
         key = name_key(item.name)
         if not key or kind not in NAME_KINDS or key in own | claimed | picks:
             continue
-        if _known_in_view(view, item.name, kind):
+        if not is_new(item.name, as_new) and _known_in_view(view, item.name, kind):
             continue
         forms = _written_forms(view, texts, item.name, own)
         if forms is None:
@@ -985,7 +991,7 @@ def _named_in_prompt(
     return named
 
 
-def _matching_stub(view: WorldView, kind: str, name: str) -> str | None:
+def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
     """A live stub of `kind` whose name or other name is `name` (ignoring
     case and a leading article), if any."""
 
@@ -1009,6 +1015,7 @@ async def preview_thing(
     *,
     stub_id: str | None = None,
     picks: dict[str, str] | None = None,
+    new_names: Sequence[str] = (),
 ) -> CreatePreview:
     """Create a `kind` thing from `prompt` -- facts, then prose -- without
     writing anything to the world. `fields` are the owner's picks (`name`,
@@ -1032,7 +1039,11 @@ async def preview_thing(
       matched it to; each entry's facts go in a "Named in this prompt"
       block, which keeps the model from inventing a duplicate;
     - an entry with an everyday name is shown "Name (kind, usually called
-      X)".
+      X)";
+    - `new_names` are names written in the prompt the owner treats as new
+      ("treat as new"): a pick for one is dropped, so it's no context, and
+      accept never links it to the world's thing of that name; listed by
+      the model, it becomes a stub of its own.
 
     The reply's `aka` becomes the preview's other names and its `names`
     the `new_names` accept makes stubs for (`_new_names`). Without a
@@ -1043,6 +1054,8 @@ async def preview_thing(
     stub = _live_stub(view, stub_id) if stub_id is not None else None
     if stub is not None:
         kind = stub.kind
+        if kind not in CREATE_KINDS:
+            raise ValueError(f"a {kind} stub can't be expanded yet")
     if kind not in CREATE_KINDS:
         raise ValueError(f"can't create a {kind!r} from a prompt")
     prose_gen.require_client(client)
@@ -1054,7 +1067,12 @@ async def preview_thing(
     fields.pop("stub", None)
     if stub is not None and not fields.get("name"):
         fields["name"] = view.name_of(stub.id) or ""
-    picks = dict(picks or {})
+    treated_as_new = [name for name in new_names if name.strip()]
+    picks = {
+        written: thing_id
+        for written, thing_id in (picks or {}).items()
+        if not is_new(written, treated_as_new)
+    }
     named = _named_in_prompt(view, picks, stub_id)
     if kind == "mix" and not fields.get("parents"):
         raise ValueError("a mix needs two parents")
@@ -1186,8 +1204,13 @@ async def preview_thing(
     own_names = [name, *(str(entry["name"]) for entry in aka)]
     if stub is not None:
         own_names.append(view.name_of(stub.id) or "")
-    new_names = _new_names(
-        view, listed, [f.text for f in facts], own_names, list(picks)
+    stub_names = _new_names(
+        view,
+        listed,
+        [f.text for f in facts],
+        own_names,
+        list(picks),
+        treated_as_new,
     )
     if kind == "character" and "born" not in fields and age is not None:
         # an age older than the calendar itself is clamped to year 1
@@ -1202,7 +1225,7 @@ async def preview_thing(
         kind=kind,
         name=name,
         facts=len(facts),
-        new_names=len(new_names),
+        new_names=len(stub_names),
         stub_id=stub_id,
     )
     return CreatePreview(
@@ -1214,11 +1237,12 @@ async def preview_thing(
         prose=prose,
         inherited=_preview_rows(rows),
         aka=aka,
-        new_names=new_names,
+        new_names=stub_names,
         stub_id=stub_id,
-        matching_stub_id=None if stub is not None else _matching_stub(view, kind, name),
+        matching_stub_id=None if stub is not None else matching_stub(view, kind, name),
         context=context,
         picks=picks,
+        treated_as_new=treated_as_new,
     )
 
 
@@ -1309,7 +1333,9 @@ def accept_preview(
     - The preview's `new_names` become stubs (`links.make_stubs`, which
       reuses a name the world has by then), and every fact's text is
       linked (`links.link_text`, with the preview's picks), keeping its
-      words; a thing's own names never link to itself.
+      words; a thing's own names never link to itself, and a name treated
+      as new never links to (or is made a stub by reusing) the world's
+      thing of that name.
     - Filling a stub -- the preview's `stub_id`, or `into_stub` ("fill the
       stub instead") -- writes into that thing and keeps its id: its kind
       (`into_stub` may have another), name, fields and other names are set,
@@ -1328,7 +1354,7 @@ def accept_preview(
     stub = _live_stub(view, target) if target is not None else None
 
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
-        made = make_stubs(rev, view, preview.new_names)
+        made = make_stubs(rev, view, preview.new_names, fresh=preview.treated_as_new)
         if stub is None:
             fields: dict[str, Any] = {**preview.fields, "name": preview.name}
             if preview.aka:
@@ -1365,6 +1391,7 @@ def accept_preview(
                 picks=preview.picks,
                 new_names=made,
                 owner=thing_id,
+                as_new=preview.treated_as_new,
             )
             rev.add_fact(
                 thing_id,

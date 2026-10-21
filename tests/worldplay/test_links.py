@@ -318,3 +318,33 @@ def test_make_stubs_maps_written_forms(world):
     night = made["The Night of Feathers"]
     assert made["Night of Feathers"] == night
     assert world.view(None).thing(night).fields["aka"] == []
+
+
+def test_names_treated_as_new_never_link_or_reuse(world):
+    owls, _tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+
+    # the world's thing by that name (or a longer name starting with it)
+    # stays plain text
+    assert link_text(view, "Moscavia's border", as_new=["Moscavia"]) == (
+        "Moscavia's border"
+    )
+    assert link_text(view, "Moscavian Owls fly", as_new=["Moscavian"]) == (
+        "Moscavian Owls fly"
+    )
+
+    # listed twice, a name treated as new is one stub of its own
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [NewName(name="Owl-folk", kind="species")] * 2,
+            fresh=["Owl-folk"],
+        )
+    stub = made["Owl-folk"]
+    assert stub != owls
+    after = world.view(None)
+    assert len(after.things("species")) == 2
+    assert link_text(
+        after, "The Owl-folk fly.", new_names=made, as_new=["Owl-folk"]
+    ) == (f"The {ref(stub, 'Owl-folk')} fly.")

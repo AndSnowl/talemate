@@ -10,7 +10,9 @@ plain text unless picked, and text already inside a reference is never
 touched.
 
 `link_text` given an `owner` (the thing whose facts the text is) leaves
-that thing's own names plain: a thing never links to itself.
+that thing's own names plain: a thing never links to itself. Names the
+owner treats as new (`as_new`, `is_new`) never link to what the world
+already has, and `make_stubs` never reuses an existing thing for one.
 
 `make_stubs` makes one stub per new name a generation lists, unless the
 world (or the same call) already has that name: one name invented twice
@@ -21,6 +23,7 @@ own, and `clean_aka` the tidying a list of other names gets.
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from collections.abc import Set as AbstractSet
 from typing import NamedTuple
 
@@ -39,6 +42,7 @@ __all__ = [
     "NewName",
     "clean_aka",
     "existing_id",
+    "is_new",
     "link_text",
     "make_stubs",
     "name_key",
@@ -75,6 +79,22 @@ def name_key(name: str) -> str:
     if len(words) > 1 and words[0] in ARTICLES:
         words = words[1:]
     return " ".join(words)
+
+
+def is_new(name: str, as_new: Collection[str]) -> bool:
+    """Whether `name` is one the owner treats as new: one of `as_new`, or
+    a longer name starting with one ("Maren Vos" when "Maren" is new), as
+    scene setup reads its own "treat as new" names. Compared as
+    `name_key`s."""
+
+    key = name_key(name)
+    if not key:
+        return False
+    for new in as_new:
+        new_key = name_key(new)
+        if new_key and (key == new_key or key.startswith(new_key + " ")):
+            return True
+    return False
 
 
 def _capitalised(written: str) -> bool:
@@ -114,15 +134,20 @@ def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
 
 
 def _link_plain(
-    view: WorldView, text: str, chosen: dict[str, str], owner: str | None
+    view: WorldView,
+    text: str,
+    chosen: dict[str, str],
+    owner: str | None,
+    as_new: Collection[str],
 ) -> str:
     """Link the names in `text`, which holds no references. A name that
-    means `owner` stays plain."""
+    means `owner` stays plain, and so does a match for a name treated as
+    new (`as_new`) unless it's chosen."""
 
     matched: list[_Span] = []
     for match in find_names(view, text):
         thing_id = chosen.get(_norm(match.text))
-        if thing_id is None and not match.suggested:
+        if thing_id is None and not match.suggested and not is_new(match.text, as_new):
             thing_id = match.candidates[0].id
         if thing_id == owner:
             thing_id = None
@@ -167,6 +192,7 @@ def link_text(
     picks: dict[str, str] | None = None,
     new_names: dict[str, str] | None = None,
     owner: str | None = None,
+    as_new: Collection[str] = (),
 ) -> str:
     """`text` with every name in it linked to its thing, keeping the words
     written as the reference's shown text (a trailing `'s` stays outside
@@ -180,7 +206,10 @@ def link_text(
       (partial) one, which stays plain text;
     - with `owner`, the thing the text is a fact of, a name that would link
       to it (its name, other names, or a pick or new name for it) stays
-      plain text: a thing never links to itself.
+      plain text: a thing never links to itself;
+    - a name the owner treats as new (`as_new`, by `is_new`) never links
+      to the thing the world already has by that name: only a pick or a
+      new name for it links it.
 
     Text inside an existing reference isn't touched, so linking twice
     changes nothing."""
@@ -196,10 +225,12 @@ def link_text(
     out: list[str] = []
     end = 0
     for existing in REF_PATTERN.finditer(text):
-        out.append(_link_plain(view, text[end : existing.start()], chosen, owner))
+        out.append(
+            _link_plain(view, text[end : existing.start()], chosen, owner, as_new)
+        )
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen, owner))
+    out.append(_link_plain(view, text[end:], chosen, owner, as_new))
     return "".join(out)
 
 
@@ -302,7 +333,13 @@ def clean_aka(
     return cleaned
 
 
-def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str, str]:
+def make_stubs(
+    rev: Revision,
+    view: WorldView,
+    names: list[NewName],
+    *,
+    fresh: Collection[str] = (),
+) -> dict[str, str]:
     """Make a stub for each of `names` the world doesn't have yet, in `rev`,
     and return each written name (whitespace tidied), each of its other
     names and each of its `written` forms, mapped to its thing's id.
@@ -312,9 +349,14 @@ def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str
     entry or stub, as does a species, race or mix name containing the name
     of another species, race or mix. Any
     other name becomes a thing of its kind (`lore` for a kind we don't
-    know) with its name, other names and `stub={"ignored": False}`."""
+    know) with its name, other names and `stub={"ignored": False}`.
+
+    A name the owner treats as new (`fresh`, by `is_new`) never reuses a
+    thing `view` has, only one an earlier name in `names` made."""
 
     known = _known_things(view)
+    # the things this call makes, the only ones a fresh name may reuse
+    made_here: list[_Known] = []
     made: dict[str, str] = {}
     for new in names:
         written = " ".join(new.name.split())
@@ -326,7 +368,8 @@ def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str
             kind = FALLBACK_KIND
 
         forms = [" ".join(form.split()) for form in new.written]
-        thing_id = _reuse(known, key, kind)
+        pool = made_here if is_new(written, fresh) else known
+        thing_id = _reuse(pool, key, kind)
         if thing_id is not None:
             for form in (written, *forms):
                 made.setdefault(form, thing_id)
@@ -338,7 +381,9 @@ def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str
             kind, fields={"name": written, "aka": aka, "stub": {"ignored": False}}
         )
         others = [str(entry["name"]) for entry in aka]
-        known.append(_Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)]))
+        thing = _Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)])
+        known.append(thing)
+        made_here.append(thing)
         for name in (written, *others, *forms):
             made.setdefault(name, thing_id)
         log.debug("make_stubs.created", name=written, kind=kind, id=thing_id)
