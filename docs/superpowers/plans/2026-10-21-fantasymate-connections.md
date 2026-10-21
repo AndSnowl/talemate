@@ -292,6 +292,7 @@
   - **ThingAka:** add, edit, tag (proper or common), the everyday radio and remove, through `set_field "aka"`;
   - **NamedStubs** on a thing page;
   - **The setup cards** show each stub preview, marked "will be filled in";
+  - **Culture stubs** show Expand disabled, with the note "Cultures arrive in the next slice";
   - test ids: `linked-ref`, `linked-stub`, `stub-card`, `stubs-tab`, `stub-row`, `aka-editor`, `named-stubs`.
 
 - [ ] **Step 1: Write the failing browser test** `test_stub_links_tab_and_aka`, seeded with the Owl-folk origin fact linking a "Tsardom of Moscavia" stub:
@@ -321,12 +322,14 @@
   - **Filling a stub instead:** a preview with `matching_stub_id` shows "Fill the stub *X* instead" and accepts with `into_stub`;
   - **Re-picking:** the owner's re-pick of a match adds the written name to that thing's `aka` as `common`, with no `everyday`;
   - **Add reference:** right-clicking in `NameHighlightInput` opens `ReferenceMenu`, which keeps cut, copy and paste and adds "Add reference…". The search covers entries and stubs, and the chosen name is inserted at the cursor with a pick recorded for it.
+  - **Re-pointing a link in a fact:** a link's hover card in `LinkedText` offers "Re-point…". It opens the same search and sends `correct_fact` with the reference's id swapped and its shown text kept (the spec's "two of the same name").
 
 - [ ] **Step 1: Write the failing browser tests**, with `TALEMATE_TEST_FIXED_PREVIEW` fixtures:
   - `test_expand_stub_prefills_and_fills_it`: the stub's id is kept and the fact now shows a link;
   - `test_prompt_names_highlight_and_repick_adds_aka`;
   - `test_fill_stub_instead`;
-  - `test_add_reference_menu_inserts_pick`.
+  - `test_add_reference_menu_inserts_pick`;
+  - `test_repoint_link_keeps_words`.
 - [ ] **Step 2: Run them.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** the full browser suite with `-n 4`. Expected: PASS.
