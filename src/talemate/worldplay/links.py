@@ -9,14 +9,19 @@ and win over the automatic match. A suggested (partial) match is left as
 plain text unless picked, and text already inside a reference is never
 touched.
 
+`link_text` given an `owner` (the thing whose facts the text is) leaves
+that thing's own names plain: a thing never links to itself.
+
 `make_stubs` makes one stub per new name a generation lists, unless the
 world (or the same call) already has that name: one name invented twice
-is one stub with two mentions.
+is one stub with two mentions. `existing_id` is the same reuse rule on its
+own, and `clean_aka` the tidying a list of other names gets.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Set as AbstractSet
 from typing import NamedTuple
 
 import structlog
@@ -30,7 +35,15 @@ from talemate.world.view import WorldView
 
 log = structlog.get_logger("talemate.worldplay.links")
 
-__all__ = ["NewName", "link_text", "make_stubs"]
+__all__ = [
+    "NewName",
+    "clean_aka",
+    "existing_id",
+    "link_text",
+    "make_stubs",
+    "name_key",
+    "name_keys",
+]
 
 # the kind a new name gets when the model gave none we know
 FALLBACK_KIND = "lore"
@@ -38,18 +51,23 @@ FALLBACK_KIND = "lore"
 
 class NewName(BaseModel):
     """A proper name a generation used that may not exist yet: its name in
-    full, its kind, and any other names (`aka` entries) for it."""
+    full, its kind, and any other names (`aka` entries) for it. `written`
+    holds the other ways the text writes it that aren't other names: the
+    name without its article ("Night of Feathers" for "The Night of
+    Feathers"), or the part of it the text uses ("Vladislav I" for "Tsar
+    Vladislav I")."""
 
     name: str
     kind: str
     aka: list[dict] = []
+    written: list[str] = []
 
 
 def _norm(text: str) -> str:
     return " ".join(text.split()).casefold()
 
 
-def _key(name: str) -> str:
+def name_key(name: str) -> str:
     """A name as compared for reuse: normalised, without a leading article
     ("The Hollow" is "hollow")."""
 
@@ -95,15 +113,21 @@ def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
     return spans
 
 
-def _link_plain(view: WorldView, text: str, chosen: dict[str, str]) -> str:
-    """Link the names in `text`, which holds no references."""
+def _link_plain(
+    view: WorldView, text: str, chosen: dict[str, str], owner: str | None
+) -> str:
+    """Link the names in `text`, which holds no references. A name that
+    means `owner` stays plain."""
 
     matched: list[_Span] = []
     for match in find_names(view, text):
         thing_id = chosen.get(_norm(match.text))
         if thing_id is None and not match.suggested:
             thing_id = match.candidates[0].id
-        # a suggestion left alone still holds its words
+        if thing_id == owner:
+            thing_id = None
+        # a suggestion left alone, or the owner's own name, still holds its
+        # words
         matched.append((match.start, match.end, thing_id or ""))
 
     # a picked or new name inside a longer name ("Maren" in "Maren Vos")
@@ -142,6 +166,7 @@ def link_text(
     *,
     picks: dict[str, str] | None = None,
     new_names: dict[str, str] | None = None,
+    owner: str | None = None,
 ) -> str:
     """`text` with every name in it linked to its thing, keeping the words
     written as the reference's shown text (a trailing `'s` stays outside
@@ -152,7 +177,10 @@ def link_text(
     - `new_names` maps a written name to a stub (`make_stubs`), for names
       `view` doesn't know yet;
     - any other match links to its best candidate, except a suggested
-      (partial) one, which stays plain text.
+      (partial) one, which stays plain text;
+    - with `owner`, the thing the text is a fact of, a name that would link
+      to it (its name, other names, or a pick or new name for it) stays
+      plain text: a thing never links to itself.
 
     Text inside an existing reference isn't touched, so linking twice
     changes nothing."""
@@ -160,14 +188,18 @@ def link_text(
     chosen = {_norm(name): thing_id for name, thing_id in (new_names or {}).items()}
     chosen.update({_norm(name): thing_id for name, thing_id in (picks or {}).items()})
     chosen.pop("", None)
+    if owner is not None:
+        chosen = {
+            key: thing_id for key, thing_id in chosen.items() if thing_id != owner
+        }
 
     out: list[str] = []
     end = 0
     for existing in REF_PATTERN.finditer(text):
-        out.append(_link_plain(view, text[end : existing.start()], chosen))
+        out.append(_link_plain(view, text[end : existing.start()], chosen, owner))
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen))
+    out.append(_link_plain(view, text[end:], chosen, owner))
     return "".join(out)
 
 
@@ -186,11 +218,11 @@ class _Known(NamedTuple):
 def _known_things(view: WorldView) -> list[_Known]:
     known = []
     for state in view.things():
-        keys = [_key(view.name_of(state.id) or "")]
+        keys = [name_key(view.name_of(state.id) or "")]
         aka = state.fields.get("aka")
         for entry in aka if isinstance(aka, list) else []:
             if isinstance(entry, dict) and isinstance(entry.get("name"), str):
-                keys.append(_key(entry["name"]))
+                keys.append(name_key(entry["name"]))
         known.append(_Known(id=state.id, kind=state.kind, keys=[k for k in keys if k]))
     return known
 
@@ -222,22 +254,43 @@ def _reuse(known: list[_Known], key: str, kind: str) -> str | None:
     return best[1] if best else None
 
 
-def _clean_aka(
-    entries: list[dict], own_key: str, taken: set[str]
+def existing_id(view: WorldView, name: str, kind: str) -> str | None:
+    """The thing `name` (of `kind`) already means in `view`, by the rule
+    `make_stubs` reuses things by: a main or other name, ignoring case and
+    a leading article, whatever its kind; or, for a species, race or mix,
+    the species, race or mix whose name it contains. `None` when it's
+    new."""
+
+    key = name_key(" ".join(name.split()))
+    return _reuse(_known_things(view), key, _norm(kind)) if key else None
+
+
+def name_keys(view: WorldView, skip: str | None = None) -> set[str]:
+    """Every main and other name in `view`, as compared for reuse, leaving
+    out the thing `skip`'s own."""
+
+    return {
+        key for thing in _known_things(view) if thing.id != skip for key in thing.keys
+    }
+
+
+def clean_aka(
+    entries: list[dict], own_name: str, taken: AbstractSet[str] = frozenset()
 ) -> list[dict[str, object]]:
     """`entries` in the shape `aka` holds: an unknown tag becomes proper,
     only the first everyday common name stays everyday, and a name that is
-    the thing's own, a repeat, or another thing's name is dropped."""
+    the thing's own (`own_name`), a repeat, or one of the name keys in
+    `taken` (`name_keys`: other things' names) is dropped."""
 
     cleaned: list[dict[str, object]] = []
-    seen = {own_key}
+    seen = {name_key(own_name)}
     everyday = False
     for entry in entries:
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             continue
         name = " ".join(name.split())
-        key = _key(name)
+        key = name_key(name)
         if key in seen or key in taken:
             continue
         seen.add(key)
@@ -251,8 +304,8 @@ def _clean_aka(
 
 def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str, str]:
     """Make a stub for each of `names` the world doesn't have yet, in `rev`,
-    and return each written name (whitespace tidied), and each of its other
-    names, mapped to its thing's id.
+    and return each written name (whitespace tidied), each of its other
+    names and each of its `written` forms, mapped to its thing's id.
 
     A name that `view` (or an earlier name in `names`) already has, as a
     main or other name and ignoring case and a leading article, reuses that
@@ -265,26 +318,28 @@ def make_stubs(rev: Revision, view: WorldView, names: list[NewName]) -> dict[str
     made: dict[str, str] = {}
     for new in names:
         written = " ".join(new.name.split())
-        key = _key(written)
+        key = name_key(written)
         if not key:
             continue
         kind = _norm(new.kind)
         if kind not in KINDS:
             kind = FALLBACK_KIND
 
+        forms = [" ".join(form.split()) for form in new.written]
         thing_id = _reuse(known, key, kind)
         if thing_id is not None:
-            made.setdefault(written, thing_id)
+            for form in (written, *forms):
+                made.setdefault(form, thing_id)
             continue
 
         taken = {k for thing in known for k in thing.keys}
-        aka = _clean_aka(new.aka, key, taken)
+        aka = clean_aka(new.aka, written, taken)
         thing_id = rev.create_thing(
             kind, fields={"name": written, "aka": aka, "stub": {"ignored": False}}
         )
         others = [str(entry["name"]) for entry in aka]
-        known.append(_Known(id=thing_id, kind=kind, keys=[key, *map(_key, others)]))
-        for name in (written, *others):
+        known.append(_Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)]))
+        for name in (written, *others, *forms):
             made.setdefault(name, thing_id)
         log.debug("make_stubs.created", name=written, kind=kind, id=thing_id)
     return made

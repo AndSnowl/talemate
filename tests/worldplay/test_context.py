@@ -40,6 +40,27 @@ def test_world_context_block_has_goal_place_lore(world):
     assert "Signed after the flood of 301." in block
 
 
+def test_world_context_block_renders_linked_facts(world):
+    """Facts made from a prompt are linked; the World block reads them as
+    written, never as raw references."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        place_id = rev.create_thing("place", fields={"name": "Veldhaer"})
+        lore_id = rev.create_thing("lore", fields={"name": "The River Treaty"})
+        rev.add_fact(place_id, "history", f"Bound by {ref(lore_id, 'the Treaty')}.")
+        rev.add_fact(lore_id, "general", f"Signed in {ref(place_id)}.")
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(310))
+    scenes.update(scene_id, state={"place_thing_id": place_id, "pulled_in": [lore_id]})
+
+    block = world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
+    assert "Bound by the Treaty." in block
+    assert "Signed in Veldhaer." in block
+    assert "[[thing:" not in block
+
+
 def test_world_context_block_lists_heritage_bodies(world, heritage_world):
     """The heritage play probe (docs/superpowers/probes/2026-10-20-
     heritage-play.md): the narrator's prompts carry no character sheets,

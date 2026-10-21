@@ -210,3 +210,21 @@ def test_suggested_prompt_without_a_sentence_end(world):
     assert prompt.startswith("St. Sophia: Pilgrims walk to St. Sophia and on")
     assert prompt.endswith("and on…")
     assert len(prompt) <= 400
+
+
+def test_context_names_carry_everyday_names(world):
+    tsardom, owls, _origin = _owl_world(world)
+    with world.revision(Source.manual(note="aka")) as rev:
+        rev.set_field(
+            owls,
+            "aka",
+            [{"name": "Owls", "tag": "common", "everyday": True}],
+            None,
+        )
+    view = world.view(None)
+
+    [(heading, _facts)] = mention_context(view, tsardom)
+    assert heading == "Owl-folk (species, usually called Owls)"
+    gathered = gather_mentions(view, tsardom)
+    assert gathered.mentioned[0].owner_everyday == "Owls"
+    assert gathered.about[0].everyday == "Owls"

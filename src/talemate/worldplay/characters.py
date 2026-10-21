@@ -27,7 +27,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.prose import CachedProse, stretches
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
-from talemate.world.view import ThingState
+from talemate.world.view import ThingState, WorldView
 from talemate.worldplay.prose_gen import inherited_categories, lineage_ids
 
 log = structlog.get_logger("talemate.worldplay.characters")
@@ -191,6 +191,7 @@ def _change_lines(
         return date is None or date.instant <= at_instant
 
     calendar = world.calendar
+    view = world.view(at)
     keyed: list[tuple[int, str]] = []
     for fact_id, (start, end) in _facts_at_rev(
         world, thing_id, world.head_rev()
@@ -222,7 +223,7 @@ def _change_lines(
         )
         end_news = ended and _not_yet_known(entry, end_date, end_rev)
 
-        text = prefix + (start.text or "")
+        text = prefix + view.render(start.text or "")
         if start_news and start.date is not None and end_date is not None and ended:
             line = (
                 f"From {calendar.format(start.date)} until "
@@ -320,7 +321,7 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
     return [line for _, line in keyed]
 
 
-def _speech_facts(state: ThingState) -> tuple[list[str], list[str]]:
+def _speech_facts(view: WorldView, state: ThingState) -> tuple[list[str], list[str]]:
     """Speech facts split into dialogue instructions and example lines --
     a fact that reads like something the character would say (it starts
     with a quote mark) is an example; anything else is an instruction."""
@@ -330,7 +331,7 @@ def _speech_facts(state: ThingState) -> tuple[list[str], list[str]]:
     for fact in state.facts:
         if fact.category != "speech":
             continue
-        text = fact.text.strip()
+        text = view.render(fact.text).strip()
         if replace_smart_quotes(text).startswith(('"', "'")):
             example_dialogue.append(text)
         else:
@@ -404,7 +405,7 @@ def character_from_world(
     if personality_entry is not None and personality_entry.text:
         base_attributes["personality"] = personality_entry.text
 
-    dialogue_instructions, example_dialogue = _speech_facts(state)
+    dialogue_instructions, example_dialogue = _speech_facts(view, state)
 
     return Character(
         name=name,

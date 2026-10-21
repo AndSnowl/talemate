@@ -178,7 +178,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
         if place_state is not None:
             place = {
                 "name": view.name_of(place_thing_id) or "",
-                "facts": [fact.text for fact in place_state.facts],
+                "facts": [view.render(fact.text) for fact in place_state.facts],
             }
     elif place_local_id:
         local = next(
@@ -205,7 +205,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
         lore.append(
             {
                 "name": view.name_of(lore_thing_id) or "",
-                "facts": [fact.text for fact in lore_state.facts],
+                "facts": [view.render(fact.text) for fact in lore_state.facts],
             }
         )
 

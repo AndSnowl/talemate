@@ -11,6 +11,7 @@ import pytest
 from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import Precision, WorldDate
 from talemate.world import heritage, store
+from talemate.world.refs import ref
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
@@ -1052,3 +1053,607 @@ async def test_preview_race_attaches_top_level_labels(probe_world):
     # a lifespan equal to the species' is dropped, a different one kept
     assert "lifespan" not in preview.fields
     assert preview.fields["adult_age"] == 20
+
+
+# --- names, stubs, expansion and context (connections, Task 5) ---------------
+
+# the connections probe's raw replies
+# (docs/superpowers/probes/2026-10-21-connections.md)
+PROBE_RAW = (
+    Path(__file__).resolve().parents[2]
+    / "docs/superpowers/probes/raw/2026-10-21-connections.json"
+)
+
+
+def _probe_reply(probe: str, variant: str, n: int) -> str:
+    runs = json.loads(PROBE_RAW.read_text())[probe]
+    return next(r for r in runs if r["variant"] == variant and r["n"] == n)["reply"]
+
+
+def _aka(name: str, tag: str = "common", everyday: bool = False) -> dict:
+    return {"name": name, "tag": tag, "everyday": everyday}
+
+
+@pytest.fixture
+def at_1020(world):
+    """The connections probe's world date: 1020."""
+
+    world.set_present(WorldDate.of(1020))
+    return world
+
+
+OWL_ORIGIN = (
+    "In 994, every person in the {tsardom} awoke as owl-folk overnight, in "
+    "what Moscavians call the Night of Feathers."
+)
+
+
+def _owl_world(world, *, stub: dict | None = None):
+    """The probe's Owl-folk (a species with physical, instinct and origin
+    facts) whose origin fact mentions the Tsardom of Moscavia stub. Returns
+    `(tsardom, owls)`."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "stub": stub or {"ignored": False},
+            },
+        )
+        owls = rev.create_thing("species", fields={"name": "Owl-folk"})
+        rev.add_fact(owls, "physical", "Owl-folk have wings in place of arms.")
+        rev.add_fact(owls, "instinct", "Owl-folk are crepuscular.")
+        rev.add_fact(
+            owls,
+            "origin",
+            OWL_ORIGIN.format(tsardom=ref(tsardom, "Tsardom of Moscavia")),
+        )
+    return tsardom, owls
+
+
+def _linked_ids(view, text: str) -> list[str]:
+    return [segment.ref for segment in view.segments(text) if segment.ref]
+
+
+async def test_accept_makes_stubs_and_links_facts(at_1020):
+    """Probe 5's broken reply (its wrapper never closes): the aka and names
+    lists are still read, never as facts; the listed names become stubs on
+    accept and every fact is linked, keeping its words."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "aka": [_aka("Moscavia", everyday=True)],
+            },
+        )
+        rev.add_fact(tsardom, "general", "A northern realm of pine forest.")
+    reply = _probe_reply("probe5", "everyday", 2)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A town of amber.")
+        preview = await preview_thing(
+            world,
+            "place",
+            "an amber market town on a lake in Moscavia",
+            {},
+            client,
+            picks={"Moscavia": tsardom},
+        )
+
+    assert preview.name == "Solnechnyy Gorod"
+    assert preview.aka == [_aka("Sunny City", everyday=True), _aka("Solnyak")]
+    assert len(preview.facts) == 12
+    assert all(f.text != "common" for f in preview.facts)
+    # the world's Tsardom and the "title" Tsar are dropped
+    assert [(n.name, n.kind) for n in preview.new_names] == [
+        ("Lake Yelizaveta", "place"),
+        ("River Solnitsa", "place"),
+        ("Pyotr Solnechnyy", "character"),
+        ("Kremova", "place"),
+        ("Night of Feathers", "event"),
+        ("Solnitsa Brotherhood", "lore"),
+        ("Darya Volkovna", "character"),
+        ("Amber Festival", "event"),
+    ]
+    assert preview.stub_id is None
+    assert preview.matching_stub_id is None
+
+    # the reply's aka and names are asked for, and the pick is named, with
+    # its everyday name, in the prompt
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert '"aka": [{"name": "...", "tag": "common", "everyday": true}]' in prompt
+    assert '"names": [{"name": "...", "kind": "place", "aka": []}]' in prompt
+    assert '"names": after the facts, every proper name your facts use' in prompt
+    assert (
+        '"Moscavia" means Tsardom of Moscavia (place, usually called Moscavia):'
+        in prompt
+    )
+    assert "- A northern realm of pine forest." in prompt
+
+    head = world.head_rev()
+    thing_id = accept_preview(world, preview)
+    assert world.head_rev() == head + 1
+
+    view = world.view(None)
+    state = view.thing(thing_id)
+    assert not state.is_stub
+    assert state.fields["aka"] == preview.aka
+    stubs = {
+        view.name_of(s.id): s for s in view.things() if s.is_stub and s.id != tsardom
+    }
+    assert set(stubs) == {n.name for n in preview.new_names}
+    assert stubs["Kremova"].kind == "place"
+    assert stubs["Night of Feathers"].kind == "event"
+
+    by_text = {view.render(f.text): f.text for f in state.facts}
+    # every fact keeps its words
+    assert set(by_text) == {f.text for f in preview.facts}
+    lake = next(t for t in by_text if t.startswith("Solnechnyy Gorod is"))
+    assert _linked_ids(view, by_text[lake]) == [stubs["Lake Yelizaveta"].id]
+    history = next(t for t in by_text if t.startswith("After the Night"))
+    assert _linked_ids(view, by_text[history]) == [
+        stubs["Night of Feathers"].id,
+        tsardom,
+    ]
+    # the thing's own name and other names never link inside its own facts
+    trade = next(t for t in by_text if t.startswith("Solnechnyy Gorod's primary"))
+    assert _linked_ids(view, by_text[trade]) == []
+    # one revision made it all
+    assert {s.source_rev for s in state.facts} == {head + 1}
+
+
+async def test_expand_stub_uses_mentions_as_context(at_1020):
+    world = at_1020
+    tsardom, owls = _owl_world(world)
+    reply = _probe_reply("probe2", "b", 0)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A realm of owl-folk.")
+        # the stub's own kind and name are used, whatever is asked
+        preview = await preview_thing(
+            world,
+            "lore",
+            "The Tsardom of Moscavia: the country where everyone turned into owl-folk.",
+            {},
+            client,
+            stub_id=tsardom,
+        )
+
+    assert preview.kind == "place"
+    assert preview.name == "Tsardom of Moscavia"
+    assert preview.stub_id == tsardom
+    assert preview.matching_stub_id is None
+    origin = OWL_ORIGIN.format(tsardom="Tsardom of Moscavia")
+    assert preview.context == [
+        (
+            "Owl-folk (species)",
+            [
+                origin,
+                "Owl-folk have wings in place of arms.",
+                "Owl-folk are crepuscular.",
+            ],
+        )
+    ]
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "Mentioned elsewhere in the world (keep these true):" in prompt
+    assert f"- Owl-folk (species, origin): {origin}" in prompt
+    assert (
+        "About those (they already exist in the world; let the place reflect "
+        "them -- a place is shaped by the people who live there):\nOwl-folk "
+        "(species):\n- Owl-folk have wings in place of arms." in prompt
+    )
+    # the name is decided: the stub's
+    assert "- name: Tsardom of Moscavia" in prompt
+    # the world's Owl-folk, and the thing's own name, aren't new
+    names = [n.name for n in preview.new_names]
+    assert "Owl-folk" not in names
+    assert "Tsardom of Moscavia" not in names
+    assert names[:3] == ["Vladislav I", "Tsar Mikhail III", "The Night of Feathers"]
+
+    head = world.head_rev()
+    thing_id = accept_preview(world, preview)
+    assert thing_id == tsardom
+    assert world.head_rev() == head + 1
+    view = world.view(None)
+    state = view.thing(tsardom)
+    assert not state.is_stub
+    assert state.kind == "place"
+    assert state.fields["aka"] == [_aka("Moscavia", everyday=True)]
+    assert len(state.facts) == len(preview.facts)
+    night = next(
+        s.id for s in view.things() if view.name_of(s.id) == "The Night of Feathers"
+    )
+    for fact in state.facts:
+        # its own name ("Tsardom", "Moscavia") never links to itself
+        assert tsardom not in _linked_ids(view, fact.text)
+    # "Night of Feathers", written without the article, links the stub
+    once = next(f for f in state.facts if f.text.startswith("Once a kingdom"))
+    assert _linked_ids(view, once.text) == [owls, night]
+    assert view.render(once.text) == preview.facts[1].text
+
+
+async def test_expand_ignored_stub_keeps_id_and_revives(at_1020):
+    world = at_1020
+    tsardom, owls = _owl_world(world, stub={"ignored": True})
+    reply = json.dumps(
+        {
+            "name": "Tsardom of Moscavia",
+            "aka": [_aka("Moscavia", everyday=True)],
+            "facts": [{"category": "description", "text": "A realm of owl-folk."}],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A realm.")
+        preview = await preview_thing(
+            world, "place", "the owl-folk's country", {}, client, stub_id=tsardom
+        )
+    assert accept_preview(world, preview) == tsardom
+
+    view = world.view(None)
+    state = view.thing(tsardom)
+    assert not state.is_stub
+    assert not state.stub_ignored
+    # the mention is a normal link to the full entry, and the name now
+    # matches in new text
+    origin = next(f for f in view.thing(owls).facts if f.category == "origin")
+    assert _linked_ids(view, origin.text) == [tsardom]
+    from talemate.world.names import find_names
+
+    [match] = find_names(view, "The Tsardom of Moscavia is cold.")
+    assert match.candidates[0].id == tsardom
+
+
+async def test_expand_deleted_stub_refused(at_1020):
+    world = at_1020
+    tsardom, _owls = _owl_world(world)
+    reply = json.dumps(
+        {
+            "name": "Tsardom of Moscavia",
+            "facts": [{"category": "description", "text": "A realm of owl-folk."}],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A realm.")
+        preview = await preview_thing(
+            world, "place", "the owl-folk's country", {}, client, stub_id=tsardom
+        )
+    with world.revision(Source.manual(note="delete")) as rev:
+        rev.remove_thing(tsardom)
+
+    head = world.head_rev()
+    with pytest.raises(ValueError):
+        accept_preview(world, preview)
+    with pytest.raises(ValueError):
+        accept_preview(
+            world, preview.model_copy(update={"stub_id": None}), into_stub=tsardom
+        )
+    assert world.head_rev() == head
+    # a deleted stub can't be previewed either
+    with pytest.raises(ValueError):
+        await preview_thing(
+            world, "place", "again", {}, MockClient("test"), stub_id=tsardom
+        )
+    # the mention still reads as written, not as an unknown name
+    view = world.view(None)
+    assert "Tsardom of Moscavia awoke" in view.render(
+        next(f.text for f in view.thing(_owls).facts if f.category == "origin")
+    )
+
+
+async def test_preview_offers_matching_stub(at_1020):
+    world = at_1020
+    with world.revision(Source.manual(note="stubs")) as rev:
+        frost = rev.create_thing(
+            "place", fields={"name": "Frosthollow", "stub": {"ignored": False}}
+        )
+        # a stub of another kind with the same name is no match
+        rev.create_thing(
+            "lore", fields={"name": "Frosthollow", "stub": {"ignored": False}}
+        )
+        vasha = rev.create_thing("character", fields={"name": "Vasha"})
+        mention = rev.add_fact(
+            vasha, "background", f"Born in {ref(frost, 'Frosthollow')}."
+        )
+    reply = json.dumps(
+        {
+            "name": "Frosthollow",
+            "facts": [{"category": "description", "text": "A cold valley."}],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A cold valley.")
+        preview = await preview_thing(world, "place", "a cold valley", {}, client)
+
+    assert preview.stub_id is None
+    assert preview.matching_stub_id == frost
+    # filling the stub instead keeps its id and its mention
+    assert accept_preview(world, preview, into_stub=frost) == frost
+    view = world.view(None)
+    state = view.thing(frost)
+    assert not state.is_stub
+    assert [f.text for f in state.facts] == ["A cold valley."]
+    assert (
+        view.render(
+            next(f.text for f in view.thing(vasha).facts if f.fact_id == mention)
+        )
+        == "Born in Frosthollow."
+    )
+
+
+async def test_picks_add_named_context(at_1020):
+    """Probe 3's matched run: "Moscavian Owls" picked as the Owl-folk puts
+    their facts in the prompt, and the reply's "Moscavian Owl-folk" isn't
+    a new species."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        owls = rev.create_thing(
+            "species", fields={"name": "Owl-folk", "aka": [_aka("Owls", everyday=True)]}
+        )
+        rev.add_fact(owls, "instinct", "Owl-folk go utterly still when startled.")
+        rev.add_fact(owls, "physical", "Owl-folk have wide yellow eyes.")
+    reply = _probe_reply("probe3", "matched", 0)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A river town.")
+        preview = await preview_thing(
+            world,
+            "place",
+            "A river town where Moscavian Owls trade with barge crews",
+            {},
+            client,
+            picks={"Moscavian Owls": owls},
+        )
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert (
+        "Named in this prompt (these already exist in the world: use them as "
+        "they are, and never invent a new one in their place):\n"
+        '"Moscavian Owls" means Owl-folk (species, usually called Owls):\n'
+        "- Owl-folk have wide yellow eyes.\n"
+        "- Owl-folk go utterly still when startled." in prompt
+    )
+    assert preview.context == [
+        (
+            'Named in this prompt: "Moscavian Owls" means Owl-folk '
+            "(species, usually called Owls)",
+            # in the kind's category order: physical before instinct
+            [
+                "Owl-folk have wide yellow eyes.",
+                "Owl-folk go utterly still when startled.",
+            ],
+        )
+    ]
+    assert preview.picks == {"Moscavian Owls": owls}
+    # "Moscavian Owl-folk" is the Owl-folk; the rest are new
+    assert [n.name for n in preview.new_names] == [
+        "Tsardom of Moscavia",
+        "Solenka River",
+        "Night of Feathers",
+    ]
+
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    general = next(
+        f
+        for f in view.thing(thing_id).facts
+        if view.render(f.text).startswith("Moscavian Owl-folk make up")
+    )
+    assert _linked_ids(view, general.text) == [owls]
+    # the town's own everyday name ("Solenka") doesn't link
+    streets = next(
+        f
+        for f in view.thing(thing_id).facts
+        if view.render(f.text).startswith("The streets of Solenka")
+    )
+    assert _linked_ids(view, streets.text) == []
+
+
+@pytest.mark.parametrize(
+    "kind, fact, prose_section",
+    [
+        ("event", {"category": "summary", "text": "The dam broke."}, "description"),
+        ("item", {"category": "power", "text": "It hums near water."}, "description"),
+    ],
+)
+async def test_event_and_item_creatable(at_1020, kind, fact, prose_section):
+    world = at_1020
+    reply = json.dumps({"name": "The Thing", "facts": [fact], "names": []})
+    client = MockClient("test")
+    when = WorldDate.of(1001).model_dump()
+    fields = {"when": when} if kind == "event" else {}
+    async with MockClientContext():
+        _queue(reply, "The Thing is old.")
+        preview = await preview_thing(world, kind, f"a {kind}", fields, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert f"You create a new {kind}" in prompt
+    if kind == "event":
+        assert "summary, consequence, general" in prompt
+        # a date field reads as a date, not as its raw value
+        assert f"- when: {world.calendar.format(WorldDate.of(1001))}" in prompt
+        assert "instant" not in prompt
+    assert preview.prose == {prose_section: "The Thing is old."}
+
+    thing_id = accept_preview(world, preview)
+    state = world.view(None).thing(thing_id)
+    assert state.kind == kind
+    assert [f.text for f in state.facts] == [fact["text"]]
+
+
+async def test_aka_and_stub_never_leak_as_raw_fields(at_1020):
+    """Every kind has `aka` and `stub`; neither reaches the prompt as a raw
+    field value."""
+
+    world = at_1020
+    reply = json.dumps(
+        {"name": "Lowmere", "facts": [{"category": "general", "text": "Wet."}]}
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Wet.")
+        preview = await preview_thing(
+            world,
+            "place",
+            "a wet town",
+            {"aka": [_aka("Lowie", everyday=True)], "stub": {"ignored": False}},
+            client,
+        )
+    for call in client.prompt_history:
+        text = str(call["prompt"])
+        assert "'everyday'" not in text
+        assert "ignored" not in text
+        assert "- aka:" not in text
+    # the owner's other names are the preview's; the stub marker is dropped
+    assert preview.aka == [_aka("Lowie", everyday=True)]
+    assert "aka" not in preview.fields and "stub" not in preview.fields
+
+
+def test_parse_names_recovers_lists_from_a_cut_off_reply():
+    from talemate.worldplay.create import parse_names
+
+    reply = (
+        '{"name": "Port", "aka": [{"name": "Porty", "tag": "nickname", '
+        '"everyday": true}, "Old Port"], "facts": [{"category": "general", '
+        '"text": "The Vesna runs past it."}], "names": [{"name": "Vesna", '
+        '"kind": "place", "aka": ["the River"]}, {"name": "Tsar", "kind": '
+        '"title", "aka": []}, {"name": "Cut'
+    )
+    aka, names = parse_names(reply)
+    assert aka == [
+        # an unknown tag is proper, and a proper name is never everyday
+        {"name": "Porty", "tag": "proper", "everyday": False},
+        {"name": "Old Port", "tag": "proper", "everyday": False},
+    ]
+    assert [(n.name, n.kind, n.aka) for n in names] == [
+        ("Vesna", "place", [_aka("the River", tag="proper")]),
+        ("Tsar", "title", []),
+    ]
+    _name, _age, facts = parse_create_reply(reply, "place", Calendar(), 313)
+    assert [f.text for f in facts] == ["The Vesna runs past it."]
+
+
+async def test_listed_names_follow_the_merge_rule(at_1020):
+    """A listed name counts only if the facts use it: in full, without its
+    article, or (a fuller name) as a capitalised phrase it holds; echoed
+    and lowercase names are dropped, and a stub links its written form."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        maren = rev.create_thing("character", fields={"name": "Maren Vos"})
+    reply = json.dumps(
+        {
+            "name": "Greyhold",
+            "aka": [_aka("Greyhold", tag="proper"), _aka("the Hold", everyday=True)],
+            "facts": [
+                {"category": "history", "text": "Alexei III the Feathery built it."},
+                {"category": "general", "text": "Great markets fill the halivas."},
+                {"category": "general", "text": "Maren keeps the Hold's gate."},
+            ],
+            "names": [
+                # a title added to the written name
+                {"name": "Tsar Alexei III the Feathery", "kind": "character"},
+                # its first word opens a sentence: no phrase, so dropped
+                {"name": "Great Stone Bridge", "kind": "item"},
+                # a lowercase coined word, and a name never written
+                {"name": "Halivas", "kind": "place"},
+                {"name": "Kremova", "kind": "place"},
+                # in the world already, by first name
+                {"name": "Maren", "kind": "character"},
+                # its own other name, and no kind (lore)
+                {"name": "The Hold", "kind": "place"},
+                {"name": "Alexei III the Feathery", "kind": ""},
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Greyhold is grey.")
+        preview = await preview_thing(world, "place", "a grey keep", {}, client)
+
+    # the main name isn't another name of itself
+    assert preview.aka == [_aka("the Hold", everyday=True)]
+    [alexei] = preview.new_names
+    assert (alexei.name, alexei.kind, alexei.written) == (
+        "Tsar Alexei III the Feathery",
+        "character",
+        ["Alexei III the Feathery"],
+    )
+
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    stub = next(s for s in view.things("character") if s.is_stub)
+    facts = {view.render(f.text): f.text for f in view.thing(thing_id).facts}
+    assert _linked_ids(view, facts["Alexei III the Feathery built it."]) == [stub.id]
+    assert _linked_ids(view, facts["Maren keeps the Hold's gate."]) == [maren]
+    assert _linked_ids(view, facts["Great markets fill the halivas."]) == []
+
+
+async def test_expand_species_stub_states_its_name(at_1020):
+    """The species and race branches show no "Already decided" list, so a
+    stub's name is stated where the name is asked for."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="stub")) as rev:
+        otters = rev.create_thing(
+            "species", fields={"name": "Lake Otters", "stub": {"ignored": False}}
+        )
+    reply = json.dumps(
+        {"name": "Otterkind", "facts": [{"category": "physical", "text": "Sleek."}]}
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Lake Otters are sleek.")
+        preview = await preview_thing(
+            world, "species", "otter-folk", {}, client, stub_id=otters
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert 'Use the name already decided: "Lake Otters".' in prompt
+    assert preview.name == "Lake Otters"
+
+
+async def test_expand_mix_stub_gets_context_blocks(probe_world):
+    world = probe_world.world
+    with world.revision(Source.manual(note="stub")) as rev:
+        stub = rev.create_thing(
+            "mix", fields={"name": "Orcling", "stub": {"ignored": False}}
+        )
+        town = rev.create_thing("place", fields={"name": "Tuskford"})
+        rev.add_fact(town, "general", f"Most of its smiths are {ref(stub)}s.")
+    reply = json.dumps(
+        {"name": "Orcling", "facts": [{"category": "physical", "text": "Tusked."}]}
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Orcling is tusked.")
+        preview = await preview_thing(
+            world,
+            "mix",
+            "",
+            {"parents": [probe_world.orc, probe_world.lowlander]},
+            client,
+            stub_id=stub,
+            picks={"Tuskford": town},
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    # Tuskford's only fact is the mention, so there's no "About those"
+    assert (
+        "Mentioned elsewhere in the world (keep these true):\n"
+        "- Tuskford (place, general): Most of its smiths are Orclings.\n\n"
+        "Named in this prompt (these already exist in the world: use them as "
+        "they are, and never invent a new one in their place):\n"
+        '"Tuskford" means Tuskford (place):\n'
+        "- Most of its smiths are Orclings.\n\n"
+        "The world's calendar:" in prompt
+    )
+    assert "About those" not in prompt
+    assert '"names": [{"name": "...", "kind": "place", "aka": []}]' in prompt
+    assert preview.stub_id == stub

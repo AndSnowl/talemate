@@ -280,3 +280,41 @@ def test_make_stubs_unknown_kind_is_lore(world):
         "the Old Tsardom",
         "Owl Country",
     }
+
+
+def test_link_text_never_links_the_owner_to_itself(world):
+    """A thing's own name, and its other names, stay plain text in its own
+    facts; other names still link, and the owner's words are never handed
+    to a shorter name inside them."""
+
+    owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+
+    text = "The Tsardom of Moscavia, or Moscavia, is home to the Owl-folk."
+    assert link_text(view, text, owner=tsardom) == (
+        f"The Tsardom of Moscavia, or Moscavia, is home to the {ref(owls, 'Owl-folk')}."
+    )
+    # a pick or new name for the owner is ignored too
+    assert (
+        link_text(view, "Moscavia is cold.", picks={"Moscavia": tsardom}, owner=tsardom)
+        == "Moscavia is cold."
+    )
+
+
+def test_make_stubs_maps_written_forms(world):
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [
+                NewName(
+                    name="The Night of Feathers",
+                    kind="event",
+                    written=["Night of Feathers"],
+                )
+            ],
+        )
+    night = made["The Night of Feathers"]
+    assert made["Night of Feathers"] == night
+    assert world.view(None).thing(night).fields["aka"] == []

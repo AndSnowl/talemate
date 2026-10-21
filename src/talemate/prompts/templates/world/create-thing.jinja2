@@ -8,8 +8,18 @@ Branches (wording from docs/superpowers/probes/2026-10-20-heritage-create.md):
     `inherited` set; overrides as a top-level "no_longer_true";
   - character with a heritage: `heritage_label`, `heritage_numbers` and
     `inherited` set; overrides per fact;
-  - anything else (a character with no heritage, a place, lore).
+  - anything else (a character with no heritage, a place, lore, an event,
+    an item).
 `inherited` is `[(label, source_name, category, text)]`.
+
+Every branch asks for the thing's "aka" and the "names" its facts use,
+and gets the context blocks (wording from
+docs/superpowers/probes/2026-10-21-connections.md, "Recommended prompt
+text"): `mentions` is `[(lead, text)]` and `about` `[(label, facts)]`, a
+stub's "Mentioned elsewhere" and "About those"; `named` is
+`[(written, label, facts)]`, "Named in this prompt". A label carries the
+entry's everyday name: "Tsardom of Moscavia (place, usually called
+Moscavia)".
 -#}
 <|SECTION:TASK|>
 {% if kind == "species" -%}
@@ -72,15 +82,41 @@ Already decided (use these as they are):
 - {{ label }}: {{ value }}
 {% endfor %}{% endif %}
 {%- endif %}
+{%- if mentions %}
+
+Mentioned elsewhere in the world (keep these true):
+{% for lead, text in mentions -%}
+- {{ lead }}: {{ text }}
+{% endfor %}
+{%- if about %}
+About those (they already exist in the world; let the {{ kind }} reflect them{% if kind == "place" %} -- a place is shaped by the people who live there{% endif %}):
+{% for label, facts in about -%}
+{{ label }}:
+{% for text in facts -%}
+- {{ text }}
+{% endfor %}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- if named %}
+
+Named in this prompt (these already exist in the world: use them as they are, and never invent a new one in their place):
+{% for written, label, facts in named -%}
+"{{ written }}" means {{ label }}:
+{% for text in facts -%}
+- {{ text }}
+{% endfor %}
+{%- endfor %}
+{%- endif %}
 
 The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
 <|CLOSE_SECTION|>
 <|SECTION:FORMAT|>
 Reply with only one JSON object, shaped exactly like this example:
 {% if kind == "species" -%}
-{"name": "...", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "facts": [{"category": "origin", "text": "One claim, in a full sentence."}, {"category": "general", "text": "Another claim."}]}
+{"name": "...", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "origin", "text": "One claim, in a full sentence."}, {"category": "general", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
 
-- "name": the species' name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
+- "name": the species' name.{% if has_name %} Use the name already decided: "{{ name }}".{% else %} Invent one if the prompt doesn't give it.{% endif %}
 - "lifespan": how long they typically live, in years, as a number.
 - "adult_age": the age in years at which they are grown, as a number.
 - "measures": their typical body ranges, each {"name", "min", "max", "unit"} with min and max as numbers: always height, plus any other measure that matters for this body (wingspan, tail length, tusk length...).
@@ -88,16 +124,16 @@ Reply with only one JSON object, shaped exactly like this example:
 - "facts": between {{ min_facts }} and {{ max_facts }} facts, one claim each. "category" is one of: {{ categories | join(", ") }}. physical: the body; instinct: inborn tendencies; variation: how members differ from each other; origin: where they come from.
 - Leave "since" out: these facts describe the species for as long as it has existed, and are never dated.
 {%- elif kind == "race" -%}
-{"name": "...", "measures": [{"name": "{{ example_measure }}", "min": 0, "max": 0, "unit": "ft"}], "facts": [{"category": "physical", "text": "One claim, in a full sentence."}, {"category": "variation", "text": "Another claim."}], "no_longer_true": []}
+{"name": "...", "measures": [{"name": "{{ example_measure }}", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "physical", "text": "One claim, in a full sentence."}, {"category": "variation", "text": "Another claim."}], "no_longer_true": [], "names": [{"name": "...", "kind": "place", "aka": []}]}
 
-- "name": the race's name.{% if has_name %} Use the name already decided.{% else %} Use the prompt's name if it gives one.{% endif %}
+- "name": the race's name.{% if has_name %} Use the name already decided: "{{ name }}".{% else %} Use the prompt's name if it gives one.{% endif %}
 - "lifespan", "adult_age" and "measures": give each only where this race differs from {{ species_name }} (a measure narrower or outside the species' range); leave out any that is the same, it is inherited. lifespan and adult_age are years, as numbers; each measure is {"name", "min", "max", "unit"}, using the species' measure names.
 - The 0s in the example are placeholders: give real numbers that fit this race and the owner's prompt.
 - "facts": between 4 and 8 facts, one claim each, only what is specific to this race. "category" is one of: {{ categories | join(", ") }}.
 - "no_longer_true": after the facts, the labels of the species facts that are untrue for this race now that your facts hold, such as ["F4"]. An inherited fact your facts only add detail to stays true and isn't listed; an empty list is fine when nothing changes.
 - Leave "since" out: these facts describe the race for as long as it has existed, and are never dated.
 {%- elif heritage_label -%}
-{"name": "...", "age": 34, "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}]}
+{"name": "...", "age": 34, "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}], "names": [{"name": "...", "kind": "place", "aka": []}]}
 
 - "name": the character's name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 - "age": how old the character is now, in years, as a number.
@@ -106,7 +142,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}; "YEAR" in the example stands for that number. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- else -%}
-{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"}, {"category": "{{ categories[-1] }}", "text": "Another claim."}]}
+{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"}, {"category": "{{ categories[-1] }}", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
 
 - "name": the {{ kind }}'s name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 {% if kind == "character" -%}
@@ -116,6 +152,8 @@ Reply with only one JSON object, shaped exactly like this example:
 - "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}; "YEAR" in the example stands for that number. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- endif %}
+- "aka": other names for this {{ kind }} itself, if it has any, each {"name", "tag", "everyday"}. "tag" is "proper" for another formal name, or "common" for what people in the world actually call it day to day (a short form, a nickname). Set "everyday" true on the one common name people use most, false on the rest. "name" stays the most formal name. An empty list is fine.
+- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, culture, event, item, lore (a group, order or faction is lore; so is a law, code, script or language); "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop" -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
 
 No commentary, no markdown fences, just the JSON object.
 <|CLOSE_SECTION|>

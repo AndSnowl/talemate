@@ -64,6 +64,19 @@ def test_rename_updates_full_name_links_only(world):
     assert earlier.render(short) == "Moscavia"
 
 
+def test_full_name_link_keeps_its_case_until_renamed(world):
+    """Linking never changes wording: a name linked as written in another
+    case ("tsardom of moscavia", a lowercase main name, or a stub's leading
+    "The" written lowercase) reads as written until the thing is renamed."""
+
+    t, _ = _moscavia(world)
+    lower = ref(t, "tsardom of moscavia")
+    assert world.view().render(lower) == "tsardom of moscavia"
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(t, "name", "Moscavian Empire", None)
+    assert world.view().render(lower) == "Moscavian Empire"
+
+
 def test_rename_by_correction_updates_full_name_links(world):
     """The app renames by correcting the name in effect (same valid_from),
     which retires the old name row; a link written with it still follows."""

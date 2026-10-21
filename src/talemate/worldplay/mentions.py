@@ -14,7 +14,9 @@ prompt that expands a stub and for what the create box shows the owner:
   physical, instinct and origin facts, then its variation and general
   ones; any other kind's follow its own category order (not probed);
 - `mention_context`: the same, as one `(heading, facts)` group per
-  mentioning entry;
+  mentioning entry. An entry with an everyday name is headed "Owl-folk
+  (species, usually called Owls)", as the probe's recommendation (d) names
+  things in create prompts;
 - `suggested_prompt`: the name and its mentioning facts, as the create
   box's starting prompt for a stub.
 """
@@ -25,6 +27,7 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
+from talemate.world.names import everyday_name
 from talemate.world.view import WorldView
 
 log = structlog.get_logger("talemate.worldplay.mentions")
@@ -33,6 +36,7 @@ __all__ = [
     "About",
     "Mention",
     "MentionContext",
+    "entry_label",
     "gather_mentions",
     "mention_context",
     "mentions",
@@ -61,6 +65,8 @@ class Mention(BaseModel):
     owner_id: str
     owner_name: str
     owner_kind: str
+    # the mentioning entry's everyday name, if it has one
+    owner_everyday: str | None = None
     fact_id: str
     category: str
     text: str
@@ -73,6 +79,7 @@ class About(BaseModel):
     id: str
     name: str
     kind: str
+    everyday: str | None = None
     facts: list[str]
 
 
@@ -89,14 +96,16 @@ def mentions(view: WorldView, thing_id: str) -> list[Mention]:
     story date (ended facts too), in the view's fact order."""
 
     found: list[Mention] = []
-    owners: dict[str, tuple[str, str] | None] = {}
+    owners: dict[str, tuple[str, str, str | None] | None] = {}
     for owner_id, fact in view.referencing(thing_id, any_date=True):
         if owner_id == thing_id:
             continue
         if owner_id not in owners:
             state = view.thing(owner_id)
             owners[owner_id] = (
-                (view.name_of(owner_id) or "", state.kind) if state else None
+                (view.name_of(owner_id) or "", state.kind, everyday_name(state))
+                if state
+                else None
             )
         owner = owners[owner_id]
         if owner is None:
@@ -106,6 +115,7 @@ def mentions(view: WorldView, thing_id: str) -> list[Mention]:
                 owner_id=owner_id,
                 owner_name=owner[0],
                 owner_kind=owner[1],
+                owner_everyday=owner[2],
                 fact_id=fact.fact_id,
                 category=fact.category,
                 text=view.render(fact.text),
@@ -163,6 +173,7 @@ def gather_mentions(view: WorldView, thing_id: str) -> MentionContext:
             id=group[0].owner_id,
             name=group[0].owner_name,
             kind=group[0].owner_kind,
+            everyday=group[0].owner_everyday,
             facts=_key_facts(view, group[0].owner_id, skip),
         )
         for group in groups[:ABOUT_ENTRIES]
@@ -170,9 +181,18 @@ def gather_mentions(view: WorldView, thing_id: str) -> MentionContext:
     return MentionContext(mentioned=mentioned, about=about)
 
 
+def entry_label(name: str, kind: str, everyday: str | None = None) -> str:
+    """How a prompt names an entry: "Owl-folk (species)", or with its
+    everyday name "Tsardom of Moscavia (place, usually called Moscavia)"."""
+
+    if everyday:
+        return f"{name} ({kind}, usually called {everyday})"
+    return f"{name} ({kind})"
+
+
 def mention_context(view: WorldView, thing_id: str) -> list[tuple[str, list[str]]]:
     """`gather_mentions` as one `(heading, facts)` group per mentioning entry
-    within the caps: the heading is "<name> (<kind>)", and the facts are its
+    within the caps: the heading is its `entry_label`, and the facts are its
     mentioning facts, then (for the first three entries) its key facts."""
 
     context = gather_mentions(view, thing_id)
@@ -180,7 +200,13 @@ def mention_context(view: WorldView, thing_id: str) -> list[tuple[str, list[str]
     groups: dict[str, tuple[str, list[str]]] = {}
     for mention in context.mentioned:
         heading, facts = groups.setdefault(
-            mention.owner_id, (f"{mention.owner_name} ({mention.owner_kind})", [])
+            mention.owner_id,
+            (
+                entry_label(
+                    mention.owner_name, mention.owner_kind, mention.owner_everyday
+                ),
+                [],
+            ),
         )
         facts.append(mention.text)
     return [

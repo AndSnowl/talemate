@@ -332,6 +332,10 @@ class WorldView:
             name = self._name_at(thing_id, _FAR_FUTURE)
         if name is None:
             return Segment(text=shown or UNKNOWN_NAME, ref=None)
+        if shown is not None and shown.casefold() == name.casefold():
+            # not renamed: the words stay as written ("owl-folk", "the
+            # Night of Feathers" for "The Night of Feathers")
+            name = shown
         return Segment(text=name, ref=thing_id if live else None)
 
     def render(self, text: str) -> str:
@@ -342,7 +346,8 @@ class WorldView:
         `⟨unknown⟩`. `[[thing:<id>|<shown>]]` reads as its shown text,
         unless that is (ignoring case) a main name the thing has ever had on
         its timeline, when it reads as the name, so a link written with the
-        full name follows a rename; a target that doesn't exist at `rev`
+        full name follows a rename (a shown text that is the name, ignoring
+        case, keeps its own case); a target that doesn't exist at `rev`
         reads as the shown text."""
 
         return REF_PATTERN.sub(lambda match: self._resolve(match).text, text)
