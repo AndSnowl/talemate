@@ -121,13 +121,18 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
     preview.get_by_text("Half-orcs are broad and short-tusked.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-    # the preview lists what the mix inherits; the owner marks Human's
-    # "no tusks" as replaced, which the model missed
+    # the preview lists what the mix inherits, each ticked as kept; the
+    # owner unticks Human's "no tusks", which the model missed, and picks
+    # what replaces it
+    assert "inherited (untick to replace)" in preview.inner_text().lower()
     ears = preview.get_by_test_id("preview-inherited").filter(
         has_text="rounded ears and no tusks"
     )
     assert "Human" in ears.inner_text()
-    ears.get_by_role("checkbox", name="Overridden").check()
+    kept = ears.get_by_role("checkbox", name="Kept")
+    assert kept.is_checked()
+    assert ears.get_by_test_id("override-by").count() == 0
+    kept.uncheck()
     replaced_by = ears.get_by_test_id("override-by")
     assert "tusks of half an inch" in replaced_by.inner_text()
     preview.get_by_role("button", name="Accept").click()

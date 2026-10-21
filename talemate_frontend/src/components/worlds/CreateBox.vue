@@ -109,10 +109,10 @@
                 <span class="fact-date">{{ fact.since ? formatDate(worlds.calendar, fact.since) + ' →' : 'always' }}</span>
             </div>
 
-            <!-- what it inherits: the owner can mark a fact the model
-                 missed as replaced by one of the preview's own -->
+            <!-- what it inherits, each ticked as kept: unticking one the
+                 model missed marks it replaced by one of the preview's own -->
             <template v-if="preview.inherited && preview.inherited.length">
-                <div class="text-caption text-muted text-uppercase mt-3">Inherited</div>
+                <div class="text-caption text-muted text-uppercase mt-3">Inherited (untick to replace)</div>
                 <div
                     v-for="row in preview.inherited"
                     :key="row.fact_id"
@@ -120,12 +120,12 @@
                     data-testid="preview-inherited"
                 >
                     <v-checkbox-btn
-                        :model-value="overriderOf(row) >= 0"
-                        aria-label="Overridden"
+                        :model-value="overriderOf(row) < 0"
+                        aria-label="Kept"
                         density="compact"
                         class="flex-grow-0"
                         :disabled="!preview.facts.length"
-                        @update:model-value="toggleOverride(row, $event)"
+                        @update:model-value="setKept(row, $event)"
                     ></v-checkbox-btn>
                     <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
                     <v-select
@@ -413,8 +413,9 @@ export default {
         overriderOf(row) {
             return this.preview.facts.findIndex((fact) => (fact.overrides || []).includes(row.fact_id));
         },
-        toggleOverride(row, on) {
-            this.worlds.setPreviewOverride(row.fact_id, on ? defaultOverrideIndex(this.preview, row) : null);
+        // ticked: inherited as it is; unticked: replaced by an own fact
+        setKept(row, kept) {
+            this.worlds.setPreviewOverride(row.fact_id, kept ? null : defaultOverrideIndex(this.preview, row));
         },
     },
 };
