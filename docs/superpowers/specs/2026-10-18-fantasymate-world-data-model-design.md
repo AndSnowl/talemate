@@ -253,8 +253,7 @@ context that crosses sections as naturally as species context already reaches ch
   automatic matching.
 - **Much later: asking the AI about your world.** This may need an instruct model.
 
-Where this goes in the phase order is the owner's call. It overlaps with "Named things that
-don't exist yet" above and with mention records (plan D).
+**Order:** the owner decided (2026-10-21) that Connections is the next slice after plan B, ahead of cultures, because every section relies on it. It takes in "Named things that don't exist yet" above, and it overlaps with mention records (plan D).
 
 **Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
 layout relative to each other is known. The map must allow places that aren't placed yet, or that
