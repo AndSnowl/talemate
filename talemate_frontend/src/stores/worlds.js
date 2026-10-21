@@ -32,11 +32,21 @@
 // step for the character page's heritage links. `overrideFact` adds an own
 // fact replacing an inherited one; it answers like any edit.
 //
+// Creating with a heritage: the create box's picker takes one or two
+// parents. Two parents always go through a mix: `findMix` asks
+// `find_mix`, and its reply (`mixFound`) says whether that mix exists. With
+// none, the box drafts the mix first: `acceptPreview(changes, {open:
+// false})` accepts it without opening its page and leaves the new thing in
+// `accepted`, so the character's box can carry on with it. A preview lists
+// the inherited facts it was made with (`preview.inherited`);
+// `setPreviewOverride` marks one as replaced by one of the preview's own
+// facts before accepting.
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
 
-import { HERITAGE_KINDS, LISTED_KINDS } from '../components/worlds/worldKinds.js';
+import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
 
@@ -69,6 +79,38 @@ export function parseWorldTarget(path) {
     return { worldPath: rest.slice(0, sep), sceneId: rest.slice(sep + 1) };
 }
 
+// Whether two parent pairs are the same two ids, in either order.
+export function sameParents(a, b) {
+    return a.length === 2 && b.length === 2 && ((a[0] === b[0] && a[1] === b[1]) || (a[0] === b[1] && a[1] === b[0]));
+}
+
+// The heritage a prompt's `match_names` matches name, for pre-filling the
+// picker: the first species, race or mix named, preferring a race or mix
+// over its own species ("a Snowy owl-folk" is Snowy). Null if none.
+export function heritageFromMatches(matches, heritage) {
+    const byId = new Map(heritage.map((item) => [item.id, item]));
+    const named = [];
+    for (const match of matches) {
+        const found = match.candidates.find((candidate) => byId.has(candidate.id));
+        if (found && !named.includes(found.id)) {
+            named.push(found.id);
+        }
+    }
+    const ancestors = new Set(
+        named.flatMap((id) => byId.get(id).species_ids.filter((speciesId) => speciesId !== id)),
+    );
+    return named.find((id) => !ancestors.has(id)) || null;
+}
+
+// Which of a preview's own facts replaces the inherited fact `row` when the
+// owner marks it: the first of the category an override of it would take,
+// else the first own fact (-1 when there are none).
+export function defaultOverrideIndex(preview, row) {
+    const category = overrideCategory(preview.kind, row.category);
+    const index = preview.facts.findIndex((fact) => fact.category === category);
+    return index >= 0 ? index : preview.facts.length ? 0 : -1;
+}
+
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact'];
 
@@ -93,6 +135,14 @@ function worldState() {
         previewPending: false,
         preview: null,
         previewError: null,
+        // the parents a `find_mix` is out for, and the last reply taken
+        // (`{parents, mix_id}`)
+        mixLookup: null,
+        mixFound: null,
+        // whether the next accepted preview opens its page; when it doesn't,
+        // the new thing (`{id, kind, name}`) lands in `accepted`
+        acceptOpens: true,
+        accepted: null,
         // the id of the thing whose prose is being regenerated
         proseRegenerating: null,
         // the new-scene prompt's names: the lookup in flight (`{text, at}`),
@@ -367,12 +417,42 @@ export const useWorldsStore = defineStore('worlds', {
             this.previewPending = false;
         },
 
-        acceptPreview(changes = {}) {
+        // forget the preview and its request (its box closed)
+        cancelPreview() {
+            this.discardPreview();
+            this.previewRequest = null;
+        },
+
+        // `open: false` keeps the page where it is (the mix drafted for a
+        // character): the new thing lands in `accepted` instead
+        acceptPreview(changes = {}, { open = true } = {}) {
             if (!this.preview) {
                 return;
             }
+            this.acceptOpens = open;
+            this.accepted = null;
             this.pending = { ...this.pending, accept_preview: true };
             this.request('accept_preview', { preview: { ...this.preview, ...changes } });
+        },
+
+        // mark the preview's inherited fact `factId` as replaced by its own
+        // fact at `index` (null: not replaced)
+        setPreviewOverride(factId, index) {
+            if (!this.preview) {
+                return;
+            }
+            const facts = this.preview.facts.map((fact, i) => {
+                const overrides = (fact.overrides || []).filter((id) => id !== factId);
+                return { ...fact, overrides: i === index ? [...overrides, factId] : overrides };
+            });
+            this.preview = { ...this.preview, facts };
+        },
+
+        // the mix of two parents, if the world has one (`mixFound`)
+        findMix(parents) {
+            this.mixFound = null;
+            this.mixLookup = { parents };
+            this.request('find_mix', { parents });
         },
 
         // --- edits (each answers with the thing as of `thingAt`) -----------
@@ -544,10 +624,22 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'accept_preview':
                     this.preview = null;
                     this.previewRequest = null;
-                    this.selectedThingId = data.id;
-                    this.thingAt = null;
-                    this.thing = data;
+                    if (this.acceptOpens) {
+                        this.selectedThingId = data.id;
+                        this.thingAt = null;
+                        this.thing = data;
+                    } else {
+                        this.accepted = { id: data.id, kind: data.kind, name: data.name };
+                    }
+                    this.acceptOpens = true;
                     this.listThings(data.kind);
+                    break;
+                case 'find_mix':
+                    // a reply for parents since changed is dropped
+                    if (this.mixLookup && sameParents(this.mixLookup.parents, data.parents)) {
+                        this.mixFound = data;
+                        this.mixLookup = null;
+                    }
                     break;
                 case 'prose_updated':
                     if (this.proseRegenerating === data.id) {
@@ -580,8 +672,10 @@ export const useWorldsStore = defineStore('worlds', {
                         this.previewPending = false;
                         this.proseRegenerating = null;
                         this.setupPending = false;
-                        // the failed request may be the name lookup
+                        // the failed request may be the name or mix lookup
                         this.nameLookup = null;
+                        this.mixLookup = null;
+                        this.acceptOpens = true;
                     }
                     break;
                 default:

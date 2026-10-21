@@ -9,7 +9,14 @@ import assert from 'node:assert/strict';
 import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
-import { useWorldsStore, parseWorldTarget, worldTarget } from '../src/stores/worlds.js';
+import {
+    defaultOverrideIndex,
+    heritageFromMatches,
+    parseWorldTarget,
+    sameParents,
+    useWorldsStore,
+    worldTarget,
+} from '../src/stores/worlds.js';
 import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
 import { TOP_KINDS, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
@@ -639,6 +646,103 @@ check('a failed delete closes the dialog and shows the error', () => {
     assert.equal(store.deleteCheck, null);
     assert.equal(store.error, 'no such thing');
     assert.equal(store.selectedThingId, 't1');
+});
+
+// --- heritage in the create box ---------------------------------------------
+
+const HERITAGE = [
+    { id: 'human', kind: 'species', name: 'Human', species_ids: ['human'] },
+    { id: 'orc', kind: 'species', name: 'Orc', species_ids: ['orc'] },
+    { id: 'low', kind: 'race', name: 'Lowlander', species_ids: ['human'] },
+];
+const named = (text, ...ids) => ({ text, start: 0, end: 0, candidates: ids.map((id) => ({ id, name: text, kind: '' })) });
+
+check('a prompt pre-fills the heritage it names, a race over its species', () => {
+    assert.equal(heritageFromMatches([named('human', 'human'), named('Lowlander', 'low')], HERITAGE), 'low');
+    assert.equal(heritageFromMatches([named('orc', 'orc'), named('Lowlander', 'low')], HERITAGE), 'orc');
+    // names that aren't heritage things (a character) are passed over
+    assert.equal(heritageFromMatches([named('Maren', 'c1'), named('orc', 'orc')], HERITAGE), 'orc');
+    assert.equal(heritageFromMatches([named('Maren', 'c1')], HERITAGE), null);
+});
+
+check('find_mix answers the parents asked about, in either order', () => {
+    assert.ok(sameParents(['a', 'b'], ['b', 'a']));
+    assert.ok(!sameParents(['a', 'b'], ['a', 'c']));
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.findMix(['low', 'orc']);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'find_mix', parents: ['low', 'orc'] });
+    // a reply for other parents is dropped
+    store.handleMessage(reply('find_mix', { parents: ['human', 'orc'], mix_id: null }));
+    assert.equal(store.mixFound, null);
+    store.handleMessage(reply('find_mix', { parents: ['orc', 'low'], mix_id: 'm1' }));
+    assert.deepEqual(store.mixFound, { parents: ['orc', 'low'], mix_id: 'm1' });
+    assert.equal(store.mixLookup, null);
+});
+
+check('a failed mix lookup stops waiting', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.findMix(['low', 'orc']);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no' } });
+    assert.equal(store.mixLookup, null);
+});
+
+check('a mix drafted for a character is accepted without opening its page', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('mix', '', { parents: ['low', 'orc'] });
+    store.handleMessage(reply('preview_thing', { kind: 'mix', prompt: '', fields: {}, name: 'Half-orc', facts: [], prose: {} }));
+    store.acceptPreview({ name: 'Half-orc' }, { open: false });
+    store.handleMessage(reply('accept_preview', { id: 'm1', kind: 'mix', name: 'Half-orc' }));
+    assert.deepEqual(store.accepted, { id: 'm1', kind: 'mix', name: 'Half-orc' });
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.previewRequest, null);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'mix' });
+    // the next accept opens its page again
+    store.previewThing('character', 'a smith', { heritage: 'm1' });
+    store.handleMessage(reply('preview_thing', { kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', facts: [], prose: {} }));
+    store.acceptPreview({ name: 'Gorra' });
+    store.handleMessage(reply('accept_preview', { id: 'c1', kind: 'character', name: 'Gorra' }));
+    assert.equal(store.selectedThingId, 'c1');
+});
+
+check('cancelling a preview forgets its request', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('mix', '', { parents: ['low', 'orc'] });
+    store.cancelPreview();
+    assert.equal(store.previewRequest, null);
+    assert.equal(store.previewPending, false);
+    store.handleMessage(reply('preview_thing', { name: 'late' }));
+    assert.equal(store.preview, null);
+});
+
+check('marking an inherited fact overridden moves it to one own fact', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('character', 'a smith', { heritage: 'low' });
+    const preview = {
+        kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', prose: {},
+        facts: [
+            { category: 'personality', text: 'Quick to anger.', overrides: [] },
+            { category: 'appearance', text: 'Tall.', overrides: [] },
+            { category: 'appearance', text: 'Green skin.', overrides: [] },
+        ],
+        inherited: [{ fact_id: 'f1', source: 'Lowlander', source_id: 'low', category: 'physical', text: 'Short.' }],
+    };
+    store.handleMessage(reply('preview_thing', preview));
+    // a physical fact is overridden by the first appearance fact
+    assert.equal(defaultOverrideIndex(store.preview, preview.inherited[0]), 1);
+    assert.equal(defaultOverrideIndex({ ...preview, facts: [] }, preview.inherited[0]), -1);
+    store.setPreviewOverride('f1', 1);
+    assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], ['f1'], []]);
+    store.setPreviewOverride('f1', 2);
+    assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], [], ['f1']]);
+    store.acceptPreview({ name: 'Gorra' });
+    assert.deepEqual(sent.at(-1).preview.facts[2].overrides, ['f1']);
+    store.setPreviewOverride('f1', null);
+    assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], [], []]);
 });
 
 check('other routers are ignored', () => {

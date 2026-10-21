@@ -518,6 +518,51 @@ async def test_fixed_preview_setting_answers_without_a_model(
     assert _last(plugin, "accept_preview")["data"]["name"] == "Oskar Dell"
 
 
+async def test_fixed_preview_lists_what_it_inherits(plugin, tmp_path, monkeypatch):
+    """The fixed preview carries the inherited facts of its heritage, like
+    the real one, so the browser tests can mark one as overridden."""
+
+    h = await _open_heritage_world(plugin)
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Gorra",
+                "facts": [{"category": "appearance", "text": "Small tusks."}],
+                "prose": {"description": "Gorra.", "personality": ""},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "preview_thing",
+            "kind": "character",
+            "prompt": "a half-orc smith",
+            "fields": {"heritage": h.half_orc},
+        }
+    )
+    await _drain(plugin)
+
+    preview = _last(plugin, "preview_thing")["data"]
+    assert [(row["fact_id"], row["source"]) for row in preview["inherited"]] == [
+        (h.short, "Lowlander"),
+        (h.bare_skin, "Human"),
+        (h.tusks, "Orc"),
+    ]
+
+    # an override the owner marked in the preview is written on accept
+    preview["facts"][0]["overrides"] = [h.tusks]
+    await plugin.handle(
+        {"type": "worlds", "action": "accept_preview", "preview": preview}
+    )
+    gorra = _last(plugin, "accept_preview")["data"]
+    tusks = next(row for row in gorra["inherited"] if row["fact_id"] == h.tusks)
+    assert tusks["overridden_by"] is not None
+
+
 async def test_edits_without_a_client_leave_prose_stale(plugin, monkeypatch):
     """With no AI client on the creator agent, an edit stands and its prose
     refresh is skipped; an explicit regenerate is refused."""

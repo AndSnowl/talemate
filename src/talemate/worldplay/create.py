@@ -35,6 +35,9 @@ one of two shapes, both read from any reply: per fact, `"overrides":
 label goes to the own fact of the same category sharing the most content
 words with it, else to the first own fact of that category, else nowhere.
 Labels are mapped back to the real fact ids; unknown ones are dropped.
+The preview carries the inherited facts it was shown (`inherited`, with
+their real ids), so the owner can mark one the model missed as overridden
+before accepting.
 
 A heritage kind's `lifespan`, `adult_age` and `measures` come back as
 numbers. A `0` (the example's placeholder), a word or a reversed range is
@@ -134,6 +137,18 @@ class PreviewFact(BaseModel):
     overrides: list[str] = Field(default_factory=list)
 
 
+class PreviewInherited(BaseModel):
+    """One inherited fact the preview was made with, as the model was
+    shown it, so the owner can mark it overridden before accepting."""
+
+    fact_id: str
+    # the layer it comes from: its name and thing id
+    source: str
+    source_id: str
+    category: str
+    text: str
+
+
 class CreatePreview(BaseModel):
     kind: str
     prompt: str
@@ -141,6 +156,8 @@ class CreatePreview(BaseModel):
     name: str
     facts: list[PreviewFact]
     prose: dict[str, str]
+    # what the new thing will inherit (empty for a kind with no heritage)
+    inherited: list[PreviewInherited] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -414,6 +431,7 @@ class _Inherited(NamedTuple):
     label: str
     fact_id: str
     source: str
+    source_id: str
     source_kind: str
     category: str
     text: str
@@ -452,6 +470,7 @@ def _labelled_facts(view: WorldView, sources: list[str]) -> list[list[_Inherited
                     label=f"F{len(seen)}",
                     fact_id=fact.fact_id,
                     source=layer.name,
+                    source_id=layer.thing_id,
                     source_kind=layer.kind,
                     category=fact.category,
                     text=fact.text,
@@ -459,6 +478,32 @@ def _labelled_facts(view: WorldView, sources: list[str]) -> list[list[_Inherited
             )
         groups.append(group)
     return groups
+
+
+def _preview_rows(rows: list[_Inherited]) -> list[PreviewInherited]:
+    return [
+        PreviewInherited(
+            fact_id=row.fact_id,
+            source=row.source,
+            source_id=row.source_id,
+            category=row.category,
+            text=row.text,
+        )
+        for row in rows
+    ]
+
+
+def preview_inherited(
+    view: WorldView, kind: str, fields: dict[str, Any]
+) -> list[PreviewInherited]:
+    """What a new `kind` thing with `fields` will inherit, as a preview
+    lists it: the facts its prompt is shown, in the same order. Sources
+    that aren't in the world are skipped."""
+
+    sources = [s for s in _lineage_sources(kind, fields) if view.thing(s) is not None]
+    return _preview_rows(
+        [row for group in _labelled_facts(view, sources) for row in group]
+    )
 
 
 def heritage_label(view: WorldView, thing_id: str) -> str:
@@ -731,6 +776,7 @@ async def preview_thing(
         name=name,
         facts=facts,
         prose=prose,
+        inherited=_preview_rows(rows),
     )
 
 

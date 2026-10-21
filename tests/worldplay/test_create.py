@@ -19,6 +19,7 @@ from talemate.worldplay.create import (
     PreviewFact,
     accept_preview,
     parse_create_reply,
+    preview_inherited,
     preview_thing,
 )
 
@@ -716,6 +717,56 @@ async def test_preview_character_maps_override_labels(probe_world):
     assert "taloned feet that serve as hands" in description_prompt
     assert "bright yellow eyes" not in description_prompt
     assert "Heritage: Snowy, Owl-folk." in description_prompt
+
+
+async def test_preview_lists_what_it_inherits(probe_world):
+    """The preview carries the inherited facts the model was shown, with
+    their real fact ids, so the owner can mark one as overridden before
+    accepting (the create box's safety net for missed overrides)."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            _reply("heritage-character-snowy-reply.txt"),
+            "Thistledown is white.",
+            "Thistledown is chatty.",
+        )
+        preview = await preview_thing(
+            probe_world.world,
+            "character",
+            "A Snowy owl-folk courier with blue eyes, who talks too much.",
+            {"heritage": probe_world.snowy},
+            client,
+        )
+
+    facts = probe_world.facts
+    inherited = {row.fact_id: row for row in preview.inherited}
+    # Snowy's four facts, then Owl-folk's six less the mottled plumage
+    # Snowy overrides
+    assert len(preview.inherited) == 9
+    assert facts["owl-4"] not in inherited
+    eyes = inherited[facts["snowy-3"]]
+    assert (eyes.source, eyes.source_id, eyes.category, eyes.text) == (
+        "Snowy",
+        probe_world.snowy,
+        "physical",
+        "Snowy owl-folk have bright yellow eyes.",
+    )
+    assert inherited[facts["owl-6"]].source_id == probe_world.owl_folk
+    # it survives the wire, as the accept request sends it back
+    sent = CreatePreview.model_validate(preview.model_dump(mode="json"))
+    assert sent.inherited == preview.inherited
+
+
+def test_preview_inherited_for_a_mix_lists_both_parents(probe_world):
+    view = probe_world.world.view()
+    rows = preview_inherited(
+        view, "mix", {"parents": [probe_world.lowlander, probe_world.orc]}
+    )
+    sources = [row.source for row in rows]
+    assert sources[:2] == ["Lowlander", "Lowlander"]
+    assert {"Human", "Orc"} <= set(sources)
+    assert preview_inherited(view, "place", {}) == []
 
 
 async def test_preview_unknown_override_label_dropped(probe_world):

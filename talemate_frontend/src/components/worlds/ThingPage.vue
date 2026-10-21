@@ -120,7 +120,7 @@
                         @save="saveForm"
                         @cancel="form = null"
                     />
-                    <HeritageSections v-if="thing.kind === 'species'" :races="thing.races" :mixes="thing.mixes" />
+                    <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
                 </v-col>
 
                 <v-col cols="12" md="6">

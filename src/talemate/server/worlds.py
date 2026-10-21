@@ -33,7 +33,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   writes nothing. `accept_preview {preview}` writes it and answers with the
   new thing. For the browser tests only, `TALEMATE_TEST_FIXED_PREVIEW`
   names a JSON file (`{name, facts, prose, fields?}`) that previews are
-  answered from instead of the model.
+  answered from instead of the model (listing what the request's fields
+  inherit, as a real preview does).
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
@@ -99,6 +100,7 @@ from talemate.worldplay.create import (
     CreatePreview,
     accept_preview,
     current_date,
+    preview_inherited,
     preview_thing,
 )
 from talemate.worldplay.persistence import save_world_scene, world_target
@@ -299,19 +301,24 @@ def _fixed_file(env: str) -> Path | None:
     return path if path.exists() else None
 
 
-async def _fixed_preview(path: Path, payload: PreviewPayload) -> CreatePreview:
+async def _fixed_preview(
+    path: Path, payload: PreviewPayload, view: WorldView
+) -> CreatePreview:
     """The browser tests' stand-in for `preview_thing`: the preview in
-    `path`, for the request's kind, prompt and fields. Async so it runs
+    `path`, for the request's kind, prompt and fields, listing what they
+    inherit in `view` as the real one does. Async so it runs
     through the same background task and reply path as the real one."""
 
     fixed = json.loads(path.read_text(encoding="utf-8"))
+    fields = {**payload.fields, **fixed.get("fields", {})}
     return CreatePreview(
         kind=payload.kind,
         prompt=payload.prompt,
-        fields={**payload.fields, **fixed.get("fields", {})},
+        fields=fields,
         name=fixed["name"],
         facts=fixed["facts"],
         prose=fixed["prose"],
+        inherited=preview_inherited(view, payload.kind, fields),
     )
 
 
@@ -799,7 +806,7 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         fixed = _fixed_file(FIXED_PREVIEW_ENV)
         if fixed is not None:
-            preview = _fixed_preview(fixed, payload)
+            preview = _fixed_preview(fixed, payload, world.view())
         else:
             client = self._client()
             preview = preview_thing(
