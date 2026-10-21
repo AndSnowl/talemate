@@ -638,3 +638,29 @@ def test_since_lines_for_switch_to_an_older_race(world, heritage_world):
     assert since_lines(world, vasha, WorldDate.of(1000)) == ["Tawny: Brown plumage."]
     # still a Snowy before the switch, as the cached prose already says
     assert since_lines(world, vasha, WorldDate.of(985)) == []
+
+
+def test_since_lines_after_a_dated_heritage_change_past_the_cache(
+    world, heritage_world
+):
+    """Final review: the prose cached for the stretch before a dated
+    heritage change was written with the old lineage, so the new layer is
+    news once the clock passes the change -- even though the change was
+    already in the store when the prose was cached."""
+
+    h = heritage_world
+    with world.revision(Source.manual()) as rev:
+        human = rev.create_thing("species", fields={"name": "Human"})
+        rev.add_fact(human, "physical", "Two hands.")
+        kit = rev.create_thing("character", fields={"name": "Kit", "heritage": human})
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(kit, "heritage", h.owl_folk, WorldDate.of(400))
+    # a scene in 390 caches the stretch that ends at the change
+    world.prose().put(
+        kit, "description", None, WorldDate.of(400), "A human with two hands."
+    )
+
+    assert since_lines(world, kit, WorldDate.of(390)) == []
+    assert since_lines(world, kit, WorldDate.of(401)) == [
+        "Owl-folk: Wings in place of arms."
+    ]

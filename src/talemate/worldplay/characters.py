@@ -295,12 +295,15 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
         for item in heritage.inherited(view, thing_id)
         if item.overridden_by is not None
     )
-    # the layers the cached text was written with; a layer the character
-    # has come to inherit from since (a heritage switch to a race that
-    # already existed) is news in full, however old its facts are
-    cached_layers = (
-        set(lineage_ids(world, thing_id, at, entry.rev)) if entry is not None else set()
-    )
+    # the layers the cached text was written with, as of a date inside the
+    # entry's own stretch (`at` can be past it, after a dated heritage
+    # change); a layer the character has come to inherit from since (a
+    # heritage switch to a race that already existed) is news in full,
+    # however old its facts are
+    cached_layers: set[str] = set()
+    if entry is not None:
+        written_at = _probe_within(entry.stretch_start, entry.stretch_end)
+        cached_layers = set(lineage_ids(world, thing_id, written_at, entry.rev))
     by_kind = inherited_categories("description")
     for layer in heritage.lineage(view, thing_id):
         categories = by_kind.get(layer.kind, ())
