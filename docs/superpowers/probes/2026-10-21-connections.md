@@ -76,16 +76,21 @@ The Tsardom expanded from its stub (name decided as "Tsardom of Moscavia"), with
 - **(b)** plus "About those": the Owl-folk's key facts in the order physical, instinct, origin, capped at 8, with the mentioning fact left out. That's 4 physical, 3 instinct and the eggs fact.
 - **(c)** plus all 11 of the Owl-folk's other facts.
 
-**Measured by the owner's standard** (is the place written for its owl-folk inhabitants?), all 9 runs pass at a basic level. The mention itself says the whole population turned into owl-folk, so every Tsardom is a country of owl-folk. What changes is how much of the species shapes the country:
+**Measured by the owner's standard** (is the place written for its owl-folk inhabitants?), all 9 runs pass at a basic level. The mention itself says the whole population turned into owl-folk, so every Tsardom is a country of owl-folk, and a keyword scan can't tell the variants apart: the script's `scan` field finds 6 or 7 of its 7 themes (owl, feathers, roosts, talons and wings, dusk and night, the Night of Feathers, humans) in every run. So each fact was judged by hand (`probe2_judged` in the raw JSON, with the fact indices):
+- **built around them:** something about the country (a law, a building, a custom, the economy, the day's schedule) depends on an owl-folk body or instinct;
+- **species-specific:** of those, the ones built on a trait only the Owl-folk facts give (talons used as hands, crepuscular and drowsy at midday, turning the whole head, eggs, hollow bones, mourning their hands), rather than generic owl imagery (night, flight, glowing eyes, feathers);
+- **restates:** a fact that mostly re-describes the species.
 
-| | Distinct owl-folk traits used (of 7 themes, keyword scan, per run) | What the facts do with them |
-|---|---|---|
-| (a) mention only | 1, 4, 4 | Owl texture is generic: "luminous eyes", "hooting resonance", "nighttime gatherings", "flight competitions". It contradicts the species once: wings "folded against their backs" (run 2). |
-| (b) key facts, cap 8 | 5, 4, 6 | Traits become institutions: "talon-grip writing is the standard for all official documents", courts held at dusk, "midday courts and councils are forbidden, as drowsiness renders decisions unreliable", round doorways for wingspans, eggs and communal nesting houses, temples "designed so that owl-folk can turn their heads freely". |
-| (c) all facts | 7, 5, 6 | As (b), plus the general facts: hollow bones ("light enough that hollow-boned families can roost…"), the oldest mourning their hands ("the Starši, or 'the Elders'"), the old generation teaching farming. It restated the species' body in 2 of 3 runs; (a) did in all 3, (b) in none. |
+| | Facts built around the owl-folk (per run) | Of those, species-specific | Restating facts | What the facts do |
+|---|---|---|---|---|
+| (a) mention only, 34 facts | 2, 3, 3 = **8** | 0, 0, 1 = **1** | 1, 2, 1 | Generic owls: "nighttime gatherings the preferred means of governance", "flight competitions over the rooftops", boyars' silver feathers, talon-painting, "thousands of glowing eyes at night". One run hit crepuscular commerce by itself. Run 2 contradicts the species: wings "folded against their backs". Run 0 says they "have preserved all the customs… of their pre-transformation civilization". |
+| (b) key facts, cap 8, 35 facts | 4, 6, 6 = **16** | 4, 3, 4 = **11** | 1, 0, 1 | Traits become institutions: "talon-grip writing is the standard for all official documents", courts held at dusk, "midday courts and councils are forbidden, as drowsiness renders decisions unreliable", streets "designed to muffle sound and provide ample perching spaces… during the drowsy midday hours", round doorways for wingspans, crèches "until they can fly", temples "designed so that owl-folk can turn their heads freely". |
+| (c) all facts, 36 facts | 7, 7, 5 = **19** | 4, 3, 4 = **11** | 1, 0, 2 | As (b), plus the general facts: hollow bones ("light enough that hollow-boned families can roost…"), literature with "laments for the hands they once possessed", head-turning trade gestures. |
 
-- **(b) is the step that matters:** it's where the country starts being built around the body and instincts, which is the owner's measure. (c) adds a little texture from the `general` facts at the cost of 3 more facts in the prompt and more restating than (b).
-- **Not caused by context:** two (b)/(c) runs invented a sub-group, "Frostowls" (b, run 2), a race-like population. Real-world names leaked in every variant (Volga, Velikiy Novgorod, Perun, the Rurikids, a "Great Mosque"), because a Russian-flavoured name invites them. They are named things, so they would become stubs, which the owner can ignore.
+- **The mention alone gives a country of owls, not of these owl-folk.** (a) builds on what any owl is like, misses the species' particulars, and once contradicts them.
+- **Key facts are what bring in the species.** Species-specific facts go from 1 to 11 with (b), and built-around facts double (8 to 16).
+- **All facts adds little over (b):** the same 11 species-specific facts, 3 more built-around facts, from the `general` facts, and 3 more facts in the prompt. With n = 3 per variant, the (b)-to-(c) difference is within run-to-run noise. Cap 8 is a prompt-size choice that the data doesn't contradict.
+- **Not caused by context:** one (b) run (run 2) invented a sub-group, the "Frostowls", a race-like population. Real-world names leaked in every variant (White Sea, Volga, River Don, Velikiy Novgorod, Perun, the Rurikids, a "Great Mosque"), because a Russian-flavoured name invites them. They are named things, so they would become stubs, which the owner can ignore.
 
 **The Tsardom's own `aka`:** "Moscavia", tagged common and everyday, in 9 of 9 runs. One run added "The Owl Kingdom" as another common name.
 
@@ -104,16 +109,18 @@ The Tsardom expanded from its stub (name decided as "Tsardom of Moscavia"), with
 
 ## Probe 4: everyday names
 
-**The suggested `aka`** (all 30 creates, 35 entries):
-- Every create gave exactly one `everyday: true` entry, and it was always tagged `common`: "Moscavia" 9 of 9, "Maren", "Maggie" for Margaret, "Solotsk", "Vostok", "Solenka", "Rostov".
-- **27 of 35 are sensible and correctly tagged.** The 8 that aren't:
-  - invented nicknames picked as the everyday name: "Bargehaven" for Bargash, "The Bargeway" for Velkovo, "Sunny" for Solnechnyy;
-  - names that don't fit: "River Otterfolk" and "Riverfolk" for lake otters, "Rostov Velikiy" (a real place);
-  - wrong tags: "Otterkind" tagged proper, "Velkovo-on-the-Sernaya" tagged common;
-  - "The Salted Throne", a metonym tagged proper.
+**The suggested `aka`** (all 30 creates in probes 1, 2, 3 and 5, 45 entries; 2 of them recovered by hand from the broken reply described under probe 1):
+- Every create gave exactly one `everyday: true` entry, and it was always tagged `common`: "Moscavia" 9 of 9, "Maren", "Maggie" for Margaret, "Solotsk", "Vostok", "Solenka", "Rostov", "Svetlina".
+- **33 of 45 are sensible and correctly tagged.** The 12 that aren't:
+  - invented nicknames picked as the everyday name (4): "Bargehaven" for Bargash, "The Bargeway" for Velkovo, "Sunny City" for Solnechnyy Gorod, "Sunny" for Solnechnyy;
+  - an everyday name that clashes (1): "Solnech" for Solnechni Gorod, which is also the name of its lake, Lake Solnech;
+  - names that don't fit (3): "River Otterfolk" and "Riverfolk" for lake otters, "Rostov Velikiy" (another real place);
+  - wrong tags (2): "Otterkind" tagged proper, "Velkovo-on-the-Sernaya" tagged common;
+  - the main name repeated as a proper other name (1): "Solnechnyy";
+  - "The Salted Throne" (1), a metonym tagged proper.
 - **The main name was the most proper one in 29 of 30.** Velkovo's longer "Velkovo-on-the-Sernaya" came back as a common other name instead.
 
-So the owner gets usually-right suggestions that need a glance. A wrong `everyday` pick is the one that matters (3 of 30), because it changes what narration says.
+So the owner gets usually-right suggestions that need a glance. A wrong `everyday` pick is the one that matters (**5 of 30** creates), because it changes what narration says. Code should drop an other name equal to the main name, or to another entry's name.
 
 **Narration.** A scene in Barrowford, "a river town on the Vesna in the south of the Tsardom of Moscavia", with the Tsardom pulled in as lore (4 facts, which use the full name). The cast was Ilse (human, the player) and Brannoc (owl-folk). There were three World blocks:
 - **plain:** the heading "Tsardom of Moscavia";
@@ -168,15 +175,15 @@ The line made no difference. Facts already prefer "Moscavia", and use the full n
       - let a run continue across an inner possessive into another capitalised word ("Cairn's Bend", "Bishops' Council");
       - never start a run with "AM" or "PM";
       - keep "St." inside a run ("Cathedral of St. Sophia").
-3. **Mention context: "Mentioned elsewhere" plus "About those", with key facts capped at 8 per mentioning entry** (variant b).
+3. **Mention context: "Mentioned elsewhere" plus "About those", with key facts capped at 8 per mentioning entry** (variant b). The mentioning fact alone gives a country of generic owls: 1 species-specific fact in 34. Key facts bring the species' own body and instincts into the country's laws, buildings and schedule: 11 in 35. All facts added no more species-specific facts (11 in 36).
    - **Key facts of a species, race or mix:** its physical, instinct and origin facts, in that order, then variation and general to fill up to 8. The mentioning fact is already shown above, so it's left out.
-   - **Not probed, my call:** for a character, place or lore entry that mentions the stub, its facts in its kind's category order, up to 8. "About those" covers at most 3 mentioning entries (most mentions first), and "Mentioned elsewhere" at most 12 facts.
+   - **Not probed, my call:** the probe only had a species mentioning a place. For a character, place or lore entry that mentions the stub, and for creating any kind other than a place, its facts in its kind's category order, up to 8. "About those" covers at most 3 mentioning entries (most mentions first), and "Mentioned elsewhere" at most 12 facts.
 4. **"Named in this prompt" stops duplicates** when the match is in the context (3/3 duplicates down to 0/3). Show every fact of each matched entry, as scene setup does.
 5. **Everyday names:**
    - In create prompts, show every named entry as "Name (kind, usually called X)", with no extra line.
    - In the scene World block, give place and lore headings "Name (usually called X)" and add the everyday-name line at the top.
 6. **The parser** (Task 5) must keep `aka` and `names` entries out of the facts, and recover both lists from a reply whose wrapper isn't closed.
-7. **The owner reviews `aka` suggestions.** In 3 of 30 creates the everyday pick was an invented nickname. The preview should show the suggested other names, with the everyday one marked, so a bad pick is easy to fix before accepting.
+7. **The owner reviews `aka` suggestions.** In 5 of 30 creates the everyday pick was an invented nickname or a name that clashes with another one. The preview should show the suggested other names, with the everyday one marked, so a bad pick is easy to fix before accepting.
 
 ## Recommended prompt text
 
@@ -225,6 +232,13 @@ About those (they already exist in the world; let the {{ kind }} reflect them{% 
 - `mentions` holds up to 12 facts.
 
 The probed text was `About those (they already exist in the world; let the place reflect them -- a place is shaped by the people who live there):`.
+
+**Unprobed parts of (b)**, to check in Task 5's or 7's acceptance run:
+- the non-place branch, where the "About those" line ends at "let the {{ kind }} reflect them" with no place clause;
+- the "for other kinds, the kind's category order" key-fact rule;
+- the caps of 3 entries and 12 mentions.
+
+The probe only expanded a place stub mentioned by a species.
 
 **(c) "Named in this prompt"**, in the same place, after the mention context when both are present:
 

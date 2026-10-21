@@ -3620,5 +3620,191 @@
         "the_tsardom": 0
       }
     }
-  ]
+  ],
+  "probe2_judged": {
+    "how": "hand judgment, fact indices into each run's facts. built: a fact where something about the country (a law, building, custom, economy, schedule) depends on an owl-folk body or instinct. species_specific: built on a trait only the Owl-folk facts give (talons used as hands, crepuscular / drowsy at midday, whole-head turning, stillness, eggs, hollow bones, mourning hands), not generic owl imagery (night, flight, glowing eyes, feathers). restates: mostly re-describes the species. contradicts: against a species fact.",
+    "runs": [
+      {
+        "variant": "a",
+        "n": 0,
+        "facts": 11,
+        "built": [
+          5,
+          8
+        ],
+        "species_specific": [],
+        "restates": [
+          4
+        ],
+        "contradicts": []
+      },
+      {
+        "variant": "a",
+        "n": 1,
+        "facts": 11,
+        "built": [
+          6,
+          9,
+          10
+        ],
+        "species_specific": [],
+        "restates": [
+          1,
+          4
+        ],
+        "contradicts": []
+      },
+      {
+        "variant": "a",
+        "n": 2,
+        "facts": 12,
+        "built": [
+          4,
+          6,
+          7
+        ],
+        "species_specific": [
+          6
+        ],
+        "restates": [
+          1
+        ],
+        "contradicts": [
+          1
+        ]
+      },
+      {
+        "variant": "b",
+        "n": 0,
+        "facts": 11,
+        "built": [
+          5,
+          6,
+          7,
+          8
+        ],
+        "species_specific": [
+          5,
+          6,
+          7,
+          8
+        ],
+        "restates": [
+          4
+        ],
+        "contradicts": []
+      },
+      {
+        "variant": "b",
+        "n": 1,
+        "facts": 12,
+        "built": [
+          3,
+          5,
+          6,
+          7,
+          9,
+          11
+        ],
+        "species_specific": [
+          5,
+          6,
+          7
+        ],
+        "restates": [],
+        "contradicts": []
+      },
+      {
+        "variant": "b",
+        "n": 2,
+        "facts": 12,
+        "built": [
+          2,
+          3,
+          5,
+          6,
+          8,
+          10
+        ],
+        "species_specific": [
+          3,
+          6,
+          8,
+          10
+        ],
+        "restates": [
+          4
+        ],
+        "contradicts": []
+      },
+      {
+        "variant": "c",
+        "n": 0,
+        "facts": 12,
+        "built": [
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "species_specific": [
+          3,
+          4,
+          6,
+          9
+        ],
+        "restates": [
+          1
+        ],
+        "contradicts": []
+      },
+      {
+        "variant": "c",
+        "n": 1,
+        "facts": 12,
+        "built": [
+          1,
+          2,
+          5,
+          6,
+          8,
+          9,
+          11
+        ],
+        "species_specific": [
+          6,
+          8,
+          9
+        ],
+        "restates": [],
+        "contradicts": []
+      },
+      {
+        "variant": "c",
+        "n": 2,
+        "facts": 12,
+        "built": [
+          4,
+          6,
+          7,
+          9,
+          10
+        ],
+        "species_specific": [
+          4,
+          6,
+          9,
+          10
+        ],
+        "restates": [
+          2,
+          8
+        ],
+        "contradicts": []
+      }
+    ]
+  }
 }
