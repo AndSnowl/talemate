@@ -24,6 +24,7 @@
             <v-btn variant="outlined" size="small" :prepend-icon="stub.ignored ? 'mdi-eye' : 'mdi-eye-off'" :loading="!!worlds.pending.ignore_stub" :disabled="busy" @click="worlds.ignoreStub(stub.id, !stub.ignored)">
                 {{ stub.ignored ? 'Unignore' : 'Ignore' }}
             </v-btn>
+            <slot></slot>
         </div>
         <div v-if="stub.kind && !expandable" class="text-caption text-muted mt-2" data-testid="expand-later">{{ expandNote(stub.kind) }}</div>
     </v-card>
@@ -36,8 +37,9 @@ import { STUB_KINDS, canExpand, expandNote, kindInfo } from './worldKinds.js';
 // One stub's card: its name (opening its page) and "not made yet", its
 // kind (a guess the owner can change), its mention count, Expand (its
 // kind's create box, from the stub; a culture, race or mix can't be, with
-// a note why) and Ignore (or Unignore). Shown on hover over a stub link, and on the stub's own page
-// (`onPage`, without the name).
+// a note why) and Ignore (or Unignore), then whatever the slot adds (a
+// link's "Re-point…"). Shown on hover over a stub link, and on the stub's
+// own page (`onPage`, without the name).
 export default {
     name: 'StubCard',
     props: {

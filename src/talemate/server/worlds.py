@@ -73,10 +73,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   that kind's `list_things`. A loaded scene keeps playing with it until
   it's reloaded.
 - Fact text written by hand (`add_fact`, `correct_fact`, `override_fact`,
-  each taking `picks`) is linked before it's written
+  each taking `picks` and `new_names`) is linked before it's written
   (`worldplay.links.link_text`): the names of entries and stubs, and the
   picks, become references keeping the words written; the thing's own
-  names stay plain, and unknown phrases are never made stubs.
+  names, and names the owner treats as new, stay plain, and unknown
+  phrases are never made stubs.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -262,6 +263,8 @@ class AddFactPayload(_ThingEdit):
     valid_until: dict | None = None
     # a name written in the text -> the thing the owner picked for it
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    # names written in the text the owner treats as new: left plain
+    new_names: list[str] = pydantic.Field(default_factory=list)
 
 
 class CorrectFactPayload(_ThingEdit):
@@ -272,6 +275,7 @@ class CorrectFactPayload(_ThingEdit):
     valid_from: dict | None = None
     valid_until: dict | None = None
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
 
 
 class MakeStubPayload(_ThingEdit):
@@ -309,6 +313,7 @@ class OverrideFactPayload(_ThingEdit):
     text: str
     category: str
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
 
 
 class FindMixPayload(pydantic.BaseModel):
@@ -917,13 +922,20 @@ class WorldsPlugin(Plugin):
         text: str,
         picks: dict[str, str],
         at: WorldDate | None,
+        new_names: list[str] | None = None,
     ) -> str:
         """Hand-written fact text with its names linked, as things are
         named at `at` (`links.link_text`): entries, stubs and the owner's
-        `picks`, never `thing_id` itself. Unknown phrases stay as they
-        are."""
+        `picks`, never `thing_id` itself, nor a name the owner treats as
+        new (`new_names`). Unknown phrases stay as they are."""
 
-        return link_text(world.view(at), text, picks=picks, owner=thing_id)
+        return link_text(
+            world.view(at),
+            text,
+            picks=picks,
+            owner=thing_id,
+            as_new=new_names or (),
+        )
 
     @staticmethod
     def _require_stub(world: World, thing_id: str) -> ThingState:
@@ -1227,6 +1239,7 @@ class WorldsPlugin(Plugin):
             payload.text,
             payload.picks,
             _date_in(payload.valid_from) or _date_in(payload.at),
+            payload.new_names,
         )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(
@@ -1255,6 +1268,7 @@ class WorldsPlugin(Plugin):
                 text,
                 payload.picks,
                 _date_in(payload.valid_from) or _date_in(payload.at),
+                payload.new_names,
             )
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
@@ -1306,7 +1320,9 @@ class WorldsPlugin(Plugin):
             raise KeyError(
                 f"{payload.thing_id} doesn't inherit fact {payload.overridden_fact_id}"
             )
-        text = self._linked(world, payload.thing_id, payload.text, payload.picks, at)
+        text = self._linked(
+            world, payload.thing_id, payload.text, payload.picks, at, payload.new_names
+        )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(
                 payload.thing_id,

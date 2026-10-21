@@ -59,8 +59,22 @@
 // since its links to the stub change with it. `expandStub` leaves the page
 // for the stub's kind, whose create box then expands it (`expanding`):
 // the preview carries the stub's id, and accepting fills the stub in place.
+// Expanding also asks for `stub_suggestion`, the create box's starting
+// prompt and the mention context (`stubSuggestion`). A preview of a new
+// thing named like a stub of its kind (`matching_stub_id`) can be accepted
+// into that stub instead (`acceptPreview(changes, {intoStub})`).
 // Other names: `setAka` writes the whole `aka` list (`set_field` "aka");
 // `akaAdded`, `akaChanged`, `akaEveryday` and `akaRemoved` make the list.
+// `addOtherName` teaches any thing another name (the owner re-picked a
+// name for it): it fetches the thing, then writes its `aka` with the name
+// added, as common and not everyday, unless it already has that name.
+//
+// Names in what the owner writes: `match_names` replies keep the
+// `unknown` phrases too (`unknownFor`). Fact edits and previews take
+// `picks` and `newNames` (see nameHighlights.js `linkPayload`), sent only
+// when there are any. `makeStub` makes a stub of a phrase in a fact.
+// `referenceTargets` is what Add reference searches: every entry and
+// live stub.
 //
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
@@ -270,7 +284,15 @@ export function previewSegments(text, newNames = []) {
 }
 
 // replies to these clear their own spinner (`pending[action]`)
-const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact'];
+const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub'];
+
+// `{picks, new_names}` for a request, leaving out the empty ones
+function linkFields(picks = {}, newNames = []) {
+    return {
+        ...(Object.keys(picks).length ? { picks } : {}),
+        ...(newNames.length ? { new_names: newNames } : {}),
+    };
+}
 
 function emptyThings() {
     return Object.fromEntries(LISTED_KINDS.map((kind) => [kind, []]));
@@ -329,6 +351,10 @@ function worldState() {
         stubs: [],
         // the stub the create box of its kind expands: `{id, kind, name}`
         expanding: null,
+        // the last `stub_suggestion` reply: `{id, prompt, context}`
+        stubSuggestion: null,
+        // thing id -> the other names to add to it once it's fetched
+        akaQueue: {},
         pending: {},
     };
 }
@@ -365,8 +391,36 @@ export const useWorldsStore = defineStore('worlds', {
                 .filter(Boolean);
             return [...species, entry].map(({ id: linkId, name }) => ({ id: linkId, name }));
         },
+        // the `match_names` unknown phrases for exactly this text and date
+        unknownFor: (state) => (text, at) => {
+            const found = state.nameMatches;
+            return found && found.text === text && sameDate(found.at, at) ? found.unknown || [] : [];
+        },
         // a stub's `list_stubs` entry, or null
         stubInfo: (state) => (id) => state.stubs.find((stub) => stub.id === id) || null,
+        // what Add reference searches: `{id, name, kind, stub}` of every
+        // listed entry, species, race and mix, and every live stub
+        referenceTargets: (state) => {
+            const byId = new Map();
+            for (const things of Object.values(state.things)) {
+                for (const thing of things) {
+                    byId.set(thing.id, { id: thing.id, name: thing.name, kind: thing.kind, stub: !!thing.stub });
+                }
+            }
+            for (const item of state.heritage) {
+                if (!byId.has(item.id)) {
+                    byId.set(item.id, { id: item.id, name: item.name, kind: item.kind, stub: false });
+                }
+            }
+            for (const stub of state.stubs) {
+                if (stub.ignored) {
+                    byId.delete(stub.id);
+                } else {
+                    byId.set(stub.id, { id: stub.id, name: stub.name, kind: stub.kind, stub: true });
+                }
+            }
+            return [...byId.values()];
+        },
     },
 
     actions: {
@@ -570,19 +624,27 @@ export const useWorldsStore = defineStore('worlds', {
         // --- create -------------------------------------------------------
 
         // `stubId`: the stub the preview expands (its kind's create box
-        // opened from it)
-        previewThing(kind, prompt, fields = {}, stubId = null) {
-            this.previewRequest = { kind, prompt, fields, stubId };
+        // opened from it); `picks` and `newNames`: the prompt's names, as
+        // the owner left them; `repicks`: the owner's re-picks (`{id,
+        // name}`), each thing taught its name once the preview is accepted
+        previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [] } = {}) {
+            this.previewRequest = { kind, prompt, fields, stubId, picks, newNames, repicks };
             this.preview = null;
             this.previewError = null;
             this.previewPending = true;
-            this.request('preview_thing', { kind, prompt, fields, ...(stubId ? { stub_id: stubId } : {}) });
+            this.request('preview_thing', {
+                kind,
+                prompt,
+                fields,
+                ...(stubId ? { stub_id: stubId } : {}),
+                ...linkFields(picks, newNames),
+            });
         },
 
         regeneratePreview() {
             const req = this.previewRequest;
             if (req) {
-                this.previewThing(req.kind, req.prompt, req.fields, req.stubId);
+                this.previewThing(req.kind, req.prompt, req.fields, req.stubId, req);
             }
         },
 
@@ -616,11 +678,14 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // open the create box of `stub`'s kind (`{id, kind, name}`) to
-        // expand it, leaving the page (and any other preview) behind
+        // expand it, leaving the page (and any other preview) behind; its
+        // suggested prompt is asked for
         expandStub(stub) {
             this.cancelPreview();
             this.closeThing();
             this.expanding = { id: stub.id, kind: stub.kind, name: stub.name };
+            this.stubSuggestion = null;
+            this.request('stub_suggestion', { id: stub.id });
         },
 
         stopExpanding() {
@@ -643,14 +708,23 @@ export const useWorldsStore = defineStore('worlds', {
 
         // `open: false` keeps the page where it is (the mix drafted for a
         // character): the new thing lands in `accepted` instead
-        acceptPreview(changes = {}, { open = true } = {}) {
+        // `intoStub`: "fill the stub instead", the stub a preview made
+        // without one fills. The owner's re-picks are taught to their
+        // things now.
+        acceptPreview(changes = {}, { open = true, intoStub = null } = {}) {
             if (!this.preview) {
                 return;
             }
             this.acceptOpens = open;
             this.accepted = null;
             this.pending = { ...this.pending, accept_preview: true };
-            this.request('accept_preview', { preview: { ...this.preview, ...changes } });
+            this.request('accept_preview', {
+                preview: { ...this.preview, ...changes },
+                ...(intoStub ? { into_stub: intoStub } : {}),
+            });
+            for (const repick of this.previewRequest?.repicks || []) {
+                this.addOtherName(repick.id, repick.name);
+            }
         },
 
         // mark the preview's inherited fact `factId` as replaced by its own
@@ -680,14 +754,29 @@ export const useWorldsStore = defineStore('worlds', {
             this.request(action, { thing_id: this.selectedThingId, at: this.thingAt, ...data });
         },
 
-        addFact(category, text, validFrom = null, validUntil = null) {
-            this.edit('add_fact', { category, text, valid_from: validFrom, valid_until: validUntil });
+        // `links`: `{picks, newNames}` for the text's names
+        addFact(category, text, validFrom = null, validUntil = null, { picks = {}, newNames = [] } = {}) {
+            this.edit('add_fact', { category, text, valid_from: validFrom, valid_until: validUntil, ...linkFields(picks, newNames) });
         },
 
         // `changes` holds only what changes: text, category, valid_from,
-        // valid_until (a null date makes that end open)
-        correctFact(factId, changes) {
-            this.edit('correct_fact', { fact_id: factId, ...changes });
+        // valid_until (a null date makes that end open); `links` as
+        // addFact's, for a changed text
+        correctFact(factId, changes, { picks = {}, newNames = [] } = {}) {
+            this.edit('correct_fact', { fact_id: factId, ...changes, ...linkFields(picks, newNames) });
+        },
+
+        // make `text`, a phrase in the open thing's fact `factId`, a stub
+        // of `kind`, and link it there
+        makeStub(factId, text, kind) {
+            this.edit('make_stub', { fact_id: factId, text, kind });
+        },
+
+        // teach thing `id` another name (common, not everyday): fetched
+        // first, since `aka` is written whole
+        addOtherName(id, name) {
+            this.akaQueue = { ...this.akaQueue, [id]: [...(this.akaQueue[id] || []), name] };
+            this.request('get_thing', { id, at: id === this.selectedThingId ? this.thingAt : null });
         },
 
         endFact(factId, until) {
@@ -699,8 +788,8 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // an own fact replacing the inherited fact `factId`
-        overrideFact(factId, category, text) {
-            this.edit('override_fact', { overridden_fact_id: factId, category, text });
+        overrideFact(factId, category, text, { picks = {}, newNames = [] } = {}) {
+            this.edit('override_fact', { overridden_fact_id: factId, category, text, ...linkFields(picks, newNames) });
         },
 
         // `value`: a number field's number, or `measures`' list of
@@ -745,6 +834,26 @@ export const useWorldsStore = defineStore('worlds', {
             this.listAllThings();
             this.listStubs();
             this.listScenes();
+        },
+
+        // the queued other names of `thing` (a `get_thing` reply), written
+        // if any is new to it
+        writeOtherNames(thing) {
+            const { [thing.id]: names, ...rest } = this.akaQueue;
+            this.akaQueue = rest;
+            const before = thing.aka || [];
+            let aka = before;
+            for (const name of names) {
+                aka = akaAdded(aka, name, 'common', thing.name);
+            }
+            if (aka !== before) {
+                this.request('set_field', {
+                    thing_id: thing.id,
+                    at: thing.id === this.selectedThingId ? this.thingAt : null,
+                    field: 'aka',
+                    value: aka,
+                });
+            }
         },
 
         clearPending(action) {
@@ -814,6 +923,14 @@ export const useWorldsStore = defineStore('worlds', {
                     if (data.id === this.selectedThingId) {
                         this.thing = data;
                     }
+                    if (this.akaQueue[data.id]) {
+                        this.writeOtherNames(data);
+                    }
+                    break;
+                case 'stub_suggestion':
+                    if (this.expanding?.id === data.id) {
+                        this.stubSuggestion = data;
+                    }
                     break;
                 case 'list_scenes':
                     this.scenes = data.scenes;
@@ -843,7 +960,7 @@ export const useWorldsStore = defineStore('worlds', {
                         && data.text === this.nameLookup.text
                         && sameDate(data.at, this.nameLookup.at)
                     ) {
-                        this.nameMatches = { ...this.nameLookup, matches: data.matches };
+                        this.nameMatches = { ...this.nameLookup, matches: data.matches, unknown: data.unknown || [] };
                         this.nameLookup = null;
                     }
                     break;

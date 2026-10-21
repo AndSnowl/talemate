@@ -15,17 +15,16 @@
             class="mb-2"
             @update:model-value="pickTouched = true"
         />
-        <v-textarea
+        <NameHighlightInput
             v-model="prompt"
+            v-model:picks="picks"
+            v-model:refs="refs"
             :label="kind === 'mix' ? 'Describe it (optional)' : 'Describe it'"
             :placeholder="placeholder"
-            rows="2"
-            auto-grow
-            density="compact"
-            variant="outlined"
-            hide-details
+            :rows="2"
+            :debounce="400"
             :disabled="busy"
-        ></v-textarea>
+        />
 
         <div class="d-flex align-center flex-wrap ga-2 mt-2">
             <v-text-field
@@ -99,6 +98,31 @@
         </div>
         <div class="text-caption text-muted mt-1">{{ hint }}</div>
 
+        <!-- what the AI is given besides the prompt: the stub's mentions
+             (and the key facts of what mentions it), the things the
+             prompt names -->
+        <v-expansion-panels v-if="contextGroups.length || namedInPrompt.length" variant="accordion" class="ai-context mt-2" data-testid="ai-context">
+            <v-expansion-panel elevation="0">
+                <v-expansion-panel-title class="text-caption">Context the AI gets</v-expansion-panel-title>
+                <v-expansion-panel-text>
+                    <div v-if="contextGroups.length" class="text-caption text-muted text-uppercase">{{ fromStub ? 'Mentioned in' : 'Context' }}</div>
+                    <div v-for="([heading, facts], index) in contextGroups" :key="index" class="context-group mb-2" data-testid="context-group">
+                        <div class="context-heading">{{ heading }}</div>
+                        <div v-for="(fact, factIndex) in facts" :key="factIndex" class="context-fact">{{ fact }}</div>
+                    </div>
+                    <div v-if="namedInPrompt.length" class="mt-1" data-testid="context-named">
+                        <span class="text-caption text-muted text-uppercase">Named in this prompt</span>
+                        <div class="d-flex flex-wrap ga-1 mt-1">
+                            <v-chip v-for="named in namedInPrompt" :key="named.id" size="small" label variant="tonal" :color="named.stub ? 'foreign' : 'link'">
+                                {{ named.name }}<span class="text-muted ml-1">({{ named.stub ? 'stub' : 'existing' }})</span>
+                            </v-chip>
+                        </div>
+                        <div class="text-caption text-muted mt-1">Their facts come along.</div>
+                    </div>
+                </v-expansion-panel-text>
+            </v-expansion-panel>
+        </v-expansion-panels>
+
         <!-- two parents with no mix yet: the mix is drafted here, under
              the character (whose prompt stays as it is), then the box
              carries on with it as the character's heritage -->
@@ -130,6 +154,23 @@
                     born <span class="world-date">{{ formatDate(worlds.calendar, preview.fields.born) }}</span>
                 </span>
             </div>
+
+            <!-- named like a stub of this kind: the owner may fill that
+                 stub rather than make a second one -->
+            <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
+                <div class="d-flex align-center flex-wrap ga-2">
+                    <span>There is a stub named “{{ matchingStub.name }}” already.</span>
+                    <v-spacer></v-spacer>
+                    <v-btn
+                        color="accent"
+                        variant="flat"
+                        size="small"
+                        :loading="!!worlds.pending.accept_preview"
+                        :disabled="!previewName.trim()"
+                        @click="accept(matchingStub.id)"
+                    >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
+                </div>
+            </v-alert>
 
             <div v-for="(text, section) in preview.prose" :key="section" class="mb-2">
                 <div class="text-caption text-muted text-uppercase">{{ section }}</div>
@@ -186,7 +227,7 @@
                     prepend-icon="mdi-check"
                     :loading="!!worlds.pending.accept_preview"
                     :disabled="!previewName.trim()"
-                    @click="accept"
+                    @click="accept()"
                 >Accept</v-btn>
                 <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :disabled="!!worlds.pending.accept_preview" @click="worlds.regeneratePreview()">Regenerate</v-btn>
                 <v-btn variant="outlined" size="small" prepend-icon="mdi-pencil" :disabled="!!worlds.pending.accept_preview" @click="worlds.discardPreview()">Edit</v-btn>
@@ -199,8 +240,10 @@
 import { defaultOverrideIndex, heritageFromMatches, previewSegments, sameParents, useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
+import { NEW_THING, linkPayload, pickedId, repicks } from './nameHighlights.js';
 import HeritagePicker from './HeritagePicker.vue';
 import LinkedText from './LinkedText.vue';
+import NameHighlightInput from './NameHighlightInput.vue';
 
 const PLACEHOLDERS = {
     character: 'A grizzled ferryman who owes the Wardens more than money…',
@@ -218,15 +261,19 @@ function yearDate(year) {
     return Number.isInteger(year) && year >= 1 && year <= 9999 ? dateOf(year) : null;
 }
 
-
-// how long the prompt rests before its names are looked up
-const MATCH_DEBOUNCE_MS = 400;
-
 // The "describe it, then create" box for one kind: a prompt plus the
 // optional core-field pickers (born for characters, the parent place for
 // places, the heritage picker for characters and mixes). Create shows the
 // backend's preview, which can be accepted, regenerated, or dropped to edit
 // the prompt and try again.
+//
+// The prompt is a `NameHighlightInput`: its names highlight as you type,
+// each open to a re-pick or "treat as new", and right-click adds a
+// reference. The preview is asked for with those picks; a re-pick teaches
+// its thing the name as written once the preview is accepted. "Context the
+// AI gets" shows the stub's mentions and the names the prompt names. A
+// preview of a new thing named like a stub of its kind offers to fill that
+// stub instead (`into_stub`).
 //
 // Heritage: a character's picker is pre-filled from the heritage its
 // prompt names, until the owner picks one. Two parents always go through a
@@ -238,12 +285,14 @@ const MATCH_DEBOUNCE_MS = 400;
 // first parent (the species page's "+ New race" and "+ New mix").
 //
 // Expanding a stub (`worlds.expanding`, of this box's kind) starts the box
-// from it: the prompt starts as the stub's name, and the preview carries
-// the stub's id, so accepting fills the stub in place. An event's picks
+// from it: the prompt starts as the stub's name, then as the suggestion
+// made from its mentions (`stub_suggestion`) unless the owner has typed
+// meanwhile, and the preview carries the stub's id, so accepting fills the
+// stub in place. An event's picks
 // are its years and place, an item's its owner.
 export default {
     name: 'CreateBox',
-    components: { HeritagePicker, LinkedText },
+    components: { HeritagePicker, LinkedText, NameHighlightInput },
     props: {
         kind: { type: String, required: true },
         // `{species}` for a race, `{parents}` for a mix
@@ -260,6 +309,10 @@ export default {
     data() {
         return {
             prompt: '',
+            // the prompt's names: pickKey -> thing id or NEW_THING, and the
+            // references added by hand (pickKey -> {id, text})
+            picks: {},
+            refs: {},
             bornYear: null,
             parentId: null,
             previewName: '',
@@ -272,7 +325,6 @@ export default {
             existingMix: null,
             mixDraft: false,
             accepting: false,
-            matchTimer: null,
             // an event's `when`/`until` years
             eventYears: { when: null, until: null },
             // an event's place, or an item's owner
@@ -333,7 +385,42 @@ export default {
         },
         // the prompt's name matches, once looked up
         matches() {
-            return this.kind === 'character' ? this.worlds.matchesFor(this.prompt, null) : [];
+            return this.worlds.matchesFor(this.prompt, null);
+        },
+        // the expanded stub's suggestion, once it's come
+        suggestion() {
+            const found = this.worlds.stubSuggestion;
+            return this.fromStub && found?.id === this.fromStub.id ? found : null;
+        },
+        // `[heading, facts]` groups: the preview's own once there is one,
+        // else the stub's mention context
+        contextGroups() {
+            if (this.preview) {
+                return this.preview.context || [];
+            }
+            return this.suggestion?.context || [];
+        },
+        // the world things the prompt names (as picked), once each; not the
+        // stub being expanded, which its suggested prompt names
+        namedInPrompt() {
+            const named = new Map();
+            for (const match of this.matches) {
+                const id = pickedId(match, this.picks, this.refs);
+                const candidate = match.candidates.find((c) => c.id === id);
+                if (id !== NEW_THING && id !== this.fromStub?.id && !named.has(id)) {
+                    const target = candidate || this.worlds.referenceTargets.find((t) => t.id === id);
+                    named.set(id, { id, name: target?.name || match.text, stub: !!target?.stub });
+                }
+            }
+            return [...named.values()];
+        },
+        // the stub of this kind the preview is named like (not one it expands)
+        matchingStub() {
+            const id = this.preview?.matching_stub_id;
+            if (!id || this.preview.stub_id) {
+                return null;
+            }
+            return { id, name: this.worlds.stubInfo(id)?.name || this.preview.name };
         },
         // the draft's notice: why it's there, and that the character waits
         mixDraftNotice() {
@@ -352,10 +439,17 @@ export default {
         fromStub: {
             handler(stub, before) {
                 if (stub && stub.id !== before?.id) {
-                    this.prompt = stub.name;
+                    this.prompt = this.suggestion?.prompt || stub.name;
                 }
             },
             immediate: true,
+        },
+        // the suggested prompt replaces the stub's bare name, unless the
+        // owner has written something else meanwhile
+        suggestion(found) {
+            if (found && (!this.prompt.trim() || this.prompt === this.fromStub?.name)) {
+                this.prompt = found.prompt;
+            }
         },
         // immediate: the box is keyed by kind, so it remounts (switching
         // kinds and back) with a preview already there
@@ -371,7 +465,9 @@ export default {
             if (!request && before?.kind === this.kind) {
                 // expanding a stub drops the box's old preview: it starts
                 // from the stub
-                this.prompt = this.fromStub?.name || '';
+                this.prompt = this.suggestion?.prompt || this.fromStub?.name || '';
+                this.picks = {};
+                this.refs = {};
                 this.bornYear = null;
                 this.parentId = null;
                 this.eventYears = { when: null, until: null };
@@ -380,15 +476,8 @@ export default {
                 this.pickTouched = false;
             }
         },
-        prompt() {
-            if (this.kind !== 'character' || this.pickTouched) {
-                return;
-            }
-            clearTimeout(this.matchTimer);
-            this.matchTimer = setTimeout(() => this.worlds.matchNames(this.prompt, null), MATCH_DEBOUNCE_MS);
-        },
         matches(matches) {
-            if (!this.pickTouched) {
+            if (this.kind === 'character' && !this.pickTouched) {
                 const id = heritageFromMatches(matches, this.worlds.heritage);
                 this.parents = id ? [id] : [];
             }
@@ -420,9 +509,6 @@ export default {
                 this.$emit('accepted', accepted);
             }
         },
-    },
-    beforeUnmount() {
-        clearTimeout(this.matchTimer);
     },
     methods: {
         formatDate,
@@ -481,11 +567,20 @@ export default {
             this.requestPreview();
         },
         requestPreview() {
-            this.worlds.previewThing(this.kind, this.prompt.trim(), this.fields(), this.fromStub?.id || null);
+            const links = linkPayload(this.matches, this.picks, this.refs);
+            // the stub being expanded isn't context for itself
+            const stubId = this.fromStub?.id;
+            links.picks = Object.fromEntries(Object.entries(links.picks).filter(([, id]) => id !== stubId));
+            this.worlds.previewThing(this.kind, this.prompt.trim(), this.fields(), stubId || null, {
+                picks: links.picks,
+                newNames: links.newNames,
+                repicks: repicks(this.matches, this.picks),
+            });
         },
-        accept() {
+        // `intoStub`: fill that stub instead of making a new thing
+        accept(intoStub = null) {
             this.accepting = this.stay;
-            this.worlds.acceptPreview({ name: this.previewName.trim() }, { open: !this.stay });
+            this.worlds.acceptPreview({ name: this.previewName.trim() }, { open: !this.stay, intoStub });
         },
         cancel() {
             if (this.mine) {
@@ -579,5 +674,31 @@ export default {
 
 .world-date {
     color: rgb(var(--v-theme-date));
+}
+
+.ai-context :deep(.v-expansion-panel) {
+    background: transparent;
+    border: 1px solid rgb(var(--v-theme-border));
+}
+
+.ai-context :deep(.v-expansion-panel-title) {
+    min-height: 32px;
+    padding: 4px 12px;
+}
+
+.context-group {
+    border-left: 2px solid rgb(var(--v-theme-border));
+    padding-left: 8px;
+}
+
+.context-heading {
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.context-fact {
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgb(var(--v-theme-muted));
 }
 </style>

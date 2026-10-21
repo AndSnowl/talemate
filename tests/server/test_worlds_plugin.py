@@ -1800,6 +1800,52 @@ async def test_add_fact_links_known_names_and_picks(plugin, monkeypatch):
     )
 
 
+async def test_fact_edits_leave_names_treated_as_new_plain(plugin, monkeypatch):
+    """A name the owner treats as new in a fact form (`new_names`) stays
+    plain text, though the world has a thing by that name; a pick still
+    links."""
+
+    s = await _open_stub_world(plugin)
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "add_fact",
+            "thing_id": s.maren,
+            "category": "background",
+            "text": "Maren left Moscavia for The Harbour.",
+            "new_names": ["The Harbour"],
+        }
+    )
+    fact = next(
+        f
+        for f in _last(plugin, "add_fact")["data"]["facts"]
+        if f["rendered"].startswith("Maren left")
+    )
+    assert fact["text"] == (f"Maren left {ref(s.tsardom, 'Moscavia')} for The Harbour.")
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "correct_fact",
+            "thing_id": s.maren,
+            "fact_id": fact["fact_id"],
+            "text": "Maren left Moscavia for The Harbour.",
+            "new_names": ["Moscavia"],
+            "picks": {"The Harbour": s.harbour},
+        }
+    )
+    corrected = next(
+        f
+        for f in _last(plugin, "correct_fact")["data"]["facts"]
+        if f["fact_id"] == fact["fact_id"]
+    )
+    assert corrected["text"] == (
+        f"Maren left Moscavia for {ref(s.harbour, 'The Harbour')}."
+    )
+
+
 async def test_make_stub_action(plugin, monkeypatch):
     s = await _open_stub_world(plugin)
     world = s.world

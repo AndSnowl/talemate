@@ -10,6 +10,8 @@ preview files.
 
 from __future__ import annotations
 
+from playwright.sync_api import expect
+
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_new_scene import _new_scene_dialog
 from e2e.worlds.test_world_tab import (
@@ -188,7 +190,11 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     box.get_by_test_id("from-stub").filter(has_text="Yelena").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-    assert box.get_by_label("Describe it").input_value() == "Yelena"
+    # the prompt is suggested from her mention
+    expect(box.get_by_label("Describe it")).to_have_value(
+        "Yelena: Raised by her mother Yelena, who kept the Old Rite.",
+        timeout=TIMEOUT_MS,
+    )
 
     # accepting fills the stub: the same page, now an entry, and Vasha's
     # fact links to it

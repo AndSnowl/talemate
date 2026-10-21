@@ -24,7 +24,19 @@ import {
     useWorldsStore,
     worldTarget,
 } from '../src/stores/worlds.js';
-import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
+import {
+    NEW_THING,
+    factEditState,
+    linkPayload,
+    matchState,
+    newNamesPayload,
+    pickedId,
+    picksPayload,
+    promptSegments,
+    repicks,
+    repointedText,
+    searchReferences,
+} from '../src/components/worlds/nameHighlights.js';
 import { STUB_KINDS, TOP_KINDS, canExpand, expandNote, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
@@ -162,6 +174,138 @@ check('the prompt is cut into plain text, matched names and new names', () => {
     assert.equal(segments.map((s) => s.text).join(''), PROMPT);
     assert.deepEqual([segments[2].start, segments[2].end], [16, 26]);
     assert.equal(segments[4].match, null);
+});
+
+const TS_ID = 'a'.repeat(32);
+const VOS_ID = 'b'.repeat(32);
+const HOLT_ID = 'c'.repeat(32);
+
+check('a suggested match shows dotted until the owner picks or turns it down', () => {
+    const tsardom = { id: 'ts', name: 'Tsardom of Moscavia', kind: 'place' };
+    const suggested = { start: 0, end: 8, text: 'Moscavia', candidates: [tsardom], suggested: true };
+    assert.equal(matchState(suggested, {}), 'suggested');
+    assert.equal(matchState(suggested, { moscavia: 'ts' }), 'matched');
+    assert.equal(matchState(suggested, { moscavia: NEW_THING }), 'new');
+    // a reference made by hand for the name counts as picked
+    assert.equal(matchState(suggested, {}, { moscavia: { id: 'ts', text: 'Moscavia' } }), 'matched');
+    assert.equal(matchState(MATCHES[0], {}), 'matched');
+});
+
+check('a reference made by hand wins over the best candidate, a re-pick over it', () => {
+    const refs = { maren: { id: 'vos', text: 'Maren' } };
+    assert.equal(pickedId(MATCHES[0], {}, refs), 'vos');
+    assert.equal(pickedId(MATCHES[0], { maren: 'holt' }, refs), 'holt');
+    assert.equal(pickedId(MATCHES[0], { maren: NEW_THING }, refs), NEW_THING);
+    // any thing, not only a candidate
+    assert.equal(pickedId(MATCHES[0], {}, { maren: { id: 'elsewhere', text: 'Maren' } }), 'elsewhere');
+});
+
+check('link payloads: matched names, then references no match covers', () => {
+    const refs = { yelena: { id: 'yel', text: 'Yelena' }, sallowford: { id: 'other', text: 'Sallowford' } };
+    assert.deepEqual(linkPayload(MATCHES, { maren: 'vos' }, refs), {
+        picks: { Maren: 'vos', Sallowford: 'other', Yelena: 'yel' },
+        newNames: [],
+    });
+    // treated as new: neither picked nor referenced
+    assert.deepEqual(linkPayload(MATCHES, { sallowford: NEW_THING }, refs), {
+        picks: { Maren: 'holt', Yelena: 'yel' },
+        newNames: ['Sallowford'],
+    });
+});
+
+check('re-picks are the candidates the owner chose by hand, once per name', () => {
+    assert.deepEqual(repicks(MATCHES, {}), []);
+    assert.deepEqual(repicks(MATCHES, { maren: 'vos', sallowford: NEW_THING }), [{ id: 'vos', name: 'Maren' }]);
+    // a pick that isn't a candidate isn't a re-pick
+    assert.deepEqual(repicks(MATCHES, { maren: 'gone' }), []);
+});
+
+check('references, unknown phrases and stubs-to-be show in the prompt', () => {
+    const text = 'Sailed with Yelena past Iron Gate and Old Mill.';
+    const unknown = [
+        { start: 24, end: 33, text: 'Iron Gate' },
+        { start: 38, end: 46, text: 'Old Mill' },
+    ];
+    const segments = promptSegments(text, [], {}, [], {
+        refs: { yelena: { id: 'yel', text: 'Yelena' } },
+        unknown,
+        stubs: [{ text: 'Old Mill', kind: 'place' }],
+    });
+    assert.deepEqual(
+        segments.map((s) => [s.text, s.state || null]),
+        [
+            ['Sailed with ', null],
+            ['Yelena', 'matched'],
+            [' past ', null],
+            ['Iron Gate', 'unknown'],
+            [' and ', null],
+            ['Old Mill', 'stub'],
+            ['.', null],
+        ],
+    );
+    assert.equal(segments[1].ref.id, 'yel');
+    assert.equal(segments[3].unknown.text, 'Iron Gate');
+    // a reference the owner then treats as new isn't shown
+    const dropped = promptSegments('Yelena', [], { yelena: NEW_THING }, [], { refs: { yelena: { id: 'yel', text: 'Yelena' } } });
+    assert.deepEqual(dropped.map((s) => s.state || null), [null]);
+});
+
+check('a linked fact is edited as it reads, its links kept as references', () => {
+    const segments = [
+        { text: 'Most nest along the ', ref: null, stub: false },
+        { text: 'Moscavia', ref: TS_ID, stub: true },
+        { text: ' border, near Iron Gate.', ref: null, stub: false },
+    ];
+    const raw = `Most nest along the [[thing:${TS_ID}|Moscavia]] border, near Iron Gate.`;
+    assert.deepEqual(factEditState(segments, raw), {
+        text: 'Most nest along the Moscavia border, near Iron Gate.',
+        refs: { moscavia: { id: TS_ID, text: 'Moscavia' } },
+    });
+    // a link to an ignored stub reads as plain words, but is kept
+    const ignoredRaw = `Raised by [[thing:${VOS_ID}|Aldric]].`;
+    assert.deepEqual(factEditState([{ text: 'Raised by Aldric.', ref: null, stub: false }], ignoredRaw, [VOS_ID]), {
+        text: 'Raised by Aldric.',
+        refs: { aldric: { id: VOS_ID, text: 'Aldric' } },
+    });
+    assert.deepEqual(factEditState([], 'plain', []), { text: 'plain', refs: {} });
+});
+
+check('re-pointing a link swaps its thing and keeps its words', () => {
+    const raw = `[[thing:${VOS_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${TS_ID}]].`;
+    const segments = [
+        { text: 'Maren', ref: VOS_ID, stub: false },
+        { text: ' met ', ref: null, stub: false },
+        { text: 'Maren Vos', ref: VOS_ID, stub: false },
+        { text: ' and ', ref: null, stub: false },
+        { text: 'Tsardom of Moscavia', ref: TS_ID, stub: true },
+        { text: '.', ref: null, stub: false },
+    ];
+    assert.equal(
+        repointedText(raw, segments, 2, HOLT_ID),
+        `[[thing:${VOS_ID}|Maren]] met [[thing:${HOLT_ID}|Maren Vos]] and [[thing:${TS_ID}]].`,
+    );
+    assert.equal(
+        repointedText(raw, segments, 0, HOLT_ID),
+        `[[thing:${HOLT_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${TS_ID}]].`,
+    );
+    // a reference with no shown text keeps the words it rendered as
+    assert.equal(
+        repointedText(raw, segments, 4, HOLT_ID),
+        `[[thing:${VOS_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${HOLT_ID}|Tsardom of Moscavia]].`,
+    );
+    assert.equal(repointedText(raw, segments, 1, HOLT_ID), null);
+});
+
+check('the reference search: names holding the query, starting ones first', () => {
+    const targets = [
+        { id: '1', name: 'Vasha', kind: 'character', stub: false },
+        { id: '2', name: 'Vasel River', kind: 'place', stub: false },
+        { id: '3', name: 'Vasilka', kind: 'place', stub: true },
+        { id: '4', name: 'Old Vasel', kind: 'lore', stub: false },
+    ];
+    assert.deepEqual(searchReferences(targets, 'vas').map((t) => t.name), ['Vasel River', 'Vasha', 'Vasilka', 'Old Vasel']);
+    assert.deepEqual(searchReferences(targets, '  '), []);
+    assert.deepEqual(searchReferences(targets, 'vas', 2).map((t) => t.id), ['2', '1']);
 });
 
 check('match offsets count code points, as the backend does', () => {
@@ -1021,6 +1165,103 @@ check('other names are written whole, and an edit re-lists the stubs', () => {
     store.handleMessage(reply('set_field', { id: 'owl', kind: 'species', aka }));
     assert.deepEqual(store.thing.aka, aka);
     assert.deepEqual(sent, [STUBS_REQUEST, { type: 'worlds', action: 'list_things', kind: 'species' }]);
+});
+
+check('expanding a stub asks for its suggestion; previews carry the names', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.expandStub(STUB);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'stub_suggestion', id: 's1' });
+    // a suggestion for another stub is dropped
+    store.handleMessage(reply('stub_suggestion', { id: 'other', prompt: 'x', context: [] }));
+    assert.equal(store.stubSuggestion, null);
+    const suggestion = { id: 's1', prompt: 'Tsardom of Moscavia: the owl-folk land.', context: [['Owl-folk (species)', ['A fact.']]] };
+    store.handleMessage(reply('stub_suggestion', suggestion));
+    assert.deepEqual(store.stubSuggestion, suggestion);
+
+    store.previewThing('place', 'A town in Moscavia', {}, null, {
+        picks: { Moscavia: 's1' },
+        newNames: ['Kalmara'],
+        repicks: [{ id: 's1', name: 'Moscavia' }],
+    });
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'preview_thing', kind: 'place', prompt: 'A town in Moscavia', fields: {},
+        picks: { Moscavia: 's1' }, new_names: ['Kalmara'],
+    });
+    store.regeneratePreview();
+    assert.deepEqual(sent.at(-1).picks, { Moscavia: 's1' });
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {}, matching_stub_id: 'k1' }));
+
+    // accepting into a stub; the re-pick fetches the stub to teach it the name
+    sent.length = 0;
+    store.acceptPreview({ name: 'Kalmara' }, { intoStub: 'k1' });
+    assert.equal(sent[0].action, 'accept_preview');
+    assert.equal(sent[0].into_stub, 'k1');
+    assert.deepEqual(sent[1], { type: 'worlds', action: 'get_thing', id: 's1', at: null });
+});
+
+check('another name is added once the thing is fetched, unless it has it', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.addOtherName('s1', 'Moscavia');
+    sent.length = 0;
+    store.handleMessage(reply('get_thing', { id: 's1', kind: 'place', name: 'Tsardom of Moscavia', aka: [] }));
+    assert.deepEqual(sent, [{
+        type: 'worlds', action: 'set_field', thing_id: 's1', at: null, field: 'aka',
+        value: [{ name: 'Moscavia', tag: 'common', everyday: false }],
+    }]);
+    assert.deepEqual(store.akaQueue, {});
+    // the page of another thing stays as it was
+    assert.equal(store.thing, null);
+
+    // its main name, or a name it has, writes nothing
+    store.addOtherName('s1', 'tsardom of moscavia');
+    store.addOtherName('s1', 'Moscavia');
+    sent.length = 0;
+    store.handleMessage(reply('get_thing', {
+        id: 's1', kind: 'place', name: 'Tsardom of Moscavia', aka: [{ name: 'Moscavia', tag: 'common', everyday: false }],
+    }));
+    assert.deepEqual(sent, []);
+});
+
+check('fact edits carry their picks and names treated as new; make_stub is an edit', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    store.addFact('general', 'Sailed with Yelena.', null, null, { picks: { Yelena: 'y1' }, newNames: ['Sallowford'] });
+    assert.deepEqual(sent.at(-1).picks, { Yelena: 'y1' });
+    assert.deepEqual(sent.at(-1).new_names, ['Sallowford']);
+    store.correctFact('f1', { text: 'Plain.' });
+    assert.equal('picks' in sent.at(-1), false);
+    store.makeStub('f1', 'Iron Gate', 'place');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'make_stub', thing_id: 'owl', at: null, fact_id: 'f1', text: 'Iron Gate', kind: 'place',
+    });
+    sent.length = 0;
+    store.handleMessage(reply('make_stub', { id: 'owl', kind: 'species', facts: [] }));
+    assert.equal(store.thing.id, 'owl');
+    assert.deepEqual(sent, [STUBS_REQUEST]);
+});
+
+check('unknown phrases belong to the exact text and date asked about', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.matchNames('Past Iron Gate.');
+    store.handleMessage(reply('match_names', { text: 'Past Iron Gate.', at: null, matches: [], unknown: [{ start: 5, end: 14, text: 'Iron Gate' }] }));
+    assert.deepEqual(store.unknownFor('Past Iron Gate.', null), [{ start: 5, end: 14, text: 'Iron Gate' }]);
+    assert.deepEqual(store.unknownFor('Past Iron Gate', null), []);
+});
+
+check('Add reference searches entries and live stubs, not ignored ones', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_things', { kind: 'character', things: [{ id: 'v', kind: 'character', name: 'Vasha' }] }));
+    store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 's1', kind: 'place', name: 'Tsardom of Moscavia', stub: { ignored: false } }] }));
+    store.handleMessage(reply('list_stubs', { stubs: [
+        { id: 's1', name: 'Tsardom of Moscavia', kind: 'place', mentions: 1, ignored: false },
+        { id: 'a1', name: 'Aldric', kind: 'character', mentions: 2, ignored: true },
+    ] }));
+    assert.deepEqual(store.referenceTargets.map((t) => [t.id, t.stub]).sort(), [['s1', true], ['v', false]]);
 });
 
 if (failures.length) {

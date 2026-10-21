@@ -1,17 +1,42 @@
 <template>
     <span class="linked-text"><template v-for="(segment, index) in shown" :key="index"><a
-        v-if="segment.ref && !segment.stub"
+        v-if="segment.ref && !segment.stub && !repoint"
         class="linked-ref"
         data-testid="linked-ref"
         href="#"
         @click.prevent="worlds.openThing(segment.ref)"
     >{{ segment.text }}</a><v-menu
-        v-else-if="segment.ref"
+        v-else-if="segment.ref && !segment.stub"
+        :model-value="openCard === index"
         open-on-hover
         :open-delay="250"
         :close-delay="200"
         :close-on-content-click="false"
         location="bottom start"
+        @update:model-value="setCard(index, $event)"
+    >
+        <template #activator="{ props }"><a
+            v-bind="props"
+            class="linked-ref"
+            data-testid="linked-ref"
+            href="#"
+            @click.prevent="worlds.openThing(segment.ref)"
+        >{{ segment.text }}</a></template>
+        <v-card class="link-card pa-3" min-width="220" data-testid="link-card">
+            <a href="#" class="link-name" @click.prevent="worlds.openThing(segment.ref)">{{ targetName(segment) }}</a>
+            <div class="d-flex ga-2 mt-2">
+                <v-btn variant="outlined" size="small" prepend-icon="mdi-swap-horizontal" @click="startRepoint(index, $event)">Re-point…</v-btn>
+            </div>
+        </v-card>
+    </v-menu><v-menu
+        v-else-if="segment.ref"
+        :model-value="openCard === index"
+        open-on-hover
+        :open-delay="250"
+        :close-delay="200"
+        :close-on-content-click="false"
+        location="bottom start"
+        @update:model-value="setCard(index, $event)"
     >
         <template #activator="{ props }"><a
             v-bind="props"
@@ -20,18 +45,29 @@
             href="#"
             @click.prevent="follow(segment)"
         >{{ segment.text }}</a></template>
-        <StubCard :stub="stubOf(segment)" />
+        <StubCard :stub="stubOf(segment)">
+            <v-btn v-if="repoint" variant="outlined" size="small" prepend-icon="mdi-swap-horizontal" @click="startRepoint(index, $event)">Re-point…</v-btn>
+        </StubCard>
     </v-menu><span
         v-else-if="segment.fresh"
         class="linked-stub fresh"
         data-testid="linked-new"
         :title="`A new ${segment.kind || 'name'}: a stub once accepted`"
-    >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template></span>
+    >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template><ReferenceMenu
+        v-if="repoint"
+        v-model="repointOpen"
+        :target="repointTarget"
+        search-only
+        search-label="Re-point to…"
+        :exclude="repointExclude"
+        @pick="repointTo"
+    /></span>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { canExpand } from './worldKinds.js';
+import ReferenceMenu from './ReferenceMenu.vue';
 import StubCard from './StubCard.vue';
 
 // Text with its names linked, from the backend's `segments` (`{text, ref,
@@ -42,25 +78,52 @@ import StubCard from './StubCard.vue';
 // stub that can't be expanded here, a culture, race or mix, opens its page). A `fresh` run is a
 // name a preview invents: stub-styled, with no card, since the stub is
 // only made on accept. With no segments, `text` shows as it is.
+//
+// With `repoint` (an own fact on its thing's page), an entry link gets a
+// hover card too, and both cards offer "Re-point…": a search
+// (`ReferenceMenu`) for the thing the link should mean, emitted as
+// `repoint {index, to}` (`index` into `segments`); the page rewrites the
+// fact, keeping the link's words. `exclude` are ids never offered.
 export default {
     name: 'LinkedText',
-    components: { StubCard },
+    components: { ReferenceMenu, StubCard },
     props: {
         segments: { type: Array, default: null },
         text: { type: String, default: '' },
+        repoint: { type: Boolean, default: false },
+        exclude: { type: Array, default: () => [] },
     },
+    emits: ['repoint'],
     setup() {
         return { worlds: useWorldsStore() };
+    },
+    data() {
+        return {
+            // the run whose hover card is open
+            openCard: null,
+            // the run being re-pointed, and where its search shows
+            repointing: null,
+            repointOpen: false,
+            repointTarget: null,
+        };
     },
     computed: {
         shown() {
             return this.segments && this.segments.length ? this.segments : [{ text: this.text, ref: null, stub: false }];
+        },
+        repointExclude() {
+            const current = this.repointing === null ? null : this.shown[this.repointing]?.ref;
+            return current ? [...this.exclude, current] : this.exclude;
         },
     },
     methods: {
         // the stub's listing, else what the run itself says
         stubOf(segment) {
             return this.worlds.stubInfo(segment.ref) || { id: segment.ref, name: segment.text, kind: null, mentions: null, ignored: false };
+        },
+        // the linked entry's name (its listing), else the words linked
+        targetName(segment) {
+            return this.worlds.referenceTargets.find((target) => target.id === segment.ref)?.name || segment.text;
         },
         follow(segment) {
             const stub = this.stubOf(segment);
@@ -69,6 +132,25 @@ export default {
             } else {
                 this.worlds.openThing(segment.ref);
             }
+        },
+        setCard(index, open) {
+            if (open) {
+                this.openCard = index;
+            } else if (this.openCard === index) {
+                this.openCard = null;
+            }
+        },
+        startRepoint(index, event) {
+            this.openCard = null;
+            this.repointing = index;
+            this.repointTarget = [event.clientX, event.clientY];
+            this.repointOpen = true;
+        },
+        repointTo(target) {
+            if (this.repointing !== null) {
+                this.$emit('repoint', { index: this.repointing, to: target.id });
+            }
+            this.repointing = null;
         },
     },
 };
@@ -90,5 +172,15 @@ export default {
 
 .linked-stub.fresh {
     cursor: help;
+}
+
+.link-card {
+    background: rgb(var(--v-theme-raised));
+    font-size: 13px;
+}
+
+.link-name {
+    color: rgb(var(--v-theme-link));
+    font-weight: 600;
 }
 </style>
