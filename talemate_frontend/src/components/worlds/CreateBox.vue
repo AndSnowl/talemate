@@ -2,163 +2,162 @@
     <v-card variant="flat" class="create-box pa-3 mb-4" data-testid="create-box">
         <div class="text-subtitle-2 mb-1">New {{ info.singular }}</div>
 
-        <!-- two parents with no mix yet: the mix is drafted first, then
-             the box carries on with it as the character's heritage -->
-        <div v-if="mixDraft" data-testid="mix-draft">
-            <v-alert type="info" variant="tonal" density="compact" class="mb-2">{{ MIX_FIRST_NOTICE }}</v-alert>
-            <CreateBox kind="mix" :preset="{ parents }" lock-parents stay cancellable @accepted="mixAccepted" @cancel="mixDraft = false" />
-        </div>
+        <div v-if="speciesName" class="text-caption text-muted mb-2">Race of {{ speciesName }}</div>
+        <HeritagePicker
+            v-if="hasPicker"
+            v-model="parents"
+            :kind="kind"
+            :disabled="busy || lockParents || mixDraft"
+            class="mb-2"
+            @update:model-value="pickTouched = true"
+        />
+        <v-textarea
+            v-model="prompt"
+            :label="kind === 'mix' ? 'Describe it (optional)' : 'Describe it'"
+            :placeholder="placeholder"
+            rows="2"
+            auto-grow
+            density="compact"
+            variant="outlined"
+            hide-details
+            :disabled="busy"
+        ></v-textarea>
 
-        <template v-else>
-            <div v-if="speciesName" class="text-caption text-muted mb-2">Race of {{ speciesName }}</div>
-            <HeritagePicker
-                v-if="hasPicker"
-                v-model="parents"
-                :kind="kind"
-                :disabled="busy || lockParents"
-                class="mb-2"
-                @update:model-value="pickTouched = true"
-            />
-            <v-textarea
-                v-model="prompt"
-                :label="kind === 'mix' ? 'Describe it (optional)' : 'Describe it'"
-                :placeholder="placeholder"
-                rows="2"
-                auto-grow
+        <div class="d-flex align-center flex-wrap ga-2 mt-2">
+            <v-text-field
+                v-if="kind === 'character'"
+                v-model.number="bornYear"
+                label="Born (year)"
+                type="number"
+                min="1"
+                max="9999"
                 density="compact"
                 variant="outlined"
                 hide-details
+                class="picker"
                 :disabled="busy"
-            ></v-textarea>
+            ></v-text-field>
+            <v-select
+                v-if="kind === 'place'"
+                v-model="parentId"
+                label="Inside (place)"
+                :items="parentOptions"
+                item-title="name"
+                item-value="id"
+                clearable
+                density="compact"
+                variant="outlined"
+                hide-details
+                class="picker picker-wide"
+                :disabled="busy"
+            ></v-select>
+            <v-spacer></v-spacer>
+            <v-btn
+                color="accent"
+                variant="flat"
+                size="small"
+                prepend-icon="mdi-creation"
+                :loading="worlds.previewPending && mine"
+                :disabled="!canCreate"
+                @click="create"
+            >Create</v-btn>
+            <v-btn v-if="cancellable" variant="outlined" size="small" :disabled="!!worlds.pending.accept_preview" @click="cancel">Cancel</v-btn>
+        </div>
+        <div class="text-caption text-muted mt-1">{{ hint }}</div>
 
-            <div class="d-flex align-center flex-wrap ga-2 mt-2">
+        <!-- two parents with no mix yet: the mix is drafted here, under
+             the character (whose prompt stays as it is), then the box
+             carries on with it as the character's heritage -->
+        <div v-if="mixDraft" class="mix-draft mt-3" data-testid="mix-draft">
+            <v-alert type="info" variant="tonal" density="compact" class="mb-2">{{ mixDraftNotice }}</v-alert>
+            <CreateBox kind="mix" :preset="{ parents }" lock-parents stay cancellable @accepted="mixAccepted" @cancel="mixDraft = false" />
+        </div>
+
+        <v-alert v-if="existingMix" type="info" variant="tonal" density="compact" class="mt-3" data-testid="mix-exists">
+            These parents already have a mix:
+            <a href="#" class="mix-link" @click.prevent="worlds.openThing(existingMix.id)">{{ existingMix.name }}</a>.
+        </v-alert>
+
+        <v-alert v-if="mine && worlds.previewError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ worlds.previewError }}
+        </v-alert>
+
+        <v-card v-if="preview" variant="tonal" class="preview mt-3 pa-3" data-testid="create-preview">
+            <div class="d-flex align-center ga-2 mb-2">
                 <v-text-field
-                    v-if="kind === 'character'"
-                    v-model.number="bornYear"
-                    label="Born (year)"
-                    type="number"
-                    min="1"
-                    max="9999"
+                    v-model="previewName"
+                    label="Name"
                     density="compact"
                     variant="outlined"
                     hide-details
-                    class="picker"
-                    :disabled="busy"
+                    class="preview-name"
                 ></v-text-field>
-                <v-select
-                    v-if="kind === 'place'"
-                    v-model="parentId"
-                    label="Inside (place)"
-                    :items="parentOptions"
-                    item-title="name"
-                    item-value="id"
-                    clearable
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    class="picker picker-wide"
-                    :disabled="busy"
-                ></v-select>
-                <v-spacer></v-spacer>
+                <span v-if="preview.fields.born" class="text-caption text-muted">
+                    born <span class="world-date">{{ formatDate(worlds.calendar, preview.fields.born) }}</span>
+                </span>
+            </div>
+
+            <div v-for="(text, section) in preview.prose" :key="section" class="mb-2">
+                <div class="text-caption text-muted text-uppercase">{{ section }}</div>
+                <div class="prose">{{ text }}</div>
+            </div>
+
+            <div class="text-caption text-muted text-uppercase mt-2">Facts</div>
+            <div v-for="(fact, index) in preview.facts" :key="index" class="fact d-flex align-center ga-2">
+                <span class="flex-grow-1">{{ fact.text }}</span>
+                <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
+                <span class="fact-date">{{ fact.since ? formatDate(worlds.calendar, fact.since) + ' →' : 'always' }}</span>
+            </div>
+
+            <!-- what it inherits: the owner can mark a fact the model
+                 missed as replaced by one of the preview's own -->
+            <template v-if="preview.inherited && preview.inherited.length">
+                <div class="text-caption text-muted text-uppercase mt-3">Inherited</div>
+                <div
+                    v-for="row in preview.inherited"
+                    :key="row.fact_id"
+                    class="fact inherited d-flex align-center ga-2"
+                    data-testid="preview-inherited"
+                >
+                    <v-checkbox-btn
+                        :model-value="overriderOf(row) >= 0"
+                        aria-label="Overridden"
+                        density="compact"
+                        class="flex-grow-0"
+                        :disabled="!preview.facts.length"
+                        @update:model-value="toggleOverride(row, $event)"
+                    ></v-checkbox-btn>
+                    <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
+                    <v-select
+                        v-if="overriderOf(row) >= 0"
+                        :model-value="overriderOf(row)"
+                        :items="ownFactItems"
+                        label="Replaced by"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        class="override-by"
+                        data-testid="override-by"
+                        @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
+                    ></v-select>
+                    <v-chip size="x-small" label variant="tonal" color="muted">{{ row.source }}</v-chip>
+                </div>
+            </template>
+
+            <div class="d-flex ga-2 mt-3">
                 <v-btn
                     color="accent"
                     variant="flat"
                     size="small"
-                    prepend-icon="mdi-creation"
-                    :loading="worlds.previewPending && mine"
-                    :disabled="!canCreate"
-                    @click="create"
-                >Create</v-btn>
-                <v-btn v-if="cancellable" variant="outlined" size="small" :disabled="!!worlds.pending.accept_preview" @click="cancel">Cancel</v-btn>
+                    prepend-icon="mdi-check"
+                    :loading="!!worlds.pending.accept_preview"
+                    :disabled="!previewName.trim()"
+                    @click="accept"
+                >Accept</v-btn>
+                <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :disabled="!!worlds.pending.accept_preview" @click="worlds.regeneratePreview()">Regenerate</v-btn>
+                <v-btn variant="outlined" size="small" prepend-icon="mdi-pencil" :disabled="!!worlds.pending.accept_preview" @click="worlds.discardPreview()">Edit</v-btn>
             </div>
-            <div class="text-caption text-muted mt-1">{{ hint }}</div>
-
-            <v-alert v-if="existingMix" type="info" variant="tonal" density="compact" class="mt-3" data-testid="mix-exists">
-                These parents already have a mix:
-                <a href="#" class="mix-link" @click.prevent="worlds.openThing(existingMix.id)">{{ existingMix.name }}</a>.
-            </v-alert>
-
-            <v-alert v-if="mine && worlds.previewError" type="error" variant="tonal" density="compact" class="mt-3">
-                {{ worlds.previewError }}
-            </v-alert>
-
-            <v-card v-if="preview" variant="tonal" class="preview mt-3 pa-3" data-testid="create-preview">
-                <div class="d-flex align-center ga-2 mb-2">
-                    <v-text-field
-                        v-model="previewName"
-                        label="Name"
-                        density="compact"
-                        variant="outlined"
-                        hide-details
-                        class="preview-name"
-                    ></v-text-field>
-                    <span v-if="preview.fields.born" class="text-caption text-muted">
-                        born <span class="world-date">{{ formatDate(worlds.calendar, preview.fields.born) }}</span>
-                    </span>
-                </div>
-
-                <div v-for="(text, section) in preview.prose" :key="section" class="mb-2">
-                    <div class="text-caption text-muted text-uppercase">{{ section }}</div>
-                    <div class="prose">{{ text }}</div>
-                </div>
-
-                <div class="text-caption text-muted text-uppercase mt-2">Facts</div>
-                <div v-for="(fact, index) in preview.facts" :key="index" class="fact d-flex align-center ga-2">
-                    <span class="flex-grow-1">{{ fact.text }}</span>
-                    <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
-                    <span class="fact-date">{{ fact.since ? formatDate(worlds.calendar, fact.since) + ' →' : 'always' }}</span>
-                </div>
-
-                <!-- what it inherits: the owner can mark a fact the model
-                     missed as replaced by one of the preview's own -->
-                <template v-if="preview.inherited && preview.inherited.length">
-                    <div class="text-caption text-muted text-uppercase mt-3">Inherited</div>
-                    <div
-                        v-for="row in preview.inherited"
-                        :key="row.fact_id"
-                        class="fact inherited d-flex align-center ga-2"
-                        data-testid="preview-inherited"
-                    >
-                        <v-checkbox-btn
-                            :model-value="overriderOf(row) >= 0"
-                            aria-label="Overridden"
-                            density="compact"
-                            class="flex-grow-0"
-                            :disabled="!preview.facts.length"
-                            @update:model-value="toggleOverride(row, $event)"
-                        ></v-checkbox-btn>
-                        <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
-                        <v-select
-                            v-if="overriderOf(row) >= 0"
-                            :model-value="overriderOf(row)"
-                            :items="ownFactItems"
-                            label="Replaced by"
-                            density="compact"
-                            variant="outlined"
-                            hide-details
-                            class="override-by"
-                            data-testid="override-by"
-                            @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
-                        ></v-select>
-                        <v-chip size="x-small" label variant="tonal" color="muted">{{ row.source }}</v-chip>
-                    </div>
-                </template>
-
-                <div class="d-flex ga-2 mt-3">
-                    <v-btn
-                        color="accent"
-                        variant="flat"
-                        size="small"
-                        prepend-icon="mdi-check"
-                        :loading="!!worlds.pending.accept_preview"
-                        :disabled="!previewName.trim()"
-                        @click="accept"
-                    >Accept</v-btn>
-                    <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :disabled="!!worlds.pending.accept_preview" @click="worlds.regeneratePreview()">Regenerate</v-btn>
-                    <v-btn variant="outlined" size="small" prepend-icon="mdi-pencil" :disabled="!!worlds.pending.accept_preview" @click="worlds.discardPreview()">Edit</v-btn>
-                </div>
-            </v-card>
-        </template>
+        </v-card>
     </v-card>
 </template>
 
@@ -177,7 +176,6 @@ const PLACEHOLDERS = {
     mix: 'Anything the blend should settle; the parents are enough to start from…',
 };
 
-const MIX_FIRST_NOTICE = 'This heritage needs a mix entry first, so every character of it shares one body plan.';
 
 // how long the prompt rests before its names are looked up
 const MATCH_DEBOUNCE_MS = 400;
@@ -191,8 +189,9 @@ const MATCH_DEBOUNCE_MS = 400;
 // Heritage: a character's picker is pre-filled from the heritage its
 // prompt names, until the owner picks one. Two parents always go through a
 // mix: Create asks `find_mix` first; an existing mix becomes the heritage,
-// and with none the box drafts the mix (a nested mix box, `stay`) and
-// comes back with it picked, the prompt kept. A mix box refuses parents
+// and with none the box drafts the mix in place (a nested mix box, `stay`,
+// under the character's own form, which stays on screen untouched) and
+// comes back with it picked. A mix box refuses parents
 // that already have a mix. `preset` fixes a race's `species` or a mix's
 // first parent (the species page's "+ New race" and "+ New mix").
 export default {
@@ -209,7 +208,7 @@ export default {
     },
     emits: ['accepted', 'cancel'],
     setup() {
-        return { worlds: useWorldsStore(), MIX_FIRST_NOTICE };
+        return { worlds: useWorldsStore() };
     },
     data() {
         return {
@@ -265,7 +264,7 @@ export default {
             return this.kind === 'race' ? this.heritageName(this.preset.species) : '';
         },
         canCreate() {
-            if (this.busy || !this.validBorn) {
+            if (this.busy || this.mixDraft || !this.validBorn) {
                 return false;
             }
             if (this.kind === 'mix') {
@@ -276,6 +275,11 @@ export default {
         // the prompt's name matches, once looked up
         matches() {
             return this.kind === 'character' ? this.worlds.matchesFor(this.prompt, null) : [];
+        },
+        // the draft's notice: why it's there, and that the character waits
+        mixDraftNotice() {
+            const names = this.parents.map((id) => this.heritageName(id) || 'this parent');
+            return `${names.join(' and ')} have no mix yet. Every character of two parents shares one mix, so draft it here first; once you accept it, this character carries on with it as heritage.`;
         },
         ownFactItems() {
             return (this.preview?.facts || []).map((fact, index) => ({ title: fact.text, value: index }));
@@ -441,6 +445,11 @@ export default {
 
 .inherited {
     color: rgb(var(--v-theme-muted));
+}
+
+.mix-draft {
+    border-left: 2px solid rgb(var(--v-theme-accent));
+    padding-left: 10px;
 }
 
 .mix-link {

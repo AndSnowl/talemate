@@ -65,10 +65,7 @@ GORRA_PREVIEW = {
     "prose": {"description": "Gorra is broad.", "personality": "Gorra is quick."},
 }
 
-NOTICE = (
-    "This heritage needs a mix entry first, so every character of it shares "
-    "one body plan."
-)
+NOTICE = "Lowlander and Orc have no mix yet."
 
 
 def _pick(page, box, label: str, name: str) -> None:
@@ -115,6 +112,7 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
     # no Lowlander x Orc mix yet: the box drafts one first
     draft = box.get_by_test_id("mix-draft")
     draft.get_by_text(NOTICE).wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert box.get_by_label("Describe it", exact=True).input_value() == prompt
     assert "Lowlander" in _parent(draft, 1).inner_text()
     assert "Orc" in _parent(draft, 2).inner_text()
     draft.get_by_role("button", name="Create").click()
@@ -141,7 +139,7 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert _parent(box, 2).count() == 0 or "Orc" not in _parent(box, 2).inner_text()
-    assert box.get_by_label("Describe it").input_value() == prompt
+    assert box.get_by_label("Describe it", exact=True).input_value() == prompt
 
     fixed_preview(GORRA_PREVIEW)
     box.get_by_role("button", name="Create").click()
@@ -253,3 +251,84 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert "Human" in human.get_by_test_id("field-species").inner_text()
+
+
+MOSCAVIAN = {
+    "kind": "species",
+    "name": "Moscavian Owls",
+    "fields": {"lifespan": 60, "adult_age": 16},
+    "facts": [{"category": "physical", "text": "Moscavians have feathered arms."}],
+}
+
+SNOWY = {
+    "kind": "race",
+    "name": "Snowy Moscavians",
+    "links": {"species": "Moscavian Owls"},
+    "facts": [{"category": "physical", "text": "Snowy Moscavians are white."}],
+}
+
+EARED = {
+    "kind": "race",
+    "name": "Eared Moscavians",
+    "links": {"species": "Moscavian Owls"},
+    "facts": [{"category": "physical", "text": "Eared Moscavians have ear tufts."}],
+}
+
+MIXED_PREVIEW = {
+    "name": "Mixed Moscavian Owls",
+    "facts": [{"category": "physical", "text": "Mixed Moscavians are grey-white."}],
+    "prose": {"description": "Grey-white owl-folk with short tufts."},
+}
+
+
+def test_mix_drafted_in_place_keeps_the_character(app, page, fixed_preview):
+    """The owner's path: on Characters, a prompt naming no heritage, two
+    races of one species picked by hand, Create, then the mix previewed and
+    accepted. The character's prompt stays on screen the whole time (the
+    draft is a step below it, not a swap for it), nothing navigates away,
+    and the character box comes back with the new mix picked."""
+
+    name = _world_name("Moscavia")
+    seed_fm_world(
+        app.root, name, present_year=1000, things=[MOSCAVIAN, SNOWY, EARED]
+    )
+    _open_world(page, name)
+    _world_tab(page)
+
+    box = page.get_by_test_id("create-box")
+    assert "New character" in box.inner_text()
+    prompt = "A young courier with mixed plumage, restless and loyal."
+    character_prompt = box.get_by_label("Describe it", exact=True)
+    character_prompt.fill(prompt)
+    _pick(page, box, "Heritage", "Snowy Moscavians")
+    _pick(page, box, "Second parent", "Eared Moscavians")
+
+    fixed_preview(MIXED_PREVIEW)
+    box.get_by_role("button", name="Create", exact=True).click()
+
+    # the draft opens under the character, whose prompt is still there
+    draft = box.get_by_test_id("mix-draft")
+    draft.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "Snowy Moscavians" in draft.inner_text()
+    assert character_prompt.is_visible()
+    assert character_prompt.input_value() == prompt
+
+    draft.get_by_role("button", name="Create", exact=True).click()
+    preview = draft.get_by_test_id("create-preview")
+    preview.get_by_text("Grey-white owl-folk with short tufts.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert character_prompt.input_value() == prompt
+    preview.get_by_role("button", name="Accept").click()
+
+    # back to the same character box: the mix picked, the prompt kept, no
+    # page opened
+    draft.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    _parent(box, 1).filter(has_text="Mixed Moscavian Owls").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert page.get_by_test_id("thing-page").count() == 0
+    assert page.get_by_test_id("create-box").count() == 1
+    assert "New character" in box.inner_text()
+    assert character_prompt.input_value() == prompt
+    assert box.get_by_role("button", name="Create", exact=True).is_enabled()
