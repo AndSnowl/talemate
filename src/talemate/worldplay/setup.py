@@ -59,7 +59,7 @@ from talemate.world.index import IndexDoc, WorldIndex
 from talemate.world.kinds import HERITAGE_KINDS
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.store import World
-from talemate.world.view import WorldView
+from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.context import LOCAL_PLACE_KIND
@@ -283,37 +283,46 @@ def _world_things(view: WorldView, thing_ids: list[str]) -> list[tuple[str, list
     return [(_KIND_LABELS.get(kind, kind.capitalize()), groups[kind]) for kind in kinds]
 
 
-def _heritages(view: WorldView) -> list[str]:
-    """Species, race and mix names for the setup prompt's `heritages` var,
-    a race labelled with its species ("Snowy (Owl-folk)")."""
+def _heritage_label(view: WorldView, state: ThingState) -> str:
+    """How a heritage thing is shown in the setup prompt's `heritages`
+    var: a race labelled with its species ("Snowy (Owl-folk)"), a species
+    or mix by its bare name. `""` for a thing with no name."""
 
-    names: list[str] = []
-    for kind in HERITAGE_KINDS:
-        for state in view.things(kind):
-            name = view.name_of(state.id) or ""
-            if not name:
-                continue
-            if kind == "race":
-                species_id = state.fields.get("species")
-                species_name = (
-                    view.name_of(species_id) if isinstance(species_id, str) else None
-                )
-                name = f"{name} ({species_name})" if species_name else name
-            names.append(name)
-    return names
+    name = view.name_of(state.id) or ""
+    if not name:
+        return ""
+    if state.kind == "race":
+        species_id = state.fields.get("species")
+        species_name = view.name_of(species_id) if isinstance(species_id, str) else None
+        return f"{name} ({species_name})" if species_name else name
+    return name
+
+
+def _heritages(view: WorldView) -> list[str]:
+    """Species, race and mix names for the setup prompt's `heritages` var."""
+
+    labels = [
+        label
+        for kind in HERITAGE_KINDS
+        for state in view.things(kind)
+        if (label := _heritage_label(view, state))
+    ]
+    return labels
 
 
 def _heritage_id(view: WorldView, name: str | None) -> str | None:
-    """The species, race or mix named `name` (matched case-insensitively
-    against its own name, not the `heritages` display label). `None` for
-    no name or one that matches nothing."""
+    """The species, race or mix named `name`, matched case-insensitively
+    against either its own name or its `heritages` display label ("Snowy"
+    and "Snowy (Owl-folk)" both find Snowy) -- a model tends to echo the
+    label it was shown. `None` for no name or one that matches nothing."""
 
     if not isinstance(name, str) or not name.strip():
         return None
     key = _norm(name)
     for kind in HERITAGE_KINDS:
         for state in view.things(kind):
-            if _norm(view.name_of(state.id) or "") == key:
+            bare = _norm(view.name_of(state.id) or "")
+            if key == bare or key == _norm(_heritage_label(view, state)):
                 return state.id
     return None
 
@@ -687,7 +696,13 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             continue
         assert ref.local is not None
         local_id = uuid.uuid4().hex
-        description_facts = list(ref.local.facts)
+        # own_facts (never the heritage's) is kept alongside the character,
+        # so a later `continue_setup` can rebuild the invented character
+        # without the heritage's facts already baked into `description`
+        # (`_carried.local_thing`) and re-derive them fresh instead of
+        # duplicating them
+        own_facts = list(ref.local.facts)
+        description_facts = list(own_facts)
         base_attributes: dict[str, object] = {}
         if ref.local.heritage_id is not None:
             physical, instinct = _heritage_facts(
@@ -708,7 +723,7 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             {
                 "local_id": local_id,
                 "kind": LOCAL_CHARACTER_KIND,
-                "data": character.model_dump(mode="json"),
+                "data": {**character.model_dump(mode="json"), "facts": own_facts},
             }
         )
 
@@ -769,10 +784,18 @@ def _carried(
     local = {thing["local_id"]: thing for thing in local_things}
 
     def local_thing(data: dict[str, Any]) -> LocalThing:
+        heritage_id = data.get("world_heritage_id") or data.get("heritage_id")
+        heritage_id = heritage_id if isinstance(heritage_id, str) else None
         if isinstance(data.get("facts"), list):
-            return LocalThing(name=data["name"], facts=data["facts"])
+            return LocalThing(
+                name=data["name"], facts=data["facts"], heritage_id=heritage_id
+            )
         description = data.get("description") or ""
-        return LocalThing(name=data["name"], facts=[description] if description else [])
+        return LocalThing(
+            name=data["name"],
+            facts=[description] if description else [],
+            heritage_id=heritage_id,
+        )
 
     player: SetupRef | None = None
     characters: list[SetupRef] = []

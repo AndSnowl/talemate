@@ -473,6 +473,76 @@ async def test_setup_prompt_lists_heritages(world, heritage_world):
     assert "Snowy (Owl-folk)" in sent
 
 
+async def test_setup_heritage_annotated_name_matches(world, heritage_world):
+    """Fix round 1, finding 2: the prompt shows a race as "Snowy
+    (Owl-folk)", and a local model tends to echo exactly what it's shown,
+    so that annotated form must resolve too, not just the bare name."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "facts": ["A quiet trader."],
+                "heritage": "Snowy (Owl-folk)",
+            }
+        ],
+        "intro": "Dawn.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+
+    rill = next(c for c in setup.characters if c.local is not None)
+    assert rill.local.heritage_id == heritage_world.snowy
+
+
+async def test_continue_setup_carries_heritage(world, heritage_world):
+    """Fix round 1, finding 1: a heritage-bearing invented character's
+    `world_heritage_id` and inherited personality must survive a
+    `continue_setup` -> `start_scene` round, and the inherited facts must
+    appear exactly once in the new description (not duplicated on top of
+    what the first `start_scene` already appended)."""
+
+    reply = {
+        "player": "Maren",
+        "characters": [
+            {
+                "name": "Rill",
+                "facts": ["A quiet trader."],
+                "heritage": "snowy",
+            }
+        ],
+        "intro": "Dawn breaks over the river.",
+    }
+    setup = await plan_scene(
+        world, "Maren meets Rill", {}, None, START, None, reply=reply
+    )
+    async with MockClientContext():
+        old_id = await start_scene(world, setup, MockClient("test"))
+
+    continued = await continue_setup(
+        world,
+        old_id,
+        "next",
+        None,
+        reply={"player": "Maren", "characters": [], "goal": "g", "intro": "i"},
+    )
+    async with MockClientContext():
+        new_id = await start_scene(world, continued, MockClient("test"))
+
+    local = {
+        thing["data"]["name"]: thing for thing in world.scenes().local_things(new_id)
+    }
+    rill_data = local["Rill"]["data"]
+    assert rill_data["world_heritage_id"] == heritage_world.snowy
+    assert rill_data["base_attributes"]["personality"] == "Hunts at dusk."
+    assert "A quiet trader." in rill_data["description"]
+    assert rill_data["description"].count("White plumage.") == 1
+    assert rill_data["description"].count("Yellow eyes.") == 1
+    assert rill_data["description"].count("Wings in place of arms.") == 1
+
+
 # --- starting -----------------------------------------------------------------
 
 
