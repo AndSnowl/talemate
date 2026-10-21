@@ -77,7 +77,7 @@
                                 <a class="thing-link" href="#" @click.prevent="worlds.openThing(link.id)">{{ link.name }}</a>
                             </template>
                         </span>
-                        <span v-else>{{ field.text }}</span>
+                        <span v-else :class="{ 'text-muted': field.deleted }">{{ field.text }}</span>
                         <v-chip v-if="field.pastLifespan" size="x-small" label variant="tonal" color="warning" prepend-icon="mdi-alert" data-testid="past-lifespan">past lifespan</v-chip>
                         <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
@@ -265,8 +265,16 @@ export default {
                         Object.assign(field, this.bornDetails(value));
                     }
                 } else if (name === 'heritage' && typeof value === 'string') {
+                    // a deleted target has no page to open: plain text
                     const links = this.worlds.heritageLinks(value);
-                    field.links = links.length ? links : [this.link(value)];
+                    if (links.length) {
+                        field.links = links;
+                    } else if (this.findThing(value)) {
+                        field.links = [this.link(value)];
+                    } else {
+                        field.text = '(deleted)';
+                        field.deleted = true;
+                    }
                 } else if (typeof value === 'string' && THING_ID.test(value)) {
                     field.links = [this.link(value)];
                 } else if (Array.isArray(value) && value.length && value.every((item) => THING_ID.test(item))) {
@@ -362,14 +370,17 @@ export default {
                 .filter(Boolean)
                 .map((item) => `${item.source_name}: ${item.rendered}`);
         },
-        thingName(id) {
+        findThing(id) {
             for (const list of Object.values(this.worlds.things)) {
                 const found = list.find((thing) => thing.id === id);
                 if (found) {
-                    return found.name;
+                    return found;
                 }
             }
-            return id.slice(0, 8);
+            return null;
+        },
+        thingName(id) {
+            return this.findThing(id)?.name ?? id.slice(0, 8);
         },
         openAsOf() {
             const parts = this.viewingDate ? dateParts(this.viewingDate) : null;

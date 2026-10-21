@@ -168,3 +168,34 @@ def test_species_page_and_inheritance(app, page):
     born = moss.get_by_test_id("field-born")
     assert "age 86 · elder" in born.inner_text()
     assert born.get_by_test_id("past-lifespan").is_visible()
+
+
+def test_deleted_heritage_shows_as_deleted(app, page):
+    """A character whose race was deleted shows its heritage as "(deleted)",
+    plain text rather than a link to a page that's gone."""
+
+    name = _world_name("Ashgrove")
+    tawny = {"kind": "race", "name": "Tawny", "links": {"species": "Owl-folk"}}
+    pip = {"kind": "character", "name": "Pip", "links": {"heritage": "Tawny"}}
+    seed_fm_world(app.root, name, present_year=1026, things=[OWL_FOLK, tawny, pip])
+    _open_world(page, name)
+    _world_tab(page)
+
+    page.get_by_test_id("kind-species").click()
+    owl = _open_thing(page, "Owl-folk")
+    owl.get_by_test_id("races-section").get_by_text("Tawny").click()
+    race = page.get_by_test_id("thing-page")
+    race.get_by_test_id("thing-name").filter(has_text="Tawny").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    race.get_by_test_id("delete-thing").click()
+    dialog = page.get_by_test_id("delete-dialog")
+    dialog.wait_for(state="visible", timeout=TIMEOUT_MS)
+    dialog.get_by_role("button", name="Delete").click()
+    dialog.wait_for(state="hidden", timeout=TIMEOUT_MS)
+
+    page.get_by_test_id("kind-character").click()
+    character = _open_thing(page, "Pip")
+    heritage = character.get_by_test_id("field-heritage")
+    heritage.get_by_text("(deleted)").wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert heritage.locator("a").count() == 0
