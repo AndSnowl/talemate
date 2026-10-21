@@ -39,7 +39,7 @@ import StubCard from './StubCard.vue';
 // entry is a solid link that opens its page; one linking a stub is dashed,
 // in the stub colour, with the stub's card on hover (not made yet, its
 // kind, its mentions, Expand and Ignore), and clicking it expands it (a
-// culture stub, which can't be yet, opens its page). A `fresh` run is a
+// stub that can't be expanded here, a culture, race or mix, opens its page). A `fresh` run is a
 // name a preview invents: stub-styled, with no card, since the stub is
 // only made on accept. With no segments, `text` shows as it is.
 export default {

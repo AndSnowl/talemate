@@ -25,18 +25,18 @@
                 {{ stub.ignored ? 'Unignore' : 'Ignore' }}
             </v-btn>
         </div>
-        <div v-if="stub.kind && !expandable" class="text-caption text-muted mt-2" data-testid="expand-later">{{ expandLaterNote }}</div>
+        <div v-if="stub.kind && !expandable" class="text-caption text-muted mt-2" data-testid="expand-later">{{ expandNote(stub.kind) }}</div>
     </v-card>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { EXPAND_LATER_NOTE, STUB_KINDS, canExpand, kindInfo } from './worldKinds.js';
+import { STUB_KINDS, canExpand, expandNote, kindInfo } from './worldKinds.js';
 
 // One stub's card: its name (opening its page) and "not made yet", its
 // kind (a guess the owner can change), its mention count, Expand (its
-// kind's create box, from the stub; a culture can't be yet) and Ignore (or
-// Unignore). Shown on hover over a stub link, and on the stub's own page
+// kind's create box, from the stub; a culture, race or mix can't be, with
+// a note why) and Ignore (or Unignore). Shown on hover over a stub link, and on the stub's own page
 // (`onPage`, without the name).
 export default {
     name: 'StubCard',
@@ -48,9 +48,6 @@ export default {
     },
     setup() {
         return { worlds: useWorldsStore() };
-    },
-    data() {
-        return { expandLaterNote: EXPAND_LATER_NOTE };
     },
     computed: {
         kindItems() {
@@ -69,6 +66,7 @@ export default {
         },
     },
     methods: {
+        expandNote,
         setKind(kind) {
             if (kind && kind !== this.stub.kind) {
                 this.worlds.changeStubKind(this.stub.id, kind);

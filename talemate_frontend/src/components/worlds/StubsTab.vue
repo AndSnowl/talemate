@@ -57,11 +57,11 @@
                                 size="x-small"
                                 class="mr-1"
                                 :disabled="busy || !canExpand(stub.kind)"
-                                :title="canExpand(stub.kind) ? '' : expandLaterNote"
+                                :title="expandNote(stub.kind) || ''"
                                 @click="worlds.expandStub(stub)"
                             >Expand</v-btn>
                             <v-btn variant="outlined" size="x-small" :disabled="busy" @click="worlds.ignoreStub(stub.id, true)">Ignore</v-btn>
-                            <div v-if="!canExpand(stub.kind)" class="text-caption text-muted" data-testid="expand-later">{{ expandLaterNote }}</div>
+                            <div v-if="!canExpand(stub.kind)" class="text-caption text-muted" data-testid="expand-later">{{ expandNote(stub.kind) }}</div>
                         </template>
                     </td>
                 </tr>
@@ -72,7 +72,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { EXPAND_LATER_NOTE, STUB_KINDS, canExpand, kindInfo } from './worldKinds.js';
+import { STUB_KINDS, canExpand, expandNote, kindInfo } from './worldKinds.js';
 
 // The World tab's Stubs: every name mentioned but not made yet, with its
 // kind (changeable), where it was first mentioned, its mention count,
@@ -84,7 +84,7 @@ export default {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { showIgnored: false, expandLaterNote: EXPAND_LATER_NOTE };
+        return { showIgnored: false };
     },
     computed: {
         shown() {
@@ -99,6 +99,7 @@ export default {
     },
     methods: {
         canExpand,
+        expandNote,
         kindLabel(kind) {
             return kindInfo(kind)?.singular || kind;
         },

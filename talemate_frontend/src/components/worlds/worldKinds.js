@@ -88,13 +88,23 @@ export const STUBS_TAB = { kind: 'stubs', label: 'Stubs', icon: 'mdi-help-circle
 // their species page, so a stub isn't guessed as one
 export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'culture'];
 
-// Whether a stub of `kind` can be expanded here: a culture can't until the
-// cultures slice (`EXPAND_LATER_NOTE` says so).
-export function canExpand(kind) {
-    return kind !== 'culture';
+// Why a stub of `kind` can't be expanded here (null when it can): a culture
+// waits for the cultures slice; a race or mix needs its species (or
+// parents), which only its species page's create box gives it.
+const NO_EXPAND_NOTES = {
+    culture: 'Cultures arrive in the next slice',
+    race: 'Make it from its species page',
+    mix: 'Make it from its species page',
+};
+
+export function expandNote(kind) {
+    return NO_EXPAND_NOTES[kind] || null;
 }
 
-export const EXPAND_LATER_NOTE = 'Cultures arrive in the next slice';
+// Whether a stub of `kind` can be expanded from its card or the Stubs tab.
+export function canExpand(kind) {
+    return !expandNote(kind);
+}
 
 // the kinds a character's heritage can be (`talemate.world.kinds.HERITAGE_KINDS`)
 export const HERITAGE_KINDS = ['species', 'race', 'mix'];

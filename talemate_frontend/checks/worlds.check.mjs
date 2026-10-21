@@ -25,7 +25,7 @@ import {
     worldTarget,
 } from '../src/stores/worlds.js';
 import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
-import { STUB_KINDS, TOP_KINDS, canExpand, overrideCategory } from '../src/components/worlds/worldKinds.js';
+import { STUB_KINDS, TOP_KINDS, canExpand, expandNote, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
 let passed = 0;
@@ -879,6 +879,19 @@ check('events and items are kinds of their own; a culture stub waits', () => {
     assert.ok(STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race'));
     assert.equal(canExpand('culture'), false);
     assert.equal(canExpand('place'), true);
+    assert.equal(expandNote('culture'), 'Cultures arrive in the next slice');
+    assert.equal(expandNote('place'), null);
+});
+
+check('a race or mix stub is made from its species page, not expanded', () => {
+    // its top-level create box has no species (or parents) to give it
+    for (const kind of ['race', 'mix']) {
+        assert.equal(canExpand(kind), false, kind);
+        assert.equal(expandNote(kind), 'Make it from its species page');
+    }
+    for (const kind of STUB_KINDS.filter((k) => k !== 'culture')) {
+        assert.equal(canExpand(kind), true, kind);
+    }
 });
 
 check('other names: add, retag, the everyday pick and remove', () => {
