@@ -513,3 +513,108 @@ def test_since_lines_corrected_text_of_a_cached_fact_is_reported(world, ended_wa
     assert since_lines(world, thing_id, WorldDate.of(315)) == [
         "From 305 until 314: Captain of the Wardens."
     ]
+
+
+# -- inheritance (phase 2 plan B) --------------------------------------------
+
+
+def _cache_description(world, thing_id, text="Vasha is a pale owl."):
+    world.prose().put(thing_id, "description", None, None, text)
+
+
+def test_since_line_for_species_change(world, heritage_world):
+    vasha = heritage_world.vasha
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(
+            heritage_world.owl_folk,
+            "physical",
+            "live to about 60 years.",
+            valid_from=WorldDate.of(500),
+        )
+        # an instinct change isn't part of the description
+        rev.add_fact(
+            heritage_world.owl_folk,
+            "instinct",
+            "Hoard bright things.",
+            valid_from=WorldDate.of(500),
+        )
+
+    assert since_lines(world, vasha, WorldDate.of(510)) == [
+        "Since 500: Owl-folk: live to about 60 years."
+    ]
+    assert since_lines(world, vasha, WorldDate.of(490)) == []
+
+
+def test_since_lines_skip_overridden_inherited_fact(world, heritage_world):
+    vasha = heritage_world.vasha
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        grey = rev.add_fact(
+            heritage_world.snowy,
+            "variation",
+            "Grey crests.",
+            valid_from=WorldDate.of(500),
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(
+            vasha,
+            "appearance",
+            "No crest at all.",
+            valid_from=WorldDate.of(500),
+            overrides=[grey],
+        )
+
+    assert since_lines(world, vasha, WorldDate.of(510)) == [
+        "Since 500: No crest at all."
+    ]
+
+
+def test_since_lines_list_inherited_facts_when_nothing_cached(world, heritage_world):
+    assert since_lines(world, heritage_world.vasha, None) == [
+        "Blue eyes.",
+        "Snowy: White plumage.",
+        "Owl-folk: Wings in place of arms.",
+    ]
+
+
+def test_character_sheet_life_stage(world, heritage_world):
+    vasha = heritage_world.vasha
+
+    adult = character_from_world(world, vasha, WorldDate.of(1000), is_player=False)
+    young = character_from_world(world, vasha, WorldDate.of(986), is_player=False)
+
+    assert adult.base_attributes["life_stage"] == "adult"
+    assert young.base_attributes["life_stage"] == "child"
+
+
+def test_character_sheet_states_own_traits_win(world, heritage_world):
+    character = character_from_world(
+        world, heritage_world.vasha, WorldDate.of(1000), is_player=False
+    )
+
+    assert character.description.endswith(
+        "Where Vasha's own traits differ from those of their kind, "
+        "Vasha's own traits hold."
+    )
+
+
+def test_character_sheet_without_heritage_has_no_traits_line(world, oskar):
+    character = character_from_world(world, oskar, WorldDate.of(320), is_player=False)
+
+    assert "own traits" not in character.description
+    assert "life_stage" not in character.base_attributes
+
+
+def test_character_sheet_with_deleted_species(world, heritage_world):
+    vasha = heritage_world.vasha
+    _cache_description(world, vasha)
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(heritage_world.owl_folk)
+
+    character = character_from_world(world, vasha, WorldDate.of(1000), is_player=False)
+
+    # Snowy sets no numbers of its own, so with Owl-folk gone there's no stage
+    assert "life_stage" not in character.base_attributes
+    assert "Wings" not in character.description
+    assert since_lines(world, vasha, WorldDate.of(1000)) == []

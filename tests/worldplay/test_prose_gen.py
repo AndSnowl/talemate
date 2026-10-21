@@ -181,3 +181,162 @@ def test_template_omits_background_block_when_empty():
     assert "Who the" not in text
     assert "for consistency only" not in text
     assert "<|BOT|>Lowmere is" in text
+
+
+# -- inheritance (phase 2 plan B) --------------------------------------------
+
+
+def _capture_requests(monkeypatch) -> list[dict]:
+    """Replace the prose request with one that records its vars and
+    answers "<name> is drawn."."""
+
+    requests: list[dict] = []
+
+    async def fake_request(template, client, kind, vars):
+        requests.append(vars)
+        return "", {"response": f"{vars['name']} is drawn."}
+
+    monkeypatch.setattr(prose_gen.Prompt, "request", fake_request)
+    return requests
+
+
+def test_inherited_categories():
+    assert prose_gen.inherited_categories("description") == {
+        "species": ("physical", "variation"),
+        "race": ("physical", "variation"),
+        "mix": ("physical", "variation"),
+        "culture": ("dress",),
+    }
+    assert prose_gen.inherited_categories("personality") == {
+        "species": ("instinct",),
+        "race": ("instinct",),
+        "mix": ("instinct",),
+        "culture": ("customs", "belief"),
+    }
+
+
+async def test_character_description_includes_inherited_physical(
+    world, heritage_world, monkeypatch
+):
+    requests = _capture_requests(monkeypatch)
+
+    await prose_gen.generate_section(
+        world, heritage_world.vasha, "description", None, object()
+    )
+
+    facts = requests[0]["facts"]
+    assert facts == ["Blue eyes.", "White plumage.", "Wings in place of arms."]
+    assert "Yellow eyes." not in facts
+    # the instinct and customs facts belong to personality: background only
+    background = requests[0]["background"]
+    assert "Hunts at dusk." in background
+    assert "Name their boats." in background
+    assert "Yellow eyes." not in background
+
+
+async def test_personality_includes_instinct_and_customs(
+    world, heritage_world, monkeypatch
+):
+    requests = _capture_requests(monkeypatch)
+
+    await prose_gen.generate_section(
+        world, heritage_world.vasha, "personality", None, object()
+    )
+
+    facts = requests[0]["facts"]
+    assert facts == ["Quiet and observant.", "Hunts at dusk.", "Name their boats."]
+    # the body stays in view as background, so he's still an owl
+    assert "Wings in place of arms." in requests[0]["background"]
+    assert "Heritage: Snowy, Owl-folk." in requests[0]["background"]
+
+
+async def test_species_page_prose_uses_all_facts(world, heritage_world, monkeypatch):
+    requests = _capture_requests(monkeypatch)
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(heritage_world.owl_folk, "origin", "First flew from the north.")
+
+    assert prose_gen.sections_for("species") == ("description",)
+    await prose_gen.ensure_prose(world, heritage_world.owl_folk, None, object())
+
+    assert len(requests) == 1
+    assert sorted(requests[0]["facts"]) == [
+        "First flew from the north.",
+        "Hunts at dusk.",
+        "Wings in place of arms.",
+    ]
+
+
+async def test_race_prose_gets_inherited_facts_as_background(
+    world, heritage_world, monkeypatch
+):
+    requests = _capture_requests(monkeypatch)
+
+    await prose_gen.generate_section(
+        world, heritage_world.snowy, "description", None, object()
+    )
+
+    assert sorted(requests[0]["facts"]) == ["White plumage.", "Yellow eyes."]
+    background = requests[0]["background"]
+    assert "Wings in place of arms." in background
+    assert "Hunts at dusk." in background
+    assert "Heritage: Owl-folk." in background
+
+
+async def test_ensure_prose_regenerates_after_species_change(
+    world, heritage_world, monkeypatch
+):
+    requests = _capture_requests(monkeypatch)
+    vasha = heritage_world.vasha
+
+    await prose_gen.ensure_prose(world, vasha, None, object())
+    assert len(requests) == 2
+    await prose_gen.ensure_prose(world, vasha, None, object())
+    assert len(requests) == 2
+
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(heritage_world.owl_folk, "physical", "Silent flight.")
+    await prose_gen.ensure_prose(world, vasha, None, object())
+
+    assert len(requests) == 4
+    assert "Silent flight." in requests[2]["facts"]
+
+
+async def test_ensure_prose_regenerates_after_race_deleted(
+    world, heritage_world, monkeypatch
+):
+    requests = _capture_requests(monkeypatch)
+    vasha = heritage_world.vasha
+
+    await prose_gen.ensure_prose(world, vasha, None, object())
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(heritage_world.snowy)
+    await prose_gen.ensure_prose(world, vasha, None, object())
+
+    assert len(requests) == 4
+    # the race is gone, and its species with it
+    assert requests[2]["facts"] == ["Blue eyes."]
+
+
+async def test_species_fact_splits_the_cached_stretch(
+    world, heritage_world, monkeypatch
+):
+    """A dated species fact is a boundary in the character's stretches, so
+    the prose cached for a scene before it doesn't cover a scene after."""
+
+    _capture_requests(monkeypatch)
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(
+            heritage_world.owl_folk,
+            "physical",
+            "Grey crests.",
+            valid_from=WorldDate.of(1000),
+        )
+
+    await prose_gen.generate_section(
+        world, heritage_world.vasha, "description", WorldDate.of(990), object()
+    )
+
+    cached = world.prose().get(heritage_world.vasha, "description", WorldDate.of(990))
+    assert cached is not None
+    assert cached.stretch_end is not None
+    assert cached.stretch_end.instant == WorldDate.of(1000).instant
