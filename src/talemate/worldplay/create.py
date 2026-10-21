@@ -1350,9 +1350,10 @@ def accept_preview(
       stub instead") -- writes into that thing and keeps its id: its kind
       (`into_stub` may have another), name, fields and other names are set,
       the facts added, and the stub marker (ignored or not) removed, so
-      every mention becomes a normal link. A deleted stub, a full entry, or
-      an `into_stub` other than the preview's own `stub_id`, is refused
-      with `ValueError` before anything is written.
+      every mention becomes a normal link. Filled under another name, it
+      keeps its old one as a common other name. A deleted stub, a full
+      entry, or an `into_stub` other than the preview's own `stub_id`, is
+      refused with `ValueError` before anything is written.
     - Otherwise a new thing is created."""
 
     if into_stub is not None and preview.stub_id not in (None, into_stub):
@@ -1437,6 +1438,15 @@ def _write_preview(
                 # stub's own other names too
                 aka = clean_aka(
                     [*preview.aka, *_aka_entries(stub.fields.get("aka"))],
+                    preview.name,
+                    name_keys(view, skip=thing_id),
+                )
+            old_name = view.name_of(thing_id) or ""
+            if name_key(old_name) != name_key(preview.name):
+                # filled under another name: the old one, which text still
+                # calls it by, is kept as a common other name
+                aka = clean_aka(
+                    [*aka, {"name": old_name, "tag": "common", "everyday": False}],
                     preview.name,
                     name_keys(view, skip=thing_id),
                 )

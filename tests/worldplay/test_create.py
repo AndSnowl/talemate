@@ -1804,3 +1804,29 @@ async def test_accept_makes_no_stub_its_facts_never_link(at_1020):
     assert view.thing(thing_id).facts[0].text == (
         f"Merchants of al-Qadir trade with {ref(kremova, 'Kremova')} here."
     )
+
+
+async def test_filling_a_stub_under_a_new_name_keeps_the_old_one(at_1020):
+    """A stub filled under another name keeps its old name as a common
+    other name, so text that calls it that still finds it."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        moskov = rev.create_thing(
+            "place", fields={"name": "Moskov", "stub": {"ignored": False}}
+        )
+    reply = json.dumps(
+        {"name": "Moskov", "facts": [{"category": "description", "text": "White."}]}
+    )
+    async with MockClientContext():
+        _queue(reply, "White walls.")
+        preview = await preview_thing(
+            world, "place", "a white city", {}, MockClient("test"), stub_id=moskov
+        )
+    # the owner renames it before accepting
+    preview.name = "Grand City of Moskov"
+    assert accept_preview(world, preview) == moskov
+
+    state = world.view(None).thing(moskov)
+    assert state.fields["name"] == "Grand City of Moskov"
+    assert state.fields["aka"] == [_aka("Moskov")]
