@@ -982,11 +982,16 @@ class WorldsPlugin(Plugin):
             raise ValueError(f"not a stub: {view.name_of(thing_id) or thing_id}")
         return state
 
-    def _edited(self, action: str, thing_id: str, at: WorldDate | None) -> None:
-        """Answer an edit with the thing as of `at`, then refresh its prose."""
+    def _edited(
+        self, action: str, thing_id: str, at: WorldDate | None, *, prose: bool = True
+    ) -> None:
+        """Answer an edit with the thing as of `at`, then refresh its prose
+        -- unless the edit changes no rendered text (`prose=False`: a link
+        made or re-pointed, an other name, the stub marker)."""
 
         self._reply(action, self._thing_payload(self._require_world(), thing_id, at))
-        self._schedule_prose(thing_id, at)
+        if prose:
+            self._schedule_prose(thing_id, at)
 
     # --- worlds -----------------------------------------------------------
 
@@ -1187,7 +1192,7 @@ class WorldsPlugin(Plugin):
                 payload.fact_id, text=link_phrase(old_text, phrase, stub_id)
             )
         log.info("worlds.stub_made", id=stub_id, name=phrase, kind=payload.kind)
-        self._edited("make_stub", payload.thing_id, at)
+        self._edited("make_stub", payload.thing_id, at, prose=False)
 
     async def handle_list_stubs(self, data: dict):
         payload = ListStubsPayload(**data)
@@ -1341,7 +1346,7 @@ class WorldsPlugin(Plugin):
         new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(payload.fact_id, text=new_text)
-        self._edited("repoint_ref", payload.thing_id, at)
+        self._edited("repoint_ref", payload.thing_id, at, prose=False)
 
     async def handle_end_fact(self, data: dict):
         payload = EndFactPayload(**data)
@@ -1370,7 +1375,12 @@ class WorldsPlugin(Plugin):
                 payload.value,
                 _date_in(payload.valid_from),
             )
-        self._edited("set_field", payload.thing_id, _date_in(payload.at))
+        self._edited(
+            "set_field",
+            payload.thing_id,
+            _date_in(payload.at),
+            prose=payload.field not in ("aka", "stub"),
+        )
 
     async def handle_override_fact(self, data: dict):
         payload = OverrideFactPayload(**data)

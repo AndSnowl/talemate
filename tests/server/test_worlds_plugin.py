@@ -2412,3 +2412,37 @@ async def test_fixed_preview_expands_and_offers_stubs(plugin, tmp_path, monkeypa
         }
     )
     assert _last(plugin, "accept_preview")["data"]["id"] == s.tsardom
+
+
+async def test_link_and_other_name_edits_schedule_no_prose(plugin, client):
+    """Making a stub of a phrase, re-pointing a link and teaching an other
+    name change no rendered text: no prose is scheduled, and the thing's
+    prose stays fresh."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(
+            s.maren,
+            "background",
+            f"Sailed from {ref(s.tsardom, 'Moscavia')} on the Night of Feathers.",
+        )
+    start, end = prose_gen.stretch_containing(world, s.maren, None)
+    for section in prose_gen.sections_for("character"):
+        world.prose().put(s.maren, section, start, end, "Maren.")
+
+    async def edit(action, **data):
+        await plugin.handle(
+            {"type": "worlds", "action": action, "thing_id": s.maren, **data}
+        )
+        assert not [m for m in _replies(plugin, "operation_done") if "error" in m]
+        assert _last(plugin, action)
+        assert not plugin.tasks, f"{action} scheduled prose"
+
+    await edit("make_stub", fact_id=fact_id, text="Night of Feathers", kind="event")
+    await edit("repoint_ref", fact_id=fact_id, occurrence=0, to_id=s.harbour)
+    await edit("set_field", field="aka", value=[_aka("Mara")], valid_from=None)
+
+    assert client.prompt_history == []
+    for section in prose_gen.sections_for("character"):
+        assert world.prose().stale(s.maren, section, None) is False
