@@ -15,6 +15,7 @@ from talemate.world.refs import ref
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
+from talemate.worldplay.links import NewName
 from talemate.worldplay.create import (
     CreatePreview,
     PreviewFact,
@@ -1733,3 +1734,73 @@ async def test_accept_refuses_two_different_stubs(at_1020):
     assert world.head_rev() == head
     # the same stub twice is fine
     assert accept_preview(world, preview, into_stub=tsardom) == tsardom
+
+
+async def test_listed_names_link_or_stay_suggestions(at_1020):
+    """From the Skyfall run: a listed "Owl-folk" while the species
+    "Owl-folk of Moscavia" exists links to that species (no duplicate
+    stub); a listed "Moscavia", only a suggested part of the "Tsardom of
+    Moscavia", stays a suggestion, not a stub."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        owls = rev.create_thing("species", fields={"name": "Owl-folk of Moscavia"})
+        rev.create_thing("place", fields={"name": "Tsardom of Moscavia"})
+    reply = json.dumps(
+        {
+            "name": "Velikostok",
+            "facts": [
+                {"category": "description", "text": "Velikostok lies in Moscavia."},
+                {"category": "history", "text": "Owl-folk nest in its towers."},
+            ],
+            "names": [
+                {"name": "Moscavia", "kind": "place"},
+                {"name": "Owl-folk", "kind": "species"},
+            ],
+        }
+    )
+    async with MockClientContext():
+        _queue(reply, "A city of towers.")
+        preview = await preview_thing(
+            world, "place", "a city of towers", {}, MockClient("test")
+        )
+    assert [n.name for n in preview.new_names] == ["Owl-folk"]
+
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    assert [s for s in view.things() if s.is_stub] == []
+    texts = {f.category: f.text for f in view.thing(thing_id).facts}
+    assert texts["history"] == f"{ref(owls, 'Owl-folk')} nest in its towers."
+    assert texts["description"] == "Velikostok lies in Moscavia."
+
+
+async def test_accept_makes_no_stub_its_facts_never_link(at_1020):
+    """A listed name no fact links to (here an inner-capital name written
+    in lowercase, so it gets no span) makes no orphan stub; the others are
+    made and linked as usual."""
+
+    world = at_1020
+    preview = CreatePreview(
+        kind="place",
+        prompt="a market",
+        name="Suq Amber",
+        facts=[
+            PreviewFact(
+                category="general",
+                text="Merchants of al-Qadir trade with Kremova here.",
+            )
+        ],
+        prose={},
+        new_names=[
+            NewName(name="al-Qadir", kind="character"),
+            NewName(name="Kremova", kind="place"),
+        ],
+    )
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    stubs = [view.name_of(s.id) for s in view.things() if s.is_stub]
+    assert stubs == ["Kremova"]
+    kremova = next(s.id for s in view.things() if s.is_stub)
+    assert view.thing(thing_id).facts[0].text == (
+        f"Merchants of al-Qadir trade with {ref(kremova, 'Kremova')} here."
+    )

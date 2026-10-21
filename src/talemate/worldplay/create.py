@@ -77,6 +77,7 @@ from talemate.world import heritage
 from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import AKA_TAGS, HERITAGE_KINDS, get_kind, validate_field
+from talemate.world.refs import parse_refs
 from talemate.world.names import (
     ARTICLES,
     everyday_name,
@@ -609,15 +610,23 @@ def _written_in(texts: list[str], name: str) -> str | None:
 
 
 def _known_in_view(view: WorldView, name: str, kind: str) -> bool:
-    """Whether `name` already means a thing in `view`: by `existing_id`, or
-    as a whole name `find_names` matches (a character's first name)."""
+    """Whether `name` already means a thing in `view` -- by `existing_id`,
+    or as a whole name `find_names` matches (a character's first name) --
+    or is wholly a suggested part of a thing's name ("Moscavia" of the
+    Tsardom of Moscavia), which stays a suggestion. A species, race or mix
+    name held by just one other's name isn't: `make_stubs` maps it to that
+    one, so the facts link it."""
 
     if existing_id(view, name, kind) is not None:
         return True
-    return any(
-        not match.suggested and (match.start, match.end) == (0, len(name))
+    whole = [
+        match
         for match in find_names(view, name)
-    )
+        if (match.start, match.end) == (0, len(name))
+    ]
+    if any(not match.suggested for match in whole):
+        return True
+    return bool(whole) and existing_id(view, name, kind, held=True) is None
 
 
 def _written_forms(
@@ -1335,7 +1344,8 @@ def accept_preview(
       linked (`links.link_text`, with the preview's picks), keeping its
       words; a thing's own names never link to itself, and a name treated
       as new never links to (or is made a stub by reusing) the world's
-      thing of that name.
+      thing of that name. A listed name no fact ends up linking to makes
+      no stub: there'd be nothing to find it by.
     - Filling a stub -- the preview's `stub_id`, or `into_stub` ("fill the
       stub instead") -- writes into that thing and keeps its id: its kind
       (`into_stub` may have another), name, fields and other names are set,
@@ -1353,53 +1363,19 @@ def accept_preview(
     view = world.view()
     stub = _live_stub(view, target) if target is not None else None
 
-    with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
-        made = make_stubs(rev, view, preview.new_names, fresh=preview.treated_as_new)
-        if stub is None:
-            fields: dict[str, Any] = {**preview.fields, "name": preview.name}
-            if preview.aka:
-                fields["aka"] = preview.aka
-            thing_id = rev.create_thing(preview.kind, fields)
-        else:
-            thing_id = stub.id
-            if stub.kind != preview.kind:
-                rev.change_stub_kind(thing_id, preview.kind)
-            if view.name_of(thing_id) != preview.name:
-                rev.set_field(thing_id, "name", preview.name, None)
-            for field, value in preview.fields.items():
-                rev.set_field(thing_id, field, value, None)
-            aka = preview.aka
-            if target != preview.stub_id:
-                # filling a stub the preview wasn't made from keeps the
-                # stub's own other names too
-                aka = clean_aka(
-                    [*preview.aka, *_aka_entries(stub.fields.get("aka"))],
-                    preview.name,
-                    name_keys(view, skip=thing_id),
-                )
-            if aka or "aka" in stub.fields:
-                rev.set_field(thing_id, "aka", aka, None)
-            rev.remove_field_value(thing_id, "stub", None)
-
-        # the revision's own view: the stubs just made and the thing's own
-        # names are in it, so a name meaning the thing itself stays plain
-        linking = world.view()
-        for fact in preview.facts:
-            text = link_text(
-                linking,
-                fact.text,
-                picks=preview.picks,
-                new_names=made,
-                owner=thing_id,
-                as_new=preview.treated_as_new,
-            )
-            rev.add_fact(
-                thing_id,
-                fact.category,
-                text,
-                valid_from=fact.since,
-                overrides=fact.overrides,
-            )
+    new_names = list(preview.new_names)
+    while True:
+        try:
+            thing_id, made = _write_preview(world, view, preview, stub, new_names)
+            break
+        except _UnlinkedNames as unlinked:
+            # written again without them, in a fresh revision: the first
+            # was rolled back whole
+            log.debug("create.unlinked_names", names=unlinked.names)
+            kept = [n for n in new_names if n.name not in unlinked.names]
+            if len(kept) == len(new_names):
+                raise RuntimeError(f"unlinked stubs with no name: {unlinked}")
+            new_names = kept
 
     # the prose was written from every fact, which is how the thing reads
     # at the open, "now" end of its timeline
@@ -1416,3 +1392,91 @@ def accept_preview(
         filled_stub=stub is not None,
     )
     return thing_id
+
+
+class _UnlinkedNames(Exception):
+    """New names whose stubs no fact linked to: the write is rolled back
+    and made again without them."""
+
+    def __init__(self, names: list[str]) -> None:
+        super().__init__(", ".join(names))
+        self.names = names
+
+
+def _write_preview(
+    world: World,
+    view: WorldView,
+    preview: CreatePreview,
+    stub: Any,
+    new_names: list[NewName],
+) -> tuple[str, dict[str, str]]:
+    """`accept_preview`'s one revision, making stubs for `new_names`.
+    Returns the thing's id and `make_stubs`' mapping. A stub made here that
+    no fact ends up linking to (the name was written in a way linking
+    doesn't take, as "al-Qadir" in lowercase) would be an orphan:
+    `_UnlinkedNames` rolls the revision back, naming them."""
+
+    with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
+        made = make_stubs(rev, view, new_names, fresh=preview.treated_as_new)
+        if stub is None:
+            fields: dict[str, Any] = {**preview.fields, "name": preview.name}
+            if preview.aka:
+                fields["aka"] = preview.aka
+            thing_id = rev.create_thing(preview.kind, fields)
+        else:
+            thing_id = stub.id
+            if stub.kind != preview.kind:
+                rev.change_stub_kind(thing_id, preview.kind)
+            if view.name_of(thing_id) != preview.name:
+                rev.set_field(thing_id, "name", preview.name, None)
+            for field, value in preview.fields.items():
+                rev.set_field(thing_id, field, value, None)
+            aka = preview.aka
+            if stub.id != preview.stub_id:
+                # filling a stub the preview wasn't made from keeps the
+                # stub's own other names too
+                aka = clean_aka(
+                    [*preview.aka, *_aka_entries(stub.fields.get("aka"))],
+                    preview.name,
+                    name_keys(view, skip=thing_id),
+                )
+            if aka or "aka" in stub.fields:
+                rev.set_field(thing_id, "aka", aka, None)
+            rev.remove_field_value(thing_id, "stub", None)
+
+        # the revision's own view: the stubs just made and the thing's own
+        # names are in it, so a name meaning the thing itself stays plain
+        linking = world.view()
+        linked: set[str] = set()
+        for fact in preview.facts:
+            text = link_text(
+                linking,
+                fact.text,
+                picks=preview.picks,
+                new_names=made,
+                owner=thing_id,
+                as_new=preview.treated_as_new,
+            )
+            linked.update(parse_refs(text))
+            rev.add_fact(
+                thing_id,
+                fact.category,
+                text,
+                valid_from=fact.since,
+                overrides=fact.overrides,
+            )
+
+        orphans = {
+            stub_id
+            for stub_id in made.values()
+            if view.thing(stub_id) is None and stub_id not in linked
+        }
+        if orphans:
+            raise _UnlinkedNames(
+                [
+                    n.name
+                    for n in new_names
+                    if made.get(" ".join(n.name.split())) in orphans
+                ]
+            )
+    return thing_id, made
