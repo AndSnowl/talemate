@@ -10,8 +10,10 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import {
+    currentNameFrom,
     defaultOverrideIndex,
     heritageFromMatches,
+    pageAfterDelete,
     parseWorldTarget,
     sameParents,
     useWorldsStore,
@@ -743,6 +745,91 @@ check('marking an inherited fact overridden moves it to one own fact', () => {
     assert.deepEqual(sent.at(-1).preview.facts[2].overrides, ['f1']);
     store.setPreviewOverride('f1', null);
     assert.deepEqual(store.preview.facts.map((f) => f.overrides), [[], [], []]);
+});
+
+check('one prose section regenerates on its own', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('t1');
+    store.regenerateProse('personality');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'regenerate_prose', id: 't1', at: null, section: 'personality' });
+    assert.equal(store.proseRegenerating, 't1');
+    assert.equal(store.proseRegeneratingSection, 'personality');
+    store.handleMessage(reply('prose_updated', { id: 't1', section: 'personality' }));
+    assert.equal(store.proseRegenerating, null);
+    assert.equal(store.proseRegeneratingSection, null);
+    // the whole-page button still regenerates every section
+    store.regenerateProse();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'regenerate_prose', id: 't1', at: null });
+    assert.equal(store.proseRegeneratingSection, null);
+});
+
+const NAME_TIMELINE = [
+    { date: null, change: 'field', field: 'name', value: 'Lowlander' },
+    { date: dateOf(380), change: 'fact_start', field: null, value: null },
+    { date: dateOf(400), change: 'field', field: 'name', value: 'Dalesfolk' },
+];
+
+check('a rename corrects the name in effect at the viewing date', () => {
+    assert.equal(currentNameFrom(NAME_TIMELINE, null).instant, dateOf(400).instant);
+    assert.equal(currentNameFrom(NAME_TIMELINE, dateOf(350)), null);
+    assert.equal(currentNameFrom([], null), null);
+
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('r1', dateOf(350));
+    store.handleMessage(reply('get_thing', { id: 'r1', kind: 'race', name: 'Lowlander', at: dateOf(350), timeline: NAME_TIMELINE }));
+    store.renameThing('Vale-folk');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'set_field', thing_id: 'r1', at: dateOf(350), field: 'name', value: 'Vale-folk', valid_from: null,
+    });
+    store.viewThingAt(null);
+    store.handleMessage(reply('get_thing', { id: 'r1', kind: 'race', name: 'Dalesfolk', at: null, timeline: NAME_TIMELINE }));
+    store.renameThing('Dales');
+    const { label: _label, ...from } = dateOf(400);
+    assert.deepEqual(sent.at(-1).valid_from, { instant: from.instant, precision: from.precision });
+    // the reply refreshes the kind's list, and with it the heritage list
+    store.handleMessage(reply('set_field', { id: 'r1', kind: 'race', name: 'Dales' }));
+    assert.equal(store.thing.name, 'Dales');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'race' });
+    store.handleMessage(reply('list_things', { kind: 'race', things: [{ id: 'r1', kind: 'race', name: 'Dales' }] }));
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_heritage' });
+});
+
+const DELETE_HERITAGE = [
+    { id: 'hum', kind: 'species', name: 'Human', species_ids: ['hum'] },
+    { id: 'orc', kind: 'species', name: 'Orc', species_ids: ['orc'] },
+    { id: 'low', kind: 'race', name: 'Lowlander', species_ids: ['hum'] },
+    { id: 'mix', kind: 'mix', name: 'Half-orc', species_ids: ['hum', 'orc'] },
+];
+
+check('after a delete, a race or mix goes back to its species page', () => {
+    const race = { id: 'low', kind: 'race', fields: { species: 'hum' } };
+    const mix = { id: 'mix', kind: 'mix', fields: { parents: ['low', 'orc'] } };
+    assert.equal(pageAfterDelete(race, DELETE_HERITAGE, null), 'hum');
+    // the species page the mix was opened from, if it's one of the mix's
+    assert.equal(pageAfterDelete(mix, DELETE_HERITAGE, 'orc'), 'orc');
+    // else its first parent's species
+    assert.equal(pageAfterDelete(mix, DELETE_HERITAGE, 'c1'), 'hum');
+    assert.equal(pageAfterDelete(mix, DELETE_HERITAGE, null), 'hum');
+    assert.equal(pageAfterDelete({ ...mix, fields: { parents: ['orc', 'low'] } }, DELETE_HERITAGE, null), 'orc');
+    // other kinds go back to the list
+    assert.equal(pageAfterDelete({ id: 'c1', kind: 'character', fields: {} }, DELETE_HERITAGE, 'hum'), null);
+    assert.equal(pageAfterDelete({ id: 'hum', kind: 'species', fields: {} }, DELETE_HERITAGE, null), null);
+
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_heritage', { things: DELETE_HERITAGE }));
+    store.openThing('orc');
+    store.openThing('mix');
+    store.handleMessage(reply('get_thing', mix));
+    store.requestDelete();
+    store.handleMessage(reply('thing_references', { id: 'mix', kind: 'mix', name: 'Half-orc', references: REFERENCES }));
+    store.confirmDelete();
+    store.handleMessage(reply('thing_deleted', { id: 'mix', kind: 'mix' }));
+    assert.equal(store.selectedThingId, 'orc');
+    assert.equal(store.deleteCheck, null);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_thing', id: 'orc', at: null });
 });
 
 check('other routers are ignored', () => {

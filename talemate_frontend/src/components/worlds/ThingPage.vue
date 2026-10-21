@@ -3,7 +3,26 @@
         <div class="d-flex align-center flex-wrap ga-2 mb-2">
             <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" @click="worlds.closeThing()">Back</v-btn>
             <template v-if="thing">
-                <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
+                <div v-if="rename" class="d-flex align-center ga-2" data-testid="rename-field">
+                    <v-text-field
+                        v-model="rename.text"
+                        label="Name"
+                        density="compact"
+                        variant="outlined"
+                        hide-details
+                        autofocus
+                        class="rename-input"
+                        :disabled="rename.sent"
+                        @keydown.enter="saveRename"
+                        @keydown.esc="rename = null"
+                    ></v-text-field>
+                    <v-btn color="accent" variant="flat" size="small" :loading="rename.sent" :disabled="!rename.text.trim()" @click="saveRename">Save</v-btn>
+                    <v-btn variant="text" size="small" :disabled="rename.sent" @click="rename = null">Cancel</v-btn>
+                </div>
+                <template v-else>
+                    <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
+                    <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
+                </template>
                 <v-chip size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon">{{ thing.kind }}</v-chip>
                 <v-spacer></v-spacer>
 
@@ -30,7 +49,8 @@
                     variant="outlined"
                     size="small"
                     prepend-icon="mdi-refresh"
-                    :loading="worlds.proseRegenerating === thing.id"
+                    :loading="worlds.proseRegenerating === thing.id && !worlds.proseRegeneratingSection"
+                    :disabled="worlds.proseRegenerating === thing.id"
                     @click="worlds.regenerateProse()"
                 >Regenerate prose</v-btn>
 
@@ -128,6 +148,18 @@
                         <div class="d-flex align-center ga-2">
                             <span class="text-overline text-muted">{{ section }} (generated)</span>
                             <v-chip v-if="prose.stale" size="x-small" label variant="tonal" color="warning">out of date</v-chip>
+                            <v-spacer></v-spacer>
+                            <v-btn
+                                v-if="proseSectionCount > 1"
+                                variant="text"
+                                size="x-small"
+                                prepend-icon="mdi-refresh"
+                                :aria-label="'Regenerate ' + section"
+                                :data-testid="'regenerate-' + section"
+                                :loading="worlds.proseRegenerating === thing.id && worlds.proseRegeneratingSection === section"
+                                :disabled="worlds.proseRegenerating === thing.id"
+                                @click="worlds.regenerateProse(section)"
+                            >Regenerate</v-btn>
                         </div>
                         <div class="prose pa-3">
                             <span v-if="prose.text">{{ prose.text }}</span>
@@ -195,8 +227,9 @@ function cut(text, length = 28) {
     return text.length > length ? text.slice(0, length - 1).trimEnd() + '…' : text;
 }
 
-// A thing's page: core fields, the facts true at the viewing date (add,
-// edit, end), the generated prose with Regenerate, the "viewing as of"
+// A thing's page: its name (renamed in place), core fields, the facts true
+// at the viewing date (add, edit, end), the generated prose with
+// Regenerate (every section, or one of a character's), the "viewing as of"
 // date, a timeline strip of its dated changes and scenes, the scenes it
 // appears in, and Delete (after a reference check and a confirmation).
 // A character's heritage shows as links, with its life stage by its age.
@@ -217,6 +250,8 @@ export default {
             asOfMonth: null,
             // the open fact form: {mode: 'add'|'edit'|'end', factId?, ...}
             form: null,
+            // the name being edited: {text, sent}
+            rename: null,
         };
     },
     computed: {
@@ -247,6 +282,9 @@ export default {
         monthOptions() {
             const names = this.worlds.calendar?.month_names || [];
             return names.map((title, index) => ({ title, value: index + 1 }));
+        },
+        proseSectionCount() {
+            return Object.keys(this.thing?.prose || {}).length;
         },
         editing() {
             return EDIT_ACTIONS.some((action) => this.worlds.pending[action]);
@@ -328,11 +366,20 @@ export default {
             if (!thing || thing.id !== before?.id || this.form?.sent) {
                 this.form = null;
             }
+            if (!thing || thing.id !== before?.id || this.rename?.sent) {
+                this.rename = null;
+            }
         },
         editing(now) {
             // the edit failed (no reply replaced the thing): keep the form
             if (!now && this.form?.sent) {
                 this.form = { ...this.form, sent: false };
+            }
+        },
+        // the rename failed (no reply replaced the thing): keep it open
+        'worlds.pending.set_field'(now) {
+            if (!now && this.rename?.sent) {
+                this.rename = { ...this.rename, sent: false };
             }
         },
     },
@@ -397,6 +444,21 @@ export default {
             this.asOfMenu = false;
             const at = date ? { instant: date.instant, precision: date.precision } : null;
             this.worlds.viewThingAt(at);
+        },
+        startRename() {
+            this.rename = { text: this.thing.name, sent: false };
+        },
+        saveRename() {
+            const name = this.rename?.text.trim();
+            if (!name || this.rename.sent) {
+                return;
+            }
+            if (name === this.thing.name) {
+                this.rename = null;
+                return;
+            }
+            this.worlds.renameThing(name);
+            this.rename = { ...this.rename, sent: true };
         },
         startAdd() {
             this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null };
@@ -470,6 +532,10 @@ export default {
 .thing-name {
     font-family: 'Alegreya', serif;
     color: rgb(var(--v-theme-accent));
+}
+
+.rename-input {
+    min-width: 260px;
 }
 
 .world-date {

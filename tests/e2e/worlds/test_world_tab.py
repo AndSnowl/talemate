@@ -269,3 +269,83 @@ def test_delete_a_thing_after_its_reference_check(app, page):
     dialog.get_by_role("button", name="Cancel").click()
     dialog.wait_for(state="hidden", timeout=TIMEOUT_MS)
     assert thing.get_by_test_id("thing-name").inner_text() == "Maren Vos"
+
+
+_RECORD_SENT_JS = """
+() => {
+    const socket = (window.__e2eSockets || []).filter(
+        (s) => s.readyState === WebSocket.OPEN && s.protocol !== "vite-hmr"
+    ).pop();
+    window.__e2eSent = [];
+    const send = socket.send.bind(socket);
+    socket.send = (data) => {
+        window.__e2eSent.push(JSON.parse(data));
+        send(data);
+    };
+}
+"""
+
+
+def test_regenerate_one_prose_section(app, page):
+    """A character's description and personality each have their own
+    Regenerate, which asks for that section only; the page's "Regenerate
+    prose" still asks for every section. (No AI client in the browser
+    tests: the request is checked, and the backend's refusal shown.)"""
+
+    name = _world_name("Lowmere")
+    seed_fm_world(app.root, name, present_year=318, things=[MAREN])
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Maren Vos")
+    page.evaluate(_RECORD_SENT_JS)
+
+    thing.get_by_test_id("regenerate-personality").click()
+    thing.get_by_test_id("regenerate-description").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    page.wait_for_function(
+        "() => window.__e2eSent.some((m) => m.action === 'regenerate_prose')",
+        timeout=TIMEOUT_MS,
+    )
+    asked = page.evaluate(
+        "() => window.__e2eSent.filter((m) => m.action === 'regenerate_prose')"
+    )
+    assert [m.get("section") for m in asked] == ["personality"]
+    page.get_by_test_id("world-tab").get_by_text(
+        "No AI client is set up to write the prose"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    thing.get_by_role("button", name="Regenerate prose").click()
+    page.wait_for_function(
+        "() => window.__e2eSent.filter((m) => m.action === 'regenerate_prose')"
+        ".length === 2",
+        timeout=TIMEOUT_MS,
+    )
+    asked = page.evaluate(
+        "() => window.__e2eSent.filter((m) => m.action === 'regenerate_prose')"
+    )
+    assert "section" not in asked[1]
+
+
+def test_rename_a_character(app, page):
+    name = _world_name("Saltreach")
+    seed_fm_world(app.root, name, present_year=318, things=[MAREN])
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Maren Vos")
+
+    thing.get_by_role("button", name="Rename").click()
+    field = thing.get_by_test_id("rename-field").get_by_label("Name")
+    assert field.input_value() == "Maren Vos"
+    field.fill("Maren Holt")
+    field.press("Enter")
+    thing.get_by_test_id("thing-name").filter(has_text="Maren Holt").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert thing.get_by_test_id("rename-field").count() == 0
+
+    thing.get_by_role("button", name="Back").click()
+    page.get_by_test_id("thing-card").filter(has_text="Maren Holt").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert page.get_by_test_id("thing-card").filter(has_text="Maren Vos").count() == 0

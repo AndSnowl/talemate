@@ -18,6 +18,7 @@ from e2e.worlds.test_world_tab import (
     _world_tab,
 )
 from e2e.seed import seed_fm_world
+from e2e.worlds.test_heritage_create import HALF_ORC, HUMAN, LOWLANDER, ORC
 
 
 def _measure(name: str, low: float, high: float) -> dict:
@@ -194,8 +195,90 @@ def test_deleted_heritage_shows_as_deleted(app, page):
     dialog.get_by_role("button", name="Delete").click()
     dialog.wait_for(state="hidden", timeout=TIMEOUT_MS)
 
+    # back to the race's species page, without the race
+    owl.get_by_test_id("thing-name").filter(has_text="Owl-folk").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    owl.get_by_test_id("races-section").get_by_text("No races yet.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
     page.get_by_test_id("kind-character").click()
     character = _open_thing(page, "Pip")
     heritage = character.get_by_test_id("field-heritage")
     heritage.get_by_text("(deleted)").wait_for(state="visible", timeout=TIMEOUT_MS)
     assert heritage.locator("a").count() == 0
+
+
+def test_rename_a_race_shows_everywhere(app, page):
+    """A race renamed on its page shows by its new name on its species
+    page and in a character's heritage links."""
+
+    name = _world_name("Rimeholt")
+    seed_fm_world(app.root, name, present_year=1026, things=[OWL_FOLK, SNOWY, VASHA])
+    _open_world(page, name)
+    _world_tab(page)
+
+    page.get_by_test_id("kind-species").click()
+    owl = _open_thing(page, "Owl-folk")
+    owl.get_by_test_id("races-section").get_by_text("Snowy").click()
+    race = page.get_by_test_id("thing-page")
+    race.get_by_test_id("thing-name").filter(has_text="Snowy").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    race.get_by_role("button", name="Rename").click()
+    field = race.get_by_test_id("rename-field").get_by_label("Name")
+    field.fill("Frostwing")
+    race.get_by_test_id("rename-field").get_by_role("button", name="Save").click()
+    race.get_by_test_id("thing-name").filter(has_text="Frostwing").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
+    # its species page lists it by the new name
+    race.get_by_test_id("field-species").get_by_text("Owl-folk").click()
+    species = page.get_by_test_id("thing-page")
+    species.get_by_test_id("thing-name").filter(has_text="Owl-folk").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    races = species.get_by_test_id("races-section")
+    races.get_by_text("Frostwing").wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert races.get_by_text("Snowy").count() == 0
+
+    # and a character of it links to it by the new name
+    page.get_by_test_id("kind-character").click()
+    vasha = _open_thing(page, "Vasha")
+    heritage = vasha.get_by_test_id("field-heritage")
+    heritage.get_by_text("Frostwing").wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "Snowy" not in heritage.inner_text()
+
+
+def test_deleting_a_mix_goes_back_to_its_species(app, page):
+    """A mix deleted from its page goes back to the species page it was
+    opened from (here its second parent, Orc), not to the species list."""
+
+    name = _world_name("Ironmere")
+    seed_fm_world(
+        app.root, name, present_year=1000, things=[HUMAN, LOWLANDER, ORC, HALF_ORC]
+    )
+    _open_world(page, name)
+    _world_tab(page)
+
+    page.get_by_test_id("kind-species").click()
+    orc = _open_thing(page, "Orc")
+    orc.get_by_test_id("mixes-section").get_by_text("Half-orc").click()
+    mix = page.get_by_test_id("thing-page")
+    mix.get_by_test_id("thing-name").filter(has_text="Half-orc").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    mix.get_by_test_id("delete-thing").click()
+    dialog = page.get_by_test_id("delete-dialog")
+    dialog.wait_for(state="visible", timeout=TIMEOUT_MS)
+    dialog.get_by_role("button", name="Delete").click()
+    dialog.wait_for(state="hidden", timeout=TIMEOUT_MS)
+
+    back = page.get_by_test_id("thing-page")
+    back.get_by_test_id("thing-name").filter(has_text="Orc").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    mixes = back.get_by_test_id("mixes-section")
+    mixes.get_by_text("No mixes yet.").wait_for(state="visible", timeout=TIMEOUT_MS)

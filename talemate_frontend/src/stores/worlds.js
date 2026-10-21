@@ -25,7 +25,16 @@
 // Deleting a thing: `requestDelete` asks for its references
 // (`thing_references`); the reply lands in `deleteCheck`, which the
 // confirmation dialog shows. `confirmDelete` deletes it; `thing_deleted`
-// closes the dialog and the thing page, back to the kind list.
+// closes the dialog and the thing page: a race or mix goes back to its
+// species page (`pageAfterDelete`), anything else to the kind list.
+//
+// Renaming: `renameThing` sends `set_field` "name", correcting the name
+// value in effect at the viewing date (`currentNameFrom`) rather than
+// adding a dated one; the reply refreshes the kind's list (and so the
+// heritage list), so cards and links show the new name.
+//
+// Prose: `regenerateProse()` rewrites every section, and
+// `regenerateProse(section)` just that one (`proseRegeneratingSection`).
 //
 // Heritage: every listing of a species, race or mix asks for
 // `list_heritage` too, so `heritage` (each with its `species_ids`) stays in
@@ -111,6 +120,50 @@ export function defaultOverrideIndex(preview, row) {
     return index >= 0 ? index : preview.facts.length ? 0 : -1;
 }
 
+// The `valid_from` of `timeline`'s name value in effect at `at` (null for
+// the latest), as a wire date without its label; null for an undated one.
+// Renaming corrects that value in place.
+export function currentNameFrom(timeline, at) {
+    // the timeline runs in date order, undated first: the last name value
+    // on or before `at` is the one in effect
+    const until = at ? at.instant : Infinity;
+    let from = null;
+    for (const entry of timeline || []) {
+        if (entry.change === 'field' && entry.field === 'name' && (!entry.date || entry.date.instant <= until)) {
+            from = entry.date ? { instant: entry.date.instant, precision: entry.date.precision } : null;
+        }
+    }
+    return from;
+}
+
+// A heritage thing's species id: itself for a species, else the first of
+// its `species_ids` that isn't itself (null if unknown).
+function speciesOf(heritage, id) {
+    const entry = heritage.find((item) => item.id === id);
+    if (!entry) {
+        return null;
+    }
+    return entry.kind === 'species' ? entry.id : entry.species_ids.find((speciesId) => speciesId !== id) || null;
+}
+
+// The page to open once `thing` is deleted: a race's species; a mix's
+// species page it was opened from (`openedFrom`), else its first parent's
+// species. Null (back to the kind list) for any other kind.
+export function pageAfterDelete(thing, heritage, openedFrom) {
+    if (thing?.kind === 'race') {
+        return thing.fields?.species || null;
+    }
+    if (thing?.kind === 'mix') {
+        const mixSpecies = heritage.find((item) => item.id === thing.id)?.species_ids || [];
+        if (openedFrom && mixSpecies.includes(openedFrom)) {
+            return openedFrom;
+        }
+        const first = (thing.fields?.parents || [])[0];
+        return first ? speciesOf(heritage, first) : null;
+    }
+    return null;
+}
+
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact'];
 
@@ -127,6 +180,9 @@ function worldState() {
         heritage: [],
         // the thing page: which thing, its payload, and the date it's viewed as of
         selectedThingId: null,
+        // the thing page open before this one (a deleted mix goes back to
+        // the species page it came from)
+        openedFrom: null,
         thing: null,
         thingAt: null,
         scenes: [],
@@ -143,8 +199,10 @@ function worldState() {
         // the new thing (`{id, kind, name}`) lands in `accepted`
         acceptOpens: true,
         accepted: null,
-        // the id of the thing whose prose is being regenerated
+        // the id of the thing whose prose is being regenerated, and the one
+        // section asked for (null: every section)
         proseRegenerating: null,
+        proseRegeneratingSection: null,
         // the new-scene prompt's names: the lookup in flight (`{text, at}`),
         // and the last `match_names` reply taken (`{text, at, matches}`).
         // A new lookup drops the old reply, so stale spans never show.
@@ -347,6 +405,9 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         openThing(id, at = null) {
+            if (id !== this.selectedThingId) {
+                this.openedFrom = this.selectedThingId;
+            }
             this.selectedThingId = id;
             this.thingAt = at;
             if (this.thing?.id !== id) {
@@ -357,6 +418,7 @@ export const useWorldsStore = defineStore('worlds', {
 
         closeThing() {
             this.deleteCheck = null;
+            this.openedFrom = null;
             this.selectedThingId = null;
             this.thing = null;
             this.thingAt = null;
@@ -486,17 +548,32 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // `value`: a number field's number, or `measures`' list of
-        // `{name, min, max, unit}`
-        setField(field, value) {
-            this.edit('set_field', { field, value });
+        // `{name, min, max, unit}`. `validFrom`, if given, is the dated
+        // value to correct (left out: the undated one).
+        setField(field, value, validFrom = undefined) {
+            this.edit('set_field', { field, value, ...(validFrom === undefined ? {} : { valid_from: validFrom }) });
         },
 
-        regenerateProse() {
+        // a correction of the open thing's name (see the module comment)
+        renameThing(name) {
+            if (!this.thing) {
+                return;
+            }
+            this.setField('name', name, currentNameFrom(this.thing.timeline, this.thingAt));
+        },
+
+        // `section`: just that one; left out, every section
+        regenerateProse(section = null) {
             if (!this.selectedThingId) {
                 return;
             }
             this.proseRegenerating = this.selectedThingId;
-            this.request('regenerate_prose', { id: this.selectedThingId, at: this.thingAt });
+            this.proseRegeneratingSection = section;
+            this.request('regenerate_prose', {
+                id: this.selectedThingId,
+                at: this.thingAt,
+                ...(section ? { section } : {}),
+            });
         },
 
         // --- replies ------------------------------------------------------
@@ -568,7 +645,11 @@ export const useWorldsStore = defineStore('worlds', {
                     this.clearPending('delete_thing');
                     this.deleteCheck = null;
                     if (data.id === this.selectedThingId) {
+                        const back = pageAfterDelete(this.thing, this.heritage, this.openedFrom);
                         this.closeThing();
+                        if (back) {
+                            this.openThing(back);
+                        }
                     }
                     break;
                 case 'match_names':
@@ -625,6 +706,7 @@ export const useWorldsStore = defineStore('worlds', {
                     this.preview = null;
                     this.previewRequest = null;
                     if (this.acceptOpens) {
+                        this.openedFrom = this.selectedThingId;
                         this.selectedThingId = data.id;
                         this.thingAt = null;
                         this.thing = data;
@@ -644,6 +726,7 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'prose_updated':
                     if (this.proseRegenerating === data.id) {
                         this.proseRegenerating = null;
+                        this.proseRegeneratingSection = null;
                     }
                     if (data.id === this.selectedThingId) {
                         this.request('get_thing', { id: data.id, at: this.thingAt });
@@ -652,6 +735,7 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'prose_failed':
                     if (this.proseRegenerating === data?.id) {
                         this.proseRegenerating = null;
+                        this.proseRegeneratingSection = null;
                     }
                     this.error = message.message;
                     break;
@@ -671,6 +755,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.deleteCheck = null;
                         this.previewPending = false;
                         this.proseRegenerating = null;
+                        this.proseRegeneratingSection = null;
                         this.setupPending = false;
                         // the failed request may be the name or mix lookup
                         this.nameLookup = null;

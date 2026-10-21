@@ -294,9 +294,7 @@ def test_mix_drafted_in_place_keeps_the_character(app, page, fixed_preview):
     and the character box comes back with the new mix picked."""
 
     name = _world_name("Moscavia")
-    seed_fm_world(
-        app.root, name, present_year=1000, things=[MOSCAVIAN, SNOWY, EARED]
-    )
+    seed_fm_world(app.root, name, present_year=1000, things=[MOSCAVIAN, SNOWY, EARED])
     _open_world(page, name)
     _world_tab(page)
 
