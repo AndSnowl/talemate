@@ -115,7 +115,13 @@ async def test_preview_prose_sections_get_identity_background(at_313):
     fixed for `regenerate_prose`/`generate_section`, which already passes
     the thing's other facts and core fields as background). A preview has
     facts and fields, not a `ThingState`, so the same background must come
-    from a helper both callers can use."""
+    from a helper both callers can use.
+
+    Personality's background leaves out the appearance fact (acceptance
+    probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md)
+    but keeps identity (name, born) and his other facts (here, the
+    background fact), so a fresh preview agrees with a later
+    regeneration."""
 
     client = MockClient("test")
     async with MockClientContext():
@@ -124,12 +130,15 @@ async def test_preview_prose_sections_get_identity_background(at_313):
 
     # [0] is the create call, [1] description, [2] personality
     personality_prompt = str(client.prompt_history[2]["prompt"])
-    # the personality section's own facts don't mention his appearance or
-    # his name/born -- without identity background, nothing here would
-    assert "A long scar across his sword hand." in personality_prompt
+    # the personality section's own facts don't mention his name/born --
+    # without identity background, nothing here would
     assert "Named Corvin Ash." in personality_prompt
     assert "Born in" in personality_prompt
     assert "for consistency only" in personality_prompt
+    # his background fact survives as context
+    assert "Exiled from Ashenmere for killing a younger opponent." in personality_prompt
+    # his appearance fact is left out of personality's background entirely
+    assert "A long scar across his sword hand." not in personality_prompt
 
 
 async def test_preview_does_not_write(at_313):

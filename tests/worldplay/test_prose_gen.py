@@ -24,12 +24,17 @@ def _queue(*responses: str) -> None:
 
 async def test_generate_section_passes_other_categories_as_background(world):
     """Vasha's personality section is generated from his personality facts
-    alone, but his appearance fact -- a different category -- is still
-    sent, as background, so the model doesn't lose track of what he is."""
+    alone, but his speech fact -- a different category -- is still sent, as
+    background, so the model doesn't lose track of what he is. His
+    appearance fact is the one exception: left out of personality's
+    background entirely, so the model stops restating it instead of
+    writing personality (acceptance probe:
+    docs/superpowers/probes/2026-10-21-personality-and-actions.md)."""
 
     with world.revision(Source.manual(note="setup")) as rev:
         vasha = rev.create_thing("character", fields={"name": "Vasha"})
         rev.add_fact(vasha, "appearance", "A large owl-like creature.")
+        rev.add_fact(vasha, "speech", "Speaks in a low rumble.")
         rev.add_fact(vasha, "personality", "Quiet and observant.")
 
     client = MockClient("test")
@@ -44,9 +49,11 @@ async def test_generate_section_passes_other_categories_as_background(world):
     prompt = str(client.prompt_history[0]["prompt"])
     # the personality fact is in the entry's own facts
     assert "Quiet and observant." in prompt
-    # the appearance fact -- a different category -- is background only
-    assert "A large owl-like creature." in prompt
+    # the speech fact -- a different category -- is background only
+    assert "Speaks in a low rumble." in prompt
     assert "for consistency only" in prompt
+    # the appearance fact is left out of personality's background entirely
+    assert "A large owl-like creature." not in prompt
 
 
 async def test_generate_section_background_includes_core_fields(world):
@@ -245,9 +252,55 @@ async def test_personality_includes_instinct_and_customs(
 
     facts = requests[0]["facts"]
     assert facts == ["Quiet and observant.", "Hunts at dusk.", "Name their boats."]
-    # the body stays in view as background, so he's still an owl
-    assert "Wings in place of arms." in requests[0]["background"]
+    # the heritage line keeps identity in view; the body does not (acceptance
+    # probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md)
     assert "Heritage: Snowy, Owl-folk." in requests[0]["background"]
+    assert "Wings in place of arms." not in requests[0]["background"]
+
+
+async def test_personality_background_excludes_appearance_and_inherited_body(
+    world, heritage_world, monkeypatch
+):
+    """The personality section's background leaves out Vasha's own
+    appearance fact and the species'/race's physical and variation facts
+    he inherits -- the owner's acceptance-run complaint was that these made
+    the model restate appearance instead of writing personality. The
+    heritage line and his other facts (here, a background fact) still get
+    through, so identity survives (acceptance probe:
+    docs/superpowers/probes/2026-10-21-personality-and-actions.md)."""
+
+    with world.revision(Source.manual(note="more")) as rev:
+        rev.add_fact(heritage_world.vasha, "background", "Keeps the lighthouse log.")
+
+    requests = _capture_requests(monkeypatch)
+    await prose_gen.generate_section(
+        world, heritage_world.vasha, "personality", None, object()
+    )
+
+    background = requests[0]["background"]
+    assert "Blue eyes." not in background
+    assert "Wings in place of arms." not in background
+    assert "White plumage." not in background
+    assert "Heritage: Snowy, Owl-folk." in background
+    assert "Keeps the lighthouse log." in background
+
+
+async def test_description_background_still_includes_inherited_body(
+    world, heritage_world, monkeypatch
+):
+    """The description section's background is unchanged by the
+    personality fix -- it still carries whatever the character inherits
+    that isn't mapped to description's own facts (here, the species'
+    instinct and the culture's customs)."""
+
+    requests = _capture_requests(monkeypatch)
+    await prose_gen.generate_section(
+        world, heritage_world.vasha, "description", None, object()
+    )
+
+    background = requests[0]["background"]
+    assert "Hunts at dusk." in background
+    assert "Name their boats." in background
 
 
 async def test_species_page_prose_uses_all_facts(world, heritage_world, monkeypatch):

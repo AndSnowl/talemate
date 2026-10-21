@@ -796,7 +796,16 @@ async def _preview_prose(
     facts `prose_gen.inherited_categories` maps to them, and every other
     inherited fact -- all of them, for a race or mix -- goes to the
     background with a "Heritage: ..." line. Inherited facts the preview
-    overrides are left out."""
+    overrides are left out.
+
+    `personality`'s background also leaves out whatever
+    `prose_gen.inherited_categories("description")` maps as inherited (a
+    species', race's or mix's `physical` and `variation`, a culture's
+    `dress`) -- the same rule `prose_gen._section_facts` applies for a
+    thing already in the world, and `prose_gen.background_for_section`'s
+    own exclusion of the character's own `appearance` facts applies here
+    too -- so a fresh preview agrees with a later regeneration (acceptance
+    probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md)."""
 
     overridden = {fact_id for fact in facts for fact_id in fact.overrides}
     live = [row for row in inherited if row.fact_id not in overridden]
@@ -822,10 +831,17 @@ async def _preview_prose(
         categories = prose_gen.section_categories(kind, section)
         section_facts = [f.text for f in facts if f.category in categories]
         by_kind = prose_gen.inherited_categories(section) if kind == "character" else {}
+        exclude_by_kind = (
+            prose_gen.inherited_categories("description")
+            if section == "personality"
+            else {}
+        )
         inherited_background: list[str] = []
         for row in live:
             if row.category in by_kind.get(row.source_kind, ()):
                 section_facts.append(row.text)
+            elif row.category in exclude_by_kind.get(row.source_kind, ()):
+                continue
             else:
                 inherited_background.append(row.text)
         background = prose_gen.background_for_section(

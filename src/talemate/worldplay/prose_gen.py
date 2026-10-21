@@ -28,6 +28,15 @@ other inherited fact goes to the background. A race or mix gets all its
 inherited facts as background. Since an ancestor's change changes the
 prose, stretches and staleness follow the thing's lineage (`lineage_ids`).
 
+`personality`'s background leaves the body out: the character's own
+`appearance` facts, and whatever `inherited_categories("description")`
+maps as inherited (a species', race's or mix's `physical` and
+`variation`, a culture's `dress`), are left out of it entirely. Giving
+the model appearance in view, even "for consistency only", made it
+restate the body instead of writing personality; `description`'s own
+background is unaffected (acceptance probe:
+docs/superpowers/probes/2026-10-21-personality-and-actions.md).
+
 Prose is generated at the "analyze" kind, not "create": a reference entry
 is a factual restatement of known facts, not an invention, so it's asked
 for at the analytical preset's lower, more deterministic temperature
@@ -151,10 +160,20 @@ def _section_facts(
     """`section`'s facts -- the thing's own facts in its categories, then,
     for a character, the inherited facts `inherited_categories` adds -- and
     the rest of its inherited facts, for the background. Overridden facts
-    are left out of both."""
+    are left out of both.
+
+    `personality`'s background also drops whatever `description` maps as
+    inherited (a species', race's or mix's `physical` and `variation`
+    facts, and a culture's `dress`) -- giving the model appearance in view
+    made it narrate the body instead of writing personality (acceptance
+    probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md).
+    `description`'s own background is unaffected."""
 
     own_categories = section_categories(state.kind, section)
     by_kind = inherited_categories(section) if state.kind == "character" else {}
+    exclude_by_kind = (
+        inherited_categories("description") if section == "personality" else {}
+    )
 
     facts: list[str] = []
     inherited_background: list[str] = []
@@ -164,6 +183,8 @@ def _section_facts(
                 facts.append(fact.text)
         elif fact.category in by_kind.get(layer.kind, ()):
             facts.append(fact.text)
+        elif fact.category in exclude_by_kind.get(layer.kind, ()):
+            continue
         else:
             inherited_background.append(fact.text)
     return facts, inherited_background
@@ -199,9 +220,15 @@ def background_for_section(
     values, rather than a `ThingState`, so this also serves `create.py`'s
     `preview_thing`, previewing a thing that isn't in the world yet.
     `born` is formatted by `calendar` (eras and all), the same as a built
-    `Character`'s own `born` label (`characters.py`)."""
+    `Character`'s own `born` label (`characters.py`).
 
-    categories = section_categories(kind, section)
+    `personality` also drops the thing's own `appearance` facts, for the
+    same reason `_section_facts` drops the inherited physical/variation
+    ones; `description`'s background is unaffected."""
+
+    categories = set(section_categories(kind, section))
+    if section == "personality":
+        categories.add("appearance")
     background = [text for category, text in facts if category not in categories]
     background.extend(inherited or [])
 
