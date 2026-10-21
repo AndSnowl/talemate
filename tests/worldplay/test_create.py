@@ -1830,3 +1830,39 @@ async def test_filling_a_stub_under_a_new_name_keeps_the_old_one(at_1020):
     state = world.view(None).thing(moskov)
     assert state.fields["name"] == "Grand City of Moskov"
     assert state.fields["aka"] == [_aka("Moskov")]
+
+
+async def test_preview_finds_prompt_names_the_picks_miss(at_1020):
+    """A Create clicked before the screen's name matches came back sends no
+    picks: the names in the prompt are found here, so they're still
+    "Named in this prompt" context. A name treated as new still isn't."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsardom = rev.create_thing("place", fields={"name": "Tsardom of Moscavia"})
+        rev.add_fact(tsardom, "general", "A northern realm of pine forest.")
+        maren = rev.create_thing("character", fields={"name": "Maren Vos"})
+        rev.add_fact(maren, "background", "A ferrywoman.")
+    reply = json.dumps(
+        {"name": "Velikostok", "facts": [{"category": "general", "text": "Pines."}]}
+    )
+    prompt = "a town in the Tsardom of Moscavia where Maren lives"
+
+    async def preview(**extra):
+        client = MockClient("test")
+        async with MockClientContext():
+            _queue(reply, "Pines.")
+            result = await preview_thing(world, "place", prompt, {}, client, **extra)
+        return result, str(client.prompt_history[0]["prompt"])
+
+    found, sent = await preview()
+    assert found.picks == {"Tsardom of Moscavia": tsardom, "Maren": maren}
+    assert "- A northern realm of pine forest." in sent
+    assert "- A ferrywoman." in sent
+
+    # "treat as new" wins, and a thing the owner picked isn't found twice
+    kept, sent = await preview(new_names=["Maren"], picks={"Tsardom": tsardom})
+    assert kept.picks == {"Tsardom": tsardom}
+    assert "- A ferrywoman." not in sent
+    kept, _sent = await preview(picks={"maren": maren})
+    assert kept.picks == {"maren": maren, "Tsardom of Moscavia": tsardom}

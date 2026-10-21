@@ -1000,6 +1000,39 @@ def _named_in_prompt(
     return named
 
 
+def _found_in_prompt(
+    view: WorldView,
+    prompt: str,
+    picks: dict[str, str],
+    as_new: Sequence[str],
+    in_context: set[str],
+) -> dict[str, str]:
+    """The names in `prompt` the owner's `picks` don't cover, each to its
+    best match (`find_names`): a Create sent before the screen's matches
+    came back still gets them as context. A suggestion, a stub (it has
+    nothing to say yet), a name treated as new (`as_new`), and a thing the
+    prompt is given anyway (`in_context`: one picked, the stub, what
+    mentions it, what's inherited) aren't found."""
+
+    picked = {name_key(written) for written in picks}
+    found: dict[str, str] = {}
+    for match in find_names(view, prompt):
+        key = name_key(match.text)
+        thing_id = match.candidates[0].id
+        if (
+            match.suggested
+            or match.candidates[0].stub
+            or key in picked
+            or thing_id in in_context
+            or is_new(match.text, as_new)
+        ):
+            continue
+        picked.add(key)
+        in_context.add(thing_id)
+        found[match.text] = thing_id
+    return found
+
+
 def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
     """A live stub of `kind` whose name or other name is `name` (ignoring
     case and a leading article), if any."""
@@ -1046,7 +1079,8 @@ async def preview_thing(
       stub, or a full entry, is a `ValueError`;
     - `picks` maps a name written in the prompt to the entry the owner
       matched it to; each entry's facts go in a "Named in this prompt"
-      block, which keeps the model from inventing a duplicate;
+      block, which keeps the model from inventing a duplicate. A name in
+      the prompt the picks don't cover is matched here (`find_names`);
     - an entry with an everyday name is shown "Name (kind, usually called
       X)";
     - `new_names` are names written in the prompt the owner treats as new
@@ -1082,7 +1116,6 @@ async def preview_thing(
         for written, thing_id in (picks or {}).items()
         if not is_new(written, treated_as_new)
     }
-    named = _named_in_prompt(view, picks, stub_id)
     if kind == "mix" and not fields.get("parents"):
         raise ValueError("a mix needs two parents")
     if kind == "race" and not fields.get("species"):
@@ -1094,6 +1127,17 @@ async def preview_thing(
     for source_id in sources:
         if view.thing(source_id) is None:
             raise ValueError(f"no such thing to inherit from: {source_id}")
+    gathered = gather_mentions(view, stub.id) if stub is not None else None
+    # what the prompt is given anyway: the stub, what mentions it, and
+    # what the new thing inherits from
+    in_context = {
+        *picks.values(),
+        *([stub.id] if stub is not None else []),
+        *(m.owner_id for m in (gathered.mentioned if gathered is not None else [])),
+        *(layer.thing_id for src in sources for layer in heritage.lineage(view, src)),
+    }
+    picks.update(_found_in_prompt(view, prompt, picks, treated_as_new, in_context))
+    named = _named_in_prompt(view, picks, stub_id)
     groups = _labelled_facts(view, sources)
     rows = [row for group in groups for row in group]
     labels = {row.label: row.fact_id for row in rows}
@@ -1124,8 +1168,7 @@ async def preview_thing(
         "named": named,
     }
     context: list[tuple[str, list[str]]] = []
-    if stub is not None:
-        gathered = gather_mentions(view, stub.id)
+    if stub is not None and gathered is not None:
         template_vars["mentions"] = [
             (
                 _mention_lead(m.owner_name, m.owner_kind, m.category, m.owner_everyday),
