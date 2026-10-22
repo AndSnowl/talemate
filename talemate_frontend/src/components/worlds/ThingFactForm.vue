@@ -32,7 +32,7 @@
                     <v-text-field v-model.number="form.untilYear" label="Until year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
                 </template>
             </div>
-            <div v-if="form.mode !== 'override'" class="text-caption text-muted mt-1">Leave a year empty for an open start or end.</div>
+            <div v-if="form.mode !== 'override'" class="text-caption text-muted mt-1">{{ form.category === 'timeline' ? 'A timeline fact needs its year (From).' : 'Leave a year empty for an open start or end.' }}</div>
             <div class="d-flex ga-2 mt-2">
                 <v-btn color="accent" variant="flat" size="small" :loading="busy" :disabled="!valid" @click="$emit('save')">Save</v-btn>
                 <v-btn variant="text" size="small" :disabled="busy" @click="$emit('cancel')">Cancel</v-btn>
@@ -45,7 +45,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { locateLinks } from './nameHighlights.js';
+import { factFormValid, locateLinks } from './nameHighlights.js';
 import NameHighlightInput from './NameHighlightInput.vue';
 
 // The inline form ThingPage opens to add, edit (correct) or end a fact, or
@@ -58,10 +58,6 @@ import NameHighlightInput from './NameHighlightInput.vue';
 // and `form.stubs` are the owner's choices.
 function isYear(value) {
     return Number.isInteger(value) && value >= 1 && value <= 9999;
-}
-
-function isEmpty(value) {
-    return value === null || value === undefined || value === '';
 }
 
 export default {
@@ -86,12 +82,7 @@ export default {
             return this.worlds.selectedThingId ? [this.worlds.selectedThingId] : [];
         },
         valid() {
-            const { text, category, fromYear, untilYear } = this.form;
-            const yearOk = (value) => isEmpty(value) || isYear(value);
-            if (!text?.trim() || !category || !yearOk(fromYear) || !yearOk(untilYear)) {
-                return false;
-            }
-            return !(isYear(fromYear) && isYear(untilYear) && untilYear <= fromYear);
+            return factFormValid(this.form);
         },
     },
     methods: {

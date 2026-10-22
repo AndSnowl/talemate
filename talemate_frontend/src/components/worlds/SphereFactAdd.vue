@@ -1,7 +1,7 @@
 <template>
     <div class="sphere-fact-add">
         <div v-if="adding" class="my-2">
-            <ThingFactForm :form="editor.form()" :categories="editor.categories()" :busy="editor.busy()" @save="editor.save()" @cancel="editor.cancel()" />
+            <ThingFactForm :form="editor.form()" :categories="[category]" :busy="editor.busy()" @save="editor.save()" @cancel="editor.cancel()" />
         </div>
         <v-btn v-else-if="editor" variant="text" size="x-small" prepend-icon="mdi-plus" :data-testid="'add-' + category" @click="editor.add(category, anchor)">{{ label }}</v-btn>
     </div>

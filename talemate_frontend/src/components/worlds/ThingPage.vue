@@ -134,6 +134,8 @@
                     <ThingNumbers v-if="isHeritage" />
                     <ThingAka />
 
+                    <!-- a pure sphere's facts all show in its sphere part -->
+                    <template v-if="thing.kind !== 'sphere'">
                     <div class="d-flex align-center mt-4 mb-1">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
                         <v-spacer></v-spacer>
@@ -159,6 +161,7 @@
                         <div v-if="form && form.factId === fact.fact_id" class="my-2">
                             <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(fact)" />
                         </div>
+                    </template>
                     </template>
 
                     <ThingInherited

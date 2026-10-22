@@ -208,6 +208,22 @@ def test_sphere_page_drawers_and_fill(app, page, fixed_sphere):
     assert len(drawers) == 7
     assert drawers[-1] == {"type": "knowledge", "title": "Key Texts"}
 
+    # a second events drawer: the Timeline shows once, under the first
+    thing.get_by_role("button", name="Add a drawer").click()
+    form = thing.get_by_test_id("drawer-form")
+    form.get_by_role("button", name="events").click()
+    form.get_by_label("Title").fill("Chronicle")
+    form.get_by_role("button", name="Save").click()
+    chronicle = _drawer_of(thing, "Chronicle")
+    chronicle.get_by_test_id("timeline-elsewhere").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert "Timeline" in chronicle.inner_text()
+    expect(thing.get_by_test_id("sphere-timeline")).to_have_count(1)
+
+    # a sphere's facts all show in its drawers: no Facts list of its own
+    expect(thing.get_by_role("button", name="Add fact")).to_have_count(0)
+
     # retitled in place, keeping its id
     _drawer_of(thing, "Doctrines").get_by_test_id("drawer-edit").click()
     form = thing.get_by_test_id("drawer-form")
@@ -233,6 +249,10 @@ def test_sphere_page_drawers_and_fill(app, page, fixed_sphere):
     # corrected where it shows, and kept in its drawer
     statement.get_by_test_id("sphere-fact-edit").click()
     form = doctrines.get_by_test_id("fact-form")
+    # it stays a statement
+    form.locator(".v-select .v-field").click()
+    expect(page.get_by_role("option")).to_have_count(1)
+    page.keyboard.press("Escape")
     form.get_by_label("Fact", exact=True).fill("Light is purity itself.")
     form.get_by_role("button", name="Save").click()
     doctrines.get_by_test_id("drawer-item").filter(
@@ -590,8 +610,9 @@ def test_promote_lore_and_place(app, page, fixed_sphere):
     )
     assert place.get_by_test_id("thing-kind").inner_text().strip() == "place"
     assert _drawer_of(place, "Tenets").is_visible()
-    # it's a sphere now: no "Make it a sphere…"
+    # it's a sphere now: no "Make it a sphere…"; its place facts still list
     assert place.get_by_test_id("make-sphere").count() == 0
+    assert place.get_by_role("button", name="Add fact").is_visible()
 
     # both are in the Spheres list, each under its template
     place.get_by_role("button", name="Back").click()
@@ -693,6 +714,24 @@ def test_end_item(app, page):
 BRANCHES = "b4a2c4e5"
 
 
+def _already_tied(page, character: str):
+    """Tie `character` from the White Dawn's People though it's tied to it
+    already (an ended tie): the error that leaves on screen."""
+    sphere = _sphere_card(page, "The White Dawn")
+    people = _drawer_of(sphere, "People")
+    people.get_by_test_id("drawer-add").click()
+    people.get_by_label("Character").click()
+    page.get_by_role("option", name=character).click()
+    people.get_by_test_id("drawer-add-form").get_by_role(
+        "button", name="Add", exact=True
+    ).click()
+    stale = page.get_by_role("alert").filter(has_text="already tied")
+    stale.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert not _sent(page, "set_ties")
+    sphere.get_by_role("button", name="Back").click()
+    return stale
+
+
 def test_part_of_editor_and_new_branch(app, page, fixed_sphere):
     name = _world_name("Branches")
     dawn = {
@@ -711,12 +750,26 @@ def test_part_of_editor_and_new_branch(app, page, fixed_sphere):
         "fields": {"template": "religion", "drawers": []},
         "links": {"parent": "The White Dawn"},
     }
-    seed_fm_world(app.root, name, present_year=1026, things=[dawn, COUNCIL, reformed])
+    # tied to the White Dawn once, in the past: not among its People now
+    marfa = {
+        "kind": "character",
+        "name": "Marfa",
+        "ties": [
+            {"sphere": "The White Dawn", "role": "novice", "since": 1001, "until": 1010}
+        ],
+    }
+    seed_fm_world(
+        app.root, name, present_year=1026, things=[dawn, COUNCIL, reformed, marfa]
+    )
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
 
-    # the council moves from Hierarchy to Doctrines
+    # tying Marfa again from the sphere: an error left on screen
+    stale = _already_tied(page, "Marfa")
+
+    # the council moves from Hierarchy to Doctrines; the old error doesn't
+    # make the move look refused
     page.get_by_test_id("kind-lore").click()
     council = _open_thing(page, "The Council of Elders")
     part_of = council.get_by_test_id("part-of")
@@ -732,6 +785,30 @@ def test_part_of_editor_and_new_branch(app, page, fixed_sphere):
     editor.get_by_role("button", name="Save").click()
     part_of.filter(has_text="Doctrines").wait_for(state="visible", timeout=TIMEOUT_MS)
     expect(editor).to_have_count(0)
+    # sending cleared it
+    expect(stale).to_have_count(0)
+
+    # a tie saved with an old error on screen closes its form too
+    council.get_by_role("button", name="Back").click()
+    stale = _already_tied(page, "Marfa")
+    page.get_by_test_id("kind-character").click()
+    character = _open_thing(page, "Marfa")
+    ties = character.get_by_test_id("ties-section")
+    tie = ties.get_by_test_id("tie").filter(has_text="The White Dawn")
+    assert "until 1010" in tie.inner_text()
+    tie.get_by_role("button", name="Edit tie").click()
+    form = tie.get_by_test_id("tie-form")
+    form.get_by_label("Role").fill("lapsed novice")
+    assert stale.is_visible()
+    form.get_by_role("button", name="Save").click()
+    tie.filter(has_text="Lapsed novice of").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(form).to_have_count(0)
+    saved = _sent(page, "set_ties")[-1]["ties"][0]
+    # the years left alone keep their stored dates
+    assert saved["role"] == "lapsed novice"
+    assert saved["until"]["precision"] == "year"
 
     # a sphere can't be part of its own branch: the refusal shows
     council.get_by_role("button", name="Back").click()

@@ -22,7 +22,10 @@
         </div>
 
         <!-- the Timeline: the sphere's dated facts -->
-        <SphereTimeline v-else-if="drawer.type === 'events'" :timeline="sphere.timeline" />
+        <template v-else-if="drawer.type === 'events'">
+            <div v-if="timelineElsewhere" class="empty" data-testid="timeline-elsewhere">The timeline shows under {{ timelineElsewhere }}.</div>
+            <SphereTimeline v-else :timeline="sphere.timeline" />
+        </template>
 
         <!-- Branches -->
         <div v-else-if="drawer.type === 'branches'">
@@ -151,6 +154,9 @@ export default {
         thing: { type: Object, required: true },
         // places the sphere holds besides this drawer's items (`{id, name}`)
         territory: { type: Array, default: () => [] },
+        // a second events drawer: the title of the first, where the
+        // Timeline shows
+        timelineElsewhere: { type: String, default: null },
     },
     emits: ['edit'],
     setup() {

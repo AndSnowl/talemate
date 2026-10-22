@@ -128,7 +128,8 @@ export default {
             }
         },
         // a save that failed keeps its form (the spinner stops before the
-        // page's prop is replaced, so only an error tells a failure apart)
+        // page's prop is replaced, so only an error tells a failure apart;
+        // sending clears any older one, so it's this request's)
         saving(now) {
             if (!now && this.form?.sent && this.worlds.error) {
                 this.form = { ...this.form, sent: false };
@@ -193,10 +194,12 @@ export default {
             } else {
                 ties[form.index] = tie;
             }
+            this.worlds.clearError();
             this.worlds.setTies(this.thing.id, ties);
             this.form = { ...form, sent: true };
         },
         removeTie(index) {
+            this.worlds.clearError();
             this.worlds.setTies(this.thing.id, tiesPayload(this.ties).filter((_tie, i) => i !== index));
         },
         startException(tie) {
@@ -219,6 +222,7 @@ export default {
             }
             const [key, id] = form.rejects === WHOLE ? [null, null] : form.rejects.split(':');
             const rejects = key === 'thing' ? { thing_id: id } : key === 'fact' ? { fact_id: id } : null;
+            this.worlds.clearError();
             this.worlds.addException(this.thing.id, form.sphereId, form.text.trim(), rejects);
             this.exception = { ...form, sent: true };
         },

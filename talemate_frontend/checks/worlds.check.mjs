@@ -32,6 +32,7 @@ import {
 import {
     NEW_THING,
     factEditState,
+    factFormValid,
     factLinkPayload,
     linkPayload,
     locateLinks,
@@ -1812,6 +1813,18 @@ check("a sphere's own drawers move among themselves and drop; inherited ones sta
         { id: 'b', type: 'practices', title: 'B' },
         { id: 'p', type: 'structure', title: 'P' },
     ]);
+});
+
+check('a fact form needs text, a category and sane years; a timeline fact a year', () => {
+    const form = { mode: 'add', text: 'Founded.', category: 'about', fromYear: null, untilYear: null };
+    assert.equal(factFormValid(form), true);
+    assert.equal(factFormValid({ ...form, text: ' ' }), false);
+    assert.equal(factFormValid({ ...form, fromYear: 1010, untilYear: 1005 }), false);
+    assert.equal(factFormValid({ ...form, fromYear: '' }), true);
+    // a timeline fact is dated: no year, no save (added or corrected)
+    assert.equal(factFormValid({ ...form, category: 'timeline' }), false);
+    assert.equal(factFormValid({ ...form, category: 'timeline', fromYear: 994 }), true);
+    assert.equal(factFormValid({ ...form, mode: 'edit', category: 'timeline', fromYear: '' }), false);
 });
 
 if (failures.length) {

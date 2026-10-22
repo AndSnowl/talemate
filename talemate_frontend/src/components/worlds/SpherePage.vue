@@ -21,6 +21,7 @@
             :drawer="drawer"
             :thing="thing"
             :territory="drawer.id === firstPlacesId ? territory : []"
+            :timeline-elsewhere="drawer.type === 'events' && drawer.id !== firstEventsId ? firstEventsTitle : null"
             @edit="startEdit(drawer)"
         >
             <template v-if="form && form.id === drawer.id" #form>
@@ -91,6 +92,13 @@ export default {
         },
         hasEvents() {
             return this.sphere.drawers.some((drawer) => drawer.type === 'events');
+        },
+        // the Timeline shows once, under the first events drawer
+        firstEventsId() {
+            return this.sphere.drawers.find((drawer) => drawer.type === 'events')?.id || null;
+        },
+        firstEventsTitle() {
+            return this.sphere.drawers.find((drawer) => drawer.id === this.firstEventsId)?.title || '';
         },
         firstPlacesId() {
             return this.sphere.drawers.find((drawer) => drawer.type === 'places')?.id || null;

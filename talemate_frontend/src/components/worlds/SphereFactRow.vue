@@ -19,7 +19,7 @@
             </template>
         </div>
         <div v-if="editing" class="my-2">
-            <ThingFactForm :form="editor.form()" :categories="editor.categories()" :busy="editor.busy()" @save="editor.save()" @cancel="editor.cancel()" @remove="editor.remove(fact)" />
+            <ThingFactForm :form="editor.form()" :categories="[editor.form().category]" :busy="editor.busy()" @save="editor.save()" @cancel="editor.cancel()" @remove="editor.remove(fact)" />
         </div>
     </div>
 </template>
@@ -33,7 +33,8 @@ import ThingFactForm from './ThingFactForm.vue';
 // any `actions` ("End this…"), Edit and Remove. Edit opens the thing
 // page's own fact form (`factEditor`, provided by ThingPage) under the
 // row: a correction keeps the fact's links by position and, for a
-// statement, its drawer. A fact the page doesn't own (a branch's
+// statement, its drawer; its category stays what it is (a place sphere's
+// own categories don't list a sphere's). A fact the page doesn't own (a branch's
 // inherited one) gets no Edit or Remove.
 export default {
     name: 'SphereFactRow',

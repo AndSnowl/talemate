@@ -417,3 +417,27 @@ export function searchReferences(targets, query, limit = 8) {
         })
         .slice(0, limit);
 }
+
+function isFormYear(value) {
+    return Number.isInteger(value) && value >= 1 && value <= 9999;
+}
+
+function isBlank(value) {
+    return value === null || value === undefined || value === '';
+}
+
+// Whether a fact form (`{mode, text, category, fromYear, untilYear}`, as
+// ThingFactForm edits it) can be saved: some text, a category, each year
+// empty or a year, the end after the start. A `timeline` fact (a
+// sphere's) is a dated moment: it needs its year.
+export function factFormValid(form) {
+    const { text, category, fromYear, untilYear } = form;
+    const yearOk = (value) => isBlank(value) || isFormYear(value);
+    if (!text?.trim() || !category || !yearOk(fromYear) || !yearOk(untilYear)) {
+        return false;
+    }
+    if (category === 'timeline' && form.mode !== 'override' && !isFormYear(fromYear)) {
+        return false;
+    }
+    return !(isFormYear(fromYear) && isFormYear(untilYear) && untilYear <= fromYear);
+}

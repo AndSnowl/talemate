@@ -114,7 +114,8 @@ export default {
         },
         // refused (an error, and no reply replaced the page): the refusal
         // shows. The store's spinner stops before the page's prop is
-        // replaced, so only an error tells a refusal apart.
+        // replaced, so only an error tells a refusal apart; sending clears
+        // any older one, so it's this request's.
         busy(now) {
             if (!now && this.editing?.sent && this.worlds.error) {
                 this.editing = { ...this.editing, sent: false, refused: this.worlds.error };
@@ -137,10 +138,12 @@ export default {
             }
         },
         save() {
+            this.worlds.clearError();
             this.worlds.setPartOf(this.thing.id, this.editing.sphereId, this.editing.drawerId);
             this.editing = { ...this.editing, sent: true, refused: null };
         },
         takeOut() {
+            this.worlds.clearError();
             this.worlds.setPartOf(this.thing.id, null);
             this.editing = { ...this.editing, sent: true, refused: null };
         },
