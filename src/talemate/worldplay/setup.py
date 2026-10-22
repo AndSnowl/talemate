@@ -818,10 +818,14 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             }
         )
 
+    # the final place shows as the place, never again as pulled in: a
+    # setup edited or continued after planning may have made a place
+    # sphere pulled in its place (ruling P10)
+    place_id = setup.place.thing_id if setup.place is not None else None
     state: dict[str, object] = {
         "intro": setup.intro,
         "characters": entries,
-        "pulled_in": list(setup.pulled_in),
+        "pulled_in": [thing_id for thing_id in setup.pulled_in if thing_id != place_id],
     }
     if setup.place is not None:
         if setup.place.thing_id is not None:

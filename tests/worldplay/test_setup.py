@@ -1296,3 +1296,30 @@ async def test_plan_scene_pulls_in_a_named_place_sphere(world, spheres_world):
     )
     assert setup.place == SetupRef(thing_id=s.tsardom)
     assert setup.pulled_in == []
+
+
+async def test_start_scene_leaves_its_place_out_of_pulled_in(world, spheres_world):
+    """A setup edited (or continued) after planning whose place became a
+    place sphere it also pulled in starts with that sphere as its place
+    only: never pulled in too (Task 7 parked item (a))."""
+
+    s = spheres_world
+    setup = await plan_scene(
+        world,
+        "Vasha keeps the vigil at Dawn Peak, far from the Tsardom",
+        {"Dawn Peak": s.dawn_peak, "the Tsardom": s.tsardom},
+        s.vasha,
+        WorldDate.of(1020),
+        None,
+        reply=VIGIL_REPLY,
+    )
+    assert setup.pulled_in == [s.tsardom]
+    # the owner moves the scene to the Tsardom
+    setup.place = SetupRef(thing_id=s.tsardom)
+
+    async with MockClientContext():
+        scene_id = await start_scene(world, setup, None)
+
+    record = world.scenes().get(scene_id)
+    assert record.state["place_thing_id"] == s.tsardom
+    assert record.state["pulled_in"] == []
