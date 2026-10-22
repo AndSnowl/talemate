@@ -103,7 +103,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `preview_branch_failed`); `accept_sphere {preview}` writes either.
   `fill_drawer {sphere_id, drawer_id}` answers `{sphere_id, drawer_id,
   items}` (or `fill_failed`) and `accept_fill {sphere_id, drawer_id,
-  items}` writes them. `set_drawers {sphere_id, drawers}`, `set_part_of
+  items}` writes them. `add_statement {sphere_id, drawer_id, text, picks,
+  new_names, spans, at}` writes a statement by hand into a drawer that
+  holds items (own or inherited; not Unsorted), linked like `add_fact`,
+  and answers with the sphere, its prose refreshed. `set_drawers {sphere_id, drawers}`, `set_part_of
   {thing_id, sphere_id|null, drawer_id}`, `set_ties {character_id, ties:
   [{sphere_id, role, since, until}]}`, `add_exception {character_id,
   sphere_id, text, rejects: {thing_id}|{fact_id}|null}` and `end_item
@@ -508,6 +511,20 @@ class AddExceptionPayload(pydantic.BaseModel):
     new_names: list[str] = pydantic.Field(default_factory=list)
     spans: list[LinkSpan] = pydantic.Field(default_factory=list)
     at: dict | None = None
+
+
+class AddStatementPayload(pydantic.BaseModel):
+    sphere_id: str
+    drawer_id: str
+    text: str
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
+    at: dict | None = None
+
+
+# the drawer types a statement written by hand can go in
+STATEMENT_DRAWER_TYPES = ("places", "practices", "beliefs", "knowledge", "structure")
 
 
 class PreviewBranchPayload(pydantic.BaseModel):
@@ -1907,6 +1924,47 @@ class WorldsPlugin(Plugin):
         with world.revision(Source.manual()) as rev:
             rev.add_fact(payload.character_id, "ties", text, origin=origin)
         self._edited("add_exception", payload.character_id, at)
+
+    async def handle_add_statement(self, data: dict):
+        """Write a statement by hand into one of a sphere's drawers (its
+        own or inherited) that holds items: a `statement` fact of the
+        sphere, undated, its drawer as its origin, as Fill and creation
+        write one (`worldplay.spheres`). The text is linked like
+        `add_fact`'s. Not people, events, branches or Unsorted. A fact of
+        the sphere feeds its prose, which is refreshed."""
+
+        payload = AddStatementPayload(**data)
+        world = self._require_world()
+        self._require_sphere(world, payload.sphere_id)
+        drawer = next(
+            (
+                d
+                for d in spheres.drawers(world.view(), payload.sphere_id)
+                if d.id == payload.drawer_id
+            ),
+            None,
+        )
+        if drawer is None:
+            raise ValueError(f"the sphere has no drawer {payload.drawer_id}")
+        if drawer.type not in STATEMENT_DRAWER_TYPES:
+            raise ValueError(f"a {drawer.type} drawer holds no statements")
+        if not payload.text.strip():
+            raise ValueError("a statement needs some text")
+        at = _date_in(payload.at)
+        text = self._linked(
+            world,
+            payload.sphere_id,
+            payload.text.strip(),
+            payload.picks,
+            at,
+            payload.new_names,
+            payload.spans,
+        )
+        with world.revision(Source.manual()) as rev:
+            rev.add_fact(
+                payload.sphere_id, "statement", text, origin={"drawer": drawer.id}
+            )
+        self._edited("add_statement", payload.sphere_id, at)
 
     async def handle_preview_branch(self, data: dict):
         """A branch of a sphere, in the background: answers

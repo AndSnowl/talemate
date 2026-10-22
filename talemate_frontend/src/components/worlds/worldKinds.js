@@ -98,14 +98,14 @@ export const TOP_KINDS = WORLD_KINDS.filter((k) => !k.nested);
 export const STUBS_TAB = { kind: 'stubs', label: 'Stubs', icon: 'mdi-help-circle-outline' };
 
 // the kinds a stub's kind can be changed to: races and mixes are made from
-// their species page, so a stub isn't guessed as one
-export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'sphere', 'culture'];
+// their species page, so a stub isn't guessed as one; a culture is a
+// legacy kind (a culture is a sphere now)
+export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'sphere'];
 
-// Why a stub of `kind` can't be expanded here (null when it can): a culture
-// waits for the cultures slice; a race or mix needs its species (or
-// parents), which only its species page's create box gives it.
+// Why a stub of `kind` can't be expanded here (null when it can): a race
+// or mix needs its species (or parents), which only its species page's
+// create box gives it.
 const NO_EXPAND_NOTES = {
-    culture: 'Cultures arrive in the next slice',
     race: 'Make it from its species page',
     mix: 'Make it from its species page',
 };
@@ -117,6 +117,12 @@ export function expandNote(kind) {
 // Whether a stub of `kind` can be expanded from its card or the Stubs tab.
 export function canExpand(kind) {
     return !expandNote(kind);
+}
+
+// What expanding a stub of `kind` is called: a legacy culture stub is
+// made a culture sphere (`worlds.expandStub`).
+export function expandLabel(kind) {
+    return kind === 'culture' ? 'Make it a sphere…' : 'Expand';
 }
 
 // the kinds a character's heritage can be (`talemate.world.kinds.HERITAGE_KINDS`)
@@ -234,4 +240,27 @@ export function tieLead(role) {
 // unchanged as inherited).
 export function drawersPayload(drawers) {
     return (drawers || []).filter((drawer) => drawer.id !== UNSORTED).map(({ id, type, title }) => ({ id, type, title }));
+}
+
+// `drawersPayload(drawers)` with the own drawer `id` moved `delta` (-1 up,
+// 1 down) among the sphere's own drawers, inherited ones kept after them;
+// null when it can't move that way.
+export function drawersMoved(drawers, id, delta) {
+    const own = (drawers || []).filter((d) => !d.inherited && d.id !== UNSORTED).map((d) => d.id);
+    const payload = drawersPayload(drawers);
+    const mine = payload.filter((d) => own.includes(d.id));
+    const rest = payload.filter((d) => !own.includes(d.id));
+    const index = mine.findIndex((d) => d.id === id);
+    const to = index + delta;
+    if (index < 0 || to < 0 || to >= mine.length) {
+        return null;
+    }
+    [mine[index], mine[to]] = [mine[to], mine[index]];
+    return [...mine, ...rest];
+}
+
+// `drawersPayload(drawers)` without the drawer `id` (its items show under
+// Unsorted then).
+export function drawersDropped(drawers, id) {
+    return drawersPayload(drawers).filter((d) => d.id !== id);
 }

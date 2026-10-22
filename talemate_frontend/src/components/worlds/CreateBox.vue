@@ -156,6 +156,7 @@
             :preview="spherePreview"
             class="mt-3"
             @accept="worlds.acceptSphere({ name: $event })"
+            @accept-into="worlds.acceptSphere({ name: $event.name, stub_id: $event.stubId })"
             @regenerate="worlds.regenerateSpherePreview()"
             @discard="worlds.discardSpherePreview()"
         />
@@ -209,25 +210,7 @@
                 <span class="text-muted">Part of</span> {{ partOfName }} <span class="text-muted">— {{ partOfDrawer }}</span>
             </div>
 
-            <!-- a character's proposed ties: each, and each "but…", can be
-                 dropped before accepting -->
-            <template v-if="preview.ties && preview.ties.length">
-                <div class="text-caption text-muted text-uppercase mt-3">Ties</div>
-                <div v-for="(tie, tieIndex) in preview.ties" :key="tie.sphere_id + tieIndex" class="preview-tie" data-testid="preview-tie">
-                    <div class="d-flex align-center ga-1">
-                        <span class="flex-grow-1">{{ tieLead(tie.role) }} <span class="tie-sphere">{{ tie.sphere }}</span><span v-if="tie.since" class="text-muted"> · since {{ formatDate(worlds.calendar, tie.since) }}</span></span>
-                        <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Drop tie" @click="worlds.dropPreviewTie(tieIndex)"></v-btn>
-                    </div>
-                    <template v-if="tie.exceptions.length">
-                        <div class="but"><i>but…</i></div>
-                        <div v-for="(exception, index) in tie.exceptions" :key="index" class="but d-flex align-center ga-1" data-testid="preview-tie-exception">
-                            <span class="flex-grow-1">– {{ exception.text }} <span class="text-muted">(departs from {{ exception.item }})</span></span>
-                            <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Drop exception" @click="worlds.dropPreviewException(tieIndex, index)"></v-btn>
-                        </div>
-                    </template>
-                    <div v-else class="but text-muted">no exceptions</div>
-                </div>
-            </template>
+            <CharacterTiesPreview :preview="preview" />
 
             <!-- what it inherits, each ticked as kept: unticking one the
                  model missed marks it replaced by one of the preview's own -->
@@ -284,8 +267,9 @@
 <script>
 import { defaultOverrideIndex, heritageFromMatches, previewSegments, sameParents, useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
-import { SPHERE_TEMPLATES, UNSORTED, kindInfo, templateInfo, tieLead } from './worldKinds.js';
+import { SPHERE_TEMPLATES, UNSORTED, kindInfo, templateInfo } from './worldKinds.js';
 import { NEW_THING, linkPayload, pickedId, repicks } from './nameHighlights.js';
+import CharacterTiesPreview from './CharacterTiesPreview.vue';
 import HeritagePicker from './HeritagePicker.vue';
 import LinkedText from './LinkedText.vue';
 import NameHighlightInput from './NameHighlightInput.vue';
@@ -348,7 +332,7 @@ function yearDate(year) {
 // stub's preview the sphere it joins (`part_of`).
 export default {
     name: 'CreateBox',
-    components: { HeritagePicker, LinkedText, NameHighlightInput, SpherePreviewCard },
+    components: { CharacterTiesPreview, HeritagePicker, LinkedText, NameHighlightInput, SpherePreviewCard },
     props: {
         kind: { type: String, required: true },
         // `{species}` for a race, `{parents}` for a mix
@@ -544,7 +528,7 @@ export default {
                     // a sphere stub's guessed template
                     if (this.isSphere) {
                         const listed = (this.worlds.things.sphere || []).find((thing) => thing.id === stub.id);
-                        this.template = listed?.template || this.template;
+                        this.template = stub.was === 'culture' ? 'culture' : listed?.template || null;
                     }
                 }
             },
@@ -644,7 +628,6 @@ export default {
     methods: {
         formatDate,
         previewSegments,
-        tieLead,
         // the box goes on as a plain one: a preview made from the stub goes
         notFromStub() {
             if (this.mine) {
@@ -842,24 +825,6 @@ export default {
     color: rgb(var(--v-theme-date));
 }
 
-.preview-tie {
-    border: 1px solid rgb(var(--v-theme-border));
-    border-radius: 6px;
-    padding: 6px 10px;
-    margin: 6px 0;
-}
-
-.preview-tie .v-btn {
-    flex: none;
-}
-
-.tie-sphere {
-    color: rgb(var(--v-theme-link));
-}
-
-.but {
-    margin: 2px 0 0 14px;
-}
 
 .ai-context :deep(.v-expansion-panel) {
     background: transparent;

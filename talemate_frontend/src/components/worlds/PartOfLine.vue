@@ -11,7 +11,7 @@
             <v-btn v-if="!editing" icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit part of" data-testid="part-of-edit" @click="startEdit"></v-btn>
         </div>
 
-        <div v-if="editing" class="editor d-flex align-center flex-wrap ga-2 mt-1" data-testid="part-of-form">
+        <div v-if="editing" class="editor d-flex align-center flex-wrap ga-2 mt-1" data-testid="part-of-form" @keydown.esc="editing = null">
             <v-autocomplete
                 v-model="editing.sphereId"
                 :items="sphereOptions"
@@ -112,9 +112,11 @@ export default {
                 this.editing = null;
             }
         },
-        // refused (no reply replaced the page): the refusal shows
+        // refused (an error, and no reply replaced the page): the refusal
+        // shows. The store's spinner stops before the page's prop is
+        // replaced, so only an error tells a refusal apart.
         busy(now) {
-            if (!now && this.editing?.sent) {
+            if (!now && this.editing?.sent && this.worlds.error) {
                 this.editing = { ...this.editing, sent: false, refused: this.worlds.error };
                 this.worlds.clearError();
             }

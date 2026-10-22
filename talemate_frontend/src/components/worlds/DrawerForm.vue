@@ -1,5 +1,5 @@
 <template>
-    <div class="drawer-form pa-2" data-testid="drawer-form">
+    <div class="drawer-form pa-2" data-testid="drawer-form" @keydown.esc="$emit('cancel')">
         <div v-if="!form.id" class="d-flex align-center flex-wrap ga-2 mb-2">
             <span class="text-caption text-muted">Type</span>
             <v-btn-toggle v-model="form.type" density="compact" variant="outlined" divided class="types" data-testid="drawer-form-type">
@@ -17,7 +17,6 @@
                 class="title-field"
                 :disabled="busy"
                 @keydown.enter="$emit('save')"
-                @keydown.esc="$emit('cancel')"
             ></v-text-field>
             <v-btn color="accent" variant="flat" size="small" :loading="busy" :disabled="!form.title.trim() || !form.type" @click="$emit('save')">Save</v-btn>
             <v-btn variant="text" size="small" :disabled="busy" @click="$emit('cancel')">Cancel</v-btn>

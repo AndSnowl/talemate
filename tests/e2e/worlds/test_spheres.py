@@ -13,6 +13,8 @@ What the page sends is read back from a websocket spy.
 
 from __future__ import annotations
 
+from playwright.sync_api import expect
+
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_connections_create import _opened, _wait_sent
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
@@ -214,6 +216,45 @@ def test_sphere_page_drawers_and_fill(app, page, fixed_sphere):
     _drawer_of(thing, "Core Doctrines").wait_for(state="visible", timeout=TIMEOUT_MS)
     retitled = _sent(page, "set_drawers")[-1]["drawers"][0]
     assert retitled == {"id": DOCTRINES, "type": "beliefs", "title": "Core Doctrines"}
+
+    # a statement written by hand into a drawer
+    doctrines = _drawer_of(thing, "Core Doctrines")
+    doctrines.get_by_test_id("drawer-add").click()
+    add = doctrines.get_by_test_id("drawer-add-form")
+    add.get_by_label("Statement").fill("Light is purity.")
+    add.get_by_role("button", name="Add", exact=True).click()
+    statement = doctrines.get_by_test_id("drawer-item").filter(
+        has_text="Light is purity."
+    )
+    statement.wait_for(state="visible", timeout=TIMEOUT_MS)
+    sent = _sent(page, "add_statement")[-1]
+    assert (sent["drawer_id"], sent["text"]) == (DOCTRINES, "Light is purity.")
+
+    # corrected where it shows, and kept in its drawer
+    statement.get_by_test_id("sphere-fact-edit").click()
+    form = doctrines.get_by_test_id("fact-form")
+    form.get_by_label("Fact", exact=True).fill("Light is purity itself.")
+    form.get_by_role("button", name="Save").click()
+    doctrines.get_by_test_id("drawer-item").filter(
+        has_text="Light is purity itself."
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    # a timeline row too
+    timeline = thing.get_by_test_id("sphere-timeline")
+    row = timeline.get_by_test_id("timeline-row").filter(has_text="Declared")
+    row.get_by_test_id("sphere-fact-edit").click()
+    form = timeline.get_by_test_id("fact-form")
+    form.get_by_label("Fact", exact=True).fill("Declared the change a purification.")
+    form.get_by_role("button", name="Save").click()
+    timeline.get_by_test_id("timeline-row").filter(
+        has_text="Declared the change a purification."
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "994" in timeline.inner_text()
+
+    # neither is listed again among the facts
+    facts = thing.get_by_test_id("fact-row")
+    assert facts.filter(has_text="Light is purity").count() == 0
+    assert facts.filter(has_text="Declared the change").count() == 0
     assert page.console_errors == []
 
 
@@ -458,7 +499,7 @@ def test_ties_with_exceptions(app, page, fixed_preview):
     proposed.filter(has_text="Kalmara Postal Service").get_by_role(
         "button", name="Drop tie"
     ).click()
-    assert proposed.count() == 1
+    expect(proposed).to_have_count(1)
     preview.get_by_role("button", name="Accept").click()
     marfa = _opened(page, "Marfa")
     ties = marfa.get_by_test_id("ties-section")
@@ -646,4 +687,105 @@ def test_end_item(app, page):
         state="visible", timeout=TIMEOUT_MS
     )
     assert "1015" in timeline.inner_text()
+    assert page.console_errors == []
+
+
+BRANCHES = "b4a2c4e5"
+
+
+def test_part_of_editor_and_new_branch(app, page, fixed_sphere):
+    name = _world_name("Branches")
+    dawn = {
+        **WHITE_DAWN,
+        "fields": {
+            **WHITE_DAWN["fields"],
+            "drawers": [
+                *WHITE_DAWN["fields"]["drawers"],
+                _drawer(BRANCHES, "branches", "Schisms"),
+            ],
+        },
+    }
+    reformed = {
+        "kind": "sphere",
+        "name": "The Reformed Dawn",
+        "fields": {"template": "religion", "drawers": []},
+        "links": {"parent": "The White Dawn"},
+    }
+    seed_fm_world(app.root, name, present_year=1026, things=[dawn, COUNCIL, reformed])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+
+    # the council moves from Hierarchy to Doctrines
+    page.get_by_test_id("kind-lore").click()
+    council = _open_thing(page, "The Council of Elders")
+    part_of = council.get_by_test_id("part-of")
+    assert "Hierarchy" in part_of.inner_text()
+    part_of.get_by_test_id("part-of-edit").click()
+    editor = part_of.get_by_test_id("part-of-form")
+    editor.get_by_test_id("part-of-drawer").locator(".v-field").click()
+    # only the drawers a lore entry may go in, and Unsorted
+    options = page.get_by_role("option")
+    expect(options).to_have_count(4)
+    assert "Holy Sites" not in " ".join(options.all_inner_texts())
+    page.get_by_role("option", name="Doctrines").click()
+    editor.get_by_role("button", name="Save").click()
+    part_of.filter(has_text="Doctrines").wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(editor).to_have_count(0)
+
+    # a sphere can't be part of its own branch: the refusal shows
+    council.get_by_role("button", name="Back").click()
+    sphere = _sphere_card(page, "The White Dawn")
+    part_of = sphere.get_by_test_id("part-of")
+    part_of.get_by_test_id("part-of-edit").click()
+    editor = part_of.get_by_test_id("part-of-form")
+    editor.get_by_test_id("part-of-sphere").locator(".v-field").click()
+    page.get_by_role("option", name="The Reformed Dawn").click()
+    editor.get_by_role("button", name="Save").click()
+    refused = editor.get_by_test_id("part-of-refused")
+    refused.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "inside it" in refused.inner_text()
+    assert "no sphere" in part_of.inner_text()
+    editor.get_by_role("button", name="Cancel").click()
+    editor.wait_for(state="hidden", timeout=TIMEOUT_MS)
+
+    # "+ New branch": a prompt, the preview in the drawer, then the branch
+    schisms = _drawer_of(sphere, "Schisms")
+    assert "The Reformed Dawn" in schisms.inner_text()
+    fixed_sphere(
+        {
+            "branch": {
+                "name": "The Forge Dawn",
+                "summary": "Smiths who keep the Dawn at the anvil.",
+                "aka": [],
+                "timeline": [],
+                "drawers": [],
+                "drops": [],
+                "items": [{"drawer": "Doctrines", "text": "The forge is a dawn too."}],
+                "names": [],
+            }
+        }
+    )
+    schisms.get_by_test_id("drawer-add").click()
+    schisms.get_by_label("Describe the branch").fill("the smiths' Dawn")
+    schisms.get_by_role("button", name="Preview").click()
+    preview = schisms.get_by_test_id("sphere-preview")
+    preview.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert _sent(page, "preview_branch")[-1]["prompt"] == "the smiths' Dawn"
+    # the owner rejects the council for this branch
+    preview.get_by_test_id("branch-parent-item").filter(
+        has_text="The Council of Elders"
+    ).get_by_role("checkbox").uncheck()
+    preview.get_by_role("button", name="Accept").click()
+    branch = _opened(page, "The Forge Dawn")
+    branch.get_by_test_id("sphere-parent").filter(has_text="The White Dawn").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    accepted = _sent(page, "accept_sphere")[-1]["preview"]
+    assert len(accepted["drops"]) == 1
+    doctrines = _drawer_of(branch, "Doctrines")
+    assert "The forge is a dawn too." in doctrines.inner_text()
+    assert (
+        "The Council of Elders" not in branch.get_by_test_id("sphere-page").inner_text()
+    )
     assert page.console_errors == []

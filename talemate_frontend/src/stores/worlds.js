@@ -309,7 +309,25 @@ const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'se
 
 // sphere edits: each answers with the thing it changed, which may not be
 // the open page
-const SPHERE_EDITS = ['set_drawers', 'set_part_of', 'set_ties', 'add_exception', 'end_item', 'accept_fill'];
+const SPHERE_EDITS = ['set_drawers', 'set_part_of', 'set_ties', 'add_exception', 'end_item', 'accept_fill', 'add_statement'];
+
+// what a sphere page shows in its drawers, Timeline and summary rather
+// than among its facts
+const SPHERE_FACT_CATEGORIES = ['statement', 'timeline', 'about'];
+
+// The facts a thing page lists under Facts: on a sphere page (a place
+// sphere too) not its statements, timeline and about facts, which show
+// (and are edited) where they belong; on a character's not its "but…"
+// exceptions, which its Ties show.
+export function listedFacts(thing) {
+    const exceptions = new Set((thing?.ties || []).flatMap((tie) => tie.exceptions.map((e) => e.fact_id)));
+    return (thing?.facts || []).filter(
+        (fact) => !exceptions.has(fact.fact_id) && !(thing.sphere && SPHERE_FACT_CATEGORIES.includes(fact.category)),
+    );
+}
+
+// the message when a character is tied from a sphere it's tied to already
+export const ALREADY_TIED = 'already tied; edit the tie on its page';
 
 // A wire date as a request takes it (no label), or null.
 export function dateIn(date) {
@@ -773,7 +791,10 @@ export const useWorldsStore = defineStore('worlds', {
         // dropped unasked: the stub waits in `expandAsk` for the owner to
         // `confirmExpand` or `keepPreview`.
         expandStub(stub, { discard = false } = {}) {
-            const target = { id: stub.id, kind: stub.kind, name: stub.name };
+            // a culture (a legacy kind) is made a culture sphere
+            const target = stub.kind === 'culture'
+                ? { id: stub.id, kind: 'sphere', name: stub.name, was: 'culture' }
+                : { id: stub.id, kind: stub.kind, name: stub.name, ...(stub.was ? { was: stub.was } : {}) };
             if ((this.preview || this.spherePreview) && !discard) {
                 this.expandAsk = target;
                 return;
@@ -791,7 +812,9 @@ export const useWorldsStore = defineStore('worlds', {
         // the owner agreed to drop the preview: expand the stub waiting
         confirmExpand() {
             const stub = this.expandAsk;
-            if (stub) {
+            if (stub?.promote) {
+                this.makeSphere(stub, { discard: true });
+            } else if (stub) {
                 this.expandStub(stub, { discard: true });
             }
         },
@@ -809,11 +832,19 @@ export const useWorldsStore = defineStore('worlds', {
 
         // "Make it a sphere…": a stub is expanded as a sphere; a lore entry
         // or a place is promoted in the sphere create box
-        makeSphere(thing) {
+        // An unaccepted preview isn't dropped unasked (`expandAsk`, as
+        // `expandStub`).
+        makeSphere(thing, { discard = false } = {}) {
             if (thing.stub) {
-                this.expandStub({ id: thing.id, kind: 'sphere', name: thing.name });
+                this.expandStub({ id: thing.id, kind: 'sphere', name: thing.name, was: thing.kind }, { discard });
                 return;
             }
+            if ((this.preview || this.spherePreview) && !discard) {
+                this.expandAsk = { id: thing.id, kind: thing.kind, name: thing.name, promote: true };
+                return;
+            }
+            this.expandAsk = null;
+            this.cancelPreview();
             this.cancelSpherePreview();
             this.expanding = null;
             this.closeThing();
@@ -915,6 +946,19 @@ export const useWorldsStore = defineStore('worlds', {
             }
             this.pending = { ...this.pending, accept_fill: true };
             this.request('accept_fill', { sphere_id: fill.sphereId, drawer_id: fill.drawerId, items });
+        },
+
+        // a statement written by hand into one of a sphere's drawers;
+        // `links` as addFact's
+        addStatement(sphereId, drawerId, text, { picks = {}, newNames = [], spans = [] } = {}) {
+            this.pending = { ...this.pending, add_statement: true };
+            this.request('add_statement', {
+                sphere_id: sphereId,
+                drawer_id: drawerId,
+                text,
+                ...linkFields(picks, newNames, spans),
+                at: this.thingAt,
+            });
         },
 
         // the sphere's drawers, in order, as the page shows them (see
@@ -1175,10 +1219,15 @@ export const useWorldsStore = defineStore('worlds', {
             const { [character.id]: added, ...rest } = this.tieQueue;
             this.tieQueue = rest;
             const ties = tiesPayload(character.ties);
-            for (const tie of added) {
-                if (!ties.some((other) => other.sphere_id === tie.sphere_id)) {
-                    ties.push({ sphere_id: tie.sphere_id, role: tie.role || '', since: dateIn(tie.since), until: null });
-                }
+            const fresh = added.filter((tie) => !ties.some((other) => other.sphere_id === tie.sphere_id));
+            if (fresh.length < added.length) {
+                // tied already (an ended tie too): edited on its page
+                this.error = ALREADY_TIED;
+                this.clearPending('set_ties');
+                return;
+            }
+            for (const tie of fresh) {
+                ties.push({ sphere_id: tie.sphere_id, role: tie.role || '', since: dateIn(tie.since), until: null });
             }
             this.request('set_ties', { character_id: character.id, ties, at: null });
         },
@@ -1188,7 +1237,9 @@ export const useWorldsStore = defineStore('worlds', {
         // or tied from the page); a Fill's names, and linked text, may
         // make stubs
         sphereEdited(action, data) {
-            if (data.id === this.selectedThingId) {
+            // a reply comes as of the edit's date (end_item's, the
+            // latest): a page viewed as of another date is fetched again
+            if (data.id === this.selectedThingId && !this.thingAt) {
                 this.thing = data;
             } else {
                 this.refreshThing();

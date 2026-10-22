@@ -6,7 +6,9 @@
             <v-chip size="x-small" label variant="outlined">{{ preview.agent ? 'acts in the world' : 'a body of knowledge' }}</v-chip>
         </div>
 
-        <div v-if="preview.prose.description" class="summary mb-2">{{ preview.prose.description }}</div>
+        <div v-if="preview.prose.description" class="summary mb-2">
+            <LinkedText :segments="previewSegments(preview.prose.description, preview.new_names)" :text="preview.prose.description" />
+        </div>
 
         <template v-if="timeline.length || about.length">
             <div class="heading">Timeline</div>
@@ -47,6 +49,15 @@
 
         <div class="d-flex ga-2 mt-3">
             <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :loading="!!worlds.pending.accept_sphere" :disabled="!name.trim()" @click="$emit('accept', name.trim())">Accept</v-btn>
+            <v-btn
+                v-if="matchingStub"
+                color="accent"
+                variant="outlined"
+                size="small"
+                data-testid="sphere-fill-stub"
+                :disabled="!name.trim() || !!worlds.pending.accept_sphere"
+                @click="$emit('accept-into', { name: name.trim(), stubId: matchingStub.id })"
+            >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
             <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :disabled="!!worlds.pending.accept_sphere" @click="$emit('regenerate')">Regenerate</v-btn>
             <v-btn variant="outlined" size="small" :prepend-icon="branch ? 'mdi-close' : 'mdi-pencil'" :disabled="!!worlds.pending.accept_sphere" @click="$emit('discard')">{{ branch ? 'Discard' : 'Edit' }}</v-btn>
         </div>
@@ -70,8 +81,9 @@ const WRITTEN_TYPES = ['places', 'practices', 'beliefs', 'knowledge', 'structure
 // part of it that it files there (`adopted`); a drawer left empty is
 // filled later from the page. A branch also lists its parent's items,
 // each kept unless the owner unticks it (`worlds.setBranchKept`).
-// Accept emits the name; Regenerate and Edit (Discard, for a branch) are
-// the box's to handle.
+// Accept emits the name; "Fill the stub instead" (a sphere stub named like
+// it) emits `accept-into {name, stubId}`; Regenerate and Edit (Discard,
+// for a branch) are the box's to handle.
 export default {
     name: 'SpherePreviewCard',
     components: { LinkedText },
@@ -79,7 +91,7 @@ export default {
         preview: { type: Object, required: true },
         branch: { type: Boolean, default: false },
     },
-    emits: ['accept', 'regenerate', 'discard'],
+    emits: ['accept', 'accept-into', 'regenerate', 'discard'],
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -87,6 +99,16 @@ export default {
         return { name: this.preview.name };
     },
     computed: {
+        // a sphere stub named like it, which it can fill instead (not one
+        // it expands or a thing it promotes)
+        matchingStub() {
+            const id = this.preview.matching_stub_id;
+            if (!id || this.preview.stub_id || this.preview.promote_id) {
+                return null;
+            }
+            const listed = (this.worlds.things.sphere || []).find((thing) => thing.id === id);
+            return { id, name: listed?.name || this.preview.name };
+        },
         timeline() {
             return this.preview.facts.filter((fact) => fact.category === 'timeline');
         },

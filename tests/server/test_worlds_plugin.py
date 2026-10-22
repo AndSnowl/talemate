@@ -3590,3 +3590,96 @@ async def test_fixed_preview_carries_ties_and_part_of(plugin, tmp_path, monkeypa
     await _drain(plugin)
     expanded = _last(plugin, "preview_thing")["data"]
     assert expanded["part_of"] == {"sphere": church, "drawer": "unsorted"}
+
+
+async def test_add_statement(plugin, client):
+    """A statement written by hand into a drawer: a `statement` fact of
+    the sphere with the drawer as its origin, linked like `add_fact`'s
+    text, shown in that drawer; the sphere's prose is refreshed."""
+
+    s = await _open_sphere_world(plugin)
+    async with MockClientContext():
+        await _act(
+            plugin,
+            "add_statement",
+            sphere_id=s.dawn,
+            drawer_id=DOCTRINES,
+            text="Light is purity, as seen from Dawn Peak.",
+        )
+        assert not _errors(plugin)
+        assert plugin.tasks, "no prose task was scheduled"
+        await _drain(plugin)
+    dawn = _last(plugin, "add_statement")["data"]
+    assert dawn["id"] == s.dawn
+    doctrines = next(d for d in dawn["sphere"]["drawers"] if d["id"] == DOCTRINES)
+    item = doctrines["items"][-1]
+    assert item["name"] == "Light is purity, as seen from Dawn Peak."
+    assert any(seg["ref"] == s.peak for seg in item["segments"])
+    fact = next(
+        f for f in s.world.view().thing(s.dawn).facts if f.fact_id == item["fact_id"]
+    )
+    assert (fact.category, fact.origin, fact.valid_from) == (
+        "statement",
+        {"drawer": DOCTRINES},
+        None,
+    )
+    assert any(
+        i.fact_id == fact.fact_id and i.drawer_id == DOCTRINES
+        for i in spheres.items(s.world.view(), s.dawn)
+    )
+
+
+async def test_add_statement_to_a_branchs_inherited_drawer(plugin):
+    s = await _open_sphere_world(plugin)
+    await _act(
+        plugin,
+        "add_statement",
+        sphere_id=s.reformed,
+        drawer_id=DOCTRINES,
+        text="All owls are equal.",
+    )
+    assert not _errors(plugin)
+    reformed = _last(plugin, "add_statement")["data"]
+    doctrines = next(d for d in reformed["sphere"]["drawers"] if d["id"] == DOCTRINES)
+    assert doctrines["inherited"] is True
+    own = [i for i in doctrines["items"] if not i["inherited"]]
+    assert [i["name"] for i in own] == ["All owls are equal."]
+
+
+@pytest.mark.parametrize(
+    "drawer, sphere",
+    [
+        ("people", "dawn"),
+        ("events", "dawn"),
+        ("0badd0e5", "dawn"),
+        ("unsorted", "dawn"),
+        ("doctrines", "peak"),
+    ],
+)
+async def test_add_statement_refusals(plugin, drawer, sphere):
+    s = await _open_sphere_world(plugin)
+    people, events = "9e091e00", "e0e47500"
+    with s.world.revision(Source.manual(note="drawers")) as rev:
+        rev.set_field(
+            s.dawn,
+            "drawers",
+            [
+                _drawer(DOCTRINES, "beliefs", "Doctrines"),
+                _drawer(RITES, "practices", "Rites"),
+                _drawer(SITES, "places", "Holy Sites"),
+                _drawer(people, "people", "People"),
+                _drawer(events, "events", "Timeline"),
+            ],
+            None,
+        )
+    drawer_id = {"people": people, "events": events, "doctrines": DOCTRINES}.get(
+        drawer, drawer
+    )
+    sphere_id = {"dawn": s.dawn, "peak": s.peak}[sphere]
+    head = s.world.head_rev()
+    await _act(
+        plugin, "add_statement", sphere_id=sphere_id, drawer_id=drawer_id, text="X."
+    )
+    assert _errors(plugin)
+    assert not _replies(plugin, "add_statement")
+    assert s.world.head_rev() == head

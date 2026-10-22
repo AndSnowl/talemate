@@ -34,32 +34,37 @@
 
         <!-- items: entries part of the sphere, and its statements -->
         <template v-else>
-            <div v-if="!drawer.items.length && !fillShown" class="empty">
+            <div v-if="!drawer.items.length && !fill" class="empty">
                 Not written yet. Fill asks the AI for this drawer, from the page so far and everything part of it.
             </div>
             <template v-for="item in drawer.items" :key="item.thing_id || item.fact_id">
-                <div class="item d-flex align-center ga-2" :class="{ inherited: item.inherited }" data-testid="drawer-item">
-                    <span class="flex-grow-1">
-                        <template v-if="item.thing_id">
-                            <LinkedText :segments="[{ text: item.name, ref: item.thing_id, stub: item.stub }]" />
-                            <template v-if="item.segments.length"><span class="text-muted"> — </span><LinkedText :segments="item.segments" /></template>
-                        </template>
-                        <LinkedText v-else :segments="item.segments" :text="item.name" />
-                        <span v-if="item.inherited" class="text-caption text-muted ml-1">(inherited)</span>
-                    </span>
-                    <v-btn
-                        v-if="!item.inherited"
-                        icon="mdi-timer-off-outline"
-                        variant="text"
-                        size="x-small"
-                        density="comfortable"
-                        aria-label="End this…"
-                        title="End this…"
-                        data-testid="end-item"
-                        @click="startEnd(item)"
-                    ></v-btn>
-                </div>
-                <div v-if="ending && ending.key === itemKey(item)" class="inline-form d-flex align-center flex-wrap ga-2" data-testid="end-item-form">
+                <SphereFactRow :fact-id="item.inherited ? null : item.fact_id" class="item" :class="{ inherited: item.inherited }" data-testid="drawer-item">
+                    <template v-if="item.thing_id">
+                        <LinkedText :segments="[{ text: item.name, ref: item.thing_id, stub: item.stub }]" />
+                        <template v-if="item.segments.length"><span class="text-muted"> — </span><LinkedText :segments="item.segments" /></template>
+                    </template>
+                    <LinkedText v-else :segments="item.segments" :text="item.name" />
+                    <span v-if="item.inherited" class="text-caption text-muted ml-1">(inherited)</span>
+                    <template #actions>
+                        <v-btn
+                            v-if="!item.inherited"
+                            icon="mdi-timer-off-outline"
+                            variant="text"
+                            size="x-small"
+                            density="comfortable"
+                            aria-label="End this…"
+                            title="End this…"
+                            data-testid="end-item"
+                            @click="startEnd(item)"
+                        ></v-btn>
+                    </template>
+                </SphereFactRow>
+                <div
+                    v-if="ending && ending.key === itemKey(item)"
+                    class="inline-form d-flex align-center flex-wrap ga-2"
+                    data-testid="end-item-form"
+                    @keydown.esc="ending = null"
+                >
                     <v-text-field v-model.number="ending.year" label="Ended in (year)" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
                     <v-autocomplete
                         v-model="ending.by"
@@ -84,27 +89,7 @@
             </div>
         </template>
 
-        <!-- "+ Add": file an entry here, tie a character, or a new branch -->
-        <div v-if="adding" class="inline-form d-flex align-center flex-wrap ga-2" data-testid="drawer-add-form">
-            <template v-if="drawer.type === 'people'">
-                <v-autocomplete v-model="adding.characterId" :items="characterOptions" item-title="name" item-value="id" label="Character" density="compact" variant="outlined" hide-details class="picker"></v-autocomplete>
-                <v-text-field v-model="adding.role" label="Role" density="compact" variant="outlined" hide-details class="picker"></v-text-field>
-                <v-text-field v-model.number="adding.year" label="Since (year)" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year"></v-text-field>
-            </template>
-            <v-text-field
-                v-else-if="drawer.type === 'branches'"
-                v-model="adding.prompt"
-                label="Describe the branch"
-                placeholder="The Reformed Dawn, who reject the doctrine of snowy superiority…"
-                density="compact"
-                variant="outlined"
-                hide-details
-                class="flex-grow-1"
-            ></v-text-field>
-            <v-autocomplete v-else v-model="adding.thingId" :items="entryOptions" item-title="name" item-value="id" label="File an entry here" density="compact" variant="outlined" hide-details class="picker"></v-autocomplete>
-            <v-btn color="accent" variant="flat" size="small" :loading="addBusy" :disabled="!canSaveAdd" @click="saveAdd">{{ drawer.type === 'branches' ? 'Preview' : 'Add' }}</v-btn>
-            <v-btn variant="text" size="small" @click="adding = null">Cancel</v-btn>
-        </div>
+        <DrawerAddForm v-if="adding" :drawer="drawer" :thing="thing" @close="adding = false" />
 
         <!-- a new branch's preview -->
         <template v-if="drawer.type === 'branches'">
@@ -121,32 +106,18 @@
             />
         </template>
 
-        <!-- Fill's items, each kept unless unticked -->
-        <div v-if="fillShown" class="fill-preview mt-2 pa-2" data-testid="fill-preview">
-            <v-progress-linear v-if="fill.pending" indeterminate color="accent"></v-progress-linear>
-            <v-alert v-else-if="fill.error" type="error" variant="tonal" density="compact">{{ fill.error }}</v-alert>
-            <template v-else>
-                <div v-if="!fill.items.length" class="text-body-2 text-muted">Nothing new to add.</div>
-                <div v-for="(item, index) in fill.items" :key="index" class="d-flex align-center ga-2" data-testid="fill-item">
-                    <v-checkbox-btn v-model="kept[index]" density="compact" class="flex-grow-0" :aria-label="'Keep ' + (item.name || item.text)"></v-checkbox-btn>
-                    <span :class="{ dropped: !kept[index] }">
-                        <template v-if="item.name"><span class="linked-stub fresh">{{ item.name }}</span><span class="text-muted"> — </span></template>{{ item.text }}
-                    </span>
-                </div>
-            </template>
-            <div class="d-flex ga-2 mt-2">
-                <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!fill.items || !keptItems.length" :loading="!!worlds.pending.accept_fill" @click="worlds.acceptFill(keptItems)">Accept</v-btn>
-                <v-btn variant="outlined" size="small" :disabled="!!worlds.pending.accept_fill" @click="worlds.discardFill()">Discard</v-btn>
-            </div>
-        </div>
+        <FillPreview v-if="fill" :fill="fill" />
     </div>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, dateParts, formatDate } from './worldDates.js';
-import { PART_OF_KINDS, UNSORTED, drawerTypesFor } from './worldKinds.js';
+import { UNSORTED } from './worldKinds.js';
+import DrawerAddForm from './DrawerAddForm.vue';
+import FillPreview from './FillPreview.vue';
 import LinkedText from './LinkedText.vue';
+import SphereFactRow from './SphereFactRow.vue';
 import SpherePreviewCard from './SpherePreviewCard.vue';
 import SphereTimeline from './SphereTimeline.vue';
 
@@ -157,21 +128,23 @@ const ITEM_TYPES = ['places', 'practices', 'beliefs', 'knowledge', 'structure'];
 // One drawer of a sphere's page: its title and dashed type tag, and by
 // type:
 // - people: the ties pointing at it (read-only here; "+ Add" ties a
-//   character, from the character's side: `worlds.addTie`);
+//   character, from the character's side);
 // - events: the Timeline;
 // - branches: the sphere's branches, "+ New branch" and its preview;
 // - any other: its items (an entry part of the sphere, its name linked
 //   with its first fact, or a statement), each own one open to "End this…"
-//   (a date, and what ended it); an inherited item is dimmed, and ends in
-//   the sphere it comes from. Fill (asking the AI for more items, each
-//   kept unless unticked) and "+ Add" (filing an entry here). A places
-//   drawer may note the territory it holds besides its items.
+//   (a date, and what ended it), an own statement to Edit and Remove too
+//   (`SphereFactRow`); an inherited item is dimmed, and ends in the sphere
+//   it comes from. Fill (`FillPreview`: the AI's items, each kept unless
+//   unticked) and "+ Add" (`DrawerAddForm`: a statement, or an entry filed
+//   here). A places drawer may note the territory it holds besides its
+//   items.
 // Unsorted holds what's part of the sphere in no drawer it has: no Fill,
-// no editing. `edit` asks the page to open its drawer form, shown in the
-// `form` slot.
+// no "+ Add", no editing. `edit` asks the page to open its drawer form,
+// shown in the `form` slot.
 export default {
     name: 'SphereDrawer',
-    components: { LinkedText, SpherePreviewCard, SphereTimeline },
+    components: { DrawerAddForm, FillPreview, LinkedText, SphereFactRow, SpherePreviewCard, SphereTimeline },
     props: {
         drawer: { type: Object, required: true },
         // the sphere's thing payload
@@ -187,10 +160,8 @@ export default {
         return {
             // "End this…": `{key, year, by}`
             ending: null,
-            // "+ Add": `{characterId, role, year}`, `{prompt}` or `{thingId}`
-            adding: null,
-            // Fill's items, by index: kept unless unticked
-            kept: [],
+            // "+ Add" is open
+            adding: false,
         };
     },
     computed: {
@@ -219,14 +190,8 @@ export default {
             const fill = this.worlds.fill;
             return fill && fill.sphereId === this.sphereId && fill.drawerId === this.drawer.id ? fill : null;
         },
-        fillShown() {
-            return !!this.fill;
-        },
         filling() {
             return !!this.fill?.pending;
-        },
-        keptItems() {
-            return (this.fill?.items || []).filter((_item, index) => this.kept[index]);
         },
         branchOpen() {
             return this.worlds.branchPending || (this.worlds.branchPreview && this.worlds.branchRequest?.parentId === this.sphereId);
@@ -239,51 +204,11 @@ export default {
         byOptions() {
             return this.worlds.referenceTargets.filter((target) => !target.stub && target.id !== this.sphereId);
         },
-        characterOptions() {
-            const tied = new Set(this.sphere.people.map((person) => person.character_id));
-            return (this.worlds.things.character || []).filter((thing) => !tied.has(thing.id));
-        },
-        // entries this drawer may hold, not in it already, not the sphere
-        entryOptions() {
-            const types = (kind) => drawerTypesFor(kind).includes(this.drawer.type);
-            const held = new Set(this.drawer.items.map((item) => item.thing_id));
-            return this.worlds.referenceTargets.filter(
-                (target) => PART_OF_KINDS.includes(target.kind) && types(target.kind) && !held.has(target.id) && target.id !== this.sphereId,
-            );
-        },
-        addBusy() {
-            return !!(this.worlds.pending.set_part_of || this.worlds.pending.set_ties || this.worlds.branchPending);
-        },
-        canSaveAdd() {
-            const adding = this.adding;
-            if (!adding || this.addBusy) {
-                return false;
-            }
-            if (this.drawer.type === 'people') {
-                return !!adding.characterId && (adding.year === null || adding.year === '' || this.validYear(adding.year));
-            }
-            if (this.drawer.type === 'branches') {
-                return !!adding.prompt.trim();
-            }
-            return !!adding.thingId;
-        },
     },
     watch: {
-        // a new Fill reply: every item kept
-        'fill.items'(items) {
-            this.kept = (items || []).map(() => true);
-        },
-        // the page changed (an edit's reply): the forms are done
+        // the page changed (an edit's reply): "End this…" is done
         thing() {
             this.ending = null;
-            if (this.adding && this.drawer.type !== 'branches') {
-                this.adding = null;
-            }
-        },
-        'worlds.branchPending'(now, before) {
-            if (before && !now && this.drawer.type === 'branches') {
-                this.adding = null;
-            }
         },
     },
     methods: {
@@ -318,30 +243,7 @@ export default {
             this.worlds.endItem(this.sphereId, item, dateOf(this.ending.year), this.ending.by || null);
         },
         startAdd() {
-            if (this.drawer.type === 'people') {
-                this.adding = { characterId: null, role: '', year: null };
-            } else if (this.drawer.type === 'branches') {
-                this.adding = { prompt: '' };
-            } else {
-                this.adding = { thingId: null };
-            }
-        },
-        saveAdd() {
-            if (!this.canSaveAdd) {
-                return;
-            }
-            const adding = this.adding;
-            if (this.drawer.type === 'people') {
-                this.worlds.addTie(adding.characterId, {
-                    sphere_id: this.sphereId,
-                    role: adding.role.trim(),
-                    since: this.validYear(adding.year) ? dateOf(adding.year) : null,
-                });
-            } else if (this.drawer.type === 'branches') {
-                this.worlds.previewBranch(this.sphereId, adding.prompt.trim());
-            } else {
-                this.worlds.setPartOf(adding.thingId, this.sphereId, this.drawer.id);
-            }
+            this.adding = true;
         },
     },
 };
@@ -408,19 +310,4 @@ export default {
     max-width: 150px;
 }
 
-.fill-preview {
-    border: 1px solid rgb(var(--v-theme-border));
-    border-radius: 6px;
-}
-
-.dropped {
-    text-decoration: line-through;
-    color: rgb(var(--v-theme-muted));
-}
-
-.linked-stub {
-    color: rgb(var(--v-theme-foreign));
-    text-decoration: underline dashed;
-    text-underline-offset: 2px;
-}
 </style>

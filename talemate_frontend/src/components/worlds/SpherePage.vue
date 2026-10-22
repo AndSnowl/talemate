@@ -3,6 +3,13 @@
         <div v-if="summary" class="summary mb-1" data-testid="sphere-summary">
             <LinkedText :segments="(thing.prose_segments || {}).description" :text="summary" />
         </div>
+        <!-- what's known about it, undated -->
+        <div class="about mb-1" data-testid="sphere-about">
+            <SphereFactRow v-for="fact in about" :key="fact.fact_id" :fact-id="fact.fact_id" class="about-row" data-testid="about-row">
+                <LinkedText :segments="fact.segments" :text="fact.rendered" />
+            </SphereFactRow>
+            <SphereFactAdd category="about" anchor="about" label="Add about it" />
+        </div>
         <div v-if="sphere.parent" class="text-body-2 mb-1" data-testid="sphere-parent">
             <span class="text-muted">A branch of </span>
             <LinkedText :segments="[{ text: sphere.parent.name, ref: sphere.parent.id, stub: false }]" />
@@ -37,14 +44,17 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { drawersPayload } from './worldKinds.js';
+import { drawersDropped, drawersMoved, drawersPayload } from './worldKinds.js';
 import DrawerForm from './DrawerForm.vue';
 import LinkedText from './LinkedText.vue';
 import SphereDrawer from './SphereDrawer.vue';
+import SphereFactAdd from './SphereFactAdd.vue';
+import SphereFactRow from './SphereFactRow.vue';
 import SphereTimeline from './SphereTimeline.vue';
 
 // The sphere part of a thing's page (a sphere, or a place that took on a
-// template), following the approved mockup: the summary, the branch's
+// template), following the approved mockup: the summary and what's known
+// about it (its `about` facts, each editable, "+ Add about it"), the branch's
 // parent, the typed and titled drawers in order (`SphereDrawer`), and
 // "+ Add a drawer". Drawers are edited here and written whole
 // (`set_drawers`, every drawer the page shows): add one of any type with
@@ -54,7 +64,7 @@ import SphereTimeline from './SphereTimeline.vue';
 // drawer, the Timeline still shows below the drawers.
 export default {
     name: 'SpherePage',
-    components: { DrawerForm, LinkedText, SphereDrawer, SphereTimeline },
+    components: { DrawerForm, LinkedText, SphereDrawer, SphereFactAdd, SphereFactRow, SphereTimeline },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -74,6 +84,10 @@ export default {
         },
         summary() {
             return this.thing.prose?.description?.text || '';
+        },
+        // its undated `about` facts, under the summary
+        about() {
+            return this.thing.facts.filter((fact) => fact.category === 'about');
         },
         hasEvents() {
             return this.sphere.drawers.some((drawer) => drawer.type === 'events');
@@ -143,27 +157,22 @@ export default {
         },
         // `delta` -1 (up) or 1 (down), among the sphere's own drawers
         moveDrawer(drawer, delta) {
-            const drawers = drawersPayload(this.sphere.drawers);
-            const own = drawers.filter((d) => this.ownIds.includes(d.id));
-            const rest = drawers.filter((d) => !this.ownIds.includes(d.id));
-            const index = own.findIndex((d) => d.id === drawer.id);
-            const to = index + delta;
-            if (index < 0 || to < 0 || to >= own.length) {
-                return;
+            const moved = drawersMoved(this.sphere.drawers, drawer.id, delta);
+            if (moved) {
+                this.write(moved);
             }
-            [own[index], own[to]] = [own[to], own[index]];
-            this.write([...own, ...rest]);
         },
         // its items go to Unsorted, where the page shows them
         dropDrawer(drawer) {
-            this.write(drawersPayload(this.sphere.drawers).filter((d) => d.id !== drawer.id));
+            this.write(drawersDropped(this.sphere.drawers, drawer.id));
         },
     },
 };
 </script>
 
 <style scoped>
-.summary {
+.summary,
+.about-row {
     line-height: 1.5;
 }
 

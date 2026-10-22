@@ -1,5 +1,5 @@
 <template>
-    <div class="tie-form d-flex align-center flex-wrap ga-2" data-testid="tie-form">
+    <div class="tie-form d-flex align-center flex-wrap ga-2" data-testid="tie-form" @keydown.esc="$emit('cancel')">
         <v-select
             v-model="form.sphereId"
             :items="spheres"

@@ -32,7 +32,7 @@
             </template>
             <div v-else class="but text-muted">no exceptions</div>
 
-            <div v-if="exception && exception.sphereId === tie.sphere_id" class="but exception-form d-flex align-center flex-wrap ga-2 mt-1" data-testid="exception-form">
+            <div v-if="exception && exception.sphereId === tie.sphere_id" class="but exception-form d-flex align-center flex-wrap ga-2 mt-1" data-testid="exception-form" @keydown.esc="exception = null">
                 <v-text-field
                     v-model="exception.text"
                     label="But…"
@@ -66,7 +66,7 @@
 </template>
 
 <script>
-import { rejectableItems, tiesPayload, useWorldsStore } from '@/stores/worlds.js';
+import { dateIn, rejectableItems, tiesPayload, useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, dateParts, formatDate } from './worldDates.js';
 import { tieLead } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
@@ -127,14 +127,15 @@ export default {
                 this.exception = null;
             }
         },
-        // a save that failed (no reply replaced the page) keeps its form
+        // a save that failed keeps its form (the spinner stops before the
+        // page's prop is replaced, so only an error tells a failure apart)
         saving(now) {
-            if (!now && this.form?.sent) {
+            if (!now && this.form?.sent && this.worlds.error) {
                 this.form = { ...this.form, sent: false };
             }
         },
         'worlds.pending.add_exception'(now) {
-            if (!now && this.exception?.sent) {
+            if (!now && this.exception?.sent && this.worlds.error) {
                 this.exception = { ...this.exception, sent: false };
             }
         },
@@ -172,9 +173,21 @@ export default {
         },
         saveTie() {
             const form = this.form;
-            const year = (value) => (Number.isInteger(value) ? dateOf(value) : null);
+            const original = form.index === null ? null : this.ties[form.index];
+            // a year left as it was keeps the stored date (and its precision)
+            const year = (value, stored) => {
+                if (stored && yearOf(stored) === value) {
+                    return dateIn(stored);
+                }
+                return Number.isInteger(value) ? dateOf(value) : null;
+            };
             const ties = tiesPayload(this.ties);
-            const tie = { sphere_id: form.sphereId, role: form.role.trim(), since: year(form.since), until: year(form.until) };
+            const tie = {
+                sphere_id: form.sphereId,
+                role: form.role.trim(),
+                since: year(form.since, original?.since),
+                until: year(form.until, original?.until),
+            };
             if (form.index === null) {
                 ties.push(tie);
             } else {

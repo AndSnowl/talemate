@@ -140,7 +140,7 @@
                         <v-btn v-if="!form || form.factId" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
                     </div>
 
-                    <div v-if="form && !form.factId" class="mb-2">
+                    <div v-if="form && !form.factId && !form.anchor" class="mb-2">
                         <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" />
                     </div>
 
@@ -228,7 +228,7 @@
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
+import { listedFacts, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { HERITAGE_KINDS, INHERITING_KINDS, PART_OF_KINDS, canPromote, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
@@ -331,6 +331,26 @@ export default {
     setup() {
         return { worlds: useWorldsStore() };
     },
+    // the page's fact form, for the sphere part's own facts (drawer
+    // statements, Timeline rows, about facts: `SphereFactRow`,
+    // `SphereFactAdd`), which open it where they show
+    provide() {
+        return {
+            factEditor: {
+                form: () => this.form,
+                categories: () => this.categories,
+                busy: () => this.editing,
+                ownFact: (id) => (this.thing?.facts || []).find((fact) => fact.fact_id === id) || null,
+                edit: (fact) => this.startEdit(fact),
+                add: (category, anchor) => this.startAddIn(category, anchor),
+                save: () => this.saveForm(),
+                cancel: () => {
+                    this.form = null;
+                },
+                remove: (fact) => this.removeFact(fact),
+            },
+        };
+    },
     data() {
         return {
             asOfMenu: false,
@@ -395,11 +415,11 @@ export default {
         hasPartOf() {
             return PART_OF_KINDS.includes(this.thing?.kind);
         },
-        // the facts listed: not a character's "but…" exceptions, which its
-        // Ties show
+        // the facts listed (`listedFacts`): a sphere's statements, timeline
+        // and about facts, and a character's "but…" exceptions, show (and
+        // are edited) elsewhere on the page
         shownFacts() {
-            const exceptions = new Set((this.thing.ties || []).flatMap((tie) => tie.exceptions.map((e) => e.fact_id)));
-            return this.thing.facts.filter((fact) => !exceptions.has(fact.fact_id));
+            return listedFacts(this.thing);
         },
         stubOfPage() {
             const thing = this.thing;
@@ -601,6 +621,10 @@ export default {
         },
         startAdd() {
             this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
+        },
+        // an add form opened where a sphere shows that category (`anchor`)
+        startAddIn(category, anchor) {
+            this.form = { mode: 'add', category, anchor, text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
         },
         startEdit(fact) {
             const { text, links } = this.editState(fact);

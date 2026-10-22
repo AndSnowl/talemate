@@ -15,9 +15,11 @@ import {
     akaEveryday,
     akaRemoved,
     branchKept,
+    ALREADY_TIED,
     currentNameFrom,
     defaultOverrideIndex,
     heritageFromMatches,
+    listedFacts,
     pageAfterDelete,
     parseWorldTarget,
     previewSegments,
@@ -48,7 +50,10 @@ import {
     canExpand,
     canPromote,
     drawerTypesFor,
+    drawersDropped,
+    drawersMoved,
     drawersPayload,
+    expandLabel,
     expandNote,
     overrideCategory,
     partOfDrawers,
@@ -1124,14 +1129,24 @@ check('other routers are ignored', () => {
 
 // --- connections: kinds, other names, preview names, stubs ------------------
 
-check('events and items are kinds of their own; a culture stub waits', () => {
+check('events and items are kinds of their own; a culture stub is made a sphere', () => {
     const top = TOP_KINDS.map((k) => k.kind);
     assert.ok(top.includes('event') && top.includes('item'));
-    assert.ok(STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race'));
-    assert.equal(canExpand('culture'), false);
+    // a legacy kind: no stub is guessed one any more
+    assert.ok(!STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race'));
+    assert.equal(canExpand('culture'), true);
+    assert.equal(expandNote('culture'), null);
+    assert.equal(expandLabel('culture'), 'Make it a sphere…');
+    assert.equal(expandLabel('place'), 'Expand');
     assert.equal(canExpand('place'), true);
-    assert.equal(expandNote('culture'), 'Cultures arrive in the next slice');
     assert.equal(expandNote('place'), null);
+});
+
+check('expanding a culture stub expands it as a culture sphere', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.expandStub({ id: 'c1', kind: 'culture', name: 'Old Rite' });
+    assert.deepEqual(store.expanding, { id: 'c1', kind: 'sphere', name: 'Old Rite', was: 'culture' });
 });
 
 check('a race or mix stub is made from its species page, not expanded', () => {
@@ -1140,7 +1155,7 @@ check('a race or mix stub is made from its species page, not expanded', () => {
         assert.equal(canExpand(kind), false, kind);
         assert.equal(expandNote(kind), 'Make it from its species page');
     }
-    for (const kind of STUB_KINDS.filter((k) => k !== 'culture')) {
+    for (const kind of STUB_KINDS) {
         assert.equal(canExpand(kind), true, kind);
     }
 });
@@ -1550,7 +1565,7 @@ check('a sphere preview, then accept, opens the sphere and lists everything', ()
 
     // a stub is made a sphere by expanding it as one
     store.makeSphere({ id: 's2', kind: 'lore', name: 'Old Rite', stub: { ignored: false } });
-    assert.deepEqual(store.expanding, { id: 's2', kind: 'sphere', name: 'Old Rite' });
+    assert.deepEqual(store.expanding, { id: 's2', kind: 'sphere', name: 'Old Rite', was: 'lore' });
     store.previewSphere('culture', 'Old Rite', {}, { stubId: 's2' });
     assert.equal(sent.at(-1).stub_id, 's2');
 });
@@ -1697,6 +1712,106 @@ check('a failed sphere request stops its spinners', () => {
     assert.deepEqual([store.fill.pending, store.fill.error], [false, 'not a sphere']);
     assert.deepEqual(store.tieQueue, {});
     assert.equal(store.error, 'not a sphere');
+});
+
+check('a sphere page lists none of its statements, timeline or about facts; a character none of its exceptions', () => {
+    const facts = [
+        { fact_id: 'f1', category: 'statement' },
+        { fact_id: 'f2', category: 'timeline' },
+        { fact_id: 'f3', category: 'about' },
+        { fact_id: 'f4', category: 'description' },
+    ];
+    assert.deepEqual(listedFacts({ facts, sphere: { drawers: [] } }).map((f) => f.fact_id), ['f4']);
+    // not a sphere: every fact
+    assert.deepEqual(listedFacts({ facts, sphere: null }).map((f) => f.fact_id), ['f1', 'f2', 'f3', 'f4']);
+    const character = {
+        facts: [{ fact_id: 'e1', category: 'ties' }, { fact_id: 'b1', category: 'background' }],
+        sphere: null,
+        ties: [{ exceptions: [{ fact_id: 'e1' }] }],
+    };
+    assert.deepEqual(listedFacts(character).map((f) => f.fact_id), ['b1']);
+    assert.deepEqual(listedFacts(null), []);
+});
+
+check('a statement written into a drawer goes out with its links', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('dawn');
+    store.addStatement('dawn', 'd1', 'Light is purity.', { picks: { Peak: 'p1' }, spans: [] });
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'add_statement', sphere_id: 'dawn', drawer_id: 'd1',
+        text: 'Light is purity.', picks: { Peak: 'p1' }, at: null,
+    });
+    store.handleMessage(reply('add_statement', { id: 'dawn', kind: 'sphere', sphere: {} }));
+    assert.equal(store.thing.id, 'dawn');
+    assert.deepEqual(store.pending, {});
+});
+
+check('a sphere edit on a page viewed as of a date fetches it again', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('dawn', dateOf(1012));
+    store.handleMessage(reply('get_thing', { id: 'dawn', kind: 'sphere', at: dateOf(1012), sphere: {} }));
+    sent.length = 0;
+    store.handleMessage(reply('end_item', { id: 'dawn', kind: 'sphere', at: null, sphere: { latest: true } }));
+    assert.deepEqual(store.thing.sphere, {});
+    assert.deepEqual(sent[0], { type: 'worlds', action: 'get_thing', id: 'dawn', at: dateOf(1012) });
+});
+
+check('tying someone tied already asks for nothing and says why', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('dawn');
+    store.addTie('vasha', { sphere_id: 'dawn', role: 'elder' });
+    sent.length = 0;
+    const ended = { sphere_id: 'dawn', role: 'novice', since: null, until: dateOf(1012), exceptions: [] };
+    store.handleMessage(reply('get_thing', { id: 'vasha', kind: 'character', ties: [ended] }));
+    assert.equal(sent.some((m) => m.action === 'set_ties'), false);
+    assert.equal(store.error, ALREADY_TIED);
+    assert.deepEqual(store.pending, {});
+});
+
+check('"Make it a sphere…" asks before it drops an unaccepted preview', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('place', 'a town');
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {} }));
+    store.makeSphere({ id: 'l1', kind: 'lore', name: 'The Doctrine', stub: null });
+    assert.deepEqual(store.expandAsk, { id: 'l1', kind: 'lore', name: 'The Doctrine', promote: true });
+    assert.equal(store.promoting, null);
+    assert.equal(store.preview.name, 'Kalmara');
+    store.confirmExpand();
+    assert.deepEqual(store.promoting, { id: 'l1', kind: 'lore', name: 'The Doctrine' });
+    assert.equal(store.preview, null);
+    assert.equal(store.expandAsk, null);
+});
+
+check('a sphere preview named like a sphere stub can fill that stub instead', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewSphere('religion', 'a church');
+    store.handleMessage(reply('preview_sphere', { kind: 'sphere', name: 'The White Dawn', stub_id: null, matching_stub_id: 'w1' }));
+    store.acceptSphere({ name: 'The White Dawn', stub_id: 'w1' });
+    assert.equal(sent.at(-1).preview.stub_id, 'w1');
+});
+
+check("a sphere's own drawers move among themselves and drop; inherited ones stay after them", () => {
+    const drawers = [
+        { id: 'a', type: 'beliefs', title: 'A', inherited: false },
+        { id: 'b', type: 'practices', title: 'B', inherited: false },
+        { id: 'p', type: 'structure', title: 'P', inherited: true },
+        { id: 'unsorted', type: 'knowledge', title: 'Unsorted', inherited: false },
+    ];
+    assert.deepEqual(drawersMoved(drawers, 'b', -1).map((d) => d.id), ['b', 'a', 'p']);
+    assert.deepEqual(drawersMoved(drawers, 'a', 1).map((d) => d.id), ['b', 'a', 'p']);
+    // the first can't go up, the last own one can't go down past inherited
+    assert.equal(drawersMoved(drawers, 'a', -1), null);
+    assert.equal(drawersMoved(drawers, 'b', 1), null);
+    assert.equal(drawersMoved(drawers, 'p', -1), null);
+    assert.deepEqual(drawersDropped(drawers, 'a'), [
+        { id: 'b', type: 'practices', title: 'B' },
+        { id: 'p', type: 'structure', title: 'P' },
+    ]);
 });
 
 if (failures.length) {

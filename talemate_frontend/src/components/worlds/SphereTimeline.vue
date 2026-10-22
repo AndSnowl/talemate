@@ -1,10 +1,11 @@
 <template>
     <div class="sphere-timeline" data-testid="sphere-timeline">
-        <div v-if="!timeline.length" class="empty">Nothing dated yet. Add a timeline fact to start it.</div>
-        <div v-for="entry in timeline" :key="entry.fact_id" class="row d-flex ga-2">
+        <div v-if="!timeline.length" class="empty">Nothing dated yet.</div>
+        <SphereFactRow v-for="entry in timeline" :key="entry.fact_id" :fact-id="entry.fact_id" class="row" data-testid="timeline-row">
             <span class="year">{{ entry.date ? formatDate(worlds.calendar, entry.date) : '—' }}</span>
-            <span class="flex-grow-1"><LinkedText :segments="entry.segments" /></span>
-        </div>
+            <LinkedText :segments="entry.segments" />
+        </SphereFactRow>
+        <SphereFactAdd category="timeline" anchor="timeline" label="Add to the timeline" />
     </div>
 </template>
 
@@ -12,12 +13,17 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { formatDate } from './worldDates.js';
 import LinkedText from './LinkedText.vue';
+import SphereFactAdd from './SphereFactAdd.vue';
+import SphereFactRow from './SphereFactRow.vue';
 
 // A sphere's Timeline: its dated facts in date order (undated first, as
-// the backend gives them), each with its date, its names linked.
+// the backend gives them), each with its date, its names linked. Its own
+// rows can be edited and removed, and "+ Add to the timeline" adds one (a
+// `timeline` fact with a year); a branch's rows from its parent are read
+// only.
 export default {
     name: 'SphereTimeline',
-    components: { LinkedText },
+    components: { LinkedText, SphereFactAdd, SphereFactRow },
     props: {
         // the sphere payload's `timeline`: `[{fact_id, date, segments}]`
         timeline: { type: Array, required: true },
@@ -37,6 +43,8 @@ export default {
 
 .year {
     flex: none;
+    display: inline-block;
+    margin-right: 8px;
     min-width: 48px;
     font-variant-numeric: tabular-nums;
     color: rgb(var(--v-theme-date));
