@@ -253,6 +253,12 @@ context that crosses sections as naturally as species context already reaches ch
   automatic matching.
 - **Much later: asking the AI about your world.** This may need an instruct model.
 
+**Later, a quality-of-life item (owner, 2026-10-21): our own spell check.** Browsers don't expose their spell-check suggestions to a page, so the custom right-click menu can't show them. A spell checker of our own would:
+- show its suggestions in the custom menu;
+- accept every word the world knows: entries' names and other names, stubs, and later each culture's language words, so invented names are never flagged.
+
+It can be done whenever.
+
 **Order:** the owner decided (2026-10-21) that Connections is the next slice after plan B, ahead of cultures, because every section relies on it. It takes in "Named things that don't exist yet" above, and it overlaps with mention records (plan D).
 
 **Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
