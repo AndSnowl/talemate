@@ -3683,3 +3683,60 @@ async def test_add_statement_refusals(plugin, drawer, sphere):
     assert _errors(plugin)
     assert not _replies(plugin, "add_statement")
     assert s.world.head_rev() == head
+
+
+@pytest.mark.parametrize(
+    ("thing", "unread", "read"),
+    [
+        # a religion: its summary reads its `about` facts, never its timeline
+        ("dawn", "timeline", "about"),
+        # a place sphere: described from its place facts
+        ("tsardom", "timeline", "description"),
+    ],
+)
+async def test_unread_fact_leaves_sphere_prose_fresh(
+    plugin, client, thing, unread, read
+):
+    """Ruling P19 through the generic fact actions ("Add to the timeline",
+    editing a statement): a fact of a category the sphere's description
+    doesn't read (P18) leaves its prose fresh -- no regeneration, and the
+    payload doesn't call it stale; one it reads makes it stale."""
+
+    s = await _open_sphere_world(plugin)
+    thing_id = getattr(s, thing)
+    await _fresh_prose(s.world, thing_id)
+    at = WorldDate.of(1019).model_dump(mode="json")
+    async with MockClientContext():
+        await _act(
+            plugin,
+            "add_fact",
+            thing_id=thing_id,
+            category=unread,
+            text="Declared the Night of Feathers holy.",
+            valid_from=at,
+        )
+        await _drain(plugin)
+        assert not _errors(plugin)
+        assert [c["kind"] for c in client.prompt_history] == []
+        payload = await _get_thing(plugin, thing_id)
+        assert payload["prose"]["description"]["stale"] is False
+        kind = s.world.view().thing(thing_id).kind
+        assert not s.world.prose().stale(
+            thing_id,
+            "description",
+            None,
+            ignore_categories=prose_gen.unread_categories(kind, "description"),
+        )
+
+        await _act(
+            plugin,
+            "add_fact",
+            thing_id=thing_id,
+            category=read,
+            text="Its faithful keep the dawn hours.",
+        )
+        assert not _errors(plugin)
+        payload = _last(plugin, "add_fact")["data"]
+        assert payload["prose"]["description"]["stale"] is True
+        await _drain(plugin)
+        assert [c["kind"] for c in client.prompt_history] == ["analyze"]

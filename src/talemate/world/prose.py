@@ -20,7 +20,7 @@ way, imports this module -- lazily, inside `World.prose()` -- the same way
 """
 
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Protocol
 
 import structlog
@@ -306,14 +306,18 @@ class ProseCache:
                     ),
                 )
 
-    def _changed_in_stretch_since(self, thing_id: str, cached: CachedProse) -> bool:
+    def _changed_in_stretch_since(
+        self, thing_id: str, cached: CachedProse, ignore: Collection[str] = ()
+    ) -> bool:
         """Whether a field value or fact of `thing_id` visible somewhere in
         the cached stretch was added, or retired (removed, corrected or
         undone), after `cached.rev`. "Visible in the stretch" means its span
         overlaps the stretch, not just that its start falls inside it: a
         fact that started before the stretch and runs through it is in that
         stretch's prose too. A retired row is gone from the timeline, so the
-        timeline check in `stale` can't see it; this catches both."""
+        timeline check in `stale` can't see it; this catches both. A fact
+        row of a category in `ignore` (one the section doesn't read) is no
+        change."""
 
         start = (
             cached.stretch_start.instant if cached.stretch_start is not None else None
@@ -324,11 +328,14 @@ class ProseCache:
         starts_before_end = "(valid_from IS NULL OR ? IS NULL OR valid_from < ?)"
         ends_after_start = "(valid_until IS NULL OR ? IS NULL OR valid_until > ?)"
 
+        ignored = sorted(ignore)
+        skip = ", ".join("?" for _ in ignored)
         facts = self._conn.execute(
             "SELECT DISTINCT fact_id FROM facts WHERE thing_id = ? "
             "AND (rev_added > ? OR rev_removed > ?) "
-            f"AND {starts_before_end} AND {ends_after_start}",
-            (thing_id, cached.rev, cached.rev, end, end, start, start),
+            f"AND {starts_before_end} AND {ends_after_start}"
+            + (f" AND category NOT IN ({skip})" if ignored else ""),
+            (thing_id, cached.rev, cached.rev, end, end, start, start, *ignored),
         ).fetchall()
         if {row["fact_id"] for row in facts} - self._link_only_facts(thing_id, cached):
             return True
@@ -389,13 +396,16 @@ class ProseCache:
                 same.add(found["fact_id"])
         return same
 
-    def _changed_since(self, thing_id: str, cached: CachedProse) -> bool:
+    def _changed_since(
+        self, thing_id: str, cached: CachedProse, ignore: Collection[str] = ()
+    ) -> bool:
         """Whether `thing_id` itself changed in the cached stretch since
         `cached.rev`, by the same two checks `stale` runs for the cached
         thing: a newer timeline change inside the stretch, or a row visible
         in it added or retired since. Changes no prose can show don't
         count: other names (`aka`), the stub marker, and a fact edit that
-        only links or re-points words (`_link_only_facts`). An id that no
+        only links or re-points words (`_link_only_facts`), and a fact of a
+        category in `ignore`. An id that no
         longer exists counts as changed."""
 
         try:
@@ -406,14 +416,16 @@ class ProseCache:
         entries = [
             entry
             for entry in entries
-            if entry.field not in _UNRENDERED_FIELDS and entry.fact_id not in link_only
+            if entry.field not in _UNRENDERED_FIELDS
+            and entry.fact_id not in link_only
+            and entry.category not in ignore
         ]
         newest = _newest_rev_in_stretch(
             entries, cached.stretch_start, cached.stretch_end
         )
         if cached.rev < newest:
             return True
-        return self._changed_in_stretch_since(thing_id, cached)
+        return self._changed_in_stretch_since(thing_id, cached, ignore)
 
     def stale(
         self,
@@ -421,16 +433,24 @@ class ProseCache:
         section: str,
         at: WorldDate | None,
         also: Sequence[str] = (),
+        ignore_categories: Collection[str] = (),
     ) -> bool:
         """`True` if there's no cached entry for the stretch containing
         `at`, its `rev` predates the newest timeline change inside that
         stretch, or a row visible in that stretch was added or retired
         after its `rev` -- for `thing_id` itself or for any id in `also`
         (a thing's lineage, most callers pass -- see `heritage.lineage`).
-        An `also` id that no longer exists counts as changed."""
+        An `also` id that no longer exists counts as changed.
+
+        `ignore_categories` are fact categories the section doesn't read
+        (a sphere's statements and timeline, for its description): a
+        change to one of `thing_id`'s own facts in them is no change. The
+        `also` ids are checked in full."""
 
         cached = self.get(thing_id, section, at)
         if cached is None:
             return True
 
-        return any(self._changed_since(id_, cached) for id_ in (thing_id, *also))
+        if self._changed_since(thing_id, cached, ignore_categories):
+            return True
+        return any(self._changed_since(id_, cached) for id_ in also)

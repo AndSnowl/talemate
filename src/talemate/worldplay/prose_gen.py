@@ -140,6 +140,18 @@ def section_categories(kind: str, section: str) -> tuple[str, ...]:
     return categories
 
 
+def unread_categories(kind: str, section: str) -> tuple[str, ...]:
+    """The `kind`'s fact categories `section` isn't written from
+    (`section_categories` leaves them out): a change to one of them leaves
+    the section's prose fresh. None for a character, whose sections each
+    keep their prose staleness as it was."""
+
+    if kind == "character":
+        return ()
+    read = section_categories(kind, section)
+    return tuple(c for c in get_kind(kind).categories if c not in read)
+
+
 def inherited_categories(section: str) -> dict[str, tuple[str, ...]]:
     """The inherited fact categories a character's `section` adds to its
     own, by the kind of layer they're inherited from."""
@@ -338,7 +350,8 @@ async def generate_section(
     """Generate `section`'s prose from the thing's facts at `at` and what
     it inherits then, cache it for the stretch containing `at`, and return
     the text. A sphere with no fact the section reads (a core's summary,
-    ruling P18) keeps the prose it has: no call, nothing cached."""
+    ruling P18) keeps the prose it has: no call, nothing cached; with no
+    prose yet, it's written from its core fields (name, template)."""
 
     view = world.view(at)
     state = view.thing(thing_id)
@@ -347,11 +360,15 @@ async def generate_section(
 
     name = view.name_of(thing_id) or ""
     facts, inherited_background = _section_facts(view, state, section)
-    if not facts and spheres.is_sphere(state):
+    kept = (
+        world.prose().get(thing_id, section, at)
+        if not facts and spheres.is_sphere(state)
+        else None
+    )
+    if kept is not None:
         # a sphere's summary from its core reads no fact (P18): nothing new
         # to write from, so the summary it has stays, uncached anew
-        kept = world.prose().get(thing_id, section, at)
-        return kept.text if kept is not None else ""
+        return kept.text
     background = background_for_section(
         world.calendar,
         state.kind,
@@ -360,6 +377,10 @@ async def generate_section(
         state.fields,
         _heritage_line(view, thing_id) + inherited_background,
     )
+    if not facts and spheres.is_sphere(state):
+        # no summary at all (the core gave none): written from what it is,
+        # its name and template
+        facts, background = background, []
     text = await render_section(state.kind, name, section, facts, client, background)
 
     # cached at the revision the facts were read at (`view.rev`), not the
@@ -384,7 +405,11 @@ async def ensure_prose(
     cache = world.prose()
     for section in sections_for(state.kind):
         if cache.stale(
-            thing_id, section, at, staleness_also(world, thing_id, section, at)
+            thing_id,
+            section,
+            at,
+            staleness_also(world, thing_id, section, at),
+            unread_categories(state.kind, section),
         ):
             await generate_section(world, thing_id, section, at, client)
 

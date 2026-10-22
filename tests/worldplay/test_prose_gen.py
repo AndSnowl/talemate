@@ -481,3 +481,29 @@ async def test_sphere_with_nothing_to_describe_keeps_its_summary(world):
     assert client.prompt_history == []
     assert text == "The church of the dawn."
     assert world.prose().get(dawn, "description", None).text == text
+
+
+async def test_sphere_with_no_summary_gets_one_from_its_background(world):
+    """A sphere with no fact its description reads and no summary cached
+    (the core gave an empty one) still gets one: written from its
+    background, its name and template."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        dawn = rev.create_thing(
+            "sphere", fields={"name": "The White Dawn", "template": "religion"}
+        )
+        rev.add_fact(dawn, "statement", "Snowy owl-folk are the purest of the folk.")
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("The White Dawn is a religion.")
+        text = await prose_gen.generate_section(
+            world, dawn, "description", None, client
+        )
+
+    assert len(client.prompt_history) == 1
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "A religion sphere." in prompt and "Named The White Dawn." in prompt
+    assert "purest of the folk" not in prompt
+    assert text == "The White Dawn is a religion."
+    assert world.prose().get(dawn, "description", None).text == text

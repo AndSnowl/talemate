@@ -1114,6 +1114,7 @@ class WorldsPlugin(Plugin):
                     section,
                     at,
                     prose_gen.staleness_also(world, thing_id, section, at),
+                    prose_gen.unread_categories(state.kind, section),
                 ),
                 "edited": cached.edited if cached is not None else False,
             }
