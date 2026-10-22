@@ -1195,7 +1195,11 @@ async def test_accept_makes_stubs_and_links_facts(at_1020):
     # every fact keeps its words
     assert set(by_text) == {f.text for f in preview.facts}
     lake = next(t for t in by_text if t.startswith("Solnechnyy Gorod is"))
-    assert _linked_ids(view, by_text[lake]) == [stubs["Lake Yelizaveta"].id]
+    # "the Moscavian interior": the adjective links the Tsardom (Moscavia)
+    assert _linked_ids(view, by_text[lake]) == [
+        stubs["Lake Yelizaveta"].id,
+        tsardom,
+    ]
     history = next(t for t in by_text if t.startswith("After the Night"))
     assert _linked_ids(view, by_text[history]) == [
         stubs["Night of Feathers"].id,

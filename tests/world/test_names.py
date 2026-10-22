@@ -273,3 +273,33 @@ def test_title_words_are_no_first_name(world):
     ]
     # a title word isn't suggested on its own either
     assert find_names(view, "The Prince waited.") == []
+
+
+def test_adjective_forms_link_like_other_names(world):
+    """A capitalised adjective form of a name or other name ("Moscavian",
+    "Kalmaran") links to its entry like an other name; lowercase it
+    doesn't, and a short name ("Uz") makes none."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        moscavia = rev.create_thing("place", fields={"name": "Moscavia"})
+        kalmar = rev.create_thing(
+            "place",
+            fields={"name": "Realm of the Isles", "aka": [_aka("Kalmara")]},
+        )
+        rev.create_thing("place", fields={"name": "Uz"})
+        rev.create_thing("place", fields={"name": "Velm", "stub": {"ignored": True}})
+    view = world.view(None)
+
+    (match,) = find_names(view, "Moscavian merchants came.")
+    assert match.text == "Moscavian"
+    assert match.suggested is False
+    assert [(c.id, c.via) for c in match.candidates] == [(moscavia, "aka")]
+
+    (match,) = find_names(view, "The Kalmaran fleet sailed.")
+    assert match.text == "Kalmaran"
+    assert [c.id for c in match.candidates] == [kalmar]
+
+    assert find_names(view, "moscavian merchants came.") == []
+    assert find_names(view, "Uzian traders came.") == []
+    # an ignored stub makes no adjective either
+    assert find_names(view, "Velmish traders came.") == []

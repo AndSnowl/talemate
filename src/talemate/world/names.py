@@ -12,7 +12,11 @@ trailing `'s` allowed and longer names tried first:
   "Tsar Alexei II" is "Alexei", never "Tsar";
 - one capitalised word of five or more letters from a multi-word main
   name ("Moscavia" for "Tsardom of Moscavia"), but no title word. That's
-  only a *suggested* match, offered after any real one.
+  only a *suggested* match, offered after any real one;
+- an adjective form of a one-word main or other name of four letters or
+  more ("Moscavian" for Moscavia, "Kalmaran" for Kalmara), matched like an
+  other name: the name, or the name less a final vowel, with one of
+  `ADJECTIVE_ENDINGS`.
 
 A stub whose name is a common word ("Hope") mustn't link the "hope" in
 "I hope", so a stub, like another name ("the Pier") or a suggestion,
@@ -59,6 +63,13 @@ TITLE_WORDS = set(
 
 # the shortest word of a longer name that's suggested on its own
 PARTIAL_MIN_LETTERS = 5
+
+# the endings an adjective form adds to a name, or to the name less a
+# final vowel; and the shortest name that has adjective forms ("Uz" has
+# none)
+ADJECTIVE_ENDINGS = ("n", "an", "ian", "ish", "ese")
+ADJECTIVE_MIN_LETTERS = 4
+_VOWELS = "aeiou"
 
 # lowercase words an unknown phrase may run across ("Night of Feathers")
 _CONNECTORS = {"of", "the"}
@@ -209,6 +220,26 @@ def _partial_words(name: str, kind: str) -> list[str]:
     ]
 
 
+def adjective_forms(name: str) -> list[str]:
+    """The adjective forms of a one-word name of `ADJECTIVE_MIN_LETTERS` or
+    more ("Moscavian", "Moscavish", ... for "Moscavia"), each once, never
+    the name itself. Empty for a longer or shorter name."""
+
+    words = name.split()
+    if len(words) != 1 or _letters(name) < ADJECTIVE_MIN_LETTERS:
+        return []
+    stems = [name]
+    if name[-1].casefold() in _VOWELS:
+        stems.append(name[:-1])
+    forms: list[str] = []
+    for stem in stems:
+        for ending in ADJECTIVE_ENDINGS:
+            form = stem + ending
+            if _norm(form) != _norm(name) and form not in forms:
+                forms.append(form)
+    return forms
+
+
 def _title_key(word: str) -> str:
     return word.casefold().rstrip(".")
 
@@ -252,10 +283,21 @@ def _aliases(view: WorldView) -> Aliases:
         if not name:
             continue
         add(name, state, name, "name")
-        for entry in _aka_entries(state):
-            other = entry.get("name")
-            if isinstance(other, str):
-                add(other, state, name, "aka")
+        others = [
+            other
+            for entry in _aka_entries(state)
+            if isinstance(other := entry.get("name"), str)
+        ]
+        for other in others:
+            add(other, state, name, "aka")
+        # an adjective form needs a capital, as another name does
+        adjectives = {
+            _norm(form)
+            for written in [name, *others]
+            for form in adjective_forms(" ".join(written.split()))
+        }
+        for form in sorted(adjectives):
+            add(form, state, name, "aka")
         words = name.split()
         first = _first_name(words) if state.kind == "character" else None
         if first is not None:
