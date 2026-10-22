@@ -365,9 +365,10 @@ async def generate_section(
         if not facts and spheres.is_sphere(state)
         else None
     )
-    if kept is not None:
+    if kept is not None and kept.text:
         # a sphere's summary from its core reads no fact (P18): nothing new
-        # to write from, so the summary it has stays, uncached anew
+        # to write from, so the summary it has stays, uncached anew (an
+        # empty one, an accepted preview's "", is no summary)
         return kept.text
     background = background_for_section(
         world.calendar,
@@ -378,7 +379,7 @@ async def generate_section(
         _heritage_line(view, thing_id) + inherited_background,
     )
     if not facts and spheres.is_sphere(state):
-        # no summary at all (the core gave none): written from what it is,
+        # no summary at all (the core gave none, or an empty one): written from what it is,
         # its name and template
         facts, background = background, []
     text = await render_section(state.kind, name, section, facts, client, background)
