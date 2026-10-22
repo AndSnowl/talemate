@@ -4,6 +4,17 @@
             <span class="text-subtitle-2">New {{ info.singular }}</span>
             <span v-if="fromStub" class="text-caption text-muted" data-testid="from-stub">from stub “{{ fromStub.name }}”</span>
             <v-btn v-if="fromStub" icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Not from the stub" :disabled="busy" @click="notFromStub"></v-btn>
+            <span v-if="promoting" class="text-caption text-muted" data-testid="promoting">making {{ promoting.kind === 'place' ? 'the place' : '' }} “{{ promoting.name }}” a sphere</span>
+            <v-btn v-if="promoting" icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Don't make it a sphere" :disabled="busy" @click="stopPromoting"></v-btn>
+        </div>
+
+        <!-- a sphere's template: its starting drawers and agent flag -->
+        <div v-if="isSphere" class="d-flex align-center flex-wrap ga-2 mb-2">
+            <span class="text-caption text-muted">Template</span>
+            <v-btn-toggle v-model="template" density="compact" variant="outlined" divided color="accent" :disabled="busy" data-testid="sphere-template-picker">
+                <v-btn v-for="item in templates" :key="item.template" :value="item.template" size="small">{{ item.label }}</v-btn>
+            </v-btn-toggle>
+            <span v-if="template" class="text-caption text-muted">{{ templateAgent ? 'acts in the world' : 'a body of knowledge' }}</span>
         </div>
 
         <div v-if="speciesName" class="text-caption text-muted mb-2">Race of {{ speciesName }}</div>
@@ -19,7 +30,7 @@
             v-model="prompt"
             v-model:picks="picks"
             v-model:refs="refs"
-            :label="kind === 'mix' ? 'Describe it (optional)' : 'Describe it'"
+            :label="kind === 'mix' || promoting ? 'Describe it (optional)' : 'Describe it'"
             :placeholder="placeholder"
             :rows="2"
             :debounce="400"
@@ -90,11 +101,11 @@
                 variant="flat"
                 size="small"
                 prepend-icon="mdi-creation"
-                :loading="worlds.previewPending && mine"
+                :loading="(isSphere ? worlds.spherePreviewPending : worlds.previewPending) && mine"
                 :disabled="!canCreate"
                 @click="create"
             >Create</v-btn>
-            <v-btn v-if="cancellable" variant="outlined" size="small" :disabled="!!worlds.pending.accept_preview" @click="cancel">Cancel</v-btn>
+            <v-btn v-if="cancellable || promoting" variant="outlined" size="small" :disabled="!!worlds.pending.accept_preview || !!worlds.pending.accept_sphere" @click="cancel">Cancel</v-btn>
         </div>
         <div class="text-caption text-muted mt-1">{{ hint }}</div>
 
@@ -136,9 +147,18 @@
             <a href="#" class="mix-link" @click.prevent="worlds.openThing(existingMix.id)">{{ existingMix.name }}</a>.
         </v-alert>
 
-        <v-alert v-if="mine && worlds.previewError" type="error" variant="tonal" density="compact" class="mt-3">
-            {{ worlds.previewError }}
+        <v-alert v-if="mine && previewError" type="error" variant="tonal" density="compact" class="mt-3">
+            {{ previewError }}
         </v-alert>
+
+        <SpherePreviewCard
+            v-if="spherePreview"
+            :preview="spherePreview"
+            class="mt-3"
+            @accept="worlds.acceptSphere({ name: $event })"
+            @regenerate="worlds.regenerateSpherePreview()"
+            @discard="worlds.discardSpherePreview()"
+        />
 
         <v-card v-if="preview" variant="tonal" class="preview mt-3 pa-3" data-testid="create-preview">
             <div class="d-flex align-center ga-2 mb-2">
@@ -183,6 +203,31 @@
                 <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
                 <span class="fact-date">{{ fact.since ? formatDate(worlds.calendar, fact.since) + ' →' : 'always' }}</span>
             </div>
+
+            <!-- the sphere drawer an expanded stub joins -->
+            <div v-if="preview.part_of" class="text-body-2 mt-2" data-testid="preview-part-of">
+                <span class="text-muted">Part of</span> {{ partOfName }} <span class="text-muted">— {{ partOfDrawer }}</span>
+            </div>
+
+            <!-- a character's proposed ties: each, and each "but…", can be
+                 dropped before accepting -->
+            <template v-if="preview.ties && preview.ties.length">
+                <div class="text-caption text-muted text-uppercase mt-3">Ties</div>
+                <div v-for="(tie, tieIndex) in preview.ties" :key="tie.sphere_id + tieIndex" class="preview-tie" data-testid="preview-tie">
+                    <div class="d-flex align-center ga-1">
+                        <span class="flex-grow-1">{{ tieLead(tie.role) }} <span class="tie-sphere">{{ tie.sphere }}</span><span v-if="tie.since" class="text-muted"> · since {{ formatDate(worlds.calendar, tie.since) }}</span></span>
+                        <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Drop tie" @click="worlds.dropPreviewTie(tieIndex)"></v-btn>
+                    </div>
+                    <template v-if="tie.exceptions.length">
+                        <div class="but"><i>but…</i></div>
+                        <div v-for="(exception, index) in tie.exceptions" :key="index" class="but d-flex align-center ga-1" data-testid="preview-tie-exception">
+                            <span class="flex-grow-1">– {{ exception.text }} <span class="text-muted">(departs from {{ exception.item }})</span></span>
+                            <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Drop exception" @click="worlds.dropPreviewException(tieIndex, index)"></v-btn>
+                        </div>
+                    </template>
+                    <div v-else class="but text-muted">no exceptions</div>
+                </div>
+            </template>
 
             <!-- what it inherits, each ticked as kept: unticking one the
                  model missed marks it replaced by one of the preview's own -->
@@ -239,11 +284,12 @@
 <script>
 import { defaultOverrideIndex, heritageFromMatches, previewSegments, sameParents, useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
-import { kindInfo } from './worldKinds.js';
+import { SPHERE_TEMPLATES, UNSORTED, kindInfo, templateInfo, tieLead } from './worldKinds.js';
 import { NEW_THING, linkPayload, pickedId, repicks } from './nameHighlights.js';
 import HeritagePicker from './HeritagePicker.vue';
 import LinkedText from './LinkedText.vue';
 import NameHighlightInput from './NameHighlightInput.vue';
+import SpherePreviewCard from './SpherePreviewCard.vue';
 
 const PLACEHOLDERS = {
     character: 'A grizzled ferryman who owes the Wardens more than money…',
@@ -253,6 +299,7 @@ const PLACEHOLDERS = {
     race: 'The largest of them, white-plumaged, from the frozen north…',
     mix: 'Anything the blend should settle; the parents are enough to start from…',
     event: 'The night the river froze solid and the ferries stopped…',
+    sphere: 'The state church of the north, which teaches the change was a purification…',
     item: 'A tarnished ferryman’s bell said to wake the drowned…',
 };
 
@@ -290,9 +337,18 @@ function yearDate(year) {
 // meanwhile, and the preview carries the stub's id, so accepting fills the
 // stub in place. An event's picks
 // are its years and place, an item's its owner.
+//
+// The Spheres box (kind "sphere") picks a template (a sphere stub's guess
+// to start with) and previews the sphere's core (`preview_sphere`,
+// `SpherePreviewCard`: summary, timeline, drawer outline, the entries it
+// adopts): a new sphere, a stub it expands (any stub "Make it a sphere…"
+// was used on), or the lore entry or place it promotes (`promoting`,
+// whose prompt is optional). A character preview shows its proposed ties,
+// each tie and each "but…" droppable before accepting, and an expanded
+// stub's preview the sphere it joins (`part_of`).
 export default {
     name: 'CreateBox',
-    components: { HeritagePicker, LinkedText, NameHighlightInput },
+    components: { HeritagePicker, LinkedText, NameHighlightInput, SpherePreviewCard },
     props: {
         kind: { type: String, required: true },
         // `{species}` for a race, `{parents}` for a mix
@@ -329,6 +385,9 @@ export default {
             eventYears: { when: null, until: null },
             // an event's place, or an item's owner
             linkedId: null,
+            // a sphere's template
+            template: null,
+            templates: SPHERE_TEMPLATES,
         };
     },
     computed: {
@@ -349,20 +408,58 @@ export default {
             const stub = this.worlds.expanding;
             return stub && stub.kind === this.kind ? stub : null;
         },
+        isSphere() {
+            return this.kind === 'sphere';
+        },
+        // the thing "Make it a sphere…" promotes (the Spheres box only)
+        promoting() {
+            return this.isSphere ? this.worlds.promoting : null;
+        },
+        templateAgent() {
+            return templateInfo(this.template).agent;
+        },
         // the store's preview request is this box's
         mine() {
+            if (this.isSphere) {
+                return !!this.worlds.spherePreviewRequest;
+            }
             return this.worlds.previewRequest?.kind === this.kind;
         },
         preview() {
-            return this.mine ? this.worlds.preview : null;
+            return this.mine && !this.isSphere ? this.worlds.preview : null;
+        },
+        spherePreview() {
+            return this.mine && this.isSphere ? this.worlds.spherePreview : null;
+        },
+        previewError() {
+            return this.isSphere ? this.worlds.spherePreviewError : this.worlds.previewError;
         },
         busy() {
+            if (this.isSphere) {
+                return (this.mine && this.worlds.spherePreviewPending) || !!this.worlds.pending.accept_sphere;
+            }
             return (this.mine && this.worlds.previewPending) || !!this.worlds.pending.accept_preview || this.lookingUp;
+        },
+        // the sphere a preview's expanded stub joins, and its drawer
+        partOfName() {
+            const id = this.preview?.part_of?.sphere;
+            return this.worlds.referenceTargets.find((target) => target.id === id)?.name || 'a sphere';
+        },
+        partOfDrawer() {
+            const link = this.preview?.part_of;
+            if (!link || link.drawer === UNSORTED) {
+                return 'Unsorted';
+            }
+            const drawers = this.worlds.sphereInfo[link.sphere]?.sphere?.drawers || [];
+            return drawers.find((drawer) => drawer.id === link.drawer)?.title || 'a drawer';
         },
         lookingUp() {
             return !!this.awaitingMix && !!this.worlds.mixLookup;
         },
         hint() {
+            if (this.isSphere) {
+                return 'Pick a template; the AI writes its summary, timeline and drawer outline, then Fill writes a drawer.';
+            }
             return this.kind === 'mix'
                 ? 'Pick both parents; the AI drafts the blend, and a description is optional.'
                 : 'Pickers are optional; the AI fills in the rest from your description.';
@@ -381,6 +478,9 @@ export default {
             if (this.kind === 'mix') {
                 return this.parents.length === 2;
             }
+            if (this.isSphere) {
+                return !!this.template && (!!this.prompt.trim() || !!this.promoting || !!this.fromStub);
+            }
             return !!this.prompt.trim();
         },
         // the prompt's name matches, once looked up
@@ -395,8 +495,9 @@ export default {
         // `[heading, facts]` groups: the preview's own once there is one,
         // else the stub's mention context
         contextGroups() {
-            if (this.preview) {
-                return this.preview.context || [];
+            const preview = this.preview || this.spherePreview;
+            if (preview) {
+                return preview.context || [];
             }
             return this.suggestion?.context || [];
         },
@@ -440,9 +541,39 @@ export default {
             handler(stub, before) {
                 if (stub && stub.id !== before?.id) {
                     this.prompt = this.suggestion?.prompt || stub.name;
+                    // a sphere stub's guessed template
+                    if (this.isSphere) {
+                        const listed = (this.worlds.things.sphere || []).find((thing) => thing.id === stub.id);
+                        this.template = listed?.template || this.template;
+                    }
                 }
             },
             immediate: true,
+        },
+        // promoting starts from its name: the prompt is optional
+        promoting: {
+            handler(thing, before) {
+                if (thing && thing.id !== before?.id) {
+                    this.prompt = '';
+                    this.template = null;
+                }
+            },
+            immediate: true,
+        },
+        // a character preview joining a sphere names its drawer
+        'preview.part_of'(link) {
+            if (link && link.drawer !== UNSORTED) {
+                this.worlds.fetchSphere(link.sphere);
+            }
+        },
+        // the sphere request is gone once accepted: start afresh
+        'worlds.spherePreviewRequest'(request, before) {
+            if (this.isSphere && !request && before) {
+                this.prompt = this.suggestion?.prompt || this.fromStub?.name || '';
+                this.picks = {};
+                this.refs = {};
+                this.template = null;
+            }
         },
         // the suggested prompt replaces the stub's bare name, unless the
         // owner has written something else meanwhile
@@ -513,12 +644,26 @@ export default {
     methods: {
         formatDate,
         previewSegments,
+        tieLead,
         // the box goes on as a plain one: a preview made from the stub goes
         notFromStub() {
             if (this.mine) {
-                this.worlds.cancelPreview();
+                this.dropPreview();
             }
             this.worlds.stopExpanding();
+        },
+        stopPromoting() {
+            if (this.mine) {
+                this.dropPreview();
+            }
+            this.worlds.stopPromoting();
+        },
+        dropPreview() {
+            if (this.isSphere) {
+                this.worlds.cancelSpherePreview();
+            } else {
+                this.worlds.cancelPreview();
+            }
         },
         heritageName(id) {
             return this.worlds.heritage.find((item) => item.id === id)?.name || '';
@@ -558,6 +703,10 @@ export default {
             if (!this.canCreate) {
                 return;
             }
+            if (this.isSphere) {
+                this.requestSpherePreview();
+                return;
+            }
             this.existingMix = null;
             if (this.parents.length === 2) {
                 this.awaitingMix = [...this.parents];
@@ -578,6 +727,19 @@ export default {
                 repicks: repicks(this.matches, this.picks).filter((repick) => repick.id !== stubId),
             });
         },
+        // a sphere's core: from the stub it expands, or for the thing it
+        // promotes
+        requestSpherePreview() {
+            const links = linkPayload(this.matches, this.picks, this.refs, this.prompt);
+            const own = this.fromStub?.id || this.promoting?.id;
+            links.picks = Object.fromEntries(Object.entries(links.picks).filter(([, id]) => id !== own));
+            this.worlds.previewSphere(this.template, this.prompt.trim(), {}, {
+                stubId: this.fromStub?.id || null,
+                promoteId: this.promoting?.id || null,
+                picks: links.picks,
+                newNames: links.newNames,
+            });
+        },
         // `intoStub`: fill that stub instead of making a new thing
         accept(intoStub = null) {
             this.accepting = this.stay;
@@ -585,10 +747,13 @@ export default {
         },
         cancel() {
             if (this.mine) {
-                this.worlds.cancelPreview();
+                this.dropPreview();
             }
             if (this.fromStub) {
                 this.worlds.stopExpanding();
+            }
+            if (this.promoting) {
+                this.worlds.stopPromoting();
             }
             this.$emit('cancel');
         },
@@ -675,6 +840,25 @@ export default {
 
 .world-date {
     color: rgb(var(--v-theme-date));
+}
+
+.preview-tie {
+    border: 1px solid rgb(var(--v-theme-border));
+    border-radius: 6px;
+    padding: 6px 10px;
+    margin: 6px 0;
+}
+
+.preview-tie .v-btn {
+    flex: none;
+}
+
+.tie-sphere {
+    color: rgb(var(--v-theme-link));
+}
+
+.but {
+    margin: 2px 0 0 14px;
 }
 
 .ai-context :deep(.v-expansion-panel) {

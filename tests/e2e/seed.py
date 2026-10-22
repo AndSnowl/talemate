@@ -366,6 +366,10 @@ def _year(value):
     return WorldDate.of(value) if value is not None else None
 
 
+def _dumped(value):
+    return WorldDate.of(value).model_dump(mode="json") if value is not None else None
+
+
 def _refs(text, ids):
     # "[[@Name|shown]]" links an earlier thing by name, keeping "shown"
     return re.sub(
@@ -394,6 +398,24 @@ try:
                     if isinstance(names, list)
                     else ids[names]
                 )
+            # a sphere drawer it's part of: an earlier sphere, by name
+            if thing.get("part_of"):
+                part_of = thing["part_of"]
+                fields["part_of"] = {
+                    "sphere": ids[part_of["sphere"]],
+                    "drawer": part_of["drawer"],
+                }
+            # a character's ties to earlier spheres, by name
+            if thing.get("ties"):
+                fields["ties"] = [
+                    {
+                        "sphere": ids[tie["sphere"]],
+                        "role": tie.get("role", ""),
+                        "since": _dumped(tie.get("since")),
+                        "until": _dumped(tie.get("until")),
+                    }
+                    for tie in thing["ties"]
+                ]
             thing_id = rev.create_thing(thing["kind"], fields)
             ids[thing["name"]] = thing_id
             for fact in thing.get("facts") or []:
@@ -403,6 +425,7 @@ try:
                     _refs(fact["text"], ids),
                     valid_from=_year(fact.get("since")),
                     valid_until=_year(fact.get("until")),
+                    origin=fact.get("origin"),
                 )
     for scene in spec["scenes"]:
         world.scenes().create(
@@ -438,8 +461,11 @@ def seed_fm_world(
 
     ``things`` items are ``{"kind", "name", "born": year|None, "fields":
     {field: value}|None, "links": {field: name | [names]}|None, "stub":
-    "live"|"ignored"|None, "facts": [{"category", "text", "since":
-    year|None, "until": year|None}]}``, written in one revision, in order.
+    "live"|"ignored"|None, "part_of": {"sphere": name, "drawer":
+    <8-hex>}|None, "ties": [{"sphere": name, "role", "since": year|None,
+    "until": year|None}]|None, "facts": [{"category", "text", "since":
+    year|None, "until": year|None, "origin": dict|None}]}``, written in one
+    revision, in order.
     A link names things listed before it (e.g. a race's ``{"species":
     "Owl-folk"}``) and is written as their ids; so does a reference in a
     fact's text, written ``[[@Name|shown text]]``. ``stub`` makes the thing
@@ -487,6 +513,20 @@ def set_fixed_setup(root: Path, reply: dict) -> None:
     "place": name | {"name", "facts"}, "goal", "intro", "extras"?}``. Its
     names are resolved against the world as a model's would be."""
     (Path(root) / FIXED_SETUP_FILE).write_text(json.dumps(reply))
+
+
+# The app's `worlds` router answers `preview_sphere`, `fill_drawer` and
+# `preview_branch` from this file (in the app root) instead of asking a
+# model; the `app` fixture points the backend's TALEMATE_TEST_FIXED_SPHERE
+# at it.
+FIXED_SPHERE_FILE = "e2e-fixed-sphere.json"
+
+
+def set_fixed_sphere(root: Path, replies: dict) -> None:
+    """Make the app's next sphere replies ``replies``: ``{"sphere": core
+    reply, "fill": [items], "branch": branch reply}``, any of them, each
+    read through the real parsing as a model's reply would be."""
+    (Path(root) / FIXED_SPHERE_FILE).write_text(json.dumps(replies))
 
 
 # Installed by the ``page`` fixture (context.add_init_script) before the app's

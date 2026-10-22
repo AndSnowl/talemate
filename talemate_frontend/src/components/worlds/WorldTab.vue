@@ -45,9 +45,32 @@
             <StubsTab v-else-if="kind === stubsTab.kind" />
             <template v-else>
                 <CreateBox :kind="kind" :key="kind" />
-                <div v-if="!entries.length" class="empty-hint pa-4 text-body-2">
+                <div v-if="!entries.length && !(kind === 'sphere' && stubs.length)" class="empty-hint pa-4 text-body-2">
                     No {{ info.label.toLowerCase() }} yet. Describe one above to create it.
                 </div>
+                <!-- the Spheres list: grouped by template, stubs dimmed among them -->
+                <template v-else-if="kind === 'sphere'">
+                    <div v-for="group in sphereGroups" :key="group.template" class="sphere-group mb-3" data-testid="sphere-group">
+                        <div class="text-overline text-muted">{{ group.label }}</div>
+                        <div class="cards">
+                            <v-card
+                                v-for="thing in group.things"
+                                :key="thing.id"
+                                variant="flat"
+                                class="thing-card pa-3"
+                                :class="{ stub: thing.stub }"
+                                :data-testid="thing.stub ? 'stub-item' : 'thing-card'"
+                                @click="worlds.openThing(thing.id)"
+                            >
+                                <div class="d-flex align-center ga-2">
+                                    <v-icon size="small" color="muted">{{ thing.kind === 'place' ? placeIcon : info.icon }}</v-icon>
+                                    <span :class="thing.stub ? 'stub-name' : 'card-name'">{{ thing.name }}</span>
+                                    <span v-if="thing.stub" class="text-caption text-muted text-no-wrap">not made yet</span>
+                                </div>
+                            </v-card>
+                        </div>
+                    </div>
+                </template>
                 <div v-else class="cards">
                     <v-card
                         v-for="thing in entries"
@@ -63,7 +86,7 @@
                         </div>
                     </v-card>
                 </div>
-                <template v-if="stubs.length">
+                <template v-if="stubs.length && kind !== 'sphere'">
                     <div class="text-overline text-muted mt-4">Stubs</div>
                     <div class="cards stubs" data-testid="kind-stubs-list">
                         <v-card
@@ -89,18 +112,20 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { STUBS_TAB, TOP_KINDS, kindInfo } from './worldKinds.js';
+import { STUBS_TAB, TOP_KINDS, kindInfo, sphereGroups } from './worldKinds.js';
 import CreateBox from './CreateBox.vue';
 import ExpandAskDialog from './ExpandAskDialog.vue';
 import StubsTab from './StubsTab.vue';
 import ThingPage from './ThingPage.vue';
 
 // The World tab: the kind list (Characters, Species, Places, Events,
-// Items, Lore; Cultures are made through the culture skill; races and
+// Items, Lore, Spheres; Cultures are made through the culture skill; races and
 // mixes are reached from their species page) and the Stubs tab below it;
 // a kind's create box, its cards and, dimmed under "Stubs", the stubs of
 // that kind; or the open thing's page. Expanding a stub (`expanding`)
-// switches to its kind, whose create box takes it up.
+// switches to its kind, whose create box takes it up, and "Make it a
+// sphere…" (`promoting`) to Spheres. Spheres are listed by template
+// (`sphereGroups`), place spheres among them, their stubs dimmed in place.
 export default {
     name: 'WorldTab',
     components: { CreateBox, ExpandAskDialog, StubsTab, ThingPage },
@@ -124,6 +149,12 @@ export default {
         stubs() {
             return (this.worlds.things[this.kind] || []).filter((thing) => thing.stub);
         },
+        sphereGroups() {
+            return sphereGroups(this.worlds.things.sphere);
+        },
+        placeIcon() {
+            return kindInfo('place').icon;
+        },
         liveStubCount() {
             return this.worlds.stubs.filter((stub) => !stub.ignored).length;
         },
@@ -132,6 +163,12 @@ export default {
         'worlds.expanding'(stub) {
             if (stub) {
                 this.kind = stub.kind;
+            }
+        },
+        // "Make it a sphere…" promotes in the Spheres create box
+        'worlds.promoting'(thing) {
+            if (thing) {
+                this.kind = 'sphere';
             }
         },
     },
@@ -145,6 +182,9 @@ export default {
             this.worlds.closeThing();
             if (this.worlds.expanding && this.worlds.expanding.kind !== kind) {
                 this.worlds.stopExpanding();
+            }
+            if (this.worlds.promoting && kind !== 'sphere') {
+                this.worlds.stopPromoting();
             }
         },
     },

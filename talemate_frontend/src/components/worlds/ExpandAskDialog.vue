@@ -33,7 +33,7 @@ export default {
             return this.worlds.expandAsk;
         },
         previewName() {
-            return this.worlds.preview?.name || 'this thing';
+            return (this.worlds.preview || this.worlds.spherePreview)?.name || 'this thing';
         },
     },
 };

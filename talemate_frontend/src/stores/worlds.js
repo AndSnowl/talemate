@@ -80,6 +80,23 @@
 // touches the rest of the fact. `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
+// Spheres: the create box of kind "sphere" previews a sphere's core
+// (`previewSphere`: a template and a prompt, a stub it expands, or the
+// thing "Make it a sphere…" promotes, `promoting`) into `spherePreview`;
+// "+ New branch" on a sphere's page previews a branch (`previewBranch`)
+// into `branchPreview`. Either is written by `accept_sphere`, which opens
+// the sphere. Fill (`fillDrawer`) asks for one drawer's items at a time
+// (`fill`); `acceptFill` writes those the owner kept. The page's sphere
+// edits (`setDrawers`, `setPartOf`, `setTies`, `addException`,
+// `endItem`) answer with the thing edited; when that's not the open page
+// (a thing filed from the sphere's "+ Add"), the page is fetched again.
+// `addTie` adds a tie from the sphere's side: the character is fetched
+// first, since `set_ties` writes its whole list (`tieQueue`).
+// `fetchSphere` keeps a sphere's payload in `sphereInfo` (for a Part of
+// editor's drawers, or the items an exception can reject). A character
+// preview's proposed ties can be dropped, whole or one exception at a
+// time, before it's accepted (`dropPreviewTie`, `dropPreviewException`).
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
@@ -290,6 +307,47 @@ export function previewSegments(text, newNames = []) {
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref'];
 
+// sphere edits: each answers with the thing it changed, which may not be
+// the open page
+const SPHERE_EDITS = ['set_drawers', 'set_part_of', 'set_ties', 'add_exception', 'end_item', 'accept_fill'];
+
+// A wire date as a request takes it (no label), or null.
+export function dateIn(date) {
+    return date ? { instant: date.instant, precision: date.precision } : null;
+}
+
+// A character payload's `ties` as `set_ties` takes them.
+export function tiesPayload(ties) {
+    return (ties || []).map((tie) => ({
+        sphere_id: tie.sphere_id,
+        role: tie.role || '',
+        since: dateIn(tie.since),
+        until: dateIn(tie.until),
+    }));
+}
+
+// The items of a sphere payload an exception can depart from: `{title,
+// value}`, value `{thing_id}` or `{fact_id}`, each once, in drawer order.
+export function rejectableItems(sphere) {
+    const items = [];
+    for (const drawer of sphere?.drawers || []) {
+        for (const item of drawer.items) {
+            const value = item.thing_id ? { thing_id: item.thing_id } : { fact_id: item.fact_id };
+            items.push({ title: item.name, value });
+        }
+    }
+    return items;
+}
+
+// A branch preview with the parent item `row` kept (`kept`) or dropped:
+// a thing item goes in `drops`, a statement in `rejects`.
+export function branchKept(preview, row, kept) {
+    const key = row.thing_id ? 'drops' : 'rejects';
+    const id = row.thing_id || row.fact_id;
+    const others = (preview[key] || []).filter((other) => other !== id);
+    return { ...preview, [key]: kept ? others : [...others, id] };
+}
+
 // `{picks, new_names, spans}` for a request, leaving out the empty ones
 function linkFields(picks = {}, newNames = [], spans = []) {
     return {
@@ -363,6 +421,30 @@ function worldState() {
         stubSuggestion: null,
         // thing id -> the other names to add to it once it's fetched
         akaQueue: {},
+        // the sphere create box: the request (`{template, prompt, fields,
+        // stubId, promoteId, picks, newNames}`) and its preview
+        spherePreviewRequest: null,
+        spherePreviewPending: false,
+        spherePreview: null,
+        spherePreviewError: null,
+        // the thing "Make it a sphere…" promotes: `{id, kind, name}`
+        promoting: null,
+        // "+ New branch": the request (`{parentId, prompt}`) and its preview
+        branchRequest: null,
+        branchPending: false,
+        branchPreview: null,
+        branchError: null,
+        // which preview an `accept_sphere` is out for: 'sphere' or 'branch'
+        sphereAccepting: null,
+        // Fill, one drawer at a time: `{sphereId, drawerId, pending, items,
+        // error}`
+        fill: null,
+        // sphere id -> its payload, for editors that need its drawers
+        sphereInfo: {},
+        // the sphere ids a `get_thing` is out for, for `sphereInfo`
+        sphereWanted: [],
+        // character id -> the ties to add to it once it's fetched
+        tieQueue: {},
         pending: {},
     };
 }
@@ -692,12 +774,14 @@ export const useWorldsStore = defineStore('worlds', {
         // `confirmExpand` or `keepPreview`.
         expandStub(stub, { discard = false } = {}) {
             const target = { id: stub.id, kind: stub.kind, name: stub.name };
-            if (this.preview && !discard) {
+            if ((this.preview || this.spherePreview) && !discard) {
                 this.expandAsk = target;
                 return;
             }
             this.expandAsk = null;
             this.cancelPreview();
+            this.cancelSpherePreview();
+            this.promoting = null;
             this.closeThing();
             this.expanding = target;
             this.stubSuggestion = null;
@@ -719,6 +803,203 @@ export const useWorldsStore = defineStore('worlds', {
 
         stopExpanding() {
             this.expanding = null;
+        },
+
+        // --- spheres ------------------------------------------------------
+
+        // "Make it a sphere…": a stub is expanded as a sphere; a lore entry
+        // or a place is promoted in the sphere create box
+        makeSphere(thing) {
+            if (thing.stub) {
+                this.expandStub({ id: thing.id, kind: 'sphere', name: thing.name });
+                return;
+            }
+            this.cancelSpherePreview();
+            this.expanding = null;
+            this.closeThing();
+            this.promoting = { id: thing.id, kind: thing.kind, name: thing.name };
+        },
+
+        stopPromoting() {
+            this.promoting = null;
+        },
+
+        // `stubId`: the stub it expands; `promoteId`: the thing it promotes
+        previewSphere(template, prompt, fields = {}, { stubId = null, promoteId = null, picks = {}, newNames = [] } = {}) {
+            this.spherePreviewRequest = { template, prompt, fields, stubId, promoteId, picks, newNames };
+            this.spherePreview = null;
+            this.spherePreviewError = null;
+            this.spherePreviewPending = true;
+            this.request('preview_sphere', {
+                template,
+                prompt,
+                fields,
+                ...(stubId ? { stub_id: stubId } : {}),
+                ...(promoteId ? { promote_id: promoteId } : {}),
+                ...linkFields(picks, newNames),
+            });
+        },
+
+        regenerateSpherePreview() {
+            const req = this.spherePreviewRequest;
+            if (req) {
+                this.previewSphere(req.template, req.prompt, req.fields, req);
+            }
+        },
+
+        discardSpherePreview() {
+            this.spherePreview = null;
+            this.spherePreviewError = null;
+            this.spherePreviewPending = false;
+        },
+
+        cancelSpherePreview() {
+            this.discardSpherePreview();
+            this.spherePreviewRequest = null;
+        },
+
+        acceptSphere(changes = {}) {
+            if (!this.spherePreview) {
+                return;
+            }
+            this.sphereAccepting = 'sphere';
+            this.pending = { ...this.pending, accept_sphere: true };
+            this.request('accept_sphere', { preview: { ...this.spherePreview, ...changes } });
+        },
+
+        previewBranch(parentId, prompt) {
+            this.branchRequest = { parentId, prompt };
+            this.branchPreview = null;
+            this.branchError = null;
+            this.branchPending = true;
+            this.request('preview_branch', { parent_id: parentId, prompt });
+        },
+
+        discardBranch() {
+            this.branchRequest = null;
+            this.branchPreview = null;
+            this.branchError = null;
+            this.branchPending = false;
+        },
+
+        // keep (or drop) one of the parent's items in the branch preview
+        setBranchKept(row, kept) {
+            if (this.branchPreview) {
+                this.branchPreview = branchKept(this.branchPreview, row, kept);
+            }
+        },
+
+        acceptBranch(changes = {}) {
+            if (!this.branchPreview) {
+                return;
+            }
+            this.sphereAccepting = 'branch';
+            this.pending = { ...this.pending, accept_sphere: true };
+            this.request('accept_sphere', { preview: { ...this.branchPreview, ...changes } });
+        },
+
+        fillDrawer(sphereId, drawerId) {
+            this.fill = { sphereId, drawerId, pending: true, items: null, error: null };
+            this.request('fill_drawer', { sphere_id: sphereId, drawer_id: drawerId });
+        },
+
+        discardFill() {
+            this.fill = null;
+        },
+
+        // the Fill items the owner kept, as `fill_drawer` gave them
+        acceptFill(items) {
+            const fill = this.fill;
+            if (!fill?.items) {
+                return;
+            }
+            this.pending = { ...this.pending, accept_fill: true };
+            this.request('accept_fill', { sphere_id: fill.sphereId, drawer_id: fill.drawerId, items });
+        },
+
+        // the sphere's drawers, in order, as the page shows them (see
+        // `drawersPayload`); one without an `id` is new
+        setDrawers(sphereId, drawers) {
+            this.pending = { ...this.pending, set_drawers: true };
+            this.request('set_drawers', { sphere_id: sphereId, drawers, at: this.thingAt });
+        },
+
+        // file `thingId` in a sphere's drawer; a null `sphereId` takes it
+        // out of every sphere
+        setPartOf(thingId, sphereId, drawerId = 'unsorted') {
+            this.pending = { ...this.pending, set_part_of: true };
+            this.request('set_part_of', {
+                thing_id: thingId,
+                sphere_id: sphereId,
+                ...(sphereId ? { drawer_id: drawerId } : {}),
+                at: thingId === this.selectedThingId ? this.thingAt : null,
+            });
+        },
+
+        // a character's whole ties list (`tiesPayload`'s shape)
+        setTies(characterId, ties) {
+            this.pending = { ...this.pending, set_ties: true };
+            this.request('set_ties', {
+                character_id: characterId,
+                ties,
+                at: characterId === this.selectedThingId ? this.thingAt : null,
+            });
+        },
+
+        // a tie added from the sphere's side: `{sphere_id, role, since}`,
+        // written once the character is fetched
+        addTie(characterId, tie) {
+            this.tieQueue = { ...this.tieQueue, [characterId]: [...(this.tieQueue[characterId] || []), tie] };
+            this.pending = { ...this.pending, set_ties: true };
+            this.request('get_thing', { id: characterId, at: null });
+        },
+
+        // `rejects`: `{thing_id}`, `{fact_id}` or null (the sphere as a whole)
+        addException(characterId, sphereId, text, rejects = null) {
+            this.pending = { ...this.pending, add_exception: true };
+            this.request('add_exception', {
+                character_id: characterId,
+                sphere_id: sphereId,
+                text,
+                rejects,
+                at: characterId === this.selectedThingId ? this.thingAt : null,
+            });
+        },
+
+        // end the sphere's own `item` (a drawer item) at `at`, by `by` (any
+        // thing id, or null)
+        endItem(sphereId, item, at, by = null) {
+            this.pending = { ...this.pending, end_item: true };
+            this.request('end_item', {
+                sphere_id: sphereId,
+                ...(item.thing_id ? { thing_id: item.thing_id } : { fact_id: item.fact_id }),
+                at,
+                by,
+            });
+        },
+
+        // the sphere's payload into `sphereInfo`
+        fetchSphere(id) {
+            if (!this.sphereWanted.includes(id)) {
+                this.sphereWanted = [...this.sphereWanted, id];
+            }
+            this.request('get_thing', { id, at: null });
+        },
+
+        dropPreviewTie(index) {
+            if (this.preview) {
+                this.preview = { ...this.preview, ties: this.preview.ties.filter((_tie, i) => i !== index) };
+            }
+        },
+
+        dropPreviewException(tieIndex, exceptionIndex) {
+            if (!this.preview) {
+                return;
+            }
+            const ties = this.preview.ties.map((tie, i) => (i === tieIndex
+                ? { ...tie, exceptions: tie.exceptions.filter((_e, j) => j !== exceptionIndex) }
+                : tie));
+            this.preview = { ...this.preview, ties };
         },
 
         // the open thing's page asked for again, as of the date it's viewed at
@@ -888,6 +1169,40 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
+        // the queued ties of `character` (a `get_thing` reply) written,
+        // after its own, unless it has a tie to that sphere already
+        writeQueuedTies(character) {
+            const { [character.id]: added, ...rest } = this.tieQueue;
+            this.tieQueue = rest;
+            const ties = tiesPayload(character.ties);
+            for (const tie of added) {
+                if (!ties.some((other) => other.sphere_id === tie.sphere_id)) {
+                    ties.push({ sphere_id: tie.sphere_id, role: tie.role || '', since: dateIn(tie.since), until: null });
+                }
+            }
+            this.request('set_ties', { character_id: character.id, ties, at: null });
+        },
+
+        // a sphere edit's reply (`data`, the thing it changed): the open
+        // page takes it, or is fetched again when it's another thing (filed
+        // or tied from the page); a Fill's names, and linked text, may
+        // make stubs
+        sphereEdited(action, data) {
+            if (data.id === this.selectedThingId) {
+                this.thing = data;
+            } else {
+                this.refreshThing();
+            }
+            if (this.sphereInfo[data.id] && data.sphere) {
+                this.sphereInfo = { ...this.sphereInfo, [data.id]: data };
+            }
+            if (action === 'accept_fill') {
+                this.fill = null;
+                this.listAllThings();
+            }
+            this.listStubs();
+        },
+
         clearPending(action) {
             if (this.pending[action]) {
                 const { [action]: _done, ...rest } = this.pending;
@@ -957,6 +1272,63 @@ export const useWorldsStore = defineStore('worlds', {
                     }
                     if (this.akaQueue[data.id]) {
                         this.writeOtherNames(data);
+                    }
+                    if (this.sphereWanted.includes(data.id)) {
+                        this.sphereWanted = this.sphereWanted.filter((id) => id !== data.id);
+                        this.sphereInfo = { ...this.sphereInfo, [data.id]: data };
+                    }
+                    if (this.tieQueue[data.id]) {
+                        this.writeQueuedTies(data);
+                    }
+                    break;
+                case 'preview_sphere':
+                    if (this.spherePreviewPending) {
+                        this.spherePreview = data;
+                        this.spherePreviewPending = false;
+                    }
+                    break;
+                case 'preview_sphere_failed':
+                    if (this.spherePreviewPending) {
+                        this.spherePreviewError = message.message;
+                        this.spherePreviewPending = false;
+                    }
+                    break;
+                case 'preview_branch':
+                    if (this.branchPending) {
+                        this.branchPreview = data;
+                        this.branchPending = false;
+                    }
+                    break;
+                case 'preview_branch_failed':
+                    if (this.branchPending) {
+                        this.branchError = message.message;
+                        this.branchPending = false;
+                    }
+                    break;
+                case 'accept_sphere':
+                    if (this.sphereAccepting === 'branch') {
+                        this.discardBranch();
+                    } else {
+                        this.cancelSpherePreview();
+                        this.expanding = null;
+                        this.promoting = null;
+                    }
+                    this.sphereAccepting = null;
+                    this.openedFrom = this.selectedThingId;
+                    this.selectedThingId = data.id;
+                    this.thingAt = null;
+                    this.thing = data;
+                    this.listStubs();
+                    this.listAllThings();
+                    break;
+                case 'fill_drawer':
+                    if (this.fill?.pending && this.fill.sphereId === data.sphere_id && this.fill.drawerId === data.drawer_id) {
+                        this.fill = { ...this.fill, pending: false, items: data.items };
+                    }
+                    break;
+                case 'fill_failed':
+                    if (this.fill?.pending && this.fill.drawerId === data?.drawer_id) {
+                        this.fill = { ...this.fill, pending: false, error: message.message };
                     }
                     break;
                 case 'stub_suggestion':
@@ -1104,10 +1476,21 @@ export const useWorldsStore = defineStore('worlds', {
                         this.nameLookup = null;
                         this.mixLookup = null;
                         this.acceptOpens = true;
+                        // or a sphere preview, a Fill or a queued tie
+                        this.spherePreviewPending = false;
+                        this.branchPending = false;
+                        this.sphereAccepting = null;
+                        if (this.fill?.pending) {
+                            this.fill = { ...this.fill, pending: false, error: message.error.message };
+                        }
+                        this.tieQueue = {};
+                        this.sphereWanted = [];
                     }
                     break;
                 default:
-                    if (EDIT_ACTIONS.includes(action) && data.id === this.selectedThingId) {
+                    if (SPHERE_EDITS.includes(action)) {
+                        this.sphereEdited(action, data);
+                    } else if (EDIT_ACTIONS.includes(action) && data.id === this.selectedThingId) {
                         this.thing = data;
                         // a linked fact (or a new name) changes the stubs' mentions
                         this.listStubs();

@@ -23,8 +23,29 @@
                     <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
                 </template>
-                <v-chip size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon">{{ thing.kind }}</v-chip>
+                <v-chip v-if="!thing.sphere || thing.kind !== 'sphere'" size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
+                <template v-if="thing.sphere">
+                    <v-chip size="x-small" label variant="outlined" prepend-icon="mdi-orbit" data-testid="sphere-template">sphere{{ thing.sphere.template ? ' · ' + thing.sphere.template : '' }}</v-chip>
+                    <v-chip
+                        size="x-small"
+                        label
+                        variant="outlined"
+                        data-testid="sphere-agent"
+                        :title="thing.sphere.agent ? 'It acts in the world (click: a body of knowledge)' : 'A body of knowledge (click: it acts in the world)'"
+                        :disabled="!!worlds.pending.set_field"
+                        @click="worlds.setField('agent', !thing.sphere.agent)"
+                    >{{ thing.sphere.agent ? 'acts in the world' : 'a body of knowledge' }}</v-chip>
+                </template>
                 <v-spacer></v-spacer>
+
+                <v-btn
+                    v-if="canPromote(thing)"
+                    variant="outlined"
+                    size="small"
+                    prepend-icon="mdi-orbit"
+                    data-testid="make-sphere"
+                    @click="worlds.makeSphere(thing)"
+                >Make it a sphere…</v-btn>
 
                 <v-menu v-model="asOfMenu" :close-on-content-click="false" location="bottom end">
                     <template #activator="{ props }">
@@ -93,6 +114,8 @@
                 <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
             </div>
 
+            <SpherePage v-if="thing.sphere" />
+
             <v-row>
                 <v-col cols="12" md="6">
                     <div v-for="field in shownFields" :key="field.name" class="field d-flex align-center flex-wrap ga-2" :data-testid="'field-' + field.name">
@@ -107,6 +130,7 @@
                         <v-chip v-if="field.pastLifespan" size="x-small" label variant="tonal" color="warning" prepend-icon="mdi-alert" data-testid="past-lifespan">past lifespan</v-chip>
                         <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
+                    <PartOfLine v-if="hasPartOf" :thing="thing" />
                     <ThingNumbers v-if="isHeritage" />
                     <ThingAka />
 
@@ -120,8 +144,8 @@
                         <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" />
                     </div>
 
-                    <div v-if="!thing.facts.length" class="text-body-2 text-muted">No facts true at this date.</div>
-                    <template v-for="fact in thing.facts" :key="fact.fact_id">
+                    <div v-if="!shownFacts.length" class="text-body-2 text-muted">No facts true at this date.</div>
+                    <template v-for="fact in shownFacts" :key="fact.fact_id">
                         <div class="fact d-flex align-center ga-2" data-testid="fact-row">
                             <span class="flex-grow-1">
                                 <LinkedText :segments="fact.segments" :text="fact.rendered" repoint :exclude="[thing.id]" @repoint="repointLink(fact, $event)" />
@@ -147,6 +171,7 @@
                         @save="saveForm"
                         @cancel="form = null"
                     />
+                    <TiesSection v-if="thing.kind === 'character'" :thing="thing" />
                     <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
                     <NamedStubs :stubs="thing.named_stubs || []" />
                 </v-col>
@@ -205,12 +230,14 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
-import { HERITAGE_KINDS, INHERITING_KINDS, kindInfo, overrideCategory } from './worldKinds.js';
+import { HERITAGE_KINDS, INHERITING_KINDS, PART_OF_KINDS, canPromote, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
 import { NEW_THING, factEditState, factLinkPayload, refOccurrence, repicks } from './nameHighlights.js';
 import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
 import NamedStubs from './NamedStubs.vue';
+import PartOfLine from './PartOfLine.vue';
+import SpherePage from './SpherePage.vue';
 import StubCard from './StubCard.vue';
 import ThingAka from './ThingAka.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
@@ -218,10 +245,16 @@ import ThingFactForm from './ThingFactForm.vue';
 import ThingInherited from './ThingInherited.vue';
 import ThingNumbers from './ThingNumbers.vue';
 import ThingReferencedIn from './ThingReferencedIn.vue';
+import TiesSection from './TiesSection.vue';
 
-// fields shown elsewhere (the name; a heritage kind's numbers), not shown
-// in the slice (cultures), or not for reading (voice, colour)
-const HIDDEN_FIELDS = ['name', 'culture', 'cultures', 'voice', 'color', 'lifespan', 'adult_age', 'measures'];
+// fields shown elsewhere (the name; a heritage kind's numbers; a sphere's
+// template, agent flag, drawers and branch parent; part of; ties), not
+// shown in the slice (cultures, languages, a branch's drops), or not for
+// reading (voice, colour)
+const HIDDEN_FIELDS = [
+    'name', 'culture', 'cultures', 'voice', 'color', 'lifespan', 'adult_age', 'measures',
+    'template', 'agent', 'drawers', 'part_of', 'ties', 'drops', 'language',
+];
 
 const FIELD_LABELS = {
     born: 'Born',
@@ -270,6 +303,14 @@ function cut(text, length = 28) {
 // asked for are made (`make_stub`, which links just that phrase). A stub's
 // page has no prose: its card (kind, Expand, Ignore) and what mentions it
 // instead.
+//
+// Spheres: a sphere (or a place that took on a template) shows its
+// template and agent chips (the agent flag toggles) and its sphere part
+// (`SpherePage`: summary, drawers, Timeline, Branches); an entry a sphere
+// can hold has a "Part of" line (`PartOfLine`); a character its Ties
+// (`TiesSection`), its "but…" facts shown there rather than among its
+// facts. "Make it a sphere…" shows on a lore entry, a place that isn't a
+// sphere and a stub (`worlds.makeSphere`).
 export default {
     name: 'ThingPage',
     components: {
@@ -283,6 +324,9 @@ export default {
         ThingInherited,
         ThingNumbers,
         ThingReferencedIn,
+        TiesSection,
+        PartOfLine,
+        SpherePage,
     },
     setup() {
         return { worlds: useWorldsStore() };
@@ -334,9 +378,28 @@ export default {
         proseSectionCount() {
             return Object.keys(this.thing?.prose || {}).length;
         },
-        // a stub has nothing written yet to make prose from
+        // a stub has nothing written yet to make prose from; a sphere's
+        // summary (its description) heads its sphere part instead
         proseShown() {
-            return this.thing?.stub ? {} : this.thing?.prose || {};
+            if (this.thing?.stub) {
+                return {};
+            }
+            const prose = this.thing?.prose || {};
+            if (this.thing?.sphere) {
+                const { description: _summary, ...rest } = prose;
+                return rest;
+            }
+            return prose;
+        },
+        // every kind a sphere's drawer can hold has a Part of line
+        hasPartOf() {
+            return PART_OF_KINDS.includes(this.thing?.kind);
+        },
+        // the facts listed: not a character's "but…" exceptions, which its
+        // Ties show
+        shownFacts() {
+            const exceptions = new Set((this.thing.ties || []).flatMap((tie) => tie.exceptions.map((e) => e.fact_id)));
+            return this.thing.facts.filter((fact) => !exceptions.has(fact.fact_id));
         },
         stubOfPage() {
             const thing = this.thing;
@@ -355,7 +418,8 @@ export default {
             const calendar = this.worlds.calendar;
             const fields = [];
             for (const [name, value] of Object.entries(this.thing.fields)) {
-                if (HIDDEN_FIELDS.includes(name) || value == null) {
+                // a branch's parent heads its sphere part
+                if (HIDDEN_FIELDS.includes(name) || value == null || (name === 'parent' && this.thing.kind === 'sphere')) {
                     continue;
                 }
                 const field = { name, label: FIELD_LABELS[name] || name };
@@ -451,6 +515,7 @@ export default {
         },
     },
     methods: {
+        canPromote,
         formatDate,
         spanLabel,
         validYear(year) {

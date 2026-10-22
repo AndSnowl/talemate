@@ -3517,3 +3517,76 @@ async def test_fixed_sphere_file_without_the_key_asks_the_model(
     assert _last(plugin, "preview_branch_failed")["message"] == (
         "No AI client is configured for the creator agent"
     )
+
+
+async def test_fixed_preview_carries_ties_and_part_of(plugin, tmp_path, monkeypatch):
+    """The browser tests' fixed preview gives a character the file's
+    `ties`, and an expanded stub that belongs in a sphere its `part_of`,
+    as a real preview does."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="stub")) as rev:
+        council = rev.create_thing(
+            "lore", {"name": "Council of Dawn", "stub": {"ignored": False}}
+        )
+    tie = {
+        "sphere_id": s.dawn,
+        "sphere": "The White Dawn",
+        "role": "elder",
+        "exceptions": [
+            {"text": "Skips the vigil.", "item": "Dawn Vigil", "thing_id": s.vigil}
+        ],
+    }
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Ilya",
+                "facts": [{"category": "background", "text": "An elder."}],
+                "prose": {},
+                "ties": [tie],
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+
+    await _act(plugin, "preview_thing", kind="character", prompt="an elder")
+    await _drain(plugin)
+    preview = _last(plugin, "preview_thing")["data"]
+    assert [t["role"] for t in preview["ties"]] == ["elder"]
+    assert preview["ties"][0]["exceptions"][0]["thing_id"] == s.vigil
+
+    await _act(
+        plugin,
+        "preview_thing",
+        kind="lore",
+        prompt="The council of The White Dawn",
+        stub_id=council,
+        picks={"The White Dawn": s.dawn},
+    )
+    await _drain(plugin)
+    expanded = _last(plugin, "preview_thing")["data"]
+    assert expanded["ties"] == []
+    # the White Dawn is no stub: a prompt naming it files nothing
+    assert expanded["part_of"] is None
+
+    with s.world.revision(Source.manual(note="sphere stub")) as rev:
+        church = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Old Church",
+                "template": "religion",
+                "stub": {"ignored": False},
+            },
+        )
+    await _act(
+        plugin,
+        "preview_thing",
+        kind="lore",
+        prompt="The council of The Old Church",
+        stub_id=council,
+        picks={"The Old Church": church},
+    )
+    await _drain(plugin)
+    expanded = _last(plugin, "preview_thing")["data"]
+    assert expanded["part_of"] == {"sphere": church, "drawer": "unsorted"}

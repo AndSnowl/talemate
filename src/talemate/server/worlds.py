@@ -54,9 +54,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `accept_preview {preview, into_stub}` writes it (into the stub
   `into_stub`, if given) and answers with the thing. For the browser
   tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
-  facts, prose, fields?}`) that previews are answered from instead of the
-  model (listing what the request's fields inherit, and for a `stub_id`
-  its kind, name and mention context, as a real preview does).
+  facts, prose, fields?, ties?}`) that previews are answered from instead
+  of the model (listing what the request's fields inherit, and for a
+  `stub_id` its kind, name, mention context and sphere `part_of`, as a
+  real preview does).
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
@@ -186,6 +187,7 @@ from talemate.worldplay.create import (
     PreviewException,
     PreviewTie,
     accept_preview,
+    child_part_of,
     current_date,
     drawer_types_for,
     exception_fact,
@@ -596,7 +598,10 @@ async def _fixed_preview(
     the stub's kind and name and carries its mention context, refusing a
     stub of a kind that can't be expanded as the real one does; without
     one, a live stub of the same kind and name is offered as
-    `matching_stub_id`.
+    `matching_stub_id`. An expanded stub that belongs in a sphere carries
+    its `part_of` as the real one does (`create.child_part_of`), and a
+    character's `ties` are the file's own, each `{sphere_id, sphere, role,
+    since?, exceptions: [{text, item, thing_id?, fact_id?}]}`.
     Async so it runs through the same background task and reply path as
     the real one."""
 
@@ -626,6 +631,12 @@ async def _fixed_preview(
         context=context,
         picks=payload.picks,
         treated_as_new=payload.new_names,
+        part_of=(
+            child_part_of(view, stub, payload.prompt, payload.picks)
+            if stub is not None
+            else None
+        ),
+        ties=fixed.get("ties", []) if kind == "character" else [],
     )
 
 

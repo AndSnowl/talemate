@@ -15,11 +15,15 @@ Fixtures:
 
 - ``app`` (session): one isolated app for the whole run, stopped at the end.
   Its backend answers the `worlds` router's ``preview_thing`` from
-  ``<root>/e2e-fixed-preview.json``, and its ``plan_scene`` and
-  ``continue_scene`` from ``<root>/e2e-fixed-setup.json``, never a model.
+  ``<root>/e2e-fixed-preview.json``, its ``plan_scene`` and
+  ``continue_scene`` from ``<root>/e2e-fixed-setup.json``, and its
+  ``preview_sphere``, ``fill_drawer`` and ``preview_branch`` from
+  ``<root>/e2e-fixed-sphere.json``, never a model.
 - ``fixed_preview``: a function that writes that file (``seed.set_fixed_preview``);
   it's removed after the test, so no later test sees a stale preview.
 - ``fixed_setup``: the same for the scene setup (``seed.set_fixed_setup``).
+- ``fixed_sphere``: the same for the sphere replies (``preview_sphere``,
+  ``fill_drawer``, ``preview_branch``; ``seed.set_fixed_sphere``).
 - ``browser_page``: a fresh browser context and blank page, closed after the test.
 - ``page``: ``browser_page`` opened on the app, onboarding wizard dismissed,
   with ``page.console_errors`` collecting console messages of type ``error``.
@@ -40,10 +44,12 @@ import pytest
 from e2e.seed import (
     FIXED_PREVIEW_FILE,
     FIXED_SETUP_FILE,
+    FIXED_SPHERE_FILE,
     SOCKET_HOOK_JS,
     dismiss_onboarding,
     set_fixed_preview,
     set_fixed_setup,
+    set_fixed_sphere,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -102,12 +108,14 @@ def browser(chromium_path):
 def app(tmp_path_factory, chromium_path):
     # chromium_path first: without a browser, skip before starting an app.
     root = tmp_path_factory.mktemp("app")
-    # The backend's `preview_thing` and scene setups answer from these files
-    # instead of a model (seed.set_fixed_preview/set_fixed_setup write them).
+    # The backend's `preview_thing`, scene setups and sphere replies answer
+    # from these files instead of a model (seed.set_fixed_preview,
+    # set_fixed_setup and set_fixed_sphere write them).
     # Set only for the backend's start: it inherits the environment then.
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(root / FIXED_PREVIEW_FILE))
         mp.setenv("TALEMATE_TEST_FIXED_SETUP", str(root / FIXED_SETUP_FILE))
+        mp.setenv("TALEMATE_TEST_FIXED_SPHERE", str(root / FIXED_SPHERE_FILE))
         info = talemate_app.start(root=root)
     try:
         yield info
@@ -129,6 +137,15 @@ def fixed_setup(app):
     path = Path(app.root) / FIXED_SETUP_FILE
     try:
         yield lambda reply: set_fixed_setup(app.root, reply)
+    finally:
+        path.unlink(missing_ok=True)
+
+
+@pytest.fixture()
+def fixed_sphere(app):
+    path = Path(app.root) / FIXED_SPHERE_FILE
+    try:
+        yield lambda replies: set_fixed_sphere(app.root, replies)
     finally:
         path.unlink(missing_ok=True)
 

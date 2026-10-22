@@ -314,7 +314,7 @@ class CreatePreview(BaseModel):
     # names written in the prompt the owner treats as new: never linked to
     # the world's thing of that name, and a stub of their own if listed
     treated_as_new: list[str] = Field(default_factory=list)
-    # the sphere drawer an expanded stub joins (`_child_part_of`), as the
+    # the sphere drawer an expanded stub joins (`child_part_of`), as the
     # `part_of` field holds it, or None
     part_of: dict[str, str] | None = None
     # a character's proposed ties to spheres in its context, with their
@@ -1535,7 +1535,7 @@ def _guessed_drawer(
     return wanted[0] if wanted else UNSORTED_DRAWER_ID
 
 
-def _child_part_of(
+def child_part_of(
     view: WorldView, stub: Any, prompt: str, picks: dict[str, str]
 ) -> dict[str, str] | None:
     """The sphere drawer an expanded stub joins (child first, as the
@@ -1646,7 +1646,7 @@ async def preview_thing(
       ("treat as new"): a pick for one is dropped, so it's no context, and
       accept never links it to the world's thing of that name; listed by
       the model, it becomes a stub of its own.
-    - an expanded stub that belongs in a sphere (`_child_part_of`: its
+    - an expanded stub that belongs in a sphere (`child_part_of`: its
       mentions are all inside one sphere's items, or its prompt names a
       sphere stub) carries the `part_of` accept gives it.
     - a character is shown the spheres in its context
@@ -1716,7 +1716,7 @@ async def preview_thing(
         {w: thing_id for w, thing_id in picks.items() if thing_id not in sphere_ids},
         stub_id,
     )
-    part_of = _child_part_of(view, stub, prompt, picks) if stub is not None else None
+    part_of = child_part_of(view, stub, prompt, picks) if stub is not None else None
     groups = _labelled_facts(view, sources)
     rows = [row for group in groups for row in group]
     labels = {row.label: row.fact_id for row in rows}
