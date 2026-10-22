@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from talemate.path import WORLDS_DIR
 
@@ -33,7 +33,7 @@ from . import schema
 from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .kinds import KindSpec, get_kind, validate_field
-from .nearness import CurationSettings
+from .curation import CurationSettings
 from .refs import parse_refs
 from .view import FactState, WorldView, _fact_state_from_row
 
@@ -747,11 +747,16 @@ class World:
 
     def curation(self) -> CurationSettings:
         """The world's curation knobs; the defaults until `set_curation`
-        is called."""
+        is called, or when the stored value can't be read (logged)."""
 
         try:
-            return CurationSettings.model_validate_json(self._meta("curation"))
+            stored = self._meta("curation")
         except KeyError:
+            return CurationSettings()
+        try:
+            return CurationSettings.model_validate_json(stored)
+        except ValidationError as exc:
+            log.warning("world.curation_unreadable", stored=stored, error=str(exc))
             return CurationSettings()
 
     def set_curation(self, settings: CurationSettings) -> None:

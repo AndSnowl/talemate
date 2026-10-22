@@ -244,3 +244,39 @@ def test_curation_settings_round_trip(world, tmp_path):
     for bad in (0, 4):
         with pytest.raises(ValidationError):
             CurationSettings(reach=bad)
+
+
+def test_ignored_stub_never_near(world):
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", fields={"name": "A"})
+        ignored = rev.create_thing(
+            "place", fields={"name": "Ignored", "stub": {"ignored": True}}
+        )
+        third = rev.create_thing("place", fields={"name": "Third", "parent": ignored})
+        plain = rev.create_thing(
+            "lore", fields={"name": "Plain", "stub": {"ignored": False}}
+        )
+        rev.add_fact(a, "general", f"Of {ref(ignored)} and {ref(plain)}.")
+
+    view = world.view()
+    found = _ids(near(view, a, reach=3))
+    assert ignored not in found
+    assert third not in found
+    # a plain stub stays near
+    assert found == [plain]
+    assert near(view, ignored) == []
+
+
+def test_unnamed_things_sort_last(world):
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("place", fields={"name": "A"})
+        unnamed = rev.create_thing("place", fields={"parent": a})
+        zed = rev.create_thing("place", fields={"name": "Zed", "parent": a})
+
+    assert _ids(near(world.view(), a)) == [zed, unnamed]
+
+
+@pytest.mark.parametrize("stored", ["not json", '{"reach": 9}', '{"entries": "x"}'])
+def test_unreadable_curation_falls_back_to_defaults(world, stored):
+    world._set_meta("curation", stored)
+    assert world.curation() == CurationSettings()

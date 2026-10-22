@@ -26,21 +26,23 @@ field values in force at its date (`WorldView._fetch_fields`' rule), facts
 true at its date and ties that hold then. A removed thing is never near,
 and never bridges two others.
 
-`CurationSettings` holds the world's knobs, stored in its `meta` table
-(`World.curation`).
+An ignored stub (the owner chose not to make it) is treated as removed,
+as name matching does; a plain stub is near like any other thing.
+
+`CurationSettings` (from `curation`) is re-exported here.
 """
 
 import json
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from .curation import CurationSettings
 from .spheres import _part_of, _tie_live, _ties
 from .view import ThingState, WorldView
 
-log = structlog.get_logger("talemate.world.nearness")
+__all__ = ["WEIGHTS", "CurationSettings", "Near", "near"]
 
 # the starting weights from the plan, kept: a thing's own structure
 # (part of, parent) is as near as it gets, a tie nearly so; a mention is
@@ -56,28 +58,13 @@ WEIGHTS: dict[str, float] = {
 
 # the thing-valued fields read as heritage links
 _HERITAGE_FIELDS = ("heritage", "species", "parents")
-_LINK_FIELDS = ("name", "part_of", "parent", "ties", *_HERITAGE_FIELDS)
+_LINK_FIELDS = ("name", "stub", "part_of", "parent", "ties", *_HERITAGE_FIELDS)
 
 
 class Near(BaseModel):
     thing_id: str
     score: float
     steps: int
-
-
-class CurationSettings(BaseModel):
-    """The world's curation knobs."""
-
-    # how far out: steps through links
-    reach: int = Field(default=2, ge=1, le=3)
-    # how many entries a prompt brings in
-    entries: int = Field(default=12, ge=0)
-    # how many facts per entry
-    facts_per_entry: int = Field(default=6, ge=0)
-    # word overlap at which a new fact reads as a repeat
-    repeat_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
-    # how far out a timeline gathers lines from
-    timeline_reach: int = Field(default=2, ge=0, le=3)
 
 
 Graph = dict[str, dict[str, float]]
@@ -186,9 +173,16 @@ def _graph(view: WorldView) -> tuple[Graph, dict[str, str]]:
     graph: Graph = {}
     names: dict[str, str] = {}
 
-    for thing_id, field, value in _field_values(view, live):
+    values = list(_field_values(view, live))
+    for thing_id, field, value in values:
+        if field == "stub" and isinstance(value, dict) and value.get("ignored") is True:
+            live.pop(thing_id, None)
+
+    for thing_id, field, value in values:
+        if thing_id not in live or field == "stub":
+            continue
         if field == "name":
-            if isinstance(value, str):
+            if isinstance(value, str) and value.strip():
                 names[thing_id] = value.casefold()
         elif field == "part_of":
             state = _state(thing_id, live[thing_id], field, value)
@@ -245,9 +239,9 @@ def near(
     view: WorldView, thing_id: str, *, reach: int = 2, limit: int = 20
 ) -> list[Near]:
     """The live things near `thing_id` at the view, best first (score
-    descending, then name, then id), at most `limit` of them, never
-    `thing_id` itself. A thing that isn't live at the view has nothing
-    near it."""
+    descending, then name, unnamed things last, then id), at most `limit`
+    of them, never `thing_id` itself. A thing that isn't live at the view,
+    or is an ignored stub, has nothing near it."""
 
     if limit <= 0 or reach <= 0:
         return []
@@ -257,7 +251,12 @@ def near(
     found = _walk(graph, thing_id, reach)
     ranked = sorted(
         found.items(),
-        key=lambda item: (-item[1][0], names.get(item[0], ""), item[0]),
+        key=lambda item: (
+            -item[1][0],
+            item[0] not in names,
+            names.get(item[0], ""),
+            item[0],
+        ),
     )
     return [
         Near(thing_id=other, score=score, steps=steps)
