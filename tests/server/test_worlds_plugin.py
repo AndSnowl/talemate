@@ -1961,6 +1961,159 @@ async def test_repoint_ref_swaps_one_link_only(plugin, monkeypatch):
     assert world.head_rev() == head
 
 
+async def _open_repoint_world(plugin, monkeypatch):
+    """The stub world, plus the full place "Moscavy" (other name "Old
+    Moscavy") and more links to the stub "Tsardom of Moscavia": one with no
+    shown words, one Moscavy's own fact holds, one showing Moscavy's own
+    name and one showing another thing's name. Prose scheduling is
+    recorded in `s.prose`."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    s.prose = []
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    monkeypatch.setattr(
+        plugin, "_schedule_prose", lambda thing_id, at, **kw: s.prose.append(thing_id)
+    )
+    with world.revision(Source.manual(note="moscavy")) as rev:
+        s.moscavy = rev.create_thing(
+            "place", {"name": "Moscavy", "aka": [_aka("Old Moscavy", tag="proper")]}
+        )
+        s.fled = rev.add_fact(s.maren, "background", f"Fled {ref(s.tsardom)} twice.")
+        s.once = rev.add_fact(
+            s.moscavy, "history", f"Once called {ref(s.tsardom, 'the Tsardom')}."
+        )
+        s.dreams = rev.add_fact(
+            s.maren, "personality", f"Dreams of {ref(s.tsardom, 'moscavy')}."
+        )
+        s.sailed = rev.add_fact(
+            s.harbour, "history", f"Boats sail to {ref(s.tsardom, 'Harbour')}."
+        )
+    return s
+
+
+def _fact_text(world, thing_id, fact_id):
+    return next(
+        f.text for f in world.view().thing(thing_id).facts if f.fact_id == fact_id
+    )
+
+
+async def test_repoint_stub_moves_every_link_and_names_the_target(plugin, monkeypatch):
+    """`repoint_stub` points every link to a stub at the target, keeping
+    the words; the stub's name and each distinct shown text become the
+    target's common other names (not its own name, one it has, or another
+    thing's); the stub is removed. One revision, and no prose: the
+    rendered text is the same."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    head = world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
+    assert not _errors(plugin)
+    assert world.head_rev() == head + 1
+
+    texts = {
+        (s.maren, s.born): f"Born in {ref(s.moscavy, 'Moscavia')}.",
+        (s.harbour, s.ships): f"Ships from {ref(s.moscavy, 'Moscavia')} dock here.",
+        (s.maren, s.fled): f"Fled {ref(s.moscavy, 'Tsardom of Moscavia')} twice.",
+        # the target's own fact can't link to itself: its words stay, plain
+        (s.moscavy, s.once): "Once called the Tsardom.",
+        (s.maren, s.dreams): f"Dreams of {ref(s.moscavy, 'moscavy')}.",
+        (s.harbour, s.sailed): f"Boats sail to {ref(s.moscavy, 'Harbour')}.",
+    }
+    for (owner, fact_id), text in texts.items():
+        assert _fact_text(world, owner, fact_id) == text
+    view = world.view()
+    assert view.thing(s.tsardom) is None
+    assert view.thing(s.moscavy).fields["aka"] == [
+        _aka("Old Moscavy", tag="proper"),
+        _aka("Tsardom of Moscavia"),
+        _aka("Moscavia"),
+        _aka("the Tsardom"),
+    ]
+    assert s.prose == []
+
+    reply = _last(plugin, "repoint_stub")["data"]
+    assert reply["stub_id"] == s.tsardom
+    assert reply["target"]["id"] == s.moscavy
+    assert reply["links"] == 6
+    assert reply["aka_added"] == ["Tsardom of Moscavia", "Moscavia", "the Tsardom"]
+
+    # the stubs listed no longer hold it
+    await _act(plugin, "list_stubs")
+    assert _last(plugin, "list_stubs")["data"]["stubs"] == []
+
+
+async def test_repoint_stub_is_undone_in_one_step(plugin, monkeypatch):
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    born = _fact_text(world, s.maren, s.born)
+    once = _fact_text(world, s.moscavy, s.once)
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
+    assert not _errors(plugin)
+
+    report = world.undo([world.head_rev()])
+    assert report.undo_rev is not None
+    view = world.view()
+    stub = view.thing(s.tsardom)
+    assert stub is not None and stub.is_stub
+    assert view.name_of(s.tsardom) == "Tsardom of Moscavia"
+    assert _fact_text(world, s.maren, s.born) == born
+    assert _fact_text(world, s.moscavy, s.once) == once
+    assert view.thing(s.moscavy).fields["aka"] == [_aka("Old Moscavy", tag="proper")]
+
+
+async def test_repoint_stub_refusals_write_nothing(plugin, monkeypatch):
+    """Refused, writing nothing: the stub itself, a deleted thing, an
+    ignored stub, a full entry as the stub, and a stub a field points at.
+    Another live stub is a target like any entry."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    with world.revision(Source.manual(note="gone")) as rev:
+        gone = rev.create_thing("place", {"name": "Gone"})
+    with world.revision(Source.manual(note="delete")) as rev:
+        rev.remove_thing(gone)
+
+    head = world.head_rev()
+    for stub_id, target_id, words in (
+        (s.tsardom, s.tsardom, "itself"),
+        (s.tsardom, gone, "no such thing"),
+        (s.tsardom, s.hope, "ignored"),
+        (s.harbour, s.moscavy, "not a stub"),
+    ):
+        await _act(plugin, "repoint_stub", stub_id=stub_id, target_id=target_id)
+        assert words in _last(plugin, "operation_done")["error"]["message"]
+        assert world.head_rev() == head
+
+    # a field pointing at the stub: re-file it first
+    with world.revision(Source.manual(note="parent")) as rev:
+        rev.set_field(s.harbour, "parent", s.tsardom, None)
+    head = world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
+    message = _last(plugin, "operation_done")["error"]["message"]
+    assert "The Harbour" in message and "parent" in message
+    assert world.head_rev() == head
+    world.undo([head])
+
+    # another live stub takes the links, and stays a stub
+    with world.revision(Source.manual(note="stub")) as rev:
+        tsardom2 = rev.create_thing(
+            "place", {"name": "The Tsardom", "stub": {"ignored": False}}
+        )
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=tsardom2)
+    assert len(_errors(plugin)) == 5
+    view = world.view()
+    assert view.thing(s.tsardom) is None
+    assert view.thing(tsardom2).is_stub
+    assert _fact_text(world, s.maren, s.born) == f"Born in {ref(tsardom2, 'Moscavia')}."
+    # "the Tsardom" is its own name now
+    assert [entry["name"] for entry in view.thing(tsardom2).fields["aka"]] == [
+        "Tsardom of Moscavia",
+        "Moscavia",
+    ]
+
+
 async def test_fact_spans_keep_same_name_links_apart(plugin, monkeypatch):
     """A fact form's `spans` link their words positionally, before picks and
     automatic matching: two links written "Maren" keep their own targets,
