@@ -476,6 +476,7 @@ async def preview_sphere(
     picks: dict[str, str] | None = None,
     new_names: Sequence[str] = (),
     promote_id: str | None = None,
+    reply: str | None = None,
 ) -> SpherePreview:
     """A sphere's core from `prompt`, under `template`, without writing
     anything: one call (`world/sphere-core`), with no prose call, since the
@@ -491,7 +492,10 @@ async def preview_sphere(
       `create.preview_thing`.
 
     `fields` are the owner's picks (`name`, a place's or branch's
-    `parent`, ...); an `agent` among them wins over the template's flag."""
+    `parent`, ...); an `agent` among them wins over the template's flag.
+
+    A given `reply` (the browser tests' fixed reply) stands in for the
+    model's, read the same way; no client is needed then."""
 
     if template not in SPHERE_TEMPLATES:
         raise ValueError(f"no such sphere template: {template!r}")
@@ -507,7 +511,8 @@ async def preview_sphere(
             raise ValueError(f"no such thing: {promote_id}")
         if not _promotable(target):
             raise ValueError(f"a {target.kind} can't be promoted to a sphere")
-    prose_gen.require_client(client)
+    if reply is None:
+        prose_gen.require_client(client)
 
     kind = "place" if target is not None and target.kind == "place" else "sphere"
     kind_spec = get_kind(kind)
@@ -572,11 +577,12 @@ async def preview_sphere(
         "name": fields.get("name") or "",
         **_calendar_vars(world),
     }
-    with world_ai_call():
-        _response, extracted = await Prompt.request(
-            "world.sphere-core", client, CORE_PROMPT_KIND, vars=template_vars
-        )
-    reply = extracted["response"]
+    if reply is None:
+        with world_ai_call():
+            _response, extracted = await Prompt.request(
+                "world.sphere-core", client, CORE_PROMPT_KIND, vars=template_vars
+            )
+        reply = extracted["response"]
     core = _reply_object(reply, "drawers")
     if core is None:
         raise ValueError("the model's reply had no drawer outline in it")
@@ -1037,7 +1043,12 @@ def _written_by(text: str, new: NewName) -> bool:
 
 
 async def fill_drawer(
-    world: World, sphere_id: str, drawer_id: str, client: Any
+    world: World,
+    sphere_id: str,
+    drawer_id: str,
+    client: Any,
+    *,
+    reply: str | None = None,
 ) -> list[dict[str, Any]]:
     """New items for one drawer of a sphere (`world/sphere-fill`), as
     `SpherePreview.items` holds them, without writing anything. Each item
@@ -1047,12 +1058,14 @@ async def fill_drawer(
     The prompt has the sphere's summary, timeline and writable drawers
     with what they hold, and its mentions (but those from entries part of
     it). An item repeating one the sphere holds is dropped; the rest are
-    matched against the world as the core's are."""
+    matched against the world as the core's are. A given `reply` stands in
+    for the model's, as in `preview_sphere`."""
 
     view = world.view()
     state = _sphere_state(view, sphere_id)
     drawer = _fill_drawer_of(view, sphere_id, drawer_id)
-    prose_gen.require_client(client)
+    if reply is None:
+        prose_gen.require_client(client)
     calendar = world.calendar
 
     held = spheres.items(view, sphere_id)
@@ -1088,11 +1101,12 @@ async def fill_drawer(
         "about": about,
         **_calendar_vars(world),
     }
-    with world_ai_call():
-        _response, extracted = await Prompt.request(
-            "world.sphere-fill", client, FILL_PROMPT_KIND, vars=template_vars
-        )
-    reply = extracted["response"]
+    if reply is None:
+        with world_ai_call():
+            _response, extracted = await Prompt.request(
+                "world.sphere-fill", client, FILL_PROMPT_KIND, vars=template_vars
+            )
+        reply = extracted["response"]
     obj = _reply_object(reply, "new_items") or _reply_object(reply, "items")
     if obj is not None:
         raw: list[Any] = obj.get("new_items") or obj.get("items") or []
@@ -1245,7 +1259,12 @@ def _branch_outline(
 
 
 async def preview_branch(
-    world: World, parent_id: str, prompt: str, client: Any
+    world: World,
+    parent_id: str,
+    prompt: str,
+    client: Any,
+    *,
+    reply: str | None = None,
 ) -> SpherePreview:
     """A branch of the sphere `parent_id` from `prompt`, without writing
     anything: one call (`world/sphere-branch`). It's a `sphere` under its
@@ -1255,7 +1274,8 @@ async def preview_branch(
     docstring) to `drops`, `rejects` and its statements' `overrides`.
 
     An item naming one the branch inherits isn't made again; the rest are
-    matched against the world as the core's are."""
+    matched against the world as the core's are. A given `reply` stands in
+    for the model's, as in `preview_sphere`."""
 
     if not prompt.strip():
         raise ValueError("a branch needs a prompt")
@@ -1264,7 +1284,8 @@ async def preview_branch(
     if parent.kind != "sphere":
         # a place sphere's `parent` is the place it lies in
         raise ValueError("only a sphere has branches")
-    prose_gen.require_client(client)
+    if reply is None:
+        prose_gen.require_client(client)
     template = parent.fields.get("template")
     template = template if template in TEMPLATE_LABELS else "other"
     agent = parent.fields.get("agent")
@@ -1295,11 +1316,12 @@ async def preview_branch(
         "types": list(TYPE_HELP.items()),
         **_calendar_vars(world),
     }
-    with world_ai_call():
-        _response, extracted = await Prompt.request(
-            "world.sphere-branch", client, CORE_PROMPT_KIND, vars=template_vars
-        )
-    reply = extracted["response"]
+    if reply is None:
+        with world_ai_call():
+            _response, extracted = await Prompt.request(
+                "world.sphere-branch", client, CORE_PROMPT_KIND, vars=template_vars
+            )
+        reply = extracted["response"]
     core = _reply_object(reply, "items") or _reply_object(reply, "drawers")
     if core is None:
         raise ValueError("the model's reply had no items in it")

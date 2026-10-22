@@ -134,6 +134,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   instead of asking any model; `start_scene` then leaves the prose as it
   is. With `TALEMATE_TEST_FIXED_PREVIEW` set as well, each stub the setup
   uses gets the fixed preview; without it, stubs stay stubs.
+  Likewise `TALEMATE_TEST_FIXED_SPHERE` names a JSON file `{"sphere":
+  {...}, "fill": [...], "branch": {...}}` of model replies (the core's,
+  Fill's items, a branch's) that `preview_sphere`, `fill_drawer` and
+  `preview_branch` read through their real parsing instead of asking the
+  model; a missing file or key asks the model as usual.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -182,6 +187,7 @@ from talemate.worldplay.create import (
     PreviewTie,
     accept_preview,
     current_date,
+    drawer_types_for,
     exception_fact,
     matching_stub,
     preview_inherited,
@@ -249,6 +255,11 @@ FIXED_PREVIEW_ENV = "TALEMATE_TEST_FIXED_PREVIEW"
 # browser tests only: a JSON file holding the scene-setup model reply
 # `plan_scene` and `continue_scene` use (see the module docstring)
 FIXED_SETUP_ENV = "TALEMATE_TEST_FIXED_SETUP"
+
+# browser tests only: a JSON file `{"sphere", "fill", "branch"}` of model
+# replies `preview_sphere`, `fill_drawer` and `preview_branch` read instead
+# of asking the model (see the module docstring)
+FIXED_SPHERE_ENV = "TALEMATE_TEST_FIXED_SPHERE"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -545,6 +556,24 @@ class RepositionScenePayload(pydantic.BaseModel):
     start: dict
 
 
+def _fixed_sphere_reply(key: str) -> str | None:
+    """The browser tests' fixed sphere reply for `key` (`sphere`, `fill`
+    or `branch`), as the model's reply text, so the real parsing reads it:
+    `None` when the setting is unset, its file isn't there, or the file has
+    no `key`. A `fill` list is wrapped as `{"new_items": [...]}`."""
+
+    path = _fixed_file(FIXED_SPHERE_ENV)
+    if path is None:
+        return None
+    fixed = json.loads(path.read_text(encoding="utf-8"))
+    reply = fixed.get(key)
+    if reply is None:
+        return None
+    if key == "fill" and isinstance(reply, list):
+        reply = {"new_items": reply}
+    return json.dumps(reply)
+
+
 def _fixed_file(env: str) -> Path | None:
     """The browser tests' fixed-reply file named by `env`, if it's set and
     a test has written the file; `None` otherwise, so a request with no
@@ -722,6 +751,17 @@ def _item_out(view: WorldView, links: _Links, item: spheres.Item) -> dict:
     }
 
 
+def _own_drawer_ids(state: ThingState) -> set[str]:
+    """The ids in the sphere's own `drawers` field (not a parent's)."""
+
+    raw = state.fields.get("drawers")
+    return {
+        drawer["id"]
+        for drawer in (raw if isinstance(raw, list) else [])
+        if isinstance(drawer, dict) and isinstance(drawer.get("id"), str)
+    }
+
+
 def _sphere_out(
     view: WorldView, links: _Links, calendar: Calendar, state: ThingState
 ) -> dict | None:
@@ -742,12 +782,7 @@ def _sphere_out(
             TEMPLATE_AGENT.get(template, False) if isinstance(template, str) else False
         )
 
-    raw = state.fields.get("drawers")
-    own = {
-        drawer.get("id")
-        for drawer in (raw if isinstance(raw, list) else [])
-        if isinstance(drawer, dict)
-    }
+    own = _own_drawer_ids(state)
     shelves = spheres.drawers(view, sphere_id)
     held = spheres.items(view, sphere_id)
     if any(item.drawer_id == spheres.UNSORTED.id for item in held):
@@ -870,6 +905,31 @@ def _ties_out(
             }
         )
     return found
+
+
+def _inside(view: WorldView, start_id: str, thing_id: str) -> bool:
+    """Whether `thing_id` is `start_id` or one it sits in, going up its
+    `parent` and `part_of` links (each thing once)."""
+
+    seen: set[str] = set()
+    stack = [start_id]
+    while stack:
+        current = stack.pop()
+        if current == thing_id:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        state = view.thing(current)
+        if state is None:
+            continue
+        parent = state.fields.get("parent")
+        if isinstance(parent, str):
+            stack.append(parent)
+        link = state.fields.get("part_of")
+        if isinstance(link, dict) and isinstance(link.get("sphere"), str):
+            stack.append(link["sphere"])
+    return False
 
 
 def _new_drawer_ids(drawers: list[DrawerIn]) -> list[dict[str, str]]:
@@ -1437,7 +1497,12 @@ class WorldsPlugin(Plugin):
                     grouped := [
                         entry
                         for entry in things
-                        if (entry["template"] or "other") == template
+                        if (
+                            entry["template"]
+                            if entry["template"] in SPHERE_TEMPLATES
+                            else "other"
+                        )
+                        == template
                     ]
                 )
             ]
@@ -1554,16 +1619,18 @@ class WorldsPlugin(Plugin):
 
         payload = PreviewSpherePayload(**data)
         world = self._require_world()
+        fixed = _fixed_sphere_reply("sphere")
         preview = sphereplay.preview_sphere(
             world,
             payload.template,
             payload.prompt,
             payload.fields,
-            self._client(),
+            self._client() if fixed is None else None,
             stub_id=payload.stub_id,
             picks=payload.picks,
             new_names=payload.new_names,
             promote_id=payload.promote_id,
+            reply=fixed,
         )
         self._spawn(
             preview,
@@ -1593,8 +1660,13 @@ class WorldsPlugin(Plugin):
 
         payload = FillDrawerPayload(**data)
         world = self._require_world()
+        fixed = _fixed_sphere_reply("fill")
         filling = sphereplay.fill_drawer(
-            world, payload.sphere_id, payload.drawer_id, self._client()
+            world,
+            payload.sphere_id,
+            payload.drawer_id,
+            self._client() if fixed is None else None,
+            reply=fixed,
         )
         self._spawn(
             filling,
@@ -1642,14 +1714,31 @@ class WorldsPlugin(Plugin):
         retype, reorder and drop. A dropped drawer's items aren't moved:
         `spheres.items` shows an item whose drawer the sphere lacks under
         `UNSORTED`, and that's where they show. Drawers change no rendered
-        text: no prose is scheduled."""
+        text: no prose is scheduled.
+
+        A branch's inherited drawer sent back as it is (same id, type and
+        title) stays inherited, not copied into the branch's own; one sent
+        back changed is kept as the branch's own, overriding its
+        parent's."""
 
         payload = SetDrawersPayload(**data)
         world = self._require_world()
-        self._require_sphere(world, payload.sphere_id)
+        state = self._require_sphere(world, payload.sphere_id)
         if any(d.id == UNSORTED_DRAWER_ID for d in payload.drawers):
             raise ValueError("Unsorted isn't a drawer of its own")
-        drawers = _new_drawer_ids(payload.drawers)
+        own = _own_drawer_ids(state)
+        inherited = {
+            d.id: (d.type, d.title)
+            for d in spheres.drawers(world.view(), payload.sphere_id)
+            if d.id not in own
+        }
+        drawers = _new_drawer_ids(
+            [
+                d
+                for d in payload.drawers
+                if d.id is None or inherited.get(d.id) != (d.type, d.title)
+            ]
+        )
         with world.revision(Source.manual(note="sphere drawers")) as rev:
             rev.set_field(payload.sphere_id, "drawers", drawers, None)
         self._edited(
@@ -1659,7 +1748,15 @@ class WorldsPlugin(Plugin):
     async def handle_set_part_of(self, data: dict):
         """File a thing in a sphere's drawer (or its `UNSORTED`), or, with
         a null `sphere_id`, take it out of every sphere. A character never
-        is part of one (people come from ties). Changes no rendered text."""
+        is part of one (people come from ties); a place goes in a places
+        drawer and any other entry in one that holds entries
+        (`create.drawer_types_for`); nothing goes in a sphere that is,
+        through its `parent` and `part_of` links, inside it.
+
+        The link is undated, unless the thing's `part_of` has dated values
+        (an item `end_item` ended): then it holds from `at` (the date
+        viewed, else the world's now), which can't be before the latest of
+        them -- that one would still win. Changes no rendered text."""
 
         payload = SetPartOfPayload(**data)
         world = self._require_world()
@@ -1671,44 +1768,79 @@ class WorldsPlugin(Plugin):
             raise ValueError(f"a {state.kind} can't be part of a sphere")
         value: dict[str, str] | None = None
         if payload.sphere_id is not None:
-            if payload.sphere_id == payload.thing_id:
-                raise ValueError("a sphere can't be part of itself")
             self._require_sphere(world, payload.sphere_id)
-            drawer_ids = {d.id for d in spheres.drawers(view, payload.sphere_id)}
-            if payload.drawer_id not in drawer_ids | {UNSORTED_DRAWER_ID}:
+            if _inside(view, payload.sphere_id, payload.thing_id):
+                raise ValueError("a thing can't be part of a sphere inside it")
+            drawer = next(
+                (
+                    d
+                    for d in spheres.drawers(view, payload.sphere_id)
+                    if d.id == payload.drawer_id
+                ),
+                None,
+            )
+            if drawer is None and payload.drawer_id != UNSORTED_DRAWER_ID:
                 raise ValueError(f"the sphere has no drawer {payload.drawer_id}")
+            if drawer is not None and drawer.type not in drawer_types_for(state.kind):
+                raise ValueError(f"a {state.kind} doesn't go in a {drawer.type} drawer")
             value = {"sphere": payload.sphere_id, "drawer": payload.drawer_id}
+        dated = [
+            entry.date
+            for entry in world.timeline(payload.thing_id)
+            if entry.change == "field"
+            and entry.field == "part_of"
+            and entry.date is not None
+        ]
+        since: WorldDate | None = None
+        if dated:
+            since = _date_in(payload.at) or current_date(world)
+            latest = max(dated, key=lambda date: date.instant)
+            if since.instant < latest.instant:
+                raise ValueError(
+                    "it changed spheres in "
+                    f"{world.calendar.format(latest)}: file it from then on"
+                )
         with world.revision(Source.manual()) as rev:
-            rev.set_field(payload.thing_id, "part_of", value, None)
+            rev.set_field(payload.thing_id, "part_of", value, since)
         self._edited("set_part_of", payload.thing_id, _date_in(payload.at), prose=False)
 
     async def handle_set_ties(self, data: dict):
-        """Replace a character's ties. Each names a sphere in the world.
-        Ties are on the character sheet, not in its prose: none is
-        scheduled."""
+        """Replace a character's ties. Each names a sphere in the world, and
+        its `since` can't be after its `until`. The stored ties the payload
+        hides (to a sphere deleted since) are kept, after the rest, so
+        undoing the delete brings them back (ruling P12). Ties are on the
+        character sheet, not in its prose: none is scheduled."""
 
         payload = SetTiesPayload(**data)
         world = self._require_world()
-        state = world.view().thing(payload.character_id)
+        view = world.view()
+        state = view.thing(payload.character_id)
         if state is None or state.kind != "character":
             raise ValueError(f"not a character: {payload.character_id}")
         ties = []
         for tie in payload.ties:
             self._require_sphere(world, tie.sphere_id)
+            since, until = _date_in(tie.since), _date_in(tie.until)
+            if (
+                since is not None
+                and until is not None
+                and since.instant > until.instant
+            ):
+                raise ValueError("a tie can't end before it starts")
             ties.append(
                 {
                     "sphere": tie.sphere_id,
                     "role": tie.role.strip(),
-                    **{
-                        key: (
-                            date.model_dump(mode="json")
-                            if (date := _date_in(getattr(tie, key))) is not None
-                            else None
-                        )
-                        for key in ("since", "until")
-                    },
+                    "since": since.model_dump(mode="json") if since else None,
+                    "until": until.model_dump(mode="json") if until else None,
                 }
             )
+        stored = state.fields.get("ties")
+        for raw in stored if isinstance(stored, list) else []:
+            sphere_id = raw.get("sphere") if isinstance(raw, dict) else None
+            sphere = view.thing(sphere_id) if isinstance(sphere_id, str) else None
+            if sphere is None or not spheres.is_sphere(sphere):
+                ties.append(raw)
         with world.revision(Source.manual()) as rev:
             rev.set_field(payload.character_id, "ties", ties, None)
         self._edited(
@@ -1786,8 +1918,13 @@ class WorldsPlugin(Plugin):
 
         payload = PreviewBranchPayload(**data)
         world = self._require_world()
+        fixed = _fixed_sphere_reply("branch")
         preview = sphereplay.preview_branch(
-            world, payload.parent_id, payload.prompt, self._client()
+            world,
+            payload.parent_id,
+            payload.prompt,
+            self._client() if fixed is None else None,
+            reply=fixed,
         )
         self._spawn(
             preview,

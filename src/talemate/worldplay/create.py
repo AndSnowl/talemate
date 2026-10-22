@@ -1449,6 +1449,15 @@ PART_OF_KINDS: tuple[str, ...] = ("lore", "place", "item", "event", "sphere")
 _ITEM_DRAWER_TYPES = ("practices", "beliefs", "knowledge", "structure")
 
 
+def drawer_types_for(kind: str) -> tuple[str, ...]:
+    """The drawer types a `kind` thing may be filed in, as creation files
+    them: a place in a places drawer, any other entry in one that holds
+    entries. Never people (ties), events (the timeline) or branches; any
+    thing may sit in `UNSORTED`."""
+
+    return ("places",) if kind == "place" else _ITEM_DRAWER_TYPES
+
+
 def _item_home(view: WorldView, owner_id: str, fact: Any) -> tuple[str, str] | None:
     """`(sphere id, drawer id)` when a fact mentioning a thing is inside a
     sphere's items: a sphere's `statement` (in the drawer its origin

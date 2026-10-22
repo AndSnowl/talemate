@@ -14,6 +14,7 @@ import talemate.instance as instance
 from talemate.server.worlds import WorldsPlugin
 from talemate.scene_message import NarratorMessage
 from talemate.tale_mate import Actor
+from talemate.world import spheres
 from talemate.world.dates import WorldDate
 from talemate.world.refs import ref
 from talemate.world.scenes import MessageRecord
@@ -685,6 +686,8 @@ async def test_edits_without_a_client_leave_prose_stale(plugin, monkeypatch):
         {"action": "continue_scene", "scene_id": "SCENE", "goal_prompt": "Onward"},
         {"action": "preview_thing", "kind": "character", "prompt": "a smith"},
         {"action": "preview_sphere", "template": "order", "prompt": "a guild"},
+        {"action": "fill_drawer", "sphere_id": "SPHERE", "drawer_id": "DRAWER"},
+        {"action": "preview_branch", "parent_id": "SPHERE", "prompt": "a schism"},
     ],
 )
 async def test_model_actions_say_when_no_ai_client_is_configured(
@@ -696,11 +699,22 @@ async def test_model_actions_say_when_no_ai_client_is_configured(
     monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(tmp_path / "no-setup.json"))
     monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(tmp_path / "no-preview.json"))
     world, _maren, _harbour = await _open_world_with_maren(plugin)
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SPHERE", str(tmp_path / "no-sphere.json"))
     scene_id = world.scenes().create("First", WorldDate.of(313))
+    with world.revision(Source.manual(note="sphere")) as rev:
+        sphere_id = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Guild",
+                "template": "order",
+                "drawers": [{"id": "0dd5ea11", "type": "beliefs", "title": "Tenets"}],
+            },
+        )
     monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
 
+    stand_ins = {"SCENE": scene_id, "SPHERE": sphere_id, "DRAWER": "0dd5ea11"}
     data = {
-        key: scene_id if value == "SCENE" else value
+        key: stand_ins.get(value, value) if isinstance(value, str) else value
         for key, value in request_data.items()
     }
     await plugin.handle({"type": "worlds", **data})
@@ -711,6 +725,8 @@ async def test_model_actions_say_when_no_ai_client_is_configured(
         "continue_scene": "continue_failed",
         "preview_thing": "preview_failed",
         "preview_sphere": "preview_sphere_failed",
+        "fill_drawer": "fill_failed",
+        "preview_branch": "preview_branch_failed",
     }[data["action"]]
     message = _last(plugin, failed)["message"]
     assert message == "No AI client is configured for the creator agent"
@@ -2891,13 +2907,23 @@ async def test_set_part_of(plugin, client):
     await _fresh_prose(s.world, s.peak)
 
     await _act(
-        plugin, "set_part_of", thing_id=s.peak, sphere_id=s.dawn, drawer_id=DOCTRINES
+        plugin, "set_part_of", thing_id=s.peak, sphere_id=s.tsardom, drawer_id=LANDS
     )
     assert not _errors(plugin)
     peak = _last(plugin, "set_part_of")["data"]
-    assert peak["part_of"]["drawer_title"] == "Doctrines"
+    assert peak["part_of"]["drawer_title"] == "Lands"
     assert not plugin.tasks
     assert _prose_fresh(s.world, s.peak)
+    await _act(
+        plugin, "set_part_of", thing_id=s.vigil, sphere_id=s.dawn, drawer_id=DOCTRINES
+    )
+    assert _last(plugin, "set_part_of")["data"]["part_of"]["drawer_title"] == (
+        "Doctrines"
+    )
+    # the Tsardom (a place sphere) in the Dawn's Holy Sites
+    await _act(
+        plugin, "set_part_of", thing_id=s.tsardom, sphere_id=s.dawn, drawer_id=SITES
+    )
 
     # into another sphere's unsorted, then out of every sphere
     await _act(
@@ -2927,6 +2953,13 @@ async def test_set_part_of(plugin, client):
         dict(thing_id=s.peak, sphere_id=s.dawn, drawer_id="0badd0e5"),
         # itself
         dict(thing_id=s.reformed, sphere_id=s.reformed, drawer_id="unsorted"),
+        # a sphere inside it: its branch (parent), and the Tsardom (part_of)
+        dict(thing_id=s.dawn, sphere_id=s.reformed, drawer_id="unsorted"),
+        dict(thing_id=s.dawn, sphere_id=s.tsardom, drawer_id="unsorted"),
+        # drawer types, as creation files things: lore isn't a place, a
+        # place goes in a places drawer
+        dict(thing_id=s.vigil, sphere_id=s.dawn, drawer_id=SITES),
+        dict(thing_id=s.peak, sphere_id=s.dawn, drawer_id=DOCTRINES),
     ]
     for data in refused:
         before = len(_errors(plugin))
@@ -2979,8 +3012,6 @@ async def test_set_ties(plugin, client):
 
 
 async def test_add_exception(plugin, client):
-    from talemate.world import spheres
-
     s = await _open_sphere_world(plugin)
     async with MockClientContext():
         # departing from a thing item, linked as written
@@ -3193,3 +3224,268 @@ async def test_accept_preview_carries_ties(plugin, client):
     assert oskar["ties"][0]["exceptions"] == []
     (tithe,) = oskar["ties"][1]["exceptions"]
     assert _text(tithe["segments"]).startswith("Pays no tithe.")
+
+
+async def test_set_part_of_refiles_an_ended_item(plugin, client):
+    """`end_item` ends the link at a date; filing the item again holds from
+    the date viewed (else now), so the dated end doesn't keep winning."""
+
+    s = await _open_sphere_world(plugin)
+    await _act(
+        plugin,
+        "end_item",
+        sphere_id=s.dawn,
+        thing_id=s.vigil,
+        at=WorldDate.of(1015).model_dump(mode="json"),
+    )
+    await _drain(plugin)
+    assert (await _get_thing(plugin, s.vigil))["part_of"] is None
+
+    # before the end: refused, it would change nothing
+    await _act(
+        plugin,
+        "set_part_of",
+        thing_id=s.vigil,
+        sphere_id=s.dawn,
+        drawer_id=RITES,
+        at=WorldDate.of(1012).model_dump(mode="json"),
+    )
+    assert "1015" in _errors(plugin)[-1]["error"]["message"]
+
+    await _act(
+        plugin, "set_part_of", thing_id=s.vigil, sphere_id=s.dawn, drawer_id=RITES
+    )
+    assert len(_errors(plugin)) == 1
+    vigil = _last(plugin, "set_part_of")["data"]
+    assert vigil["part_of"]["drawer_title"] == "Rites"
+    view = s.world.view()
+    assert view.field_since(s.vigil, "part_of") == WorldDate.of(1020)
+    assert s.vigil in {
+        i.thing_id for i in spheres.items(view, s.dawn) if i.drawer_id == RITES
+    }
+    # its time out of the Dawn stays told
+    assert s.vigil not in {
+        i.thing_id for i in spheres.items(s.world.view(WorldDate.of(1017)), s.dawn)
+    }
+
+
+async def test_set_drawers_keeps_a_branchs_inherited_drawers(plugin, client):
+    """The full drawer list a branch's page shows, sent back as it is,
+    leaves its own `drawers` field alone; an inherited drawer sent back
+    changed is a deliberate override, kept as its own."""
+
+    s = await _open_sphere_world(plugin)
+    shown = (await _get_thing(plugin, s.reformed))["sphere"]["drawers"]
+    assert {d["id"] for d in shown} == {DOCTRINES, RITES, SITES}
+
+    sent = [{k: d[k] for k in ("id", "type", "title")} for d in shown]
+    await _act(plugin, "set_drawers", sphere_id=s.reformed, drawers=sent)
+    assert not _errors(plugin)
+    assert s.world.view().thing(s.reformed).fields.get("drawers") == []
+
+    sent[1] = {**sent[1], "title": "Reformed Rites"}
+    sent.append({"type": "beliefs", "title": "Reforms"})
+    await _act(plugin, "set_drawers", sphere_id=s.reformed, drawers=sent)
+    own = s.world.view().thing(s.reformed).fields["drawers"]
+    assert [(d["id"], d["title"]) for d in own][:1] == [(RITES, "Reformed Rites")]
+    assert [d["title"] for d in own] == ["Reformed Rites", "Reforms"]
+    titles = [
+        d["title"] for d in _last(plugin, "set_drawers")["data"]["sphere"]["drawers"]
+    ]
+    assert titles == ["Reformed Rites", "Reforms", "Doctrines", "Holy Sites"]
+
+
+async def test_set_ties_keeps_a_tie_to_a_deleted_sphere(plugin, client):
+    """Ruling P12: a tie to a deleted sphere is hidden, so a UI save never
+    sends it; it's kept, and undoing the delete brings it back."""
+
+    s = await _open_sphere_world(plugin)
+    since = WorldDate.of(1010).model_dump(mode="json")
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.vasha,
+        ties=[
+            {"sphere_id": s.dawn, "role": "practitioner", "since": since},
+            {"sphere_id": s.tsardom, "role": "subject"},
+        ],
+    )
+    await _act(plugin, "delete_thing", id=s.dawn)
+    deleted = s.world.head_rev()
+    vasha = await _get_thing(plugin, s.vasha)
+    assert [t["sphere_name"] for t in vasha["ties"]] == ["Tsardom"]
+
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.vasha,
+        ties=[{"sphere_id": s.tsardom, "role": "loyal subject"}],
+    )
+    assert not _errors(plugin)
+    s.world.undo([deleted])
+
+    vasha = await _get_thing(plugin, s.vasha)
+    assert [(t["sphere_name"], t["role"]) for t in vasha["ties"]] == [
+        ("Tsardom", "loyal subject"),
+        ("The White Dawn", "practitioner"),
+    ]
+    assert vasha["ties"][1]["since"]["label"] == "1010"
+    assert [t.character_id for t in spheres.people(s.world.view(), s.dawn)] == [s.vasha]
+
+
+async def test_set_ties_refuses_an_end_before_the_start(plugin, client):
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[
+            {
+                "sphere_id": s.dawn,
+                "role": "novice",
+                "since": WorldDate.of(1015).model_dump(mode="json"),
+                "until": WorldDate.of(1012).model_dump(mode="json"),
+            }
+        ],
+    )
+    assert "end before" in _errors(plugin)[-1]["error"]["message"]
+    assert s.world.head_rev() == head
+
+
+async def test_list_things_unknown_template_groups_as_other(plugin, monkeypatch):
+    from talemate.world import kinds
+
+    s = await _open_sphere_world(plugin)
+    # a template no longer offered, written when it still was
+    monkeypatch.setattr(kinds, "SPHERE_TEMPLATES", (*kinds.SPHERE_TEMPLATES, "cult"))
+    with s.world.revision(Source.manual(note="old")) as rev:
+        odd = rev.create_thing("sphere", {"name": "The Old Way", "template": "cult"})
+    monkeypatch.undo()
+    await _act(plugin, "list_things", kind="sphere")
+    groups = {
+        g["template"]: [t["id"] for t in g["things"]]
+        for g in _last(plugin, "list_things")["data"]["groups"]
+    }
+    assert groups["other"] == [odd]
+
+
+async def test_add_exception_from_the_whole_sphere(plugin, client):
+    """`rejects` null: a departure from the sphere's teaching as a whole,
+    linking the sphere, with no origin."""
+
+    s = await _open_sphere_world(plugin)
+    async with MockClientContext():
+        await _act(
+            plugin,
+            "add_exception",
+            character_id=s.vasha,
+            sphere_id=s.dawn,
+            text="Doubts it all",
+            rejects=None,
+        )
+        await _drain(plugin)
+    assert not _errors(plugin)
+    exceptions = _last(plugin, "add_exception")["data"]["ties"][0]["exceptions"]
+    doubts = exceptions[-1]
+    assert _text(doubts["segments"]) == (
+        "Doubts it all. Departs from a teaching of The White Dawn"
+    )
+    assert doubts["segments"][-1]["ref"] == s.dawn
+    fact = next(
+        f for f in s.world.view().thing(s.vasha).facts if f.fact_id == doubts["fact_id"]
+    )
+    assert fact.origin is None
+
+
+async def test_preview_branch_failure_is_reported(plugin, client):
+    s = await _open_sphere_world(plugin)
+    async with MockClientContext():
+        client_responses.get().append("no json here")
+        await _act(plugin, "preview_branch", parent_id=s.dawn, prompt="smiths")
+        await _drain(plugin)
+    assert "no items" in _last(plugin, "preview_branch_failed")["message"]
+
+
+async def test_end_item_refuses_a_malformed_date(plugin, client):
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    for at in ({"instant": "soon"}, None, "1015"):
+        before = len(_errors(plugin))
+        await _act(plugin, "end_item", sphere_id=s.dawn, thing_id=s.vigil, at=at)
+        assert len(_errors(plugin)) == before + 1, at
+    assert s.world.head_rev() == head
+
+
+def _fixed_sphere_file(tmp_path, monkeypatch, **replies):
+    path = tmp_path / "fixed-sphere.json"
+    path.write_text(json.dumps(replies))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SPHERE", str(path))
+    # no client at all: the fixed replies must not need one
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+
+
+async def test_fixed_sphere_preview_answers_without_a_model(
+    plugin, tmp_path, monkeypatch
+):
+    await _open_sphere_world(plugin)
+    _fixed_sphere_file(tmp_path, monkeypatch, sphere=json.loads(CORE_SYNOD))
+    await _act(plugin, "preview_sphere", template="order", prompt="a council of smiths")
+    await _drain(plugin)
+    assert not _replies(plugin, "preview_sphere_failed")
+    preview = _last(plugin, "preview_sphere")["data"]
+    # read through the real parsing: drawers given ids, app drawers added
+    assert preview["name"] == "The Iron Synod"
+    assert preview["template"] == "order"
+    assert [d["title"] for d in preview["drawers"]][:1] == ["Tenets"]
+    assert all(len(d["id"]) == 8 for d in preview["drawers"])
+    assert "Members" in [d["title"] for d in preview["drawers"]]
+    await _act(plugin, "accept_sphere", preview=preview)
+    assert _last(plugin, "accept_sphere")["data"]["name"] == "The Iron Synod"
+
+
+async def test_fixed_fill_answers_without_a_model(plugin, tmp_path, monkeypatch):
+    s = await _open_sphere_world(plugin)
+    _fixed_sphere_file(
+        tmp_path,
+        monkeypatch,
+        fill=[
+            {"name": "Dawn Vigil", "text": "A nightly prayer at first light."},
+            {"name": "The Ember Rite", "text": "Coals are carried up the peak."},
+        ],
+    )
+    await _act(plugin, "fill_drawer", sphere_id=s.dawn, drawer_id=RITES)
+    await _drain(plugin)
+    items = _last(plugin, "fill_drawer")["data"]["items"]
+    # the real parsing: the repeat of the Dawn Vigil is dropped
+    assert [i["name"] for i in items] == ["The Ember Rite"]
+    assert items[0]["drawer_id"] == RITES
+    assert items[0]["kind"] == "lore"
+
+
+async def test_fixed_branch_answers_without_a_model(plugin, tmp_path, monkeypatch):
+    s = await _open_sphere_world(plugin)
+    _fixed_sphere_file(tmp_path, monkeypatch, branch=json.loads(BRANCH_SMITHS))
+    await _act(plugin, "preview_branch", parent_id=s.dawn, prompt="the smiths' Dawn")
+    await _drain(plugin)
+    assert not _replies(plugin, "preview_branch_failed")
+    preview = _last(plugin, "preview_branch")["data"]
+    assert preview["name"] == "The Forge Dawn"
+    assert preview["fields"] == {"parent": s.dawn}
+    # F1, the first parent item, mapped back to its thing
+    first = preview["parent_items"][0]
+    assert first["label"] == "F1"
+    assert preview["drops"] == ([first["thing_id"]] if first["thing_id"] else [])
+
+
+async def test_fixed_sphere_file_missing_asks_the_model(
+    plugin, client, tmp_path, monkeypatch
+):
+    await _open_sphere_world(plugin)
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SPHERE", str(tmp_path / "none.json"))
+    async with MockClientContext():
+        client_responses.get().append(CORE_SYNOD)
+        await _act(plugin, "preview_sphere", template="order", prompt="smiths")
+        await _drain(plugin)
+    assert len(client.prompt_history) == 1
+    assert _last(plugin, "preview_sphere")["data"]["name"] == "The Iron Synod"
