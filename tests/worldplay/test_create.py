@@ -1897,3 +1897,438 @@ def test_adjective_form_name_is_still_stubbed(at_1020):
         )
     linked = link_text(world.view(), "Magian the seer came to the Magi.")
     assert parse_refs(linked) == [magian, magi]
+
+
+# --- ties at character creation ----------------------------------------------
+
+from talemate.world.spheres import exceptions as sphere_exceptions  # noqa: E402
+
+
+class DawnWorld(NamedTuple):
+    dawn: str
+    separation: str
+    vigil: str
+    purity: str
+    kremova: str
+    tsardom: str
+    kovask: str
+    law: str
+
+
+def _sphere_drawer(drawer_id: str, type_: str, title: str) -> dict:
+    return {"id": drawer_id, "type": type_, "title": title}
+
+
+@pytest.fixture
+def dawn_world(at_1020):
+    """The spheres probe's White Dawn (a religion, everyday "the Dawn")
+    with a doctrine, a rite and a statement, Kremova as a holy site (a
+    place: never an item), and the Tsardom of Moscavia, a nation place
+    sphere (other name Moscavia) holding Kremova and Kovask, with one
+    law."""
+
+    with at_1020.revision(Source.manual(note="spheres")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "aka": [_aka("Moscavia", everyday=True)],
+                "template": "nation",
+                "drawers": [
+                    _sphere_drawer("d0000101", "beliefs", "Laws"),
+                    _sphere_drawer("d0000102", "places", "Lands"),
+                ],
+            },
+        )
+        rev.add_fact(tsardom, "about", "A northern realm of owl-folk.")
+        law = rev.add_fact(
+            tsardom,
+            "statement",
+            "Only owl-folk may hold land.",
+            origin={"drawer": "d0000101"},
+        )
+        kovask = rev.create_thing("place", fields={"name": "Kovask", "parent": tsardom})
+        dawn = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The White Dawn",
+                "aka": [_aka("Dawn Church", tag="proper"), _aka("the Dawn")],
+                "template": "religion",
+                "drawers": [
+                    _sphere_drawer("d0000001", "beliefs", "Doctrines"),
+                    _sphere_drawer("d0000002", "practices", "Rites and Ceremonies"),
+                    _sphere_drawer("d0000003", "places", "Holy Sites"),
+                ],
+            },
+        )
+        rev.add_fact(dawn, "about", "The state church of the owl-folk.")
+        separation = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Doctrine of Separation",
+                "part_of": {"sphere": dawn, "drawer": "d0000001"},
+            },
+        )
+        rev.add_fact(separation, "general", "The faithful may not marry humans.")
+        rev.add_fact(separation, "general", "Issued in 1019.")
+        kremova = rev.create_thing(
+            "place",
+            fields={
+                "name": "Kremova",
+                "parent": tsardom,
+                "part_of": {"sphere": dawn, "drawer": "d0000003"},
+            },
+        )
+        rev.add_fact(kremova, "general", "The white city.")
+        vigil = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Dawn Vigil",
+                "part_of": {"sphere": dawn, "drawer": "d0000002"},
+            },
+        )
+        rev.add_fact(vigil, "general", "The faithful watch the first light.")
+        purity = rev.add_fact(
+            dawn,
+            "statement",
+            "Snowy owl-folk are the purest of the folk.",
+            origin={"drawer": "d0000001"},
+        )
+    return DawnWorld(dawn, separation, vigil, purity, kremova, tsardom, kovask, law)
+
+
+DAWN_BLOCK = (
+    "Spheres in the world (faiths, nations, orders, cultures, fields of "
+    "knowledge) the character may belong to, each with what it holds, "
+    "labelled S1, S2...:\n"
+    "The White Dawn (religion):\n"
+    "- The state church of the owl-folk.\n"
+    "- S1 (Doctrines): The Doctrine of Separation: The faithful may not "
+    "marry humans.\n"
+    "- S2 (Rites and Ceremonies): The Dawn Vigil: The faithful watch the "
+    "first light.\n"
+    "- S3 (Doctrines): Snowy owl-folk are the purest of the folk.\n"
+)
+
+
+def _priestess_reply(ties: list) -> str:
+    return json.dumps(
+        {
+            "name": "Ilyana",
+            "age": 30,
+            "facts": [
+                {"category": "background", "text": "Raised in a mountain cloister."},
+                {"category": "personality", "text": "Patient and wry."},
+            ],
+            "names": [],
+            "ties": ties,
+        }
+    )
+
+
+async def _preview_priestess(world, prompt: str, ties: list, **extra):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(_priestess_reply(ties), "She is tall.", "She is patient.")
+        preview = await preview_thing(world, "character", prompt, {}, client, **extra)
+    return preview, str(client.prompt_history[0]["prompt"])
+
+
+async def test_character_preview_proposes_ties_to_existing_spheres(at_1020, dawn_world):
+    """The probe's (c): a sphere named in the prompt is shown with its
+    items labelled S1..., places left out, and not again under "Named in
+    this prompt"; the reply's ties resolve to it, with `since` read as a
+    fact's and each exception's label mapped to its item."""
+
+    d = dawn_world
+    preview, prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn who loves a human",
+        [
+            {
+                "sphere": "The White Dawn",
+                "role": "priest",
+                "since": "1004",
+                "exceptions": [
+                    {"text": "She means to marry a human.", "rejects": "S1"},
+                    {"text": "She thinks all folk equal.", "rejects": "s3"},
+                ],
+            }
+        ],
+    )
+
+    assert DAWN_BLOCK + "\nThe world's calendar:" in prompt
+    assert "Named in this prompt" not in prompt
+    # the example object and the rules, verbatim
+    assert (
+        '"names": [{"name": "...", "kind": "place", "aka": []}], "ties": '
+        '[{"sphere": "...", "role": "practitioner", "since": "YEAR", '
+        '"exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]}' in prompt
+    )
+    assert (
+        '- "ties": after the names, the spheres above this character belongs '
+        'to, each {"sphere", "role", "since", "exceptions"}: "sphere" its name '
+        'as written above; "role" a word or two for how they belong '
+        '(practitioner, priest, elder, scholar, member); "since" the year '
+        "they joined, as a bare number no later than 1020, or left out. Only "
+        "the spheres above: never invent one here. An empty list is fine.\n"
+        '- "exceptions": only where this character departs from the sphere, '
+        'each {"text", "rejects"}: "text" one sentence on what they reject or '
+        'do differently, and "rejects" the label of the item it departs from, '
+        'such as "S3". The character already holds everything else the sphere '
+        "holds, so never restate it, in an exception or in the facts. Most "
+        "ties have no exception or one.\n"
+        "- Write each exception only there, never again as one of the facts.\n"
+        "\nNo commentary" in prompt
+    )
+
+    assert len(preview.ties) == 1
+    tie = preview.ties[0]
+    assert (tie.sphere_id, tie.sphere, tie.role) == (d.dawn, "The White Dawn", "priest")
+    assert tie.since == WorldDate.of(1004)
+    assert [(e.text, e.thing_id, e.fact_id) for e in tie.exceptions] == [
+        ("She means to marry a human.", d.separation, None),
+        ("She thinks all folk equal.", None, d.purity),
+    ]
+    # the owner sees the sphere as context too
+    assert (
+        "Sphere: The White Dawn (religion)",
+        [
+            "The state church of the owl-folk.",
+            "S1 (Doctrines): The Doctrine of Separation: The faithful may not "
+            "marry humans.",
+            "S2 (Rites and Ceremonies): The Dawn Vigil: The faithful watch the "
+            "first light.",
+            "S3 (Doctrines): Snowy owl-folk are the purest of the folk.",
+        ],
+    ) in preview.context
+
+
+async def test_no_spheres_no_ties_wording(at_1020):
+    """With no sphere in context the prompt doesn't ask for ties, and a
+    reply's stray ties resolve to nothing."""
+
+    preview, prompt = await _preview_priestess(
+        at_1020,
+        "a wandering priestess",
+        [{"sphere": "The White Dawn", "role": "priest"}],
+    )
+
+    assert "Spheres in the world" not in prompt
+    assert '"ties"' not in prompt
+    assert preview.ties == []
+
+
+async def test_unknown_sphere_tie_dropped(at_1020, dawn_world):
+    """A tie resolves only by a sphere's name or other name: an unknown
+    sphere, and an adjective form ("Moscavian", ruling P8), are dropped;
+    a tie without a role is a member."""
+
+    d = dawn_world
+    preview, _prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn",
+        [
+            {"sphere": "The Iron Covenant", "role": "member"},
+            {"sphere": "Moscavian", "role": "subject"},
+            {"sphere": "Dawn Church", "role": "priest"},
+            {"sphere": "moscavia"},
+            {"sphere": "Kremova", "role": "pilgrim"},
+            "The White Dawn",
+        ],
+    )
+
+    assert [(t.sphere_id, t.role) for t in preview.ties] == [
+        (d.dawn, "priest"),
+        (d.tsardom, "member"),
+    ]
+
+
+async def test_tie_since_parsed_like_a_facts(at_1020, dawn_world):
+    """`since` is a string or a number, read like a fact's; a year after
+    now, a placeholder or a phrase is no date."""
+
+    sinces = [1004, "1010", "1996", 1994, "YEAR", "since childhood", None]
+    preview, _prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn",
+        [{"sphere": "The White Dawn", "role": "priest", "since": s} for s in sinces],
+    )
+
+    assert [t.since for t in preview.ties] == [
+        WorldDate.of(1004),
+        WorldDate.of(1010),
+        None,
+        None,
+        None,
+        None,
+        None,
+    ]
+
+
+async def test_sphere_labels_run_across_spheres(at_1020, dawn_world):
+    """A picked place brings the spheres whose territory holds it (the
+    Tsardom holds Kovask; Kremova is the Dawn's holy site and in the
+    Tsardom); a sphere reached twice is listed once; labels run on from
+    one sphere into the next."""
+
+    d = dawn_world
+    preview, prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn from Kremova",
+        [
+            {
+                "sphere": "Tsardom of Moscavia",
+                "role": "subject",
+                "exceptions": [
+                    {"text": "She rents land to humans.", "rejects": "S4"},
+                    # the Dawn's label under the Tsardom's tie: dropped
+                    {"text": "She skips the vigil.", "rejects": "S2"},
+                    {"text": "Unlabelled.", "rejects": "S9"},
+                    {"text": "No label at all."},
+                ],
+            }
+        ],
+    )
+
+    assert prompt.count("The White Dawn (religion):") == 1
+    assert (
+        "Tsardom of Moscavia (nation, usually called Moscavia):\n"
+        "- A northern realm of owl-folk.\n"
+        "- S4 (Laws): Only owl-folk may hold land.\n" in prompt
+    )
+    assert "- S3 (Doctrines): Snowy owl-folk are the purest" in prompt
+    # Kremova, a plain place, is still named; the spheres aren't
+    assert '"Kremova" means Kremova (place):' in prompt
+    assert '"White Dawn"' not in prompt.split("Named in this prompt")[1]
+    [tie] = preview.ties
+    assert tie.sphere_id == d.tsardom
+    assert [(e.text, e.fact_id) for e in tie.exceptions] == [
+        ("She rents land to humans.", d.law)
+    ]
+
+
+async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
+    """On accept the ties are written and each exception becomes a `ties`
+    fact: one rejecting a thing item ends with a reference to it, one
+    rejecting a statement references the sphere and records the fact in
+    its origin; `spheres.exceptions` finds both (ruling P3)."""
+
+    d = dawn_world
+    preview, _prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn",
+        [
+            {
+                "sphere": "The White Dawn",
+                "role": "priest",
+                "since": 1004,
+                "exceptions": [
+                    {"text": "She means to marry a human", "rejects": "S1"},
+                    {"text": "She thinks all folk equal.", "rejects": "S3"},
+                ],
+            }
+        ],
+    )
+
+    thing_id = accept_preview(at_1020, preview)
+
+    view = at_1020.view(None)
+    state = view.thing(thing_id)
+    assert state.fields["ties"] == [
+        {
+            "sphere": d.dawn,
+            "role": "priest",
+            "since": WorldDate.of(1004).model_dump(mode="json"),
+            "until": None,
+        }
+    ]
+    ties_facts = {f.fact_id: f for f in state.facts if f.category == "ties"}
+    assert len(ties_facts) == 2
+    by_thing = next(f for f in ties_facts.values() if d.separation in f.refs)
+    assert by_thing.text.endswith(ref(d.separation, "The Doctrine of Separation"))
+    assert view.render(by_thing.text) == (
+        "She means to marry a human. Departs from The Doctrine of Separation"
+    )
+    by_fact = next(f for f in ties_facts.values() if f.fact_id != by_thing.fact_id)
+    assert by_fact.origin == {"rejects_fact": d.purity}
+    assert d.dawn in by_fact.refs
+    found = sphere_exceptions(view, thing_id, d.dawn)
+    assert {f.fact_id for f in found} == set(ties_facts)
+    # no fact of the facts list went to the ties category
+    assert all(f.category != "ties" for f in preview.facts)
+
+
+def test_cut_off_reply_ties_are_no_facts():
+    """A reply cut off inside its ties: neither a tie nor an exception
+    object is read as a fact."""
+
+    reply = (
+        '{"name": "Ilyana", "facts": [{"category": "background", "text": '
+        '"Raised in a cloister."}], "names": [], "ties": [{"sphere": "The '
+        'White Dawn", "role": "priest", "since": 1004, "exceptions": '
+        '[{"text": "She marries.", "rejects": "S1"}]}, {"sphere": "Mosc'
+    )
+
+    _name, _age, facts = parse_create_reply(reply, "character", Calendar(), 1020)
+
+    assert [f.text for f in facts] == ["Raised in a cloister."]
+
+
+async def test_heritage_character_gets_the_ties_wording(probe_world):
+    """The probe ran (c) on the heritage branch: its example object gains
+    the ties too, after "names", and the block sits before the calendar."""
+
+    world = probe_world.world
+    with world.revision(Source.manual(note="sphere")) as rev:
+        dawn = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The White Dawn",
+                "template": "religion",
+                "drawers": [_sphere_drawer("d0000001", "beliefs", "Doctrines")],
+            },
+        )
+        rev.add_fact(
+            dawn, "statement", "Snowy owl-folk are pure.", origin={"drawer": "d0000001"}
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            _priestess_reply([{"sphere": "White Dawn", "role": "practitioner"}]),
+            "She is white.",
+            "She is calm.",
+        )
+        preview = await preview_thing(
+            world,
+            "character",
+            "a Snowy courier of the White Dawn",
+            {"heritage": probe_world.snowy},
+            client,
+        )
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert (
+        "The White Dawn (religion):\n- S1 (Doctrines): Snowy owl-folk are pure.\n"
+        "\nThe world's calendar:" in prompt
+    )
+    assert '"overrides": []' in prompt
+    assert '"aka": []}], "ties": [{"sphere": "...", "role": "practitioner"' in prompt
+    assert [(t.sphere_id, t.role, t.since) for t in preview.ties] == [
+        (dawn, "practitioner", None)
+    ]
+
+
+async def test_accept_refuses_a_tie_to_a_deleted_sphere(at_1020, dawn_world):
+    preview, _prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn",
+        [{"sphere": "The White Dawn", "role": "priest"}],
+    )
+    with at_1020.revision(Source.manual(note="gone")) as rev:
+        rev.remove_thing(dawn_world.dawn)
+    head = at_1020.head_rev()
+
+    with pytest.raises(ValueError, match="no sphere"):
+        accept_preview(at_1020, preview)
+    assert at_1020.head_rev() == head

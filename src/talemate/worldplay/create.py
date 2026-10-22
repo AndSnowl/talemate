@@ -63,6 +63,21 @@ in a sphere -- mentioned only inside one sphere's items, or with a sphere
 stub named in its prompt -- joins it (`CreatePreview.part_of`); the parent
 is never written to.
 
+A character is offered ties to the spheres in its context (the spheres
+probe's (c)): those the prompt names or that mention a stub being
+expanded (Connections' context), and those whose territory holds a place
+the prompt names, each listed once with its items (places left out)
+labelled S1... across all of them. A sphere listed there isn't also
+"Named in this prompt". The reply's `"ties"` resolve by a sphere's name
+or other name only (never an adjective form), and an unknown one is
+dropped; a tie's `since` is read as a fact's; an exception's `"rejects"`
+label maps to an item of its own tie's sphere, or the exception is
+dropped (`parse_ties`). On accept the ties are written, and each
+exception becomes a `ties` fact that references what it rejects: a thing
+item at the end of its text, or, for a statement item, the sphere, with
+`origin = {"rejects_fact": <fact id>}` (`world.spheres.exceptions` reads
+both).
+
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -92,7 +107,7 @@ from talemate.world.kinds import (
     get_kind,
     validate_field,
 )
-from talemate.world.refs import parse_refs
+from talemate.world.refs import parse_refs, ref
 from talemate.world.names import (
     ARTICLES,
     everyday_name,
@@ -100,7 +115,7 @@ from talemate.world.names import (
     unknown_proper_phrases,
 )
 from talemate.world.store import Source, World
-from talemate.world.view import WorldView
+from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.links import (
@@ -114,7 +129,12 @@ from talemate.worldplay.links import (
     name_key,
     name_keys,
 )
-from talemate.worldplay.mentions import entry_label, gather_mentions, mention_context
+from talemate.worldplay.mentions import (
+    MentionContext,
+    entry_label,
+    gather_mentions,
+    mention_context,
+)
 
 log = structlog.get_logger("talemate.worldplay.create")
 
@@ -190,11 +210,18 @@ _NOT_CATEGORY_KEYS = {
     "max",
     "aka",
     "names",
+    "ties",
+    "sphere",
+    "role",
+    "exceptions",
+    "rejects",
 }
 
 # keys only an `aka` entry or a "names" entry has: an object with one is
 # never a fact, even when a cut-off reply's fallback finds it on its own
 _NAME_ENTRY_KEYS = {"tag", "everyday", "kind"}
+# keys only a tie or an exception has, likewise
+_TIE_KEYS = {"sphere", "rejects", "exceptions"}
 
 # words that say nothing about a fact's topic, left out of the overlap a
 # top-level "no_longer_true" label is attached by
@@ -207,6 +234,7 @@ _WORD_RE = re.compile(r"[a-z]+")
 _NAME_RE = re.compile(r'"name"\s*:\s*"((?:[^"\\]|\\.)*)"')
 _AKA_LIST_RE = re.compile(r'"aka"\s*:\s*\[')
 _NAMES_LIST_RE = re.compile(r'"names"\s*:\s*\[')
+_TIES_LIST_RE = re.compile(r'"ties"\s*:\s*\[')
 # the format example's placeholder, copied as is
 _PLACEHOLDER = "..."
 _AGE_RE = re.compile(r'"age"\s*:\s*"?(\d{1,4})')
@@ -233,6 +261,28 @@ class PreviewInherited(BaseModel):
     source_id: str
     category: str
     text: str
+
+
+class PreviewException(BaseModel):
+    """A "but..." of a proposed tie: what the character does differently,
+    and the sphere item it departs from -- a thing (`thing_id`) or a
+    statement (`fact_id`), named `item` as the prompt showed it."""
+
+    text: str
+    item: str
+    thing_id: str | None = None
+    fact_id: str | None = None
+
+
+class PreviewTie(BaseModel):
+    """A tie the reply proposes to a sphere already in the world."""
+
+    sphere_id: str
+    # the sphere's name, for the owner
+    sphere: str
+    role: str
+    since: WorldDate | None = None
+    exceptions: list[PreviewException] = Field(default_factory=list)
 
 
 class CreatePreview(BaseModel):
@@ -266,6 +316,9 @@ class CreatePreview(BaseModel):
     # the sphere drawer an expanded stub joins (`_child_part_of`), as the
     # `part_of` field holds it, or None
     part_of: dict[str, str] | None = None
+    # a character's proposed ties to spheres in its context, with their
+    # exceptions
+    ties: list[PreviewTie] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -464,12 +517,18 @@ def parse_no_longer_true(reply: str, labels: dict[str, str]) -> list[str]:
     return _mapped_labels(wrapper["no_longer_true"], labels)
 
 
+# categories a create reply's facts never take: a sphere's (a place's
+# timeline, about and statement facts come from `worldplay.spheres`), and
+# a character's `ties`, which are exceptions written from its ties alone
+_NOT_CREATED_CATEGORIES = (*SPHERE_CATEGORIES, "ties")
+
+
 def create_categories(kind: str) -> list[str]:
     """The fact categories a `kind` thing is written from a prompt: its
-    kind's, less the ones only a sphere uses (a place's timeline, about and
-    statement facts come from `worldplay.spheres`)."""
+    kind's, less the ones only a sphere uses and `ties` (exceptions come
+    from the reply's ties, never its facts)."""
 
-    return [c for c in get_kind(kind).categories if c not in SPHERE_CATEGORIES]
+    return [c for c in get_kind(kind).categories if c not in _NOT_CREATED_CATEGORIES]
 
 
 def parse_create_reply(
@@ -498,9 +557,10 @@ def parse_create_reply(
             if isinstance(obj.get("age"), (int, str)) and str(obj["age"]).isdigit():
                 age = int(obj["age"])
             fact_objects.extend(f for f in obj["facts"] if isinstance(f, dict))
-        elif not _NAME_ENTRY_KEYS & obj.keys():
-            # an `aka` or "names" entry a broken wrapper left on its own
-            # (the connections probe read one as a fact "common") isn't one
+        elif not (_NAME_ENTRY_KEYS | _TIE_KEYS) & obj.keys():
+            # an `aka`, "names" or "ties" entry a broken wrapper left on its
+            # own (the connections probe read one as a fact "common") isn't
+            # one
             fact_objects.append(obj)
 
     # a truncated reply never closes its wrapper object; its name and age
@@ -1114,6 +1174,241 @@ def _found_in_prompt(
     return found
 
 
+# --- spheres a character may be tied to --------------------------------------
+
+
+class _SphereItem(NamedTuple):
+    """An item the spheres block labels, as an exception's `"rejects"`
+    maps back to it."""
+
+    sphere_id: str
+    item: spheres.Item
+
+
+# a tie's role when the reply gives none
+_DEFAULT_ROLE = "member"
+
+
+def context_spheres(
+    view: WorldView, picks: dict[str, str], gathered: MentionContext | None
+) -> list[str]:
+    """The spheres a character's prompt has in context, each once: those
+    picked or found in the prompt, those mentioning the stub being
+    expanded (`gathered`), then those whose territory holds a picked
+    place, in the order they were made."""
+
+    found: list[str] = []
+
+    def add(thing_id: str) -> None:
+        state = view.thing(thing_id)
+        if state is not None and spheres.is_sphere(state) and thing_id not in found:
+            found.append(thing_id)
+
+    for thing_id in picks.values():
+        add(thing_id)
+    if gathered is not None:
+        for mention in gathered.mentioned:
+            add(mention.owner_id)
+        for about in gathered.about:
+            add(about.id)
+    places = {
+        thing_id
+        for thing_id in picks.values()
+        if (state := view.thing(thing_id)) is not None and state.kind == "place"
+    }
+    if places:
+        for state in sorted(view.things(), key=lambda thing: thing.created):
+            if spheres.is_sphere(state) and places.intersection(
+                spheres.territory(view, state.id)
+            ):
+                add(state.id)
+    return found
+
+
+def _sphere_heading(view: WorldView, state: ThingState) -> str:
+    """A sphere as the spheres block heads it, by its template: "The
+    White Dawn (religion)"."""
+
+    template = state.fields.get("template")
+    heading: str = entry_label(
+        view.name_of(state.id) or "",
+        template if isinstance(template, str) else state.kind,
+        everyday_name(state),
+    )
+    return heading
+
+
+def spheres_block(
+    view: WorldView, sphere_ids: list[str]
+) -> tuple[list[tuple[str, str, list[tuple[str, str, str]]]], dict[str, _SphereItem]]:
+    """The spheres block as the create prompt lists it -- `(heading, about,
+    [(label, drawer title, line)])` per sphere: its first `about` fact,
+    then its items in `items` order, places left out -- and what each
+    label (S1... running across all the spheres) stands for."""
+
+    block: list[tuple[str, str, list[tuple[str, str, str]]]] = []
+    labels: dict[str, _SphereItem] = {}
+    for sphere_id in sphere_ids:
+        state = view.thing(sphere_id)
+        if state is None:
+            continue
+        about = next(
+            (
+                fact
+                for fact in sorted(state.facts, key=lambda fact: fact.created)
+                if fact.category == "about"
+            ),
+            None,
+        )
+        titles = {
+            drawer.id: drawer.title for drawer in spheres.drawers(view, sphere_id)
+        }
+        lines: list[tuple[str, str, str]] = []
+        for item in spheres.items(view, sphere_id):
+            thing = view.thing(item.thing_id) if item.thing_id is not None else None
+            if thing is not None and thing.kind == "place":
+                continue
+            label = f"S{len(labels) + 1}"
+            labels[label] = _SphereItem(sphere_id, item)
+            title = titles.get(item.drawer_id, spheres.UNSORTED.title)
+            lines.append((label, title, spheres._item_line(item)))
+        block.append(
+            (
+                _sphere_heading(view, state),
+                view.render(about.text) if about is not None else "",
+                lines,
+            )
+        )
+    return block, labels
+
+
+def _sphere_named(view: WorldView, name: str, shown: list[str]) -> str | None:
+    """The sphere whose name or other name is `name` (ignoring case and a
+    leading article), the ones shown first; never by an adjective form."""
+
+    key = name_key(name)
+    if not key:
+        return None
+    others: list[str] = [
+        state.id
+        for state in sorted(view.things(), key=lambda thing: thing.created)
+        if spheres.is_sphere(state) and state.id not in shown
+    ]
+    for sphere_id in [*shown, *others]:
+        state = view.thing(sphere_id)
+        if state is None or not spheres.is_sphere(state):
+            continue
+        names = [view.name_of(sphere_id) or ""]
+        names += [entry["name"] for entry in _aka_entries(state.fields.get("aka"))]
+        if key in {name_key(other) for other in names}:
+            return sphere_id
+    return None
+
+
+def _raw_ties(reply: str) -> object:
+    """The reply's `"ties"` list: the wrapper's, or, when it was cut off,
+    every complete tie of the last `"ties"` list."""
+
+    wrapper = _reply_wrapper(reply)
+    if wrapper is not None:
+        return wrapper.get("ties")
+    last = None
+    for last in _TIES_LIST_RE.finditer(reply):
+        pass
+    return _list_at(reply, last)
+
+
+def _tie_exceptions(
+    raw: object, sphere_id: str, labels: dict[str, _SphereItem]
+) -> list[PreviewException]:
+    """A tie's exceptions whose `"rejects"` label is one of its own
+    sphere's items; the rest are dropped."""
+
+    found: list[PreviewException] = []
+    for entry in raw if isinstance(raw, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        text, label = entry.get("text"), entry.get("rejects")
+        if not isinstance(text, str) or not text.strip() or not isinstance(label, str):
+            continue
+        target = labels.get(label.strip().upper())
+        if target is None or target.sphere_id != sphere_id:
+            log.debug("create.exception_dropped", label=label)
+            continue
+        found.append(
+            PreviewException(
+                text=" ".join(text.split()),
+                item=target.item.name,
+                thing_id=target.item.thing_id,
+                fact_id=None if target.item.thing_id else target.item.fact_id,
+            )
+        )
+    return found
+
+
+def parse_ties(
+    reply: str,
+    view: WorldView,
+    labels: dict[str, _SphereItem],
+    shown: list[str],
+    calendar: Calendar,
+    now_year: int,
+) -> list[PreviewTie]:
+    """The reply's ties to spheres already in the world (by name or other
+    name, the `shown` ones first), in order; one to an unknown sphere is
+    dropped. `since` is read as a fact's (`_parse_since`), and a tie
+    without a role is a member's."""
+
+    ties: list[PreviewTie] = []
+    raw_ties = _raw_ties(reply)
+    for raw in raw_ties if isinstance(raw_ties, list) else []:
+        if not isinstance(raw, dict) or not isinstance(raw.get("sphere"), str):
+            continue
+        sphere_id = _sphere_named(view, raw["sphere"], shown)
+        if sphere_id is None:
+            log.debug("create.unknown_sphere", sphere=raw["sphere"])
+            continue
+        role = raw.get("role")
+        role = " ".join(role.split()) if isinstance(role, str) else ""
+        ties.append(
+            PreviewTie(
+                sphere_id=sphere_id,
+                sphere=view.name_of(sphere_id) or "",
+                role=role if role.strip(" .") else _DEFAULT_ROLE,
+                since=_parse_since(raw.get("since"), calendar, now_year),
+                exceptions=_tie_exceptions(raw.get("exceptions"), sphere_id, labels),
+            )
+        )
+    return ties
+
+
+def _exception_fact(
+    text: str, tie: PreviewTie, exception: PreviewException
+) -> tuple[str, dict[str, object] | None]:
+    """An exception's `ties` fact, `(text, origin)`: one rejecting a thing
+    item ends with a reference to it; one rejecting a statement references
+    the sphere and records the statement in its origin (ruling P3). Text
+    that references its target already is kept as it is."""
+
+    origin: dict[str, object] | None = None
+    if exception.thing_id is not None:
+        target, shown, lead = exception.thing_id, exception.item, "Departs from"
+    else:
+        target, shown, lead = tie.sphere_id, tie.sphere, "Departs from a teaching of"
+        if exception.fact_id is not None:
+            origin = {"rejects_fact": exception.fact_id}
+    if target in parse_refs(text):
+        return text, origin
+    body = text.rstrip()
+    if body[-1:] not in (".", "!", "?"):
+        body += "."
+    try:
+        token = ref(target, shown)
+    except ValueError:
+        token = ref(target)
+    return f"{body} {lead} {token}", origin
+
+
 # the kinds that can be part of a sphere, in a drawer: entries a drawer
 # holds, and nested spheres. Characters never are: people come from ties
 PART_OF_KINDS: tuple[str, ...] = ("lore", "place", "item", "event", "sphere")
@@ -1274,6 +1569,10 @@ async def preview_thing(
     - an expanded stub that belongs in a sphere (`_child_part_of`: its
       mentions are all inside one sphere's items, or its prompt names a
       sphere stub) carries the `part_of` accept gives it.
+    - a character is shown the spheres in its context
+      (`context_spheres`, `spheres_block`) instead of as named entries,
+      and the reply's ties to existing spheres become the preview's `ties`
+      (`parse_ties`).
 
     A sphere isn't made here: `worldplay.spheres.preview_sphere` makes one
     from a template.
@@ -1329,7 +1628,14 @@ async def preview_thing(
         *(layer.thing_id for src in sources for layer in heritage.lineage(view, src)),
     }
     picks.update(_found_in_prompt(view, prompt, picks, treated_as_new, in_context))
-    named = _named_in_prompt(view, picks, stub_id)
+    # a character's spheres in context are shown as such, not as named
+    sphere_ids = context_spheres(view, picks, gathered) if kind == "character" else []
+    sphere_block, sphere_labels = spheres_block(view, sphere_ids)
+    named = _named_in_prompt(
+        view,
+        {w: thing_id for w, thing_id in picks.items() if thing_id not in sphere_ids},
+        stub_id,
+    )
     part_of = _child_part_of(view, stub, prompt, picks) if stub is not None else None
     groups = _labelled_facts(view, sources)
     rows = [row for group in groups for row in group]
@@ -1359,6 +1665,7 @@ async def preview_thing(
         "mentions": [],
         "about": [],
         "named": named,
+        "spheres": sphere_block,
     }
     context: list[tuple[str, list[str]]] = []
     if stub is not None and gathered is not None:
@@ -1379,6 +1686,13 @@ async def preview_thing(
     context += [
         (f'Named in this prompt: "{written}" means {label}', facts)
         for written, label, facts in named
+    ]
+    context += [
+        (
+            f"Sphere: {heading}",
+            [*([about] if about else []), *(f"{a} ({b}): {c}" for a, b, c in lines)],
+        )
+        for heading, about, lines in sphere_block
     ]
     if kind == "character" and sources:
         template_vars["heritage_label"] = heritage_label(view, sources[0])
@@ -1412,6 +1726,11 @@ async def preview_thing(
     name, age, facts = parse_create_reply(reply, kind, calendar, now_year, labels)
     if not facts:
         raise ValueError("the model's reply had no facts in it")
+    ties = (
+        parse_ties(reply, view, sphere_labels, sphere_ids, calendar, now_year)
+        if sphere_ids
+        else []
+    )
 
     source_names = [row.source for row in rows]
     _attach_top_level(
@@ -1489,6 +1808,7 @@ async def preview_thing(
         picks=picks,
         treated_as_new=treated_as_new,
         part_of=part_of,
+        ties=ties,
     )
 
 
@@ -1583,6 +1903,10 @@ def accept_preview(
       as new never links to (or is made a stub by reusing) the world's
       thing of that name. A listed name no fact ends up linking to makes
       no stub: there'd be nothing to find it by.
+    - A character's `ties` are written (after any the owner's fields
+      give), and each of their exceptions becomes a `ties` fact
+      (`_exception_fact`). A tie to a thing that's no sphere (deleted
+      since) is refused with `ValueError` before anything is written.
     - Filling a stub -- the preview's `stub_id`, or `into_stub` ("fill the
       stub instead") -- writes into that thing and keeps its id: its kind
       (`into_stub` may have another), name, fields and other names are set,
@@ -1600,6 +1924,10 @@ def accept_preview(
     target = preview.stub_id or into_stub
     view = world.view()
     stub = _live_stub(view, target) if target is not None else None
+    for tie in preview.ties:
+        sphere = view.thing(tie.sphere_id)
+        if sphere is None or not spheres.is_sphere(sphere):
+            raise ValueError(f"a tie to no sphere: {tie.sphere_id}")
 
     new_names = list(preview.new_names)
     while True:
@@ -1711,6 +2039,29 @@ def _write_preview(
             rev.remove_field_value(thing_id, "stub", None)
         if preview.part_of is not None:
             rev.set_field(thing_id, "part_of", preview.part_of, None)
+        if preview.ties:
+            held = preview.fields.get("ties")
+            rev.set_field(
+                thing_id,
+                "ties",
+                [
+                    *(held if isinstance(held, list) else []),
+                    *(
+                        {
+                            "sphere": tie.sphere_id,
+                            "role": tie.role,
+                            "since": (
+                                tie.since.model_dump(mode="json")
+                                if tie.since is not None
+                                else None
+                            ),
+                            "until": None,
+                        }
+                        for tie in preview.ties
+                    ),
+                ],
+                None,
+            )
 
         # the revision's own view: the stubs just made and the thing's own
         # names are in it, so a name meaning the thing itself stays plain
@@ -1733,6 +2084,19 @@ def _write_preview(
                 valid_from=fact.since,
                 overrides=fact.overrides,
             )
+        for tie in preview.ties:
+            for exception in tie.exceptions:
+                text = link_text(
+                    linking,
+                    exception.text,
+                    picks=preview.picks,
+                    new_names=made,
+                    owner=thing_id,
+                    as_new=preview.treated_as_new,
+                )
+                linked.update(parse_refs(text))
+                text, origin = _exception_fact(text, tie, exception)
+                rev.add_fact(thing_id, "ties", text, origin=origin)
 
         orphans = {
             stub_id

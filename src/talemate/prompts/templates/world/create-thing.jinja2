@@ -20,6 +20,13 @@ stub's "Mentioned elsewhere" and "About those"; `named` is
 `[(written, label, facts)]`, "Named in this prompt". A label carries the
 entry's everyday name: "Tsardom of Moscavia (place, usually called
 Moscavia)".
+
+A character with spheres in context (wording from
+docs/superpowers/probes/2026-10-22-spheres.md, "(c) Ties and exceptions
+at character creation") gets the spheres block, `spheres` as
+`[(heading, about, [(label, drawer title, line)])]`, the `"ties"` key in
+its example object and the ties rules. A sphere shown there isn't also
+"Named in this prompt".
 -#}
 <|SECTION:TASK|>
 {% if kind == "species" -%}
@@ -108,6 +115,18 @@ Named in this prompt (these already exist in the world: use them as they are, an
 {% endfor %}
 {%- endfor %}
 {%- endif %}
+{%- if spheres %}
+
+Spheres in the world (faiths, nations, orders, cultures, fields of knowledge) the character may belong to, each with what it holds, labelled S1, S2...:
+{% for heading, about, items in spheres -%}
+{{ heading }}:
+{% if about %}- {{ about }}
+{% endif -%}
+{% for label, title, line in items -%}
+- {{ label }} ({{ title }}): {{ line }}
+{% endfor -%}
+{% endfor %}
+{%- endif %}
 
 The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
 <|CLOSE_SECTION|>
@@ -133,7 +152,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "no_longer_true": after the facts, the labels of the species facts that are untrue for this race now that your facts hold, such as ["F4"]. An inherited fact your facts only add detail to stays true and isn't listed; an empty list is fine when nothing changes.
 - Leave "since" out: these facts describe the race for as long as it has existed, and are never dated.
 {%- elif heritage_label -%}
-{"name": "...", "age": 34, "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", "age": 34, "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if spheres %}, "ties": [{"sphere": "...", "role": "practitioner", "since": "YEAR", "exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]{% endif %}}
 
 - "name": the character's name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 - "age": how old the character is now, in years, as a number.
@@ -142,7 +161,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}; "YEAR" in the example stands for that number. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- else -%}
-{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"}, {"category": "{{ categories[-1] }}", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"}, {"category": "{{ categories[-1] }}", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if spheres %}, "ties": [{"sphere": "...", "role": "practitioner", "since": "YEAR", "exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]{% endif %}}
 
 - "name": the {{ kind }}'s name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 {% if kind == "character" -%}
@@ -154,6 +173,11 @@ Reply with only one JSON object, shaped exactly like this example:
 {%- endif %}
 - "aka": other names for this {{ kind }} itself, if it has any, each {"name", "tag", "everyday"}. "tag" is "proper" for another formal name, or "common" for what people in the world actually call it day to day (a short form, a nickname). Set "everyday" true on the one common name people use most, false on the rest. "name" stays the most formal name. An empty list is fine.
 - "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, culture, event, item, lore (a group, order or faction is lore; so is a law, code, script or language); "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+{%- if spheres %}
+- "ties": after the names, the spheres above this character belongs to, each {"sphere", "role", "since", "exceptions"}: "sphere" its name as written above; "role" a word or two for how they belong (practitioner, priest, elder, scholar, member); "since" the year they joined, as a bare number no later than {{ now_year }}, or left out. Only the spheres above: never invent one here. An empty list is fine.
+- "exceptions": only where this character departs from the sphere, each {"text", "rejects"}: "text" one sentence on what they reject or do differently, and "rejects" the label of the item it departs from, such as "S3". The character already holds everything else the sphere holds, so never restate it, in an exception or in the facts. Most ties have no exception or one.
+- Write each exception only there, never again as one of the facts.
+{%- endif %}
 
 No commentary, no markdown fences, just the JSON object.
 <|CLOSE_SECTION|>
