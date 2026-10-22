@@ -165,7 +165,16 @@ KINDS: dict[str, KindSpec] = {
             ("agent", "json"),
             ("drawers", "json"),
         ),
-        categories=["description", "history", "law", "general", "statement"],
+        # a place sphere's timeline, about and statement facts too
+        categories=[
+            "description",
+            "history",
+            "law",
+            "general",
+            "statement",
+            "timeline",
+            "about",
+        ],
     ),
     "sphere": KindSpec(
         name="sphere",
@@ -217,6 +226,10 @@ KINDS: dict[str, KindSpec] = {
 
 
 HERITAGE_KINDS: tuple[str, ...] = ("species", "race", "mix")
+
+# the fact categories only a sphere uses: a place holds them once it takes
+# on a template, but a plain place is never written them from a prompt
+SPHERE_CATEGORIES: tuple[str, ...] = ("timeline", "about", "statement")
 
 # kinds kept in KINDS so old worlds still read, but no longer created or
 # guessed in fresh ones (superseded by the sphere kind)

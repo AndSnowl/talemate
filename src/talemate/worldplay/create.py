@@ -87,6 +87,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
     AKA_TAGS,
     HERITAGE_KINDS,
+    SPHERE_CATEGORIES,
     UNSORTED_DRAWER_ID,
     get_kind,
     validate_field,
@@ -463,6 +464,14 @@ def parse_no_longer_true(reply: str, labels: dict[str, str]) -> list[str]:
     return _mapped_labels(wrapper["no_longer_true"], labels)
 
 
+def create_categories(kind: str) -> list[str]:
+    """The fact categories a `kind` thing is written from a prompt: its
+    kind's, less the ones only a sphere uses (a place's timeline, about and
+    statement facts come from `worldplay.spheres`)."""
+
+    return [c for c in get_kind(kind).categories if c not in SPHERE_CATEGORIES]
+
+
 def parse_create_reply(
     reply: str,
     kind: str,
@@ -476,7 +485,7 @@ def parse_create_reply(
     `"overrides"` labels are mapped through `labels` (label -> fact id) to
     its `overrides`."""
 
-    categories = get_kind(kind).categories
+    categories = create_categories(kind)
     fallback = _FALLBACK_CATEGORY.get(kind, "general")
 
     name: str | None = None
@@ -1103,6 +1112,10 @@ def _found_in_prompt(
     return found
 
 
+# the kinds that can be part of a sphere, in a drawer: entries a drawer
+# holds, and nested spheres. Characters never are: people come from ties
+PART_OF_KINDS: tuple[str, ...] = ("lore", "place", "item", "event", "sphere")
+
 # drawer types a non-place child may join by its mention's drawer: people
 # come from ties, events are the timeline, branches are spheres
 _ITEM_DRAWER_TYPES = ("practices", "beliefs", "knowledge", "structure")
@@ -1158,10 +1171,11 @@ def _child_part_of(
       that stub, unsorted -- the stub has no drawers yet, and expanding it
       later files its children (`worldplay.spheres` adoption).
 
-    A stub that's part of a sphere already stays where it is. The parent is
+    A stub that's part of a sphere already stays where it is, and one of a
+    kind outside `PART_OF_KINDS` (a character) joins none. The parent is
     never written to: expanding a child never creates its sphere."""
 
-    if stub.fields.get("part_of") is not None:
+    if stub.kind not in PART_OF_KINDS or stub.fields.get("part_of") is not None:
         return None
     mentioning = [
         (owner_id, fact)
@@ -1328,7 +1342,7 @@ async def preview_thing(
     template_vars: dict[str, Any] = {
         "kind": kind,
         "prompt": prompt,
-        "categories": kind_spec.categories,
+        "categories": create_categories(kind),
         "known_fields": _known_fields(world, fields, now),
         "has_name": bool(fields.get("name")),
         "name": fields.get("name") or "",

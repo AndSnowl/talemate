@@ -8,7 +8,8 @@ docs/superpowers/probes/2026-10-22-spheres.md, "Recommended prompt text"
 probe found kept Fill from repeating the drawer's items and from breaking
 on a statement.
 
-`drawers` is `[(title, type, lines)]` for the sphere's writable drawers,
+`drawers` is `[(title, type, lines, target)]` for the sphere's writable
+drawers, `target` marking the one to fill (by id, not title),
 `existing` the lines of the drawer to fill, `timeline` its timeline lines
 ("<year>: <text>"). The Connections blocks are as in sphere-core, without
 the entries already part of the sphere.
@@ -24,8 +25,8 @@ Timeline:
 - {{ line }}
 {% endfor -%}
 {% endif -%}
-{% for title, type, lines in drawers -%}
-{{ title }} ({{ type }}){% if title == drawer_title %}, the drawer to fill{% endif %}:
+{% for title, type, lines, target in drawers -%}
+{{ title }} ({{ type }}){% if target %}, the drawer to fill{% endif %}:
 {% for line in lines -%}
 - {{ line }}
 {% else -%}

@@ -498,6 +498,33 @@ async def test_promote_place_keeps_kind(moscavia, world):
     # Kremova, already in the world, is linked, not made again
     assert len(_named(view, "Kremova")) == 1
     assert moscavia.kremova in spheres.territory(view, moscavia.tsardom)
+    # the place's timeline shows (ruling P7)
+    assert [f.valid_from for f in spheres.timeline(view, moscavia.tsardom)] == [
+        WorldDate.of(year) for year in (994, 1001, 1015, 1020)
+    ]
+
+
+async def test_place_create_prompt_hides_sphere_categories(moscavia, world):
+    """A place may hold timeline, about and statement facts as a sphere,
+    but a plain place's create prompt never offers them."""
+
+    reply = json.dumps(
+        {
+            "name": "Vesnagrad",
+            "facts": [
+                {"category": "description", "text": "A river town."},
+                {"category": "timeline", "text": "Founded long ago."},
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A river town.")
+        preview = await preview_thing(world, "place", "a river town", {}, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "description, history, law, general." in prompt
+    assert "timeline" not in prompt.split("FORMAT")[-1]
+    assert [f.category for f in preview.facts] == ["description", "general"]
 
 
 # --- Fill --------------------------------------------------------------------
@@ -686,8 +713,11 @@ async def test_core_guards(moscavia, world):
         ("The Toll Song", customs, "lore"),
         ("", UNSORTED_DRAWER_ID, ""),
     ]
-    # a year after now is no date
-    assert [f.since for f in preview.facts] == [WorldDate.of(1001), None]
+    # a year after now is no date: that entry is filed as "about"
+    assert [(f.category, f.since) for f in preview.facts] == [
+        ("timeline", WorldDate.of(1001)),
+        ("about", None),
+    ]
     assert [(n.name, n.kind, n.template) for n in preview.new_names] == [
         ("Rafters' Compact", "sphere", "order")
     ]
@@ -702,3 +732,158 @@ async def test_core_guards(moscavia, world):
     assert [item.text for item in unsorted] == ["Amber is weighed in May."]
     (compact,) = _named(view, "Rafters' Compact")
     assert (compact.kind, compact.fields["template"]) == ("sphere", "order")
+
+
+async def test_character_stub_named_as_item_is_not_drawn_in(moscavia, world):
+    """A character stub sharing an item's name stays out of the drawer:
+    people come only from ties. The item is a statement linking it."""
+
+    with world.revision(Source.manual(note="patriarch")) as rev:
+        patriarch = rev.create_thing(
+            "character", {"name": "The Grand Patriarch", "stub": {"ignored": False}}
+        )
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    assert "The Grand Patriarch" not in [item["name"] for item in preview.items]
+    statement = [i for i in preview.items if i["text"].startswith("The Grand")]
+    assert statement and not statement[0]["name"]
+
+    accept_sphere(world, preview)
+    view = world.view()
+    assert view.thing(patriarch).fields.get("part_of") is None
+    assert view.thing(patriarch).facts == []
+
+
+async def test_free_sphere_stub_named_as_item_nests(moscavia, world):
+    with world.revision(Source.manual(note="synod")) as rev:
+        synod = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Synod of Dawns",
+                "template": "order",
+                "stub": {"ignored": False},
+            },
+        )
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    ids = _drawer_ids(preview)
+    (item,) = [i for i in preview.items if i.get("thing_id") == synod]
+    accept_sphere(world, preview)
+    state = world.view().thing(synod)
+    assert state.fields["part_of"] == {
+        "sphere": moscavia.dawn,
+        "drawer": ids["Hierarchy"],
+    }
+    assert [f.category for f in state.facts] == ["about"]
+
+
+async def test_child_first_character_gets_no_part_of(moscavia, world):
+    with world.revision(Source.manual(note="orel")) as rev:
+        orel = rev.create_thing(
+            "character", {"name": "Orel", "stub": {"ignored": False}}
+        )
+    reply = json.dumps(
+        {
+            "name": "Orel",
+            "age": 60,
+            "facts": [
+                {"category": "background", "text": "A hermit of the White Dawn."}
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A hermit.")
+        preview = await preview_thing(
+            world,
+            "character",
+            "Orel, hermit of the White Dawn.",
+            {},
+            client,
+            stub_id=orel,
+        )
+    assert preview.part_of is None
+    # every queued reply used, so none leaks into the next test
+    assert len(client.prompt_history) == 2
+
+
+async def test_item_named_the_makes_no_empty_stub(moscavia, world):
+    reply = json.dumps(
+        {
+            "name": "The Amber Road",
+            "summary": "The river trade.",
+            "drawers": [{"type": "practices", "title": "Customs"}],
+            "items": [
+                {
+                    "drawer": "Customs",
+                    "name": "the",
+                    "text": "Barges sail at dawn.",
+                    "kind": "lore",
+                }
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        preview = await preview_sphere(world, "other", "The Amber Road.", {}, client)
+    assert [(i["name"], i["text"]) for i in preview.items] == [
+        ("", "Barges sail at dawn.")
+    ]
+    accept_sphere(world, preview)
+    assert not [
+        t
+        for t in world.view().things()
+        if not (world.view().name_of(t.id) or "").strip(" .")
+    ]
+
+
+async def test_item_named_like_a_name_treated_as_new_stays_new(moscavia, world):
+    with world.revision(Source.manual(note="vigil")) as rev:
+        vigil = rev.create_thing(
+            "lore", {"name": "The Dawn Vigil", "stub": {"ignored": False}}
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(CORE_RELIGION)
+        preview = await preview_sphere(
+            world,
+            "religion",
+            "The White Dawn and its Dawn Vigil.",
+            {},
+            client,
+            stub_id=moscavia.dawn,
+            new_names=["Dawn Vigil"],
+        )
+    (item,) = [i for i in preview.items if i["name"] == "The Dawn Vigil"]
+    assert "thing_id" not in item
+    accept_sphere(world, preview)
+    assert world.view().thing(vigil).fields.get("part_of") is None
+
+
+async def test_fill_targets_drawer_by_id(moscavia, world, full_dawn):
+    """Two drawers titled alike stay apart: Fill lists and marks the one
+    asked for by id."""
+
+    rites = full_dawn
+    view = world.view()
+    drawers = view.thing(moscavia.dawn).fields["drawers"]
+    twin = {"id": "abcdef01", "type": "practices", "title": "Rites and Ceremonies"}
+    with world.revision(Source.manual(note="twin")) as rev:
+        rev.set_field(moscavia.dawn, "drawers", [*drawers, twin], None)
+        rev.add_fact(
+            moscavia.dawn,
+            "statement",
+            "Twin drawer statement.",
+            origin={"drawer": twin["id"]},
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(FILL_RITES_NEW_ITEMS)
+        await fill_drawer(world, moscavia.dawn, twin["id"], client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert prompt.count("the drawer to fill") == 1
+    already = prompt.split("Already in Rites and Ceremonies")[1].split("Write 3 to 5")[
+        0
+    ]
+    assert "Twin drawer statement." in already
+    assert "Dawn Vigil" not in already
+    assert rites != twin["id"]

@@ -59,13 +59,18 @@ from talemate.world.kinds import (
     get_kind,
     validate_field,
 )
-from talemate.world.names import everyday_name
+from talemate.world.names import ARTICLES, everyday_name
 from talemate.world.refs import parse_refs
 from talemate.world.store import Revision, Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import create, prose_gen
 from talemate.worldplay.ai import world_ai_call
-from talemate.worldplay.create import CreatePreview, PreviewFact, json_objects
+from talemate.worldplay.create import (
+    PART_OF_KINDS,
+    CreatePreview,
+    PreviewFact,
+    json_objects,
+)
 from talemate.worldplay.links import (
     NewName,
     clean_aka,
@@ -117,6 +122,7 @@ _ITEM_CATEGORY = {
     "place": "description",
     "item": "description",
     "event": "summary",
+    "sphere": "about",
 }
 
 # two item texts sharing this much of their topic words say the same
@@ -128,8 +134,9 @@ _FILLED_NOTE = "sphere drawer filled"
 
 class SpherePreview(CreatePreview):
     """A sphere's core, before it's written. `kind` is `sphere`, or `place`
-    for a place taking on a template; `facts` are its timeline (a place's
-    dated `history`), and `prose["description"]` its summary.
+    for a place taking on a template; `facts` are its dated `timeline`
+    (an entry with no usable year is `about`), and `prose["description"]`
+    its summary.
 
     - `drawers`: `{"id", "type", "title"}`, as the `drawers` field holds
       them;
@@ -241,7 +248,8 @@ def _item(raw: object, drawer_id: str) -> dict[str, Any] | None:
     if not text:
         return None
     name = _tidy(raw.get("name"))
-    if not name.strip(" ."):
+    if not name.strip(" .") or name.casefold() in ARTICLES:
+        # no name, or an article alone ("the"): a statement
         return {"drawer_id": drawer_id, "name": "", "text": text, "kind": ""}
     kind = _tidy(raw.get("kind")).lower()
     return {
@@ -277,6 +285,7 @@ def _settle_items(
     own_keys: set[str],
     parts: list[ThingState],
     adopt: dict[str, str],
+    as_new: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """`items` matched against the world, each name and statement once:
 
@@ -284,9 +293,11 @@ def _settle_items(
     - one naming an entry already part of it is dropped, and that entry is
       filed in the item's drawer (`adopt`, thing id -> drawer id, first
       item wins);
-    - one naming a stub that's in no sphere links it (`thing_id`);
+    - one naming a stub of a `PART_OF_KINDS` kind that's in no sphere links
+      it (`thing_id`): a nested sphere stub too, never a character;
     - one naming any other thing in the world becomes a statement;
-    - any other makes a stub on accept."""
+    - any other, or one named like a name the owner treats as new
+      (`as_new`), makes a stub on accept."""
 
     part_of_keys = {key: part.id for part in parts for key in _named_keys(view, part)}
     seen: set[str] = set()
@@ -302,6 +313,9 @@ def _settle_items(
         if key in seen or key in own_keys:
             continue
         seen.add(key)
+        if is_new(item["name"], as_new):
+            settled.append(item)
+            continue
         if key in part_of_keys:
             adopt.setdefault(part_of_keys[key], item["drawer_id"])
             continue
@@ -311,8 +325,8 @@ def _settle_items(
             settled.append(item)
         elif (
             state.is_stub
+            and state.kind in PART_OF_KINDS
             and state.fields.get("part_of") is None
-            and not spheres.is_sphere(state)
         ):
             settled.append({**item, "thing_id": state.id})
         else:
@@ -335,10 +349,13 @@ def _listed_names(raw: object, calendar: Calendar) -> list[NewName]:
 
 
 def _parts_of(view: WorldView, thing_id: str) -> list[ThingState]:
-    """The things part of `thing_id` now, in the order they were made."""
+    """The things part of `thing_id` now, in the order they were made, of
+    the kinds a drawer holds (`PART_OF_KINDS`)."""
 
     found = []
     for state in sorted(view.things(), key=lambda thing: thing.created):
+        if state.kind not in PART_OF_KINDS:
+            continue
         link = state.fields.get("part_of")
         if isinstance(link, dict) and link.get("sphere") == thing_id:
             found.append(state)
@@ -528,12 +545,14 @@ async def preview_sphere(
     name = name or create._fallback_name(prompt)
     calendar = world.calendar
     now_year = create.current_date(world).to_datetime().year
-    category = "timeline" if kind == "sphere" else "history"
     facts: list[PreviewFact] = []
     for entry in core.get("timeline") or []:
         text = _tidy(entry.get("text")) if isinstance(entry, dict) else ""
         if text and all(fact.text != text for fact in facts):
             since = create._parse_since(entry.get("year"), calendar, now_year)
+            # an entry with no year of this calendar up to now (after now,
+            # or unreadable) is no moment of the timeline: it's "about"
+            category = "timeline" if since is not None else "about"
             facts.append(PreviewFact(category=category, text=text, since=since))
 
     drawers = _outline(core.get("drawers"), template)
@@ -547,7 +566,12 @@ async def preview_sphere(
     )
     adopt: dict[str, str] = {}
     items = _settle_items(
-        view, [item for item in raw_items if item], own_keys, parts, adopt
+        view,
+        [item for item in raw_items if item],
+        own_keys,
+        parts,
+        adopt,
+        treated_as_new,
     )
     places = [d["id"] for d in drawers if d["type"] == "places"]
     adopted = [
@@ -666,7 +690,11 @@ def _write_items(
             words = item["name"].split()
             # a lowercase leading "the" isn't part of the name, as with
             # `make_stubs` ("the Dawn Vigil" makes "Dawn Vigil")
-            name = " ".join(words[1:]) if words[0] == "the" else item["name"]
+            name = (
+                " ".join(words[1:])
+                if len(words) > 1 and words[0] == "the"
+                else item["name"]
+            )
             thing_id = rev.create_thing(
                 kind,
                 fields={"name": name, "stub": {"ignored": False}, "part_of": part_of},
@@ -944,8 +972,15 @@ async def fill_drawer(
     calendar = world.calendar
 
     held = spheres.items(view, sphere_id)
+    # (title, type, lines, whether it's the drawer to fill): matched by id,
+    # so two drawers of one title stay apart
     lines = [
-        (d.title, d.type, [_item_line(view, i) for i in held if i.drawer_id == d.id])
+        (
+            d.title,
+            d.type,
+            [_item_line(view, i) for i in held if i.drawer_id == d.id],
+            d.id == drawer.id,
+        )
         for d in spheres.drawers(view, sphere_id)
         if d.type in TYPE_HELP
     ]
@@ -971,9 +1006,7 @@ async def fill_drawer(
         "summary": _summary(world, view, state),
         "timeline": timeline,
         "drawers": lines,
-        "existing": [
-            line for title, _t, ls in lines if title == drawer.title for line in ls
-        ],
+        "existing": [line for *_, ls, target in lines if target for line in ls],
         "mentions": mentions,
         "about": about,
         **_calendar_vars(world),
