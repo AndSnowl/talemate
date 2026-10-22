@@ -2332,3 +2332,126 @@ async def test_accept_refuses_a_tie_to_a_deleted_sphere(at_1020, dawn_world):
     with pytest.raises(ValueError, match="no sphere"):
         accept_preview(at_1020, preview)
     assert at_1020.head_rev() == head
+
+
+async def test_spheres_block_caps_items_per_sphere(at_1020, dawn_world):
+    """Ruling P9: each sphere shows its first 8 non-place items (places
+    skipped before counting); only those get labels, so the next sphere
+    starts at S9."""
+
+    d = dawn_world
+    with at_1020.revision(Source.manual(note="more")) as rev:
+        for n in range(1, 8):
+            rev.add_fact(
+                d.dawn,
+                "statement",
+                f"Teaching number {n}.",
+                origin={"drawer": "d0000001"},
+            )
+    preview, prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn from Kremova",
+        [
+            {
+                "sphere": "Tsardom of Moscavia",
+                "role": "subject",
+                "exceptions": [{"text": "She rents land to humans.", "rejects": "S9"}],
+            }
+        ],
+    )
+
+    assert "- S8 (Doctrines): Teaching number 5.\n" in prompt
+    assert "Teaching number 6." not in prompt
+    assert "- S9 (Laws): Only owl-folk may hold land.\n" in prompt
+    assert "S10" not in prompt
+    [tie] = preview.ties
+    assert [e.fact_id for e in tie.exceptions] == [d.law]
+
+
+async def test_stub_mentioned_by_a_sphere_shows_it_as_a_sphere(at_1020, dawn_world):
+    """Expanding a character stub a sphere mentions: the sphere comes in
+    through the mention context and is shown in the spheres block, never
+    as "Named in this prompt", even when picked too."""
+
+    d = dawn_world
+    with at_1020.revision(Source.manual(note="stub")) as rev:
+        stub = rev.create_thing(
+            "character", fields={"name": "Ilyana", "stub": {"ignored": False}}
+        )
+        rev.add_fact(
+            d.dawn,
+            "statement",
+            "%s keeps the vigil flame." % ref(stub, "Ilyana"),
+            origin={"drawer": "d0000002"},
+        )
+    for picks in ({}, {"White Dawn": d.dawn}):
+        preview, prompt = await _preview_priestess(
+            at_1020,
+            "a priestess of the White Dawn",
+            [{"sphere": "The White Dawn", "role": "priest"}],
+            stub_id=stub,
+            picks=picks,
+        )
+        assert "The White Dawn (religion):\n" in prompt
+        assert "- S4 (Rites and Ceremonies): Ilyana keeps the vigil flame.\n" in prompt
+        assert "Named in this prompt" not in prompt
+        assert [t.sphere_id for t in preview.ties] == [d.dawn]
+
+
+async def test_accept_drops_exceptions_whose_item_is_gone(at_1020, dawn_world):
+    """An exception whose rejected thing or statement is gone from the
+    sphere by accept (deleted, or ended) is dropped quietly; the tie
+    stays."""
+
+    d = dawn_world
+    preview, _prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn",
+        [
+            {
+                "sphere": "The White Dawn",
+                "role": "priest",
+                "exceptions": [
+                    {"text": "She means to marry a human.", "rejects": "S1"},
+                    {"text": "She skips the vigil.", "rejects": "S2"},
+                    {"text": "She thinks all folk equal.", "rejects": "S3"},
+                ],
+            }
+        ],
+    )
+    with at_1020.revision(Source.manual(note="gone")) as rev:
+        rev.remove_thing(d.separation)
+        rev.remove_fact(d.purity)
+
+    thing_id = accept_preview(at_1020, preview)
+
+    view = at_1020.view(None)
+    state = view.thing(thing_id)
+    assert [t["sphere"] for t in state.fields["ties"]] == [d.dawn]
+    ties_facts = [f for f in state.facts if f.category == "ties"]
+    assert [view.render(f.text) for f in ties_facts] == [
+        "She skips the vigil. Departs from The Dawn Vigil"
+    ]
+
+
+async def test_accept_skips_blank_exceptions(at_1020, dawn_world):
+    """An exception the owner blanked in the preview writes no fact."""
+
+    preview, _prompt = await _preview_priestess(
+        at_1020,
+        "a priestess of the White Dawn",
+        [
+            {
+                "sphere": "The White Dawn",
+                "role": "priest",
+                "exceptions": [{"text": "She skips the vigil.", "rejects": "S2"}],
+            }
+        ],
+    )
+    preview.ties[0].exceptions[0].text = "   "
+
+    thing_id = accept_preview(at_1020, preview)
+
+    state = at_1020.view(None).thing(thing_id)
+    assert [f for f in state.facts if f.category == "ties"] == []
+    assert len(state.fields["ties"]) == 1

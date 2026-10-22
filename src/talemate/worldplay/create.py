@@ -1188,6 +1188,10 @@ class _SphereItem(NamedTuple):
 # a tie's role when the reply gives none
 _DEFAULT_ROLE = "member"
 
+# the most items the spheres block shows per sphere, places not counted
+# (ruling P9)
+SPHERE_BLOCK_ITEMS = 8
+
 
 def context_spheres(
     view: WorldView, picks: dict[str, str], gathered: MentionContext | None
@@ -1243,8 +1247,9 @@ def spheres_block(
 ) -> tuple[list[tuple[str, str, list[tuple[str, str, str]]]], dict[str, _SphereItem]]:
     """The spheres block as the create prompt lists it -- `(heading, about,
     [(label, drawer title, line)])` per sphere: its first `about` fact,
-    then its items in `items` order, places left out -- and what each
-    label (S1... running across all the spheres) stands for."""
+    then its first `SPHERE_BLOCK_ITEMS` items in `items` order, places
+    left out before counting -- and what each label (S1... running across
+    all the spheres, only for the items shown) stands for."""
 
     block: list[tuple[str, str, list[tuple[str, str, str]]]] = []
     labels: dict[str, _SphereItem] = {}
@@ -1268,6 +1273,8 @@ def spheres_block(
             thing = view.thing(item.thing_id) if item.thing_id is not None else None
             if thing is not None and thing.kind == "place":
                 continue
+            if len(lines) == SPHERE_BLOCK_ITEMS:
+                break
             label = f"S{len(labels) + 1}"
             labels[label] = _SphereItem(sphere_id, item)
             title = titles.get(item.drawer_id, spheres.UNSORTED.title)
@@ -1380,6 +1387,29 @@ def parse_ties(
             )
         )
     return ties
+
+
+def _live_exceptions(view: WorldView, tie: PreviewTie) -> list[PreviewException]:
+    """The tie's exceptions worth writing: not blank, and rejecting an
+    item the sphere still holds (one deleted or ended since the preview
+    is dropped quietly)."""
+
+    held = spheres.items(view, tie.sphere_id) if tie.exceptions else []
+    thing_ids = {item.thing_id for item in held if item.thing_id}
+    fact_ids = {item.fact_id for item in held if item.thing_id is None}
+    kept: list[PreviewException] = []
+    for exception in tie.exceptions:
+        if not exception.text.strip():
+            continue
+        if exception.thing_id is not None:
+            live = exception.thing_id in thing_ids
+        else:
+            live = exception.fact_id is None or exception.fact_id in fact_ids
+        if not live:
+            log.debug("create.exception_item_gone", tie=tie.sphere_id)
+            continue
+        kept.append(exception)
+    return kept
 
 
 def _exception_fact(
@@ -1905,8 +1935,10 @@ def accept_preview(
       no stub: there'd be nothing to find it by.
     - A character's `ties` are written (after any the owner's fields
       give), and each of their exceptions becomes a `ties` fact
-      (`_exception_fact`). A tie to a thing that's no sphere (deleted
-      since) is refused with `ValueError` before anything is written.
+      (`_exception_fact`); a blank exception, or one whose rejected item
+      the sphere no longer holds, is dropped quietly (`_live_exceptions`).
+      A tie to a thing that's no sphere (deleted since) is refused with
+      `ValueError` before anything is written.
     - Filling a stub -- the preview's `stub_id`, or `into_stub` ("fill the
       stub instead") -- writes into that thing and keeps its id: its kind
       (`into_stub` may have another), name, fields and other names are set,
@@ -2085,7 +2117,7 @@ def _write_preview(
                 overrides=fact.overrides,
             )
         for tie in preview.ties:
-            for exception in tie.exceptions:
+            for exception in _live_exceptions(view, tie):
                 text = link_text(
                     linking,
                     exception.text,
