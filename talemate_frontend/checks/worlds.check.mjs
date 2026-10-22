@@ -26,6 +26,7 @@ import {
     parseWorldTarget,
     previewSegments,
     rejectableItems,
+    repointedNote,
     samePage,
     sameParents,
     tiesPayload,
@@ -1949,6 +1950,39 @@ check('back skips a deleted thing, and returns to the Stubs page it came from', 
     assert.equal(store.section, 'stubs');
 });
 
+check('expanding a stub or promoting a thing shows its section, as a visit', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.showSection('stubs');
+    store.expandStub({ id: 's1', kind: 'place', name: 'Kremova' });
+    assert.equal(store.section, 'place');
+    store.goBack();
+    assert.equal(store.section, 'stubs');
+    store.openThing('lore1');
+    store.makeSphere({ id: 'lore1', kind: 'lore', name: 'Vigil' });
+    assert.equal(store.section, 'sphere');
+    store.goBack();
+    assert.equal(store.selectedThingId, 'lore1');
+});
+
+check('a page back opens that fails to load is skipped: back goes on', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('a');
+    store.openThing('b');
+    store.openThing('c');
+    store.goBack();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_thing', id: 'b', at: null });
+    // b went (deleted elsewhere, say): its get_thing fails
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no such thing: b' } });
+    assert.equal(store.selectedThingId, 'a');
+    assert.ok(store.gone.includes('b'));
+    // a page that loads clears the watch: a later error goes nowhere
+    store.handleMessage(reply('get_thing', { id: 'a', kind: 'lore', name: 'A' }));
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'other' } });
+    assert.equal(store.selectedThingId, 'a');
+});
+
 check('the history is per world: opening another world starts it afresh', () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
@@ -1985,12 +2019,24 @@ check('repointStub sends the stub and the target; the reply forgets the stub', (
     assert.equal(store.pending.repoint_stub, true);
     sent.length = 0;
     const target = { id: 'moscavy', kind: 'place', name: 'Moscavy', aka: [] };
-    store.handleMessage(reply('repoint_stub', { stub_id: 'tsardom', stub_name: 'Tsardom', target, links: 2, aka_added: ['Tsardom'] }));
+    store.handleMessage(reply('repoint_stub', { stub_id: 'tsardom', stub_name: 'Tsardom', target, links: 2, aka_added: ['Tsardom'], facts_moved: 1, notes: ['Moscavy stays in X'] }));
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(store.stubRepointed, { stubName: 'Tsardom', target: { id: 'moscavy', name: 'Moscavy' }, links: 2, akaAdded: ['Tsardom'] });
+    assert.deepEqual(store.stubRepointed, {
+        stubName: 'Tsardom',
+        target: { id: 'moscavy', name: 'Moscavy' },
+        links: 2,
+        akaAdded: ['Tsardom'],
+        factsMoved: 1,
+        notes: ['Moscavy stays in X'],
+    });
+    assert.equal(
+        repointedNote(store.stubRepointed),
+        'Tsardom: 2 links now point to Moscavy, which took 1 fact from it. Moscavy is now also known as Tsardom. Moscavy stays in X.',
+    );
     listedEverything(sent);
-    // the stub's page is gone from the history
+    // the stub's page is gone from the history; leaving clears the note
     store.openThing('moscavy');
+    assert.equal(store.stubRepointed, null);
     store.goBack();
     assert.equal(store.selectedThingId, null);
     assert.equal(store.section, 'stubs');

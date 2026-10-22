@@ -226,6 +226,15 @@ export function pageAfterDelete(thing, heritage, openedFrom) {
     return null;
 }
 
+// The Stubs page's (and the target page's) note on a `stubRepointed`.
+export function repointedNote(done) {
+    const links = `${done.links} link${done.links === 1 ? '' : 's'}`;
+    const facts = done.factsMoved ? `, which took ${done.factsMoved} fact${done.factsMoved === 1 ? '' : 's'} from it` : '';
+    const names = done.akaAdded.length ? ` ${done.target.name} is now also known as ${done.akaAdded.join(', ')}.` : '';
+    const notes = done.notes.map((note) => ` ${note}.`).join('');
+    return `${done.stubName}: ${links} now point to ${done.target.name}${facts}.${names}${notes}`;
+}
+
 // the most pages the back arrow remembers
 const HISTORY_CAP = 50;
 
@@ -443,8 +452,11 @@ function worldState() {
         history: [],
         gone: [],
         // the last `repoint_stub` done: `{stubName, target: {id, name},
-        // links, akaAdded}`
+        // links, akaAdded, factsMoved, notes}`, until the owner moves on
         stubRepointed: null,
+        // the thing page `goBack` opened, until it loads: if it fails to,
+        // it's gone and back goes on
+        backOpening: null,
         things: emptyThings(),
         // every species, race and mix: `list_heritage`'s `{id, kind, name,
         // species_ids}`
@@ -748,6 +760,7 @@ export const useWorldsStore = defineStore('worlds', {
 
         // the owner opens `next`: the page left goes on the history
         visit(next) {
+            this.stubRepointed = null;
             this.history = historyPushed(this.history, this.currentPage(), { section: this.section, at: null, ...next });
         },
 
@@ -768,6 +781,7 @@ export const useWorldsStore = defineStore('worlds', {
             }
             this.section = page.section;
             if (page.thingId) {
+                this.backOpening = page.thingId;
                 this.showThing(page.thingId, page.at);
             } else {
                 this.closeThing();
@@ -918,6 +932,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.cancelSpherePreview();
             this.promoting = null;
             this.visit({ section: target.kind, thingId: null });
+            this.section = target.kind;
             this.closeThing();
             this.expanding = target;
             this.stubSuggestion = null;
@@ -963,6 +978,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.cancelSpherePreview();
             this.expanding = null;
             this.visit({ section: 'sphere', thingId: null });
+            this.section = 'sphere';
             this.closeThing();
             this.promoting = { id: thing.id, kind: thing.kind, name: thing.name };
         },
@@ -1434,6 +1450,9 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 }
                 case 'get_thing':
+                    if (data.id === this.backOpening) {
+                        this.backOpening = null;
+                    }
                     if (data.id === this.selectedThingId) {
                         this.thing = data;
                     }
@@ -1533,6 +1552,8 @@ export const useWorldsStore = defineStore('worlds', {
                         target: { id: data.target.id, name: data.target.name },
                         links: data.links,
                         akaAdded: data.aka_added,
+                        factsMoved: data.facts_moved || 0,
+                        notes: data.notes || [],
                     };
                     if (data.stub_id === this.selectedThingId) {
                         // the stub's page is gone: the target's stands in
@@ -1677,6 +1698,14 @@ export const useWorldsStore = defineStore('worlds', {
                         }
                         this.tieQueue = {};
                         this.sphereWanted = [];
+                        // the page back opened is gone: back goes on
+                        const failed = this.backOpening;
+                        this.backOpening = null;
+                        if (failed && failed === this.selectedThingId) {
+                            this.gone = [...this.gone, failed];
+                            this.error = null;
+                            this.goBack();
+                        }
                     }
                     break;
                 default:

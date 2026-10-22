@@ -123,8 +123,8 @@ import ThingPage from './ThingPage.vue';
 // mixes are reached from their species page) and the Stubs tab below it;
 // a kind's create box, its cards and, dimmed under "Stubs", the stubs of
 // that kind; or the open thing's page. Expanding a stub (`expanding`)
-// switches to its kind, whose create box takes it up, and "Make it a
-// sphere…" (`promoting`) to Spheres. Spheres are listed by template
+// switches the store to its kind, whose create box takes it up, and "Make
+// it a sphere…" (`promoting`) to Spheres. Spheres are listed by template
 // (`sphereGroups`), place spheres among them, their stubs dimmed in place.
 // The open section is the store's `section`, so the thing page's back
 // arrow can return to a list or the Stubs page (`worlds.goBack`).
@@ -162,19 +162,6 @@ export default {
         },
         liveStubCount() {
             return this.worlds.stubs.filter((stub) => !stub.ignored).length;
-        },
-    },
-    watch: {
-        'worlds.expanding'(stub) {
-            if (stub) {
-                this.worlds.section = stub.kind;
-            }
-        },
-        // "Make it a sphere…" promotes in the Spheres create box
-        'worlds.promoting'(thing) {
-            if (thing) {
-                this.worlds.section = 'sphere';
-            }
         },
     },
     methods: {

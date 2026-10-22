@@ -34,7 +34,7 @@ from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .kinds import KindSpec, get_kind, validate_field
 from .refs import parse_refs
-from .view import WorldView
+from .view import FactState, WorldView, _fact_state_from_row
 
 if TYPE_CHECKING:
     from .prose import ProseCache
@@ -397,9 +397,14 @@ class Revision:
         valid_from: object = _UNSET,
         valid_until: object = _UNSET,
         overrides: list[str] | None = None,
+        thing_id: str | None = None,
+        origin: object = _UNSET,
     ) -> None:
         """Retire the live version of `fact_id` and add a new version with
-        the same `fact_id`, copying over any part left unspecified. `text`
+        the same `fact_id`, copying over any part left unspecified. A
+        `thing_id` moves the fact to that thing (its category must be one
+        that thing's kind has); `origin` (a dict, or `None`) replaces its
+        origin. `text`
         and `category` are never legitimately `None`, so `None` there means
         "unspecified"; `valid_from`/`valid_until` use a sentinel instead,
         since `None` is a legitimate value for them (an open end).
@@ -426,7 +431,16 @@ class Revision:
             else overrides
         )
 
-        kind = self._thing_kind(live["thing_id"])
+        owner = live["thing_id"] if thing_id is None else thing_id
+        if thing_id is not None:
+            self._require_thing(thing_id)
+        origin_json = (
+            live["origin_json"]
+            if origin is _UNSET
+            else (json.dumps(origin) if origin is not None else None)
+        )
+
+        kind = self._thing_kind(owner)
         kind_spec = get_kind(kind)
         if new_category not in kind_spec.categories:
             raise ValueError(f"{kind!r} has no fact category {new_category!r}")
@@ -450,14 +464,14 @@ class Revision:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 fact_id,
-                live["thing_id"],
+                owner,
                 new_category,
                 new_text,
                 from_instant,
                 from_precision,
                 until_instant,
                 until_precision,
-                live["origin_json"],
+                origin_json,
                 self.rev,
             ),
         )
@@ -758,6 +772,46 @@ class World:
         view stays pinned even as later revisions are written."""
 
         return WorldView(self._conn, at, rev if rev is not None else self.head_rev())
+
+    def live_facts(self, thing_id: str | None = None) -> builtins.list[FactState]:
+        """The facts of `thing_id` (of every thing, if `None`) live at the
+        head revision, on every story date, ended ones too: what `view()`
+        shows on one date at a time. Ordered by creation."""
+
+        rev = self.head_rev()
+        rows = self._conn.execute(
+            """
+            SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
+                   f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+                   f.origin_json,
+                   (SELECT MIN(f0.row_id) FROM facts f0
+                    WHERE f0.fact_id = f.fact_id) AS created
+            FROM facts f
+            JOIN things t ON t.id = f.thing_id
+              AND t.rev_added <= :rev
+              AND (t.rev_removed IS NULL OR t.rev_removed > :rev)
+            WHERE f.rev_added <= :rev
+              AND (f.rev_removed IS NULL OR f.rev_removed > :rev)
+              AND (:thing_id IS NULL OR f.thing_id = :thing_id)
+            ORDER BY created
+            """,
+            {"rev": rev, "thing_id": thing_id},
+        ).fetchall()
+        facts = []
+        for row in rows:
+            state = _fact_state_from_row(row)
+            state.overrides = self._fact_overrides(row["row_id"])
+            facts.append(state)
+        return facts
+
+    def _fact_overrides(self, row_id: int) -> builtins.list[str]:
+        return [
+            r[0]
+            for r in self._conn.execute(
+                "SELECT fact_id FROM fact_overrides WHERE row_id = ? ORDER BY rowid",
+                (row_id,),
+            )
+        ]
 
     def timeline(
         self, thing_id: str, rev: int | None = None

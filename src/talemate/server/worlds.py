@@ -40,18 +40,17 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `change_stub_kind {id, kind}` answer with the stub's payload.
   `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
   starting prompt for the stub and the mention context its expansion gets.
-  `repoint_stub {stub_id, target_id}` points every link to the stub at the
-  target (an entry, or another live stub), keeping each link's words (a
-  link in the target's own facts becomes its plain words), adds the stub's
-  name, its other names and each distinct shown text to the target's other
-  names (common, not everyday; never the target's own name, one it has, or
-  another thing's), and removes the stub, all in one revision. It answers
-  `{stub_id, stub_name, target, links, aka_added}` (`target` the target's
-  payload).
-  Refused, writing nothing: the stub itself, a deleted thing or an ignored
-  stub as the target, and a stub used other than by fact links (a field,
-  a sphere filing or tie, a scene). No prose is scheduled: the rendered
-  text is the same.
+  `repoint_stub {stub_id, target_id}` (`talemate.worldplay.repoint`)
+  points everything naming the stub at the target (an entry, or another
+  live stub) -- fact links, fields, filings, ties, the stub's own facts
+  and filing -- teaches the target its names and removes the stub, in one
+  revision. It answers `{stub_id, stub_name, target, links, aka_added,
+  facts_moved, notes}` (`target` the target's payload; `notes` what didn't
+  carry over as the stub had it). Refused, writing nothing: the stub
+  itself, a deleted thing or an ignored stub as the target, and a use the
+  target can't take (a scene's, a field of another kind, a filing or tie
+  when it isn't a sphere, its own). Only moved facts change rendered text:
+  then the target's prose is refreshed.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
   `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
@@ -189,7 +188,7 @@ from talemate.world.kinds import (
 )
 from talemate.world.names import find_names, unknown_proper_phrases
 from talemate.world.prose import UNRENDERED_FIELDS
-from talemate.world.refs import REF_PATTERN, ref
+from talemate.world.refs import REF_PATTERN
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
 from talemate.world.timeline import TimelineEntry
@@ -219,12 +218,12 @@ from talemate.worldplay.links import (
     link_phrase,
     link_text,
     make_stubs,
-    name_key,
     repoint_ref,
 )
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
-from talemate.worldplay.references import thing_references, uses_beyond_facts
+from talemate.worldplay.references import thing_references
+from talemate.worldplay.repoint import repoint_stub
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -2145,114 +2144,28 @@ class WorldsPlugin(Plugin):
         )
 
     async def handle_repoint_stub(self, data: dict):
-        """Point every link to a stub at `target_id`, teach the target the
-        stub's names, and remove the stub, in one revision (see the module
-        docstring)."""
+        """Point everything that names a stub at `target_id` and remove the
+        stub, in one revision (`worldplay.repoint.repoint_stub`). Only the
+        stub's own facts, moved to the target, change rendered text: the
+        target's prose is refreshed when there were any."""
 
         payload = RepointStubPayload(**data)
         world = self._require_world()
-        stub = self._require_stub(world, payload.stub_id)
-        view = world.view()
-        if payload.target_id == payload.stub_id:
-            raise ValueError("a stub can't be re-pointed onto itself")
-        target = view.thing(payload.target_id)
-        if target is None:
-            raise KeyError(f"no such thing: {payload.target_id}")
-        target_name = view.name_of(target.id) or ""
-        if target.stub_ignored:
-            raise ValueError(f"{target_name} is an ignored stub")
-        stub_name = view.name_of(stub.id) or ""
-        uses = uses_beyond_facts(world, stub.id)
-        if uses:
-            raise ValueError(
-                f"{stub_name} is also used by {', '.join(uses)}: change those first"
-            )
-
-        # each fact linking the stub, rewritten; the words each link shows
-        rewritten: dict[str, tuple[str, str]] = {}
-        shown_texts: list[str] = []
-        links = 0
-        for owner, fact in view.referencing(stub.id, any_date=True):
-            if owner == stub.id or fact.fact_id in rewritten:
-                continue
-
-            def repointed(found, owner=owner) -> str:
-                nonlocal links
-                if found.group(1) != stub.id:
-                    return found.group(0)
-                links += 1
-                shown = found.group(2) or "".join(
-                    seg.text for seg in view.segments(found.group(0))
-                )
-                shown_texts.append(shown)
-                # the target's own fact never links to itself
-                return shown if owner == target.id else ref(target.id, shown)
-
-            text = REF_PATTERN.sub(repointed, fact.text or "")
-            rewritten[fact.fact_id] = (owner, text)
-
-        aka = list(target.fields.get("aka") or [])
-        held = {name_key(target_name)} | {
-            name_key(entry["name"]) for entry in aka if isinstance(entry, dict)
-        }
-        taken = self._other_name_keys(view, {stub.id, target.id})
-        stub_aka = [
-            entry["name"]
-            for entry in stub.fields.get("aka") or []
-            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-        ]
-        added: list[str] = []
-        for name in [stub_name, *stub_aka, *shown_texts]:
-            name = " ".join(name.split())
-            key = name_key(name)
-            if not key or key in held or key in taken:
-                continue
-            held.add(key)
-            added.append(name)
-            aka.append({"name": name, "tag": "common", "everyday": False})
-
-        with world.revision(
-            Source.manual(note=f"re-pointed {stub_name} to {target_name}")
-        ) as rev:
-            for fact_id, (_owner, text) in rewritten.items():
-                rev.correct_fact(fact_id, text=text)
-            if added:
-                rev.set_field(target.id, "aka", aka, None)
-            rev.remove_thing(stub.id)
-        log.info(
-            "worlds.stub_repointed",
-            stub=stub.id,
-            target=target.id,
-            links=links,
-            aka_added=added,
-        )
-        # links keep their words and other names aren't rendered: no prose
+        done = repoint_stub(world, payload.stub_id, payload.target_id)
         self._reply(
             "repoint_stub",
             {
-                "stub_id": stub.id,
-                "stub_name": stub_name,
-                "target": self._thing_payload(world, target.id, None),
-                "links": links,
-                "aka_added": added,
+                "stub_id": payload.stub_id,
+                "stub_name": done.stub_name,
+                "target": self._thing_payload(world, payload.target_id, None),
+                "links": done.links,
+                "aka_added": done.aka_added,
+                "facts_moved": done.facts_moved,
+                "notes": done.notes,
             },
         )
-
-    @staticmethod
-    def _other_name_keys(view: WorldView, skip: set[str]) -> set[str]:
-        """Every main and other name key of the things in `view` but
-        `skip`'s."""
-
-        keys: set[str] = set()
-        for state in view.things():
-            if state.id in skip:
-                continue
-            keys.add(name_key(view.name_of(state.id) or ""))
-            for entry in state.fields.get("aka") or []:
-                if isinstance(entry, dict) and isinstance(entry.get("name"), str):
-                    keys.add(name_key(entry["name"]))
-        keys.discard("")
-        return keys
+        if done.facts_moved:
+            self._schedule_prose(payload.target_id, None)
 
     # --- edits ------------------------------------------------------------
 

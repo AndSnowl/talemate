@@ -342,3 +342,53 @@ def test_present_defaults_to_year_one_and_round_trips(tmp_path):
         assert reopened.present() == WorldDate.of(1000)
     finally:
         reopened.close()
+
+
+def test_correct_fact_moves_a_fact_to_another_thing(world):
+    """`correct_fact(thing_id=...)` moves a fact, keeping its id, dates and
+    overrides; `origin` replaces its origin. Undo moves it back."""
+
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", {"name": "A"})
+        b = rev.create_thing("place", {"name": "B"})
+        fact_id = rev.add_fact(
+            a,
+            "general",
+            "Ended once.",
+            valid_from=WorldDate.of(10),
+            valid_until=WorldDate.of(20),
+            origin={"drawer": "x"},
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(fact_id, thing_id=b, origin={"tie": a})
+    moved = world.live_facts(b)
+    assert [(f.fact_id, f.category, f.text) for f in moved] == [
+        (fact_id, "general", "Ended once.")
+    ]
+    assert (moved[0].valid_from, moved[0].valid_until) == (
+        WorldDate.of(10),
+        WorldDate.of(20),
+    )
+    assert moved[0].origin == {"tie": a}
+    assert world.live_facts(a) == []
+
+    # a category the new thing's kind lacks is refused
+    with world.revision(Source.manual()) as rev:
+        c = rev.create_thing("character", {"name": "C"})
+    with pytest.raises(ValueError):
+        with world.revision(Source.manual()) as rev:
+            rev.correct_fact(fact_id, thing_id=c)
+
+    world.undo([world.head_rev() - 1])
+    assert [f.fact_id for f in world.live_facts(a)] == [fact_id]
+    assert world.live_facts(a)[0].origin == {"drawer": "x"}
+
+
+def test_live_facts_lists_every_date(world):
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", {"name": "A"})
+        rev.add_fact(a, "general", "Now.")
+        rev.add_fact(a, "general", "Then.", valid_until=WorldDate.of(5))
+        rev.add_fact(a, "general", "Later.", valid_from=WorldDate.of(500))
+    assert sorted(f.text for f in world.live_facts(a)) == ["Later.", "Now.", "Then."]
+    assert len(world.view(WorldDate.of(100)).thing(a).facts) == 1

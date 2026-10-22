@@ -85,7 +85,7 @@
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
+import { repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { STUB_KINDS, canExpand, expandLabel, expandNote, kindInfo } from './worldKinds.js';
 import StubRepointButton from './StubRepointButton.vue';
 
@@ -111,10 +111,7 @@ export default {
             return !!this.worlds.pending.ignore_stub || !!this.worlds.pending.change_stub_kind || !!this.worlds.pending.repoint_stub;
         },
         repointedNote() {
-            const done = this.worlds.stubRepointed;
-            const links = `${done.links} link${done.links === 1 ? '' : 's'}`;
-            const names = done.akaAdded.length ? ` ${done.target.name} is now also known as ${done.akaAdded.join(', ')}.` : '';
-            return `${done.stubName}: ${links} now point to ${done.target.name}.${names}`;
+            return repointedNote(this.worlds.stubRepointed);
         },
     },
     mounted() {

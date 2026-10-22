@@ -11,10 +11,6 @@ human-readable entries for the delete dialog:
   unknown on the dates it held);
 - scenes that use it as the player, a character, the place, pulled-in
   lore or a pulled-in sphere.
-
-`uses_beyond_facts` names every use but fact links, sphere filings
-(`part_of`) and character ties included: what re-pointing a stub's links
-elsewhere can't carry over.
 """
 
 from __future__ import annotations
@@ -27,7 +23,7 @@ from talemate.world.store import World
 
 log = structlog.get_logger("talemate.worldplay.references")
 
-__all__ = ["thing_references", "uses_beyond_facts"]
+__all__ = ["thing_references"]
 
 
 def _points_at(field_type: str, value: object, thing_id: str) -> bool:
@@ -122,56 +118,3 @@ def thing_references(world: World, thing_id: str) -> dict[str, list[dict]]:
         "fields": _field_entries(world, thing_id),
         "scenes": _scene_entries(world, thing_id),
     }
-
-
-def _filed_or_tied(world: World, thing_id: str) -> list[dict]:
-    """`{thing_id, thing_name, field}` of each thing filed in `thing_id`
-    (`part_of`) or tied to it (`ties`), on any story date."""
-
-    view = world.view()
-    entries = []
-    for state in view.things():
-        if state.id == thing_id:
-            continue
-        fields = set()
-        for entry in world.timeline(state.id):
-            if entry.change != "field":
-                continue
-            value = entry.value
-            if (
-                entry.field == "part_of"
-                and isinstance(value, dict)
-                and value.get("sphere") == thing_id
-            ):
-                fields.add("part_of")
-            if (
-                entry.field == "ties"
-                and isinstance(value, list)
-                and any(
-                    isinstance(tie, dict) and tie.get("sphere") == thing_id
-                    for tie in value
-                )
-            ):
-                fields.add("ties")
-        for field in sorted(fields):
-            entries.append(
-                {
-                    "thing_id": state.id,
-                    "thing_name": view.name_of(state.id) or "",
-                    "field": field,
-                }
-            )
-    return entries
-
-
-def uses_beyond_facts(world: World, thing_id: str) -> list[str]:
-    """Every use of `thing_id` but other things' fact links, as short
-    phrases ("The Harbour's parent", "the scene At the harbour"): fields
-    pointing at it, things filed in it or tied to it, and scenes using
-    it. Empty when fact links are all there is."""
-
-    fields = _field_entries(world, thing_id) + _filed_or_tied(world, thing_id)
-    return [
-        f"{entry['thing_name']}'s {entry['field'].replace('_', ' ')}"
-        for entry in fields
-    ] + [f"the scene {entry['name']}" for entry in _scene_entries(world, thing_id)]
