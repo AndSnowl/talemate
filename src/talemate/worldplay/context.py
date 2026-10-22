@@ -204,19 +204,12 @@ def _touched_spheres(
 
 
 def _sphere_summary(world: World, view: WorldView, sphere_id: str) -> str:
-    """The sphere's summary (ruling P1): its cached description prose as
-    of the view's date, else its first `about` fact, rendered."""
+    """The sphere's summary (`spheres.summary`, rulings P1, P21): its
+    cached description prose as of the view's date, else its summary
+    fact, rendered."""
 
     cached = _cached_section(world, sphere_id, "description", view.at)
-    if cached is not None and cached.text:
-        return str(view.render(cached.text))
-    state = view.thing(sphere_id)
-    about = [
-        fact
-        for fact in sorted(state.facts if state else [], key=lambda f: f.created)
-        if fact.category == "about"
-    ]
-    return view.render(about[0].text) if about else ""
+    return spheres.summary(view, sphere_id, cached.text if cached else None)
 
 
 def _sphere_parent(view: WorldView, state: ThingState) -> str | None:

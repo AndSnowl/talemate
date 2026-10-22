@@ -17,13 +17,18 @@ sits in.
 
 People come from character ties (a character's `ties` field), not from a
 list on the sphere, so a branch's members aren't its parent's. Exceptions
-are the character's `ties` facts that name the sphere or one of its items.
+are the character's `ties` facts filed under the tie (origin `tie`, ruling
+P22).
+
+A sphere's summary (ruling P21) is its `about` fact whose origin marks it
+`summary`; its description prose is written from it first (`summary`).
 
 Every read goes through the given `WorldView`, so a dated part-of ending
 or tie follows the view's `(at, rev)`.
 """
 
-from collections.abc import Callable, Collection
+import re
+from collections.abc import Callable, Collection, Sequence
 
 import structlog
 from pydantic import BaseModel, ValidationError
@@ -31,7 +36,13 @@ from pydantic import BaseModel, ValidationError
 from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .heritage import overriders
-from .kinds import TEMPLATE_AGENT, UNSORTED_DRAWER_ID
+from .kinds import (
+    ENTRY_DRAWER_TYPES,
+    TEMPLATE_AGENT,
+    UNSORTED_DRAWER_ID,
+    WRITTEN_DRAWER_TYPES,
+)
+from .refs import REF_PATTERN, parse_refs
 from .view import FactState, ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.spheres")
@@ -51,7 +62,9 @@ class Drawer(BaseModel):
 # where an item goes when its drawer isn't among the sphere's drawers
 UNSORTED = Drawer(id=UNSORTED_DRAWER_ID, type="knowledge", title="Unsorted")
 
-# a template's starting drawers, as (type, title), in display order
+# a template's starting drawers, as (type, title), in display order. A
+# nation has no Branches (ruling P23): a place sphere never branches, its
+# `parent` being the place it lies in
 TEMPLATE_DRAWERS: dict[str, list[tuple[str, str]]] = {
     "religion": [
         ("beliefs", "Doctrines"),
@@ -60,6 +73,7 @@ TEMPLATE_DRAWERS: dict[str, list[tuple[str, str]]] = {
         ("people", "People"),
         ("places", "Holy Sites"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ],
     "nation": [
         ("structure", "Government"),
@@ -75,12 +89,14 @@ TEMPLATE_DRAWERS: dict[str, list[tuple[str, str]]] = {
         ("people", "Members"),
         ("places", "Sites"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ],
     "culture": [
         ("practices", "Customs and Holidays"),
         ("beliefs", "Beliefs and Legends"),
         ("people", "People"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ],
     "field": [
         ("knowledge", "Principles"),
@@ -88,6 +104,7 @@ TEMPLATE_DRAWERS: dict[str, list[tuple[str, str]]] = {
         ("knowledge", "Frontier"),
         ("people", "Practitioners"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ],
     "other": [("events", "Timeline")],
 }
@@ -221,12 +238,56 @@ def _statement_drawer(fact: FactState) -> str:
     return drawer if isinstance(drawer, str) else UNSORTED.id
 
 
-def _first_text(view: WorldView, thing: ThingState) -> str:
-    """The thing's first written fact that's visible, rendered ("" for
-    none)."""
+def is_summary_fact(fact: FactState) -> bool:
+    """Whether the fact is a sphere's summary: an `about` fact whose origin
+    marks it so (ruling P21)."""
 
-    facts = _authored(thing.facts)
-    return view.render(facts[0].text) if facts else ""
+    return fact.category == "about" and (fact.origin or {}).get("summary") is True
+
+
+def summary_fact(state: ThingState) -> FactState | None:
+    """The sphere's summary fact (`is_summary_fact`), else, for a sphere
+    written before there was one, its first written `about` fact; `None`
+    for neither."""
+
+    about = [fact for fact in _authored(state.facts) if fact.category == "about"]
+    return next((fact for fact in about if is_summary_fact(fact)), None) or (
+        about[0] if about else None
+    )
+
+
+def summary(view: WorldView, sphere_id: str, cached: str | None = None) -> str:
+    """The sphere's summary, rendered: `cached` (the caller's cached
+    `description` prose, the summary as last written) when it's not
+    empty, else its summary fact (`summary_fact`), else ""."""
+
+    if cached:
+        return view.render(cached)
+    state = view.thing(sphere_id)
+    fact = summary_fact(state) if state is not None else None
+    return view.render(fact.text) if fact is not None else ""
+
+
+# `summary`, for `key_facts`, whose parameter of that name hides it
+_summary_of = summary
+
+
+def item_fact(state: ThingState) -> FactState | None:
+    """The fact a thing item shows as its text: a nested sphere's summary
+    fact (`summary_fact`), never its first timeline fact; any other
+    thing's first written visible fact."""
+
+    if is_sphere(state):
+        return summary_fact(state)
+    facts = _authored(state.facts)
+    return facts[0] if facts else None
+
+
+def _first_text(view: WorldView, thing: ThingState) -> str:
+    """The thing item's text (`item_fact`), rendered ("" for none)."""
+
+    fact = item_fact(thing)
+    return view.render(fact.text) if fact is not None else ""
 
 
 def items(
@@ -294,6 +355,73 @@ def items(
         # what this sphere drops is gone from every less specific one
         dropped |= _drops(state)
     return found
+
+
+# words in an entry's name that make it a body of people (a council, an
+# order), filed in a structure drawer when nothing else says where
+_BODY_WORDS = frozenset(("council", "order", "guild", "synod", "college", "court"))
+
+
+def names_a_body(name: str) -> bool:
+    """Whether `name` names a body of people ("The Council of Elders")."""
+
+    return any(word in _BODY_WORDS for word in re.findall(r"[a-z]+", name.casefold()))
+
+
+def entry_drawer(
+    drawers: Sequence[Drawer], kind: str, wanted: str | None, name: str = ""
+) -> str:
+    """The id of the drawer among `drawers` an entry is filed in, as
+    creation files it:
+
+    - `wanted`, when it's `UNSORTED` or one of `drawers` of a type the
+      entry may go in: `ENTRY_DRAWER_TYPES` for a thing of `kind`, the
+      written types for a statement (`kind` "");
+    - else (`wanted` is `None`, or a drawer it doesn't go in) a guess: a
+      place goes in the first places drawer; a sphere, or an entry named
+      like a body of people (`names_a_body`), in the first structure
+      drawer;
+    - else `UNSORTED`."""
+
+    allowed = ENTRY_DRAWER_TYPES.get(kind, ()) if kind else WRITTEN_DRAWER_TYPES
+    if wanted == UNSORTED.id:
+        return wanted
+    if any(d.id == wanted and d.type in allowed for d in drawers):
+        return str(wanted)
+    if kind == "place":
+        guess = "places"
+    elif kind == "sphere" or (kind and names_a_body(name)):
+        guess = "structure"
+    else:
+        return UNSORTED.id
+    return next((d.id for d in drawers if d.type == guess), UNSORTED.id)
+
+
+def sits_in(view: WorldView, start_id: str, thing_id: str) -> bool:
+    """Whether `thing_id` is `start_id` or a thing `start_id` sits in,
+    going up its `parent` and `part_of` links, each thing once (so a cycle
+    ends): a thing can't be filed in, nor branch from, anything sitting
+    inside it."""
+
+    seen: set[str] = set()
+    stack = [start_id]
+    while stack:
+        current = stack.pop()
+        if current == thing_id:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        state = view.thing(current)
+        if state is None:
+            continue
+        parent = state.fields.get("parent")
+        if isinstance(parent, str):
+            stack.append(parent)
+        link = _part_of(state)
+        if link is not None:
+            stack.append(link[0])
+    return False
 
 
 def _date(value: object) -> WorldDate | None:
@@ -501,26 +629,54 @@ def timeline(view: WorldView, sphere_id: str) -> list[FactState]:
     return _timeline(view, sphere_id, frozenset())
 
 
+# how an exception's text ends, linking what it departs from (a thing item,
+# or the sphere for one of its statements): `create.exception_fact`'s
+_DEPARTS_FROM = re.compile(
+    r"Departs from(?: a teaching of)?\s+(%s)\s*$" % REF_PATTERN.pattern
+)
+
+
+def departs_from(text: str) -> str | None:
+    """The thing an exception's raw text departs from: the reference its
+    closing "Departs from <link>" (or "Departs from a teaching of <link>")
+    sentence links, or `None` when it doesn't end with one."""
+
+    found = _DEPARTS_FROM.search(text)
+    if found is None:
+        return None
+    refs = parse_refs(found.group(1))
+    return refs[0] if refs else None
+
+
 def exceptions(view: WorldView, character_id: str, sphere_id: str) -> list[FactState]:
-    """The character's `ties` facts that depart from the sphere: those
-    referencing the sphere or one of its thing items, or whose origin
-    `rejects_fact` is one of its statement items."""
+    """The character's `ties` facts that depart from the sphere: those whose
+    origin `tie` is the sphere (ruling P22). One written before exceptions
+    were filed by tie (no `tie` in its origin) is matched by what it
+    rejects instead: its origin `rejects_fact`, one of the sphere's
+    statement items, or the link its text ends with ("Departs from
+    <link>", `departs_from`), the sphere or one of its thing items -- never
+    by any other reference in its text, which may name another tied
+    sphere."""
 
     state = view.thing(character_id)
     if state is None:
         return []
+    ties = [fact for fact in state.facts if fact.category == "ties"]
+    filed = [fact for fact in ties if isinstance((fact.origin or {}).get("tie"), str)]
+    found = [fact for fact in filed if (fact.origin or {}).get("tie") == sphere_id]
+    unfiled = [fact for fact in ties if fact not in filed]
+    if not unfiled:
+        return found
     sphere_items = items(view, sphere_id)
     thing_ids = {sphere_id} | {i.thing_id for i in sphere_items if i.thing_id}
     fact_ids = {i.fact_id for i in sphere_items if i.fact_id}
-    return [
+    old = [
         fact
-        for fact in state.facts
-        if fact.category == "ties"
-        and (
-            thing_ids.intersection(fact.refs)
-            or (fact.origin or {}).get("rejects_fact") in fact_ids
-        )
+        for fact in unfiled
+        if (fact.origin or {}).get("rejects_fact") in fact_ids
+        or departs_from(fact.text) in thing_ids
     ]
+    return [fact for fact in ties if fact in found or fact in old]
 
 
 def _is_agent(state: ThingState) -> bool:
@@ -607,8 +763,8 @@ def key_facts(
     skip: Collection[str] = (),
 ) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
-    `KEY_FACTS_CAP` lines: the summary (`summary`, the caller's cached
-    `description` prose, or else the sphere's first `about` fact), then its
+    `KEY_FACTS_CAP` lines: the summary (`summary`, as the caller found it,
+    else the sphere's summary fact: module `summary`), then its
     top beliefs and practices items (and structure, for an agent) -- the
     first in `items` order, taken a drawer type at a time in turn, a thing
     item as `item_line` gives it -- then its latest timeline facts, each
@@ -621,13 +777,7 @@ def key_facts(
     if state is None:
         return []
 
-    head: list[str] = []
-    if summary:
-        head.append(summary)
-    else:
-        about = next((f for f in _authored(state.facts) if f.category == "about"), None)
-        if about is not None:
-            head.append(view.render(about.text))
+    head = [line for line in [summary or _summary_of(view, sphere_id)] if line]
 
     calendar = calendar or Calendar()
     latest = [

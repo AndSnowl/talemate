@@ -2763,6 +2763,14 @@ async def test_preview_sphere_then_accept(plugin, client):
     assert accepted["prose"]["description"]["text"] == (
         "A council of smiths who keep the forges."
     )
+    # the summary is its own fact (ruling P21): named in the payload, so
+    # the page shows it as the summary, not as an about row
+    summary_id = accepted["sphere"]["summary_fact_id"]
+    (summary,) = [f for f in accepted["facts"] if f["fact_id"] == summary_id]
+    assert (summary["category"], summary["rendered"]) == (
+        "about",
+        "A council of smiths who keep the forges.",
+    )
     assert not plugin.tasks
 
 
@@ -3062,9 +3070,12 @@ async def test_add_exception(plugin, client):
     assert {f.fact_id for f in found} == {
         e["fact_id"] for e in vasha["ties"][0]["exceptions"]
     }
-    teaching = next(f for f in found if f.origin)
-    assert teaching.origin == {"rejects_fact": s.unblessed}
+    teaching = next(f for f in found if (f.origin or {}).get("rejects_fact"))
+    # filed under its tie (ruling P22), and the statement it rejects (P3)
+    assert teaching.origin == {"tie": s.dawn, "rejects_fact": s.unblessed}
     assert teaching.category == "ties"
+    climbing = next(f for f in found if "climbs" in f.text)
+    assert climbing.origin == {"tie": s.dawn}
 
     head = s.world.head_rev()
     refused = [
@@ -3395,7 +3406,8 @@ async def test_add_exception_from_the_whole_sphere(plugin, client):
     fact = next(
         f for f in s.world.view().thing(s.vasha).facts if f.fact_id == doubts["fact_id"]
     )
-    assert fact.origin is None
+    # filed under its tie alone: it rejects no item (ruling P22)
+    assert fact.origin == {"tie": s.dawn}
 
 
 async def test_preview_branch_failure_is_reported(plugin, client):
@@ -3740,3 +3752,40 @@ async def test_unread_fact_leaves_sphere_prose_fresh(
         assert payload["prose"]["description"]["stale"] is True
         await _drain(plugin)
         assert [c["kind"] for c in client.prompt_history] == ["analyze"]
+
+
+async def test_part_of_a_deleted_sphere_is_none(plugin):
+    """A thing whose sphere was deleted shows no "Part of" line: the
+    sphere's items never list it either."""
+
+    s = await _open_sphere_world(plugin)
+    await _act(plugin, "delete_thing", id=s.dawn)
+    assert not _errors(plugin)
+    vigil = await _get_thing(plugin, s.vigil)
+    assert vigil["part_of"] is None
+    # undone, it's back
+    with s.world.revision(Source.manual(note="back")) as rev:
+        rev.set_field(s.vigil, "part_of", {"sphere": s.reformed, "drawer": RITES}, None)
+    vigil = await _get_thing(plugin, s.vigil)
+    assert vigil["part_of"]["sphere_id"] == s.reformed
+
+
+@pytest.mark.parametrize(
+    "field, value, action",
+    [
+        ("part_of", None, "set_part_of"),
+        ("ties", [], "set_ties"),
+        ("drawers", [], "set_drawers"),
+    ],
+)
+async def test_set_field_refuses_guarded_fields(plugin, field, value, action):
+    """`part_of`, `ties` and `drawers` have actions of their own, with
+    their guards: `set_field` refuses them, naming that action."""
+
+    s = await _open_sphere_world(plugin)
+    thing_id = s.vasha if field == "ties" else s.dawn if field == "drawers" else s.vigil
+    head = s.world.head_rev()
+    await _act(plugin, "set_field", thing_id=thing_id, field=field, value=value)
+    (error,) = _errors(plugin)
+    assert action in error["error"]["message"]
+    assert s.world.head_rev() == head

@@ -461,6 +461,7 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         "Hierarchy",
         "People",
         "Timeline",
+        "Branches",
     ]
     hierarchy = _drawer(dawn, "Hierarchy")["items"]
     assert [i["thing_id"] for i in hierarchy][0] == council_id
@@ -638,3 +639,114 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         # the one turn
         "narrate_512": 1,
     }
+
+
+TSARDOM_SPHERE_COUNCIL_REPLY = json.dumps(
+    {
+        **json.loads(TSARDOM_REPLY),
+        "names": [
+            {"name": "Kremova", "kind": "place", "aka": []},
+            {
+                "name": "The White Dawn",
+                "kind": "sphere",
+                "template": "religion",
+                "aka": [],
+            },
+            # guessed an order sphere ("council" maps to order)
+            {"name": "Council of Elders", "kind": "sphere", "template": "council"},
+        ],
+    }
+)
+COUNCIL_CORE = json.dumps(
+    {
+        "name": "Council of Elders",
+        "summary": COUNCIL_TEXT,
+        "aka": [],
+        "timeline": [],
+        "drawers": [{"type": "structure", "title": "Seats"}],
+        "items": [{"drawer": "Seats", "text": "Seven seats, one for each elder."}],
+        "names": [],
+    }
+)
+# the White Dawn's core, leaving the council out of its items
+DAWN_CORE_WITHOUT_COUNCIL = json.dumps(
+    {
+        **json.loads(DAWN_CORE),
+        "items": [
+            item
+            for item in json.loads(DAWN_CORE)["items"]
+            if item.get("name") != "The Council of Elders"
+        ],
+    }
+)
+
+
+async def test_council_sphere_first_then_dawn_files_it(plugin, client):
+    """Minor 5, end to end: the Tsardom's reply guesses the Council of
+    Elders an order sphere; it's expanded first, as a sphere whose prompt
+    names the White Dawn stub, so it's part of it (unsorted). The White
+    Dawn's core then leaves it out of its items -- and it still lands in
+    Hierarchy, a body of people filed in the structure drawer."""
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "create_world",
+            "name": "Moscavia",
+            "present_year": 1020,
+        }
+    )
+    preview = await _send(
+        plugin,
+        "preview_thing",
+        TSARDOM_SPHERE_COUNCIL_REPLY,
+        TSARDOM_PROSE,
+        kind="place",
+        prompt="The Tsardom of Moscavia, a northern realm",
+        fields={},
+    )
+    await _send(plugin, "accept_preview", preview=preview)
+    stubs = await _stubs(plugin)
+    assert stubs["Council of Elders"]["kind"] == "sphere"
+    dawn_id = stubs["The White Dawn"]["id"]
+    council_id = stubs["Council of Elders"]["id"]
+    council = await _thing(plugin, council_id)
+    assert council["sphere"]["template"] == "order"
+
+    # the council first, as an order sphere: part of the White Dawn stub
+    suggestion = await _send(plugin, "stub_suggestion", id=council_id)
+    assert "White Dawn" in suggestion["prompt"]
+    preview = await _send(
+        plugin,
+        "preview_sphere",
+        COUNCIL_CORE,
+        template="order",
+        prompt=suggestion["prompt"],
+        fields={},
+        stub_id=council_id,
+    )
+    assert preview["part_of"] == {"sphere": dawn_id, "drawer": "unsorted"}
+    council = await _send(plugin, "accept_sphere", preview=preview)
+    assert council["part_of"]["drawer_title"] == "Unsorted"
+
+    # the White Dawn, whose core never relists it: guessed into Hierarchy
+    suggestion = await _send(plugin, "stub_suggestion", id=dawn_id)
+    preview = await _send(
+        plugin,
+        "preview_sphere",
+        DAWN_CORE_WITHOUT_COUNCIL,
+        template="religion",
+        prompt=suggestion["prompt"],
+        fields={},
+        stub_id=dawn_id,
+    )
+    hierarchy_id = next(
+        d["id"] for d in preview["drawers"] if d["title"] == "Hierarchy"
+    )
+    assert preview["adopted"] == [{"thing_id": council_id, "drawer_id": hierarchy_id}]
+    dawn = await _send(plugin, "accept_sphere", preview=preview)
+    hierarchy = _drawer(dawn, "Hierarchy")["items"]
+    assert hierarchy[0]["thing_id"] == council_id
+    # a nested sphere reads as its summary
+    assert _text(hierarchy[0]["segments"]) == COUNCIL_TEXT
+    assert "Unsorted" not in [d["title"] for d in dawn["sphere"]["drawers"]]

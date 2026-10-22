@@ -191,7 +191,8 @@ def _section_facts(
     facts, and a culture's `dress`) -- giving the model appearance in view
     made it narrate the body instead of writing personality (acceptance
     probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md).
-    `description`'s own background is unaffected."""
+    `description`'s own background is unaffected. A sphere's summary fact
+    (`spheres.is_summary_fact`) comes first."""
 
     own_categories = section_categories(state.kind, section)
     by_kind = inherited_categories(section) if state.kind == "character" else {}
@@ -201,7 +202,11 @@ def _section_facts(
 
     facts: list[str] = []
     inherited_background: list[str] = []
-    for fact, layer in heritage.effective_facts(view, state.id):
+    found = heritage.effective_facts(view, state.id)
+    # a sphere's summary fact leads its description (ruling P21): the
+    # other about facts add to it, never replace it
+    found.sort(key=lambda pair: not spheres.is_summary_fact(pair[0]))
+    for fact, layer in found:
         # rendered: a linked fact reads as written, never as `[[thing:...]]`
         text = view.render(fact.text)
         if layer.depth == 0:

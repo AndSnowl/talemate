@@ -173,6 +173,7 @@ from talemate.world.kinds import (
     SPHERE_TEMPLATES,
     TEMPLATE_AGENT,
     UNSORTED_DRAWER_ID,
+    WRITTEN_DRAWER_TYPES,
 )
 from talemate.world.names import find_names, unknown_proper_phrases
 from talemate.world.prose import UNRENDERED_FIELDS
@@ -524,8 +525,13 @@ class AddStatementPayload(pydantic.BaseModel):
     at: dict | None = None
 
 
-# the drawer types a statement written by hand can go in
-STATEMENT_DRAWER_TYPES = ("places", "practices", "beliefs", "knowledge", "structure")
+# the fields set through an action of their own, which guards them:
+# `set_field` refuses them, naming that action
+GUARDED_FIELDS: dict[str, str] = {
+    "part_of": "set_part_of",
+    "ties": "set_ties",
+    "drawers": "set_drawers",
+}
 
 
 class PreviewBranchPayload(pydantic.BaseModel):
@@ -748,14 +754,6 @@ class _Links:
 # --- spheres ------------------------------------------------------------------
 
 
-def _first_fact(state: ThingState) -> FactState | None:
-    """The thing's first written visible fact (`spheres.items` gives its
-    rendered text as a thing item's text)."""
-
-    facts = sorted(state.facts, key=lambda fact: fact.created)
-    return facts[0] if facts else None
-
-
 def _own_fact(state: ThingState | None, fact_id: str | None) -> FactState | None:
     if state is None:
         return None
@@ -763,12 +761,13 @@ def _own_fact(state: ThingState | None, fact_id: str | None) -> FactState | None
 
 
 def _item_out(view: WorldView, links: _Links, item: spheres.Item) -> dict:
-    """A drawer's item for the wire: a statement's text, or a thing's
-    first fact, as linked runs."""
+    """A drawer's item for the wire: a statement's text, or the thing's
+    fact `spheres.items` shows (`spheres.item_fact`: a nested sphere's
+    summary), as linked runs."""
 
     if item.thing_id is not None:
         thing = view.thing(item.thing_id)
-        fact = _first_fact(thing) if thing is not None else None
+        fact = spheres.item_fact(thing) if thing is not None else None
     else:
         fact = _own_fact(view.thing(item.source_id), item.fact_id)
     return {
@@ -842,9 +841,17 @@ def _sphere_out(
         ),
         key=lambda other: other.created,
     )
+    summary = spheres.summary_fact(state)
     return {
         "template": template if isinstance(template, str) else None,
         "agent": agent,
+        # the summary's fact (ruling P21), shown and corrected as the
+        # summary, not among the about facts
+        "summary_fact_id": (
+            summary.fact_id
+            if summary is not None and spheres.is_summary_fact(summary)
+            else None
+        ),
         "drawers": drawers,
         "people": [
             {
@@ -890,10 +897,17 @@ def _drawer_title(view: WorldView, sphere_id: str, drawer_id: str) -> str:
 
 
 def _part_of_out(view: WorldView, state: ThingState) -> dict | None:
+    """The sphere drawer the thing is part of, or `None`: also for a
+    sphere that's since been deleted (or is no sphere any more), as
+    `spheres.items` never lists the thing there."""
+
     link = state.fields.get("part_of")
     if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
         return None
     sphere_id, drawer_id = link["sphere"], str(link.get("drawer") or "")
+    sphere = view.thing(sphere_id)
+    if sphere is None or not spheres.is_sphere(sphere):
+        return None
     return {
         "sphere_id": sphere_id,
         "sphere_name": view.name_of(sphere_id) or "",
@@ -935,31 +949,6 @@ def _ties_out(
             }
         )
     return found
-
-
-def _inside(view: WorldView, start_id: str, thing_id: str) -> bool:
-    """Whether `thing_id` is `start_id` or one it sits in, going up its
-    `parent` and `part_of` links (each thing once)."""
-
-    seen: set[str] = set()
-    stack = [start_id]
-    while stack:
-        current = stack.pop()
-        if current == thing_id:
-            return True
-        if current in seen:
-            continue
-        seen.add(current)
-        state = view.thing(current)
-        if state is None:
-            continue
-        parent = state.fields.get("parent")
-        if isinstance(parent, str):
-            stack.append(parent)
-        link = state.fields.get("part_of")
-        if isinstance(link, dict) and isinstance(link.get("sphere"), str):
-            stack.append(link["sphere"])
-    return False
 
 
 def _new_drawer_ids(drawers: list[DrawerIn]) -> list[dict[str, str]]:
@@ -1796,7 +1785,7 @@ class WorldsPlugin(Plugin):
         value: dict[str, str] | None = None
         if payload.sphere_id is not None:
             self._require_sphere(world, payload.sphere_id)
-            if _inside(view, payload.sphere_id, payload.thing_id):
+            if spheres.sits_in(view, payload.sphere_id, payload.thing_id):
                 raise ValueError("a thing can't be part of a sphere inside it")
             drawer = next(
                 (
@@ -1945,7 +1934,7 @@ class WorldsPlugin(Plugin):
         )
         if drawer is None:
             raise ValueError(f"the sphere has no drawer {payload.drawer_id}")
-        if drawer.type not in STATEMENT_DRAWER_TYPES:
+        if drawer.type not in WRITTEN_DRAWER_TYPES:
             raise ValueError(f"a {drawer.type} drawer holds no statements")
         if not payload.text.strip():
             raise ValueError("a statement needs some text")
@@ -2239,7 +2228,15 @@ class WorldsPlugin(Plugin):
         self._edited("remove_fact", payload.thing_id, _date_in(payload.at))
 
     async def handle_set_field(self, data: dict):
+        """Set one field. The fields with an action of their own, which
+        guards them, are refused here: `part_of` (`set_part_of`), `ties`
+        (`set_ties`) and `drawers` (`set_drawers`)."""
+
         payload = SetFieldPayload(**data)
+        if payload.field in GUARDED_FIELDS:
+            raise ValueError(
+                f"{payload.field!r} is set with {GUARDED_FIELDS[payload.field]}"
+            )
         world = self._require_world()
         with world.revision(Source.manual()) as rev:
             rev.set_field(

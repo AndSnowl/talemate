@@ -15,8 +15,10 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
+from talemate.worldplay import prose_gen
 from talemate.worldplay.create import (
     CreatePreview,
+    spheres_block,
     PreviewFact,
     accept_preview,
     preview_thing,
@@ -163,7 +165,8 @@ async def test_preview_sphere_outline_and_items(moscavia, world):
     assert preview.stub_id == moscavia.dawn
     assert preview.name == "The White Dawn"
     assert (preview.template, preview.agent) == ("religion", True)
-    # the reply's drawers, then the ones the app keeps (people, timeline)
+    # the reply's drawers, then the ones the app keeps (people, timeline,
+    # branches)
     assert [(d["type"], d["title"]) for d in preview.drawers] == [
         ("beliefs", "Doctrines"),
         ("practices", "Rites and Ceremonies"),
@@ -171,6 +174,7 @@ async def test_preview_sphere_outline_and_items(moscavia, world):
         ("structure", "Hierarchy"),
         ("people", "People"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ]
     assert all(len(d["id"]) == 8 for d in preview.drawers)
 
@@ -1262,7 +1266,7 @@ async def test_end_item_links_both_sides(moscavia, world, full_dawn):
     about = [
         view.render(f.text)
         for f in view.thing(moscavia.dawn).facts
-        if f.category == "about"
+        if f.category == "about" and not spheres.is_summary_fact(f)
     ]
     assert about == [f"Ended in 1016: {offering.text}"]
     # no `by`, no timeline fact anywhere
@@ -1373,7 +1377,11 @@ async def test_branch_statement_overridden_once(moscavia, world, full_dawn):
     overriding = [i for i in preview.items if grace.fact_id in i.get("overrides", [])]
     assert len(overriding) == 1
     branch = accept_sphere(world, preview)
-    assert not [f for f in world.view().thing(branch).facts if f.category == "about"]
+    assert not [
+        f
+        for f in world.view().thing(branch).facts
+        if f.category == "about" and not spheres.is_summary_fact(f)
+    ]
 
 
 async def test_end_inherited_item_refused(moscavia, world, full_dawn):
@@ -1501,3 +1509,248 @@ async def test_accept_preview_files_an_ended_stub_from_now(moscavia, world, full
     assert vigil.thing_id in {
         i.thing_id for i in spheres.items(view, moscavia.dawn) if i.drawer_id == rites
     }
+
+
+# --- the summary (ruling P21) ------------------------------------------------
+
+
+DAWN_SUMMARY_WORDS = "the state church of the Tsardom of Moscavia"
+
+
+def _summary_facts(world, sphere_id):
+    view = world.view()
+    return [
+        view.render(f.text)
+        for f in view.thing(sphere_id).facts
+        if spheres.is_summary_fact(f)
+    ]
+
+
+async def test_core_summary_is_a_summary_fact(moscavia, world):
+    """The core's summary is written as the sphere's `about` fact marked
+    `summary`, and still cached as its description."""
+
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    accept_sphere(world, preview)
+
+    assert _summary_facts(world, moscavia.dawn) == [preview.prose["description"]]
+    assert spheres.summary(world.view(), moscavia.dawn) == preview.prose["description"]
+    cached = world.prose().get(moscavia.dawn, "description", None)
+    assert cached.text == preview.prose["description"]
+    assert not world.prose().stale(
+        moscavia.dawn,
+        "description",
+        None,
+        (),
+        prose_gen.unread_categories("sphere", "description"),
+    )
+
+
+async def _regenerated_prompt(world, sphere_id) -> str:
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("The White Dawn is a faith whose priests wear white.")
+        await prose_gen.generate_section(world, sphere_id, "description", None, client)
+    return str(client.prompt_history[0]["prompt"])
+
+
+async def test_summary_survives_an_about_fact(moscavia, world):
+    """Ruling P21: an about fact added after the core is written into the
+    description after the summary, never in its place."""
+
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    accept_sphere(world, preview)
+    with world.revision(Source.manual(note="about")) as rev:
+        rev.add_fact(moscavia.dawn, "about", "Its priests wear white.")
+
+    prompt = await _regenerated_prompt(world, moscavia.dawn)
+    assert DAWN_SUMMARY_WORDS in prompt
+    assert prompt.index(DAWN_SUMMARY_WORDS) < prompt.index("Its priests wear white.")
+    assert _summary_facts(world, moscavia.dawn) == [preview.prose["description"]]
+
+
+async def test_summary_survives_toggling_agent(moscavia, world):
+    """The agent flag is no input to prose: toggling it leaves the
+    summary fresh, and a regeneration still writes from the summary."""
+
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    accept_sphere(world, preview)
+    with world.revision(Source.manual(note="agent")) as rev:
+        rev.set_field(moscavia.dawn, "agent", False, None)
+
+    assert not world.prose().stale(
+        moscavia.dawn,
+        "description",
+        None,
+        (),
+        prose_gen.unread_categories("sphere", "description"),
+    )
+    prompt = await _regenerated_prompt(world, moscavia.dawn)
+    assert DAWN_SUMMARY_WORDS in prompt
+    assert _summary_facts(world, moscavia.dawn) == [preview.prose["description"]]
+
+
+async def test_summary_survives_ending_a_statement(moscavia, world, full_dawn):
+    """ "End this..." on a statement notes the ending as an about fact: the
+    summary is regenerated with it, and kept."""
+
+    view = world.view()
+    statement = next(
+        i
+        for i in spheres.items(view, moscavia.dawn)
+        if i.thing_id is None and i.text.startswith("On each anniversary")
+    )
+    end_item(world, moscavia.dawn, statement, WorldDate.of(1018), None)
+
+    prompt = await _regenerated_prompt(world, moscavia.dawn)
+    assert DAWN_SUMMARY_WORDS in prompt
+    assert "Ended in 1018" in prompt
+    assert prompt.index(DAWN_SUMMARY_WORDS) < prompt.index("Ended in 1018")
+    assert [
+        DAWN_SUMMARY_WORDS in text for text in _summary_facts(world, moscavia.dawn)
+    ] == [True]
+
+
+async def test_ties_block_carries_a_core_made_summary(moscavia, world):
+    """A sphere made by the core has no about fact but its summary: the
+    character prompt's spheres block carries that summary line."""
+
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    accept_sphere(world, preview)
+    view = world.view()
+
+    (block,), _labels = spheres_block(view, [moscavia.dawn])
+    assert block[1] == preview.prose["description"]
+
+    client = MockClient("test")
+    async with MockClientContext():
+        reply = {
+            "name": "Vasha",
+            "facts": [{"category": "background", "text": "Carries letters."}],
+            "names": [],
+        }
+        _queue(json.dumps(reply), "Vasha.", "Dry.")
+        await preview_thing(
+            world,
+            "character",
+            "Vasha, a courier of the White Dawn",
+            {},
+            client,
+            picks={"White Dawn": moscavia.dawn},
+        )
+        # the queue is shared by the process's tests: nothing left over
+        client_responses.get().clear()
+    assert preview.prose["description"] in str(client.prompt_history[0]["prompt"])
+
+
+# --- filing (P23, minors 5 and 6) ---------------------------------------------
+
+
+async def test_religion_has_a_branches_drawer(moscavia, world):
+    """Ruling P23: a religion made by the core has a Branches drawer, which
+    the core is never asked to fill; a place sphere gets none."""
+
+    preview, client = await _dawn_preview(world, moscavia.dawn)
+    assert [(d["type"], d["title"]) for d in preview.drawers][-1] == (
+        "branches",
+        "Branches",
+    )
+    prompt = str(client.prompt_history[0]["prompt"])
+    # never offered to the reply as a drawer to write
+    assert "- branches:" not in prompt
+    accept_sphere(world, preview)
+    shelves = spheres.drawers(world.view(), moscavia.dawn)
+    assert [d.type for d in shelves].count("branches") == 1
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(CORE_NATION)
+        promoted = await preview_sphere(
+            world, "religion", "", {}, client, promote_id=moscavia.kremova
+        )
+    assert promoted.kind == "place"
+    assert "branches" not in [d["type"] for d in promoted.drawers]
+
+
+@pytest.mark.parametrize("kind", ["lore", "sphere"])
+async def test_adopted_council_not_relisted_lands_in_hierarchy(moscavia, world, kind):
+    """A council made first (lore, or an order sphere stub) and adopted by
+    a core reply that doesn't relist it is filed by a guess: Hierarchy,
+    the first structure drawer -- not Unsorted."""
+
+    fields = {
+        "name": "Council of Elders",
+        "part_of": {"sphere": moscavia.dawn, "drawer": UNSORTED_DRAWER_ID},
+    }
+    if kind == "sphere":
+        fields.update(template="order", stub={"ignored": False})
+    with world.revision(Source.manual(note="council")) as rev:
+        council = rev.create_thing(kind, fields)
+        if kind == "lore":
+            rev.add_fact(council, "general", "Seven elders.")
+
+    preview, _ = await _dawn_preview(world, moscavia.dawn)
+    assert "Council of Elders" not in CORE_RELIGION
+    ids = _drawer_ids(preview)
+    assert preview.adopted == [{"thing_id": council, "drawer_id": ids["Hierarchy"]}]
+
+    accept_sphere(world, preview)
+    assert world.view().thing(council).fields["part_of"] == {
+        "sphere": moscavia.dawn,
+        "drawer": ids["Hierarchy"],
+    }
+
+
+async def test_items_go_in_drawers_they_may(moscavia, world):
+    """Creation files items as `set_part_of` would: a place listed under
+    Rites goes to Holy Sites, lore under Holy Sites to Unsorted, a
+    statement under People to Unsorted -- in the preview and when
+    written."""
+
+    core = json.loads(CORE_AFTER_COUNCIL)
+    core["items"] = [
+        {
+            "drawer": "Rites and Ceremonies",
+            "name": "Amber Grove",
+            "text": "A grove.",
+            "kind": "place",
+        },
+        {
+            "drawer": "Holy Sites",
+            "name": "The Quiet Rule",
+            "text": "Be quiet.",
+            "kind": "lore",
+        },
+        {"drawer": "People", "name": "", "text": "Everyone prays."},
+        {"drawer": "Doctrines", "name": "", "text": "Light is pure."},
+    ]
+    core["names"] = []
+    preview, _ = await _dawn_preview(world, moscavia.dawn, json.dumps(core))
+    ids = _drawer_ids(preview)
+    by_text = {item["text"]: item["drawer_id"] for item in preview.items}
+    assert by_text == {
+        "A grove.": ids["Holy Sites"],
+        "Be quiet.": UNSORTED_DRAWER_ID,
+        "Everyone prays.": UNSORTED_DRAWER_ID,
+        "Light is pure.": ids["Doctrines"],
+    }
+
+    # an owner's preview naming a drawer an entry can't go in is filed
+    # right on accept too
+    preview.items[0]["drawer_id"] = ids["Rites and Ceremonies"]
+    accept_sphere(world, preview)
+    view = world.view()
+    found = {i.name: i.drawer_id for i in spheres.items(view, moscavia.dawn)}
+    assert found["Amber Grove"] == ids["Holy Sites"]
+    assert found["The Quiet Rule"] == UNSORTED_DRAWER_ID
+    assert found["Everyone prays."] == UNSORTED_DRAWER_ID
+
+
+def test_written_types_are_the_ones_the_core_writes():
+    """The core's and Fill's drawer types (with the probe's glosses) are
+    the one set `kinds.WRITTEN_DRAWER_TYPES` names."""
+
+    from talemate.world.kinds import WRITTEN_DRAWER_TYPES
+    from talemate.worldplay.spheres import TYPE_HELP
+
+    assert tuple(TYPE_HELP) == WRITTEN_DRAWER_TYPES

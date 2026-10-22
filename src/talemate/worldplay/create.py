@@ -89,7 +89,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, NamedTuple
 
 import structlog
@@ -101,7 +101,9 @@ from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
     AKA_TAGS,
+    ENTRY_DRAWER_TYPES,
     HERITAGE_KINDS,
+    PART_OF_KINDS,
     SPHERE_CATEGORIES,
     UNSORTED_DRAWER_ID,
     get_kind,
@@ -1243,14 +1245,26 @@ def _sphere_heading(view: WorldView, state: ThingState) -> str:
     return heading
 
 
+def cached_summary(world: World, sphere_id: str) -> str | None:
+    """The sphere's summary as last written: its cached `description`
+    prose now, or `None` (`spheres.summary` falls back to its summary
+    fact)."""
+
+    cached = world.prose().get(sphere_id, "description", None)
+    return cached.text if cached is not None else None
+
+
 def spheres_block(
-    view: WorldView, sphere_ids: list[str]
+    view: WorldView,
+    sphere_ids: list[str],
+    cached: Callable[[str], str | None] | None = None,
 ) -> tuple[list[tuple[str, str, list[tuple[str, str, str]]]], dict[str, _SphereItem]]:
-    """The spheres block as the create prompt lists it -- `(heading, about,
-    [(label, drawer title, line)])` per sphere: its first `about` fact,
-    then its first `SPHERE_BLOCK_ITEMS` items in `items` order, places
-    left out before counting -- and what each label (S1... running across
-    all the spheres, only for the items shown) stands for."""
+    """The spheres block as the create prompt lists it -- `(heading,
+    summary, [(label, drawer title, line)])` per sphere: its summary
+    (`spheres.summary`, from `cached`'s prose for it when given), then its
+    first `SPHERE_BLOCK_ITEMS` items in `items` order, places left out
+    before counting -- and what each label (S1... running across all the
+    spheres, only for the items shown) stands for."""
 
     block: list[tuple[str, str, list[tuple[str, str, str]]]] = []
     labels: dict[str, _SphereItem] = {}
@@ -1258,14 +1272,6 @@ def spheres_block(
         state = view.thing(sphere_id)
         if state is None:
             continue
-        about = next(
-            (
-                fact
-                for fact in sorted(state.facts, key=lambda fact: fact.created)
-                if fact.category == "about"
-            ),
-            None,
-        )
         titles = {
             drawer.id: drawer.title for drawer in spheres.drawers(view, sphere_id)
         }
@@ -1283,7 +1289,9 @@ def spheres_block(
         block.append(
             (
                 _sphere_heading(view, state),
-                view.render(about.text) if about is not None else "",
+                spheres.summary(
+                    view, sphere_id, cached(sphere_id) if cached is not None else None
+                ),
                 lines,
             )
         )
@@ -1415,19 +1423,20 @@ def _live_exceptions(view: WorldView, tie: PreviewTie) -> list[PreviewException]
 
 def exception_fact(
     text: str, tie: PreviewTie, exception: PreviewException
-) -> tuple[str, dict[str, object] | None]:
-    """An exception's `ties` fact, `(text, origin)`: one rejecting a thing
-    item ends with a reference to it; one rejecting a statement references
-    the sphere and records the statement in its origin (ruling P3). Text
+) -> tuple[str, dict[str, object]]:
+    """An exception's `ties` fact, `(text, origin)`: filed under its tie
+    (origin `tie`, the sphere: ruling P22), one rejecting a thing item ends
+    with a reference to it; one rejecting a statement references the
+    sphere and records the statement in its origin too (ruling P3). Text
     that references its target already is kept as it is."""
 
-    origin: dict[str, object] | None = None
+    origin: dict[str, object] = {"tie": tie.sphere_id}
     if exception.thing_id is not None:
         target, shown, lead = exception.thing_id, exception.item, DEPARTS_FROM
     else:
         target, shown, lead = tie.sphere_id, tie.sphere, DEPARTS_FROM_TEACHING
         if exception.fact_id is not None:
-            origin = {"rejects_fact": exception.fact_id}
+            origin["rejects_fact"] = exception.fact_id
     if target in parse_refs(text):
         return text, origin
     body = text.rstrip()
@@ -1438,15 +1447,6 @@ def exception_fact(
     except ValueError:
         token = ref(target)
     return f"{body} {lead} {token}", origin
-
-
-# the kinds that can be part of a sphere, in a drawer: entries a drawer
-# holds, and nested spheres. Characters never are: people come from ties
-PART_OF_KINDS: tuple[str, ...] = ("lore", "place", "item", "event", "sphere")
-
-# drawer types a non-place child may join by its mention's drawer: people
-# come from ties, events are the timeline, branches are spheres
-_ITEM_DRAWER_TYPES = ("practices", "beliefs", "knowledge", "structure")
 
 
 def part_of_since(
@@ -1491,11 +1491,12 @@ def part_of_since(
 
 def drawer_types_for(kind: str) -> tuple[str, ...]:
     """The drawer types a `kind` thing may be filed in, as creation files
-    them: a place in a places drawer, any other entry in one that holds
-    entries. Never people (ties), events (the timeline) or branches; any
-    thing may sit in `UNSORTED`."""
+    them (`kinds.ENTRY_DRAWER_TYPES`): a place in a places drawer, any
+    other entry in one that holds entries; none for a kind outside
+    `PART_OF_KINDS`. Never people (ties), events (the timeline) or
+    branches; any thing may sit in `UNSORTED`."""
 
-    return ("places",) if kind == "place" else _ITEM_DRAWER_TYPES
+    return ENTRY_DRAWER_TYPES.get(kind, ())
 
 
 def _item_home(view: WorldView, owner_id: str, fact: Any) -> tuple[str, str] | None:
@@ -1530,32 +1531,9 @@ def _guessed_drawer(
     if kind == "place":
         wanted = [d.id for d in drawers if d.type == "places"]
     else:
-        holding = {d.id for d in drawers if d.type in _ITEM_DRAWER_TYPES}
+        holding = {d.id for d in drawers if d.type in drawer_types_for(kind)}
         wanted = [drawer for drawer in mentioned_in if drawer in holding]
     return wanted[0] if wanted else UNSORTED_DRAWER_ID
-
-
-def _sits_in(view: WorldView, sphere_id: str, thing_id: str) -> bool:
-    """Whether `thing_id` is `sphere_id` or a sphere it sits in, going up
-    its `part_of` and `parent` links (so a child-first link never makes a
-    cycle)."""
-
-    seen: set[str] = set()
-    current: str | None = sphere_id
-    while current is not None and current not in seen:
-        if current == thing_id:
-            return True
-        seen.add(current)
-        state = view.thing(current)
-        if state is None:
-            return False
-        link = state.fields.get("part_of")
-        up = link.get("sphere") if isinstance(link, dict) else None
-        if not isinstance(up, str):
-            parent = state.fields.get("parent")
-            up = parent if isinstance(parent, str) else None
-        current = up
-    return False
 
 
 def child_part_of(
@@ -1573,7 +1551,7 @@ def child_part_of(
 
     A stub that's part of a sphere already stays where it is, and one of a
     kind outside `PART_OF_KINDS` (a character) joins none; nor does a
-    sphere stub join a sphere that sits inside it (`_sits_in`). The parent
+    sphere stub join a sphere that sits inside it (`spheres.sits_in`). The parent
     is never written to: expanding a child never creates its sphere."""
 
     if stub.kind not in PART_OF_KINDS or stub.fields.get("part_of") is not None:
@@ -1590,7 +1568,9 @@ def child_part_of(
     ]
     if mentioning and len(homes) == len(mentioning):
         sphere_ids = {sphere_id for sphere_id, _drawer in homes}
-        if len(sphere_ids) == 1 and not _sits_in(view, next(iter(sphere_ids)), stub.id):
+        if len(sphere_ids) == 1 and not spheres.sits_in(
+            view, next(iter(sphere_ids)), stub.id
+        ):
             sphere_id = sphere_ids.pop()
             drawers = [drawer for _sphere, drawer in homes]
             return {
@@ -1611,7 +1591,7 @@ def child_part_of(
             and state is not None
             and state.kind == "sphere"
             and state.is_stub
-            and not _sits_in(view, thing_id, stub.id)
+            and not spheres.sits_in(view, thing_id, stub.id)
         ):
             return {"sphere": thing_id, "drawer": UNSORTED_DRAWER_ID}
     return None
@@ -1735,7 +1715,9 @@ async def preview_thing(
     picks.update(_found_in_prompt(view, prompt, picks, treated_as_new, in_context))
     # a character's spheres in context are shown as such, not as named
     sphere_ids = context_spheres(view, picks, gathered) if kind == "character" else []
-    sphere_block, sphere_labels = spheres_block(view, sphere_ids)
+    sphere_block, sphere_labels = spheres_block(
+        view, sphere_ids, lambda sphere_id: cached_summary(world, sphere_id)
+    )
     named = _named_in_prompt(
         view,
         {w: thing_id for w, thing_id in picks.items() if thing_id not in sphere_ids},

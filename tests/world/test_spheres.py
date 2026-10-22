@@ -13,7 +13,9 @@ from talemate.world.spheres import (
     TEMPLATE_DRAWERS,
     UNSORTED,
     Drawer,
+    departs_from,
     drawers,
+    entry_drawer,
     exceptions,
     holders,
     is_sphere,
@@ -21,6 +23,9 @@ from talemate.world.spheres import (
     items,
     key_facts,
     people,
+    sits_in,
+    summary,
+    summary_fact,
     territory,
     ties_of,
     timeline,
@@ -528,9 +533,21 @@ def test_branch_timeline_cut_at_split(world, spheres):
 
 
 def test_exceptions_by_ref(world, spheres):
+    """An exception written before they were filed by tie (no origin
+    `tie`) is matched by what it rejects: its `rejects_fact`, or the link
+    its "Departs from" sentence ends with -- never by another reference
+    in its text (ruling P22)."""
+
     s = spheres
     with world.revision(Source.manual()) as rev:
         by_item = rev.add_fact(
+            s.vasha,
+            "ties",
+            "Thinks the council is too old. Departs from [[thing:%s|the Council]]"
+            % s.council,
+        )
+        # a reference to an item elsewhere in the text: no exception
+        loose = rev.add_fact(
             s.vasha, "ties", "Thinks [[thing:%s]] is too old." % s.council
         )
 
@@ -538,13 +555,160 @@ def test_exceptions_by_ref(world, spheres):
     found = [f.fact_id for f in exceptions(view, s.vasha, s.dawn)]
 
     assert set(found) == {s.exception, s.skips_prayers, by_item}
-    assert s.unrelated_tie not in found
+    assert s.unrelated_tie not in found and loose not in found
     # the branch overrode the superiority doctrine, so that rejection isn't
     # an exception there; the inherited council and prayers still are
     assert set(f.fact_id for f in exceptions(view, s.vasha, s.reformed)) == {
         s.skips_prayers,
         by_item,
     }
+
+
+def test_departs_from():
+    council = "c" * 32
+    assert departs_from(f"Too old. Departs from [[thing:{council}|the Council]]") == (
+        council
+    )
+    assert departs_from(f"No. Departs from a teaching of [[thing:{council}]] ") == (
+        council
+    )
+    assert departs_from(f"Departs from [[thing:{council}]] and more.") is None
+    assert departs_from("Plain text.") is None
+
+
+def test_exception_shows_under_its_own_tie_only(world, spheres):
+    """Ruling P22: an exception filed under the White Dawn tie (origin
+    `tie`) that mentions the Tsardom, another sphere Vasha is tied to,
+    shows under the White Dawn tie only -- and one filed under the
+    Tsardom shows there, whatever it links."""
+
+    s = spheres
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(
+            s.vasha,
+            "ties",
+            [
+                _tie(s.dawn, "practitioner", since=WorldDate.of(1000)),
+                _tie(s.tsardom, "subject"),
+            ],
+            None,
+        )
+        dawn_but = rev.add_fact(
+            s.vasha,
+            "ties",
+            "Prays for [[thing:%s|the Tsardom]] at dusk, not dawn. Departs from "
+            "a teaching of [[thing:%s|the White Dawn]]" % (s.tsardom, s.dawn),
+            origin={"tie": s.dawn, "rejects_fact": s.prayers},
+        )
+        tsardom_but = rev.add_fact(
+            s.vasha,
+            "ties",
+            "Won't swear by [[thing:%s|the Dawn]]." % s.dawn,
+            origin={"tie": s.tsardom},
+        )
+
+    view = world.view()
+    under_dawn = {f.fact_id for f in exceptions(view, s.vasha, s.dawn)}
+    under_tsardom = {f.fact_id for f in exceptions(view, s.vasha, s.tsardom)}
+    assert dawn_but in under_dawn and dawn_but not in under_tsardom
+    assert tsardom_but in under_tsardom and tsardom_but not in under_dawn
+    # the old, unfiled ones keep their place: the Never-sets-foot fact
+    # names the Tsardom, but departs from nothing
+    assert s.unrelated_tie not in under_tsardom
+
+
+def test_summary_prefers_cached_then_the_summary_fact(world, spheres):
+    """Ruling P21: the summary is the cached prose when there is some,
+    else the about fact marked `summary`, else (a sphere from before) the
+    first about fact."""
+
+    s = spheres
+    view = world.view()
+    assert summary(view, s.dawn) == "A faith of the snowy owl-folk."
+    assert summary(view, s.dawn, "") == "A faith of the snowy owl-folk."
+    assert summary(view, s.dawn, "The church of the dawn.") == "The church of the dawn."
+    assert summary(view, s.reformed) == ""
+    assert summary(view, "f" * 32) == ""
+
+    with world.revision(Source.manual()) as rev:
+        marked = rev.add_fact(
+            s.dawn,
+            "about",
+            "The state church of the Tsardom.",
+            origin={"summary": True},
+        )
+    view = world.view()
+    assert summary_fact(view.thing(s.dawn)).fact_id == marked
+    assert summary(view, s.dawn) == "The state church of the Tsardom."
+    # key facts lead with it
+    assert key_facts(view, s.dawn)[0] == "The state church of the Tsardom."
+
+
+def test_nested_sphere_item_reads_its_summary(world, spheres):
+    """A sphere part of another shows as its summary, not as its first
+    (timeline) fact."""
+
+    s = spheres
+    with world.revision(Source.manual()) as rev:
+        synod = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The Synod",
+                "template": "order",
+                "part_of": {"sphere": s.dawn, "drawer": HIERARCHY},
+            },
+        )
+        rev.add_fact(synod, "timeline", "Founded.", valid_from=WorldDate.of(990))
+        rev.add_fact(synod, "about", "Elders of the faith.", origin={"summary": True})
+
+    item = next(i for i in items(world.view(), s.dawn) if i.thing_id == synod)
+    assert item.text == "Elders of the faith."
+
+
+def test_entry_drawer():
+    shelves = [
+        Drawer(id=DOCTRINES, type="beliefs", title="Doctrines"),
+        Drawer(id=HIERARCHY, type="structure", title="Hierarchy"),
+        Drawer(id=RITES, type="practices", title="Rites"),
+        Drawer(id=PEOPLE, type="people", title="People"),
+        Drawer(id=HOLY_SITES, type="places", title="Holy Sites"),
+    ]
+    # where it may go: kept
+    assert entry_drawer(shelves, "lore", RITES, "The Vigil") == RITES
+    assert entry_drawer(shelves, "place", HOLY_SITES, "Dawn Peak") == HOLY_SITES
+    assert entry_drawer(shelves, "", HOLY_SITES) == HOLY_SITES
+    assert entry_drawer(shelves, "lore", UNSORTED.id) == UNSORTED.id
+    # a place in rites goes to the places drawer; lore in Holy Sites to
+    # Unsorted, or, named like a body, to the structure drawer
+    assert entry_drawer(shelves, "place", RITES, "Dawn Peak") == HOLY_SITES
+    assert entry_drawer(shelves, "lore", HOLY_SITES, "The Vigil") == UNSORTED.id
+    assert entry_drawer(shelves, "lore", HOLY_SITES, "The Council") == HIERARCHY
+    # a statement never sits with the people
+    assert entry_drawer(shelves, "", PEOPLE) == UNSORTED.id
+    # nothing said: guessed
+    assert entry_drawer(shelves, "sphere", None, "The Pale Feathers") == HIERARCHY
+    assert entry_drawer(shelves, "lore", None, "Synod of Dawns") == HIERARCHY
+    assert entry_drawer(shelves, "item", None, "The Amber Ledgers") == UNSORTED.id
+    assert entry_drawer(shelves[:1], "place", None, "Dawn Peak") == UNSORTED.id
+
+
+def test_sits_in(world, spheres):
+    """One cycle guard: up `parent` and `part_of` links, each once."""
+
+    s = spheres
+    view = world.view()
+    assert sits_in(view, s.dawn, s.dawn)
+    assert sits_in(view, s.reformed, s.dawn)  # its parent
+    assert sits_in(view, s.council, s.dawn)  # part of it
+    assert sits_in(view, s.little_kovask, s.tsardom)  # up the place tree
+    assert not sits_in(view, s.dawn, s.reformed)
+    assert not sits_in(view, s.tsardom, s.kovask)
+    with world.revision(Source.manual()) as rev:
+        # a cycle ends
+        rev.set_field(
+            s.dawn, "part_of", {"sphere": s.reformed, "drawer": "unsorted"}, None
+        )
+    assert not sits_in(world.view(), s.dawn, s.tsardom)
 
 
 def test_key_facts_capped(world, spheres):
@@ -730,6 +894,7 @@ def test_template_drawers():
         ("people", "People"),
         ("places", "Holy Sites"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ]
     assert TEMPLATE_DRAWERS["nation"] == [
         ("structure", "Government"),
@@ -745,12 +910,14 @@ def test_template_drawers():
         ("people", "Members"),
         ("places", "Sites"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ]
     assert TEMPLATE_DRAWERS["culture"] == [
         ("practices", "Customs and Holidays"),
         ("beliefs", "Beliefs and Legends"),
         ("people", "People"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ]
     assert TEMPLATE_DRAWERS["field"] == [
         ("knowledge", "Principles"),
@@ -758,6 +925,7 @@ def test_template_drawers():
         ("knowledge", "Frontier"),
         ("people", "Practitioners"),
         ("events", "Timeline"),
+        ("branches", "Branches"),
     ]
     assert TEMPLATE_DRAWERS["other"] == [("events", "Timeline")]
     for drawer_list in TEMPLATE_DRAWERS.values():

@@ -145,6 +145,9 @@ _ITEM_CATEGORY = {
 _REPEAT_OVERLAP = 0.75
 
 _CREATED_NOTE = "sphere created from prompt"
+
+# the origin of a sphere's summary fact (ruling P21)
+SUMMARY_ORIGIN: dict[str, object] = {"summary": True}
 _FILLED_NOTE = "sphere drawer filled"
 _ENDED_NOTE = "sphere item ended"
 
@@ -213,11 +216,12 @@ def _new_drawer_id(taken: set[str]) -> str:
     return drawer_id
 
 
-def _outline(raw: object, template: str) -> list[dict[str, str]]:
+def _outline(raw: object, template: str, kind: str = "sphere") -> list[dict[str, str]]:
     """The drawers of the reply's outline that are a type it may write,
     titles tidied and each title once -- or the template's own when none
     is -- then the template's drawers of the app's types (people, the
-    timeline), each with a new id."""
+    timeline, branches: never filled by the reply), each with a new id. A
+    place sphere gets no Branches drawer (ruling P23): it never branches."""
 
     taken: set[str] = set()
     found: list[dict[str, str]] = []
@@ -241,7 +245,7 @@ def _outline(raw: object, template: str) -> list[dict[str, str]]:
     found += [
         {"id": _new_drawer_id(taken), "type": type_, "title": title}
         for type_, title in start
-        if type_ not in TYPE_HELP
+        if type_ not in TYPE_HELP and (kind != "place" or type_ != "branches")
     ]
     return found
 
@@ -608,7 +612,7 @@ async def preview_sphere(
             category = "timeline" if since is not None else "about"
             facts.append(PreviewFact(category=category, text=text, since=since))
 
-    drawers = _outline(core.get("drawers"), template)
+    drawers = _outline(core.get("drawers"), template, kind)
     raw_items = [
         _item(raw, _drawer_for(raw.get("drawer"), drawers))
         for raw in core.get("items") or []
@@ -626,12 +630,20 @@ async def preview_sphere(
         adopt,
         treated_as_new,
     )
-    places = [d["id"] for d in drawers if d["type"] == "places"]
+    shelves = _shelves(drawers)
+    items = _filed(view, items, shelves)
+    # an entry the reply relists is filed in its drawer; one it doesn't is
+    # filed by a guess (`spheres.entry_drawer`), so a council the reply
+    # leaves out still lands in Hierarchy
     adopted = [
         {
             "thing_id": part.id,
-            "drawer_id": adopt.get(part.id)
-            or (places[0] if part.kind == "place" and places else UNSORTED_DRAWER_ID),
+            "drawer_id": spheres.entry_drawer(
+                shelves,
+                part.kind,
+                adopt.get(part.id),
+                view.name_of(part.id) or "",
+            ),
         }
         for part in parts
     ]
@@ -706,6 +718,43 @@ async def preview_sphere(
 # --- writing -----------------------------------------------------------------
 
 
+def _shelves(drawers: Sequence[dict[str, str]]) -> list[spheres.Drawer]:
+    return [spheres.Drawer.model_validate(drawer) for drawer in drawers]
+
+
+def _item_kind(view: WorldView, item: dict[str, Any]) -> str:
+    """The kind an item is filed as: its stub's, for one linking a stub;
+    its own (lore outside `ITEM_KINDS`) for a named one; "" for a
+    statement."""
+
+    if item.get("thing_id"):
+        state = view.thing(item["thing_id"])
+        return state.kind if state is not None else "lore"
+    if not item.get("name"):
+        return ""
+    return item["kind"] if item["kind"] in ITEM_KINDS else "lore"
+
+
+def _filed(
+    view: WorldView, items: list[dict[str, Any]], drawers: Sequence[spheres.Drawer]
+) -> list[dict[str, Any]]:
+    """`items`, each in a drawer it may go in (`spheres.entry_drawer`, the
+    rule `set_part_of` keeps): a place named in a practices drawer goes to
+    the places drawer, lore in Holy Sites to Unsorted (or, named like a
+    council, to the structure drawer); a statement in the people drawer to
+    Unsorted."""
+
+    return [
+        {
+            **item,
+            "drawer_id": spheres.entry_drawer(
+                drawers, _item_kind(view, item), item["drawer_id"], item["name"]
+            ),
+        }
+        for item in items
+    ]
+
+
 def _without_article(name: str) -> str:
     words = name.split()
     if len(words) > 1 and words[0].casefold() in ("the", "a", "an"):
@@ -726,11 +775,14 @@ def _write_items(
     """Write `items` into the sphere, in `rev`: a named item is a stub of
     its kind part of the sphere in its drawer (or, with a `thing_id`, that
     stub put there), with its text as a fact; a nameless one is a
-    `statement` fact of the sphere whose origin names its drawer. `made`
+    `statement` fact of the sphere whose origin names its drawer, each in
+    a drawer it may go in (`_filed`). `made`
     (written name -> id, from `make_stubs`) gains the item stubs, so every
     text links them; texts are linked once all are made. Returns the ids
     the written texts link to."""
 
+    # filed in drawers they may go in, whatever the preview said
+    items = _filed(world.view(), items, spheres.drawers(world.view(), sphere_id))
     placed: list[tuple[str, dict[str, Any]]] = []
     for item in items:
         if not item.get("name"):
@@ -881,6 +933,20 @@ def _write_sphere(
             as_new=preview.treated_as_new,
         )
         linking = world.view()
+        summary = preview.prose.get("description", "").strip()
+        if summary:
+            # the summary's source of truth (ruling P21): the description
+            # is written from it first, so other about facts never wipe it
+            text = link_text(
+                linking,
+                summary,
+                picks=preview.picks,
+                new_names=made,
+                owner=thing_id,
+                as_new=preview.treated_as_new,
+            )
+            linked.update(parse_refs(text))
+            rev.add_fact(thing_id, "about", text, origin=SUMMARY_ORIGIN)
         for fact in preview.facts:
             text = link_text(
                 linking,
@@ -1007,16 +1073,10 @@ def _item_line(view: WorldView, item: spheres.Item) -> str:
 
 
 def _summary(world: World, view: WorldView, state: ThingState) -> str:
-    """The sphere's summary: its cached description, else its first
-    `about` fact."""
+    """The sphere's summary (`spheres.summary`): its cached description,
+    else its summary fact."""
 
-    cached = world.prose().get(state.id, "description", None)
-    if cached is not None:
-        return cached.text
-    about = [
-        f for f in sorted(state.facts, key=lambda f: f.created) if f.category == "about"
-    ]
-    return view.render(about[0].text) if about else ""
+    return spheres.summary(view, state.id, create.cached_summary(world, state.id))
 
 
 def _timeline_lines(world: World, view: WorldView, sphere_id: str) -> list[str]:
@@ -1139,6 +1199,7 @@ async def fill_drawer(
     fresh = [item for item in parsed if not _repeats(item, held)]
     own_keys = _named_keys(view, state)
     items = _settle_items(view, fresh, own_keys, _parts_of(view, sphere_id), {})
+    items = _filed(view, items, spheres.drawers(view, sphere_id))
 
     own_names = [name, *(item["name"] for item in items if item["name"])]
     listed = _listed_names(obj.get("names") if obj is not None else None, calendar)
@@ -1381,6 +1442,7 @@ async def preview_branch(
     kept = [row for row in rows if row["thing_id"] and row["thing_id"] not in drops]
     own_keys = {name_key(name)} | {name_key(row["name"]) for row in kept}
     items = _settle_items(view, raw_items, own_keys, [], {})
+    items = _filed(view, items, _shelves(every_drawer))
     for item in items:
         # a named item can't carry an override: the branch rejects the
         # statements it replaces instead

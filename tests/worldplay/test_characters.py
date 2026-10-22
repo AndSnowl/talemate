@@ -804,22 +804,26 @@ def test_tie_line_keeps_names_and_capitals_opening_an_exception(world, spheres_w
             s.vasha,
             "ties",
             f"Vasha skips [[thing:{s.separation}|the doctrine]]'s fast.",
+            origin={"tie": s.dawn},
         )
         rev.add_fact(
             s.vasha,
             "ties",
             f"[[thing:{s.kremova}]] is where she breaks "
             f"[[thing:{s.separation}|the doctrine]].",
+            origin={"tie": s.dawn},
         )
         rev.add_fact(
             s.vasha,
             "ties",
             f"I'll not bow, she says of [[thing:{s.separation}|the doctrine]].",
+            origin={"tie": s.dawn},
         )
         rev.add_fact(
             s.vasha,
             "ties",
             f"NEVER kneels at [[thing:{s.separation}|the doctrine]]'s reading.",
+            origin={"tie": s.dawn},
         )
     vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
     assert vasha.base_attributes["ties"].endswith(
@@ -843,16 +847,19 @@ def test_exception_opening_with_a_world_name_keeps_its_capital(world, spheres_wo
             s.vasha,
             "ties",
             f"Brenna taught her to doubt [[thing:{s.separation}|the doctrine]].",
+            origin={"tie": s.dawn},
         )
         rev.add_fact(
             s.vasha,
             "ties",
             f"The vigil at [[thing:{s.separation}|the doctrine]]'s feast bores her.",
+            origin={"tie": s.dawn},
         )
         rev.add_fact(
             s.vasha,
             "ties",
             f"Skips [[thing:{s.separation}|the doctrine]]'s fast.",
+            origin={"tie": s.dawn},
         )
     vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
     assert vasha.base_attributes["ties"].endswith(

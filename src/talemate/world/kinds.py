@@ -84,6 +84,36 @@ DRAWER_TYPES: tuple[str, ...] = (
     "events",
 )
 
+# the drawer types whose content is written (by the core, Fill or the
+# owner): entries filed there and statements. The rest are the app's own:
+# people come from ties, events are the timeline, branches are spheres
+# with a parent
+WRITTEN_DRAWER_TYPES: tuple[str, ...] = (
+    "places",
+    "practices",
+    "beliefs",
+    "knowledge",
+    "structure",
+)
+
+# the written drawer types that hold entries other than places
+_ENTRY_TYPES: tuple[str, ...] = ("practices", "beliefs", "knowledge", "structure")
+
+# the drawer types a thing of each kind may be filed in (`part_of`): a
+# place in a places drawer, any other entry in one that holds entries. Its
+# keys are the kinds that can be part of a sphere at all; a character
+# never is (people come from ties). Any of them may sit in Unsorted too.
+ENTRY_DRAWER_TYPES: dict[str, tuple[str, ...]] = {
+    "lore": _ENTRY_TYPES,
+    "place": ("places",),
+    "item": _ENTRY_TYPES,
+    "event": _ENTRY_TYPES,
+    "sphere": _ENTRY_TYPES,
+}
+
+# the kinds that can be part of a sphere, in a drawer
+PART_OF_KINDS: tuple[str, ...] = tuple(ENTRY_DRAWER_TYPES)
+
 _DRAWER_ID_RE = re.compile(r"^[0-9a-f]{8}$")
 
 # the drawer id of "no drawer yet": `spheres.UNSORTED`'s, never a real

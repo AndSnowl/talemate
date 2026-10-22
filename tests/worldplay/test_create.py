@@ -2251,7 +2251,9 @@ async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
         "She means to marry a human. Departs from The Doctrine of Separation"
     )
     by_fact = next(f for f in ties_facts.values() if f.fact_id != by_thing.fact_id)
-    assert by_fact.origin == {"rejects_fact": d.purity}
+    # filed under its tie (ruling P22), naming the statement it rejects
+    assert by_fact.origin == {"tie": d.dawn, "rejects_fact": d.purity}
+    assert by_thing.origin == {"tie": d.dawn}
     assert d.dawn in by_fact.refs
     found = sphere_exceptions(view, thing_id, d.dawn)
     assert {f.fact_id for f in found} == set(ties_facts)

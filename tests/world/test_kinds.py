@@ -221,3 +221,41 @@ def test_measures_shape():
             "measures",
             [{"name": "height", "min": 1.5, "unit": "m"}],
         )
+
+
+def test_drawer_type_constants():
+    """One set of drawer-type constants, mirrored in the frontend's
+    worldKinds.js (pinned there by checks/worlds.check.mjs)."""
+
+    from talemate.world.kinds import (
+        DRAWER_TYPES,
+        ENTRY_DRAWER_TYPES,
+        PART_OF_KINDS,
+        WRITTEN_DRAWER_TYPES,
+    )
+
+    assert WRITTEN_DRAWER_TYPES == (
+        "places",
+        "practices",
+        "beliefs",
+        "knowledge",
+        "structure",
+    )
+    entries = ("practices", "beliefs", "knowledge", "structure")
+    assert ENTRY_DRAWER_TYPES == {
+        "lore": entries,
+        "place": ("places",),
+        "item": entries,
+        "event": entries,
+        "sphere": entries,
+    }
+    assert PART_OF_KINDS == ("lore", "place", "item", "event", "sphere")
+    assert set(WRITTEN_DRAWER_TYPES) < set(DRAWER_TYPES)
+
+
+def test_agent_is_unrendered():
+    """A sphere's agent flag is no input to its prose (ruling P21)."""
+
+    from talemate.world.prose import UNRENDERED_FIELDS
+
+    assert "agent" in UNRENDERED_FIELDS
