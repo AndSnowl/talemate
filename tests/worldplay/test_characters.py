@@ -664,3 +664,167 @@ def test_since_lines_after_a_dated_heritage_change_past_the_cache(
     assert since_lines(world, kit, WorldDate.of(401)) == [
         "Owl-folk: Wings in place of arms."
     ]
+
+
+# --- ties ---------------------------------------------------------------------
+
+
+def test_sheet_has_tie_lines_with_exceptions(world, spheres_world):
+    """Each live tie is one line on the sheet: the role capitalised, "of"
+    the sphere, "(since <year>)" when there's a since, then "but: " and its
+    exceptions read as text (character creation's "Departs from ..." link
+    left off), joined with "; "."""
+
+    s = spheres_world
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert vasha.base_attributes["ties"] == (
+        "Practitioner of the White Dawn (since 1010), but: doesn't believe "
+        "snowy owl-folk are superior; means to marry a human"
+    )
+    assert "ties: Practitioner of the White Dawn" in vasha.sheet
+    assert "Departs" not in vasha.sheet
+    assert "[[thing:" not in vasha.sheet
+
+    # no since, no exceptions
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    assert brenna.base_attributes["ties"] == "Elder of the Council of Elders"
+
+    # before the tie began, there's none
+    young = character_from_world(world, s.vasha, WorldDate.of(1005), is_player=False)
+    assert "ties" not in young.base_attributes
+
+
+def test_sheet_has_one_line_per_live_tie(world, spheres_world):
+    s = spheres_world
+    with world.revision(Source.manual(note="more ties")) as rev:
+        rev.set_field(
+            s.brenna,
+            "ties",
+            [
+                {"sphere": s.council, "role": "elder", "since": None, "until": None},
+                {
+                    "sphere": s.guild,
+                    "role": "apprentice",
+                    "since": WorldDate.of(990).model_dump(mode="json"),
+                    "until": WorldDate.of(1000).model_dump(mode="json"),
+                },
+                {
+                    "sphere": s.tsardom,
+                    "role": "subject",
+                    "since": WorldDate.of(1001).model_dump(mode="json"),
+                    "until": None,
+                },
+            ],
+            None,
+        )
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    # one line each, the ended apprenticeship left out; a leading "The"
+    # is lowercased mid-line, a name without one is as written
+    assert brenna.base_attributes["ties"] == (
+        "Elder of the Council of Elders\nSubject of Tsardom of Moscavia (since 1001)"
+    )
+
+
+def test_tie_to_deleted_sphere(world, spheres_world):
+    """A tie stores the sphere's id, not its name, so a tie to a sphere
+    since deleted has no name to show and is left out (never
+    "⟨unknown⟩"), as are its exceptions."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="gone")) as rev:
+        rev.remove_thing(s.council)
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    assert "ties" not in brenna.base_attributes
+    assert "⟨unknown⟩" not in brenna.sheet
+
+    with world.revision(Source.manual(note="gone too")) as rev:
+        rev.remove_thing(s.dawn)
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert "ties" not in vasha.base_attributes
+
+
+def test_exception_text_without_departs_suffix():
+    from talemate.worldplay.characters import exception_text
+
+    dawn, item = "a" * 32, "b" * 32
+    assert (
+        exception_text(
+            f"Doesn't believe it. Departs from a teaching of [[thing:{dawn}|The Dawn]]"
+        )
+        == "Doesn't believe it."
+    )
+    assert (
+        exception_text(f"Means to marry. Departs from [[thing:{item}]]")
+        == "Means to marry."
+    )
+    # only the trailing link sentence goes; a reference elsewhere stays
+    assert exception_text(
+        f"Skips [[thing:{item}|the vigil]] at Departs from Peak."
+    ) == (f"Skips [[thing:{item}|the vigil]] at Departs from Peak.")
+    assert exception_text("Sleeps through prayers.") == "Sleeps through prayers."
+
+
+def test_exception_text_strips_what_creation_appends():
+    """Round trip: the link sentence `create._exception_fact` appends to
+    an exception (for a thing item, and for a statement, whose item name
+    is a whole sentence) is exactly what `exception_text` takes off."""
+
+    from talemate.worldplay.characters import exception_text
+    from talemate.worldplay.create import (
+        PreviewException,
+        PreviewTie,
+        _exception_fact,
+    )
+
+    dawn, item = "a" * 32, "b" * 32
+    tie = PreviewTie(sphere_id=dawn, sphere="The White Dawn", role="priest")
+    for exception in (
+        PreviewException(
+            text="Means to marry a human", item="The Doctrine", thing_id=item
+        ),
+        PreviewException(
+            text="Thinks all folk equal.",
+            item="Snowy owl-folk are the purest of the folk.",
+            fact_id="c" * 32,
+        ),
+    ):
+        text, _origin = _exception_fact(exception.text, tie, exception)
+        assert "Departs from" in text
+        assert exception_text(text) == exception.text.rstrip(".") + "."
+
+
+def test_tie_line_keeps_names_and_capitals_opening_an_exception(world, spheres_world):
+    """An exception opening with a name -- a reference, or the character's
+    own (left unlinked by creation) -- or with "I" or a word in capitals
+    keeps its case after "but: "; any other opens lowercase."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="more")) as rev:
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"Vasha skips [[thing:{s.separation}|the doctrine]]'s fast.",
+        )
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"[[thing:{s.kremova}]] is where she breaks "
+            f"[[thing:{s.separation}|the doctrine]].",
+        )
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"I'll not bow, she says of [[thing:{s.separation}|the doctrine]].",
+        )
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"NEVER kneels at [[thing:{s.separation}|the doctrine]]'s reading.",
+        )
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert vasha.base_attributes["ties"].endswith(
+        "but: doesn't believe snowy owl-folk are superior; means to marry a "
+        "human; Vasha skips the doctrine's fast; Kremova is where she breaks "
+        "the doctrine; I'll not bow, she says of the doctrine; NEVER kneels at the "
+        "doctrine's reading"
+    )

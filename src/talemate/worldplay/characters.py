@@ -18,13 +18,17 @@ heritage's numbers, and a deleted ancestor simply drops out of the lineage.
 
 from __future__ import annotations
 
+import re
+
 import structlog
 
 from talemate.character import Character
 from talemate.util import replace_smart_quotes
-from talemate.world import heritage
+from talemate.world import heritage, spheres
+from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.prose import CachedProse, stretches
+from talemate.world.refs import REF_PATTERN
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
 from talemate.world.view import ThingState, WorldView
@@ -37,6 +41,20 @@ log = structlog.get_logger("talemate.worldplay.characters")
 _DESCRIPTION_CATEGORIES = ("appearance", "background")
 
 _FAR_FUTURE = 10**15
+
+# how character creation ends an exception's `ties` fact, linking what it
+# departs from: a thing item, or (for a statement item) the sphere
+DEPARTS_FROM = "Departs from"
+DEPARTS_FROM_TEACHING = "Departs from a teaching of"
+
+_DEPARTS_SUFFIX = re.compile(
+    r"\s*(?:%s|%s)\s+%s\s*$"
+    % (
+        re.escape(DEPARTS_FROM_TEACHING),
+        re.escape(DEPARTS_FROM),
+        REF_PATTERN.pattern,
+    )
+)
 
 # the `Character` fields `character_from_world` derives from the world;
 # every other field is per-scene state (color, avatar, voice, details, ...)
@@ -339,6 +357,74 @@ def _speech_facts(view: WorldView, state: ThingState) -> tuple[list[str], list[s
     return dialogue_instructions, example_dialogue
 
 
+def exception_text(text: str) -> str:
+    """An exception fact's raw text less the "Departs from <link>" (or
+    "Departs from a teaching of <link>") sentence character creation ends
+    it with: that link is for the world's pages, not for reading."""
+
+    return _DEPARTS_SUFFIX.sub("", text).strip()
+
+
+def _mid_sentence(raw: str, text: str, own_name: str) -> str:
+    """`text` (rendered from `raw`) to follow "but: ": its closing period
+    dropped and its first letter lowercased -- unless it opens with a name
+    (a reference, or the character's own name, which character creation
+    leaves unlinked), "I" ("I'll"), or a word in capitals."""
+
+    text = text.strip().rstrip(".").rstrip()
+    first = text.split(" ", 1)[0]
+    word = first.split("'", 1)[0].strip(",;:")
+    keep = (
+        not text
+        or raw.lstrip().startswith("[[")
+        or word == "I"
+        or (len(word) > 1 and word.isupper())
+        or (bool(word) and word in own_name.split())
+    )
+    return text if keep else text[0].lower() + text[1:]
+
+
+def mid_sentence_name(name: str) -> str:
+    """A name as it reads mid-sentence: a leading "The" lowercased ("of
+    the White Dawn")."""
+
+    return "the " + name[4:] if name.startswith("The ") else name
+
+
+def tie_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
+    """One line per tie of the character's that holds at `view.at`, e.g.
+    "Practitioner of the White Dawn (since 1010), but: doesn't believe
+    snowy owl-folk are superior": the role capitalised, "(since <year>)"
+    when the tie has a since, and its exceptions (`spheres.exceptions`, in
+    the order they were written) joined with "; ". A tie stores its
+    sphere's id, not its name, so a tie to a sphere that's since been
+    deleted has no name and is left out."""
+
+    own_name = view.name_of(thing_id) or ""
+    lines: list[str] = []
+    for tie in spheres.ties_of(view, thing_id, live=True):
+        if view.thing(tie.sphere_id) is None:
+            continue
+        name = view.name_of(tie.sphere_id) or view.render(f"[[thing:{tie.sphere_id}]]")
+        role = tie.role.strip() or "member"
+        line = f"{role[0].upper()}{role[1:]} of {mid_sentence_name(name)}"
+        if tie.since is not None:
+            line += f" (since {calendar.format(tie.since)})"
+        texts = [
+            _mid_sentence(raw, view.render(raw), own_name)
+            for fact in sorted(
+                spheres.exceptions(view, thing_id, tie.sphere_id),
+                key=lambda fact: fact.created,
+            )
+            if (raw := exception_text(fact.text))
+        ]
+        texts = [text for text in texts if text]
+        if texts:
+            line += ", but: " + "; ".join(texts)
+        lines.append(line)
+    return lines
+
+
 def age_in_years(born: WorldDate, at: WorldDate) -> int:
     """Full years elapsed from `born` to `at`, allowing for the birthday
     not having happened yet this year (a naive `at.year - born.year`
@@ -400,6 +486,10 @@ def character_from_world(
         )
         if stage is not None:
             base_attributes["life_stage"] = stage
+
+    ties = tie_lines(view, world.calendar, thing_id)
+    if ties:
+        base_attributes["ties"] = "\n".join(ties)
 
     personality_entry = _cached_section(world, thing_id, "personality", at)
     if personality_entry is not None and personality_entry.text:

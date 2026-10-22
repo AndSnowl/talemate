@@ -426,3 +426,195 @@ def test_context_block_everyday_name_of_the_place(world):
     block = world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
     assert "Place: Tsardom of Moscavia (usually called Moscavia)" in block
     assert EVERYDAY_LINE in block
+
+
+# --- spheres -------------------------------------------------------------------
+
+SPHERES_LEAD = (
+    "Spheres this scene touches (faiths, nations, orders, cultures): keep what "
+    "they hold true, and bring it in only where the scene calls for it."
+)
+
+DAWN_BLOCK = (
+    "The White Dawn (religion)\n"
+    "- The White Dawn is the state church of Moscavia.\n"
+    "- The Doctrine of Separation forbids the faithful to marry humans.\n"
+    "- Snowy owl-folk are the purest of the folk.\n"
+    "- The Council of Elders: Seven elders seated in Kremova.\n"
+    "- In 994: Declared the Night of Feathers a purification.\n"
+    "- In 1019: Issued the Doctrine of Separation.\n"
+)
+
+TSARDOM_BLOCK = (
+    "Tsardom of Moscavia (nation, usually called Moscavia)\n"
+    "- A northern realm of owl-folk.\n"
+    "- Only owl-folk may hold land.\n"
+    "- In 990: Crowned the first Tsar.\n"
+)
+
+
+def _sphere_scene(world, **state):
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(1020), goal="Keep the vigil")
+    scenes.update(scene_id, state=state)
+    return world_context_block(world, scenes.get(scene_id), WorldDate.of(1020))
+
+
+def _present(*thing_ids):
+    return [{"thing_id": thing_id, "active": True} for thing_id in thing_ids]
+
+
+def test_context_touched_sphere_key_facts(world, spheres_world):
+    """A sphere the scene touches is one block of its key facts, after the
+    lore and before who is here, under the probe's (d) lead line: the
+    summary (its cached description prose), its top items (a thing item
+    whose text opens with its name as the text alone), then its latest
+    timeline facts dated "In <year>". Named (pulled in) and holding the
+    place (Dawn Peak, a holy site), it's still there once, and never also
+    as a lore entry."""
+
+    s = spheres_world
+    block = _sphere_scene(
+        world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn, s.separation]
+    )
+
+    assert f"\n{SPHERES_LEAD}\n{DAWN_BLOCK}" in block
+    assert block.count("The White Dawn") == 2  # the heading and the summary
+    assert block.count("Snowy owl-folk are the purest") == 1
+    assert "A faith of the dawn." not in block
+    assert "[[thing:" not in block
+    # after the lore entries (the doctrine, pulled in too), before the end
+    assert block.index("The Doctrine of Separation\n- ") < block.index(SPHERES_LEAD)
+    assert block.endswith(DAWN_BLOCK + "\n[end of world]")
+
+
+def test_context_touched_by_territory_and_members(world, spheres_world):
+    """The Tsardom holds Kremova, the scene's place; Vasha, present, is a
+    practitioner of the Dawn; Brenna, present, an elder of the Council,
+    nested in the Dawn: the Council brings its parent's summary only, and
+    not when the parent is in the block itself. Territory, then named,
+    then members."""
+
+    s = spheres_world
+    block = _sphere_scene(
+        world, place_thing_id=s.kremova, characters=_present(s.vasha, s.brenna)
+    )
+    council = "The Council of Elders (order)\n- Seven elders seated in Kremova.\n"
+    assert f"{SPHERES_LEAD}\n{TSARDOM_BLOCK}\n{DAWN_BLOCK}\n{council}" in block
+    assert block.count(SPHERES_LEAD) == 1
+
+    block = _sphere_scene(
+        world, place_thing_id=s.kremova, characters=_present(s.brenna)
+    )
+    council = (
+        "The Council of Elders (order)\n"
+        "- Part of the White Dawn: The White Dawn is the state church of "
+        "Moscavia.\n"
+        "- Seven elders seated in Kremova.\n"
+    )
+    assert f"{SPHERES_LEAD}\n{TSARDOM_BLOCK}\n{council}" in block
+    assert "The White Dawn (religion)" not in block
+
+    # an inactive character is no member present; an ended tie neither
+    block = _sphere_scene(
+        world,
+        place_thing_id=s.dawn_peak,
+        characters=[{"thing_id": s.brenna, "active": False}],
+    )
+    assert "The Council of Elders (order)" not in block
+
+
+def test_place_sphere_context_once(world, spheres_world):
+    """The scene's place is itself a sphere (the Tsardom): it shows once,
+    as the place, its own place facts followed by its key facts, never
+    again as a sphere block."""
+
+    s = spheres_world
+    block = _sphere_scene(world, place_thing_id=s.tsardom)
+
+    assert (
+        "Place: Tsardom of Moscavia (usually called Moscavia)\n"
+        "- Cold forests and frozen rivers.\n"
+        "- A northern realm of owl-folk.\n"
+        "- Only owl-folk may hold land.\n"
+        "- In 990: Crowned the first Tsar.\n"
+    ) in block
+    assert "(nation" not in block
+    assert SPHERES_LEAD not in block
+    assert block.count("Only owl-folk may hold land.") == 1
+    assert block.count("Crowned the first Tsar.") == 1
+
+    # with other spheres touched, still once
+    block = _sphere_scene(
+        world,
+        place_thing_id=s.tsardom,
+        pulled_in=[s.dawn],
+        characters=_present(s.vasha),
+    )
+    assert block.count("Only owl-folk may hold land.") == 1
+    assert "(nation" not in block
+    assert block.count("The White Dawn (religion)") == 1
+
+
+def test_untouched_sphere_not_in_context(world, spheres_world):
+    """A sphere nothing touches never shows: not the Iron Guild, and with
+    nothing touched at all, no lead line either."""
+
+    s = spheres_world
+    block = _sphere_scene(world, place_thing_id=s.dawn_peak)
+    assert "Iron Guild" not in block
+    assert "Smiths of the far south." not in block
+
+    with world.revision(Source.manual(note="elsewhere")) as rev:
+        elsewhere = rev.create_thing("place", fields={"name": "The Southern Wastes"})
+    block = _sphere_scene(world, place_thing_id=elsewhere)
+    assert SPHERES_LEAD not in block
+    assert "Iron Guild" not in block
+    assert "White Dawn" not in block
+    assert "Moscavia" not in block
+
+
+@pytest.mark.asyncio
+async def test_no_extra_model_calls_on_turn(world, spheres_world):
+    """Spheres in play cost no model call: the World instruction (narrator
+    and conversation) carries the touched spheres, and a time passage
+    rebuilds Vasha's sheet with her tie line, all from what's stored."""
+
+    s = spheres_world
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(1020), goal="Keep the vigil")
+    scenes.update(
+        scene_id,
+        state={"place_thing_id": s.kremova, "characters": _present(s.vasha)},
+    )
+    record = scenes.get(scene_id)
+
+    scene = MockScene()
+    bootstrap_scene(scene)
+    character = character_from_world(world, s.vasha, record.start, is_player=False)
+    conversation = instance.get_agent("conversation")
+    actor = Actor(character=character, agent=conversation)
+    actor.scene = scene
+    scene.actors.append(actor)
+    scene.active_characters.append(character.name)
+    scene.character_data[character.name] = character
+    scene.world_context = WorldSceneContext(world=world, record=record)
+    connect(scene)
+
+    emission = ConversationAgentEmission(
+        agent=conversation, character=character, response=""
+    )
+    await async_signals.get("agent.conversation.inject_instructions").send(emission)
+    [instruction] = [i for i in emission.dynamic_instructions if i.title == "World"]
+    assert TSARDOM_BLOCK in instruction.content
+    assert DAWN_BLOCK in instruction.content
+
+    world_state = instance.get_agent("world_state")
+    await world_state.advance_time("P30D")
+    assert (
+        scene.get_character("Vasha")
+        .base_attributes["ties"]
+        .startswith("Practitioner of the White Dawn (since 1010), but: ")
+    )
+
+    assert scene.mock_client.prompt_history == []

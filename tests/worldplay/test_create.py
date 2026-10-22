@@ -2368,6 +2368,32 @@ async def test_spheres_block_caps_items_per_sphere(at_1020, dawn_world):
     assert [e.fact_id for e in tie.exceptions] == [d.law]
 
 
+async def test_spheres_block_item_line_not_doubled(at_1020, dawn_world):
+    """Ruling P5: a thing item whose text already opens with its name is
+    listed as the text alone, never "Name: Name ..."."""
+
+    d = dawn_world
+    with at_1020.revision(Source.manual(note="named")) as rev:
+        doctrine = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Doctrine of Purity",
+                "part_of": {"sphere": d.dawn, "drawer": "d0000001"},
+            },
+        )
+        rev.add_fact(
+            doctrine, "general", "The Doctrine of Purity keeps the roosts apart."
+        )
+    _preview, prompt = await _preview_priestess(
+        at_1020, "a priestess of the White Dawn", []
+    )
+
+    assert "- S3 (Doctrines): The Doctrine of Purity keeps the roosts apart.\n" in (
+        prompt
+    )
+    assert "The Doctrine of Purity: The Doctrine of Purity" not in prompt
+
+
 async def test_stub_mentioned_by_a_sphere_shows_it_as_a_sphere(at_1020, dawn_world):
     """Expanding a character stub a sphere mentions: the sphere comes in
     through the mention context and is shown in the spheres block, never

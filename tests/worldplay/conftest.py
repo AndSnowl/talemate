@@ -72,3 +72,184 @@ def heritage_world(world):
         customs=customs,
         blue_eyes=blue_eyes,
     )
+
+
+class SpheresWorld(NamedTuple):
+    tsardom: str
+    kremova: str
+    dawn_peak: str
+    dawn: str
+    separation: str
+    superiority: str
+    council: str
+    guild: str
+    vasha: str
+    brenna: str
+
+
+def _drawer(drawer_id, type_, title):
+    return {"id": drawer_id, "type": type_, "title": title}
+
+
+def _tie(sphere, role, since=None, until=None):
+    return {
+        "sphere": sphere,
+        "role": role,
+        "since": since.model_dump(mode="json") if since else None,
+        "until": until.model_dump(mode="json") if until else None,
+    }
+
+
+@pytest.fixture
+def spheres_world(world):
+    """The spheres probe's world, small: the Tsardom of Moscavia (a nation
+    place sphere, everyday "Moscavia") holding Kremova; the White Dawn (a
+    religion, summary cached as its description prose) with a doctrine
+    entry whose text opens with its name, a statement, Dawn Peak as a holy
+    site and a dated timeline; the Council of Elders, an order sphere
+    nested in the Dawn's Hierarchy; the Iron Guild, touched by nothing;
+    Vasha, a practitioner of the Dawn since 1010 with two exceptions
+    (worded as character creation writes them), and Brenna, an elder of
+    the Council."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="spheres")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "aka": [{"name": "Moscavia", "tag": "common", "everyday": True}],
+                "template": "nation",
+                "drawers": [
+                    _drawer("d0000101", "beliefs", "Laws"),
+                    _drawer("d0000102", "places", "Lands"),
+                ],
+            },
+        )
+        rev.add_fact(tsardom, "description", "Cold forests and frozen rivers.")
+        rev.add_fact(tsardom, "about", "A northern realm of owl-folk.")
+        rev.add_fact(
+            tsardom,
+            "statement",
+            "Only owl-folk may hold land.",
+            origin={"drawer": "d0000101"},
+        )
+        rev.add_fact(
+            tsardom, "timeline", "Crowned the first Tsar.", valid_from=WorldDate.of(990)
+        )
+        kremova = rev.create_thing(
+            "place", fields={"name": "Kremova", "parent": tsardom}
+        )
+        rev.add_fact(kremova, "description", "The white city.")
+        dawn_peak = rev.create_thing("place", fields={"name": "Dawn Peak"})
+
+        dawn = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The White Dawn",
+                "template": "religion",
+                "drawers": [
+                    _drawer("d0000001", "beliefs", "Doctrines"),
+                    _drawer("d0000002", "structure", "Hierarchy"),
+                    _drawer("d0000003", "practices", "Rites and Ceremonies"),
+                    _drawer("d0000004", "places", "Holy Sites"),
+                ],
+            },
+        )
+        rev.add_fact(dawn, "about", "A faith of the dawn.")
+        separation = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Doctrine of Separation",
+                "part_of": {"sphere": dawn, "drawer": "d0000001"},
+            },
+        )
+        rev.add_fact(
+            separation,
+            "general",
+            "The Doctrine of Separation forbids the faithful to marry humans.",
+        )
+        superiority = rev.add_fact(
+            dawn,
+            "statement",
+            "Snowy owl-folk are the purest of the folk.",
+            origin={"drawer": "d0000001"},
+        )
+        rev.set_field(
+            dawn_peak, "part_of", {"sphere": dawn, "drawer": "d0000004"}, None
+        )
+        rev.add_fact(
+            dawn,
+            "timeline",
+            "Declared the Night of Feathers a purification.",
+            valid_from=WorldDate.of(994),
+        )
+        rev.add_fact(
+            dawn,
+            "timeline",
+            "Issued the Doctrine of Separation.",
+            valid_from=WorldDate.of(1019),
+        )
+
+        council = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The Council of Elders",
+                "template": "order",
+                "drawers": [_drawer("d0000201", "structure", "Ranks")],
+                "part_of": {"sphere": dawn, "drawer": "d0000002"},
+            },
+        )
+        rev.add_fact(council, "about", "Seven elders seated in Kremova.")
+
+        guild = rev.create_thing(
+            "sphere", fields={"name": "The Iron Guild", "template": "order"}
+        )
+        rev.add_fact(guild, "about", "Smiths of the far south.")
+
+        vasha = rev.create_thing(
+            "character",
+            fields={
+                "name": "Vasha",
+                "ties": [_tie(dawn, "practitioner", since=WorldDate.of(1010))],
+            },
+        )
+        rev.add_fact(
+            vasha,
+            "ties",
+            "Doesn't believe snowy owl-folk are superior. Departs from a "
+            f"teaching of {ref(dawn, 'The White Dawn')}",
+            origin={"rejects_fact": superiority},
+        )
+        rev.add_fact(
+            vasha,
+            "ties",
+            "Means to marry a human. Departs from "
+            f"{ref(separation, 'The Doctrine of Separation')}",
+        )
+        brenna = rev.create_thing(
+            "character",
+            fields={"name": "Brenna", "ties": [_tie(council, "elder")]},
+        )
+
+    world.prose().put(
+        dawn,
+        "description",
+        None,
+        None,
+        "The White Dawn is the state church of Moscavia.",
+    )
+
+    return SpheresWorld(
+        tsardom=tsardom,
+        kremova=kremova,
+        dawn_peak=dawn_peak,
+        dawn=dawn,
+        separation=separation,
+        superiority=superiority,
+        council=council,
+        guild=guild,
+        vasha=vasha,
+        brenna=brenna,
+    )

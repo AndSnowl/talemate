@@ -26,7 +26,8 @@ or tie follows the view's `(at, rev)`.
 import structlog
 from pydantic import BaseModel, ValidationError
 
-from .dates import WorldDate
+from .calendar import Calendar
+from .dates import Precision, WorldDate
 from .heritage import overriders
 from .kinds import TEMPLATE_AGENT, UNSORTED_DRAWER_ID
 from .view import FactState, ThingState, WorldView
@@ -455,10 +456,46 @@ def _is_agent(state: ThingState) -> bool:
     return isinstance(template, str) and TEMPLATE_AGENT.get(template, False)
 
 
+_ARTICLES = ("the ", "a ", "an ")
+
+
+def _bare(text: str) -> str:
+    """`text` casefolded, less a leading article."""
+
+    folded = text.casefold()
+    for article in _ARTICLES:
+        if folded.startswith(article):
+            return folded[len(article) :]
+    return folded
+
+
+def _opens_with(text: str, name: str) -> bool:
+    """Whether `text` opens with `name` (ignoring case and a leading
+    article on either), ending at a word boundary."""
+
+    bare_text, bare_name = _bare(text), _bare(name).strip()
+    if not bare_name or not bare_text.startswith(bare_name):
+        return False
+    rest = bare_text[len(bare_name) :]
+    return not rest or not rest[0].isalnum()
+
+
+def item_line(name: str, text: str) -> str:
+    """A thing item as one line: "<name>: <text>"; the text alone when it
+    already opens with the name (no "Name: Name ..." doubling); the name
+    alone when there's no text."""
+
+    if not text:
+        return name
+    if _opens_with(text, name):
+        return text
+    return f"{name}: {text}"
+
+
 def _item_line(item: Item) -> str:
     if item.thing_id is None:
         return item.text
-    return f"{item.name}: {item.text}" if item.text else item.name
+    return item_line(item.name, item.text)
 
 
 def _round_robin(sizes: list[int], budget: int) -> list[int]:
@@ -475,13 +512,30 @@ def _round_robin(sizes: list[int], budget: int) -> list[int]:
     return taken
 
 
-def key_facts(view: WorldView, sphere_id: str, summary: str | None = None) -> list[str]:
+def _timeline_line(view: WorldView, fact: FactState, calendar: Calendar) -> str:
+    """A timeline fact as key facts give it: "In <year>: <text>", the year
+    as `calendar` labels it, or the text alone when it's undated."""
+
+    text = view.render(fact.text)
+    if fact.valid_from is None:
+        return text
+    year = WorldDate(instant=fact.valid_from.instant, precision=Precision.YEAR)
+    return f"In {calendar.format(year)}: {text}"
+
+
+def key_facts(
+    view: WorldView,
+    sphere_id: str,
+    summary: str | None = None,
+    calendar: Calendar | None = None,
+) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, the caller's cached
     `description` prose, or else the sphere's first `about` fact), then its
     top beliefs and practices items (and structure, for an agent) -- the
-    first in `items` order, taken a drawer type at a time in turn -- then
-    its latest timeline facts."""
+    first in `items` order, taken a drawer type at a time in turn, a thing
+    item as `item_line` gives it -- then its latest timeline facts, each
+    "In <year>: <text>" by `calendar` (the default one when not given)."""
 
     state = view.thing(sphere_id)
     if state is None:
@@ -495,7 +549,11 @@ def key_facts(view: WorldView, sphere_id: str, summary: str | None = None) -> li
         if about is not None:
             head.append(view.render(about.text))
 
-    latest = [view.render(f.text) for f in timeline(view, sphere_id)[-_KEY_TIMELINE:]]
+    calendar = calendar or Calendar()
+    latest = [
+        _timeline_line(view, fact, calendar)
+        for fact in timeline(view, sphere_id)[-_KEY_TIMELINE:]
+    ]
 
     types = ["beliefs", "practices"] + (["structure"] if _is_agent(state) else [])
     type_of = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}

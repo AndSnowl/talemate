@@ -17,21 +17,27 @@ context and calls `connect`; a scene that never gets a
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
 import talemate.emit.async_signals as async_signals
 from talemate.agents.base import DynamicInstruction
 from talemate.prompts import Prompt
-from talemate.world import heritage
+from talemate.world import heritage, spheres
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import HERITAGE_KINDS
+from talemate.world.kinds import HERITAGE_KINDS, SPHERE_CATEGORIES
 from talemate.world.names import everyday_name
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
-from talemate.world.view import WorldView
+from talemate.world.view import ThingState, WorldView
 
-from .characters import WORLD_DERIVED_FIELDS, character_from_world
+from .characters import (
+    WORLD_DERIVED_FIELDS,
+    _cached_section,
+    character_from_world,
+    mid_sentence_name,
+)
 
 log = structlog.get_logger("talemate.worldplay.context")
 
@@ -106,6 +112,22 @@ def _traits(
     return body, instincts
 
 
+def _present(record: SceneRecord) -> list[dict[str, Any]]:
+    """The scene's character entries that are here: the player (first,
+    when the characters don't list them) and every active character."""
+
+    entries = [
+        entry
+        for entry in record.state.get("characters") or []
+        if isinstance(entry, dict)
+    ]
+    if record.player_thing_id and not any(
+        entry.get("thing_id") == record.player_thing_id for entry in entries
+    ):
+        entries.insert(0, {"thing_id": record.player_thing_id, "active": True})
+    return [entry for entry in entries if entry.get("active", True)]
+
+
 def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
     """The scene's player and active characters that have a heritage, each
     as `{"name", "heritage", "body", "instincts"}`, all as of `view`: a
@@ -119,20 +141,9 @@ def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
         for thing in world.scenes().local_things(record.id)
         if thing["kind"] == LOCAL_CHARACTER_KIND and isinstance(thing["data"], dict)
     }
-    entries = [
-        entry
-        for entry in record.state.get("characters") or []
-        if isinstance(entry, dict)
-    ]
-    if record.player_thing_id and not any(
-        entry.get("thing_id") == record.player_thing_id for entry in entries
-    ):
-        entries.insert(0, {"thing_id": record.player_thing_id, "active": True})
 
     cast: list[dict] = []
-    for entry in entries:
-        if not entry.get("active", True):
-            continue
+    for entry in _present(record):
         thing_id = entry.get("thing_id")
         if thing_id:
             state = view.thing(thing_id)
@@ -160,6 +171,114 @@ def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
     return cast
 
 
+def _touched_spheres(
+    view: WorldView, record: SceneRecord, place_thing_id: str | None
+) -> list[str]:
+    """The spheres the scene touches, each once: those whose territory
+    holds the scene's place (in the order they were made), those the
+    prompt or setup named (pulled in), then those a character here has a
+    live tie to (Global Constraints, "Context")."""
+
+    sphere_states = sorted(
+        [
+            state
+            for state in [*view.things("sphere"), *view.things("place")]
+            if spheres.is_sphere(state)
+        ],
+        key=lambda state: state.created,
+    )
+    sphere_ids = {state.id for state in sphere_states}
+    touched: list[str] = []
+
+    def touch(sphere_id: str) -> None:
+        if sphere_id in sphere_ids and sphere_id not in touched:
+            touched.append(sphere_id)
+
+    if place_thing_id:
+        for state in sphere_states:
+            if place_thing_id in spheres.territory(view, state.id):
+                touch(state.id)
+    for thing_id in record.state.get("pulled_in") or []:
+        touch(thing_id)
+    for entry in _present(record):
+        thing_id = entry.get("thing_id")
+        if isinstance(thing_id, str):
+            for tie in spheres.ties_of(view, thing_id, live=True):
+                touch(tie.sphere_id)
+    return touched
+
+
+def _sphere_summary(world: World, view: WorldView, sphere_id: str) -> str:
+    """The sphere's summary (ruling P1): its cached description prose as
+    of the view's date, else its first `about` fact, rendered."""
+
+    cached = _cached_section(world, sphere_id, "description", view.at)
+    if cached is not None and cached.text:
+        return str(view.render(cached.text))
+    state = view.thing(sphere_id)
+    about = [
+        fact
+        for fact in sorted(state.facts if state else [], key=lambda f: f.created)
+        if fact.category == "about"
+    ]
+    return view.render(about[0].text) if about else ""
+
+
+def _sphere_parent(view: WorldView, state: ThingState) -> str | None:
+    """The sphere a sphere sits in: a branch's `parent`, else the sphere
+    it's part of (the Council of Elders in the White Dawn's Hierarchy);
+    `None` when neither is a live sphere."""
+
+    candidates: list[object] = []
+    if state.kind == "sphere":
+        candidates.append(state.fields.get("parent"))
+    part_of = state.fields.get("part_of")
+    if isinstance(part_of, dict):
+        candidates.append(part_of.get("sphere"))
+    for candidate in candidates:
+        if not isinstance(candidate, str) or candidate == state.id:
+            continue
+        parent = view.thing(candidate)
+        if parent is not None and spheres.is_sphere(parent):
+            return candidate
+    return None
+
+
+def _sphere_entries(
+    world: World, view: WorldView, sphere_ids: list[str], shown: set[str]
+) -> list[dict[str, Any]]:
+    """The spheres block, one entry per sphere in `sphere_ids`: its key
+    facts (`spheres.key_facts`, with its summary) and, for a nested
+    sphere whose parent isn't `shown` in the block already, the parent's
+    summary alone."""
+
+    entries: list[dict[str, Any]] = []
+    for sphere_id in sphere_ids:
+        state = view.thing(sphere_id)
+        if state is None:
+            continue
+        template = state.fields.get("template")
+        entry: dict[str, Any] = {
+            "name": view.name_of(sphere_id) or "",
+            "template": template if isinstance(template, str) else "sphere",
+            "everyday": everyday_name(state),
+            "parent_name": "",
+            "parent_summary": "",
+            "key_facts": spheres.key_facts(
+                view,
+                sphere_id,
+                _sphere_summary(world, view, sphere_id) or None,
+                world.calendar,
+            ),
+        }
+        parent_id = _sphere_parent(view, state)
+        if parent_id is not None and parent_id not in shown:
+            entry["parent_name"] = mid_sentence_name(view.name_of(parent_id) or "")
+            entry["parent_summary"] = _sphere_summary(world, view, parent_id)
+        entries.append(entry)
+    return entries
+
+
 def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
     """The "World" instruction's content: the scene's goal, its current
     place, whatever lore has been pulled into it, and who is here by
@@ -168,6 +287,14 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     scene invented its place, the scene-local place thing
     `record.state["place_local_id"]` (its name and facts); the lore entries
     are `record.state["pulled_in"]`.
+
+    The spheres the scene touches (`_touched_spheres`) follow the lore,
+    one block each under one lead line (the spheres probe's (d)), with
+    their key facts; a pulled-in sphere shows there, not as lore. When the
+    scene's place is itself a sphere, it shows once, as the place: its own
+    place facts, then its key facts (summary from its `about` fact, since
+    its description prose retells those place facts), never again as a
+    sphere block.
 
     A place or lore entry with an everyday name is shown "<main> (usually
     called <everyday>)", and the block then opens with a line asking for
@@ -183,10 +310,17 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     if place_thing_id:
         place_state = view.thing(place_thing_id)
         if place_state is not None:
+            facts = [view.render(fact.text) for fact in place_state.facts]
+            if spheres.is_sphere(place_state):
+                facts = [
+                    view.render(fact.text)
+                    for fact in place_state.facts
+                    if fact.category not in SPHERE_CATEGORIES
+                ] + spheres.key_facts(view, place_thing_id, None, world.calendar)
             place = {
                 "name": view.name_of(place_thing_id) or "",
                 "everyday": everyday_name(place_state),
-                "facts": [view.render(fact.text) for fact in place_state.facts],
+                "facts": facts,
             }
     elif place_local_id:
         local = next(
@@ -206,10 +340,14 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
+    touched = _touched_spheres(view, record, place_thing_id)
+    in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
+    sphere_entries = _sphere_entries(world, view, in_block, set(touched))
+
     lore = []
     for lore_thing_id in record.state.get("pulled_in") or []:
         lore_state = view.thing(lore_thing_id)
-        if lore_state is None:
+        if lore_state is None or spheres.is_sphere(lore_state):
             continue
         lore.append(
             {
@@ -226,8 +364,10 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "goal": record.goal,
                 "place": place,
                 "lore": lore,
+                "spheres": sphere_entries,
                 "everyday": any(
-                    entry["everyday"] for entry in [*([place] if place else []), *lore]
+                    entry["everyday"]
+                    for entry in [*([place] if place else []), *lore, *sphere_entries]
                 ),
                 "cast": _cast(world, record, view),
             },

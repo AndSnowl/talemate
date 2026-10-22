@@ -975,13 +975,13 @@ def _fill_drawer_of(view: WorldView, sphere_id: str, drawer_id: str) -> spheres.
 
 def _item_line(view: WorldView, item: spheres.Item) -> str:
     """A drawer's item as Fill lists it: a statement's text, or a thing's
-    name and all its facts."""
+    name and all its facts (`spheres.item_line`: no doubled name)."""
 
     if item.thing_id is None:
         return item.text
     state = view.thing(item.thing_id)
     texts = _rendered_facts(view, state) if state is not None else []
-    return f"{item.name}: {' '.join(texts)}" if texts else item.name
+    return spheres.item_line(item.name, " ".join(texts))
 
 
 def _summary(world: World, view: WorldView, state: ThingState) -> str:

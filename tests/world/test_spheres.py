@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import DRAWER_TYPES, SPHERE_TEMPLATES
 from talemate.world.spheres import (
@@ -15,6 +16,7 @@ from talemate.world.spheres import (
     drawers,
     exceptions,
     is_sphere,
+    item_line,
     items,
     key_facts,
     people,
@@ -573,9 +575,9 @@ def test_key_facts_capped(world, spheres):
         "Doctrine 0.",
         "The Feather Rite",
         "The Council of Elders: Seven elders rule the faith.",
-        "Issued the Doctrine of Separation.",
-        "Synod of 1020.",
-        "Synod of 1021.",
+        "In 1019: Issued the Doctrine of Separation.",
+        "In 1020: Synod of 1020.",
+        "In 1021: Synod of 1021.",
     ]
 
     summarised = key_facts(view, s.dawn, summary="The church of the dawn.")
@@ -594,12 +596,73 @@ def test_key_facts_small_sphere(world, spheres):
         "The Feather Rite",
         "Prayers at first light.",
         "The Council of Elders: Seven elders rule the faith.",
-        "Founded at Dawn Peak.",
-        "Declared the transformation a purification.",
-        "Issued the Doctrine of Separation.",
+        "In 900: Founded at Dawn Peak.",
+        "In 994: Declared the transformation a purification.",
+        "In 1019: Issued the Doctrine of Separation.",
     ]
     # a missing sphere has none
     assert key_facts(view, "f" * 32) == []
+
+
+def test_key_facts_dates_timeline_by_the_calendar(world, spheres):
+    """Timeline lines read "In <year>: <text>" (P5), the year as the
+    world's calendar labels it, whatever the fact's precision; an undated
+    timeline fact is its text alone."""
+
+    s = spheres
+    with world.revision(Source.manual()) as rev:
+        rev.add_fact(s.dawn, "timeline", "Visions began.")
+        rev.add_fact(
+            s.dawn,
+            "timeline",
+            "The Pale Spire raised.",
+            valid_from=WorldDate.of(1007, 3, 4),
+        )
+    view = world.view()
+    calendar = Calendar(
+        eras=[Era(name="After Rising", abbreviation="AR", start_year=1000)]
+    )
+
+    lines = key_facts(view, s.dawn, calendar=calendar)
+    assert lines[-3:] == [
+        "In 994: Declared the transformation a purification.",
+        "In 8 AR: The Pale Spire raised.",
+        "In 20 AR: Issued the Doctrine of Separation.",
+    ]
+    with world.revision(Source.manual()) as rev:
+        for fact_id in (s.purification, s.separation, s.founded):
+            rev.remove_fact(fact_id)
+    lines = key_facts(world.view(), s.dawn)
+    assert lines[-2:] == ["Visions began.", "In 1007: The Pale Spire raised."]
+
+
+def test_item_line_drops_a_doubled_name():
+    """A thing item whose text already opens with its name is its text
+    alone (P5), with or without a leading article on either side; any
+    other is "<name>: <text>", and one with no text its name."""
+
+    assert (
+        item_line(
+            "The Doctrine of Separation",
+            "The Doctrine of Separation forbids marriage with humans.",
+        )
+        == "The Doctrine of Separation forbids marriage with humans."
+    )
+    assert (
+        item_line("The Council of Elders", "Council of Elders: seven elders.")
+        == "Council of Elders: seven elders."
+    )
+    assert item_line("Dawn Vigil", "The dawn vigil is kept in silence.") == (
+        "The dawn vigil is kept in silence."
+    )
+    # the name must end at a word boundary
+    assert item_line("The Dawn", "The Dawnwatch keeps the gate.") == (
+        "The Dawn: The Dawnwatch keeps the gate."
+    )
+    assert item_line("The Council of Elders", "Seven elders rule the faith.") == (
+        "The Council of Elders: Seven elders rule the faith."
+    )
+    assert item_line("The Feather Rite", "") == "The Feather Rite"
 
 
 def test_first_and_order_follow_writing(world, spheres):

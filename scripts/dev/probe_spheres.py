@@ -1298,7 +1298,8 @@ def sphere_lines(world: World, sphere_id: str, at: WorldDate) -> tuple[str, list
     heading = entry_label(
         view.name_of(sphere_id) or "", str(state.fields.get("template")), None
     )
-    # key_facts' timeline lines carry no year: the probe dates them
+    # key_facts' timeline lines carried no year when this ran (Task 7 dates
+    # them since): the probe dated them itself
     lines = spheres.key_facts(view, sphere_id)
     latest = spheres.timeline(view, sphere_id)[-3:]
     dated = [

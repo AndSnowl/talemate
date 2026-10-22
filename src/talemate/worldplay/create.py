@@ -118,6 +118,7 @@ from talemate.world.store import Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
 from talemate.worldplay.links import (
     FALLBACK_KIND,
     NewName,
@@ -1422,9 +1423,9 @@ def _exception_fact(
 
     origin: dict[str, object] | None = None
     if exception.thing_id is not None:
-        target, shown, lead = exception.thing_id, exception.item, "Departs from"
+        target, shown, lead = exception.thing_id, exception.item, DEPARTS_FROM
     else:
-        target, shown, lead = tie.sphere_id, tie.sphere, "Departs from a teaching of"
+        target, shown, lead = tie.sphere_id, tie.sphere, DEPARTS_FROM_TEACHING
         if exception.fact_id is not None:
             origin = {"rejects_fact": exception.fact_id}
     if target in parse_refs(text):

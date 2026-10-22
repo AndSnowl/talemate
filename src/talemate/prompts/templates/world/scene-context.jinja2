@@ -17,6 +17,17 @@ Place: {{ place.name }}{% if place.everyday %} (usually called {{ place.everyday
 - {{ fact }}
 {% endfor %}
 {% endfor -%}
+{% if spheres %}
+Spheres this scene touches (faiths, nations, orders, cultures): keep what they hold true, and bring it in only where the scene calls for it.
+{% for sphere in spheres -%}
+{{ sphere.name }} ({{ sphere.template }}{% if sphere.everyday %}, usually called {{ sphere.everyday }}{% endif %})
+{% if sphere.parent_summary %}- Part of {{ sphere.parent_name }}: {{ sphere.parent_summary }}
+{% endif -%}
+{% for line in sphere.key_facts -%}
+- {{ line }}
+{% endfor %}
+{% endfor -%}
+{% endif -%}
 {% if cast %}
 Who is here, by heritage (keep every description and action true to these bodies and instincts):
 {% for member in cast -%}
