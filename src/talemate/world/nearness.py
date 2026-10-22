@@ -110,16 +110,17 @@ def _live_things(view: WorldView) -> dict[str, str]:
 
 
 def _field_values(
-    view: WorldView, live: dict[str, str]
+    view: WorldView, live: dict[str, str], fields: Sequence[str] = _LINK_FIELDS
 ) -> Iterable[tuple[str, str, object]]:
-    """`(thing id, field, decoded value)` for the link fields of live
-    things, each the value in force at the view's date: of the rows live
+    """`(thing id, field, decoded value)` for `fields` (the link fields
+    unless told) of live things, each the value in force at the view's
+    date: of the rows live
     at the revision and from no later than the date, the one with the
     greatest `valid_from` (NULL lowest), then `row_id` -- the rule of
     `WorldView._fetch_fields`, picked here in Python rather than with a
     window function, which costs three times as much over a whole table."""
 
-    placeholders = ", ".join("?" for _ in _LINK_FIELDS)
+    placeholders = ", ".join("?" for _ in fields)
     rows = _rows(
         view,
         f"""
@@ -128,7 +129,7 @@ def _field_values(
           AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?)
           AND (valid_from IS NULL OR valid_from <= ?)
         """,
-        (*_LINK_FIELDS, view.rev, view.rev, view._at_instant()),
+        (*fields, view.rev, view.rev, view._at_instant()),
     )
     best: dict[tuple[str, str], tuple[tuple[bool, int, int], str]] = {}
     for thing_id, field, value_json, valid_from, row_id in rows:
