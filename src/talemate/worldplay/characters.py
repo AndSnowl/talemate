@@ -26,7 +26,8 @@ from talemate.character import Character
 from talemate.util import replace_smart_quotes
 from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar
-from talemate.world.dates import WorldDate
+from talemate.world.dates import Precision, WorldDate
+from talemate.world.names import find_names
 from talemate.world.prose import CachedProse, stretches
 from talemate.world.refs import REF_PATTERN
 from talemate.world.store import World
@@ -365,23 +366,31 @@ def exception_text(text: str) -> str:
     return _DEPARTS_SUFFIX.sub("", text).strip()
 
 
-def _mid_sentence(raw: str, text: str, own_name: str) -> str:
+def _opens_with_a_name(view: WorldView, raw: str, text: str) -> bool:
+    """Whether `text` (rendered from `raw`) opens with a name: a
+    reference, "I" ("I'll"), a word in capitals, or (checked last, the
+    costly one) a world name `find_names` matches at its very start,
+    linked or not, other than a mere suggestion."""
+
+    if raw.lstrip().startswith("[["):
+        return True
+    word = text.split(" ", 1)[0].split("'", 1)[0].strip(",;:")
+    if word == "I" or (len(word) > 1 and word.isupper()):
+        return True
+    return any(
+        match.start == 0 and not match.suggested for match in find_names(view, text)
+    )
+
+
+def _mid_sentence(view: WorldView, raw: str, text: str) -> str:
     """`text` (rendered from `raw`) to follow "but: ": its closing period
-    dropped and its first letter lowercased -- unless it opens with a name
-    (a reference, or the character's own name, which character creation
-    leaves unlinked), "I" ("I'll"), or a word in capitals."""
+    dropped and its first letter lowercased, unless it opens with a name
+    (`_opens_with_a_name`)."""
 
     text = text.strip().rstrip(".").rstrip()
-    first = text.split(" ", 1)[0]
-    word = first.split("'", 1)[0].strip(",;:")
-    keep = (
-        not text
-        or raw.lstrip().startswith("[[")
-        or word == "I"
-        or (len(word) > 1 and word.isupper())
-        or (bool(word) and word in own_name.split())
-    )
-    return text if keep else text[0].lower() + text[1:]
+    if not text or _opens_with_a_name(view, raw, text):
+        return text
+    return text[0].lower() + text[1:]
 
 
 def mid_sentence_name(name: str) -> str:
@@ -398,20 +407,21 @@ def tie_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
     when the tie has a since, and its exceptions (`spheres.exceptions`, in
     the order they were written) joined with "; ". A tie stores its
     sphere's id, not its name, so a tie to a sphere that's since been
-    deleted has no name and is left out."""
+    deleted, or that has no name at the view's date, is left out. The
+    since is given as its year, however precise."""
 
-    own_name = view.name_of(thing_id) or ""
     lines: list[str] = []
     for tie in spheres.ties_of(view, thing_id, live=True):
-        if view.thing(tie.sphere_id) is None:
+        name = view.name_of(tie.sphere_id)
+        if view.thing(tie.sphere_id) is None or not name:
             continue
-        name = view.name_of(tie.sphere_id) or view.render(f"[[thing:{tie.sphere_id}]]")
         role = tie.role.strip() or "member"
         line = f"{role[0].upper()}{role[1:]} of {mid_sentence_name(name)}"
         if tie.since is not None:
-            line += f" (since {calendar.format(tie.since)})"
+            year = WorldDate(instant=tie.since.instant, precision=Precision.YEAR)
+            line += f" (since {calendar.format(year)})"
         texts = [
-            _mid_sentence(raw, view.render(raw), own_name)
+            _mid_sentence(view, raw, view.render(raw))
             for fact in sorted(
                 spheres.exceptions(view, thing_id, tie.sphere_id),
                 key=lambda fact: fact.created,

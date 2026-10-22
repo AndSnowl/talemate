@@ -32,6 +32,7 @@ from talemate.worldplay.setup import (
     match_names,
     plan_scene,
     start_scene,
+    stubs_to_fill,
 )
 
 from conftest import (
@@ -1235,3 +1236,63 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
         setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
 
     assert [p.stub_id for p in setup.stub_previews] == [stubs["frost"], stubs["order"]]
+
+
+# --- spheres ------------------------------------------------------------------
+
+VIGIL_REPLY = {
+    "player": "Vasha",
+    "place": {"name": "Dawn Peak", "world": True},
+    "goal": "Keep the vigil.",
+    "intro": "Snow on the peak.",
+}
+
+
+async def test_plan_scene_pulls_in_a_named_place_sphere(world, spheres_world):
+    """Ruling P10: a place sphere the prompt names (the Tsardom, the scene
+    at Dawn Peak) is pulled in, so the scene touches it; a plain place
+    isn't, nor the scene's own place, and a named place-sphere stub isn't
+    previewed (places only ever are as the scene's place)."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="stub")) as rev:
+        marches = rev.create_thing(
+            "place",
+            fields={
+                "name": "The Marches",
+                "template": "nation",
+                "stub": {"ignored": False},
+            },
+        )
+    setup = await plan_scene(
+        world,
+        "Vasha keeps the vigil at Dawn Peak, far from the Tsardom, the Marches "
+        "and Kremova",
+        {
+            "Dawn Peak": s.dawn_peak,
+            "the Tsardom": s.tsardom,
+            "the Marches": marches,
+            "Kremova": s.kremova,
+        },
+        s.vasha,
+        WorldDate.of(1020),
+        None,
+        reply=VIGIL_REPLY,
+    )
+
+    assert setup.place == SetupRef(thing_id=s.dawn_peak)
+    assert setup.pulled_in == [s.tsardom, marches]
+    assert stubs_to_fill(world, setup) == []
+
+    # the scene's own place is never pulled in, place sphere or not
+    setup = await plan_scene(
+        world,
+        "Vasha rides through the Tsardom",
+        {"the Tsardom": s.tsardom},
+        s.vasha,
+        WorldDate.of(1020),
+        None,
+        reply={**VIGIL_REPLY, "place": None},
+    )
+    assert setup.place == SetupRef(thing_id=s.tsardom)
+    assert setup.pulled_in == []

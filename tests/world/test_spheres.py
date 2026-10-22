@@ -15,6 +15,7 @@ from talemate.world.spheres import (
     Drawer,
     drawers,
     exceptions,
+    holders,
     is_sphere,
     item_line,
     items,
@@ -761,3 +762,85 @@ def test_template_drawers():
     assert TEMPLATE_DRAWERS["other"] == [("events", "Timeline")]
     for drawer_list in TEMPLATE_DRAWERS.values():
         assert all(type_ in DRAWER_TYPES for type_, _ in drawer_list)
+
+
+def test_holders_agree_with_territory(world, spheres):
+    """`holders(view, place)` -- every sphere whose territory holds the
+    place, found from one snapshot -- matches asking `territory` of each
+    sphere, on a world with a place sphere nested in another (Kovask in
+    the Tsardom), holy sites under places, a branch that drops one of its
+    parent's holy sites (and so the places under it), a branch with its
+    own places drawer, a site in a drawer that isn't a places one, and a
+    sphere nested in a sphere."""
+
+    s = spheres
+    with world.revision(Source.manual(note="more places")) as rev:
+        rev.set_field(s.kovask, "template", "nation", None)
+        spire = rev.create_thing(
+            "place",
+            fields={
+                "name": "The Pale Spire",
+                "part_of": {"sphere": s.dawn, "drawer": HOLY_SITES},
+            },
+        )
+        steps = rev.create_thing(
+            "place", fields={"name": "Spire Steps", "parent": spire}
+        )
+        rev.set_field(s.reformed, "drops", [s.feather_rite, spire], None)
+        rev.set_field(
+            s.reformed,
+            "drawers",
+            [
+                _drawer(REFORMED_DOCTRINES, "beliefs", "Reformed Doctrines"),
+                _drawer(EVENTS, "events", "Our Timeline"),
+                _drawer("d0000010", "places", "Reformed Sites"),
+            ],
+            None,
+        )
+        chapel = rev.create_thing(
+            "place",
+            fields={
+                "name": "Reform Chapel",
+                "parent": s.little_kovask,
+                "part_of": {"sphere": s.reformed, "drawer": "d0000010"},
+            },
+        )
+        rev.create_thing(
+            "place",
+            fields={
+                "name": "Rite Grove",
+                "part_of": {"sphere": s.dawn, "drawer": RITES},
+            },
+        )
+        rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The Spire Wardens",
+                "template": "order",
+                "part_of": {"sphere": s.dawn, "drawer": HIERARCHY},
+            },
+        )
+
+    view = world.view()
+    all_spheres = [thing.id for thing in view.things() if is_sphere(thing)]
+    places = [thing.id for thing in view.things("place")]
+    for place_id in places:
+        expected = {
+            sphere_id
+            for sphere_id in all_spheres
+            if place_id in territory(view, sphere_id)
+        }
+        assert set(holders(view, place_id)) == expected, view.name_of(place_id)
+
+    # spot checks: the dropped spire and its steps are the Dawn's only;
+    # the chapel is the branch's, Kovask's and the Tsardom's
+    assert set(holders(view, steps)) == {s.dawn}
+    assert set(holders(view, chapel)) == {s.reformed, s.kovask, s.tsardom}
+    assert set(holders(view, s.dawn_peak)) == {
+        s.dawn,
+        s.reformed,
+        s.kovask,
+        s.tsardom,
+    }
+    assert holders(view, "f" * 32) == []
+    assert holders(view, s.dawn) == []

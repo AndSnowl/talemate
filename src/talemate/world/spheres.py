@@ -23,6 +23,8 @@ Every read goes through the given `WorldView`, so a dated part-of ending
 or tie follows the view's `(at, rev)`.
 """
 
+from collections.abc import Callable
+
 import structlog
 from pydantic import BaseModel, ValidationError
 
@@ -135,16 +137,22 @@ def _parent_ids(state: ThingState) -> list[str]:
     return [parent] if isinstance(parent, str) else []
 
 
-def _chain(view: WorldView, sphere_id: str) -> list[ThingState]:
+def _chain(
+    view: WorldView,
+    sphere_id: str,
+    lookup: Callable[[str], ThingState | None] | None = None,
+) -> list[ThingState]:
     """The sphere, then its parent, its parent's parent and so on, stopping
-    at one that's missing, not a sphere, or already in the chain."""
+    at one that's missing, not a sphere, or already in the chain. Things
+    are read with `lookup` when given (a snapshot), else `view.thing`."""
 
+    get = lookup or view.thing
     chain: list[ThingState] = []
     seen: set[str] = set()
     next_id: str | None = sphere_id
     while next_id is not None and next_id not in seen:
         seen.add(next_id)
-        state = view.thing(next_id)
+        state = get(next_id)
         if state is None or not is_sphere(state):
             break
         chain.append(state)
@@ -221,12 +229,16 @@ def _first_text(view: WorldView, thing: ThingState) -> str:
     return view.render(facts[0].text) if facts else ""
 
 
-def items(view: WorldView, sphere_id: str) -> list[Item]:
+def items(
+    view: WorldView, sphere_id: str, things: list[ThingState] | None = None
+) -> list[Item]:
     """The sphere's items: the things part of it, then its statement facts,
     each in the order they were made;
     for a branch, then each parent's in turn, less the things a more
     specific sphere in the chain drops and the facts its facts override.
-    An item whose drawer the sphere doesn't have is in `UNSORTED`."""
+    An item whose drawer the sphere doesn't have is in `UNSORTED`. Given
+    `things` (a snapshot of the view's things), it reads those instead of
+    scanning the view again."""
 
     chain = _chain(view, sphere_id)
     if not chain:
@@ -236,7 +248,8 @@ def items(view: WorldView, sphere_id: str) -> list[Item]:
     overridden = overriders(chain, _parent_ids)
 
     members: dict[str, list[tuple[ThingState, str]]] = {}
-    for thing in sorted(view.things(), key=lambda thing: thing.created):
+    snapshot = view.things() if things is None else things
+    for thing in sorted(snapshot, key=lambda thing: thing.created):
         link = _part_of(thing)
         if link is not None and link[0] in chain_ids and thing.id not in chain_ids:
             members.setdefault(link[0], []).append((thing, link[1]))
@@ -389,6 +402,68 @@ def territory(view: WorldView, sphere_id: str) -> list[str]:
     return held
 
 
+def _holds_through_items(chain: list[ThingState], ancestors: list[ThingState]) -> bool:
+    """Whether one of `ancestors` (places) is a thing item of the sphere
+    `chain[0]` in a places drawer -- `items`' rule: part of a sphere in
+    the chain, not one of the chain itself, not dropped by a more specific
+    sphere in it, its drawer typed by the most specific sphere having it."""
+
+    depth_of = {state.id: depth for depth, state in enumerate(chain)}
+    types = {drawer.id: drawer.type for drawer in _drawers_of(chain)}
+    for place in ancestors:
+        link = _part_of(place)
+        if link is None or link[0] not in depth_of or place.id in depth_of:
+            continue
+        if types.get(link[1]) != "places":
+            continue
+        if any(place.id in _drops(state) for state in chain[: depth_of[link[0]]]):
+            continue
+        return True
+    return False
+
+
+def holders(
+    view: WorldView, place_id: str, things: list[ThingState] | None = None
+) -> list[str]:
+    """The ids of the spheres whose `territory` holds the place, in the
+    order they were made, from one snapshot of the view's things
+    (`things`, else `view.things()`): what asking `territory` of every
+    sphere would give, without a scan per sphere. A sphere holds the place
+    when the place, or a place it sits in (its `parent` chain), is the
+    sphere itself (a place sphere) or one of its items in a places
+    drawer."""
+
+    snapshot = view.things() if things is None else things
+    by_id = {state.id: state for state in snapshot}
+    place = by_id.get(place_id)
+    if place is None or place.kind != "place":
+        return []
+
+    ancestors: list[ThingState] = []
+    seen: set[str] = set()
+    current: ThingState | None = place
+    while current is not None and current.id not in seen:
+        seen.add(current.id)
+        ancestors.append(current)
+        parent = current.fields.get("parent")
+        current = by_id.get(parent) if isinstance(parent, str) else None
+        if current is not None and current.kind != "place":
+            current = None
+    ancestor_ids = {state.id for state in ancestors}
+
+    found: list[str] = []
+    for state in sorted(snapshot, key=lambda thing: thing.created):
+        if not is_sphere(state):
+            continue
+        if state.kind == "place" and state.id in ancestor_ids:
+            found.append(state.id)
+            continue
+        chain = _chain(view, state.id, by_id.get)
+        if _holds_through_items(chain, ancestors):
+            found.append(state.id)
+    return found
+
+
 def _date_key(fact: FactState) -> tuple[int, int, int]:
     """Date order, undated first, then the order the facts were written."""
 
@@ -528,6 +603,7 @@ def key_facts(
     sphere_id: str,
     summary: str | None = None,
     calendar: Calendar | None = None,
+    things: list[ThingState] | None = None,
 ) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, the caller's cached
@@ -535,7 +611,8 @@ def key_facts(
     top beliefs and practices items (and structure, for an agent) -- the
     first in `items` order, taken a drawer type at a time in turn, a thing
     item as `item_line` gives it -- then its latest timeline facts, each
-    "In <year>: <text>" by `calendar` (the default one when not given)."""
+    "In <year>: <text>" by `calendar` (the default one when not given).
+    `things`, a snapshot of the view's things, saves `items` a scan."""
 
     state = view.thing(sphere_id)
     if state is None:
@@ -557,7 +634,7 @@ def key_facts(
 
     types = ["beliefs", "practices"] + (["structure"] if _is_agent(state) else [])
     type_of = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
-    sphere_items = items(view, sphere_id)
+    sphere_items = items(view, sphere_id, things)
     groups = [
         [item for item in sphere_items if type_of.get(item.drawer_id) == type_]
         for type_ in types

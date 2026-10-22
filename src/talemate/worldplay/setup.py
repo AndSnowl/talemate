@@ -72,6 +72,7 @@ from talemate.world.kinds import HERITAGE_KINDS
 # `NameCandidate` and `NameMatch` are re-exported: they were scene setup's
 from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
+from talemate.world.spheres import is_sphere
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
@@ -137,7 +138,8 @@ class SetupRef(BaseModel):
 class SceneSetup(BaseModel):
     """A planned scene: who (the player and the other characters), where,
     when, what it's about and how it opens. `pulled_in` is the lore the
-    scene draws on; `invented` names everything made up for it. `prompt`
+    scene draws on (spheres too: a place sphere named in the prompt is
+    pulled in, ruling P10); `invented` names everything made up for it. `prompt`
     (the owner's storyline) and `summary` (of the scene it continues, if
     any) become the scene's premise."""
 
@@ -547,8 +549,15 @@ def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
     if setup.place is not None:
         refs.append(setup.place)
     thing_ids = [ref.thing_id for ref in refs if ref.thing_id is not None]
+    # a place is filled only as the scene's place: a place sphere pulled in
+    # (ruling P10) stays as it is, as it did before it was pulled in
+    pulled_in = [
+        thing_id
+        for thing_id in setup.pulled_in
+        if (state := view.thing(thing_id)) is None or state.kind != "place"
+    ]
     stub_ids = []
-    for thing_id in _dedupe([*thing_ids, *setup.pulled_in]):
+    for thing_id in _dedupe([*thing_ids, *pulled_in]):
         state = view.thing(thing_id)
         if state is None or not state.is_stub:
             continue
@@ -694,11 +703,16 @@ async def plan_scene(
         prompt=prompt,
         new_names=frozenset(_norm(name) for name in new_names or [] if name.strip()),
     )
+    # ruling P10: a place sphere named in the prompt is pulled in (the
+    # scene touches it), unless it's the scene's own place; other places
+    # and characters never are
+    own_place = setup.place.thing_id if setup.place is not None else None
     setup.pulled_in = [
         thing_id
         for thing_id in _dedupe([*shown, *_stubs_named(view, setup)])
         if (state := view.thing(thing_id)) is not None
-        and state.kind not in ("character", "place")
+        and state.kind != "character"
+        and (state.kind != "place" or (is_sphere(state) and thing_id != own_place))
     ]
     setup.stub_previews = await _stub_previews(world, setup, client)
     log.info(

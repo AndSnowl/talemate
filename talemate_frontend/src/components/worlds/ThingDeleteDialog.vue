@@ -58,7 +58,7 @@ import { useWorldsStore } from '@/stores/worlds.js';
 
 const FIELD_LABELS = { parent: 'inside', owner: 'owner', place: 'place', culture: 'culture', cultures: 'cultures' };
 
-const ROLE_LABELS = { player: 'the player', character: 'a character', place: 'the place', lore: 'pulled-in lore' };
+const ROLE_LABELS = { player: 'the player', character: 'a character', place: 'the place', lore: 'pulled-in lore', sphere: 'a sphere it touches' };
 
 // The "are you sure?" dialog for deleting the open thing: shown while the
 // store holds its reference check (`deleteCheck`). It always says what a

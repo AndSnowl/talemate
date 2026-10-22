@@ -172,22 +172,18 @@ def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
 
 
 def _touched_spheres(
-    view: WorldView, record: SceneRecord, place_thing_id: str | None
+    view: WorldView,
+    record: SceneRecord,
+    place_thing_id: str | None,
+    things: list[ThingState],
 ) -> list[str]:
     """The spheres the scene touches, each once: those whose territory
-    holds the scene's place (in the order they were made), those the
-    prompt or setup named (pulled in), then those a character here has a
-    live tie to (Global Constraints, "Context")."""
+    holds the scene's place (`spheres.holders`, in the order they were
+    made), those the prompt or setup named (pulled in), then those a
+    character here has a live tie to (Global Constraints, "Context").
+    `things` is one snapshot of the view's things."""
 
-    sphere_states = sorted(
-        [
-            state
-            for state in [*view.things("sphere"), *view.things("place")]
-            if spheres.is_sphere(state)
-        ],
-        key=lambda state: state.created,
-    )
-    sphere_ids = {state.id for state in sphere_states}
+    sphere_ids = {state.id for state in things if spheres.is_sphere(state)}
     touched: list[str] = []
 
     def touch(sphere_id: str) -> None:
@@ -195,9 +191,8 @@ def _touched_spheres(
             touched.append(sphere_id)
 
     if place_thing_id:
-        for state in sphere_states:
-            if place_thing_id in spheres.territory(view, state.id):
-                touch(state.id)
+        for sphere_id in spheres.holders(view, place_thing_id, things):
+            touch(sphere_id)
     for thing_id in record.state.get("pulled_in") or []:
         touch(thing_id)
     for entry in _present(record):
@@ -245,7 +240,11 @@ def _sphere_parent(view: WorldView, state: ThingState) -> str | None:
 
 
 def _sphere_entries(
-    world: World, view: WorldView, sphere_ids: list[str], shown: set[str]
+    world: World,
+    view: WorldView,
+    sphere_ids: list[str],
+    shown: set[str],
+    things: list[ThingState],
 ) -> list[dict[str, Any]]:
     """The spheres block, one entry per sphere in `sphere_ids`: its key
     facts (`spheres.key_facts`, with its summary) and, for a nested
@@ -269,6 +268,7 @@ def _sphere_entries(
                 sphere_id,
                 _sphere_summary(world, view, sphere_id) or None,
                 world.calendar,
+                things,
             ),
         }
         parent_id = _sphere_parent(view, state)
@@ -303,6 +303,8 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     plain heading kept the full name every time."""
 
     view = world.view(at)
+    # one snapshot of the world's things for every sphere lookup below
+    things = view.things()
 
     place = None
     place_thing_id = record.state.get("place_thing_id")
@@ -316,7 +318,9 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                     view.render(fact.text)
                     for fact in place_state.facts
                     if fact.category not in SPHERE_CATEGORIES
-                ] + spheres.key_facts(view, place_thing_id, None, world.calendar)
+                ] + spheres.key_facts(
+                    view, place_thing_id, None, world.calendar, things
+                )
             place = {
                 "name": view.name_of(place_thing_id) or "",
                 "everyday": everyday_name(place_state),
@@ -340,9 +344,9 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
-    touched = _touched_spheres(view, record, place_thing_id)
+    touched = _touched_spheres(view, record, place_thing_id, things)
     in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
-    sphere_entries = _sphere_entries(world, view, in_block, set(touched))
+    sphere_entries = _sphere_entries(world, view, in_block, set(touched), things)
 
     lore = []
     for lore_thing_id in record.state.get("pulled_in") or []:

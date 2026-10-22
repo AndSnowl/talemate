@@ -9,8 +9,8 @@ human-readable entries for the delete dialog:
   (a character's `heritage`, a race's `species`, a mix's `parents`, ...),
   on any story date (a value set once and since replaced still renders as
   unknown on the dates it held);
-- scenes that use it as the player, a character, the place or pulled-in
-  lore.
+- scenes that use it as the player, a character, the place, pulled-in
+  lore or a pulled-in sphere.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from __future__ import annotations
 import structlog
 
 from talemate.world.kinds import get_kind
+from talemate.world.spheres import is_sphere
 from talemate.world.store import World
 
 log = structlog.get_logger("talemate.worldplay.references")
@@ -76,7 +77,9 @@ def _field_entries(world: World, thing_id: str) -> list[dict]:
     return entries
 
 
-def _scene_roles(record_state: dict, player: str | None, thing_id: str) -> list[str]:
+def _scene_roles(
+    record_state: dict, player: str | None, thing_id: str, sphere: bool = False
+) -> list[str]:
     roles = []
     if player == thing_id:
         roles.append("player")
@@ -89,15 +92,17 @@ def _scene_roles(record_state: dict, player: str | None, thing_id: str) -> list[
     if record_state.get("place_thing_id") == thing_id:
         roles.append("place")
     if thing_id in (record_state.get("pulled_in") or []):
-        roles.append("lore")
+        roles.append("sphere" if sphere else "lore")
     return roles
 
 
 def _scene_entries(world: World, thing_id: str) -> list[dict]:
+    state = world.view().thing(thing_id)
+    sphere = state is not None and is_sphere(state)
     return [
         {"scene_id": record.id, "name": record.name, "role": role}
         for record in world.scenes().list()
-        for role in _scene_roles(record.state, record.player_thing_id, thing_id)
+        for role in _scene_roles(record.state, record.player_thing_id, thing_id, sphere)
     ]
 
 
@@ -106,7 +111,7 @@ def thing_references(world: World, thing_id: str) -> dict[str, list[dict]]:
     `{"facts": [{thing_id, thing_name, text}], "fields": [{thing_id,
     thing_name, field}], "scenes": [{scene_id, name, role}]}`. A fact's
     text is rendered with names; a scene's role is `player`, `character`,
-    `place` or `lore`."""
+    `place`, `lore` or `sphere`."""
 
     return {
         "facts": _fact_entries(world, thing_id),

@@ -114,3 +114,22 @@ def test_references_count_parents_and_heritage(world):
     assert thing_references(world, half_orc)["fields"] == [
         {"thing_id": brenna, "thing_name": "Brenna", "field": "heritage"},
     ]
+
+
+def test_scene_role_of_a_pulled_in_sphere(world, spheres_world):
+    """A sphere a scene pulled in (a sphere thing, or a place sphere named
+    in the prompt) is labelled "sphere", not "lore"; the scene's place
+    stays "place"."""
+
+    s = spheres_world
+    scene_id = world.scenes().create(
+        "Vigil",
+        WorldDate.of(1020),
+        state={"place_thing_id": s.dawn_peak, "pulled_in": [s.tsardom, s.dawn]},
+    )
+    entry = {"scene_id": scene_id, "name": "Vigil"}
+    assert thing_references(world, s.tsardom)["scenes"] == [{**entry, "role": "sphere"}]
+    assert thing_references(world, s.dawn)["scenes"] == [{**entry, "role": "sphere"}]
+    assert thing_references(world, s.dawn_peak)["scenes"] == [
+        {**entry, "role": "place"}
+    ]

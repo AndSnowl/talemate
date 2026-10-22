@@ -618,3 +618,24 @@ async def test_no_extra_model_calls_on_turn(world, spheres_world):
     )
 
     assert scene.mock_client.prompt_history == []
+
+
+def test_named_place_sphere_context_once(world, spheres_world, monkeypatch):
+    """Ruling P10: the Tsardom, named in the prompt (pulled in) while the
+    scene is at Dawn Peak, outside it, shows once as a sphere block and
+    never as lore. Who holds the place is found from one snapshot
+    (`spheres.holders`), never by asking each sphere's territory."""
+
+    from talemate.world import spheres as world_spheres
+
+    def no_territory(*_args, **_kwargs):
+        raise AssertionError("territory asked per sphere")
+
+    monkeypatch.setattr(world_spheres, "territory", no_territory)
+
+    s = spheres_world
+    block = _sphere_scene(world, place_thing_id=s.dawn_peak, pulled_in=[s.tsardom])
+    assert f"{SPHERES_LEAD}\n{DAWN_BLOCK}\n{TSARDOM_BLOCK}" in block
+    assert block.count("Tsardom of Moscavia") == 1
+    assert block.count("Only owl-folk may hold land.") == 1
+    assert "Cold forests and frozen rivers." not in block

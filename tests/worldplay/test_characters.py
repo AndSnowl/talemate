@@ -828,3 +828,65 @@ def test_tie_line_keeps_names_and_capitals_opening_an_exception(world, spheres_w
         "the doctrine; I'll not bow, she says of the doctrine; NEVER kneels at the "
         "doctrine's reading"
     )
+
+
+def test_exception_opening_with_a_world_name_keeps_its_capital(world, spheres_world):
+    """The first letter after "but:" keeps its case when the text opens
+    with a world name, linked or not (Brenna, another character, left
+    plain); the character's own name doesn't protect a leading word ("The
+    Grey Wanderer" and "The vigil..."); a plain verb is lowercased."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="names")) as rev:
+        rev.set_field(s.vasha, "name", "The Grey Wanderer", None)
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"Brenna taught her to doubt [[thing:{s.separation}|the doctrine]].",
+        )
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"The vigil at [[thing:{s.separation}|the doctrine]]'s feast bores her.",
+        )
+        rev.add_fact(
+            s.vasha,
+            "ties",
+            f"Skips [[thing:{s.separation}|the doctrine]]'s fast.",
+        )
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert vasha.base_attributes["ties"].endswith(
+        "; Brenna taught her to doubt the doctrine; the vigil at the "
+        "doctrine's feast bores her; skips the doctrine's fast"
+    )
+
+
+def test_tie_since_reads_as_a_year(world, spheres_world):
+    s = spheres_world
+    with world.revision(Source.manual(note="precise")) as rev:
+        rev.set_field(
+            s.brenna,
+            "ties",
+            [
+                {
+                    "sphere": s.council,
+                    "role": "elder",
+                    "since": WorldDate.of(1010, 3, 4).model_dump(mode="json"),
+                    "until": None,
+                }
+            ],
+            None,
+        )
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    assert brenna.base_attributes["ties"] == (
+        "Elder of the Council of Elders (since 1010)"
+    )
+
+
+def test_tie_to_a_nameless_sphere_is_left_out(world, spheres_world):
+    s = spheres_world
+    with world.revision(Source.manual(note="nameless")) as rev:
+        rev.remove_field_value(s.council, "name", None)
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    assert "ties" not in brenna.base_attributes
+    assert "⟨unknown⟩" not in brenna.sheet
