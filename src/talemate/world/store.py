@@ -397,14 +397,11 @@ class Revision:
         valid_from: object = _UNSET,
         valid_until: object = _UNSET,
         overrides: list[str] | None = None,
-        thing_id: str | None = None,
         origin: object = _UNSET,
     ) -> None:
         """Retire the live version of `fact_id` and add a new version with
-        the same `fact_id`, copying over any part left unspecified. A
-        `thing_id` moves the fact to that thing (its category must be one
-        that thing's kind has); `origin` (a dict, or `None`) replaces its
-        origin. `text`
+        the same `fact_id`, copying over any part left unspecified.
+        `origin` (a dict, or `None`) replaces its origin. `text`
         and `category` are never legitimately `None`, so `None` there means
         "unspecified"; `valid_from`/`valid_until` use a sentinel instead,
         since `None` is a legitimate value for them (an open end).
@@ -431,9 +428,7 @@ class Revision:
             else overrides
         )
 
-        owner = live["thing_id"] if thing_id is None else thing_id
-        if thing_id is not None:
-            self._require_thing(thing_id)
+        owner = live["thing_id"]
         origin_json = (
             live["origin_json"]
             if origin is _UNSET

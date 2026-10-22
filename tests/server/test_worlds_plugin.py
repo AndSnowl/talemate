@@ -4024,12 +4024,14 @@ async def test_repoint_stub_carries_a_fill_stubs_filing_and_facts(plugin, client
     assert world.head_rev() == head + 1
     view = world.view()
     assert view.thing(noon).fields["part_of"] == {"sphere": s.dawn, "drawer": RITES}
-    moved = {f.fact_id: f for f in world.live_facts(noon)}
-    assert "Rung at noon." in [f.text for f in moved.values()]
-    # the fact keeps its id, category and dates; its link to Noon is words
-    assert moved[echo].text == "Echoes the Noon Bells."
-    assert moved[echo].category == "general"
-    assert (moved[echo].valid_from, moved[echo].valid_until) == (
+    moved = {f.text: f for f in world.live_facts(noon)}
+    assert set(moved) == {"Rung at noon.", "Echoes the Noon Bells."}
+    # a new fact of Noon's, with the category and dates; its link to Noon
+    # is words
+    echoed = moved["Echoes the Noon Bells."]
+    assert echoed.fact_id != echo
+    assert echoed.category == "general"
+    assert (echoed.valid_from, echoed.valid_until) == (
         WorldDate.of(1001),
         WorldDate.of(1015),
     )
@@ -4102,3 +4104,168 @@ async def test_repoint_stub_carries_fields_filings_and_ties(plugin, client):
     assert [t.sphere_id for t in spheres.ties_of(world.view(), s.maren)] == [s.dawn]
     exceptions = spheres.exceptions(world.view(), s.maren, s.dawn)
     assert [f.fact_id for f in exceptions] == [doubt]
+
+
+async def test_repoint_stub_redo_keeps_the_moved_facts(plugin, monkeypatch):
+    """Undoing the undo of a re-point gives the target the stub's facts
+    again; a fact overriding one of the stub's overrides the moved copy."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    with world.revision(Source.manual(note="own")) as rev:
+        lore = rev.add_fact(s.tsardom, "general", "A cold realm.")
+        warmer = rev.add_fact(
+            s.harbour, "general", "Warmer than they say.", overrides=[lore]
+        )
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
+    assert not _errors(plugin)
+    [moved] = [f for f in world.live_facts(s.moscavy) if f.text == "A cold realm."]
+    [over] = [f for f in world.live_facts(s.harbour) if f.fact_id == warmer]
+    assert over.overrides == [moved.fact_id]
+    assert s.prose == [s.moscavy]
+
+    repointed = world.head_rev()
+    undone = world.undo([repointed]).undo_rev
+    assert world.view().thing(s.tsardom) is not None
+    assert "A cold realm." not in [f.text for f in world.live_facts(s.moscavy)]
+    assert [
+        f.overrides for f in world.live_facts(s.harbour) if f.fact_id == warmer
+    ] == [[lore]]
+    report = world.undo([undone])
+    assert not report.conflicts
+    assert world.view().thing(s.tsardom) is None
+    assert "A cold realm." in [f.text for f in world.live_facts(s.moscavy)]
+    assert [
+        f.overrides for f in world.live_facts(s.harbour) if f.fact_id == warmer
+    ] == [[moved.fact_id]]
+
+
+async def test_repoint_stub_never_makes_a_parent_cycle(plugin, monkeypatch):
+    """A place stub whose own parent is the target leaves the target
+    without that parent (noted); a parent use that would close a loop
+    (Region in the stub, Bay in Region, the stub onto Bay) is refused."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    with world.revision(Source.manual(note="places")) as rev:
+        cove = rev.create_thing(
+            "place", {"name": "Cove", "stub": {"ignored": False}, "parent": s.moscavy}
+        )
+        region = rev.create_thing("place", {"name": "Region", "parent": s.tsardom})
+        bay = rev.create_thing("place", {"name": "Bay", "parent": region})
+
+    await _act(plugin, "repoint_stub", stub_id=cove, target_id=s.moscavy)
+    assert not _errors(plugin)
+    assert world.view().thing(s.moscavy).fields.get("parent") is None
+    notes = _last(plugin, "repoint_stub")["data"]["notes"]
+    assert any("parent" in note for note in notes)
+
+    head = world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=bay)
+    message = _last(plugin, "operation_done")["error"]["message"]
+    assert "Region's parent" in message
+    assert world.head_rev() == head
+
+
+async def test_repoint_stub_more_refusals(plugin, client):
+    """Refused, naming the use: a filing and a tie when the target isn't
+    a sphere, a filing that would loop, a mix whose two parents would be
+    one, and shares naming the target twice."""
+
+    s = await _open_sphere_world(plugin)
+    world = s.world
+    with world.revision(Source.manual(note="uses")) as rev:
+        faith = rev.create_thing(
+            "sphere",
+            {"name": "Old Faith", "template": "religion", "stub": {"ignored": False}},
+        )
+        rev.create_thing(
+            "lore",
+            {"name": "Ember Rite", "part_of": {"sphere": faith, "drawer": "unsorted"}},
+        )
+        rev.set_field(
+            s.maren,
+            "ties",
+            [{"sphere": faith, "role": "keeper", "since": None, "until": None}],
+            None,
+        )
+        plain = rev.create_thing("lore", {"name": "Plain Lore"})
+        order = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Order",
+                "template": "order",
+                "part_of": {"sphere": faith, "drawer": "unsorted"},
+            },
+        )
+        chapter = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Chapter",
+                "template": "order",
+                "part_of": {"sphere": order, "drawer": "unsorted"},
+            },
+        )
+        orc = rev.create_thing("species", {"name": "Orc"})
+        elf = rev.create_thing("species", {"name": "Elf", "stub": {"ignored": False}})
+        rev.create_thing("mix", {"name": "Half-elf", "parents": [orc, elf]})
+        rev.create_thing(
+            "place",
+            {
+                "name": "Borderland",
+                "cultures": [
+                    {"thing_id": faith, "share": 50},
+                    {"thing_id": s.dawn, "share": 50},
+                ],
+            },
+        )
+    head = world.head_rev()
+    for stub_id, target_id, words in (
+        (faith, plain, ("Ember Rite's part of", "Maren's ties", "a sphere")),
+        (faith, chapter, ("The Order's part of", "inside itself")),
+        (elf, orc, ("Half-elf's parents",)),
+        (faith, s.dawn, ("Borderland's cultures",)),
+    ):
+        await _act(plugin, "repoint_stub", stub_id=stub_id, target_id=target_id)
+        message = _last(plugin, "operation_done")["error"]["message"]
+        assert all(word in message for word in words), message
+        assert world.head_rev() == head
+
+
+async def test_repoint_stub_sphere_fields_and_prose(plugin, monkeypatch):
+    """A sphere stub's template, agent and drawers stay off a target that
+    isn't a sphere (noted); an equal value carries no note. Prose is
+    refreshed for a thing whose rendered field was rewritten (a parent),
+    not for an unrendered one (a filing)."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    with world.revision(Source.manual(note="faith")) as rev:
+        faith = rev.create_thing(
+            "sphere",
+            {
+                "name": "Old Faith",
+                "template": "religion",
+                "agent": True,
+                "stub": {"ignored": False},
+            },
+        )
+        shrine = rev.create_thing("place", {"name": "Shrine"})
+        rev.set_field(s.harbour, "parent", s.tsardom, None)
+        rev.set_field(s.moscavy, "kind", "country", None)
+        rev.set_field(s.tsardom, "kind", "country", None)
+
+    await _act(plugin, "repoint_stub", stub_id=faith, target_id=shrine)
+    assert not _errors(plugin)
+    shrine_state = world.view().thing(shrine)
+    assert "template" not in shrine_state.fields
+    notes = " ".join(_last(plugin, "repoint_stub")["data"]["notes"])
+    assert "template" in notes and "agent" in notes
+
+    s.prose.clear()
+    await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
+    assert not _errors(plugin)
+    assert not any(
+        "kind" in note for note in _last(plugin, "repoint_stub")["data"]["notes"]
+    )
+    assert s.harbour in s.prose

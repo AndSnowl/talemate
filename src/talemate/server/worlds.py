@@ -49,8 +49,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   carry over as the stub had it). Refused, writing nothing: the stub
   itself, a deleted thing or an ignored stub as the target, and a use the
   target can't take (a scene's, a field of another kind, a filing or tie
-  when it isn't a sphere, its own). Only moved facts change rendered text:
-  then the target's prose is refreshed.
+  when it isn't a sphere, a loop of parents or filings, a mix's parents or
+  shares naming it twice, its own). Prose is refreshed where its input
+  changed: the target's for facts or rendered fields it took, another
+  thing's for a rendered field rewritten.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
   `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
@@ -2145,9 +2147,10 @@ class WorldsPlugin(Plugin):
 
     async def handle_repoint_stub(self, data: dict):
         """Point everything that names a stub at `target_id` and remove the
-        stub, in one revision (`worldplay.repoint.repoint_stub`). Only the
-        stub's own facts, moved to the target, change rendered text: the
-        target's prose is refreshed when there were any."""
+        stub, in one revision (`worldplay.repoint.repoint_stub`). Prose
+        is refreshed only where its input changed: the target's, for the
+        stub's facts or rendered fields it took, and another thing's, for a
+        rendered field rewritten (a parent, a culture, a heritage)."""
 
         payload = RepointStubPayload(**data)
         world = self._require_world()
@@ -2164,8 +2167,8 @@ class WorldsPlugin(Plugin):
                 "notes": done.notes,
             },
         )
-        if done.facts_moved:
-            self._schedule_prose(payload.target_id, None)
+        for thing_id in done.prose:
+            self._schedule_prose(thing_id, None)
 
     # --- edits ------------------------------------------------------------
 
