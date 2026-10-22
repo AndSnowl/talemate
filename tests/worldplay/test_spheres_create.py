@@ -534,6 +534,49 @@ async def test_place_create_prompt_hides_sphere_categories(moscavia, world):
     assert [f.category for f in preview.facts] == ["description", "general"]
 
 
+async def test_create_prompt_names_faiths_and_orders_as_spheres(moscavia, world):
+    """A thing's create prompt lists names of kind "sphere" with a template,
+    in the core's wording (the spheres Task 10 session: from the old "a
+    group, order or faction is lore", the Tsardom's state church came back
+    as lore), so the faith a place names becomes a religion sphere stub."""
+
+    reply = json.dumps(
+        {
+            "name": "Vesnagrad",
+            "facts": [
+                {
+                    "category": "description",
+                    "text": "A river town where the Church of the Vesna keeps "
+                    "its oldest shrine.",
+                }
+            ],
+            "names": [
+                {
+                    "name": "Church of the Vesna",
+                    "kind": "sphere",
+                    "template": "religion",
+                    "aka": [],
+                }
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A river town.")
+        preview = await preview_thing(world, "place", "a river town", {}, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert '"kind" one of character, place, species, race, sphere, event' in prompt
+    assert (
+        "A faith or church, an order, academy, guild or council, a culture, or a "
+        'field of knowledge or magic is "sphere", with a "template": religion, '
+        "order, culture or field, only these" in prompt
+    )
+    assert "a group, order or faction is lore" not in prompt
+    assert [(n.name, n.kind, n.template) for n in preview.new_names] == [
+        ("Church of the Vesna", "sphere", "religion")
+    ]
+
+
 # --- Fill --------------------------------------------------------------------
 
 
@@ -780,6 +823,56 @@ async def test_free_sphere_stub_named_as_item_nests(moscavia, world):
         "drawer": ids["Hierarchy"],
     }
     assert [f.category for f in state.facts] == ["about"]
+
+
+async def test_child_first_sphere_stub_gets_part_of(moscavia, world):
+    """A council guessed as an order sphere, expanded as a sphere while the
+    White Dawn is still a stub: its prompt names the White Dawn, so it's
+    made part of it (unsorted) and the White Dawn stays a bare stub; then
+    the White Dawn's core adopts it. A sphere whose prompt names a stub
+    that's already part of it isn't made part of that."""
+
+    with world.revision(Source.manual(note="council stub")) as rev:
+        council = rev.create_thing(
+            "sphere",
+            {
+                "name": "Council of Elders",
+                "template": "order",
+                "stub": {"ignored": False},
+            },
+        )
+        rev.add_fact(
+            moscavia.kremova,
+            "description",
+            f"The {ref(council, 'Council of Elders')} of "
+            f"{ref(moscavia.dawn, 'the White Dawn')} sits in Kremova.",
+        )
+    dawn_before = world.view().thing(moscavia.dawn)
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(CORE_ORDER)
+        preview = await preview_sphere(
+            world,
+            "order",
+            "Council of Elders: The Council of Elders of the White Dawn sits in "
+            "Kremova.",
+            {},
+            client,
+            stub_id=council,
+        )
+    assert preview.part_of == {"sphere": moscavia.dawn, "drawer": UNSORTED_DRAWER_ID}
+    accept_sphere(world, preview)
+    view = world.view()
+    assert view.thing(council).fields["part_of"] == preview.part_of
+    dawn = view.thing(moscavia.dawn)
+    assert dawn.is_stub and dawn.fields == dawn_before.fields and dawn.facts == []
+    assert [i.thing_id for i in spheres.items(view, moscavia.dawn)] == [council]
+
+    # the White Dawn's prompt names the council, now part of it: no cycle
+    preview, _ = await _dawn_preview(world, moscavia.dawn, CORE_AFTER_COUNCIL)
+    assert preview.part_of is None
+    assert [a["thing_id"] for a in preview.adopted] == [council]
 
 
 async def test_child_first_character_gets_no_part_of(moscavia, world):

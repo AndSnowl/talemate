@@ -254,3 +254,40 @@ def test_heritage_origin_facts_outlast_the_cap(world):
     # the mention, the first 8 key facts, then the origin fact the cap cut;
     # the general fact stays cut
     assert _heads(facts[1:]) == [*["Physical"] * 5, *["Instinct"] * 3, "Origin:"]
+
+
+def test_suggested_prompt_of_a_sphere_item_stub(world):
+    """A stub a sphere's core made (the Dawn Vigil, in the White Dawn's
+    Rites) suggests its own fact first, then the sphere it's part of, then
+    what mentions it: in the spheres Task 10 session the Vigil's prompt
+    led with a character's "but..." exception, and the model wrote the
+    Vigil around her."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        dawn = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "The White Dawn",
+                "template": "religion",
+                "drawers": [{"id": "0000000a", "type": "practices", "title": "Rites"}],
+            },
+        )
+        vigil = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Dawn Vigil",
+                "stub": {"ignored": False},
+                "part_of": {"sphere": dawn, "drawer": "0000000a"},
+            },
+        )
+        rev.add_fact(vigil, "general", "A silent prayer at first light")
+        vasha = rev.create_thing("character", fields={"name": "Vasha"})
+        rev.add_fact(
+            vasha, "ties", f"She keeps {ref(vigil, 'the Dawn Vigil')} out of habit."
+        )
+    view = world.view(None)
+
+    assert suggested_prompt(view, vigil) == (
+        "The Dawn Vigil: A silent prayer at first light. Part of the White "
+        "Dawn, under Rites. She keeps the Dawn Vigil out of habit."
+    )

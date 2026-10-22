@@ -27,6 +27,12 @@ at character creation") gets the spheres block, `spheres` as
 `[(heading, about, [(label, drawer title, line)])]`, the `"ties"` key in
 its example object and the ties rules. A sphere shown there isn't also
 "Named in this prompt".
+
+The "names" rule names faiths, orders, councils, cultures and fields as
+"sphere" with a "template", in the sphere core's wording (spheres probe,
+"(a) The core"): the Task 10 session found the old "a group, order or
+faction is lore" made a place's state church a lore stub
+(docs/superpowers/probes/2026-10-22-spheres-flow.md).
 -#}
 <|SECTION:TASK|>
 {% if kind == "species" -%}
@@ -172,7 +178,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- endif %}
 - "aka": other names for this {{ kind }} itself, if it has any, each {"name", "tag", "everyday"}. "tag" is "proper" for another formal name, or "common" for what people in the world actually call it day to day (a short form, a nickname). Set "everyday" true on the one common name people use most, false on the rest. "name" stays the most formal name. An empty list is fine.
-- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, culture, event, item, lore (a group, order or faction is lore; so is a law, code, script or language); "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, sphere, event, item, lore; "aka" any other names your facts use for the same thing. A faith or church, an order, academy, guild or council, a culture, or a field of knowledge or magic is "sphere", with a "template": religion, order, culture or field, only these (a country or realm is a place; a rank or office is lore; so is any other group or faction, and a law, code, script or language). Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
 {%- if spheres %}
 - "ties": after the names, the spheres above this character belongs to, each {"sphere", "role", "since", "exceptions"}: "sphere" its name as written above; "role" a word or two for how they belong (practitioner, priest, elder, scholar, member); "since" the year they joined, as a bare number no later than {{ now_year }}, or left out. Only the spheres above: never invent one here. An empty list is fine.
 - "exceptions": only where this character departs from the sphere, each {"text", "rejects"}: "text" one sentence on what they reject or do differently, and "rejects" the label of the item it departs from, such as "S3". The character already holds everything else the sphere holds, so never restate it, in an exception or in the facts. Most ties have no exception or one.

@@ -23,7 +23,7 @@ Every read goes through the given `WorldView`, so a dated part-of ending
 or tie follows the view's `(at, rev)`.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 import structlog
 from pydantic import BaseModel, ValidationError
@@ -604,6 +604,7 @@ def key_facts(
     summary: str | None = None,
     calendar: Calendar | None = None,
     things: list[ThingState] | None = None,
+    skip: Collection[str] = (),
 ) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, the caller's cached
@@ -612,7 +613,9 @@ def key_facts(
     first in `items` order, taken a drawer type at a time in turn, a thing
     item as `item_line` gives it -- then its latest timeline facts, each
     "In <year>: <text>" by `calendar` (the default one when not given).
-    `things`, a snapshot of the view's things, saves `items` a scan."""
+    `things`, a snapshot of the view's things, saves `items` a scan. A
+    thing item in `skip` (shown elsewhere in full) is left out, and the
+    next item takes its place."""
 
     state = view.thing(sphere_id)
     if state is None:
@@ -634,7 +637,9 @@ def key_facts(
 
     types = ["beliefs", "practices"] + (["structure"] if _is_agent(state) else [])
     type_of = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
-    sphere_items = items(view, sphere_id, things)
+    sphere_items = [
+        item for item in items(view, sphere_id, things) if item.thing_id not in skip
+    ]
     groups = [
         [item for item in sphere_items if type_of.get(item.drawer_id) == type_]
         for type_ in types

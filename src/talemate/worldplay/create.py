@@ -1535,6 +1535,29 @@ def _guessed_drawer(
     return wanted[0] if wanted else UNSORTED_DRAWER_ID
 
 
+def _sits_in(view: WorldView, sphere_id: str, thing_id: str) -> bool:
+    """Whether `thing_id` is `sphere_id` or a sphere it sits in, going up
+    its `part_of` and `parent` links (so a child-first link never makes a
+    cycle)."""
+
+    seen: set[str] = set()
+    current: str | None = sphere_id
+    while current is not None and current not in seen:
+        if current == thing_id:
+            return True
+        seen.add(current)
+        state = view.thing(current)
+        if state is None:
+            return False
+        link = state.fields.get("part_of")
+        up = link.get("sphere") if isinstance(link, dict) else None
+        if not isinstance(up, str):
+            parent = state.fields.get("parent")
+            up = parent if isinstance(parent, str) else None
+        current = up
+    return False
+
+
 def child_part_of(
     view: WorldView, stub: Any, prompt: str, picks: dict[str, str]
 ) -> dict[str, str] | None:
@@ -1549,8 +1572,9 @@ def child_part_of(
       later files its children (`worldplay.spheres` adoption).
 
     A stub that's part of a sphere already stays where it is, and one of a
-    kind outside `PART_OF_KINDS` (a character) joins none. The parent is
-    never written to: expanding a child never creates its sphere."""
+    kind outside `PART_OF_KINDS` (a character) joins none; nor does a
+    sphere stub join a sphere that sits inside it (`_sits_in`). The parent
+    is never written to: expanding a child never creates its sphere."""
 
     if stub.kind not in PART_OF_KINDS or stub.fields.get("part_of") is not None:
         return None
@@ -1566,7 +1590,7 @@ def child_part_of(
     ]
     if mentioning and len(homes) == len(mentioning):
         sphere_ids = {sphere_id for sphere_id, _drawer in homes}
-        if len(sphere_ids) == 1:
+        if len(sphere_ids) == 1 and not _sits_in(view, next(iter(sphere_ids)), stub.id):
             sphere_id = sphere_ids.pop()
             drawers = [drawer for _sphere, drawer in homes]
             return {
@@ -1587,6 +1611,7 @@ def child_part_of(
             and state is not None
             and state.kind == "sphere"
             and state.is_stub
+            and not _sits_in(view, thing_id, stub.id)
         ):
             return {"sphere": thing_id, "drawer": UNSORTED_DRAWER_ID}
     return None

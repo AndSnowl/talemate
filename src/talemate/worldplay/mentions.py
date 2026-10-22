@@ -19,8 +19,8 @@ prompt that expands a stub and for what the create box shows the owner:
   mentioning entry. An entry with an everyday name is headed "Owl-folk
   (species, usually called Owls)", as the probe's recommendation (d) names
   things in create prompts;
-- `suggested_prompt`: the name and its mentioning facts, as the create
-  box's starting prompt for a stub.
+- `suggested_prompt`: the name, the stub's own facts and sphere, and its
+  mentioning facts, as the create box's starting prompt for a stub.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from __future__ import annotations
 import structlog
 from pydantic import BaseModel
 
+from talemate.world import spheres
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
 from talemate.world.names import everyday_name
 from talemate.world.view import WorldView
@@ -252,17 +253,55 @@ def _cut(text: str, limit: int, start: int) -> str:
     return text[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
+def _home_line(view: WorldView, thing_id: str) -> str:
+    """ "Part of the White Dawn, under Rites." for a thing in a sphere's
+    drawer ("Part of the White Dawn." when unsorted), else ""."""
+
+    state = view.thing(thing_id)
+    link = state.fields.get("part_of") if state is not None else None
+    if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
+        return ""
+    sphere = view.thing(link["sphere"])
+    name = view.name_of(link["sphere"]) or ""
+    if sphere is None or not spheres.is_sphere(sphere) or not name:
+        return ""
+    # mid-sentence: "Part of the White Dawn"
+    name = "the " + name[4:] if name.startswith("The ") else name
+    title = next(
+        (
+            drawer.title
+            for drawer in spheres.drawers(view, sphere.id)
+            if drawer.id == link.get("drawer")
+        ),
+        None,
+    )
+    return f"Part of {name}, under {title}." if title else f"Part of {name}."
+
+
 def suggested_prompt(view: WorldView, stub_id: str) -> str:
-    """The create box's starting prompt for a stub: "<name>: " and its
-    mentioning facts, rendered and joined (the most-mentioning entries
-    first), cut at `PROMPT_MAX` characters on a sentence's end. Just the
-    name when nothing mentions it."""
+    """The create box's starting prompt for a stub: "<name>: ", the stub's
+    own facts (an item a sphere's core made has its text), the sphere it's
+    part of (`_home_line`), then its mentioning facts, rendered and joined
+    (the most-mentioning entries first), cut at `PROMPT_MAX` characters on
+    a sentence's end. Just the name when there's none of these.
+
+    Its own facts and sphere lead (the spheres Task 10 session): led by
+    a character's mention alone, a rite's prompt was written around her."""
 
     name = view.name_of(stub_id) or ""
+    state = view.thing(stub_id)
+    own = [
+        _sentence(view.render(fact.text))
+        for fact in sorted(state.facts if state else [], key=lambda f: f.created)
+    ]
     texts = [
-        _sentence(mention.text)
-        for group in _by_entry(mentions(view, stub_id))
-        for mention in group
+        *own,
+        _home_line(view, stub_id),
+        *(
+            _sentence(mention.text)
+            for group in _by_entry(mentions(view, stub_id))
+            for mention in group
+        ),
     ]
     texts = [text for text in texts if text]
     if not texts:

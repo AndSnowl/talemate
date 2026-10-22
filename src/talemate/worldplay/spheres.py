@@ -482,8 +482,10 @@ async def preview_sphere(
     anything: one call (`world/sphere-core`), with no prose call, since the
     reply's summary is the description.
 
-    - with `stub_id`, the stub is expanded: its name is used, and its
-      mentions are context, as `create.preview_thing` does;
+    - with `stub_id`, the stub is expanded: its name is used, its
+      mentions are context, and it joins the sphere it belongs in
+      (`create.child_part_of`, child first), as `create.preview_thing`
+      does;
     - with `promote_id`, a lore entry, a place or a stub is promoted: its
       facts are "Already known" and stay on it;
     - either way, the entries already part of it are "Already part of it"
@@ -551,11 +553,16 @@ async def preview_sphere(
     named = create._named_in_prompt(
         view, picks, target.id if target is not None else None
     )
+    # an expanded stub joins the sphere it belongs in, child first, as
+    # `create.preview_thing` has it (never a branch: its parent is its own)
+    part_of = (
+        create.child_part_of(view, target, prompt, picks)
+        if stub_id is not None and target is not None and "parent" not in fields
+        else None
+    )
     mentions, about = _mention_vars(gathered, part_ids)
     known = _rendered_facts(view, target) if target is not None else []
-    part_of = [
-        (_part_heading(view, part), _rendered_facts(view, part)) for part in parts
-    ]
+    held = [(_part_heading(view, part), _rendered_facts(view, part)) for part in parts]
 
     template_vars: dict[str, Any] = {
         "label": TEMPLATE_LABELS[template],
@@ -563,7 +570,7 @@ async def preview_sphere(
         "agent": agent,
         "prompt": prompt,
         "known": known,
-        "part_of": part_of,
+        "part_of": held,
         "mentions": mentions,
         "about": about,
         "named": named,
@@ -652,7 +659,7 @@ async def preview_sphere(
     )
     summary = _tidy(core.get("summary"))
 
-    context = [(f"Part of it: {heading}", texts) for heading, texts in part_of]
+    context = [(f"Part of it: {heading}", texts) for heading, texts in held]
     if stub_id is not None and target is not None:
         context = mention_context(view, target.id) + context
     context += [
@@ -692,6 +699,7 @@ async def preview_sphere(
         items=items,
         adopted=adopted,
         promote_id=promote_id,
+        part_of=part_of,
     )
 
 
@@ -849,6 +857,13 @@ def _write_sphere(
         made = make_stubs(rev, view, new_names, fresh=preview.treated_as_new)
         stubs = dict(made)
         thing_id = _write_core(rev, view, preview, target)
+        if preview.part_of is not None:
+            rev.set_field(
+                thing_id,
+                "part_of",
+                preview.part_of,
+                create.part_of_since(world, thing_id, strict=False),
+            )
         for adopted in preview.adopted:
             rev.set_field(
                 adopted["thing_id"],

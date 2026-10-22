@@ -474,18 +474,35 @@ def test_context_touched_sphere_key_facts(world, spheres_world):
     as a lore entry."""
 
     s = spheres_world
-    block = _sphere_scene(
-        world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn, s.separation]
-    )
+    block = _sphere_scene(world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn])
 
     assert f"\n{SPHERES_LEAD}\n{DAWN_BLOCK}" in block
     assert block.count("The White Dawn") == 2  # the heading and the summary
     assert block.count("Snowy owl-folk are the purest") == 1
     assert "A faith of the dawn." not in block
     assert "[[thing:" not in block
-    # after the lore entries (the doctrine, pulled in too), before the end
-    assert block.index("The Doctrine of Separation\n- ") < block.index(SPHERES_LEAD)
     assert block.endswith(DAWN_BLOCK + "\n[end of world]")
+
+
+def test_pulled_in_item_shows_once(world, spheres_world):
+    """An item of a touched sphere that's pulled in as lore (the Doctrine
+    of Separation, named by the scene) shows once, as the lore entry with
+    all its facts, after which the sphere's key facts leave it out (the
+    spheres Task 10 session: the Council of Elders showed twice)."""
+
+    s = spheres_world
+    block = _sphere_scene(
+        world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn, s.separation]
+    )
+
+    separation = "The Doctrine of Separation forbids the faithful to marry humans."
+    assert block.count(separation) == 1
+    # shown as lore, before the spheres
+    assert block.index(f"The Doctrine of Separation\n- {separation}") < block.index(
+        SPHERES_LEAD
+    )
+    without = DAWN_BLOCK.replace(f"- {separation}\n", "")
+    assert f"\n{SPHERES_LEAD}\n{without}" in block
 
 
 def test_context_touched_by_territory_and_members(world, spheres_world):

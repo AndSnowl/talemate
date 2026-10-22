@@ -245,11 +245,12 @@ def _sphere_entries(
     sphere_ids: list[str],
     shown: set[str],
     things: list[ThingState],
+    as_lore: set[str],
 ) -> list[dict[str, Any]]:
     """The spheres block, one entry per sphere in `sphere_ids`: its key
-    facts (`spheres.key_facts`, with its summary) and, for a nested
-    sphere whose parent isn't `shown` in the block already, the parent's
-    summary alone."""
+    facts (`spheres.key_facts`, with its summary, less the items shown
+    `as_lore` in the block already) and, for a nested sphere whose parent
+    isn't `shown` in the block already, the parent's summary alone."""
 
     entries: list[dict[str, Any]] = []
     for sphere_id in sphere_ids:
@@ -269,6 +270,7 @@ def _sphere_entries(
                 _sphere_summary(world, view, sphere_id) or None,
                 world.calendar,
                 things,
+                as_lore,
             ),
         }
         parent_id = _sphere_parent(view, state)
@@ -290,7 +292,9 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
 
     The spheres the scene touches (`_touched_spheres`) follow the lore,
     one block each under one lead line (the spheres probe's (d)), with
-    their key facts; a pulled-in sphere shows there, not as lore. When the
+    their key facts; a pulled-in sphere shows there, not as lore, and a
+    pulled-in item of a sphere shows as lore, not again in its key facts.
+    When the
     scene's place is itself a sphere, it shows once, as the place: its own
     place facts, then its key facts (summary from its `about` fact, since
     its description prose retells those place facts), never again as a
@@ -306,6 +310,23 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     # one snapshot of the world's things for every sphere lookup below
     things = view.things()
 
+    lore = []
+    # a sphere's item pulled in as lore shows once, there, in full: the
+    # sphere's key facts leave it out
+    as_lore: set[str] = set()
+    for lore_thing_id in record.state.get("pulled_in") or []:
+        lore_state = view.thing(lore_thing_id)
+        if lore_state is None or spheres.is_sphere(lore_state):
+            continue
+        as_lore.add(lore_thing_id)
+        lore.append(
+            {
+                "name": view.name_of(lore_thing_id) or "",
+                "everyday": everyday_name(lore_state),
+                "facts": [view.render(fact.text) for fact in lore_state.facts],
+            }
+        )
+
     place = None
     place_thing_id = record.state.get("place_thing_id")
     place_local_id = record.state.get("place_local_id")
@@ -319,7 +340,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                     for fact in place_state.facts
                     if fact.category not in SPHERE_CATEGORIES
                 ] + spheres.key_facts(
-                    view, place_thing_id, None, world.calendar, things
+                    view, place_thing_id, None, world.calendar, things, as_lore
                 )
             place = {
                 "name": view.name_of(place_thing_id) or "",
@@ -346,20 +367,9 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
 
     touched = _touched_spheres(view, record, place_thing_id, things)
     in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
-    sphere_entries = _sphere_entries(world, view, in_block, set(touched), things)
-
-    lore = []
-    for lore_thing_id in record.state.get("pulled_in") or []:
-        lore_state = view.thing(lore_thing_id)
-        if lore_state is None or spheres.is_sphere(lore_state):
-            continue
-        lore.append(
-            {
-                "name": view.name_of(lore_thing_id) or "",
-                "everyday": everyday_name(lore_state),
-                "facts": [view.render(fact.text) for fact in lore_state.facts],
-            }
-        )
+    sphere_entries = _sphere_entries(
+        world, view, in_block, set(touched), things, as_lore
+    )
 
     return str(
         Prompt.get(
