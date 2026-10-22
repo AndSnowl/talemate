@@ -1413,7 +1413,7 @@ def _live_exceptions(view: WorldView, tie: PreviewTie) -> list[PreviewException]
     return kept
 
 
-def _exception_fact(
+def exception_fact(
     text: str, tie: PreviewTie, exception: PreviewException
 ) -> tuple[str, dict[str, object] | None]:
     """An exception's `ties` fact, `(text, origin)`: one rejecting a thing
@@ -1936,7 +1936,7 @@ def accept_preview(
       no stub: there'd be nothing to find it by.
     - A character's `ties` are written (after any the owner's fields
       give), and each of their exceptions becomes a `ties` fact
-      (`_exception_fact`); a blank exception, or one whose rejected item
+      (`exception_fact`); a blank exception, or one whose rejected item
       the sphere no longer holds, is dropped quietly (`_live_exceptions`).
       A tie to a thing that's no sphere (deleted since) is refused with
       `ValueError` before anything is written.
@@ -2128,7 +2128,7 @@ def _write_preview(
                     as_new=preview.treated_as_new,
                 )
                 linked.update(parse_refs(text))
-                text, origin = _exception_fact(text, tie, exception)
+                text, origin = exception_fact(text, tie, exception)
                 rev.add_fact(thing_id, "ties", text, origin=origin)
 
         orphans = {

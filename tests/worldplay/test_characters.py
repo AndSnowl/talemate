@@ -765,7 +765,7 @@ def test_exception_text_without_departs_suffix():
 
 
 def test_exception_text_strips_what_creation_appends():
-    """Round trip: the link sentence `create._exception_fact` appends to
+    """Round trip: the link sentence `create.exception_fact` appends to
     an exception (for a thing item, and for a statement, whose item name
     is a whole sentence) is exactly what `exception_text` takes off."""
 
@@ -773,7 +773,7 @@ def test_exception_text_strips_what_creation_appends():
     from talemate.worldplay.create import (
         PreviewException,
         PreviewTie,
-        _exception_fact,
+        exception_fact,
     )
 
     dawn, item = "a" * 32, "b" * 32
@@ -788,7 +788,7 @@ def test_exception_text_strips_what_creation_appends():
             fact_id="c" * 32,
         ),
     ):
-        text, _origin = _exception_fact(exception.text, tie, exception)
+        text, _origin = exception_fact(exception.text, tie, exception)
         assert "Departs from" in text
         assert exception_text(text) == exception.text.rstrip(".") + "."
 

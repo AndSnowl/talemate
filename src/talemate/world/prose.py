@@ -39,8 +39,11 @@ _FAR_FUTURE = 10**15
 _FAR_PAST = -_FAR_FUTURE
 
 # fields no prose reads: other names and the stub marker change what links
-# and how a thing is found, never what its prose says
-_UNRENDERED_FIELDS = ("aka", "stub")
+# and how a thing is found, never what its prose says; a sphere's drawers,
+# what sphere drawer a thing is part of and a character's ties file things
+# and feed scene context, never prose (it reads facts, name, born, kind)
+UNRENDERED_FIELDS: tuple[str, ...] = ("aka", "stub", "drawers", "part_of", "ties")
+_UNRENDERED_FIELDS = UNRENDERED_FIELDS
 
 # a fact version as prose reads it: category, text with its links' shown
 # words, dates with their precisions, and what it overrides

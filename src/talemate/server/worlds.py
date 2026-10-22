@@ -84,6 +84,31 @@ through `signal_operation_failed` (an `operation_done` envelope with
   reference of a fact (the `occurrence`-th in its text) at another thing,
   keeping its words and changing nothing else; it answers like
   `correct_fact`.
+- Spheres (`talemate.world.spheres`): the thing payload has `sphere`
+  (`null`, or `{template, agent, drawers: [{id, type, title, inherited,
+  items: [{thing_id, fact_id, name, segments, inherited, stub}]}], people:
+  [{character_id, name, role, since, until}], territory: [{id, name}],
+  timeline: [{fact_id, date, segments}], branches: [{id, name}], parent:
+  {id, name} | null}`; an item in no drawer the sphere has is in a last
+  `unsorted` drawer), `part_of` (`null`, or `{sphere_id, sphere_name,
+  drawer_id, drawer_title}`, Unsorted's title for a drawer that's gone)
+  and, for a character, `ties` (`[{sphere_id, sphere_name, role, since,
+  until, exceptions: [{fact_id, segments}]}]`). `list_things {kind:
+  "sphere"}` lists place spheres too, each with its `template`, and adds
+  `groups: [{template, things}]`. `preview_sphere {template, prompt,
+  fields, stub_id, picks, new_names, promote_id}` and `preview_branch
+  {parent_id, prompt}` run in the background like `preview_thing`
+  (answering with `{preview}` data, or `preview_sphere_failed` /
+  `preview_branch_failed`); `accept_sphere {preview}` writes either.
+  `fill_drawer {sphere_id, drawer_id}` answers `{sphere_id, drawer_id,
+  items}` (or `fill_failed`) and `accept_fill {sphere_id, drawer_id,
+  items}` writes them. `set_drawers {sphere_id, drawers}`, `set_part_of
+  {thing_id, sphere_id|null, drawer_id}`, `set_ties {character_id, ties:
+  [{sphere_id, role, since, until}]}`, `add_exception {character_id,
+  sphere_id, text, rejects: {thing_id}|{fact_id}|null}` and `end_item
+  {sphere_id, thing_id|fact_id, at, by}` answer with the thing edited (the
+  sphere, for `end_item`). Prose is refreshed only when rendered text
+  changed: drawers, part-of and ties are no prose's input.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -117,6 +142,7 @@ formatted with the world's calendar; `label` is ignored on the way in.
 import asyncio
 import json
 import os
+import uuid
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
@@ -127,23 +153,36 @@ import structlog
 import talemate.instance as instance
 from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
-from talemate.world import heritage
+from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import HERITAGE_KINDS, KINDS
+from talemate.world.kinds import (
+    DRAWER_TYPES,
+    HERITAGE_KINDS,
+    KINDS,
+    SPHERE_TEMPLATES,
+    TEMPLATE_AGENT,
+    UNSORTED_DRAWER_ID,
+)
 from talemate.world.names import find_names, unknown_proper_phrases
+from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.refs import REF_PATTERN
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
 from talemate.world.timeline import TimelineEntry
-from talemate.world.view import Segment, ThingState, WorldView
+from talemate.world.view import FactState, Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
+from talemate.worldplay import spheres as sphereplay
 from talemate.worldplay.characters import age_in_years
 from talemate.worldplay.create import (
     CREATE_KINDS,
+    PART_OF_KINDS,
     CreatePreview,
+    PreviewException,
+    PreviewTie,
     accept_preview,
     current_date,
+    exception_fact,
     matching_stub,
     preview_inherited,
     preview_thing,
@@ -358,6 +397,118 @@ class SetFieldPayload(_ThingEdit):
     valid_from: dict | None = None
 
 
+class PreviewSpherePayload(pydantic.BaseModel):
+    template: str
+    prompt: str = ""
+    fields: dict = pydantic.Field(default_factory=dict)
+    # the stub this preview expands, or the thing it promotes (not both)
+    stub_id: str | None = None
+    promote_id: str | None = None
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
+
+
+class AcceptSpherePayload(pydantic.BaseModel):
+    preview: sphereplay.SpherePreview
+
+
+class FillDrawerPayload(pydantic.BaseModel):
+    sphere_id: str
+    drawer_id: str
+
+
+class AcceptFillPayload(FillDrawerPayload):
+    # `fill_drawer`'s items, less any the owner dropped
+    items: list[dict[str, Any]]
+
+
+class DrawerIn(pydantic.BaseModel):
+    # left out for a new drawer: it's given an id
+    id: str | None = None
+    type: str
+    title: str
+
+    @pydantic.field_validator("type")
+    @classmethod
+    def _known_type(cls, value: str) -> str:
+        if value not in DRAWER_TYPES:
+            raise ValueError(f"no such drawer type: {value!r}")
+        return value
+
+    @pydantic.field_validator("title")
+    @classmethod
+    def _titled(cls, value: str) -> str:
+        title = " ".join(value.split())
+        if not title:
+            raise ValueError("a drawer needs a title")
+        return title
+
+
+class SetDrawersPayload(pydantic.BaseModel):
+    sphere_id: str
+    drawers: list[DrawerIn]
+    at: dict | None = None
+
+
+class SetPartOfPayload(_ThingEdit):
+    # `None` takes the thing out of every sphere
+    sphere_id: str | None = None
+    drawer_id: str = UNSORTED_DRAWER_ID
+
+
+class TieIn(pydantic.BaseModel):
+    sphere_id: str
+    role: str = ""
+    since: dict | None = None
+    until: dict | None = None
+
+
+class SetTiesPayload(pydantic.BaseModel):
+    character_id: str
+    ties: list[TieIn]
+    at: dict | None = None
+
+
+class ItemRef(pydantic.BaseModel):
+    """One item of a sphere: a thing part of it, or one of its statements
+    (exactly one of the two)."""
+
+    thing_id: str | None = None
+    fact_id: str | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _one(self) -> "ItemRef":
+        if (self.thing_id is None) == (self.fact_id is None):
+            raise ValueError("an item is a thing_id or a fact_id")
+        return self
+
+
+class AddExceptionPayload(pydantic.BaseModel):
+    character_id: str
+    sphere_id: str
+    text: str
+    # the item it departs from; `None` departs from the sphere's teaching
+    # as a whole
+    rejects: ItemRef | None = None
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
+    at: dict | None = None
+
+
+class PreviewBranchPayload(pydantic.BaseModel):
+    parent_id: str
+    prompt: str
+
+
+class EndItemPayload(ItemRef):
+    sphere_id: str
+    # the date the item ends at
+    at: dict
+    # what ended it, if anything (a sphere gets a timeline fact)
+    by: str | None = None
+
+
 class RegenerateProsePayload(pydantic.BaseModel):
     id: str
     at: dict | None = None
@@ -533,6 +684,209 @@ class _Links:
                     }
                 )
         return found
+
+
+# --- spheres ------------------------------------------------------------------
+
+
+def _first_fact(state: ThingState) -> FactState | None:
+    """The thing's first written visible fact (`spheres.items` gives its
+    rendered text as a thing item's text)."""
+
+    facts = sorted(state.facts, key=lambda fact: fact.created)
+    return facts[0] if facts else None
+
+
+def _own_fact(state: ThingState | None, fact_id: str | None) -> FactState | None:
+    if state is None:
+        return None
+    return next((fact for fact in state.facts if fact.fact_id == fact_id), None)
+
+
+def _item_out(view: WorldView, links: _Links, item: spheres.Item) -> dict:
+    """A drawer's item for the wire: a statement's text, or a thing's
+    first fact, as linked runs."""
+
+    if item.thing_id is not None:
+        thing = view.thing(item.thing_id)
+        fact = _first_fact(thing) if thing is not None else None
+    else:
+        fact = _own_fact(view.thing(item.source_id), item.fact_id)
+    return {
+        "thing_id": item.thing_id,
+        "fact_id": item.fact_id,
+        "name": item.name,
+        "segments": links.segments(fact.text) if fact is not None else [],
+        "inherited": item.inherited,
+        "stub": item.stub,
+    }
+
+
+def _sphere_out(
+    view: WorldView, links: _Links, calendar: Calendar, state: ThingState
+) -> dict | None:
+    """A sphere's own part of the thing payload (`None` for a thing that's
+    no sphere): its template and agent flag; its drawers in order (a
+    branch's inherited ones after its own, each marked `inherited`), each
+    with its items, then `UNSORTED` when anything is in no drawer it has;
+    its people (from ties), territory, dated timeline, branches and the
+    sphere it branches from."""
+
+    if not spheres.is_sphere(state):
+        return None
+    sphere_id = state.id
+    template = state.fields.get("template")
+    agent = state.fields.get("agent")
+    if not isinstance(agent, bool):
+        agent = (
+            TEMPLATE_AGENT.get(template, False) if isinstance(template, str) else False
+        )
+
+    raw = state.fields.get("drawers")
+    own = {
+        drawer.get("id")
+        for drawer in (raw if isinstance(raw, list) else [])
+        if isinstance(drawer, dict)
+    }
+    shelves = spheres.drawers(view, sphere_id)
+    held = spheres.items(view, sphere_id)
+    if any(item.drawer_id == spheres.UNSORTED.id for item in held):
+        shelves = [*shelves, spheres.UNSORTED]
+    drawers = [
+        {
+            "id": drawer.id,
+            "type": drawer.type,
+            "title": drawer.title,
+            "inherited": drawer.id not in own and drawer.id != spheres.UNSORTED.id,
+            "items": [
+                _item_out(view, links, item)
+                for item in held
+                if item.drawer_id == drawer.id
+            ],
+        }
+        for drawer in shelves
+    ]
+
+    parent_id = state.fields.get("parent") if state.kind == "sphere" else None
+    parent = view.thing(parent_id) if isinstance(parent_id, str) else None
+    branches = sorted(
+        (
+            other
+            for other in view.things("sphere")
+            if other.fields.get("parent") == sphere_id and other.id != sphere_id
+        ),
+        key=lambda other: other.created,
+    )
+    return {
+        "template": template if isinstance(template, str) else None,
+        "agent": agent,
+        "drawers": drawers,
+        "people": [
+            {
+                "character_id": tie.character_id,
+                "name": view.name_of(tie.character_id) or "",
+                "role": tie.role,
+                "since": _date_out(calendar, tie.since),
+                "until": _date_out(calendar, tie.until),
+            }
+            for tie in spheres.people(view, sphere_id)
+        ],
+        "territory": [
+            {"id": place_id, "name": view.name_of(place_id) or ""}
+            for place_id in spheres.territory(view, sphere_id)
+        ],
+        "timeline": [
+            {
+                "fact_id": fact.fact_id,
+                "date": _date_out(calendar, fact.valid_from),
+                "segments": links.segments(fact.text),
+            }
+            for fact in spheres.timeline(view, sphere_id)
+        ],
+        "branches": [
+            {"id": other.id, "name": view.name_of(other.id) or ""} for other in branches
+        ],
+        "parent": (
+            {"id": parent.id, "name": view.name_of(parent.id) or ""}
+            if parent is not None and spheres.is_sphere(parent)
+            else None
+        ),
+    }
+
+
+def _drawer_title(view: WorldView, sphere_id: str, drawer_id: str) -> str:
+    """The title of the sphere's drawer `drawer_id`; `UNSORTED`'s for one
+    it doesn't have (dropped, or never there), where its items show."""
+
+    for drawer in spheres.drawers(view, sphere_id):
+        if drawer.id == drawer_id:
+            return drawer.title
+    return spheres.UNSORTED.title
+
+
+def _part_of_out(view: WorldView, state: ThingState) -> dict | None:
+    link = state.fields.get("part_of")
+    if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
+        return None
+    sphere_id, drawer_id = link["sphere"], str(link.get("drawer") or "")
+    return {
+        "sphere_id": sphere_id,
+        "sphere_name": view.name_of(sphere_id) or "",
+        "drawer_id": drawer_id,
+        "drawer_title": _drawer_title(view, sphere_id, drawer_id),
+    }
+
+
+def _ties_out(
+    view: WorldView, links: _Links, calendar: Calendar, state: ThingState
+) -> list[dict]:
+    """A character's ties, in its `ties` field's order, ended ones too,
+    each with its exceptions (`spheres.exceptions`, in writing order). A
+    tie to a sphere that's since been deleted is left out, as on the
+    character sheet."""
+
+    if state.kind != "character":
+        return []
+    found = []
+    for tie in spheres.ties_of(view, state.id):
+        sphere = view.thing(tie.sphere_id)
+        if sphere is None or not spheres.is_sphere(sphere):
+            continue
+        exceptions = sorted(
+            spheres.exceptions(view, state.id, tie.sphere_id),
+            key=lambda fact: fact.created,
+        )
+        found.append(
+            {
+                "sphere_id": tie.sphere_id,
+                "sphere_name": view.name_of(tie.sphere_id) or "",
+                "role": tie.role,
+                "since": _date_out(calendar, tie.since),
+                "until": _date_out(calendar, tie.until),
+                "exceptions": [
+                    {"fact_id": fact.fact_id, "segments": links.segments(fact.text)}
+                    for fact in exceptions
+                ],
+            }
+        )
+    return found
+
+
+def _new_drawer_ids(drawers: list[DrawerIn]) -> list[dict[str, str]]:
+    """`drawers` as the `drawers` field holds them, a new drawer given an
+    id no other has."""
+
+    taken = {drawer.id for drawer in drawers if drawer.id is not None}
+    out = []
+    for drawer in drawers:
+        drawer_id = drawer.id
+        while drawer_id is None:
+            drawer_id = uuid.uuid4().hex[:8]
+            if drawer_id in taken:
+                drawer_id = None
+        taken.add(drawer_id)
+        out.append({"id": drawer_id, "type": drawer.type, "title": drawer.title})
+    return out
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -711,6 +1065,9 @@ class WorldsPlugin(Plugin):
             "prose_segments": prose_segments,
             "mentions": [m.model_dump() for m in mentions(view, thing_id)],
             "named_stubs": links.named_stubs(state),
+            "sphere": _sphere_out(view, links, calendar, state),
+            "part_of": _part_of_out(view, state),
+            "ties": _ties_out(view, links, calendar, state),
             "timeline": timeline,
             "appears_in": self._appears_in(world, [thing_id]),
             "referenced_in": {
@@ -1042,11 +1399,22 @@ class WorldsPlugin(Plugin):
     # --- things -----------------------------------------------------------
 
     async def handle_list_things(self, data: dict):
+        """A kind's things. `sphere` lists every sphere -- places that have
+        taken on a template too, under their own kind -- each with its
+        `template`, and adds `groups`: `[{template, things}]` in template
+        order, a sphere with no template under `other`."""
+
         payload = ListThingsPayload(**data)
         world = self._require_world()
         view = world.view()
+        states = view.things(payload.kind)
+        if payload.kind == "sphere":
+            places = [
+                state for state in view.things("place") if spheres.is_sphere(state)
+            ]
+            states = sorted([*states, *places], key=lambda state: state.created)
         things = []
-        for state in view.things(payload.kind):
+        for state in states:
             if state.stub_ignored:
                 continue
             entry: dict[str, Any] = {
@@ -1056,8 +1424,24 @@ class WorldsPlugin(Plugin):
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
+            if payload.kind == "sphere":
+                template = state.fields.get("template")
+                entry["template"] = template if isinstance(template, str) else None
             things.append(entry)
-        self._reply("list_things", {"kind": payload.kind, "things": things})
+        reply: dict[str, Any] = {"kind": payload.kind, "things": things}
+        if payload.kind == "sphere":
+            reply["groups"] = [
+                {"template": template, "things": grouped}
+                for template in SPHERE_TEMPLATES
+                if (
+                    grouped := [
+                        entry
+                        for entry in things
+                        if (entry["template"] or "other") == template
+                    ]
+                )
+            ]
+        self._reply("list_things", reply)
 
     async def handle_list_heritage(self, data: dict):
         view = self._require_world().view()
@@ -1159,6 +1543,300 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         thing_id = accept_preview(world, payload.preview, into_stub=payload.into_stub)
         self._reply("accept_preview", self._thing_payload(world, thing_id, None))
+
+    # --- spheres ----------------------------------------------------------
+
+    async def handle_preview_sphere(self, data: dict):
+        """A sphere's core (`worldplay.spheres.preview_sphere`), in the
+        background like `preview_thing`: answers `preview_sphere {preview}`
+        (a `SpherePreview` dump) or `preview_sphere_failed`; writes
+        nothing."""
+
+        payload = PreviewSpherePayload(**data)
+        world = self._require_world()
+        preview = sphereplay.preview_sphere(
+            world,
+            payload.template,
+            payload.prompt,
+            payload.fields,
+            self._client(),
+            stub_id=payload.stub_id,
+            picks=payload.picks,
+            new_names=payload.new_names,
+            promote_id=payload.promote_id,
+        )
+        self._spawn(
+            preview,
+            self.create_task_done_callback(
+                "preview_sphere",
+                "preview_sphere_failed",
+                "Error previewing a sphere",
+                success_data=lambda preview: preview.model_dump(mode="json"),
+            ),
+        )
+
+    async def handle_accept_sphere(self, data: dict):
+        """Write a `preview_sphere` or `preview_branch` preview and answer
+        with the sphere. Its summary is cached as its description, as
+        `accept_preview` caches a thing's prose, so no prose is
+        scheduled."""
+
+        payload = AcceptSpherePayload(**data)
+        world = self._require_world()
+        thing_id = sphereplay.accept_sphere(world, payload.preview)
+        self._reply("accept_sphere", self._thing_payload(world, thing_id, None))
+
+    async def handle_fill_drawer(self, data: dict):
+        """New items for one drawer, in the background: answers
+        `fill_drawer {sphere_id, drawer_id, items}` or `fill_failed`;
+        writes nothing."""
+
+        payload = FillDrawerPayload(**data)
+        world = self._require_world()
+        filling = sphereplay.fill_drawer(
+            world, payload.sphere_id, payload.drawer_id, self._client()
+        )
+        self._spawn(
+            filling,
+            self.create_task_done_callback(
+                "fill_drawer",
+                "fill_failed",
+                "Error filling a sphere drawer",
+                success_data=lambda items: {
+                    "sphere_id": payload.sphere_id,
+                    "drawer_id": payload.drawer_id,
+                    "items": items,
+                },
+                failure_data={
+                    "sphere_id": payload.sphere_id,
+                    "drawer_id": payload.drawer_id,
+                },
+            ),
+        )
+
+    async def handle_accept_fill(self, data: dict):
+        """Write the Fill items the owner kept and answer with the sphere.
+        A statement is a fact of the sphere, so its prose is refreshed
+        when one was written; named items are new stubs, with no prose."""
+
+        payload = AcceptFillPayload(**data)
+        world = self._require_world()
+        sphereplay.accept_fill(
+            world, payload.sphere_id, payload.drawer_id, payload.items
+        )
+        self._edited(
+            "accept_fill",
+            payload.sphere_id,
+            None,
+            prose=any(not item.get("name") for item in payload.items),
+        )
+
+    def _require_sphere(self, world: World, sphere_id: str) -> ThingState:
+        state = world.view().thing(sphere_id)
+        if state is None or not spheres.is_sphere(state):
+            raise ValueError(f"not a sphere: {sphere_id}")
+        return state
+
+    async def handle_set_drawers(self, data: dict):
+        """Set a sphere's own drawers, in order: add (no `id`), retitle,
+        retype, reorder and drop. A dropped drawer's items aren't moved:
+        `spheres.items` shows an item whose drawer the sphere lacks under
+        `UNSORTED`, and that's where they show. Drawers change no rendered
+        text: no prose is scheduled."""
+
+        payload = SetDrawersPayload(**data)
+        world = self._require_world()
+        self._require_sphere(world, payload.sphere_id)
+        if any(d.id == UNSORTED_DRAWER_ID for d in payload.drawers):
+            raise ValueError("Unsorted isn't a drawer of its own")
+        drawers = _new_drawer_ids(payload.drawers)
+        with world.revision(Source.manual(note="sphere drawers")) as rev:
+            rev.set_field(payload.sphere_id, "drawers", drawers, None)
+        self._edited(
+            "set_drawers", payload.sphere_id, _date_in(payload.at), prose=False
+        )
+
+    async def handle_set_part_of(self, data: dict):
+        """File a thing in a sphere's drawer (or its `UNSORTED`), or, with
+        a null `sphere_id`, take it out of every sphere. A character never
+        is part of one (people come from ties). Changes no rendered text."""
+
+        payload = SetPartOfPayload(**data)
+        world = self._require_world()
+        view = world.view()
+        state = view.thing(payload.thing_id)
+        if state is None:
+            raise KeyError(f"no such thing: {payload.thing_id}")
+        if state.kind not in PART_OF_KINDS:
+            raise ValueError(f"a {state.kind} can't be part of a sphere")
+        value: dict[str, str] | None = None
+        if payload.sphere_id is not None:
+            if payload.sphere_id == payload.thing_id:
+                raise ValueError("a sphere can't be part of itself")
+            self._require_sphere(world, payload.sphere_id)
+            drawer_ids = {d.id for d in spheres.drawers(view, payload.sphere_id)}
+            if payload.drawer_id not in drawer_ids | {UNSORTED_DRAWER_ID}:
+                raise ValueError(f"the sphere has no drawer {payload.drawer_id}")
+            value = {"sphere": payload.sphere_id, "drawer": payload.drawer_id}
+        with world.revision(Source.manual()) as rev:
+            rev.set_field(payload.thing_id, "part_of", value, None)
+        self._edited("set_part_of", payload.thing_id, _date_in(payload.at), prose=False)
+
+    async def handle_set_ties(self, data: dict):
+        """Replace a character's ties. Each names a sphere in the world.
+        Ties are on the character sheet, not in its prose: none is
+        scheduled."""
+
+        payload = SetTiesPayload(**data)
+        world = self._require_world()
+        state = world.view().thing(payload.character_id)
+        if state is None or state.kind != "character":
+            raise ValueError(f"not a character: {payload.character_id}")
+        ties = []
+        for tie in payload.ties:
+            self._require_sphere(world, tie.sphere_id)
+            ties.append(
+                {
+                    "sphere": tie.sphere_id,
+                    "role": tie.role.strip(),
+                    **{
+                        key: (
+                            date.model_dump(mode="json")
+                            if (date := _date_in(getattr(tie, key))) is not None
+                            else None
+                        )
+                        for key in ("since", "until")
+                    },
+                }
+            )
+        with world.revision(Source.manual()) as rev:
+            rev.set_field(payload.character_id, "ties", ties, None)
+        self._edited(
+            "set_ties", payload.character_id, _date_in(payload.at), prose=False
+        )
+
+    async def handle_add_exception(self, data: dict):
+        """Add a "but..." to a character's tie: a `ties` fact written as
+        character creation writes one (`create.exception_fact`), so
+        `spheres.exceptions` finds it. `rejects` is the item it departs
+        from, `{thing_id}` (a thing part of the sphere: the fact links it)
+        or `{fact_id}` (one of its statements: the fact links the sphere
+        and its origin names the statement), a live item of the sphere,
+        inherited ones included; null departs from the sphere as a whole.
+        The text is linked like `add_fact`'s. The character needs a tie to
+        the sphere. A fact feeds its prose, which is refreshed."""
+
+        payload = AddExceptionPayload(**data)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        view = world.view()
+        state = view.thing(payload.character_id)
+        if state is None or state.kind != "character":
+            raise ValueError(f"not a character: {payload.character_id}")
+        self._require_sphere(world, payload.sphere_id)
+        if all(
+            tie.sphere_id != payload.sphere_id
+            for tie in spheres.ties_of(view, payload.character_id)
+        ):
+            raise ValueError("the character has no tie to that sphere")
+        if not payload.text.strip():
+            raise ValueError("an exception needs some text")
+
+        sphere_name = view.name_of(payload.sphere_id) or ""
+        rejects = payload.rejects
+        item_name = sphere_name
+        if rejects is not None:
+            item = next(
+                (
+                    item
+                    for item in spheres.items(view, payload.sphere_id)
+                    if (item.thing_id, item.fact_id)
+                    == (rejects.thing_id, rejects.fact_id)
+                ),
+                None,
+            )
+            if item is None:
+                raise ValueError("that's no item of the sphere")
+            item_name = item.name
+        text = self._linked(
+            world,
+            payload.character_id,
+            payload.text,
+            payload.picks,
+            at,
+            payload.new_names,
+            payload.spans,
+        )
+        tie = PreviewTie(sphere_id=payload.sphere_id, sphere=sphere_name, role="")
+        exception = PreviewException(
+            text=payload.text,
+            item=item_name,
+            thing_id=rejects.thing_id if rejects is not None else None,
+            fact_id=rejects.fact_id if rejects is not None else None,
+        )
+        text, origin = exception_fact(text, tie, exception)
+        with world.revision(Source.manual()) as rev:
+            rev.add_fact(payload.character_id, "ties", text, origin=origin)
+        self._edited("add_exception", payload.character_id, at)
+
+    async def handle_preview_branch(self, data: dict):
+        """A branch of a sphere, in the background: answers
+        `preview_branch {preview}` (a `SpherePreview` dump, accepted with
+        `accept_sphere`) or `preview_branch_failed`; writes nothing."""
+
+        payload = PreviewBranchPayload(**data)
+        world = self._require_world()
+        preview = sphereplay.preview_branch(
+            world, payload.parent_id, payload.prompt, self._client()
+        )
+        self._spawn(
+            preview,
+            self.create_task_done_callback(
+                "preview_branch",
+                "preview_branch_failed",
+                "Error previewing a branch",
+                success_data=lambda preview: preview.model_dump(mode="json"),
+            ),
+        )
+
+    async def handle_end_item(self, data: dict):
+        """End one of a sphere's own items at `at` (`thing_id` or
+        `fact_id`), noting `by` (`worldplay.spheres.end_item`), and answer
+        with the sphere. The facts it writes are rendered text: prose is
+        refreshed for each full entry that got one -- the thing item, or
+        the sphere for a statement, and `by` when it's a sphere."""
+
+        payload = EndItemPayload(**data)
+        world = self._require_world()
+        view = world.view()
+        self._require_sphere(world, payload.sphere_id)
+        item = next(
+            (
+                item
+                for item in spheres.items(view, payload.sphere_id)
+                if (item.thing_id, item.fact_id) == (payload.thing_id, payload.fact_id)
+            ),
+            None,
+        )
+        if item is None:
+            raise ValueError("that's no item of the sphere")
+        sphereplay.end_item(
+            world,
+            payload.sphere_id,
+            item,
+            WorldDate.model_validate(payload.at),
+            payload.by,
+        )
+        self._edited("end_item", payload.sphere_id, None, prose=False)
+        changed = [item.thing_id or payload.sphere_id]
+        by = view.thing(payload.by) if payload.by is not None else None
+        if by is not None and spheres.is_sphere(by):
+            changed.append(by.id)
+        after = world.view()
+        for thing_id in dict.fromkeys(changed):
+            state = after.thing(thing_id)
+            if state is not None and not state.is_stub:
+                self._schedule_prose(thing_id, None)
 
     # --- stubs ------------------------------------------------------------
 
@@ -1384,7 +2062,7 @@ class WorldsPlugin(Plugin):
             "set_field",
             payload.thing_id,
             _date_in(payload.at),
-            prose=payload.field not in ("aka", "stub"),
+            prose=payload.field not in UNRENDERED_FIELDS,
         )
 
     async def handle_override_fact(self, data: dict):

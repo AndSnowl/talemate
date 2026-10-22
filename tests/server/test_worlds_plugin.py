@@ -684,6 +684,7 @@ async def test_edits_without_a_client_leave_prose_stale(plugin, monkeypatch):
         {"action": "plan_scene", "prompt": "Maren goes", "player": None},
         {"action": "continue_scene", "scene_id": "SCENE", "goal_prompt": "Onward"},
         {"action": "preview_thing", "kind": "character", "prompt": "a smith"},
+        {"action": "preview_sphere", "template": "order", "prompt": "a guild"},
     ],
 )
 async def test_model_actions_say_when_no_ai_client_is_configured(
@@ -709,6 +710,7 @@ async def test_model_actions_say_when_no_ai_client_is_configured(
         "plan_scene": "plan_failed",
         "continue_scene": "continue_failed",
         "preview_thing": "preview_failed",
+        "preview_sphere": "preview_sphere_failed",
     }[data["action"]]
     message = _last(plugin, failed)["message"]
     assert message == "No AI client is configured for the creator agent"
@@ -2465,3 +2467,729 @@ async def test_link_and_other_name_edits_schedule_no_prose(plugin, client):
     assert client.prompt_history == []
     for section in prose_gen.sections_for("character"):
         assert world.prose().stale(s.maren, section, None) is False
+
+
+# --- spheres -----------------------------------------------------------------
+
+DOCTRINES, RITES, SITES, LANDS = "d0c7a1e5", "a1e5d0c7", "5175e5ab", "1a4d5ab0"
+
+
+def _drawer(drawer_id, type_, title):
+    return {"id": drawer_id, "type": type_, "title": title}
+
+
+def _text(segments):
+    return "".join(run["text"] for run in segments)
+
+
+async def _open_sphere_world(plugin):
+    """Present 1020. The White Dawn, a religion with Doctrines, Rites and
+    Holy Sites: the Dawn Vigil (lore) in Rites, Dawn Peak (a place) in
+    Holy Sites, a statement in Doctrines, an `about` fact and a dated
+    timeline fact naming the Peak. The Reformed Dawn, its branch. The
+    Tsardom, a place that's a nation sphere. Vasha, a practitioner of the
+    Dawn since 1010 who skips the Vigil; Maren, tied to nothing."""
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "create_world",
+            "name": "Vael",
+            "present_year": 1020,
+        }
+    )
+    world = plugin.world
+    s = SimpleNamespace(world=world)
+    with world.revision(Source.manual(note="seed")) as rev:
+        s.dawn = rev.create_thing(
+            "sphere",
+            {
+                "name": "The White Dawn",
+                "template": "religion",
+                "agent": True,
+                "drawers": [
+                    _drawer(DOCTRINES, "beliefs", "Doctrines"),
+                    _drawer(RITES, "practices", "Rites"),
+                    _drawer(SITES, "places", "Holy Sites"),
+                ],
+            },
+        )
+        s.vigil = rev.create_thing(
+            "lore",
+            {"name": "Dawn Vigil", "part_of": {"sphere": s.dawn, "drawer": RITES}},
+        )
+        rev.add_fact(s.vigil, "general", "A nightly prayer at first light.")
+        s.peak = rev.create_thing(
+            "place",
+            {"name": "Dawn Peak", "part_of": {"sphere": s.dawn, "drawer": SITES}},
+        )
+        rev.add_fact(s.peak, "description", "A white mountain.")
+        s.unblessed = rev.add_fact(
+            s.dawn,
+            "statement",
+            "The unchanged are unblessed.",
+            origin={"drawer": DOCTRINES},
+        )
+        rev.add_fact(s.dawn, "about", "The state church.")
+        s.synod = rev.add_fact(
+            s.dawn,
+            "timeline",
+            f"The First Synod meets on {ref(s.peak, 'Dawn Peak')}.",
+            valid_from=WorldDate.of(996),
+        )
+        s.reformed = rev.create_thing(
+            "sphere",
+            {"name": "The Reformed Dawn", "template": "religion", "parent": s.dawn},
+        )
+        s.tsardom = rev.create_thing(
+            "place",
+            {
+                "name": "Tsardom",
+                "kind": "country",
+                "template": "nation",
+                "drawers": [_drawer(LANDS, "places", "Lands")],
+            },
+        )
+        rev.add_fact(s.tsardom, "description", "A northern realm.")
+        s.vasha = rev.create_thing(
+            "character",
+            {
+                "name": "Vasha",
+                "ties": [
+                    {
+                        "sphere": s.dawn,
+                        "role": "practitioner",
+                        "since": WorldDate.of(1010).model_dump(mode="json"),
+                        "until": None,
+                    }
+                ],
+            },
+        )
+        s.skips = rev.add_fact(
+            s.vasha,
+            "ties",
+            f"Skips the vigil. Departs from {ref(s.vigil, 'Dawn Vigil')}",
+        )
+        s.maren = rev.create_thing("character", {"name": "Maren"})
+    return s
+
+
+def _errors(plugin):
+    return [m for m in _replies(plugin, "operation_done") if "error" in m]
+
+
+async def _act(plugin, action, **data):
+    await plugin.handle({"type": "worlds", "action": action, **data})
+
+
+async def test_payload_sphere_part_of_ties(plugin):
+    s = await _open_sphere_world(plugin)
+
+    dawn = await _get_thing(plugin, s.dawn)
+    sphere = dawn["sphere"]
+    assert (sphere["template"], sphere["agent"]) == ("religion", True)
+    assert [(d["id"], d["type"], d["title"]) for d in sphere["drawers"]] == [
+        (DOCTRINES, "beliefs", "Doctrines"),
+        (RITES, "practices", "Rites"),
+        (SITES, "places", "Holy Sites"),
+    ]
+    doctrines, rites, sites = sphere["drawers"]
+    assert doctrines["items"] == [
+        {
+            "thing_id": None,
+            "fact_id": s.unblessed,
+            "name": "The unchanged are unblessed.",
+            "segments": [_plain("The unchanged are unblessed.")],
+            "inherited": False,
+            "stub": False,
+        }
+    ]
+    assert rites["items"] == [
+        {
+            "thing_id": s.vigil,
+            "fact_id": None,
+            "name": "Dawn Vigil",
+            "segments": [_plain("A nightly prayer at first light.")],
+            "inherited": False,
+            "stub": False,
+        }
+    ]
+    assert [i["thing_id"] for i in sites["items"]] == [s.peak]
+    assert sphere["people"] == [
+        {
+            "character_id": s.vasha,
+            "name": "Vasha",
+            "role": "practitioner",
+            "since": sphere["people"][0]["since"],
+            "until": None,
+        }
+    ]
+    assert sphere["people"][0]["since"]["label"] == "1010"
+    assert sphere["territory"] == [{"id": s.peak, "name": "Dawn Peak"}]
+    (synod,) = sphere["timeline"]
+    assert synod["fact_id"] == s.synod
+    assert synod["date"]["label"] == "996"
+    assert synod["segments"][1] == {"text": "Dawn Peak", "ref": s.peak, "stub": False}
+    assert "[[thing:" not in json.dumps(sphere)
+    assert sphere["branches"] == [{"id": s.reformed, "name": "The Reformed Dawn"}]
+    assert sphere["parent"] is None
+    assert dawn["part_of"] is None
+    assert dawn["ties"] == []
+
+    # a branch: its parent, and what it inherits
+    reformed = (await _get_thing(plugin, s.reformed))["sphere"]
+    assert reformed["parent"] == {"id": s.dawn, "name": "The White Dawn"}
+    assert reformed["agent"] is True
+    assert reformed["people"] == []
+    inherited = [i for d in reformed["drawers"] for i in d["items"]]
+    assert inherited and all(i["inherited"] for i in inherited)
+
+    # an item: the sphere and drawer it's part of
+    vigil = await _get_thing(plugin, s.vigil)
+    assert vigil["sphere"] is None
+    assert vigil["part_of"] == {
+        "sphere_id": s.dawn,
+        "sphere_name": "The White Dawn",
+        "drawer_id": RITES,
+        "drawer_title": "Rites",
+    }
+
+    # a character: its ties, each with its exceptions
+    vasha = await _get_thing(plugin, s.vasha)
+    assert vasha["sphere"] is None
+    (tie,) = vasha["ties"]
+    assert {k: tie[k] for k in ("sphere_id", "sphere_name", "role", "until")} == {
+        "sphere_id": s.dawn,
+        "sphere_name": "The White Dawn",
+        "role": "practitioner",
+        "until": None,
+    }
+    assert tie["since"]["label"] == "1010"
+    (skips,) = tie["exceptions"]
+    assert skips["fact_id"] == s.skips
+    assert _text(skips["segments"]) == "Skips the vigil. Departs from Dawn Vigil"
+    assert skips["segments"][-1]["ref"] == s.vigil
+
+    # a place that's a sphere has both
+    tsardom = await _get_thing(plugin, s.tsardom)
+    assert tsardom["kind"] == "place"
+    assert tsardom["fields"]["kind"] == "country"
+    assert tsardom["sphere"]["template"] == "nation"
+    assert tsardom["sphere"]["agent"] is True
+    assert tsardom["sphere"]["territory"] == [{"id": s.tsardom, "name": "Tsardom"}]
+    assert tsardom["sphere"]["parent"] is None
+
+    # a part-of drawer that's gone shows as Unsorted
+    with s.world.revision(Source.manual(note="move")) as rev:
+        rev.set_field(s.peak, "part_of", {"sphere": s.dawn, "drawer": "0badd0e5"}, None)
+    peak = await _get_thing(plugin, s.peak)
+    assert peak["part_of"]["drawer_id"] == "0badd0e5"
+    assert peak["part_of"]["drawer_title"] == "Unsorted"
+    json.dumps(plugin.websocket_handler.messages)
+
+
+async def test_list_things_spheres_by_template(plugin):
+    s = await _open_sphere_world(plugin)
+    await _act(plugin, "list_things", kind="sphere")
+    listed = _last(plugin, "list_things")["data"]
+    assert listed["kind"] == "sphere"
+    by_id = {t["id"]: t for t in listed["things"]}
+    # the place sphere is listed with the spheres, as its kind
+    assert set(by_id) == {s.dawn, s.reformed, s.tsardom}
+    assert by_id[s.tsardom]["kind"] == "place"
+    assert by_id[s.dawn]["template"] == "religion"
+    assert [
+        (group["template"], [t["id"] for t in group["things"]])
+        for group in listed["groups"]
+    ] == [("religion", [s.dawn, s.reformed]), ("nation", [s.tsardom])]
+
+
+CORE_SYNOD = json.dumps(
+    {
+        "name": "The Iron Synod",
+        "summary": "A council of smiths who keep the forges.",
+        "aka": [],
+        "timeline": [{"year": 1001, "text": "The Synod was founded."}],
+        "drawers": [{"type": "beliefs", "title": "Tenets"}],
+        "items": [{"drawer": "Tenets", "name": "", "text": "Iron is holy."}],
+        "names": [],
+    }
+)
+
+
+async def test_preview_sphere_then_accept(plugin, client):
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    async with MockClientContext():
+        client_responses.get().append(CORE_SYNOD)
+        await _act(
+            plugin,
+            "preview_sphere",
+            template="order",
+            prompt="a council of smiths",
+            fields={},
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_sphere")["data"]
+    assert preview["name"] == "The Iron Synod"
+    assert preview["template"] == "order"
+    assert s.world.head_rev() == head
+    json.dumps(preview)
+
+    await _act(plugin, "accept_sphere", preview=preview)
+    assert not _errors(plugin)
+    accepted = _last(plugin, "accept_sphere")["data"]
+    assert accepted["kind"] == "sphere"
+    assert accepted["name"] == "The Iron Synod"
+    assert accepted["sphere"]["template"] == "order"
+    tenets = next(d for d in accepted["sphere"]["drawers"] if d["title"] == "Tenets")
+    assert [i["name"] for i in tenets["items"]] == ["Iron is holy."]
+    assert accepted["prose"]["description"]["text"] == (
+        "A council of smiths who keep the forges."
+    )
+    assert not plugin.tasks
+
+
+async def test_preview_sphere_promotes(plugin, client):
+    """`promote_id` reaches `preview_sphere`: the place stays a place."""
+
+    s = await _open_sphere_world(plugin)
+    async with MockClientContext():
+        client_responses.get().append(CORE_SYNOD)
+        await _act(
+            plugin,
+            "preview_sphere",
+            template="order",
+            prompt="the peak as an order",
+            promote_id=s.peak,
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_sphere")["data"]
+    assert preview["promote_id"] == s.peak
+    assert preview["kind"] == "place"
+
+
+FILL_RITES = json.dumps(
+    {
+        "new_items": [
+            {"name": "", "text": "Smiths sing to the anvil when the bells ring."}
+        ],
+        "names": [],
+    }
+)
+
+
+async def test_fill_drawer_then_accept(plugin, client):
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    async with MockClientContext():
+        client_responses.get().append(FILL_RITES)
+        await _act(plugin, "fill_drawer", sphere_id=s.dawn, drawer_id=RITES)
+        await _drain(plugin)
+        filled = _last(plugin, "fill_drawer")["data"]
+        assert (filled["sphere_id"], filled["drawer_id"]) == (s.dawn, RITES)
+        assert [i["text"] for i in filled["items"]] == [
+            "Smiths sing to the anvil when the bells ring."
+        ]
+        assert s.world.head_rev() == head
+
+        await _act(
+            plugin,
+            "accept_fill",
+            sphere_id=s.dawn,
+            drawer_id=RITES,
+            items=filled["items"],
+        )
+        assert not _errors(plugin)
+        dawn = _last(plugin, "accept_fill")["data"]
+        rites = next(d for d in dawn["sphere"]["drawers"] if d["id"] == RITES)
+        assert [i["name"] for i in rites["items"]] == [
+            "Dawn Vigil",
+            "Smiths sing to the anvil when the bells ring.",
+        ]
+        # a statement was written on the sphere: its prose is refreshed
+        assert plugin.tasks
+        await _drain(plugin)
+
+
+async def test_fill_failure_is_reported(plugin, client):
+    s = await _open_sphere_world(plugin)
+    await _act(plugin, "fill_drawer", sphere_id=s.dawn, drawer_id="0badd0e5")
+    await _drain(plugin)
+    failed = _last(plugin, "fill_failed")
+    assert "no drawer" in failed["message"]
+    assert client.prompt_history == []
+
+
+async def _fresh_prose(world, thing_id):
+    start, end = prose_gen.stretch_containing(world, thing_id, None)
+    for section in prose_gen.sections_for(world.view().thing(thing_id).kind):
+        world.prose().put(thing_id, section, start, end, "Prose.")
+
+
+def _prose_fresh(world, thing_id):
+    kind = world.view().thing(thing_id).kind
+    return all(
+        world.prose().stale(thing_id, section, None) is False
+        for section in prose_gen.sections_for(kind)
+    )
+
+
+async def test_set_drawers(plugin, client):
+    s = await _open_sphere_world(plugin)
+    await _fresh_prose(s.world, s.dawn)
+    await _fresh_prose(s.world, s.vigil)
+
+    # retitle Doctrines, put Holy Sites first, add a drawer, drop Rites
+    await _act(
+        plugin,
+        "set_drawers",
+        sphere_id=s.dawn,
+        drawers=[
+            _drawer(SITES, "places", "Holy Sites"),
+            _drawer(DOCTRINES, "beliefs", "Teachings"),
+            {"type": "structure", "title": "Hierarchy"},
+        ],
+    )
+    assert not _errors(plugin)
+    sphere = _last(plugin, "set_drawers")["data"]["sphere"]
+    assert [(d["type"], d["title"]) for d in sphere["drawers"]] == [
+        ("places", "Holy Sites"),
+        ("beliefs", "Teachings"),
+        ("structure", "Hierarchy"),
+        ("knowledge", "Unsorted"),
+    ]
+    hierarchy = sphere["drawers"][2]
+    assert len(hierarchy["id"]) == 8 and hierarchy["items"] == []
+    # the dropped drawer's item shows under Unsorted
+    unsorted = sphere["drawers"][3]
+    assert unsorted["id"] == "unsorted"
+    assert [i["thing_id"] for i in unsorted["items"]] == [s.vigil]
+    vigil = await _get_thing(plugin, s.vigil)
+    assert vigil["part_of"]["drawer_title"] == "Unsorted"
+    # no rendered text changed
+    assert not plugin.tasks
+    assert _prose_fresh(s.world, s.dawn)
+    assert _prose_fresh(s.world, s.vigil)
+
+    head = s.world.head_rev()
+    for drawers in (
+        [{"type": "rites", "title": "Rites"}],
+        [{"type": "beliefs", "title": "  "}],
+        [_drawer(SITES, "places", "A"), _drawer(SITES, "places", "B")],
+        [{"id": "unsorted", "type": "beliefs", "title": "No"}],
+    ):
+        await _act(plugin, "set_drawers", sphere_id=s.dawn, drawers=drawers)
+        assert _errors(plugin)
+    await _act(plugin, "set_drawers", sphere_id=s.vigil, drawers=[])
+    assert "not a sphere" in _errors(plugin)[-1]["error"]["message"]
+    assert s.world.head_rev() == head
+
+
+async def test_set_part_of(plugin, client):
+    s = await _open_sphere_world(plugin)
+    await _fresh_prose(s.world, s.peak)
+
+    await _act(
+        plugin, "set_part_of", thing_id=s.peak, sphere_id=s.dawn, drawer_id=DOCTRINES
+    )
+    assert not _errors(plugin)
+    peak = _last(plugin, "set_part_of")["data"]
+    assert peak["part_of"]["drawer_title"] == "Doctrines"
+    assert not plugin.tasks
+    assert _prose_fresh(s.world, s.peak)
+
+    # into another sphere's unsorted, then out of every sphere
+    await _act(
+        plugin,
+        "set_part_of",
+        thing_id=s.peak,
+        sphere_id=s.tsardom,
+        drawer_id="unsorted",
+    )
+    assert _last(plugin, "set_part_of")["data"]["part_of"] == {
+        "sphere_id": s.tsardom,
+        "sphere_name": "Tsardom",
+        "drawer_id": "unsorted",
+        "drawer_title": "Unsorted",
+    }
+    await _act(plugin, "set_part_of", thing_id=s.peak, sphere_id=None)
+    assert _last(plugin, "set_part_of")["data"]["part_of"] is None
+    assert not _errors(plugin)
+
+    head = s.world.head_rev()
+    refused = [
+        # a character joins by ties
+        dict(thing_id=s.vasha, sphere_id=s.dawn, drawer_id=DOCTRINES),
+        # not a sphere
+        dict(thing_id=s.peak, sphere_id=s.vigil, drawer_id="unsorted"),
+        # no such drawer
+        dict(thing_id=s.peak, sphere_id=s.dawn, drawer_id="0badd0e5"),
+        # itself
+        dict(thing_id=s.reformed, sphere_id=s.reformed, drawer_id="unsorted"),
+    ]
+    for data in refused:
+        before = len(_errors(plugin))
+        await _act(plugin, "set_part_of", **data)
+        assert len(_errors(plugin)) == before + 1, data
+    assert s.world.head_rev() == head
+
+
+async def test_set_ties(plugin, client):
+    s = await _open_sphere_world(plugin)
+    await _fresh_prose(s.world, s.maren)
+    since = WorldDate.of(1015).model_dump(mode="json")
+
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[
+            {"sphere_id": s.dawn, "role": "priest", "since": since, "until": None},
+            {"sphere_id": s.tsardom, "role": "subject"},
+        ],
+    )
+    assert not _errors(plugin)
+    maren = _last(plugin, "set_ties")["data"]
+    assert [(t["sphere_name"], t["role"]) for t in maren["ties"]] == [
+        ("The White Dawn", "priest"),
+        ("Tsardom", "subject"),
+    ]
+    assert maren["ties"][0]["since"]["label"] == "1015"
+    assert maren["ties"][1]["since"] is None
+    assert not plugin.tasks
+    assert _prose_fresh(s.world, s.maren)
+    dawn = await _get_thing(plugin, s.dawn)
+    assert [p["name"] for p in dawn["sphere"]["people"]] == ["Vasha", "Maren"]
+
+    # replaced, not added to
+    await _act(plugin, "set_ties", character_id=s.maren, ties=[])
+    assert _last(plugin, "set_ties")["data"]["ties"] == []
+
+    head = s.world.head_rev()
+    for data in (
+        dict(character_id=s.maren, ties=[{"sphere_id": s.vigil, "role": "x"}]),
+        dict(character_id=s.maren, ties=[{"sphere_id": "f" * 32, "role": "x"}]),
+        dict(character_id=s.peak, ties=[]),
+    ):
+        before = len(_errors(plugin))
+        await _act(plugin, "set_ties", **data)
+        assert len(_errors(plugin)) == before + 1, data
+    assert s.world.head_rev() == head
+
+
+async def test_add_exception(plugin, client):
+    from talemate.world import spheres
+
+    s = await _open_sphere_world(plugin)
+    async with MockClientContext():
+        # departing from a thing item, linked as written
+        await _act(
+            plugin,
+            "add_exception",
+            character_id=s.vasha,
+            sphere_id=s.dawn,
+            text="Never climbs Dawn Peak",
+            rejects={"thing_id": s.peak},
+        )
+        assert not _errors(plugin)
+        vasha = _last(plugin, "add_exception")["data"]
+        # an exception is a fact: the character's prose is refreshed
+        assert plugin.tasks
+        await _drain(plugin)
+
+        # departing from a statement
+        await _act(
+            plugin,
+            "add_exception",
+            character_id=s.vasha,
+            sphere_id=s.dawn,
+            text="Thinks the unchanged are blessed",
+            rejects={"fact_id": s.unblessed},
+        )
+        await _drain(plugin)
+    assert not _errors(plugin)
+    vasha = _last(plugin, "add_exception")["data"]
+    texts = [_text(e["segments"]) for e in vasha["ties"][0]["exceptions"]]
+    assert texts[0] == "Skips the vigil. Departs from Dawn Vigil"
+    # text that links the item already is kept as written
+    climbs = next(
+        e
+        for e in vasha["ties"][0]["exceptions"]
+        if _text(e["segments"]).startswith("Never")
+    )
+    assert climbs["segments"] == [
+        _plain("Never climbs "),
+        {"text": "Dawn Peak", "ref": s.peak, "stub": False},
+    ]
+    assert (
+        "Thinks the unchanged are blessed. Departs from a teaching of The White Dawn"
+        in texts
+    )
+    # the same facts spheres.exceptions finds
+    view = s.world.view()
+    found = spheres.exceptions(view, s.vasha, s.dawn)
+    assert {f.fact_id for f in found} == {
+        e["fact_id"] for e in vasha["ties"][0]["exceptions"]
+    }
+    teaching = next(f for f in found if f.origin)
+    assert teaching.origin == {"rejects_fact": s.unblessed}
+    assert teaching.category == "ties"
+
+    head = s.world.head_rev()
+    refused = [
+        # not an item of the Dawn
+        dict(character_id=s.vasha, sphere_id=s.dawn, rejects={"thing_id": s.tsardom}),
+        dict(character_id=s.vasha, sphere_id=s.dawn, rejects={"fact_id": s.synod}),
+        # both, or neither
+        dict(
+            character_id=s.vasha,
+            sphere_id=s.dawn,
+            rejects={"thing_id": s.peak, "fact_id": s.unblessed},
+        ),
+        # Maren has no tie to the Dawn
+        dict(character_id=s.maren, sphere_id=s.dawn, rejects={"thing_id": s.peak}),
+    ]
+    for data in refused:
+        before = len(_errors(plugin))
+        await _act(plugin, "add_exception", text="No.", **data)
+        assert len(_errors(plugin)) == before + 1, data
+    assert s.world.head_rev() == head
+
+
+BRANCH_SMITHS = json.dumps(
+    {
+        "name": "The Forge Dawn",
+        "summary": "Smiths who keep the Dawn at the anvil.",
+        "aka": [],
+        "timeline": [],
+        "drawers": [],
+        "drops": ["F1"],
+        "items": [{"drawer": "Doctrines", "text": "The forge is a dawn too."}],
+        "names": [],
+    }
+)
+
+
+async def test_preview_branch_then_accept(plugin, client):
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    async with MockClientContext():
+        client_responses.get().append(BRANCH_SMITHS)
+        await _act(
+            plugin, "preview_branch", parent_id=s.dawn, prompt="the smiths' Dawn"
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_branch")["data"]
+    assert preview["fields"] == {"parent": s.dawn}
+    assert [row["label"] for row in preview["parent_items"]][:1] == ["F1"]
+    assert s.world.head_rev() == head
+
+    await _act(plugin, "accept_sphere", preview=preview)
+    assert not _errors(plugin)
+    branch = _last(plugin, "accept_sphere")["data"]
+    assert branch["name"] == "The Forge Dawn"
+    assert branch["sphere"]["parent"] == {"id": s.dawn, "name": "The White Dawn"}
+    dawn = await _get_thing(plugin, s.dawn)
+    assert {b["name"] for b in dawn["sphere"]["branches"]} == {
+        "The Reformed Dawn",
+        "The Forge Dawn",
+    }
+
+
+async def test_end_item(plugin, client):
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    async with MockClientContext():
+        await _act(
+            plugin,
+            "end_item",
+            sphere_id=s.dawn,
+            thing_id=s.vigil,
+            at=WorldDate.of(1015).model_dump(mode="json"),
+            by=s.tsardom,
+        )
+        assert not _errors(plugin)
+        dawn = _last(plugin, "end_item")["data"]
+        assert dawn["id"] == s.dawn
+        items = [i["thing_id"] for d in dawn["sphere"]["drawers"] for i in d["items"]]
+        assert s.vigil not in items
+        assert s.world.head_rev() == head + 1
+        # the Vigil and the Tsardom got facts: their prose is refreshed
+        assert len(plugin.tasks) == 2
+        await _drain(plugin)
+
+        await _act(
+            plugin,
+            "end_item",
+            sphere_id=s.dawn,
+            fact_id=s.unblessed,
+            at=WorldDate.of(1016).model_dump(mode="json"),
+        )
+        await _drain(plugin)
+    assert not _errors(plugin)
+    dawn = _last(plugin, "end_item")["data"]
+    assert s.unblessed not in [
+        i["fact_id"] for d in dawn["sphere"]["drawers"] for i in d["items"]
+    ]
+    tsardom = await _get_thing(plugin, s.tsardom)
+    assert [_text(t["segments"]) for t in tsardom["sphere"]["timeline"]] == [
+        "Ended Dawn Vigil"
+    ]
+
+    head = s.world.head_rev()
+    at = WorldDate.of(1017).model_dump(mode="json")
+    for data in (
+        # not an item of the Dawn
+        dict(sphere_id=s.dawn, thing_id=s.tsardom, at=at),
+        # inherited: ended in the sphere it comes from
+        dict(sphere_id=s.reformed, thing_id=s.peak, at=at),
+        # neither
+        dict(sphere_id=s.dawn, at=at),
+    ):
+        before = len(_errors(plugin))
+        await _act(plugin, "end_item", **data)
+        assert len(_errors(plugin)) == before + 1, data
+    assert s.world.head_rev() == head
+
+
+async def test_accept_preview_carries_ties(plugin, client):
+    """A character preview's ties round-trip through accept_preview, as the
+    owner left them: here with one tie's exception dropped."""
+
+    s = await _open_sphere_world(plugin)
+    preview = {
+        "kind": "character",
+        "prompt": "a smith",
+        "name": "Oskar",
+        "facts": [{"category": "background", "text": "A smith."}],
+        "prose": {},
+        "ties": [
+            {
+                "sphere_id": s.dawn,
+                "sphere": "The White Dawn",
+                "role": "deacon",
+                "since": None,
+                "exceptions": [],
+            },
+            {
+                "sphere_id": s.tsardom,
+                "sphere": "Tsardom",
+                "role": "subject",
+                "since": None,
+                "exceptions": [
+                    {"text": "Pays no tithe", "item": "Tsardom", "thing_id": None}
+                ],
+            },
+        ],
+    }
+    await _act(plugin, "accept_preview", preview=preview)
+    assert not _errors(plugin)
+    oskar = _last(plugin, "accept_preview")["data"]
+    assert [(t["sphere_name"], t["role"]) for t in oskar["ties"]] == [
+        ("The White Dawn", "deacon"),
+        ("Tsardom", "subject"),
+    ]
+    assert oskar["ties"][0]["exceptions"] == []
+    (tithe,) = oskar["ties"][1]["exceptions"]
+    assert _text(tithe["segments"]).startswith("Pays no tithe.")
