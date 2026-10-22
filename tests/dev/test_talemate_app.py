@@ -272,7 +272,7 @@ def test_start_reports_backend_crash_with_log_tail(
     monkeypatch.setattr(
         talemate_app,
         "backend_command",
-        lambda copy_root, port: [
+        lambda copy_root, port, *_: [
             sys.executable,
             "-c",
             "import sys; print('boom'); sys.exit(3)",
@@ -284,7 +284,7 @@ def test_start_reports_backend_crash_with_log_tail(
     monkeypatch.setattr(
         talemate_app,
         "frontend_command",
-        lambda copy_root, port: [
+        lambda copy_root, port, *_: [
             sys.executable,
             "-c",
             "import time; time.sleep(60)",
@@ -478,6 +478,204 @@ def test_backend_env_without_guix_environment_unchanged(tmp_path, monkeypatch):
     env = talemate_app.backend_env(tmp_path)
 
     assert "LD_LIBRARY_PATH" not in env
+
+
+def test_backend_command_binds_loopback_by_default():
+    cmd = talemate_app.backend_command(Path("/root"), 1234)
+    assert cmd[cmd.index("--host") + 1] == "127.0.0.1"
+
+
+def test_backend_command_lan_binds_all_interfaces():
+    cmd = talemate_app.backend_command(Path("/root"), 1234, host="0.0.0.0")
+    assert cmd[cmd.index("--host") + 1] == "0.0.0.0"
+
+
+def test_frontend_command_binds_loopback_by_default():
+    cmd = talemate_app.frontend_command(Path("/root"), 1234)
+    assert cmd[cmd.index("--host") + 1] == "127.0.0.1"
+
+
+def test_frontend_command_lan_binds_all_interfaces():
+    cmd = talemate_app.frontend_command(Path("/root"), 1234, host="0.0.0.0")
+    assert cmd[cmd.index("--host") + 1] == "0.0.0.0"
+
+
+def test_frontend_env_websocket_host_defaults_to_loopback():
+    env = talemate_app.frontend_env(5050)
+    assert env["VITE_TALEMATE_BACKEND_WEBSOCKET_URL"] == "ws://127.0.0.1:5050"
+
+
+def test_frontend_env_websocket_host_follows_lan_host():
+    # The frontend (TalemateApp.vue) already swaps a 0.0.0.0 backend URL for
+    # the page's own hostname, so a browser on another machine connects to
+    # the right backend.
+    env = talemate_app.frontend_env(5050, host="0.0.0.0")
+    assert env["VITE_TALEMATE_BACKEND_WEBSOCKET_URL"] == "ws://0.0.0.0:5050"
+
+
+def test_vite_config_allows_any_host_when_lan_requested(tmp_path):
+    (tmp_path / "talemate_frontend").mkdir()
+    config = talemate_app.write_vite_config(tmp_path, allow_lan=True)
+    assert "config.server.allowedHosts = true;" in config.read_text()
+
+
+def test_vite_config_leaves_allowed_hosts_alone_without_lan(tmp_path):
+    (tmp_path / "talemate_frontend").mkdir()
+    config = talemate_app.write_vite_config(tmp_path)
+    assert "allowedHosts" not in config.read_text()
+
+
+def test_pick_ports_probes_the_requested_host(monkeypatch):
+    recorded_hosts = []
+
+    class _RecordingSocket:
+        _next_port = 60001
+
+        def __init__(self, *args):
+            self._port = None
+
+        def setsockopt(self, *args):
+            pass
+
+        def bind(self, address):
+            recorded_hosts.append(address[0])
+            port = address[1] or _RecordingSocket._next_port
+            _RecordingSocket._next_port += 1
+            self._port = port
+
+        def getsockname(self):
+            return ("x", self._port)
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+    fake_socket = types.SimpleNamespace(
+        socket=_RecordingSocket,
+        SOL_SOCKET=socket.SOL_SOCKET,
+        SO_REUSEADDR=socket.SO_REUSEADDR,
+    )
+    monkeypatch.setattr(talemate_app, "socket", fake_socket)
+
+    talemate_app._pick_ports(None, None, host="0.0.0.0")
+
+    assert recorded_hosts == ["0.0.0.0", "0.0.0.0"]
+
+
+def test_lan_address_returns_the_routed_local_address(monkeypatch):
+    class _FakeUdpSocket:
+        def __init__(self, *args):
+            pass
+
+        def connect(self, address):
+            pass
+
+        def getsockname(self):
+            return ("10.9.8.7", 0)
+
+        def close(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            pass
+
+    fake_socket = types.SimpleNamespace(
+        socket=lambda *a: _FakeUdpSocket(),
+        AF_INET=socket.AF_INET,
+        SOCK_DGRAM=socket.SOCK_DGRAM,
+    )
+    monkeypatch.setattr(talemate_app, "socket", fake_socket)
+
+    assert talemate_app._lan_address() == "10.9.8.7"
+
+
+def test_lan_address_falls_back_without_a_route(monkeypatch):
+    class _RaisingSocket:
+        def __init__(self, *args):
+            raise OSError("no route")
+
+    fake_socket = types.SimpleNamespace(
+        socket=_RaisingSocket,
+        AF_INET=socket.AF_INET,
+        SOCK_DGRAM=socket.SOCK_DGRAM,
+    )
+    monkeypatch.setattr(talemate_app, "socket", fake_socket)
+
+    assert talemate_app._lan_address() == "0.0.0.0"
+
+
+def test_start_lan_binds_all_interfaces_and_shows_lan_address(
+    tmp_path, monkeypatch, tiny_checkout
+):
+    calls = {}
+
+    def fake_backend_command(copy_root, port, host="127.0.0.1"):
+        calls["backend_host"] = host
+        return [sys.executable, "-c", "pass"]
+
+    def fake_frontend_command(copy_root, port, host="127.0.0.1"):
+        calls["frontend_host"] = host
+        return [sys.executable, "-c", "pass"]
+
+    real_frontend_env = talemate_app.frontend_env
+
+    def wrapped_frontend_env(backend_port, host="127.0.0.1"):
+        calls["frontend_env_host"] = host
+        return real_frontend_env(backend_port, host)
+
+    real_write_vite_config = talemate_app.write_vite_config
+
+    def wrapped_write_vite_config(copy_root, allow_lan=False):
+        calls["allow_lan"] = allow_lan
+        return real_write_vite_config(copy_root, allow_lan)
+
+    monkeypatch.setattr(talemate_app, "backend_command", fake_backend_command)
+    monkeypatch.setattr(talemate_app, "frontend_command", fake_frontend_command)
+    monkeypatch.setattr(talemate_app, "frontend_env", wrapped_frontend_env)
+    monkeypatch.setattr(talemate_app, "write_vite_config", wrapped_write_vite_config)
+    monkeypatch.setattr(talemate_app, "_lan_address", lambda: "10.9.8.7")
+    monkeypatch.setattr(talemate_app, "_wait_ready", lambda info, procs, timeout: None)
+
+    info = talemate_app.start(root=tmp_path / "root", lan=True)
+
+    assert calls["backend_host"] == "0.0.0.0"
+    assert calls["frontend_host"] == "0.0.0.0"
+    assert calls["frontend_env_host"] == "0.0.0.0"
+    assert calls["allow_lan"] is True
+    assert info.frontend_url == f"http://10.9.8.7:{info.frontend_port}/"
+    assert info.backend_ws_url == f"ws://10.9.8.7:{info.backend_port}/ws"
+
+
+def test_cli_start_passes_lan_flag_through(tmp_path, monkeypatch):
+    captured = {}
+
+    def fake_start(**kwargs):
+        captured.update(kwargs)
+        return talemate_app.AppInfo(
+            root=tmp_path,
+            backend_port=1,
+            frontend_port=2,
+            backend_pid=0,
+            frontend_pid=0,
+            frontend_url="http://10.9.8.7:2/",
+            backend_ws_url="ws://10.9.8.7:1/ws",
+            log_dir=tmp_path,
+        )
+
+    monkeypatch.setattr(talemate_app, "start", fake_start)
+
+    code = talemate_app.main(["start", "--lan", "--root", str(tmp_path)])
+
+    assert code == 0
+    assert captured["lan"] is True
 
 
 def test_vite_config_allows_checkout_node_modules(tmp_path):

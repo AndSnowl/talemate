@@ -497,6 +497,55 @@ class Revision:
             (self.rev, thing_id),
         )
 
+    @_require_open
+    def change_stub_kind(self, thing_id: str, kind: str) -> None:
+        """Give a stub another kind: its thing row is retired and a row of
+        `kind` with the same id is added, so undo reverses it like any other
+        write. Its field values and facts are kept as they are. Raises
+        `ValueError` unless the thing is a stub (a live `stub` value at any
+        date), and when a live field or fact category of it doesn't exist on
+        `kind`."""
+
+        new_spec = _kind_for(kind)
+        old_kind = self._require_thing(thing_id)
+        if (
+            self._conn.execute(
+                "SELECT 1 FROM field_values "
+                "WHERE thing_id = ? AND field = 'stub' AND rev_removed IS NULL",
+                (thing_id,),
+            ).fetchone()
+            is None
+        ):
+            raise ValueError(f"only a stub's kind can be changed: {thing_id}")
+        if kind == old_kind:
+            return
+
+        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
+        new_types = {spec.name: spec.type for spec in new_spec.fields}
+        for (field,) in self._conn.execute(
+            "SELECT DISTINCT field FROM field_values "
+            "WHERE thing_id = ? AND rev_removed IS NULL",
+            (thing_id,),
+        ):
+            if new_types.get(field) != old_types[field]:
+                raise ValueError(f"{kind!r} has no {old_types[field]} field {field!r}")
+        for (category,) in self._conn.execute(
+            "SELECT DISTINCT category FROM facts "
+            "WHERE thing_id = ? AND rev_removed IS NULL",
+            (thing_id,),
+        ):
+            if category not in new_spec.categories:
+                raise ValueError(f"{kind!r} has no fact category {category!r}")
+
+        self._conn.execute(
+            "UPDATE things SET rev_removed = ? WHERE id = ? AND rev_removed IS NULL",
+            (self.rev, thing_id),
+        )
+        self._conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES (?, ?, ?)",
+            (thing_id, kind, self.rev),
+        )
+
 
 class World:
     """A world's SQLite database, plus its `assets/` and `index/` folders."""

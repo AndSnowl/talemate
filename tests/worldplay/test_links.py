@@ -1,0 +1,488 @@
+"""Linking names in text (keeping the written words) and making stubs for
+the names a generation invents."""
+
+from talemate.world.refs import ref
+from talemate.world.store import Source
+import pytest
+
+from talemate.worldplay.links import (
+    LinkSpan,
+    NewName,
+    link_phrase,
+    link_text,
+    make_stubs,
+    repoint_ref,
+)
+
+
+def _aka(name: str, tag: str = "common", everyday: bool = False) -> dict:
+    return {"name": name, "tag": tag, "everyday": everyday}
+
+
+def _moscavia_world(world):
+    """The Owl-folk species (other name "Moscavian Owls"), the Tsardom of
+    Moscavia (everyday name "Moscavia"), and a lore entry named "Hope".
+    Returns their ids."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        owls = rev.create_thing(
+            "species",
+            fields={"name": "Owl-folk", "aka": [_aka("Moscavian Owls", tag="proper")]},
+        )
+        tsardom = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "aka": [_aka("Moscavia", everyday=True)],
+            },
+        )
+        hope = rev.create_thing(
+            "lore", fields={"name": "Hope", "stub": {"ignored": False}}
+        )
+    return owls, tsardom, hope
+
+
+def test_link_text_keeps_words(world):
+    owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+
+    linked = link_text(view, "Moscavia's border")
+    # the possessive stays outside the reference
+    assert linked == ref(tsardom, "Moscavia") + "'s border"
+    assert view.render(linked) == "Moscavia's border"
+
+    text = "The Owl-folk of the Tsardom of Moscavia; I hope Moscavian Owls fly."
+    linked = link_text(view, text)
+    assert linked == (
+        f"The {ref(owls, 'Owl-folk')} of the {ref(tsardom, 'Tsardom of Moscavia')}; "
+        f"I hope {ref(owls, 'Moscavian Owls')} fly."
+    )
+    assert view.render(linked) == text
+
+    # a full name's possessive follows a rename
+    full = link_text(view, "the Tsardom of Moscavia's border")
+    assert full == "the " + ref(tsardom, "Tsardom of Moscavia") + "'s border"
+    with world.revision(Source.manual(note="rename")) as rev:
+        rev.set_field(tsardom, "name", "Moscavian Empire", None)
+    assert world.view(None).render(full) == "the Moscavian Empire's border"
+
+
+def test_link_text_leaves_references_alone(world):
+    owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+
+    text = f"{ref(tsardom, 'Moscavia')} and {ref(owls)} met the Owl-folk"
+    assert link_text(view, text) == (
+        f"{ref(tsardom, 'Moscavia')} and {ref(owls)} met the {ref(owls, 'Owl-folk')}"
+    )
+    # linking twice changes nothing
+    assert link_text(view, link_text(view, text)) == link_text(view, text)
+
+
+def test_link_text_respects_picks_and_skips_suggested(world):
+    with world.revision(Source.manual(note="setup")) as rev:
+        maren_vos = rev.create_thing("character", fields={"name": "Maren Vos"})
+        maren_holt = rev.create_thing("character", fields={"name": "Maren Holt"})
+        tsardom = rev.create_thing("place", fields={"name": "Tsardom of Moscavia"})
+        frost = rev.create_thing("place", fields={"name": "Frosthollow"})
+    view = world.view(None)
+
+    # "Maren" alone means either; the best candidate is the default...
+    text = "Maren sailed from Moscavia to Maren Vos and Frosthollow"
+    assert link_text(view, text) == (
+        f"{ref(maren_holt, 'Maren')} sailed from Moscavia to "
+        f"{ref(maren_vos, 'Maren Vos')} and {ref(frost, 'Frosthollow')}"
+    )
+    # ...the owner's pick wins, a pick links a suggested match, and the full
+    # name "Maren Vos" still links to its own entry
+    picks = {"Maren": maren_vos, "Moscavia": tsardom, "Frosthollow": maren_holt}
+    assert link_text(view, text, picks=picks) == (
+        f"{ref(maren_vos, 'Maren')} sailed from {ref(tsardom, 'Moscavia')} to "
+        f"{ref(maren_vos, 'Maren Vos')} and {ref(maren_holt, 'Frosthollow')}"
+    )
+
+
+def test_link_text_links_new_names(world):
+    _owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        stubs = make_stubs(rev, view, [NewName(name="Night of Feathers", kind="event")])
+        # the stub isn't in `view` yet: `new_names` links it
+        linked = link_text(
+            view,
+            "On the Night of Feathers, Moscavia woke; the night of feathers ended.",
+            new_names=stubs,
+        )
+    night = stubs["Night of Feathers"]
+    assert linked == (
+        f"On the {ref(night, 'Night of Feathers')}, {ref(tsardom, 'Moscavia')} "
+        "woke; the night of feathers ended."
+    )
+
+
+def test_make_stubs_reuses_existing_name(world):
+    """Frosthollow, named by Vasha and later by a place, is one stub with two
+    mentions (Review Focus 4)."""
+
+    owls, tsardom, _hope = _moscavia_world(world)
+    with world.revision(Source.manual(note="vasha")) as rev:
+        first = make_stubs(
+            rev,
+            world.view(None),
+            [NewName(name="Frosthollow", kind="place", aka=[_aka("the Hollow")])],
+        )
+        frost = first["Frosthollow"]
+        assert first == {"Frosthollow": frost, "the Hollow": frost}
+        vasha = rev.create_thing("character", fields={"name": "Vasha"})
+        rev.add_fact(vasha, "background", f"Born in {ref(frost, 'Frosthollow')}.")
+
+    view = world.view(None)
+    stub = view.thing(frost)
+    assert stub.kind == "place"
+    assert stub.fields == {
+        "name": "Frosthollow",
+        "aka": [_aka("the Hollow")],
+        "stub": {"ignored": False},
+    }
+
+    with world.revision(Source.manual(note="place")) as rev:
+        second = make_stubs(
+            rev,
+            view,
+            [
+                NewName(name=" frosthollow ", kind="place"),
+                NewName(name="The Hollow", kind="place"),
+                # other names and the main name with its article count too
+                NewName(name="Moscavia", kind="culture"),
+                NewName(name="The Owl-folk", kind="species"),
+                # a name containing an entry's name, as a species or race,
+                # is that entry
+                NewName(name="Moscavian Owl-folk", kind="species"),
+                NewName(name="Moscavian Owls of the North", kind="race"),
+                # twice in one call is one stub
+                NewName(name="River Sere", kind="place"),
+                NewName(name="the River Sere", kind="place"),
+            ],
+        )
+        sere = second["River Sere"]
+        assert second == {
+            "frosthollow": frost,
+            "The Hollow": frost,
+            "Moscavia": tsardom,
+            "The Owl-folk": owls,
+            "Moscavian Owl-folk": owls,
+            "Moscavian Owls of the North": owls,
+            "River Sere": sere,
+            "the River Sere": sere,
+        }
+        town = rev.create_thing("place", fields={"name": "Icemarch"})
+        rev.add_fact(town, "general", f"North of {ref(frost, 'Frosthollow')}.")
+
+    view = world.view(None)
+    assert sorted(owner for owner, _fact in view.referencing(frost)) == sorted(
+        [vasha, town]
+    )
+    assert sorted(s.fields["name"] for s in view.things() if s.is_stub) == [
+        "Frosthollow",
+        "Hope",
+        "River Sere",
+    ]
+
+
+def test_make_stubs_containment_is_for_heritage_only(world):
+    owls, tsardom, _hope = _moscavia_world(world)
+    with world.revision(Source.manual(note="town")) as rev:
+        town = rev.create_thing(
+            "place",
+            fields={"name": "Solnechni Gorod", "aka": [_aka("Solnech", everyday=True)]},
+        )
+        frost = rev.create_thing("place", fields={"name": "Frosthollow"})
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            world.view(None),
+            [
+                # a species or race containing a heritage name is that entry
+                NewName(name="Moscavian Owl-folk", kind="species"),
+                NewName(name="Snowy Owl-folk", kind="race"),
+                # a place containing a place's name (or other name) is a new
+                # place
+                NewName(name="Lake Solnech", kind="place"),
+                NewName(name="Frosthollow Bridge", kind="place"),
+                NewName(name="Moscavia Proper", kind="place"),
+                # an event containing a place's name isn't that place
+                NewName(name="Siege of Moscavia", kind="event"),
+                # nor is a species containing a place's name
+                NewName(name="Moscavia Owls", kind="species"),
+                # and a part of a word doesn't count
+                NewName(name="Owl-folkish Kin", kind="species"),
+            ],
+        )
+    assert made["Moscavian Owl-folk"] == made["Snowy Owl-folk"] == owls
+    new = [
+        made[name]
+        for name in (
+            "Lake Solnech",
+            "Frosthollow Bridge",
+            "Moscavia Proper",
+            "Siege of Moscavia",
+            "Moscavia Owls",
+            "Owl-folkish Kin",
+        )
+    ]
+    assert len(set(new)) == 6 and not set(new) & {owls, tsardom, town, frost}
+    view = world.view(None)
+    assert all(view.thing(thing_id).is_stub for thing_id in new)
+    assert view.thing(made["Lake Solnech"]).kind == "place"
+
+
+def test_make_stubs_unknown_kind_is_lore(world):
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            world.view(None),
+            [
+                NewName(name="Code of Talons", kind="title"),
+                NewName(name="Lake Solnech", kind=" Place "),
+                NewName(
+                    name="Tsardom of Moscavia",
+                    kind="place",
+                    aka=[
+                        {"name": "Moscavia", "tag": "common", "everyday": True},
+                        {"name": "the Old Tsardom", "tag": "former name"},
+                        {"name": "Tsardom of Moscavia", "tag": "proper"},
+                        {"name": "Moscavia", "tag": "proper"},
+                        {"name": "Owl Country", "tag": "common", "everyday": True},
+                        {"name": "Lake Solnech", "tag": "common"},
+                        {"name": "", "tag": "common"},
+                        {"tag": "common"},
+                    ],
+                ),
+                NewName(name="  ", kind="place"),
+            ],
+        )
+    view = world.view(None)
+    code = view.thing(made["Code of Talons"])
+    assert code.kind == "lore"
+    assert code.fields == {
+        "name": "Code of Talons",
+        "aka": [],
+        "stub": {"ignored": False},
+    }
+    assert view.thing(made["Lake Solnech"]).kind == "place"
+
+    # other names are cleaned up into the shape `aka` holds: an unknown tag
+    # is proper, one everyday name, and no repeats of its own or another
+    # entry's name
+    tsardom = view.thing(made["Tsardom of Moscavia"])
+    assert tsardom.fields["aka"] == [
+        _aka("Moscavia", everyday=True),
+        _aka("the Old Tsardom", tag="proper"),
+        _aka("Owl Country"),
+    ]
+    assert made["Moscavia"] == made["Owl Country"] == tsardom.id
+    assert set(made) == {
+        "Code of Talons",
+        "Lake Solnech",
+        "Tsardom of Moscavia",
+        "Moscavia",
+        "the Old Tsardom",
+        "Owl Country",
+    }
+
+
+def test_link_text_never_links_the_owner_to_itself(world):
+    """A thing's own name, and its other names, stay plain text in its own
+    facts; other names still link, and the owner's words are never handed
+    to a shorter name inside them."""
+
+    owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+
+    text = "The Tsardom of Moscavia, or Moscavia, is home to the Owl-folk."
+    assert link_text(view, text, owner=tsardom) == (
+        f"The Tsardom of Moscavia, or Moscavia, is home to the {ref(owls, 'Owl-folk')}."
+    )
+    # a pick or new name for the owner is ignored too
+    assert (
+        link_text(view, "Moscavia is cold.", picks={"Moscavia": tsardom}, owner=tsardom)
+        == "Moscavia is cold."
+    )
+
+
+def test_make_stubs_maps_written_forms(world):
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [
+                NewName(
+                    name="The Night of Feathers",
+                    kind="event",
+                    written=["Night of Feathers"],
+                )
+            ],
+        )
+    night = made["The Night of Feathers"]
+    assert made["Night of Feathers"] == night
+    assert world.view(None).thing(night).fields["aka"] == []
+
+
+def test_names_treated_as_new_never_link_or_reuse(world):
+    owls, _tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+
+    # the world's thing by that name (or a longer name starting with it)
+    # stays plain text
+    assert link_text(view, "Moscavia's border", as_new=["Moscavia"]) == (
+        "Moscavia's border"
+    )
+    assert link_text(view, "Moscavian Owls fly", as_new=["Moscavian"]) == (
+        "Moscavian Owls fly"
+    )
+
+    # listed twice, a name treated as new is one stub of its own
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [NewName(name="Owl-folk", kind="species")] * 2,
+            fresh=["Owl-folk"],
+        )
+    stub = made["Owl-folk"]
+    assert stub != owls
+    after = world.view(None)
+    assert len(after.things("species")) == 2
+    assert link_text(
+        after, "The Owl-folk fly.", new_names=made, as_new=["Owl-folk"]
+    ) == (f"The {ref(stub, 'Owl-folk')} fly.")
+
+
+A = "a" * 32
+B = "b" * 32
+C = "c" * 32
+
+
+def test_link_text_spans_link_or_keep_their_words_first(world):
+    """Spans (code-point offsets) link their words to their own thing (or,
+    with no ref, keep them plain) before anything else: two of the same
+    name keep their own targets, a span kept plain stays plain whatever
+    picks say, and the rest is linked as usual."""
+
+    _owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+    text = "Maren rowed with Maren past Maren and Moscavia, not Moscavia."
+    spans = [
+        LinkSpan(start=17, end=22, ref=B),
+        LinkSpan(start=0, end=5, ref=A),
+        LinkSpan(start=52, end=60, ref=None),
+    ]
+    assert link_text(view, text, picks={"Maren": C}, spans=spans) == (
+        f"{ref(A, 'Maren')} rowed with {ref(B, 'Maren')} past {ref(C, 'Maren')}"
+        f" and {ref(tsardom, 'Moscavia')}, not Moscavia."
+    )
+    assert link_text(view, "🌙 Maren", spans=[LinkSpan(start=2, end=7, ref=A)]) == (
+        f"🌙 {ref(A, 'Maren')}"
+    )
+    # overlapping, empty, out-of-range or ref-crossing spans are refused
+    for bad in (
+        [LinkSpan(start=0, end=5, ref=A), LinkSpan(start=3, end=8, ref=B)],
+        [LinkSpan(start=4, end=4, ref=A)],
+        [LinkSpan(start=30, end=99, ref=A)],
+    ):
+        with pytest.raises(ValueError):
+            link_text(view, "Maren rowed with Maren.", spans=bad)
+    with pytest.raises(ValueError):
+        link_text(
+            view, f"{ref(A, 'Maren')} met", spans=[LinkSpan(start=2, end=10, ref=B)]
+        )
+
+
+def test_link_phrase_links_only_that_phrase():
+    text = (
+        f"Near The Harbour, on the Night of Feathers, by {ref(A, 'Night of Feathers')}."
+    )
+    # the first plain occurrence (outside any reference), nothing else
+    assert link_phrase(text, "Night of Feathers", B) == (
+        f"Near The Harbour, on the {ref(B, 'Night of Feathers')},"
+        f" by {ref(A, 'Night of Feathers')}."
+    )
+    # whole words only; a phrase the text doesn't hold plain is refused
+    with pytest.raises(ValueError):
+        link_phrase("Harbourside", "Harbour", B)
+    with pytest.raises(ValueError):
+        link_phrase(f"by {ref(A, 'Kremova')}", "Kremova", B)
+
+
+def test_repoint_ref_swaps_one_reference_keeping_its_words():
+    text = f"{ref(A, 'Maren')} met {ref(A, 'Maren')} and {ref(C)} near Maren."
+    assert repoint_ref(text, 1, B, "unused") == (
+        f"{ref(A, 'Maren')} met {ref(B, 'Maren')} and {ref(C)} near Maren."
+    )
+    # a reference with no shown text keeps the words it rendered as
+    assert repoint_ref(text, 2, B, "Tsardom of Moscavia") == (
+        f"{ref(A, 'Maren')} met {ref(A, 'Maren')} and"
+        f" {ref(B, 'Tsardom of Moscavia')} near Maren."
+    )
+    with pytest.raises(ValueError):
+        repoint_ref(text, 3, B, "x")
+
+
+def test_make_stubs_reuses_a_heritage_whose_name_holds_it(world):
+    """A listed "Owl-folk" while the species "Owl-folk of Moscavia" exists
+    is that species: no duplicate stub, and the text links to it."""
+
+    with world.revision(Source.manual(note="species")) as rev:
+        owls = rev.create_thing("species", fields={"name": "Owl-folk of Moscavia"})
+        rev.create_thing("place", fields={"name": "Owl Rock"})
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [
+                NewName(name="Owl-folk", kind="species"),
+                # only heritage holds heritage: a place's name isn't a race
+                NewName(name="Owl", kind="race"),
+            ],
+        )
+        linked = link_text(view, "Owl-folk nest in its towers.", new_names=made)
+    assert made["Owl-folk"] == owls
+    assert made["Owl"] != owls
+    assert linked == f"{ref(owls, 'Owl-folk')} nest in its towers."
+
+
+def test_make_stubs_drops_a_lowercase_leading_the(world):
+    """A new stub listed "the Kremlin" is named "Kremlin", so a bare
+    "Kremlin" links to it later; "the Kremlin" still maps to it as
+    written."""
+
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(
+            rev,
+            view,
+            [
+                NewName(name="the Kremlin", kind="place"),
+                NewName(name="The Hermitage", kind="place"),
+            ],
+        )
+        linked = link_text(view, "Behind the Kremlin walls.", new_names=made)
+    kremlin = made["the Kremlin"]
+    view = world.view(None)
+    assert view.name_of(kremlin) == "Kremlin"
+    # a capital "The" is part of the name as written
+    assert view.name_of(made["The Hermitage"]) == "The Hermitage"
+    assert linked == f"Behind {ref(kremlin, 'the Kremlin')} walls."
+    assert link_text(view, "Kremlin walls.") == f"{ref(kremlin, 'Kremlin')} walls."
+
+
+def test_new_names_never_link_inside_a_hyphenated_word(world):
+    """A new stub "Owl" doesn't link the "Owl" of "Owl-folk"."""
+
+    view = world.view(None)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        made = make_stubs(rev, view, [NewName(name="Owl", kind="lore")])
+        linked = link_text(view, "Owl-folk and an Owl.", new_names=made)
+    assert linked == f"Owl-folk and an {ref(made['Owl'], 'Owl')}."

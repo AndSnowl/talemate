@@ -178,15 +178,17 @@ def _section_facts(
     facts: list[str] = []
     inherited_background: list[str] = []
     for fact, layer in heritage.effective_facts(view, state.id):
+        # rendered: a linked fact reads as written, never as `[[thing:...]]`
+        text = view.render(fact.text)
         if layer.depth == 0:
             if fact.category in own_categories:
-                facts.append(fact.text)
+                facts.append(text)
         elif fact.category in by_kind.get(layer.kind, ()):
-            facts.append(fact.text)
+            facts.append(text)
         elif fact.category in exclude_by_kind.get(layer.kind, ()):
             continue
         else:
-            inherited_background.append(fact.text)
+            inherited_background.append(text)
     return facts, inherited_background
 
 
@@ -329,7 +331,7 @@ async def generate_section(
         world.calendar,
         state.kind,
         section,
-        [(fact.category, fact.text) for fact in state.facts],
+        [(fact.category, view.render(fact.text)) for fact in state.facts],
         state.fields,
         _heritage_line(view, thing_id) + inherited_background,
     )

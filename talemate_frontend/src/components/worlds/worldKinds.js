@@ -2,7 +2,7 @@
 // `talemate.world.kinds.KINDS`). Cultures are listed but made through the
 // culture skill, so they can't be opened or created here. Races and mixes
 // (`nested`) aren't listed at the top level: they're reached from their
-// species page.
+// species page. The Stubs tab (`STUBS_TAB`) sits below the kinds.
 
 const HERITAGE_CATEGORIES = ['origin', 'physical', 'instinct', 'variation', 'general'];
 
@@ -45,6 +45,20 @@ export const WORLD_KINDS = [
         categories: ['description', 'history', 'law', 'general'],
     },
     {
+        kind: 'event',
+        label: 'Events',
+        singular: 'event',
+        icon: 'mdi-calendar-star',
+        categories: ['summary', 'consequence', 'general'],
+    },
+    {
+        kind: 'item',
+        label: 'Items',
+        singular: 'item',
+        icon: 'mdi-sword',
+        categories: ['description', 'history', 'power', 'general'],
+    },
+    {
         kind: 'lore',
         label: 'Lore',
         singular: 'lore entry',
@@ -66,6 +80,31 @@ export const LISTED_KINDS = WORLD_KINDS.filter((k) => !k.viaSkill).map((k) => k.
 
 // the kinds the World tab lists (and the create box offers)
 export const TOP_KINDS = WORLD_KINDS.filter((k) => !k.nested);
+
+// the World tab's list of stubs, below the kinds
+export const STUBS_TAB = { kind: 'stubs', label: 'Stubs', icon: 'mdi-help-circle-outline' };
+
+// the kinds a stub's kind can be changed to: races and mixes are made from
+// their species page, so a stub isn't guessed as one
+export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'culture'];
+
+// Why a stub of `kind` can't be expanded here (null when it can): a culture
+// waits for the cultures slice; a race or mix needs its species (or
+// parents), which only its species page's create box gives it.
+const NO_EXPAND_NOTES = {
+    culture: 'Cultures arrive in the next slice',
+    race: 'Make it from its species page',
+    mix: 'Make it from its species page',
+};
+
+export function expandNote(kind) {
+    return NO_EXPAND_NOTES[kind] || null;
+}
+
+// Whether a stub of `kind` can be expanded from its card or the Stubs tab.
+export function canExpand(kind) {
+    return !expandNote(kind);
+}
 
 // the kinds a character's heritage can be (`talemate.world.kinds.HERITAGE_KINDS`)
 export const HERITAGE_KINDS = ['species', 'race', 'mix'];

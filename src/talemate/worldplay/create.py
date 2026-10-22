@@ -44,6 +44,17 @@ numbers. A `0` (the example's placeholder), a word or a reversed range is
 dropped, never raised, and so is a race's number that only repeats its
 species' resolved one (it would pin what's inherited anyway).
 
+Names follow the connections probe
+(docs/superpowers/probes/2026-10-21-connections.md). The reply also gives
+the thing's own other names (`"aka"`) and the proper names its facts use
+(`"names"`); `parse_names` reads both, from a cut-off reply too, and
+neither list's entries are ever read as facts. The listed names the facts
+really use and the world doesn't have yet become stubs on accept
+(`_new_names`); capitalised phrases the reply didn't list stay
+suggestions. A stub is expanded under its own id, with what its mentions
+say as context, and the entries the owner matched in the prompt are shown
+as "Named in this prompt".
+
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -55,6 +66,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from typing import Any, NamedTuple
 
 import structlog
@@ -64,11 +76,30 @@ from talemate.prompts import Prompt
 from talemate.world import heritage
 from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import HERITAGE_KINDS, get_kind, validate_field
+from talemate.world.kinds import AKA_TAGS, HERITAGE_KINDS, get_kind, validate_field
+from talemate.world.refs import parse_refs
+from talemate.world.names import (
+    ARTICLES,
+    everyday_name,
+    find_names,
+    unknown_proper_phrases,
+)
 from talemate.world.store import Source, World
 from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.links import (
+    FALLBACK_KIND,
+    NewName,
+    clean_aka,
+    existing_id,
+    is_new,
+    link_text,
+    make_stubs,
+    name_key,
+    name_keys,
+)
+from talemate.worldplay.mentions import entry_label, gather_mentions, mention_context
 
 log = structlog.get_logger("talemate.worldplay.create")
 
@@ -80,6 +111,21 @@ CREATE_KINDS: tuple[str, ...] = (
     "species",
     "race",
     "mix",
+    "event",
+    "item",
+)
+
+# the kinds the reply's "names" may give a name (the prompt lists them);
+# an entry with any other kind ("title") is dropped, one with none is lore
+NAME_KINDS: tuple[str, ...] = (
+    "character",
+    "place",
+    "species",
+    "race",
+    "culture",
+    "event",
+    "item",
+    "lore",
 )
 
 # how many facts the prompt asks for, and the most a preview keeps
@@ -112,7 +158,13 @@ _NOT_CATEGORY_KEYS = {
     "unit",
     "min",
     "max",
+    "aka",
+    "names",
 }
+
+# keys only an `aka` entry or a "names" entry has: an object with one is
+# never a fact, even when a cut-off reply's fallback finds it on its own
+_NAME_ENTRY_KEYS = {"tag", "everyday", "kind"}
 
 # words that say nothing about a fact's topic, left out of the overlap a
 # top-level "no_longer_true" label is attached by
@@ -123,6 +175,10 @@ _STOP_WORDS = frozenset(
 _WORD_RE = re.compile(r"[a-z]+")
 
 _NAME_RE = re.compile(r'"name"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_AKA_LIST_RE = re.compile(r'"aka"\s*:\s*\[')
+_NAMES_LIST_RE = re.compile(r'"names"\s*:\s*\[')
+# the format example's placeholder, copied as is
+_PLACEHOLDER = "..."
 _AGE_RE = re.compile(r'"age"\s*:\s*"?(\d{1,4})')
 _YEAR_RE = re.compile(r"^\s*(\d{1,4})\s*([^\d\s][^\d]*)?\s*$")
 
@@ -158,6 +214,25 @@ class CreatePreview(BaseModel):
     prose: dict[str, str]
     # what the new thing will inherit (empty for a kind with no heritage)
     inherited: list[PreviewInherited] = Field(default_factory=list)
+    # its own other names, `aka` entries, for the owner to check (the
+    # everyday pick is wrong often enough to need a glance)
+    aka: list[dict] = Field(default_factory=list)
+    # the names its facts use that aren't in the world yet: stubs on accept
+    new_names: list[NewName] = Field(default_factory=list)
+    # the stub this preview expands, if any
+    stub_id: str | None = None
+    # a live stub of the same kind and name, offered as "fill the stub
+    # instead" (only when no `stub_id` was given)
+    matching_stub_id: str | None = None
+    # the context the model was given, as `(heading, facts)` groups to show
+    # the owner: the stub's mentions, then the entries the prompt names
+    context: list[tuple[str, list[str]]] = Field(default_factory=list)
+    # the owner's picks for names written in the prompt (written name ->
+    # thing id); they win when the facts are linked too
+    picks: dict[str, str] = Field(default_factory=dict)
+    # names written in the prompt the owner treats as new: never linked to
+    # the world's thing of that name, and a stub of their own if listed
+    treated_as_new: list[str] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -382,7 +457,9 @@ def parse_create_reply(
             if isinstance(obj.get("age"), (int, str)) and str(obj["age"]).isdigit():
                 age = int(obj["age"])
             fact_objects.extend(f for f in obj["facts"] if isinstance(f, dict))
-        else:
+        elif not _NAME_ENTRY_KEYS & obj.keys():
+            # an `aka` or "names" entry a broken wrapper left on its own
+            # (the connections probe read one as a fact "common") isn't one
             fact_objects.append(obj)
 
     # a truncated reply never closes its wrapper object; its name and age
@@ -419,6 +496,225 @@ def parse_create_reply(
     # the format example's placeholder name, copied as is, is no name
     name = name.strip() if name and name.strip(" .") else None
     return name, age, facts[:MAX_FACTS]
+
+
+def _aka_entries(value: object) -> list[dict[str, Any]]:
+    """Other names as `aka` holds them, from a reply's list of `{"name",
+    "tag", "everyday"}` objects or plain strings: a tag other than proper
+    or common ("former name") becomes proper, and only the first common
+    name marked everyday stays everyday. The placeholder "..." and empty
+    names are dropped."""
+
+    entries: list[dict[str, Any]] = []
+    everyday = False
+    for item in value if isinstance(value, list) else []:
+        raw = item.get("name") if isinstance(item, dict) else item
+        if not isinstance(raw, str):
+            continue
+        name = " ".join(raw.split())
+        if not name.strip(" ."):
+            continue
+        tag = item.get("tag") if isinstance(item, dict) else None
+        tag = tag if tag in AKA_TAGS else "proper"
+        is_everyday = (
+            isinstance(item, dict)
+            and item.get("everyday") is True
+            and tag == "common"
+            and not everyday
+        )
+        everyday = everyday or is_everyday
+        entries.append({"name": name, "tag": tag, "everyday": is_everyday})
+    return entries
+
+
+def _list_at(text: str, match: re.Match[str] | None) -> list[Any] | None:
+    """The JSON list that starts at `match`'s `[`, or, when it was cut off,
+    the complete objects inside it. `None` without a match."""
+
+    if match is None:
+        return None
+    start = match.end() - 1
+    try:
+        value, _end = json.JSONDecoder(strict=False).raw_decode(text, start)
+    except json.JSONDecodeError:
+        return json_objects(text[start:])
+    return value if isinstance(value, list) else None
+
+
+def parse_names(reply: str) -> tuple[list[dict[str, Any]], list[NewName]]:
+    """`(aka, names)` from a `world/create-thing` reply: the thing's own
+    other names, and the proper names its facts use, as the reply gives
+    them (`NewName`, kind as written; `_new_names` decides which count).
+
+    Both lists are decoded on their own when the wrapper object broke, so
+    a cut-off reply keeps them: the thing's `aka` from before the facts,
+    and every complete entry of the last `"names"` list."""
+
+    wrapper = _reply_wrapper(reply)
+    if wrapper is not None:
+        raw_aka: object = wrapper.get("aka")
+        raw_names: object = wrapper.get("names")
+    else:
+        head = reply.split('"facts"', 1)[0]
+        raw_aka = _list_at(head, _AKA_LIST_RE.search(head))
+        last = None
+        for last in _NAMES_LIST_RE.finditer(reply):
+            pass
+        raw_names = _list_at(reply, last)
+
+    names: list[NewName] = []
+    for item in raw_names if isinstance(raw_names, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        if "tag" in item or "everyday" in item:
+            # an `aka` object of an entry that was cut off, which the
+            # fallback found on its own: no name of its own
+            continue
+        name = " ".join(item["name"].split())
+        if not name.strip(" ."):
+            continue
+        kind = item.get("kind")
+        names.append(
+            NewName(
+                name=name,
+                kind=kind.strip().lower() if isinstance(kind, str) else "",
+                aka=_aka_entries(item.get("aka")),
+            )
+        )
+    return _aka_entries(raw_aka), names
+
+
+# --- the names the facts use -------------------------------------------------
+
+
+def _written_in(texts: list[str], name: str) -> str | None:
+    """How `texts` write `name`, if they do: a whole-word, case-insensitive
+    occurrence written with a capital (past a leading article), as
+    written."""
+
+    words = name.split()
+    pattern = re.compile(
+        r"(?<![\w-])" + r"\s+".join(map(re.escape, words)) + r"(?![\w-])",
+        re.IGNORECASE,
+    )
+    for text in texts:
+        for hit in pattern.finditer(text):
+            written = " ".join(hit.group(0).split())
+            first = written.split()[0]
+            rest = written.split()[1:]
+            if first[:1].isupper() or (
+                first.casefold() in ARTICLES and rest and rest[0][:1].isupper()
+            ):
+                return written
+    return None
+
+
+def _known_in_view(view: WorldView, name: str, kind: str) -> bool:
+    """Whether `name` already means a thing in `view` -- by `existing_id`,
+    or as a whole name `find_names` matches (a character's first name) --
+    or is wholly a suggested part of a thing's name ("Moscavia" of the
+    Tsardom of Moscavia), which stays a suggestion. A species, race or mix
+    name held by just one other's name isn't: `make_stubs` maps it to that
+    one, so the facts link it."""
+
+    if existing_id(view, name, kind) is not None:
+        return True
+    whole = [
+        match
+        for match in find_names(view, name)
+        if (match.start, match.end) == (0, len(name))
+    ]
+    if any(not match.suggested for match in whole):
+        return True
+    return bool(whole) and existing_id(view, name, kind, held=True) is None
+
+
+def _written_forms(
+    view: WorldView, texts: list[str], name: str, own: set[str]
+) -> list[str] | None:
+    """The forms the facts write a listed name in, other than the name
+    itself: `[]` when the name (or the name without its leading article,
+    then `["Night of Feathers"]`) is there as it is; else the longest
+    capitalised phrase of the facts that the name holds as whole words
+    and that's no name yet (`unknown_proper_phrases`: "Alexei III the
+    Feathery" for "Tsar Alexei III the Feathery"). `None` when the facts
+    don't use it at all (a name echoed from context, a lowercase coined
+    word)."""
+
+    words = name.split()
+    tries = [name]
+    if len(words) > 1 and words[0].casefold() in ARTICLES:
+        tries.append(" ".join(words[1:]))
+    for i, attempt in enumerate(tries):
+        if _written_in(texts, attempt) is not None:
+            return [] if i == 0 else [attempt]
+
+    key = name_key(name)
+    parts = [
+        phrase.text
+        for text in texts
+        for phrase in unknown_proper_phrases(view, text)
+        if name_key(phrase.text) not in own
+        and re.search(
+            r"(?<![\w-])" + re.escape(name_key(phrase.text)) + r"(?![\w-])", key
+        )
+    ]
+    if not parts:
+        return None
+    return [max(parts, key=len)]
+
+
+def _new_names(
+    view: WorldView,
+    listed: list[NewName],
+    texts: list[str],
+    own_names: list[str],
+    picked: Sequence[str] = (),
+    as_new: Sequence[str] = (),
+) -> list[NewName]:
+    """The reply's listed names that become stubs on accept, by the
+    connections probe's merge rule
+    (docs/superpowers/probes/2026-10-21-connections.md, recommendation 2):
+
+    - a name with a kind outside `NAME_KINDS` ("title") is dropped; one
+      with no kind is lore;
+    - the thing's own names (`own_names`: its name and other names) are
+      dropped;
+    - a name the facts (`texts`) don't use is dropped; one they write only
+      in part keeps that part as a `written` form;
+    - a name already in the world (`existing_id`, or a whole `find_names`
+      match) is dropped: linking finds it. A name the owner treats as new
+      (`as_new`, by `links.is_new`) is kept all the same;
+    - a name the owner picked an entry for in the prompt (`picked`, the
+      picks' written names), as listed or in a form the facts write it
+      in, is dropped: the owner's pick wins, and linking uses it;
+    - a name listed twice, or once in full and once as the form the facts
+      write it in, is one entry (the first listed).
+
+    Capitalised phrases the reply didn't list stay suggestions, never
+    stubs."""
+
+    own = {name_key(name) for name in own_names if name.strip()}
+    picks = {name_key(written) for written in picked if written.strip()}
+    kept: list[NewName] = []
+    # the names, and written forms, of the names kept so far
+    claimed: set[str] = set()
+    for item in listed:
+        kind = item.kind or FALLBACK_KIND
+        key = name_key(item.name)
+        if not key or kind not in NAME_KINDS or key in own | claimed | picks:
+            continue
+        if not is_new(item.name, as_new) and _known_in_view(view, item.name, kind):
+            continue
+        forms = _written_forms(view, texts, item.name, own)
+        if forms is None:
+            log.debug("create.name_unused", name=item.name)
+            continue
+        if any(name_key(form) in claimed | picks for form in forms):
+            continue
+        kept.append(NewName(name=item.name, kind=kind, aka=item.aka, written=forms))
+        claimed |= {key, *map(name_key, forms)}
+    return kept
 
 
 # --- what the new thing inherits ---------------------------------------------
@@ -473,7 +769,8 @@ def _labelled_facts(view: WorldView, sources: list[str]) -> list[list[_Inherited
                     source_id=layer.thing_id,
                     source_kind=layer.kind,
                     category=fact.category,
-                    text=fact.text,
+                    # rendered: a linked fact reads as written
+                    text=view.render(fact.text),
                 )
             )
         groups.append(group)
@@ -612,6 +909,12 @@ def _attach_top_level(
 # --- preview and accept ------------------------------------------------------
 
 
+# fields every kind has that never reach a prompt as a raw value: other
+# names are shown as "(usually called ...)", and the stub marker is
+# bookkeeping
+_UNSHOWN_FIELDS = {"aka", "stub"}
+
+
 def _known_fields(
     world: World, fields: dict[str, Any], now: WorldDate
 ) -> list[tuple[str, str]]:
@@ -621,18 +924,34 @@ def _known_fields(
     view = world.view()
     lines: list[tuple[str, str]] = []
     for field, value in fields.items():
+        if field in _UNSHOWN_FIELDS:
+            continue
         if field == "born":
             born = value if isinstance(value, WorldDate) else WorldDate(**value)
             age = now.to_datetime().year - born.to_datetime().year
             lines.append(("born", f"{calendar.format(born)} (age {age} now)"))
+        elif field in ("when", "until"):
+            date = value if isinstance(value, WorldDate) else WorldDate(**value)
+            lines.append((field, calendar.format(date)))
         elif field in ("parent", "culture", "owner", "place"):
             lines.append((field, view.name_of(value) or str(value)))
+        elif field == "cultures":
+            names = [view.name_of(share["thing_id"]) or "" for share in value]
+            lines.append((field, ", ".join(name for name in names if name)))
         elif field in ("heritage", "species", "parents"):
             # the lineage is named in the prompt's own heritage lines
             continue
         else:
             lines.append((field, str(value)))
     return lines
+
+
+def _mention_lead(name: str, kind: str, category: str, everyday: str | None) -> str:
+    """A mentioning fact's lead in the prompt: "Owl-folk (species,
+    origin)", or "Owl-folk (species, origin; usually called Owls)"."""
+
+    usually = f"; usually called {everyday}" if everyday else ""
+    return f"{name} ({kind}, {category}{usually})"
 
 
 def _fallback_name(prompt: str) -> str:
@@ -645,18 +964,141 @@ def _fallback_name(prompt: str) -> str:
     return text[:60].rsplit(" ", 1)[0]
 
 
+def _live_stub(view: WorldView, stub_id: str) -> Any:
+    """The stub `stub_id` (its `ThingState`), or `ValueError` when it was
+    deleted or is a full entry."""
+
+    state = view.thing(stub_id)
+    if state is None:
+        raise ValueError(f"the stub was deleted: {stub_id}")
+    if not state.is_stub:
+        raise ValueError(f"not a stub: {stub_id}")
+    return state
+
+
+def _named_in_prompt(
+    view: WorldView, picks: dict[str, str], skip: str | None
+) -> list[tuple[str, str, list[str]]]:
+    """`(written, label, facts)` for each entry the owner picked for a name
+    in the prompt (but `skip`, the stub being expanded): every fact it has
+    at the view's date, rendered, as scene setup shows them, in its kind's
+    category order. `ValueError` for a pick that's no thing."""
+
+    named: list[tuple[str, str, list[str]]] = []
+    for written, thing_id in picks.items():
+        state = view.thing(thing_id)
+        if state is None:
+            raise ValueError(f"no such thing: {thing_id}")
+        if thing_id == skip:
+            continue
+        label = entry_label(
+            view.name_of(thing_id) or "", state.kind, everyday_name(state)
+        )
+        rank = {c: i for i, c in enumerate(get_kind(state.kind).categories)}
+        facts = sorted(state.facts, key=lambda fact: rank.get(fact.category, len(rank)))
+        named.append((written, label, [view.render(f.text) for f in facts]))
+    return named
+
+
+def _found_in_prompt(
+    view: WorldView,
+    prompt: str,
+    picks: dict[str, str],
+    as_new: Sequence[str],
+    in_context: set[str],
+) -> dict[str, str]:
+    """The names in `prompt` the owner's `picks` don't cover, each to its
+    best match (`find_names`): a Create sent before the screen's matches
+    came back still gets them as context. A suggestion, a stub (it has
+    nothing to say yet), a name treated as new (`as_new`), and a thing the
+    prompt is given anyway (`in_context`: one picked, the stub, what
+    mentions it, what's inherited) aren't found."""
+
+    picked = {name_key(written) for written in picks}
+    found: dict[str, str] = {}
+    for match in find_names(view, prompt):
+        key = name_key(match.text)
+        thing_id = match.candidates[0].id
+        if (
+            match.suggested
+            or match.candidates[0].stub
+            or key in picked
+            or thing_id in in_context
+            or is_new(match.text, as_new)
+        ):
+            continue
+        picked.add(key)
+        in_context.add(thing_id)
+        found[match.text] = thing_id
+    return found
+
+
+def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
+    """A live stub of `kind` whose name or other name is `name` (ignoring
+    case and a leading article), if any."""
+
+    key = name_key(name)
+    for state in view.things(kind):
+        if not state.is_stub:
+            continue
+        names = [view.name_of(state.id) or ""]
+        names += [entry["name"] for entry in _aka_entries(state.fields.get("aka"))]
+        if key in {name_key(other) for other in names}:
+            return state.id
+    return None
+
+
 async def preview_thing(
-    world: World, kind: str, prompt: str, fields: dict[str, Any], client: Any
+    world: World,
+    kind: str,
+    prompt: str,
+    fields: dict[str, Any],
+    client: Any,
+    *,
+    stub_id: str | None = None,
+    picks: dict[str, str] | None = None,
+    new_names: Sequence[str] = (),
 ) -> CreatePreview:
     """Create a `kind` thing from `prompt` -- facts, then prose -- without
     writing anything to the world. `fields` are the owner's picks (`name`,
-    `born`, a place's `parent`, a race's `species`, ...), kept as given.
+    `born`, a place's `parent`, a race's `species`, ...), kept as given;
+    an `aka` among them is the preview's other names, and a `stub` marker
+    is dropped.
 
     A mix needs its two `parents`, and only a mix may have an empty
     `prompt`: two parents are enough to draft one from. A race needs its
     `species`. A character with a `heritage`, a race and a mix are shown
-    what they inherit, and may mark inherited facts as overridden."""
+    what they inherit, and may mark inherited facts as overridden.
 
+    Context, from the connections probe
+    (docs/superpowers/probes/2026-10-21-connections.md):
+
+    - with a `stub_id`, the stub is expanded: its kind and name are used
+      (`kind` is ignored; a `name` in `fields` still wins), and the prompt
+      gets what its mentions say (`mentions.gather_mentions`). A deleted
+      stub, or a full entry, is a `ValueError`;
+    - `picks` maps a name written in the prompt to the entry the owner
+      matched it to; each entry's facts go in a "Named in this prompt"
+      block, which keeps the model from inventing a duplicate. A name in
+      the prompt the picks don't cover is matched here (`find_names`);
+    - an entry with an everyday name is shown "Name (kind, usually called
+      X)";
+    - `new_names` are names written in the prompt the owner treats as new
+      ("treat as new"): a pick for one is dropped, so it's no context, and
+      accept never links it to the world's thing of that name; listed by
+      the model, it becomes a stub of its own.
+
+    The reply's `aka` becomes the preview's other names and its `names`
+    the `new_names` accept makes stubs for (`_new_names`). Without a
+    `stub_id`, a live stub of the same kind and name is offered as
+    `matching_stub_id`."""
+
+    view = world.view()
+    stub = _live_stub(view, stub_id) if stub_id is not None else None
+    if stub is not None:
+        kind = stub.kind
+        if kind not in CREATE_KINDS:
+            raise ValueError(f"a {kind} stub can't be expanded yet")
     if kind not in CREATE_KINDS:
         raise ValueError(f"can't create a {kind!r} from a prompt")
     prose_gen.require_client(client)
@@ -664,6 +1106,16 @@ async def preview_thing(
     fields = dict(fields or {})
     for field, value in fields.items():
         validate_field(kind_spec, field, value)
+    owner_aka = fields.pop("aka", None)
+    fields.pop("stub", None)
+    if stub is not None and not fields.get("name"):
+        fields["name"] = view.name_of(stub.id) or ""
+    treated_as_new = [name for name in new_names if name.strip()]
+    picks = {
+        written: thing_id
+        for written, thing_id in (picks or {}).items()
+        if not is_new(written, treated_as_new)
+    }
     if kind == "mix" and not fields.get("parents"):
         raise ValueError("a mix needs two parents")
     if kind == "race" and not fields.get("species"):
@@ -671,11 +1123,21 @@ async def preview_thing(
     if kind != "mix" and not prompt.strip():
         raise ValueError(f"a {kind} needs a prompt")
 
-    view = world.view()
     sources = _lineage_sources(kind, fields)
     for source_id in sources:
         if view.thing(source_id) is None:
             raise ValueError(f"no such thing to inherit from: {source_id}")
+    gathered = gather_mentions(view, stub.id) if stub is not None else None
+    # what the prompt is given anyway: the stub, what mentions it, and
+    # what the new thing inherits from
+    in_context = {
+        *picks.values(),
+        *([stub.id] if stub is not None else []),
+        *(m.owner_id for m in (gathered.mentioned if gathered is not None else [])),
+        *(layer.thing_id for src in sources for layer in heritage.lineage(view, src)),
+    }
+    picks.update(_found_in_prompt(view, prompt, picks, treated_as_new, in_context))
+    named = _named_in_prompt(view, picks, stub_id)
     groups = _labelled_facts(view, sources)
     rows = [row for group in groups for row in group]
     labels = {row.label: row.fact_id for row in rows}
@@ -701,7 +1163,30 @@ async def preview_thing(
         "max_facts": MAX_FACTS,
         "inherited": [(r.label, r.source, r.category, r.text) for r in rows],
         "heritage_label": "",
+        "mentions": [],
+        "about": [],
+        "named": named,
     }
+    context: list[tuple[str, list[str]]] = []
+    if stub is not None and gathered is not None:
+        template_vars["mentions"] = [
+            (
+                _mention_lead(m.owner_name, m.owner_kind, m.category, m.owner_everyday),
+                m.text,
+            )
+            for m in gathered.mentioned
+        ]
+        template_vars["about"] = [
+            (entry_label(a.name, a.kind, a.everyday), a.facts)
+            for a in gathered.about
+            # an entry whose only facts mention the stub has nothing to add
+            if a.facts
+        ]
+        context += mention_context(view, stub.id)
+    context += [
+        (f'Named in this prompt: "{written}" means {label}', facts)
+        for written, label, facts in named
+    ]
     if kind == "character" and sources:
         template_vars["heritage_label"] = heritage_label(view, sources[0])
         template_vars["heritage_numbers"] = numbers_line(
@@ -760,6 +1245,25 @@ async def preview_thing(
         default_name = f"Mix of {' and '.join(parent_names)}"
     name = fields.get("name") or name or default_name
     fields.pop("name", None)
+
+    reply_aka, listed = parse_names(reply)
+    if owner_aka is not None:
+        aka_entries = list(owner_aka)
+    else:
+        existing = _aka_entries(stub.fields.get("aka")) if stub is not None else []
+        aka_entries = [*existing, *reply_aka]
+    aka = clean_aka(aka_entries, name, name_keys(view, skip=stub_id))
+    own_names = [name, *(str(entry["name"]) for entry in aka)]
+    if stub is not None:
+        own_names.append(view.name_of(stub.id) or "")
+    stub_names = _new_names(
+        view,
+        listed,
+        [f.text for f in facts],
+        own_names,
+        list(picks),
+        treated_as_new,
+    )
     if kind == "character" and "born" not in fields and age is not None:
         # an age older than the calendar itself is clamped to year 1
         fields["born"] = WorldDate.of(max(1, now_year - age))
@@ -768,7 +1272,14 @@ async def preview_thing(
         view, calendar, kind, name, facts, fields, rows, sources, client
     )
 
-    log.info("create.preview", kind=kind, name=name, facts=len(facts))
+    log.info(
+        "create.preview",
+        kind=kind,
+        name=name,
+        facts=len(facts),
+        new_names=len(stub_names),
+        stub_id=stub_id,
+    )
     return CreatePreview(
         kind=kind,
         prompt=prompt,
@@ -777,6 +1288,13 @@ async def preview_thing(
         facts=facts,
         prose=prose,
         inherited=_preview_rows(rows),
+        aka=aka,
+        new_names=stub_names,
+        stub_id=stub_id,
+        matching_stub_id=None if stub is not None else matching_stub(view, kind, name),
+        context=context,
+        picks=picks,
+        treated_as_new=treated_as_new,
     )
 
 
@@ -858,23 +1376,50 @@ async def _preview_prose(
     return prose
 
 
-def accept_preview(world: World, preview: CreatePreview) -> str:
-    """Write `preview` as a new thing in one revision -- the thing, its
-    fields and its facts -- then cache its prose for the current stretch.
-    Returns the new thing id."""
+def accept_preview(
+    world: World, preview: CreatePreview, *, into_stub: str | None = None
+) -> str:
+    """Write `preview` in one revision, then cache its prose for the
+    current stretch. Returns the thing id.
 
-    with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
-        thing_id = rev.create_thing(
-            preview.kind, {**preview.fields, "name": preview.name}
+    - The preview's `new_names` become stubs (`links.make_stubs`, which
+      reuses a name the world has by then), and every fact's text is
+      linked (`links.link_text`, with the preview's picks), keeping its
+      words; a thing's own names never link to itself, and a name treated
+      as new never links to (or is made a stub by reusing) the world's
+      thing of that name. A listed name no fact ends up linking to makes
+      no stub: there'd be nothing to find it by.
+    - Filling a stub -- the preview's `stub_id`, or `into_stub` ("fill the
+      stub instead") -- writes into that thing and keeps its id: its kind
+      (`into_stub` may have another), name, fields and other names are set,
+      the facts added, and the stub marker (ignored or not) removed, so
+      every mention becomes a normal link. Filled under another name, it
+      keeps its old one as a common other name. A deleted stub, a full
+      entry, or an `into_stub` other than the preview's own `stub_id`, is
+      refused with `ValueError` before anything is written.
+    - Otherwise a new thing is created."""
+
+    if into_stub is not None and preview.stub_id not in (None, into_stub):
+        raise ValueError(
+            f"the preview expands the stub {preview.stub_id}, not {into_stub}"
         )
-        for fact in preview.facts:
-            rev.add_fact(
-                thing_id,
-                fact.category,
-                fact.text,
-                valid_from=fact.since,
-                overrides=fact.overrides,
-            )
+    target = preview.stub_id or into_stub
+    view = world.view()
+    stub = _live_stub(view, target) if target is not None else None
+
+    new_names = list(preview.new_names)
+    while True:
+        try:
+            thing_id, made = _write_preview(world, view, preview, stub, new_names)
+            break
+        except _UnlinkedNames as unlinked:
+            # written again without them, in a fresh revision: the first
+            # was rolled back whole
+            log.debug("create.unlinked_names", names=unlinked.names)
+            kept = [n for n in new_names if n.name not in unlinked.names]
+            if len(kept) == len(new_names):
+                raise RuntimeError(f"unlinked stubs with no name: {unlinked}")
+            new_names = kept
 
     # the prose was written from every fact, which is how the thing reads
     # at the open, "now" end of its timeline
@@ -883,5 +1428,108 @@ def accept_preview(world: World, preview: CreatePreview) -> str:
     for section in prose_gen.sections_for(preview.kind):
         if section in preview.prose:
             cache.put(thing_id, section, start, end, preview.prose[section])
-    log.info("create.accept", kind=preview.kind, thing_id=thing_id)
+    log.info(
+        "create.accept",
+        kind=preview.kind,
+        thing_id=thing_id,
+        stubs=len(set(made.values())),
+        filled_stub=stub is not None,
+    )
     return thing_id
+
+
+class _UnlinkedNames(Exception):
+    """New names whose stubs no fact linked to: the write is rolled back
+    and made again without them."""
+
+    def __init__(self, names: list[str]) -> None:
+        super().__init__(", ".join(names))
+        self.names = names
+
+
+def _write_preview(
+    world: World,
+    view: WorldView,
+    preview: CreatePreview,
+    stub: Any,
+    new_names: list[NewName],
+) -> tuple[str, dict[str, str]]:
+    """`accept_preview`'s one revision, making stubs for `new_names`.
+    Returns the thing's id and `make_stubs`' mapping. A stub made here that
+    no fact ends up linking to (the name was written in a way linking
+    doesn't take, as "al-Qadir" in lowercase) would be an orphan:
+    `_UnlinkedNames` rolls the revision back, naming them."""
+
+    with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
+        made = make_stubs(rev, view, new_names, fresh=preview.treated_as_new)
+        if stub is None:
+            fields: dict[str, Any] = {**preview.fields, "name": preview.name}
+            if preview.aka:
+                fields["aka"] = preview.aka
+            thing_id = rev.create_thing(preview.kind, fields)
+        else:
+            thing_id = stub.id
+            if stub.kind != preview.kind:
+                rev.change_stub_kind(thing_id, preview.kind)
+            if view.name_of(thing_id) != preview.name:
+                rev.set_field(thing_id, "name", preview.name, None)
+            for field, value in preview.fields.items():
+                rev.set_field(thing_id, field, value, None)
+            aka = preview.aka
+            if stub.id != preview.stub_id:
+                # filling a stub the preview wasn't made from keeps the
+                # stub's own other names too
+                aka = clean_aka(
+                    [*preview.aka, *_aka_entries(stub.fields.get("aka"))],
+                    preview.name,
+                    name_keys(view, skip=thing_id),
+                )
+            old_name = view.name_of(thing_id) or ""
+            if name_key(old_name) != name_key(preview.name):
+                # filled under another name: the old one, which text still
+                # calls it by, is kept as a common other name
+                aka = clean_aka(
+                    [*aka, {"name": old_name, "tag": "common", "everyday": False}],
+                    preview.name,
+                    name_keys(view, skip=thing_id),
+                )
+            if aka or "aka" in stub.fields:
+                rev.set_field(thing_id, "aka", aka, None)
+            rev.remove_field_value(thing_id, "stub", None)
+
+        # the revision's own view: the stubs just made and the thing's own
+        # names are in it, so a name meaning the thing itself stays plain
+        linking = world.view()
+        linked: set[str] = set()
+        for fact in preview.facts:
+            text = link_text(
+                linking,
+                fact.text,
+                picks=preview.picks,
+                new_names=made,
+                owner=thing_id,
+                as_new=preview.treated_as_new,
+            )
+            linked.update(parse_refs(text))
+            rev.add_fact(
+                thing_id,
+                fact.category,
+                text,
+                valid_from=fact.since,
+                overrides=fact.overrides,
+            )
+
+        orphans = {
+            stub_id
+            for stub_id in made.values()
+            if view.thing(stub_id) is None and stub_id not in linked
+        }
+        if orphans:
+            raise _UnlinkedNames(
+                [
+                    n.name
+                    for n in new_names
+                    if made.get(" ".join(n.name.split())) in orphans
+                ]
+            )
+    return thing_id, made

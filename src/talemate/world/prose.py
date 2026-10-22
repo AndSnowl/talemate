@@ -8,7 +8,9 @@ field value or fact start/end, as `World.timeline` reports them. Like
 `World.revision`. `rev` here is the revision an entry was generated from
 (`World.head_rev()` at the time it was cached, unless the caller says
 otherwise), used only to tell whether it's gone stale: a row visible in the
-stretch that was added or retired after `rev` makes the entry stale.
+stretch that was added or retired after `rev` makes the entry stale --
+unless prose can't show it: other names (`aka`), the stub marker, and a
+fact edit that only links or re-points words never do.
 
 `TimelineSource` is a `Protocol`, not `World` itself: this module only needs
 a thing's timeline and the current head revision, and spelling that
@@ -25,6 +27,7 @@ import structlog
 from pydantic import BaseModel
 
 from .dates import Precision, WorldDate
+from .refs import REF_PATTERN
 from .timeline import TimelineEntry
 
 log = structlog.get_logger("talemate.world.prose")
@@ -34,6 +37,27 @@ log = structlog.get_logger("talemate.world.prose")
 _FAR_FUTURE = 10**15
 # "-infinity", for an open (NULL) stretch start when comparing bounds
 _FAR_PAST = -_FAR_FUTURE
+
+# fields no prose reads: other names and the stub marker change what links
+# and how a thing is found, never what its prose says
+_UNRENDERED_FIELDS = ("aka", "stub")
+
+# a fact version as prose reads it: category, text with its links' shown
+# words, dates with their precisions, and what it overrides
+_FactKey = tuple[
+    str, str, int | None, str | None, int | None, str | None, tuple[str, ...]
+]
+
+
+def _shown_text(text: str) -> str:
+    """`text` as far as the text alone says how it renders: a reference
+    with shown words is just those words, whatever it points at; one shown
+    by its target's name is kept whole, target and all."""
+
+    return REF_PATTERN.sub(
+        lambda found: found.group(2) if found.group(2) is not None else found.group(0),
+        text,
+    )
 
 
 class TimelineSource(Protocol):
@@ -297,33 +321,90 @@ class ProseCache:
         starts_before_end = "(valid_from IS NULL OR ? IS NULL OR valid_from < ?)"
         ends_after_start = "(valid_until IS NULL OR ? IS NULL OR valid_until > ?)"
 
-        fact = self._conn.execute(
-            "SELECT 1 FROM facts WHERE thing_id = ? "
+        facts = self._conn.execute(
+            "SELECT DISTINCT fact_id FROM facts WHERE thing_id = ? "
             "AND (rev_added > ? OR rev_removed > ?) "
-            f"AND {starts_before_end} AND {ends_after_start} LIMIT 1",
+            f"AND {starts_before_end} AND {ends_after_start}",
             (thing_id, cached.rev, cached.rev, end, end, start, start),
-        ).fetchone()
-        if fact is not None:
+        ).fetchall()
+        if {row["fact_id"] for row in facts} - self._link_only_facts(thing_id, cached):
             return True
+        unrendered = ", ".join("?" for _ in _UNRENDERED_FIELDS)
         value = self._conn.execute(
             "SELECT 1 FROM field_values WHERE thing_id = ? "
             "AND (rev_added > ? OR rev_removed > ?) "
+            f"AND field NOT IN ({unrendered}) "
             f"AND {starts_before_end} LIMIT 1",
-            (thing_id, cached.rev, cached.rev, end, end),
+            (thing_id, cached.rev, cached.rev, *_UNRENDERED_FIELDS, end, end),
         ).fetchone()
         return value is not None
+
+    def _fact_keys(self, rows: list[sqlite3.Row]) -> list[_FactKey]:
+        keys: list[_FactKey] = []
+        for row in rows:
+            overrides = self._conn.execute(
+                "SELECT fact_id FROM fact_overrides WHERE row_id = ?",
+                (row["row_id"],),
+            ).fetchall()
+            keys.append(
+                (
+                    row["category"],
+                    _shown_text(row["text"]),
+                    row["valid_from"],
+                    row["from_precision"],
+                    row["valid_until"],
+                    row["until_precision"],
+                    tuple(sorted(o["fact_id"] for o in overrides)),
+                )
+            )
+        return sorted(keys, key=repr)
+
+    def _link_only_facts(self, thing_id: str, cached: CachedProse) -> set[str]:
+        """The facts of `thing_id` changed since `cached.rev` whose versions
+        read the same now as then (`_shown_text`): a word linked, or a link
+        that keeps its words re-pointed. Prose can't tell, so they don't
+        make it stale."""
+
+        changed = self._conn.execute(
+            "SELECT DISTINCT fact_id FROM facts WHERE thing_id = ? "
+            "AND (rev_added > ? OR rev_removed > ?)",
+            (thing_id, cached.rev, cached.rev),
+        ).fetchall()
+        same: set[str] = set()
+        for found in changed:
+            rows = self._conn.execute(
+                "SELECT * FROM facts WHERE fact_id = ?", (found["fact_id"],)
+            ).fetchall()
+            then = [
+                row
+                for row in rows
+                if row["rev_added"] <= cached.rev
+                and (row["rev_removed"] is None or row["rev_removed"] > cached.rev)
+            ]
+            now = [row for row in rows if row["rev_removed"] is None]
+            if self._fact_keys(then) == self._fact_keys(now):
+                same.add(found["fact_id"])
+        return same
 
     def _changed_since(self, thing_id: str, cached: CachedProse) -> bool:
         """Whether `thing_id` itself changed in the cached stretch since
         `cached.rev`, by the same two checks `stale` runs for the cached
         thing: a newer timeline change inside the stretch, or a row visible
-        in it added or retired since. An id that no longer exists counts as
-        changed."""
+        in it added or retired since. Changes no prose can show don't
+        count: other names (`aka`), the stub marker, and a fact edit that
+        only links or re-points words (`_link_only_facts`). An id that no
+        longer exists counts as changed."""
 
         try:
             entries = self._view_factory().timeline(thing_id)
         except KeyError:
             return True
+        link_only = self._link_only_facts(thing_id, cached)
+        entries = [
+            entry
+            for entry in entries
+            if entry.field not in _UNRENDERED_FIELDS and entry.fact_id not in link_only
+        ]
         newest = _newest_rev_in_stretch(
             entries, cached.stretch_start, cached.stretch_end
         )

@@ -355,7 +355,7 @@ def place_glossary(world: SeededWorld, entries: list[dict]) -> None:
 # Runs inside the copy: a fantasymate world (`talemate.world`) in the copy's
 # WORLDS_DIR, the folder the running app's `worlds` router lists.
 _FM_WORLD_SCRIPT = """
-import json, sys
+import json, re, sys
 
 from talemate.path import WORLDS_DIR
 from talemate.world.dates import WorldDate
@@ -364,6 +364,15 @@ from talemate.world.store import Source, World
 
 def _year(value):
     return WorldDate.of(value) if value is not None else None
+
+
+def _refs(text, ids):
+    # "[[@Name|shown]]" links an earlier thing by name, keeping "shown"
+    return re.sub(
+        r"\\[\\[@([^|\\]]+)\\|([^\\]]+)\\]\\]",
+        lambda m: "[[thing:" + ids[m.group(1)] + "|" + m.group(2) + "]]",
+        text,
+    )
 
 
 spec = json.loads(sys.argv[1])
@@ -376,6 +385,8 @@ try:
             fields = {"name": thing["name"], **(thing.get("fields") or {})}
             if thing.get("born") is not None:
                 fields["born"] = WorldDate.of(thing["born"])
+            if thing.get("stub") is not None:
+                fields["stub"] = {"ignored": thing["stub"] == "ignored"}
             # a link names an earlier thing (or a list of them)
             for field, names in (thing.get("links") or {}).items():
                 fields[field] = (
@@ -389,7 +400,7 @@ try:
                 rev.add_fact(
                     thing_id,
                     fact["category"],
-                    fact["text"],
+                    _refs(fact["text"], ids),
                     valid_from=_year(fact.get("since")),
                     valid_until=_year(fact.get("until")),
                 )
@@ -426,11 +437,13 @@ def seed_fm_world(
     """Create a fantasymate world (`talemate.world.World`) in the app's worlds folder.
 
     ``things`` items are ``{"kind", "name", "born": year|None, "fields":
-    {field: value}|None, "links": {field: name | [names]}|None, "facts":
-    [{"category", "text", "since": year|None, "until": year|None}]}``,
-    written in one revision, in order. A link names things listed before
-    it (e.g. a race's ``{"species": "Owl-folk"}``) and is written as their
-    ids. ``scenes`` items are ``{"name", "start": year,
+    {field: value}|None, "links": {field: name | [names]}|None, "stub":
+    "live"|"ignored"|None, "facts": [{"category", "text", "since":
+    year|None, "until": year|None}]}``, written in one revision, in order.
+    A link names things listed before it (e.g. a race's ``{"species":
+    "Owl-folk"}``) and is written as their ids; so does a reference in a
+    fact's text, written ``[[@Name|shown text]]``. ``stub`` makes the thing
+    a stub (ignored or not). ``scenes`` items are ``{"name", "start": year,
     "premise"="", "player": thing name|None}``, created in the world's
     scene store (with no messages).
     """

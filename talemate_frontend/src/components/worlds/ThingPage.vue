@@ -46,6 +46,7 @@
                 </v-menu>
 
                 <v-btn
+                    v-if="!thing.stub"
                     variant="outlined"
                     size="small"
                     prepend-icon="mdi-refresh"
@@ -71,6 +72,11 @@
         </div>
 
         <template v-else>
+            <div v-if="thing.stub" class="stub-panel pa-3 mb-4" data-testid="stub-panel">
+                <div class="text-subtitle-2 mb-1">A stub</div>
+                <StubCard :stub="stubOfPage" on-page />
+            </div>
+
             <div class="timeline-strip d-flex flex-wrap align-center ga-1 mb-4" data-testid="timeline-strip">
                 <v-chip
                     v-for="(point, index) in timelinePoints"
@@ -102,6 +108,7 @@
                         <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
                     <ThingNumbers v-if="isHeritage" />
+                    <ThingAka />
 
                     <div class="d-flex align-center mt-4 mb-1">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
@@ -117,7 +124,7 @@
                     <template v-for="fact in thing.facts" :key="fact.fact_id">
                         <div class="fact d-flex align-center ga-2" data-testid="fact-row">
                             <span class="flex-grow-1">
-                                {{ fact.rendered }}
+                                <LinkedText :segments="fact.segments" :text="fact.rendered" repoint :exclude="[thing.id]" @repoint="repointLink(fact, $event)" />
                                 <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
                             </span>
                             <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
@@ -141,10 +148,20 @@
                         @cancel="form = null"
                     />
                     <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
+                    <NamedStubs :stubs="thing.named_stubs || []" />
                 </v-col>
 
                 <v-col cols="12" md="6">
-                    <div v-for="(prose, section) in thing.prose" :key="section" class="mb-3">
+                    <div v-if="thing.stub" data-testid="stub-mentions-list">
+                        <div class="text-overline text-muted">Mentioned in</div>
+                        <div v-if="!thing.mentions.length" class="text-body-2 text-muted">Nothing mentions it now.</div>
+                        <div v-for="mention in thing.mentions" :key="mention.fact_id" class="fact" data-testid="stub-mention">
+                            <a class="thing-link" href="#" @click.prevent="worlds.openThing(mention.owner_id)">{{ mention.owner_name }}</a>
+                            <span class="text-caption text-muted"> ({{ mention.category }})</span>:
+                            {{ mention.text }}
+                        </div>
+                    </div>
+                    <div v-for="(prose, section) in proseShown" :key="section" class="mb-3">
                         <div class="d-flex align-center ga-2">
                             <span class="text-overline text-muted">{{ section }} (generated)</span>
                             <v-chip v-if="prose.stale" size="x-small" label variant="tonal" color="warning">out of date</v-chip>
@@ -162,7 +179,7 @@
                             >Regenerate</v-btn>
                         </div>
                         <div class="prose pa-3">
-                            <span v-if="prose.text">{{ prose.text }}</span>
+                            <LinkedText v-if="prose.text" :segments="(thing.prose_segments || {})[section]" :text="prose.text" />
                             <span v-else class="text-muted">Not written yet.</span>
                         </div>
                     </div>
@@ -190,7 +207,12 @@ import { useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { HERITAGE_KINDS, INHERITING_KINDS, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
+import { NEW_THING, factEditState, factLinkPayload, refOccurrence, repicks } from './nameHighlights.js';
 import HeritageSections from './HeritageSections.vue';
+import LinkedText from './LinkedText.vue';
+import NamedStubs from './NamedStubs.vue';
+import StubCard from './StubCard.vue';
+import ThingAka from './ThingAka.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
 import ThingInherited from './ThingInherited.vue';
@@ -236,10 +258,32 @@ function cut(text, length = 28) {
 // A species, race or mix page has its numbers, and what references it in
 // place of the scenes. A character, race or mix page shows what it
 // inherits, each fact open to an override; a species page its races and
-// mixes.
+// mixes. Facts, inherited facts and prose show their names linked
+// (`LinkedText`), and an own fact's link can be re-pointed at another
+// thing (`repoint_ref`: that one reference, its words kept, nothing else
+// changed); the page lists its other names (`ThingAka`) and the stubs its
+// facts named (`NamedStubs`). The fact form edits a fact's words as they
+// read, its links kept by position (`factEditState`): saving sends them
+// as `spans`, each to its own thing, then the owner's picks and names
+// treated as new. Once the save is answered, the things the owner
+// re-picked are taught their names as written, and the stubs the owner
+// asked for are made (`make_stub`, which links just that phrase). A stub's
+// page has no prose: its card (kind, Expand, Ignore) and what mentions it
+// instead.
 export default {
     name: 'ThingPage',
-    components: { HeritageSections, ThingDeleteDialog, ThingFactForm, ThingInherited, ThingNumbers, ThingReferencedIn },
+    components: {
+        HeritageSections,
+        LinkedText,
+        NamedStubs,
+        StubCard,
+        ThingAka,
+        ThingDeleteDialog,
+        ThingFactForm,
+        ThingInherited,
+        ThingNumbers,
+        ThingReferencedIn,
+    },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -250,6 +294,10 @@ export default {
             asOfMonth: null,
             // the open fact form: {mode: 'add'|'edit'|'end', factId?, ...}
             form: null,
+            // what follows a save once its reply is in: {factId (null: the
+            // fact the reply adds), known (fact ids before), stubs to make,
+            // names (re-picks) to teach}
+            afterSave: null,
             // the name being edited: {text, sent}
             rename: null,
         };
@@ -285,6 +333,20 @@ export default {
         },
         proseSectionCount() {
             return Object.keys(this.thing?.prose || {}).length;
+        },
+        // a stub has nothing written yet to make prose from
+        proseShown() {
+            return this.thing?.stub ? {} : this.thing?.prose || {};
+        },
+        stubOfPage() {
+            const thing = this.thing;
+            return {
+                id: thing.id,
+                name: thing.name,
+                kind: thing.kind,
+                mentions: (thing.mentions || []).length,
+                ignored: !!thing.stub?.ignored,
+            };
         },
         editing() {
             return EDIT_ACTIONS.some((action) => this.worlds.pending[action]);
@@ -363,8 +425,12 @@ export default {
     watch: {
         thing(thing, before) {
             // another thing, or the reply to the form's own edit
+            if (this.afterSave && this.form?.sent && thing?.id === before?.id) {
+                this.afterSaved(thing);
+            }
             if (!thing || thing.id !== before?.id || this.form?.sent) {
                 this.form = null;
+                this.afterSave = null;
             }
             if (!thing || thing.id !== before?.id || this.rename?.sent) {
                 this.rename = null;
@@ -374,6 +440,7 @@ export default {
             // the edit failed (no reply replaced the thing): keep the form
             if (!now && this.form?.sent) {
                 this.form = { ...this.form, sent: false };
+                this.afterSave = null;
             }
         },
         // the rename failed (no reply replaced the thing): keep it open
@@ -460,27 +527,45 @@ export default {
             this.worlds.renameThing(name);
             this.rename = { ...this.rename, sent: true };
         },
+        // the words and links of `fact` (own or inherited), for its form
+        // (each link remembers the thing it had: `was`)
+        editState(fact) {
+            const ignored = this.worlds.stubs.filter((stub) => stub.ignored).map((stub) => stub.id);
+            const state = factEditState(fact.segments, fact.text || fact.rendered || '', ignored);
+            return { ...state, links: state.links.map((link) => ({ ...link, was: link.ref })) };
+        },
         startAdd() {
-            this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null };
+            this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
         },
         startEdit(fact) {
+            const { text, links } = this.editState(fact);
             this.form = {
                 mode: 'edit',
                 factId: fact.fact_id,
                 category: fact.category,
-                text: fact.text,
+                text,
                 fromYear: yearOf(fact.valid_from),
                 untilYear: yearOf(fact.valid_until),
                 original: fact,
+                originalText: text,
+                picks: {},
+                refs: {},
+                links,
+                stubs: [],
             };
         },
         startOverride(fact) {
+            const { text, links } = this.editState(fact);
             this.form = {
                 mode: 'override',
                 factId: fact.fact_id,
                 category: overrideCategory(this.thing.kind, fact.category),
-                text: fact.rendered,
+                text,
                 replaces: `${fact.source_name}'s “${fact.rendered}”`,
+                picks: {},
+                refs: {},
+                links,
+                stubs: [],
             };
         },
         startEnd(fact) {
@@ -489,17 +574,44 @@ export default {
         saveForm() {
             const form = this.form;
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
+            const matches = form.mode === 'end' ? [] : this.worlds.matchesFor(form.text, this.worlds.thingAt);
+            // what's sent is the trimmed text: the spans count in it
+            const text = form.mode === 'end' ? '' : form.text.trim();
+            let links = null;
+            if (form.mode !== 'end') {
+                const picks = form.picks || {};
+                links = factLinkPayload(text, matches, picks, form.refs || {}, form.links || []);
+                // re-picks by name, and of one link
+                const names = [
+                    ...repicks(matches, picks),
+                    ...(form.links || [])
+                        .filter((link) => link.ref !== link.was && link.ref !== NEW_THING)
+                        .map((link) => ({ id: link.ref, name: link.text })),
+                ].filter((repick) => repick.id !== this.thing.id);
+                this.afterSave = form.stubs?.length || names.length
+                    ? {
+                        factId: form.mode === 'edit' ? form.factId : null,
+                        known: this.thing.facts.map((fact) => fact.fact_id),
+                        stubs: form.stubs || [],
+                        names,
+                    }
+                    : null;
+            }
             if (form.mode === 'add') {
-                this.worlds.addFact(form.category, form.text.trim(), year(form.fromYear), year(form.untilYear));
+                this.worlds.addFact(form.category, text, year(form.fromYear), year(form.untilYear), links);
             } else if (form.mode === 'override') {
-                this.worlds.overrideFact(form.factId, form.category, form.text.trim());
+                this.worlds.overrideFact(form.factId, form.category, text, links);
             } else if (form.mode === 'end') {
                 this.worlds.endFact(form.factId, dateOf(form.untilYear));
             } else {
                 const original = form.original;
                 const changes = {};
-                if (form.text.trim() !== original.text) {
-                    changes.text = form.text.trim();
+                // the words, or what they link to, changed
+                const relinked = Object.keys(form.picks).length > 0
+                    || Object.keys(form.refs).length > 0
+                    || form.links.some((link) => link.ref !== link.was);
+                if (text !== form.originalText || relinked) {
+                    changes.text = text;
                 }
                 if (form.category !== original.category) {
                     changes.category = form.category;
@@ -513,12 +625,45 @@ export default {
                     changes.valid_until = year(form.untilYear);
                 }
                 if (!Object.keys(changes).length) {
+                    // only stubs to make, if any: the fact is as it was
+                    if (this.afterSave) {
+                        this.afterSaved(this.thing);
+                    }
                     this.form = null;
                     return;
                 }
-                this.worlds.correctFact(form.factId, changes);
+                this.worlds.correctFact(form.factId, changes, 'text' in changes ? links : {});
             }
             this.form = { ...form, sent: true };
+        },
+        // what follows a save (`afterSave`), now that `thing` holds it:
+        // the re-picked things learn their names, and the stubs are made in
+        // the fact edited, or the one the reply added
+        afterSaved(thing) {
+            const pending = this.afterSave;
+            this.afterSave = null;
+            for (const repick of pending.names) {
+                this.worlds.addOtherName(repick.id, repick.name);
+            }
+            const fact = pending.factId
+                ? thing.facts.find((f) => f.fact_id === pending.factId)
+                : thing.facts.find((f) => !pending.known.includes(f.fact_id));
+            if (!fact) {
+                return;
+            }
+            for (const stub of pending.stubs) {
+                if ((fact.rendered || '').includes(stub.text)) {
+                    this.worlds.makeStub(fact.fact_id, stub.text, stub.kind);
+                }
+            }
+        },
+        // `segments[index]` of the own fact `fact` now links `to`, its
+        // words kept
+        repointLink(fact, { index, to }) {
+            const occurrence = refOccurrence(fact.text, fact.segments, index);
+            if (occurrence !== null && to !== fact.segments[index].ref) {
+                this.worlds.repointRef(fact.fact_id, occurrence, to);
+            }
         },
         removeFact(fact) {
             this.worlds.removeFact(fact.fact_id);
@@ -590,6 +735,11 @@ export default {
     color: rgb(var(--v-theme-muted));
     min-width: 80px;
     text-align: right;
+}
+
+.stub-panel {
+    border: 1px dashed rgb(var(--v-theme-foreign));
+    border-radius: 6px;
 }
 
 .prose {

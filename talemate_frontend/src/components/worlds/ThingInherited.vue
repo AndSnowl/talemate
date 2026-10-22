@@ -8,8 +8,8 @@
         <template v-for="fact in inherited" :key="fact.fact_id">
             <div class="fact d-flex align-center ga-2" :class="{ overridden: fact.overridden_by }" data-testid="inherited-fact">
                 <span class="flex-grow-1 inherited-text">
-                    <s v-if="fact.overridden_by">{{ fact.rendered }}</s>
-                    <template v-else>{{ fact.rendered }}</template>
+                    <s v-if="fact.overridden_by"><LinkedText :segments="fact.segments" :text="fact.rendered" /></s>
+                    <LinkedText v-else :segments="fact.segments" :text="fact.rendered" />
                     <span v-if="fact.overridden_by" class="replaced ml-2">replaced by its own fact</span>
                 </span>
                 <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
@@ -37,6 +37,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import LinkedText from './LinkedText.vue';
 import ThingFactForm from './ThingFactForm.vue';
 
 // What a character, race or mix inherits from its heritage (`inherited`),
@@ -45,7 +46,7 @@ import ThingFactForm from './ThingFactForm.vue';
 // here under its fact. A fact an own fact replaces is struck through.
 export default {
     name: 'ThingInherited',
-    components: { ThingFactForm },
+    components: { LinkedText, ThingFactForm },
     props: {
         inherited: { type: Array, required: true },
         // ThingPage's open fact form, or null

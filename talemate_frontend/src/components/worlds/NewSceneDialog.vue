@@ -12,64 +12,23 @@
                     <div class="text-caption text-muted mb-1">
                         Who you are, where, doing what. Rough is fine; whatever you leave open comes from the world, or is invented.
                     </div>
-                    <div class="prompt-box">
-                        <textarea
-                            ref="prompt"
-                            v-model="prompt"
-                            class="prompt-input"
-                            aria-label="Storyline"
-                            rows="3"
-                            :placeholder="placeholder"
-                            :disabled="worlds.setupPending"
-                            @input="grow"
-                        ></textarea>
-                        <div class="prompt-layer" aria-hidden="true">
-                            <template v-for="segment in segments" :key="segment.start">
-                                <v-menu v-if="segment.match" open-on-hover location="bottom start" :open-delay="100">
-                                    <template #activator="{ props }">
-                                        <mark
-                                            v-bind="props"
-                                            class="name"
-                                            :class="segment.state"
-                                            data-testid="name-match"
-                                            @mousedown.prevent="caretAt(segment.end)"
-                                        >{{ segment.text }}</mark>
-                                    </template>
-                                    <v-list density="compact" class="name-popover" data-testid="name-popover">
-                                        <v-list-item
-                                            v-for="candidate in segment.match.candidates"
-                                            :key="candidate.id"
-                                            :active="pickedId(segment.match) === candidate.id"
-                                            :aria-selected="String(pickedId(segment.match) === candidate.id)"
-                                            color="highlight1"
-                                            data-testid="name-candidate"
-                                            @click="pick(segment.match, candidate.id)"
-                                        >
-                                            <template #prepend>
-                                                <v-icon size="small">{{ pickedId(segment.match) === candidate.id ? 'mdi-check' : 'mdi-blank' }}</v-icon>
-                                            </template>
-                                            <v-list-item-title>{{ candidate.name }}</v-list-item-title>
-                                            <v-list-item-subtitle>{{ candidate.kind }}</v-list-item-subtitle>
-                                        </v-list-item>
-                                        <v-divider></v-divider>
-                                        <v-list-item
-                                            :active="pickedId(segment.match) === NEW_THING"
-                                            color="warning"
-                                            prepend-icon="mdi-pencil"
-                                            @click="pick(segment.match, NEW_THING)"
-                                        >
-                                            <v-list-item-title>Treat as new</v-list-item-title>
-                                        </v-list-item>
-                                    </v-list>
-                                </v-menu>
-                                <mark v-else-if="segment.state" class="name new" data-testid="name-new">{{ segment.text }}</mark>
-                                <template v-else>{{ segment.text }}</template>
-                            </template>&#8203;
-                        </div>
-                    </div>
+                    <NameHighlightInput
+                        ref="prompt"
+                        v-model="prompt"
+                        v-model:picks="picks"
+                        v-model:refs="refs"
+                        label="Storyline"
+                        :show-label="false"
+                        :at="start"
+                        :invented="invented"
+                        :placeholder="placeholder"
+                        :disabled="worlds.setupPending"
+                    />
                     <div class="text-caption text-muted mt-1">
-                        <span class="legend matched">Blue</span> is a world thing (hover to change it).
+                        <span class="legend matched">Blue</span> is a world thing (hover to change it), and
+                        <span class="legend suggested">dotted</span> may be one.
                         <span class="legend new">Yellow</span> will be invented for this scene.
+                        Right-click to add a reference.
                     </div>
 
                     <div class="d-flex flex-wrap align-center ga-2 mt-3">
@@ -136,44 +95,40 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
-import { NEW_THING, newNamesPayload, pickKey, pickedId, picksPayload, promptSegments } from './nameHighlights.js';
+import { linkPayload } from './nameHighlights.js';
+import NameHighlightInput from './NameHighlightInput.vue';
 import SceneSetupCards from './SceneSetupCards.vue';
-
-// how long typing pauses before the names are looked up
-const MATCH_DEBOUNCE_MS = 300;
 
 // the "Starts" choices that aren't a scene's end
 const NOW_START = 'now';
 const CUSTOM_START = 'custom';
 
 // The new-scene dialog: one storyline prompt, with the world thing names in
-// it highlighted as you type (`match_names`), each pick changeable from its
-// hover popover; who you play and when it starts; then "Set up scene"
-// (`plan_scene`) shows the setup step, whose Start writes the scene
+// it highlighted as you type (`NameHighlightInput`), each pick changeable
+// from its hover popover; who you play and when it starts; then "Set up
+// scene" (`plan_scene`) shows the setup step, whose Start writes the scene
 // (`start_scene`). TalemateApp loads the started scene.
-//
-// The highlights are a layer over the textarea, in the same font and box,
-// with transparent text: only the marks show (and take the hover).
 export default {
     name: 'NewSceneDialog',
-    components: { SceneSetupCards },
+    components: { NameHighlightInput, SceneSetupCards },
     props: {
         modelValue: { type: Boolean, default: false },
     },
     emits: ['update:modelValue'],
     setup() {
-        return { worlds: useWorldsStore(), NEW_THING, CUSTOM_START };
+        return { worlds: useWorldsStore(), CUSTOM_START };
     },
     data() {
         return {
             prompt: '',
             // pickKey(name) -> thing id or NEW_THING
             picks: {},
+            // pickKey(name) -> {id, text}: references added by hand
+            refs: {},
             player: null,
             startChoice: NOW_START,
             startYear: null,
             placeholder: 'Maren has headed out from Sallowford to forage for bleakcap, but finds more than she bargained for…',
-            matchTimer: null,
             // the names the last setup invented (kept after Edit)
             lastInvented: [],
         };
@@ -192,9 +147,6 @@ export default {
         invented() {
             const setup = this.mine ? this.worlds.sceneSetup?.setup : null;
             return setup?.invented || this.lastInvented;
-        },
-        segments() {
-            return promptSegments(this.prompt, this.matches, this.picks, this.invented);
         },
         playerOptions() {
             return [{ id: null, name: 'Let the setup choose' }, ...(this.worlds.things.character || [])];
@@ -226,21 +178,9 @@ export default {
         },
     },
     watch: {
-        prompt() {
-            this.scheduleMatch();
-        },
-        start() {
-            this.scheduleMatch();
-        },
         modelValue(open) {
             if (open) {
                 this.$nextTick(() => this.$refs.prompt?.focus());
-            }
-        },
-        showingSetup(showing) {
-            // back from the setup (Edit): the textarea is drawn again
-            if (!showing) {
-                this.$nextTick(this.grow);
             }
         },
         'worlds.sceneSetup'(planned) {
@@ -256,52 +196,21 @@ export default {
             }
         },
     },
-    beforeUnmount() {
-        clearTimeout(this.matchTimer);
-    },
     methods: {
-        pickedId(match) {
-            return pickedId(match, this.picks);
-        },
         validYear(year) {
             return Number.isInteger(year) && year >= 1 && year <= 9999;
-        },
-        scheduleMatch() {
-            clearTimeout(this.matchTimer);
-            this.matchTimer = setTimeout(() => this.worlds.matchNames(this.prompt, this.start), MATCH_DEBOUNCE_MS);
-        },
-        pick(match, id) {
-            this.picks = { ...this.picks, [pickKey(match.text)]: id };
-        },
-        caretAt(offset) {
-            const input = this.$refs.prompt;
-            if (input) {
-                input.focus();
-                input.setSelectionRange(offset, offset);
-            }
-        },
-        grow() {
-            const input = this.$refs.prompt;
-            if (input) {
-                input.style.height = 'auto';
-                input.style.height = `${input.scrollHeight + 2}px`;
-            }
         },
         setUp() {
             if (!this.prompt.trim() || !this.validStart) {
                 return;
             }
-            this.worlds.planScene(
-                this.prompt.trim(),
-                picksPayload(this.matches, this.picks),
-                this.player,
-                this.start,
-                newNamesPayload(this.matches, this.picks),
-            );
+            const links = linkPayload(this.matches, this.picks, this.refs, this.prompt);
+            this.worlds.planScene(this.prompt.trim(), links.picks, this.player, this.start, links.newNames);
         },
         reset() {
             this.prompt = '';
             this.picks = {};
+            this.refs = {};
             this.player = null;
             this.startChoice = NOW_START;
             this.startYear = null;
@@ -326,70 +235,6 @@ export default {
     color: rgb(var(--v-theme-accent));
 }
 
-.prompt-box {
-    position: relative;
-}
-
-/* the textarea and the highlight layer share one box, font and wrapping */
-.prompt-input,
-.prompt-layer {
-    font: inherit;
-    font-size: 14px;
-    line-height: 1.7;
-    padding: 8px 10px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    word-break: normal;
-    letter-spacing: normal;
-}
-
-.prompt-input {
-    display: block;
-    width: 100%;
-    min-height: 84px;
-    resize: none;
-    overflow: hidden;
-    color: rgb(var(--v-theme-on-surface));
-    background: rgb(var(--v-theme-background));
-    border-color: rgb(var(--v-theme-border));
-    outline: none;
-}
-
-.prompt-input:focus {
-    border-color: rgb(var(--v-theme-accent));
-}
-
-.prompt-layer {
-    position: absolute;
-    inset: 0;
-    color: transparent;
-    pointer-events: none;
-    overflow: hidden;
-}
-
-.name {
-    color: transparent;
-    border-radius: 2px;
-    pointer-events: auto;
-    cursor: pointer;
-}
-
-.name.matched {
-    background: rgba(var(--v-theme-highlight1), 0.25);
-    border-bottom: 2px solid rgb(var(--v-theme-highlight1));
-}
-
-.name.new {
-    background: rgba(var(--v-theme-warning), 0.2);
-    border-bottom: 2px solid rgb(var(--v-theme-warning));
-}
-
-.name-popover {
-    min-width: 220px;
-}
-
 .legend {
     padding: 0 2px;
     border-radius: 2px;
@@ -398,6 +243,10 @@ export default {
 .legend.matched {
     background: rgba(var(--v-theme-highlight1), 0.25);
     border-bottom: 2px solid rgb(var(--v-theme-highlight1));
+}
+
+.legend.suggested {
+    border-bottom: 2px dotted rgb(var(--v-theme-highlight1));
 }
 
 .legend.new {

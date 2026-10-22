@@ -49,7 +49,7 @@ then prints their URLs.
 
 ```bash
 guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/talemate_app.py \
-    start [--ai] [--root DIR] [--backend-port N] [--frontend-port N]
+    start [--ai] [--lan] [--root DIR] [--backend-port N] [--frontend-port N]
 guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/talemate_app.py status
 guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/talemate_app.py stop
 ```
@@ -63,6 +63,9 @@ guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/talemate_app.p
   before ever passing it. `start --ai` refuses with "AI runs need
   TALEMATE_AI_TESTS=1 — ask the owner first" unless `TALEMATE_AI_TESTS=1`
   is set, so only an owner-approved run can start one.
+- `--lan` binds the backend and frontend on `0.0.0.0` and prints this
+  machine's LAN address instead of `127.0.0.1`, so another computer on the
+  home network can open the printed URL.
 - The run never touches the OS keyring: the backend runs with
   `TALEMATE_DISABLE_KEYRING=1`, and its encryption key is a file in
   `<root>/secrets`.

@@ -1,6 +1,6 @@
 import pytest
 
-from talemate.world.kinds import HERITAGE_KINDS, get_kind, validate_field
+from talemate.world.kinds import HERITAGE_KINDS, KINDS, get_kind, validate_field
 from talemate.world.refs import parse_refs, ref
 
 _HERITAGE_CATEGORIES = ["origin", "physical", "instinct", "variation", "general"]
@@ -15,6 +15,8 @@ def test_kinds_table():
         "voice",
         "color",
         "heritage",
+        "aka",
+        "stub",
     ]
     assert [f.type for f in character.fields] == [
         "text",
@@ -23,6 +25,8 @@ def test_kinds_table():
         "json",
         "text",
         "thing",
+        "json",
+        "json",
     ]
     assert character.categories == [
         "appearance",
@@ -35,6 +39,59 @@ def test_kinds_table():
 
     with pytest.raises(KeyError):
         get_kind("magic")
+
+
+def test_every_kind_has_aka_and_stub():
+    for kind in KINDS.values():
+        types = {f.name: f.type for f in kind.fields}
+        assert types["aka"] == "json", kind.name
+        assert types["stub"] == "json", kind.name
+
+
+def test_aka_shape_validated():
+    place = get_kind("place")
+    validate_field(place, "aka", [])
+    validate_field(
+        place,
+        "aka",
+        [
+            {"name": "Moscavia", "tag": "common", "everyday": True},
+            {"name": "the Tsardom", "tag": "common", "everyday": False},
+            {"name": "Grand Tsardom", "tag": "proper", "everyday": False},
+        ],
+    )
+
+    bad = [
+        # two everyday names
+        [
+            {"name": "Moscavia", "tag": "common", "everyday": True},
+            {"name": "the Tsardom", "tag": "common", "everyday": True},
+        ],
+        # an everyday name must be common
+        [{"name": "Grand Tsardom", "tag": "proper", "everyday": True}],
+        # unknown tag
+        [{"name": "Moscavia", "tag": "nickname", "everyday": False}],
+        # not a list, missing keys, wrong types, extra keys, blank name
+        {"name": "Moscavia", "tag": "common", "everyday": False},
+        [{"name": "Moscavia", "tag": "common"}],
+        [{"name": "Moscavia", "tag": "common", "everyday": "yes"}],
+        [{"name": 3, "tag": "common", "everyday": False}],
+        [{"name": "Moscavia", "tag": "common", "everyday": False, "x": 1}],
+        [{"name": "  ", "tag": "common", "everyday": False}],
+        ["Moscavia"],
+    ]
+    for value in bad:
+        with pytest.raises(ValueError):
+            validate_field(place, "aka", value)
+
+
+def test_stub_shape_validated():
+    lore = get_kind("lore")
+    validate_field(lore, "stub", {"ignored": False})
+    validate_field(lore, "stub", {"ignored": True})
+    for value in (True, {}, {"ignored": 1}, {"ignored": False, "x": 1}, None):
+        with pytest.raises(ValueError):
+            validate_field(lore, "stub", value)
 
 
 def test_parse_refs_dedupes_in_order():
@@ -54,12 +111,16 @@ def test_species_race_mix_kinds():
         "lifespan",
         "adult_age",
         "measures",
+        "aka",
+        "stub",
     ]
     assert [f.type for f in species.fields] == [
         "text",
         "thing",
         "number",
         "number",
+        "json",
+        "json",
         "json",
     ]
     assert species.categories == _HERITAGE_CATEGORIES
@@ -71,12 +132,16 @@ def test_species_race_mix_kinds():
         "lifespan",
         "adult_age",
         "measures",
+        "aka",
+        "stub",
     ]
     assert [f.type for f in race.fields] == [
         "text",
         "thing",
         "number",
         "number",
+        "json",
+        "json",
         "json",
     ]
     assert race.categories == _HERITAGE_CATEGORIES
@@ -88,12 +153,16 @@ def test_species_race_mix_kinds():
         "lifespan",
         "adult_age",
         "measures",
+        "aka",
+        "stub",
     ]
     assert [f.type for f in mix.fields] == [
         "text",
         "things",
         "number",
         "number",
+        "json",
+        "json",
         "json",
     ]
     assert mix.categories == _HERITAGE_CATEGORIES

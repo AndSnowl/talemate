@@ -11,7 +11,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   any scene has moved past it. The
   open world is held on the websocket handler (`handler.world`), one per
   connection, and closed when the connection goes.
-- Things: `list_things {kind}`, `get_thing {id, at}`. A thing's payload
+- Things: `list_things {kind}` (stubs included, each with its `stub`
+  marker; ignored stubs left out), `get_thing {id, at}`. A thing's payload
   holds its fields, the facts visible at `at` (each with the inherited
   facts it `overrides`), its cached prose per section (with whether it's
   stale, following its lineage), its whole timeline and the scenes it
@@ -22,19 +23,40 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `referenced_in` is what `thing_references` reports, plus
   `member_scenes`: the scenes with a member character (one whose lineage
   includes the thing) in them.
+- Links: each own and inherited fact carries `segments`, its rendered
+  text as `{text, ref, stub}` runs (`ref` the thing a run links to, `stub`
+  whether that's a stub; a link to an ignored stub is plain text), and
+  `prose_segments` holds each section's cached prose the same way, its
+  names found by `world.names.find_names` (never the thing's own, and
+  never making anything). The payload also has the thing's other names
+  (`aka`), its `stub` marker (`null` or `{ignored}`; `fields` holds
+  neither), its `mentions` (every other entry's fact that references it)
+  and `named_stubs` (`{id, name, kind}` of the stubs its facts link to).
+- Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
+  `text` (or reuses the thing that already has that name, reviving an
+  ignored stub) and links that phrase in the fact (its first plain
+  occurrence, nothing else), answering like `correct_fact`. `list_stubs {include_ignored}` answers `{stubs: [{id, name, kind, first_mentioned:
+  {thing_id, name}, mentions, ignored}]}`. `ignore_stub {id, ignored}` and
+  `change_stub_kind {id, kind}` answer with the stub's payload.
+  `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
+  starting prompt for the stub and the mention context its expansion gets.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
   `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
   species_ids}]}`, every species, race and mix, for the heritage picker.
   `find_mix {parents: [a, b]}` answers `{parents, mix_id}`, the mix of
   those two parents in either order (`null` if there's none yet).
-- Create: `preview_thing {kind, prompt, fields}` runs in the background and
-  answers `preview_thing {preview}` or `preview_failed {message}`; it
-  writes nothing. `accept_preview {preview}` writes it and answers with the
-  new thing. For the browser tests only, `TALEMATE_TEST_FIXED_PREVIEW`
-  names a JSON file (`{name, facts, prose, fields?}`) that previews are
-  answered from instead of the model (listing what the request's fields
-  inherit, as a real preview does).
+- Create: `preview_thing {kind, prompt, fields, stub_id, picks,
+  new_names}` runs in the background and answers `preview_thing {preview}`
+  or `preview_failed {message}`; it writes nothing. `stub_id` expands that
+  stub, `picks` maps a name written in the prompt to the thing the owner
+  matched it to, and `new_names` are written names the owner treats as new.
+  `accept_preview {preview, into_stub}` writes it (into the stub
+  `into_stub`, if given) and answers with the thing. For the browser
+  tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
+  facts, prose, fields?}`) that previews are answered from instead of the
+  model (listing what the request's fields inherit, and for a `stub_id`
+  its kind, name and mention context, as a real preview does).
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
@@ -50,15 +72,31 @@ through `signal_operation_failed` (an `operation_done` envelope with
   that revision restores it, and answers `thing_deleted {id, kind}` and
   that kind's `list_things`. A loaded scene keeps playing with it until
   it's reloaded.
+- Fact text written by hand (`add_fact`, `correct_fact`, `override_fact`,
+  each taking `picks`, `new_names` and `spans`) is linked before it's
+  written: first the `spans` (`[{start, end, ref}]`, code points: a fact
+  form's existing links, by position, so two links of the same words keep
+  their own targets; a span with a null `ref` keeps its words plain), then (`worldplay.links.link_text`) the names of
+  entries and stubs, and the picks, in the rest, keeping the words
+  written; the thing's own names, and names the owner treats as new, stay
+  plain, and unknown phrases are never made stubs.
+  `repoint_ref {thing_id, fact_id, occurrence, to_id, at}` points one
+  reference of a fact (the `occurrence`-th in its text) at another thing,
+  keeping its words and changing nothing else; it answers like
+  `correct_fact`.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
-  prompt (the reply echoes `text` and `at`). `plan_scene {prompt, picks, new_names, player, start}` (picks
-  and names treated as new always win over automatic matching) and
+  prompt (the reply echoes `text` and `at`), each candidate marked `stub`
+  and `via`, plus the `unknown` capitalised phrases no name covers.
+  `plan_scene {prompt, picks, new_names, player, start}` (picks and names
+  treated as new always win over automatic matching) and
   `continue_scene {scene_id, goal_prompt}` (saving that scene first if
   it's the one loaded) run in the background and answer
   with `{setup, names}` (the world things' names, for display), or
-  `plan_failed`/`continue_failed`; they write nothing. `start_scene {setup}`
-  (background too: it brings the characters' prose up to date) writes the
-  scene and answers `{scene_id, target, scene}` (or `start_failed`), where
+  `plan_failed`/`continue_failed`; they write nothing. The setup's
+  `stub_previews` (`CreatePreview` dumps) fill out the stubs it uses.
+  `start_scene {setup}` (background too: it brings the characters' prose
+  up to date) writes the stub previews into their stubs, then the scene, and
+  answers `{scene_id, target, scene}` (or `start_failed`), where
   `target` is the `world://` path the frontend then sends to `load_scene`.
   `list_scenes` lists the world's scenes, newest first.
   `reposition_scene {scene_id, start}` moves a scene's start date; if that
@@ -69,7 +107,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   file holding a scene-setup model reply (`{player, characters, place,
   goal, intro, extras?}`) that `plan_scene` and `continue_scene` use
   instead of asking any model; `start_scene` then leaves the prose as it
-  is.
+  is. With `TALEMATE_TEST_FIXED_PREVIEW` set as well, each stub the setup
+  uses gets the fixed preview; without it, stubs stay stubs.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -91,19 +130,33 @@ from talemate.server.websocket_plugin import Plugin
 from talemate.world import heritage
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import HERITAGE_KINDS
+from talemate.world.kinds import HERITAGE_KINDS, KINDS
+from talemate.world.names import find_names, unknown_proper_phrases
+from talemate.world.refs import REF_PATTERN
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
-from talemate.world.view import ThingState, WorldView
+from talemate.world.timeline import TimelineEntry
+from talemate.world.view import Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import age_in_years
 from talemate.worldplay.create import (
+    CREATE_KINDS,
     CreatePreview,
     accept_preview,
     current_date,
+    matching_stub,
     preview_inherited,
     preview_thing,
 )
+from talemate.worldplay.links import (
+    LinkSpan,
+    NewName,
+    link_phrase,
+    link_text,
+    make_stubs,
+    repoint_ref,
+)
+from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
 from talemate.worldplay.setup import (
@@ -112,6 +165,7 @@ from talemate.worldplay.setup import (
     match_names,
     plan_scene,
     start_scene,
+    stubs_to_fill,
 )
 
 __all__ = ["WorldsPlugin"]
@@ -195,10 +249,18 @@ class PreviewPayload(pydantic.BaseModel):
     kind: str
     prompt: str
     fields: dict = pydantic.Field(default_factory=dict)
+    # the stub this preview expands
+    stub_id: str | None = None
+    # a name written in the prompt -> the thing the owner matched it to
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    # names written in the prompt the owner treats as new
+    new_names: list[str] = pydantic.Field(default_factory=list)
 
 
 class AcceptPreviewPayload(pydantic.BaseModel):
     preview: CreatePreview
+    # "fill the stub instead": the stub a preview made without one fills
+    into_stub: str | None = None
 
 
 class _ThingEdit(pydantic.BaseModel):
@@ -213,6 +275,12 @@ class AddFactPayload(_ThingEdit):
     text: str
     valid_from: dict | None = None
     valid_until: dict | None = None
+    # a name written in the text -> the thing the owner picked for it
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    # names written in the text the owner treats as new: left plain
+    new_names: list[str] = pydantic.Field(default_factory=list)
+    # spans of the text linked by position (code points), before the rest
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
 
 
 class CorrectFactPayload(_ThingEdit):
@@ -222,6 +290,37 @@ class CorrectFactPayload(_ThingEdit):
     # unset means "keep"; an explicit null means "make it open"
     valid_from: dict | None = None
     valid_until: dict | None = None
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
+
+
+class RepointRefPayload(_ThingEdit):
+    fact_id: str
+    # which reference of the fact's text, 0-based, in order
+    occurrence: int
+    to_id: str
+
+
+class MakeStubPayload(_ThingEdit):
+    fact_id: str
+    # the phrase in the fact the stub is named after
+    text: str
+    kind: str
+
+
+class ListStubsPayload(pydantic.BaseModel):
+    include_ignored: bool = False
+
+
+class IgnoreStubPayload(pydantic.BaseModel):
+    id: str
+    ignored: bool
+
+
+class ChangeStubKindPayload(pydantic.BaseModel):
+    id: str
+    kind: str
 
 
 class EndFactPayload(_ThingEdit):
@@ -237,6 +336,9 @@ class OverrideFactPayload(_ThingEdit):
     overridden_fact_id: str
     text: str
     category: str
+    picks: dict[str, str] = pydantic.Field(default_factory=dict)
+    new_names: list[str] = pydantic.Field(default_factory=list)
+    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
 
 
 class FindMixPayload(pydantic.BaseModel):
@@ -308,21 +410,129 @@ async def _fixed_preview(
     path: Path, payload: PreviewPayload, view: WorldView
 ) -> CreatePreview:
     """The browser tests' stand-in for `preview_thing`: the preview in
-    `path`, for the request's kind, prompt and fields, listing what they
-    inherit in `view` as the real one does. Async so it runs
-    through the same background task and reply path as the real one."""
+    `path`, for the request's kind, prompt, fields and picks, listing what
+    they inherit in `view` as the real one does. With a `stub_id` it takes
+    the stub's kind and name and carries its mention context, refusing a
+    stub of a kind that can't be expanded as the real one does; without
+    one, a live stub of the same kind and name is offered as
+    `matching_stub_id`.
+    Async so it runs through the same background task and reply path as
+    the real one."""
 
     fixed = json.loads(path.read_text(encoding="utf-8"))
     fields = {**payload.fields, **fixed.get("fields", {})}
+    kind, name = payload.kind, fixed["name"]
+    context: list[tuple[str, list[str]]] = []
+    stub = view.thing(payload.stub_id) if payload.stub_id is not None else None
+    if payload.stub_id is not None:
+        if stub is None or not stub.is_stub:
+            raise ValueError(f"not a stub: {payload.stub_id}")
+        if stub.kind not in CREATE_KINDS:
+            raise ValueError(f"a {stub.kind} stub can't be expanded yet")
+        kind = stub.kind
+        name = view.name_of(stub.id) or name
+        context = mention_context(view, stub.id)
     return CreatePreview(
-        kind=payload.kind,
+        kind=kind,
         prompt=payload.prompt,
         fields=fields,
-        name=fixed["name"],
+        name=name,
         facts=fixed["facts"],
         prose=fixed["prose"],
-        inherited=preview_inherited(view, payload.kind, fields),
+        inherited=preview_inherited(view, kind, fields),
+        stub_id=payload.stub_id,
+        matching_stub_id=None if stub is not None else matching_stub(view, kind, name),
+        context=context,
+        picks=payload.picks,
+        treated_as_new=payload.new_names,
     )
+
+
+# --- links ------------------------------------------------------------------
+
+
+def _stub_out(state: ThingState) -> dict | None:
+    """A thing's stub marker for the wire: `None` for a full entry."""
+
+    return {"ignored": state.stub_ignored} if state.is_stub else None
+
+
+class _Links:
+    """Linked text in one view, for the wire: runs of rendered text as
+    `{text, ref, stub}`, `ref` the thing a run links to and `stub` whether
+    that thing is a stub. A link to an ignored stub is plain text: ignoring
+    a stub hides it everywhere. Each linked thing is looked up once."""
+
+    def __init__(self, view: WorldView) -> None:
+        self.view = view
+        self._states: dict[str, ThingState | None] = {}
+
+    def _state(self, thing_id: str) -> ThingState | None:
+        if thing_id not in self._states:
+            self._states[thing_id] = self.view.thing(thing_id)
+        return self._states[thing_id]
+
+    def _out(self, runs: list[Segment]) -> list[dict]:
+        out: list[dict] = []
+        for run in runs:
+            state = self._state(run.ref) if run.ref is not None else None
+            linked = state is not None and not state.stub_ignored
+            ref = run.ref if linked else None
+            if ref is None and out and out[-1]["ref"] is None:
+                out[-1]["text"] += run.text
+                continue
+            out.append(
+                {
+                    "text": run.text,
+                    "ref": ref,
+                    "stub": linked and state is not None and state.is_stub,
+                }
+            )
+        return out
+
+    def segments(self, text: str) -> list[dict]:
+        """A fact's text, rendered, as linked runs."""
+
+        return self._out(self.view.segments(text))
+
+    def prose_segments(self, text: str, owner: str) -> list[dict]:
+        """Prose as linked runs: each name `find_names` matches links to
+        its best candidate, keeping the words. A suggested match, and one
+        that may mean `owner` (whose prose it is), stay plain."""
+
+        runs: list[Segment] = []
+        end = 0
+        for match in find_names(self.view, text):
+            if match.suggested or any(c.id == owner for c in match.candidates):
+                continue
+            runs.append(Segment(text=text[end : match.start], ref=None))
+            runs.append(Segment(text=match.text, ref=match.candidates[0].id))
+            end = match.end
+        runs.append(Segment(text=text[end:], ref=None))
+        return self._out([run for run in runs if run.text])
+
+    def named_stubs(self, state: ThingState) -> list[dict]:
+        """`{id, name, kind}` of each live stub `state`'s facts link to (not
+        an ignored one), in the order they're first linked."""
+
+        found: list[dict] = []
+        seen: set[str] = {state.id}
+        for fact in state.facts:
+            for thing_id in fact.refs:
+                if thing_id in seen:
+                    continue
+                seen.add(thing_id)
+                other = self._state(thing_id)
+                if other is None or not other.is_stub or other.stub_ignored:
+                    continue
+                found.append(
+                    {
+                        "id": thing_id,
+                        "name": self.view.name_of(thing_id) or "",
+                        "kind": other.kind,
+                    }
+                )
+        return found
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -414,12 +624,14 @@ class WorldsPlugin(Plugin):
             raise KeyError(f"no such thing: {thing_id}")
         calendar = world.calendar
 
+        links = _Links(view)
         facts = [
             {
                 "fact_id": fact.fact_id,
                 "category": fact.category,
                 "text": fact.text,
                 "rendered": view.render(fact.text),
+                "segments": links.segments(fact.text),
                 "valid_from": _date_out(calendar, fact.valid_from),
                 "valid_until": _date_out(calendar, fact.valid_until),
                 "source_rev": fact.source_rev,
@@ -432,6 +644,7 @@ class WorldsPlugin(Plugin):
                 "fact_id": item.fact.fact_id,
                 "category": item.fact.category,
                 "rendered": view.render(item.fact.text),
+                "segments": links.segments(item.fact.text),
                 "source_id": item.source_id,
                 "source_kind": item.source_kind,
                 "source_name": item.source_name,
@@ -442,8 +655,14 @@ class WorldsPlugin(Plugin):
 
         cache = world.prose()
         prose = {}
+        prose_segments = {}
         for section in prose_gen.sections_for(state.kind):
             cached = cache.get(thing_id, section, at)
+            prose_segments[section] = (
+                links.prose_segments(cached.text, thing_id)
+                if cached is not None
+                else []
+            )
             prose[section] = {
                 "text": cached.text if cached is not None else None,
                 "stale": cache.stale(
@@ -478,13 +697,20 @@ class WorldsPlugin(Plugin):
             "fields": {
                 field: _value_out(calendar, value)
                 for field, value in state.fields.items()
+                # each has a key of its own
+                if field not in ("aka", "stub")
             },
+            "aka": state.fields.get("aka") or [],
+            "stub": _stub_out(state),
             "facts": facts,
             "inherited": inherited,
             "numbers": heritage.numbers(view, thing_id).model_dump(),
             "life_stage": self._life_stage(world, view, state, at),
             **self._species_members(state, view),
             "prose": prose,
+            "prose_segments": prose_segments,
+            "mentions": [m.model_dump() for m in mentions(view, thing_id)],
+            "named_stubs": links.named_stubs(state),
             "timeline": timeline,
             "appears_in": self._appears_in(world, [thing_id]),
             "referenced_in": {
@@ -605,6 +831,31 @@ class WorldsPlugin(Plugin):
             },
         }
 
+    async def _planned(self, world: World, planning: Coroutine) -> SceneSetup:
+        """`planning`'s setup. In the browser tests (a fixed setup, so no
+        client to preview stubs with), the fixed preview, if there is one,
+        stands in for each stub's preview, as `preview_thing` would."""
+
+        setup = await planning
+        fixed = _fixed_file(FIXED_PREVIEW_ENV)
+        if fixed is None or setup.stub_previews:
+            return setup
+        view = world.view()
+        setup.stub_previews = [
+            await _fixed_preview(
+                fixed,
+                PreviewPayload(
+                    kind=state.kind,
+                    prompt=suggested_prompt(view, stub_id),
+                    stub_id=stub_id,
+                ),
+                view,
+            )
+            for stub_id in stubs_to_fill(world, setup)
+            if (state := view.thing(stub_id)) is not None
+        ]
+        return setup
+
     # --- background tasks -------------------------------------------------
 
     def _spawn(self, coro: Coroutine, callback) -> asyncio.Task:
@@ -677,18 +928,75 @@ class WorldsPlugin(Plugin):
             ),
         )
 
-    def _require_fact_of(self, world: World, thing_id: str, fact_id: str) -> None:
-        """Refuse an edit to a fact that isn't `thing_id`'s own, so the
-        reply and the prose refresh are for the thing that changed."""
+    def _require_fact_of(
+        self, world: World, thing_id: str, fact_id: str
+    ) -> TimelineEntry:
+        """The live start of `thing_id`'s own fact `fact_id` (its text and
+        dates), refusing an edit to a fact that isn't the thing's own, so
+        the reply and the prose refresh are for the thing that changed."""
 
-        if not any(entry.fact_id == fact_id for entry in world.timeline(thing_id)):
-            raise KeyError(f"no such fact on {thing_id}: {fact_id}")
+        for entry in world.timeline(thing_id):
+            if entry.fact_id == fact_id and entry.change == "fact_start":
+                return entry
+        raise KeyError(f"no such fact on {thing_id}: {fact_id}")
 
-    def _edited(self, action: str, thing_id: str, at: WorldDate | None) -> None:
-        """Answer an edit with the thing as of `at`, then refresh its prose."""
+    @staticmethod
+    def _linked(
+        world: World,
+        thing_id: str,
+        text: str,
+        picks: dict[str, str],
+        at: WorldDate | None,
+        new_names: list[str] | None = None,
+        spans: list[LinkSpan] | None = None,
+    ) -> str:
+        """Hand-written fact text with its names linked, as things are
+        named at `at` (`links.link_text`): first the `spans` (a fact form's
+        existing links, by position: each to its own thing, or kept plain),
+        then entries, stubs and the owner's `picks` in the rest, never
+        `thing_id` itself, nor a name the owner treats as new
+        (`new_names`). A span to `thing_id`, or to a thing that isn't
+        there, keeps its words plain. Unknown phrases stay as they are."""
+
+        view = world.view(at)
+        kept = [
+            span
+            if span.ref is None
+            or (span.ref != thing_id and view.thing(span.ref) is not None)
+            else LinkSpan(start=span.start, end=span.end)
+            for span in spans or []
+        ]
+        return link_text(
+            view,
+            text,
+            picks=picks,
+            owner=thing_id,
+            as_new=new_names or (),
+            spans=kept,
+        )
+
+    @staticmethod
+    def _require_stub(world: World, thing_id: str) -> ThingState:
+        """The stub `thing_id`, refusing a missing thing or a full entry."""
+
+        view = world.view()
+        state = view.thing(thing_id)
+        if state is None:
+            raise KeyError(f"no such thing: {thing_id}")
+        if not state.is_stub:
+            raise ValueError(f"not a stub: {view.name_of(thing_id) or thing_id}")
+        return state
+
+    def _edited(
+        self, action: str, thing_id: str, at: WorldDate | None, *, prose: bool = True
+    ) -> None:
+        """Answer an edit with the thing as of `at`, then refresh its prose
+        -- unless the edit changes no rendered text (`prose=False`: a link
+        made or re-pointed, an other name, the stub marker)."""
 
         self._reply(action, self._thing_payload(self._require_world(), thing_id, at))
-        self._schedule_prose(thing_id, at)
+        if prose:
+            self._schedule_prose(thing_id, at)
 
     # --- worlds -----------------------------------------------------------
 
@@ -737,10 +1045,18 @@ class WorldsPlugin(Plugin):
         payload = ListThingsPayload(**data)
         world = self._require_world()
         view = world.view()
-        things = [
-            {"id": state.id, "kind": state.kind, "name": view.name_of(state.id) or ""}
-            for state in view.things(payload.kind)
-        ]
+        things = []
+        for state in view.things(payload.kind):
+            if state.stub_ignored:
+                continue
+            entry: dict[str, Any] = {
+                "id": state.id,
+                "kind": state.kind,
+                "name": view.name_of(state.id) or "",
+            }
+            if state.is_stub:
+                entry["stub"] = _stub_out(state)
+            things.append(entry)
         self._reply("list_things", {"kind": payload.kind, "things": things})
 
     async def handle_list_heritage(self, data: dict):
@@ -819,7 +1135,14 @@ class WorldsPlugin(Plugin):
         else:
             client = self._client()
             preview = preview_thing(
-                world, payload.kind, payload.prompt, payload.fields, client
+                world,
+                payload.kind,
+                payload.prompt,
+                payload.fields,
+                client,
+                stub_id=payload.stub_id,
+                picks=payload.picks,
+                new_names=payload.new_names,
             )
         self._spawn(
             preview,
@@ -834,19 +1157,137 @@ class WorldsPlugin(Plugin):
     async def handle_accept_preview(self, data: dict):
         payload = AcceptPreviewPayload(**data)
         world = self._require_world()
-        thing_id = accept_preview(world, payload.preview)
+        thing_id = accept_preview(world, payload.preview, into_stub=payload.into_stub)
         self._reply("accept_preview", self._thing_payload(world, thing_id, None))
+
+    # --- stubs ------------------------------------------------------------
+
+    async def handle_make_stub(self, data: dict):
+        """Make a stub named `text` (or reuse the thing already named so,
+        reviving an ignored stub) and link that phrase in the fact,
+        answering like `correct_fact`. Only the first occurrence of the
+        phrase outside any reference is linked; nothing else in the fact
+        changes. A phrase the fact doesn't hold that way is refused, writing
+        nothing."""
+
+        payload = MakeStubPayload(**data)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        fact = self._require_fact_of(world, payload.thing_id, payload.fact_id)
+        phrase = " ".join(payload.text.split())
+        if not phrase:
+            raise ValueError("a stub needs a name")
+        if payload.kind not in KINDS:
+            raise ValueError(f"no such kind: {payload.kind!r}")
+        old_text = fact.text or ""
+        with world.revision(Source.manual(note=f"stub {phrase}")) as rev:
+            made = make_stubs(
+                rev, world.view(at), [NewName(name=phrase, kind=payload.kind)]
+            )
+            stub_id = made[phrase]
+            if stub_id == payload.thing_id:
+                raise ValueError(f"{phrase!r} is this thing's own name")
+            reused = world.view(at).thing(stub_id)
+            if reused is not None and reused.stub_ignored:
+                # the owner asked for it by name: it's no longer ignored
+                rev.set_field(stub_id, "stub", {"ignored": False}, None)
+            # only the phrase is linked: the rest of the fact stays as the
+            # owner left it (a name treated as new stays plain)
+            rev.correct_fact(
+                payload.fact_id, text=link_phrase(old_text, phrase, stub_id)
+            )
+        log.info("worlds.stub_made", id=stub_id, name=phrase, kind=payload.kind)
+        self._edited("make_stub", payload.thing_id, at, prose=False)
+
+    async def handle_list_stubs(self, data: dict):
+        payload = ListStubsPayload(**data)
+        view = self._require_world().view()
+        stubs = []
+        for state in view.things():
+            if not state.is_stub or (
+                state.stub_ignored and not payload.include_ignored
+            ):
+                continue
+            found = mentions(view, state.id)
+            # the mention written first: the lowest revision, then fact order
+            written = {
+                fact.fact_id: fact.source_rev
+                for _owner, fact in view.referencing(state.id, any_date=True)
+            }
+            first = min(
+                enumerate(found),
+                key=lambda pair: (written.get(pair[1].fact_id, 0), pair[0]),
+                default=None,
+            )
+            stubs.append(
+                {
+                    "id": state.id,
+                    "name": view.name_of(state.id) or "",
+                    "kind": state.kind,
+                    "first_mentioned": (
+                        {"thing_id": first[1].owner_id, "name": first[1].owner_name}
+                        if first is not None
+                        else None
+                    ),
+                    "mentions": len(found),
+                    "ignored": state.stub_ignored,
+                }
+            )
+        stubs.sort(key=lambda stub: (stub["name"].casefold(), stub["id"]))
+        self._reply("list_stubs", {"stubs": stubs})
+
+    async def handle_ignore_stub(self, data: dict):
+        payload = IgnoreStubPayload(**data)
+        world = self._require_world()
+        self._require_stub(world, payload.id)
+        with world.revision(Source.manual()) as rev:
+            rev.set_field(payload.id, "stub", {"ignored": payload.ignored}, None)
+        self._reply("ignore_stub", self._thing_payload(world, payload.id, None))
+
+    async def handle_change_stub_kind(self, data: dict):
+        payload = ChangeStubKindPayload(**data)
+        world = self._require_world()
+        self._require_stub(world, payload.id)
+        with world.revision(Source.manual()) as rev:
+            rev.change_stub_kind(payload.id, payload.kind)
+        self._reply("change_stub_kind", self._thing_payload(world, payload.id, None))
+
+    async def handle_stub_suggestion(self, data: dict):
+        payload = ThingIdPayload(**data)
+        world = self._require_world()
+        self._require_stub(world, payload.id)
+        view = world.view()
+        self._reply(
+            "stub_suggestion",
+            {
+                "id": payload.id,
+                "prompt": suggested_prompt(view, payload.id),
+                "context": [
+                    [heading, facts]
+                    for heading, facts in mention_context(view, payload.id)
+                ],
+            },
+        )
 
     # --- edits ------------------------------------------------------------
 
     async def handle_add_fact(self, data: dict):
         payload = AddFactPayload(**data)
         world = self._require_world()
+        text = self._linked(
+            world,
+            payload.thing_id,
+            payload.text,
+            payload.picks,
+            _date_in(payload.valid_from) or _date_in(payload.at),
+            payload.new_names,
+            payload.spans,
+        )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(
                 payload.thing_id,
                 payload.category,
-                payload.text,
+                text,
                 valid_from=_date_in(payload.valid_from),
                 valid_until=_date_in(payload.valid_until),
             )
@@ -861,14 +1302,56 @@ class WorldsPlugin(Plugin):
             if key in payload.model_fields_set
         }
         self._require_fact_of(world, payload.thing_id, payload.fact_id)
+        text = payload.text
+        if text is not None:
+            text = self._linked(
+                world,
+                payload.thing_id,
+                text,
+                payload.picks,
+                _date_in(payload.valid_from) or _date_in(payload.at),
+                payload.new_names,
+                payload.spans,
+            )
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
                 payload.fact_id,
-                text=payload.text,
+                text=text,
                 category=payload.category,
                 **dates,
             )
         self._edited("correct_fact", payload.thing_id, _date_in(payload.at))
+
+    async def handle_repoint_ref(self, data: dict):
+        """Point one reference of an own fact (its `occurrence`-th, in the
+        raw text) at `to_id`, keeping its words; nothing else in the fact
+        changes. Answers like `correct_fact`."""
+
+        payload = RepointRefPayload(**data)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        fact = self._require_fact_of(world, payload.thing_id, payload.fact_id)
+        view = world.view(at)
+        if view.thing(payload.to_id) is None:
+            raise KeyError(f"no such thing: {payload.to_id}")
+        if payload.to_id == payload.thing_id:
+            raise ValueError("a fact can't reference its own thing")
+        text = fact.text or ""
+        old = next(
+            (
+                found
+                for index, found in enumerate(REF_PATTERN.finditer(text))
+                if index == payload.occurrence
+            ),
+            None,
+        )
+        rendered = (
+            "".join(seg.text for seg in view.segments(old.group(0))) if old else ""
+        )
+        new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
+        with world.revision(Source.manual()) as rev:
+            rev.correct_fact(payload.fact_id, text=new_text)
+        self._edited("repoint_ref", payload.thing_id, at, prose=False)
 
     async def handle_end_fact(self, data: dict):
         payload = EndFactPayload(**data)
@@ -897,7 +1380,12 @@ class WorldsPlugin(Plugin):
                 payload.value,
                 _date_in(payload.valid_from),
             )
-        self._edited("set_field", payload.thing_id, _date_in(payload.at))
+        self._edited(
+            "set_field",
+            payload.thing_id,
+            _date_in(payload.at),
+            prose=payload.field not in ("aka", "stub"),
+        )
 
     async def handle_override_fact(self, data: dict):
         payload = OverrideFactPayload(**data)
@@ -911,11 +1399,20 @@ class WorldsPlugin(Plugin):
             raise KeyError(
                 f"{payload.thing_id} doesn't inherit fact {payload.overridden_fact_id}"
             )
+        text = self._linked(
+            world,
+            payload.thing_id,
+            payload.text,
+            payload.picks,
+            at,
+            payload.new_names,
+            payload.spans,
+        )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(
                 payload.thing_id,
                 payload.category,
-                payload.text,
+                text,
                 overrides=[payload.overridden_fact_id],
             )
         self._edited("override_fact", payload.thing_id, at)
@@ -939,7 +1436,9 @@ class WorldsPlugin(Plugin):
     async def handle_match_names(self, data: dict):
         payload = MatchNamesPayload(**data)
         world = self._require_world()
-        matches = match_names(world, payload.text, _date_in(payload.at))
+        at = _date_in(payload.at)
+        matches = match_names(world, payload.text, at)
+        unknown = unknown_proper_phrases(world.view(at), payload.text)
         self._reply(
             "match_names",
             {
@@ -947,6 +1446,7 @@ class WorldsPlugin(Plugin):
                 # echoed, so the screen can tell which lookup this answers
                 "at": payload.at,
                 "matches": [m.model_dump() for m in matches],
+                "unknown": [u.model_dump() for u in unknown],
             },
         )
 
@@ -955,17 +1455,18 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         fixed = self._fixed_setup()
         client = self._client() if fixed is None else None
+        planning = plan_scene(
+            world,
+            payload.prompt,
+            payload.picks,
+            payload.player,
+            _date_in(payload.start),
+            client,
+            reply=fixed,
+            new_names=payload.new_names,
+        )
         self._spawn(
-            plan_scene(
-                world,
-                payload.prompt,
-                payload.picks,
-                payload.player,
-                _date_in(payload.start),
-                client,
-                reply=fixed,
-                new_names=payload.new_names,
-            ),
+            self._planned(world, planning) if fixed is not None else planning,
             self.create_task_done_callback(
                 "plan_scene",
                 "plan_failed",
@@ -1014,10 +1515,11 @@ class WorldsPlugin(Plugin):
             save_world_scene(scene)
         fixed = self._fixed_setup()
         client = self._client() if fixed is None else None
+        planning = continue_setup(
+            world, payload.scene_id, payload.goal_prompt, client, reply=fixed
+        )
         self._spawn(
-            continue_setup(
-                world, payload.scene_id, payload.goal_prompt, client, reply=fixed
-            ),
+            self._planned(world, planning) if fixed is not None else planning,
             self.create_task_done_callback(
                 "continue_scene",
                 "continue_failed",

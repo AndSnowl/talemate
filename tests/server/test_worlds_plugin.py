@@ -15,6 +15,7 @@ from talemate.server.worlds import WorldsPlugin
 from talemate.scene_message import NarratorMessage
 from talemate.tale_mate import Actor
 from talemate.world.dates import WorldDate
+from talemate.world.refs import ref
 from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
@@ -839,6 +840,7 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "fact_id": h.short,
             "category": "physical",
             "rendered": "Lowlanders are short.",
+            "segments": [{"text": "Lowlanders are short.", "ref": None, "stub": False}],
             "source_id": h.lowlander,
             "source_kind": "race",
             "source_name": "Lowlander",
@@ -848,6 +850,9 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "fact_id": h.bare_skin,
             "category": "physical",
             "rendered": "Humans have bare skin.",
+            "segments": [
+                {"text": "Humans have bare skin.", "ref": None, "stub": False}
+            ],
             "source_id": h.human,
             "source_kind": "species",
             "source_name": "Human",
@@ -1329,6 +1334,78 @@ async def test_fixed_setup_setting_answers_without_a_model(
     assert client.prompt_history == []
 
 
+async def test_setup_carries_stub_previews_and_fills_them_on_start(
+    plugin, client, tmp_path, monkeypatch
+):
+    """The setup payload carries a preview for each stub it uses
+    (`stub_previews`); sent back on Start, they fill the stubs, keeping
+    their ids. In the browser tests the fixed preview stands in for each;
+    a culture stub is left as it is."""
+
+    world, _maren, _harbour = await _open_world_with_maren(plugin)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        weir = rev.create_thing(
+            "place", {"name": "The Weir", "stub": {"ignored": True}}
+        )
+        salt = rev.create_thing(
+            "culture", {"name": "Saltfolk", "stub": {"ignored": False}}
+        )
+    setup_file = tmp_path / "fixed-setup.json"
+    setup_file.write_text(
+        json.dumps(
+            {
+                "player": "Maren",
+                "characters": [],
+                "place": {"name": "The Weir"},
+                "goal": "Mend the weir.",
+                "intro": "Water roars.",
+            }
+        )
+    )
+    preview_file = tmp_path / "fixed-preview.json"
+    preview_file.write_text(
+        json.dumps(
+            {
+                "name": "ignored: the stub's own name wins",
+                "facts": [{"category": "description", "text": "A broken dam."}],
+                "prose": {"description": "A broken dam."},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SETUP", str(setup_file))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(preview_file))
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "plan_scene",
+            "prompt": "Maren mends the Weir among the Saltfolk",
+            "picks": {"Saltfolk": salt},
+            "player": None,
+            "start": WorldDate.of(313).model_dump(),
+        }
+    )
+    await _drain(plugin)
+    setup = _last(plugin, "plan_scene")["data"]["setup"]
+    assert setup["place"]["thing_id"] == weir
+    assert [p["stub_id"] for p in setup["stub_previews"]] == [weir]
+    assert setup["stub_previews"][0]["name"] == "The Weir"
+    assert world.head_rev() == head
+
+    await plugin.handle({"type": "worlds", "action": "start_scene", "setup": setup})
+    await _drain(plugin)
+    scene_id = _last(plugin, "start_scene")["data"]["scene_id"]
+    view = world.view(None)
+    state = view.thing(weir)
+    assert not state.is_stub
+    assert [fact.text for fact in state.facts] == ["A broken dam."]
+    assert view.thing(salt).is_stub
+    assert world.scenes().get(scene_id).state["place_thing_id"] == weir
+    assert client.prompt_history == []
+
+
 async def test_plan_scene_owner_choices_win(plugin, tmp_path, monkeypatch):
     """`plan_scene`'s picks beat an exact name match, and its `new_names`
     are invented even when one world thing has that name."""
@@ -1528,3 +1605,863 @@ async def test_continue_scene_saves_the_loaded_scene_first(plugin, monkeypatch):
         )
     finally:
         loaded_world.close()
+
+
+# --- links, stubs and other names ---------------------------------------------
+
+
+def _aka(name, tag="common", everyday=False):
+    return {"name": name, "tag": tag, "everyday": everyday}
+
+
+async def _open_stub_world(plugin):
+    """Maren and The Harbour, plus two stubs: the place "Tsardom of
+    Moscavia" (everyday name "Moscavia"), which Maren's background and
+    then, a revision later, The Harbour's history mention, and the ignored
+    lore stub "Hope", which Maren's personality mentions."""
+
+    world, maren, harbour = await _open_world_with_maren(plugin)
+    s = SimpleNamespace(world=world, maren=maren, harbour=harbour)
+    with world.revision(Source.manual(note="stubs")) as rev:
+        s.tsardom = rev.create_thing(
+            "place",
+            {
+                "name": "Tsardom of Moscavia",
+                "aka": [_aka("Moscavia", everyday=True)],
+                "stub": {"ignored": False},
+            },
+        )
+        s.hope = rev.create_thing("lore", {"name": "Hope", "stub": {"ignored": True}})
+        s.born = rev.add_fact(
+            maren, "background", f"Born in {ref(s.tsardom, 'Moscavia')}."
+        )
+        s.clings = rev.add_fact(
+            maren, "personality", f"Clings to {ref(s.hope, 'Hope')}."
+        )
+    with world.revision(Source.manual(note="harbour")) as rev:
+        s.ships = rev.add_fact(
+            harbour, "history", f"Ships from {ref(s.tsardom, 'Moscavia')} dock here."
+        )
+    return s
+
+
+def _plain(text):
+    return {"text": text, "ref": None, "stub": False}
+
+
+async def test_payload_segments_and_stub_fields(plugin):
+    s = await _open_stub_world(plugin)
+    world = s.world
+    start, end = prose_gen.stretch_containing(world, s.maren, None)
+    world.prose().put(
+        s.maren,
+        "description",
+        start,
+        end,
+        "Maren sails from The Harbour toward Moscavia, clinging to Hope.",
+    )
+    head = world.head_rev()
+
+    thing = await _get_thing(plugin, s.maren)
+    facts = {f["fact_id"]: f for f in thing["facts"]}
+    assert facts[s.born]["segments"] == [
+        _plain("Born in "),
+        {"text": "Moscavia", "ref": s.tsardom, "stub": True},
+        _plain("."),
+    ]
+    # an ignored stub is hidden: its words stay, as plain text
+    assert facts[s.clings]["segments"] == [_plain("Clings to Hope.")]
+    # prose is matched by name, never linked to the thing itself, and makes
+    # nothing
+    assert thing["prose_segments"] == {
+        "description": [
+            _plain("Maren sails from "),
+            {"text": "The Harbour", "ref": s.harbour, "stub": False},
+            _plain(" toward "),
+            {"text": "Moscavia", "ref": s.tsardom, "stub": True},
+            _plain(", clinging to Hope."),
+        ],
+        "personality": [],
+    }
+    assert world.head_rev() == head
+    assert thing["aka"] == []
+    assert thing["stub"] is None
+    assert "aka" not in thing["fields"] and "stub" not in thing["fields"]
+    assert thing["named_stubs"] == [
+        {"id": s.tsardom, "name": "Tsardom of Moscavia", "kind": "place"}
+    ]
+    assert thing["mentions"] == []
+    json.dumps(thing)
+
+    stub = await _get_thing(plugin, s.tsardom)
+    assert stub["stub"] == {"ignored": False}
+    assert stub["aka"] == [_aka("Moscavia", everyday=True)]
+    assert stub["fields"] == {"name": "Tsardom of Moscavia"}
+    assert sorted(
+        (m["owner_id"], m["fact_id"], m["text"]) for m in stub["mentions"]
+    ) == sorted(
+        [
+            (s.maren, s.born, "Born in Moscavia."),
+            (s.harbour, s.ships, "Ships from Moscavia dock here."),
+        ]
+    )
+    assert (await _get_thing(plugin, s.hope))["stub"] == {"ignored": True}
+
+    # kind lists hold stubs, marked, but not ignored ones
+    await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
+    places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+    assert places == {
+        s.harbour: {"id": s.harbour, "kind": "place", "name": "The Harbour"},
+        s.tsardom: {
+            "id": s.tsardom,
+            "kind": "place",
+            "name": "Tsardom of Moscavia",
+            "stub": {"ignored": False},
+        },
+    }
+    await plugin.handle({"type": "worlds", "action": "list_things", "kind": "lore"})
+    assert _last(plugin, "list_things")["data"]["things"] == []
+
+
+async def test_match_names_marks_stubs_and_unknown(plugin):
+    s = await _open_stub_world(plugin)
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "match_names",
+            "text": "Maren rows from Moscavia to Kremova.",
+            "at": None,
+        }
+    )
+    data = _last(plugin, "match_names")["data"]
+    matches = {m["text"]: m for m in data["matches"]}
+    assert matches["Moscavia"]["candidates"][0] == {
+        "id": s.tsardom,
+        "name": "Tsardom of Moscavia",
+        "kind": "place",
+        "stub": True,
+        "via": "aka",
+    }
+    assert matches["Maren"]["candidates"][0]["stub"] is False
+    assert matches["Maren"]["candidates"][0]["via"] == "name"
+    assert data["unknown"] == [{"start": 28, "end": 35, "text": "Kremova"}]
+
+
+async def test_add_fact_links_known_names_and_picks(plugin, monkeypatch):
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    count = len(world.view().things())
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "add_fact",
+            "thing_id": s.maren,
+            "category": "background",
+            "text": "Maren left Moscavia for The Harbour with Vasha and the Grey Pier crew.",
+            "picks": {"Grey Pier": s.harbour},
+        }
+    )
+    reply = _last(plugin, "add_fact")["data"]
+    fact = next(f for f in reply["facts"] if f["text"].startswith("Maren left"))
+    # her own name stays plain; the stub, the entry and the pick link,
+    # keeping their words; "Vasha" is only a suggestion, never a stub
+    assert fact["text"] == (
+        f"Maren left {ref(s.tsardom, 'Moscavia')} for "
+        f"{ref(s.harbour, 'The Harbour')} with Vasha and the "
+        f"{ref(s.harbour, 'Grey Pier')} crew."
+    )
+    assert fact["rendered"] == (
+        "Maren left Moscavia for The Harbour with Vasha and the Grey Pier crew."
+    )
+    assert len(world.view().things()) == count
+
+    # correcting the text links it again; an existing reference (a re-point
+    # keeps its words and swaps the id) is kept as sent
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "correct_fact",
+            "thing_id": s.maren,
+            "fact_id": fact["fact_id"],
+            "text": f"Met Vasha at {ref(s.tsardom, 'The Harbour')} by Moscavia.",
+            "picks": {"Vasha": s.maren},
+        }
+    )
+    corrected = next(
+        f
+        for f in _last(plugin, "correct_fact")["data"]["facts"]
+        if f["fact_id"] == fact["fact_id"]
+    )
+    # a pick meaning the thing itself stays plain, like its own name
+    assert corrected["text"] == (
+        f"Met Vasha at {ref(s.tsardom, 'The Harbour')} by {ref(s.tsardom, 'Moscavia')}."
+    )
+
+
+async def test_fact_edits_leave_names_treated_as_new_plain(plugin, monkeypatch):
+    """A name the owner treats as new in a fact form (`new_names`) stays
+    plain text, though the world has a thing by that name; a pick still
+    links."""
+
+    s = await _open_stub_world(plugin)
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "add_fact",
+            "thing_id": s.maren,
+            "category": "background",
+            "text": "Maren left Moscavia for The Harbour.",
+            "new_names": ["The Harbour"],
+        }
+    )
+    fact = next(
+        f
+        for f in _last(plugin, "add_fact")["data"]["facts"]
+        if f["rendered"].startswith("Maren left")
+    )
+    assert fact["text"] == (f"Maren left {ref(s.tsardom, 'Moscavia')} for The Harbour.")
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "correct_fact",
+            "thing_id": s.maren,
+            "fact_id": fact["fact_id"],
+            "text": "Maren left Moscavia for The Harbour.",
+            "new_names": ["Moscavia"],
+            "picks": {"The Harbour": s.harbour},
+        }
+    )
+    corrected = next(
+        f
+        for f in _last(plugin, "correct_fact")["data"]["facts"]
+        if f["fact_id"] == fact["fact_id"]
+    )
+    assert corrected["text"] == (
+        f"Maren left Moscavia for {ref(s.harbour, 'The Harbour')}."
+    )
+
+
+async def test_make_stub_leaves_a_name_treated_as_new_plain(plugin, monkeypatch):
+    """Making a stub of one phrase links that phrase only: a known name the
+    owner left plain in the same fact (treat as new) stays plain."""
+
+    s = await _open_stub_world(plugin)
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "add_fact",
+            "thing_id": s.maren,
+            "category": "background",
+            "text": "Orphaned near The Harbour on the Night of Feathers.",
+            "new_names": ["The Harbour"],
+        }
+    )
+    fact = next(
+        f
+        for f in _last(plugin, "add_fact")["data"]["facts"]
+        if f["rendered"].startswith("Orphaned")
+    )
+    assert fact["text"] == "Orphaned near The Harbour on the Night of Feathers."
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.maren,
+            "fact_id": fact["fact_id"],
+            "text": "Night of Feathers",
+            "kind": "event",
+        }
+    )
+    night = next(t for t in s.world.view().things("event"))
+    made = next(
+        f
+        for f in _last(plugin, "make_stub")["data"]["facts"]
+        if f["fact_id"] == fact["fact_id"]
+    )
+    assert made["text"] == (
+        f"Orphaned near The Harbour on the {ref(night.id, 'Night of Feathers')}."
+    )
+
+
+async def test_repoint_ref_swaps_one_link_only(plugin, monkeypatch):
+    """`repoint_ref` points the n-th reference of a fact at another thing,
+    keeping its words, and leaves everything else as it was: a known name
+    written plain stays plain."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(
+            s.maren,
+            "background",
+            f"Sailed from {ref(s.tsardom, 'Moscavia')} past The Harbour"
+            f" to {ref(s.tsardom, 'Moscavia')}.",
+        )
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "repoint_ref",
+            "thing_id": s.maren,
+            "fact_id": fact_id,
+            "occurrence": 1,
+            "to_id": s.harbour,
+        }
+    )
+    assert world.head_rev() == head + 1
+    fact = next(
+        f
+        for f in _last(plugin, "repoint_ref")["data"]["facts"]
+        if f["fact_id"] == fact_id
+    )
+    assert fact["text"] == (
+        f"Sailed from {ref(s.tsardom, 'Moscavia')} past The Harbour"
+        f" to {ref(s.harbour, 'Moscavia')}."
+    )
+
+    # no such reference, or a thing that isn't there: refused
+    head = world.head_rev()
+    for occurrence, to_id in ((5, s.harbour), (0, "f" * 32)):
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "repoint_ref",
+                "thing_id": s.maren,
+                "fact_id": fact_id,
+                "occurrence": occurrence,
+                "to_id": to_id,
+            }
+        )
+        assert "error" in _last(plugin, "operation_done")
+    assert world.head_rev() == head
+
+
+async def test_fact_spans_keep_same_name_links_apart(plugin, monkeypatch):
+    """A fact form's `spans` link their words positionally, before picks and
+    automatic matching: two links written "Maren" keep their own targets,
+    and a third, plain "Maren" follows the name-keyed pick."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="marens")) as rev:
+        vos = rev.create_thing("character", {"name": "Maren Vos"})
+        holt = rev.create_thing("character", {"name": "Maren Holt"})
+        fact_id = rev.add_fact(
+            s.harbour,
+            "history",
+            f"{ref(vos, 'Maren')} rowed with {ref(holt, 'Maren')}.",
+        )
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "correct_fact",
+            "thing_id": s.harbour,
+            "fact_id": fact_id,
+            "text": "Maren rowed with Maren past Maren's dock, and Maren.",
+            "spans": [
+                {"start": 0, "end": 5, "ref": vos},
+                {"start": 17, "end": 22, "ref": holt},
+                {"start": 46, "end": 51, "ref": None},
+            ],
+            "picks": {"Maren": s.maren},
+        }
+    )
+    fact = next(
+        f
+        for f in _last(plugin, "correct_fact")["data"]["facts"]
+        if f["fact_id"] == fact_id
+    )
+    # a span with no ref keeps its words plain, whatever the picks say
+    assert fact["text"] == (
+        f"{ref(vos, 'Maren')} rowed with {ref(holt, 'Maren')}"
+        f" past {ref(s.maren, 'Maren')}'s dock, and Maren."
+    )
+
+
+async def test_make_stub_refuses_the_owner_itself(plugin, monkeypatch):
+    """A stub of the fact's own thing's name would be a link to itself:
+    refused, writing nothing."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(s.harbour, "history", "The Harbour flooded once.")
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.harbour,
+            "fact_id": fact_id,
+            "text": "The Harbour",
+            "kind": "place",
+        }
+    )
+    assert "error" in _last(plugin, "operation_done")
+    assert world.head_rev() == head
+
+
+async def test_make_stub_action(plugin, monkeypatch):
+    s = await _open_stub_world(plugin)
+    world = s.world
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(
+            s.maren, "background", "Orphaned on the Night of Feathers in Moscavia."
+        )
+    head = world.head_rev()
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.maren,
+            "fact_id": fact_id,
+            "text": "Night of Feathers",
+            "kind": "event",
+        }
+    )
+    reply = _last(plugin, "make_stub")["data"]
+    assert world.head_rev() == head + 1
+    assert reply["id"] == s.maren
+    view = world.view()
+    night = next(t for t in view.things("event"))
+    assert view.name_of(night.id) == "Night of Feathers"
+    assert night.is_stub and not night.stub_ignored
+    fact = next(f for f in reply["facts"] if f["fact_id"] == fact_id)
+    assert fact["segments"] == [
+        _plain("Orphaned on the "),
+        {"text": "Night of Feathers", "ref": night.id, "stub": True},
+        # only the phrase asked for is linked: the rest is left as it was
+        _plain(" in Moscavia."),
+    ]
+    assert {"id": night.id, "name": "Night of Feathers", "kind": "event"} in reply[
+        "named_stubs"
+    ]
+
+    # a phrase the fact doesn't hold is refused, writing nothing
+    head = world.head_rev()
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.maren,
+            "fact_id": fact_id,
+            "text": "Kremova",
+            "kind": "place",
+        }
+    )
+    assert "Kremova" in _last(plugin, "operation_done")["error"]["message"]
+    assert world.head_rev() == head
+
+    # an ignored stub of that name is reused, and no longer ignored
+    with world.revision(Source.manual(note="fact")) as rev:
+        prays = rev.add_fact(s.maren, "personality", "Prays for Hope.")
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "make_stub",
+            "thing_id": s.maren,
+            "fact_id": prays,
+            "text": "Hope",
+            "kind": "lore",
+        }
+    )
+    fact = next(
+        f for f in _last(plugin, "make_stub")["data"]["facts"] if f["fact_id"] == prays
+    )
+    assert fact["text"] == f"Prays for {ref(s.hope, 'Hope')}."
+    assert not world.view().thing(s.hope).stub_ignored
+
+
+async def test_list_stubs_counts_and_ignored(plugin):
+    s = await _open_stub_world(plugin)
+
+    await plugin.handle({"type": "worlds", "action": "list_stubs"})
+    assert _last(plugin, "list_stubs")["data"] == {
+        "stubs": [
+            {
+                "id": s.tsardom,
+                "name": "Tsardom of Moscavia",
+                "kind": "place",
+                # Maren's fact was written first
+                "first_mentioned": {"thing_id": s.maren, "name": "Maren"},
+                "mentions": 2,
+                "ignored": False,
+            }
+        ]
+    }
+
+    await plugin.handle(
+        {"type": "worlds", "action": "list_stubs", "include_ignored": True}
+    )
+    stubs = _last(plugin, "list_stubs")["data"]["stubs"]
+    assert [stub["name"] for stub in stubs] == ["Hope", "Tsardom of Moscavia"]
+    assert stubs[0] == {
+        "id": s.hope,
+        "name": "Hope",
+        "kind": "lore",
+        "first_mentioned": {"thing_id": s.maren, "name": "Maren"},
+        "mentions": 1,
+        "ignored": True,
+    }
+
+
+async def test_ignore_and_change_kind(plugin):
+    s = await _open_stub_world(plugin)
+    world = s.world
+
+    await plugin.handle(
+        {"type": "worlds", "action": "ignore_stub", "id": s.tsardom, "ignored": True}
+    )
+    assert _last(plugin, "ignore_stub")["data"]["stub"] == {"ignored": True}
+    assert world.view().thing(s.tsardom).stub_ignored
+    await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
+    assert [t["id"] for t in _last(plugin, "list_things")["data"]["things"]] == [
+        s.harbour
+    ]
+    born = next(
+        f
+        for f in (await _get_thing(plugin, s.maren))["facts"]
+        if f["fact_id"] == s.born
+    )
+    assert born["segments"] == [_plain("Born in Moscavia.")]
+
+    await plugin.handle(
+        {"type": "worlds", "action": "ignore_stub", "id": s.tsardom, "ignored": False}
+    )
+    assert not world.view().thing(s.tsardom).stub_ignored
+
+    await plugin.handle(
+        {"type": "worlds", "action": "change_stub_kind", "id": s.hope, "kind": "item"}
+    )
+    changed = _last(plugin, "change_stub_kind")["data"]
+    assert (changed["id"], changed["kind"]) == (s.hope, "item")
+    assert world.view().thing(s.hope).kind == "item"
+
+    # a full entry is no stub: neither action applies to it
+    head = world.head_rev()
+    await plugin.handle(
+        {"type": "worlds", "action": "ignore_stub", "id": s.harbour, "ignored": True}
+    )
+    assert _last(plugin, "operation_done")["error"]
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "change_stub_kind",
+            "id": s.harbour,
+            "kind": "lore",
+        }
+    )
+    assert _last(plugin, "operation_done")["error"]
+    assert world.head_rev() == head
+
+
+async def test_stub_suggestion(plugin):
+    s = await _open_stub_world(plugin)
+    with s.world.revision(Source.manual(note="culture")) as rev:
+        rite = rev.create_thing(
+            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
+        )
+        rev.add_fact(s.harbour, "general", f"Keeps the {ref(rite, 'Feather Rite')}.")
+
+    await plugin.handle(
+        {"type": "worlds", "action": "stub_suggestion", "id": s.tsardom}
+    )
+    data = _last(plugin, "stub_suggestion")["data"]
+    assert data["id"] == s.tsardom
+    assert data["prompt"] == (
+        "Tsardom of Moscavia: Born in Moscavia. Ships from Moscavia dock here."
+    )
+    assert data["context"] == [
+        [
+            "Maren (character)",
+            [
+                "Born in Moscavia.",
+                "Tall and grey-eyed.",
+                "Lost her left eye.",
+                "Clings to Hope.",
+            ],
+        ],
+        [
+            "The Harbour (place)",
+            ["Ships from Moscavia dock here.", "Keeps the Feather Rite."],
+        ],
+    ]
+
+    # a culture stub can't be expanded yet, but it has a suggestion
+    await plugin.handle({"type": "worlds", "action": "stub_suggestion", "id": rite})
+    assert _last(plugin, "stub_suggestion")["data"]["prompt"] == (
+        "Feather Rite: Keeps the Feather Rite."
+    )
+
+
+async def test_preview_with_stub_id_and_accept_into_stub(plugin, client):
+    s = await _open_stub_world(plugin)
+    world = s.world
+    reply = json.dumps(
+        {
+            "name": "Tsardom of Moscavia",
+            "facts": [{"category": "description", "text": "A realm of pine forest."}],
+        }
+    )
+
+    async with MockClientContext():
+        client_responses.get().extend([reply, "Pines, everywhere."])
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "preview_thing",
+                "kind": "lore",
+                "prompt": "the northern realm Maren came from",
+                "fields": {},
+                "stub_id": s.tsardom,
+                "picks": {"Maren": s.maren},
+            }
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_thing")["data"]
+    assert (preview["kind"], preview["stub_id"]) == ("place", s.tsardom)
+    assert preview["picks"] == {"Maren": s.maren}
+    assert preview["context"][0][0] == "Maren (character)"
+
+    await plugin.handle(
+        {"type": "worlds", "action": "accept_preview", "preview": preview}
+    )
+    accepted = _last(plugin, "accept_preview")["data"]
+    assert accepted["id"] == s.tsardom
+    assert accepted["stub"] is None
+    assert accepted["aka"] == [_aka("Moscavia", everyday=True)]
+
+    # a preview made without a stub fills one with `into_stub`
+    lore_reply = json.dumps(
+        {
+            "name": "Hope",
+            "facts": [{"category": "general", "text": "A sailor's creed."}],
+        }
+    )
+    async with MockClientContext():
+        client_responses.get().extend([lore_reply, "A creed."])
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "preview_thing",
+                "kind": "lore",
+                "prompt": "a sailor's creed",
+                "fields": {},
+            }
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_thing")["data"]
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "accept_preview",
+            "preview": preview,
+            "into_stub": s.hope,
+        }
+    )
+    filled = _last(plugin, "accept_preview")["data"]
+    assert filled["id"] == s.hope
+    assert filled["stub"] is None
+    assert not world.view().thing(s.hope).is_stub
+
+    # a culture stub can't be expanded yet: the preview fails, saying so
+    with world.revision(Source.manual(note="culture")) as rev:
+        rite = rev.create_thing(
+            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
+        )
+    async with MockClientContext():
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "preview_thing",
+                # the stub's own kind decides, whatever is asked
+                "kind": "lore",
+                "prompt": "Feather Rite",
+                "fields": {},
+                "stub_id": rite,
+            }
+        )
+        await _drain(plugin)
+    assert "a culture stub can't be expanded" in str(_last(plugin, "preview_failed"))
+
+
+async def test_preview_names_treated_as_new(plugin, client):
+    """A matched name the owner treats as new is never context or a link
+    to the entry: listed by the model, it becomes a stub of its own;
+    unlisted, it stays plain text."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    reply = json.dumps(
+        {
+            "name": "Ilse",
+            "facts": [
+                {"category": "background", "text": "Sister of Maren, from Moscavia."}
+            ],
+            "names": [{"name": "Maren", "kind": "character", "aka": []}],
+        }
+    )
+
+    async def preview_and_accept(model_reply):
+        client.prompt_history.clear()
+        async with MockClientContext():
+            client_responses.get().extend([model_reply, "Ilse."])
+            await plugin.handle(
+                {
+                    "type": "worlds",
+                    "action": "preview_thing",
+                    "kind": "character",
+                    "prompt": "Maren's sister",
+                    "fields": {},
+                    "picks": {"Maren": s.maren},
+                    "new_names": ["Maren"],
+                }
+            )
+            await _drain(plugin)
+            # the facts, then the one prose section they have facts for
+            assert len(client.prompt_history) == 2
+            preview = _last(plugin, "preview_thing")["data"]
+            prompt = str(client.prompt_history[0]["prompt"])
+        await plugin.handle(
+            {"type": "worlds", "action": "accept_preview", "preview": preview}
+        )
+        return preview, prompt, _last(plugin, "accept_preview")["data"]
+
+    preview, prompt, accepted = await preview_and_accept(reply)
+    assert "Named in this prompt" not in prompt
+    assert "Tall and grey-eyed." not in prompt
+    assert preview["picks"] == {}
+    assert [n["name"] for n in preview["new_names"]] == ["Maren"]
+    view = world.view()
+    marens = [t.id for t in view.things("character") if view.name_of(t.id) == "Maren"]
+    stub = next(t for t in marens if t != s.maren)
+    assert view.thing(stub).is_stub
+    assert accepted["facts"][0]["text"] == (
+        f"Sister of {ref(stub, 'Maren')}, from {ref(s.tsardom, 'Moscavia')}."
+    )
+
+    # not listed by the model: the name stays plain
+    unlisted = json.dumps(
+        {
+            "name": "Ilse",
+            "facts": [{"category": "background", "text": "Sister of Maren."}],
+        }
+    )
+    _preview, _prompt, accepted = await preview_and_accept(unlisted)
+    assert accepted["facts"][0]["text"] == "Sister of Maren."
+
+
+async def test_fixed_preview_expands_and_offers_stubs(plugin, tmp_path, monkeypatch):
+    """The browser tests' fixed preview acts like a real one for stubs: a
+    `stub_id` gives the stub's kind, name and mention context, and a
+    preview named like a stub offers it as `matching_stub_id`."""
+
+    s = await _open_stub_world(plugin)
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Tsardom of Moscavia",
+                "facts": [{"category": "description", "text": "Pine forest."}],
+                "prose": {"description": "Pines."},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+
+    async def preview(**extra):
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "preview_thing",
+                "kind": "place",
+                "prompt": "a northern realm",
+                "fields": {},
+                **extra,
+            }
+        )
+        await _drain(plugin)
+        return _last(plugin, "preview_thing")["data"]
+
+    expanded = await preview(kind="lore", stub_id=s.tsardom)
+    assert (expanded["kind"], expanded["stub_id"]) == ("place", s.tsardom)
+    assert expanded["matching_stub_id"] is None
+    assert [heading for heading, _facts in expanded["context"]] == [
+        "Maren (character)",
+        "The Harbour (place)",
+    ]
+
+    offered = await preview()
+    assert (offered["stub_id"], offered["matching_stub_id"]) == (None, s.tsardom)
+
+    # a culture stub can't be expanded, fixed preview or not
+    with s.world.revision(Source.manual(note="culture")) as rev:
+        rite = rev.create_thing(
+            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
+        )
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "preview_thing",
+            "kind": "lore",
+            "prompt": "a rite",
+            "fields": {},
+            "stub_id": rite,
+        }
+    )
+    await _drain(plugin)
+    assert "a culture stub can't be expanded" in str(_last(plugin, "preview_failed"))
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "accept_preview",
+            "preview": offered,
+            "into_stub": s.tsardom,
+        }
+    )
+    assert _last(plugin, "accept_preview")["data"]["id"] == s.tsardom
+
+
+async def test_link_and_other_name_edits_schedule_no_prose(plugin, client):
+    """Making a stub of a phrase, re-pointing a link and teaching an other
+    name change no rendered text: no prose is scheduled, and the thing's
+    prose stays fresh."""
+
+    s = await _open_stub_world(plugin)
+    world = s.world
+    with world.revision(Source.manual(note="fact")) as rev:
+        fact_id = rev.add_fact(
+            s.maren,
+            "background",
+            f"Sailed from {ref(s.tsardom, 'Moscavia')} on the Night of Feathers.",
+        )
+    start, end = prose_gen.stretch_containing(world, s.maren, None)
+    for section in prose_gen.sections_for("character"):
+        world.prose().put(s.maren, section, start, end, "Maren.")
+
+    async def edit(action, **data):
+        await plugin.handle(
+            {"type": "worlds", "action": action, "thing_id": s.maren, **data}
+        )
+        assert not [m for m in _replies(plugin, "operation_done") if "error" in m]
+        assert _last(plugin, action)
+        assert not plugin.tasks, f"{action} scheduled prose"
+
+    await edit("make_stub", fact_id=fact_id, text="Night of Feathers", kind="event")
+    await edit("repoint_ref", fact_id=fact_id, occurrence=0, to_id=s.harbour)
+    await edit("set_field", field="aka", value=[_aka("Mara")], valid_from=None)
+
+    assert client.prompt_history == []
+    for section in prose_gen.sections_for("character"):
+        assert world.prose().stale(s.maren, section, None) is False

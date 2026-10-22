@@ -10,17 +10,36 @@ import { createPinia, setActivePinia } from 'pinia';
 
 import { dateOf, dateParts, ageAt, clampDay, daysInMonth, formatDate, spanLabel } from '../src/components/worlds/worldDates.js';
 import {
+    akaAdded,
+    akaChanged,
+    akaEveryday,
+    akaRemoved,
     currentNameFrom,
     defaultOverrideIndex,
     heritageFromMatches,
     pageAfterDelete,
     parseWorldTarget,
+    previewSegments,
     sameParents,
     useWorldsStore,
     worldTarget,
 } from '../src/stores/worlds.js';
-import { NEW_THING, newNamesPayload, pickedId, picksPayload, promptSegments } from '../src/components/worlds/nameHighlights.js';
-import { TOP_KINDS, overrideCategory } from '../src/components/worlds/worldKinds.js';
+import {
+    NEW_THING,
+    factEditState,
+    factLinkPayload,
+    linkPayload,
+    locateLinks,
+    matchState,
+    newNamesPayload,
+    pickedId,
+    picksPayload,
+    promptSegments,
+    refOccurrence,
+    repicks,
+    searchReferences,
+} from '../src/components/worlds/nameHighlights.js';
+import { STUB_KINDS, TOP_KINDS, canExpand, expandNote, overrideCategory } from '../src/components/worlds/worldKinds.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
 let passed = 0;
@@ -120,6 +139,18 @@ check('a name picks its best candidate until the owner picks another', () => {
     assert.equal(pickedId(MATCHES[0], { maren: NEW_THING }), NEW_THING);
 });
 
+check('a suggested (partial) match is never picked unless the owner picks it', () => {
+    const tsardom = { id: 'ts', name: 'Tsardom of Moscavia', kind: 'place', via: 'partial' };
+    const suggested = { start: 0, end: 8, text: 'Moscavia', candidates: [tsardom], suggested: true };
+    assert.equal(pickedId(suggested, {}), NEW_THING);
+    assert.equal(pickedId(suggested, { moscavia: 'ts' }), 'ts');
+    // left alone, it's neither a pick nor a name treated as new
+    assert.deepEqual(picksPayload([suggested], {}), {});
+    assert.deepEqual(newNamesPayload([suggested], {}), []);
+    assert.deepEqual(picksPayload([suggested], { moscavia: 'ts' }), { Moscavia: 'ts' });
+    assert.deepEqual(newNamesPayload([suggested], { moscavia: NEW_THING }), ['Moscavia']);
+});
+
 check('picks go out once per name, leaving out names treated as new', () => {
     assert.deepEqual(picksPayload(MATCHES, { maren: 'vos' }), { Maren: 'vos', Sallowford: 'sal' });
     assert.deepEqual(picksPayload(MATCHES, { maren: NEW_THING }), { Sallowford: 'sal' });
@@ -145,6 +176,227 @@ check('the prompt is cut into plain text, matched names and new names', () => {
     assert.equal(segments.map((s) => s.text).join(''), PROMPT);
     assert.deepEqual([segments[2].start, segments[2].end], [16, 26]);
     assert.equal(segments[4].match, null);
+});
+
+const TS_ID = 'a'.repeat(32);
+const VOS_ID = 'b'.repeat(32);
+const HOLT_ID = 'c'.repeat(32);
+
+check('a suggested match shows dotted until the owner picks or turns it down', () => {
+    const tsardom = { id: 'ts', name: 'Tsardom of Moscavia', kind: 'place' };
+    const suggested = { start: 0, end: 8, text: 'Moscavia', candidates: [tsardom], suggested: true };
+    assert.equal(matchState(suggested, {}), 'suggested');
+    assert.equal(matchState(suggested, { moscavia: 'ts' }), 'matched');
+    assert.equal(matchState(suggested, { moscavia: NEW_THING }), 'new');
+    // a reference made by hand for the name counts as picked
+    assert.equal(matchState(suggested, {}, { moscavia: { id: 'ts', text: 'Moscavia' } }), 'matched');
+    assert.equal(matchState(MATCHES[0], {}), 'matched');
+});
+
+check('a reference made by hand wins over the best candidate, a re-pick over it', () => {
+    const refs = { maren: { id: 'vos', text: 'Maren' } };
+    assert.equal(pickedId(MATCHES[0], {}, refs), 'vos');
+    assert.equal(pickedId(MATCHES[0], { maren: 'holt' }, refs), 'holt');
+    assert.equal(pickedId(MATCHES[0], { maren: NEW_THING }, refs), NEW_THING);
+    // any thing, not only a candidate
+    assert.equal(pickedId(MATCHES[0], {}, { maren: { id: 'elsewhere', text: 'Maren' } }), 'elsewhere');
+});
+
+check('link payloads: matched names, then references no match covers', () => {
+    const refs = { yelena: { id: 'yel', text: 'Yelena' }, sallowford: { id: 'other', text: 'Sallowford' } };
+    assert.deepEqual(linkPayload(MATCHES, { maren: 'vos' }, refs), {
+        picks: { Maren: 'vos', Sallowford: 'other', Yelena: 'yel' },
+        newNames: [],
+    });
+    // treated as new: neither picked nor referenced
+    assert.deepEqual(linkPayload(MATCHES, { sallowford: NEW_THING }, refs), {
+        picks: { Maren: 'holt', Yelena: 'yel' },
+        newNames: ['Sallowford'],
+    });
+});
+
+check('re-picks are the candidates the owner chose by hand, once per name', () => {
+    assert.deepEqual(repicks(MATCHES, {}), []);
+    assert.deepEqual(repicks(MATCHES, { maren: 'vos', sallowford: NEW_THING }), [{ id: 'vos', name: 'Maren' }]);
+    // a pick that isn't a candidate isn't a re-pick
+    assert.deepEqual(repicks(MATCHES, { maren: 'gone' }), []);
+});
+
+check('references, unknown phrases and stubs-to-be show in the prompt', () => {
+    const text = 'Sailed with Yelena past Iron Gate and Old Mill.';
+    const unknown = [
+        { start: 24, end: 33, text: 'Iron Gate' },
+        { start: 38, end: 46, text: 'Old Mill' },
+    ];
+    const segments = promptSegments(text, [], {}, [], {
+        refs: { yelena: { id: 'yel', text: 'Yelena' } },
+        unknown,
+        stubs: [{ text: 'Old Mill', kind: 'place' }],
+    });
+    assert.deepEqual(
+        segments.map((s) => [s.text, s.state || null]),
+        [
+            ['Sailed with ', null],
+            ['Yelena', 'matched'],
+            [' past ', null],
+            ['Iron Gate', 'unknown'],
+            [' and ', null],
+            ['Old Mill', 'stub'],
+            ['.', null],
+        ],
+    );
+    assert.equal(segments[1].ref.id, 'yel');
+    assert.equal(segments[3].unknown.text, 'Iron Gate');
+    // a reference the owner then treats as new isn't shown
+    const dropped = promptSegments('Yelena', [], { yelena: NEW_THING }, [], { refs: { yelena: { id: 'yel', text: 'Yelena' } } });
+    assert.deepEqual(dropped.map((s) => s.state || null), [null]);
+});
+
+check('a linked fact is edited as it reads, each link kept by position', () => {
+    const segments = [
+        { text: 'Maren', ref: VOS_ID, stub: false },
+        { text: ' met Maren and ', ref: null, stub: false },
+        { text: 'Maren', ref: HOLT_ID, stub: false },
+        { text: ' near ', ref: null, stub: false },
+        { text: 'Moscavia', ref: TS_ID, stub: true },
+        { text: '.', ref: null, stub: false },
+    ];
+    const raw = `[[thing:${VOS_ID}|Maren]] met Maren and [[thing:${HOLT_ID}|Maren]] near [[thing:${TS_ID}|Moscavia]].`;
+    const state = factEditState(segments, raw);
+    assert.equal(state.text, 'Maren met Maren and Maren near Moscavia.');
+    // the n-th time its words are written in the text
+    assert.deepEqual(state.links, [
+        { text: 'Maren', ref: VOS_ID, nth: 0 },
+        { text: 'Maren', ref: HOLT_ID, nth: 2 },
+        { text: 'Moscavia', ref: TS_ID, nth: 0 },
+    ]);
+    // a link to an ignored stub reads as plain words, but is kept
+    const ignoredRaw = `Raised by [[thing:${VOS_ID}|Aldric]] near Aldric's.`;
+    assert.deepEqual(factEditState([{ text: "Raised by Aldric near Aldric's.", ref: null, stub: false }], ignoredRaw, [VOS_ID]).links, [
+        { text: 'Aldric', ref: VOS_ID, nth: 0 },
+    ]);
+    assert.deepEqual(factEditState([], 'plain', []), { text: 'plain', links: [] });
+    // an ignored link with no shown words doesn't lose the ones after it
+    const noShown = `[[thing:${HOLT_ID}]] met [[thing:${VOS_ID}|Aldric]].`;
+    assert.deepEqual(factEditState([{ text: 'Old Holt met Aldric.', ref: null, stub: false }], noShown, [HOLT_ID, VOS_ID]).links, [
+        { text: 'Aldric', ref: VOS_ID, nth: 0 },
+    ]);
+});
+
+check('links are found again in the edited text, and sent as code-point spans', () => {
+    const links = [
+        { text: 'Maren', ref: VOS_ID, nth: 0 },
+        { text: 'Maren', ref: HOLT_ID, nth: 2 },
+        { text: 'Moscavia', ref: TS_ID, nth: 0 },
+    ];
+    const text = '🌙 Maren met Maren and Maren, far from Moscovy.';
+    const located = locateLinks(text, links);
+    assert.deepEqual(located.map((l) => [text.slice(l.start, l.end), l.ref.id, l.index]), [['Maren', VOS_ID, 0], ['Maren', HOLT_ID, 1]]);
+    assert.deepEqual(factLinkPayload(text, [], {}, {}, links), {
+        picks: {},
+        newNames: [],
+        spans: [
+            { start: 2, end: 7, ref: VOS_ID },
+            { start: 22, end: 27, ref: HOLT_ID },
+        ],
+    });
+    // whole words only
+    assert.deepEqual(locateLinks('Marenhall', [{ text: 'Maren', ref: VOS_ID, nth: 0 }]), []);
+});
+
+check("a pick on a plain name leaves the links of the same words theirs", () => {
+    const links = [
+        { text: 'Maren', ref: VOS_ID, nth: 0 },
+        { text: 'Maren', ref: HOLT_ID, nth: 1 },
+    ];
+    const text = 'Maren rowed with Maren and Maren.';
+    const matches = [0, 17, 27].map((start) => ({ start, end: start + 5, text: 'Maren', candidates: [HOLT, VOS] }));
+    assert.deepEqual(factLinkPayload(text, matches, { maren: 'vos' }, {}, links), {
+        picks: { Maren: 'vos' },
+        newNames: [],
+        spans: [
+            { start: 0, end: 5, ref: VOS_ID },
+            { start: 17, end: 22, ref: HOLT_ID },
+        ],
+    });
+    // a link re-picked, or treated as new (kept plain: a null ref),
+    // changes that link alone
+    const changed = [{ ...links[0], ref: 'x' }, { ...links[1], ref: NEW_THING }];
+    assert.deepEqual(factLinkPayload(text, matches, {}, {}, changed), {
+        picks: { Maren: 'holt' },
+        newNames: [],
+        spans: [
+            { start: 0, end: 5, ref: 'x' },
+            { start: 17, end: 22, ref: null },
+        ],
+    });
+});
+
+check('spans count in the very text sent', () => {
+    const links = [{ text: 'Maren', ref: VOS_ID, nth: 0 }];
+    const sent = '  Maren rowed.  '.trim();
+    assert.deepEqual(factLinkPayload(sent, [], {}, {}, links).spans, [{ start: 0, end: 5, ref: VOS_ID }]);
+});
+
+check('existing links show as matched, a same-place match attached', () => {
+    const text = 'Maren met Maren.';
+    const linked = [{ start: 10, end: 15, index: 0, ref: { id: 'holt', text: 'Maren' } }];
+    const matches = [
+        { start: 0, end: 5, text: 'Maren', candidates: [HOLT, VOS] },
+        { start: 10, end: 15, text: 'Maren', candidates: [HOLT, VOS] },
+    ];
+    const segments = promptSegments(text, matches, {}, [], { linked });
+    assert.deepEqual(segments.map((s) => [s.text, s.state || null, s.linked ? s.ref.id : null]), [
+        ['Maren', 'matched', null],
+        [' met ', null, null],
+        ['Maren', 'matched', 'holt'],
+        ['.', null, null],
+    ]);
+    assert.equal(segments[2].match, matches[1]);
+    assert.equal(segments[2].linkIndex, 0);
+    // a link turned to new by the owner shows new; a name pick doesn't touch it
+    const asNew = promptSegments(text, matches, {}, [], { linked: [{ ...linked[0], ref: { id: NEW_THING, text: 'Maren' } }] });
+    assert.equal(asNew[2].state, 'new');
+    assert.equal(promptSegments(text, matches, { maren: NEW_THING }, [], { linked })[2].state, 'matched');
+});
+
+check("re-pointing names the link's place among the fact's references", () => {
+    const raw = `[[thing:${VOS_ID}|Maren]] met [[thing:${VOS_ID}|Maren Vos]] and [[thing:${TS_ID}]].`;
+    const segments = [
+        { text: 'Maren', ref: VOS_ID, stub: false },
+        { text: ' met ', ref: null, stub: false },
+        { text: 'Maren Vos', ref: VOS_ID, stub: false },
+        { text: ' and ', ref: null, stub: false },
+        { text: 'Tsardom of Moscavia', ref: TS_ID, stub: true },
+        { text: '.', ref: null, stub: false },
+    ];
+    assert.equal(refOccurrence(raw, segments, 0), 0);
+    assert.equal(refOccurrence(raw, segments, 2), 1);
+    assert.equal(refOccurrence(raw, segments, 4), 2);
+    assert.equal(refOccurrence(raw, segments, 1), null);
+    // a reference that renders plain (an ignored stub) still counts
+    const withIgnored = `[[thing:${HOLT_ID}|Aldric]] and [[thing:${VOS_ID}|Maren]].`;
+    assert.equal(refOccurrence(withIgnored, [{ text: 'Aldric and ', ref: null }, { text: 'Maren', ref: VOS_ID }, { text: '.', ref: null }], 1), 1);
+});
+
+check('before the names are looked up, the owner\'s own picks still go out', () => {
+    const text = 'Maren went to Sallowford.';
+    assert.deepEqual(linkPayload([], { maren: 'vos', sallowford: NEW_THING, gone: 'x' }, {}, text), {
+        picks: { Maren: 'vos' },
+        newNames: ['Sallowford'],
+    });
+});
+
+check('the reference search: names holding the query, starting ones first', () => {
+    const targets = [
+        { id: '1', name: 'Vasha', kind: 'character', stub: false },
+        { id: '2', name: 'Vasel River', kind: 'place', stub: false },
+        { id: '3', name: 'Vasilka', kind: 'place', stub: true },
+        { id: '4', name: 'Old Vasel', kind: 'lore', stub: false },
+    ];
+    assert.deepEqual(searchReferences(targets, 'vas').map((t) => t.name), ['Vasel River', 'Vasha', 'Vasilka', 'Old Vasel']);
+    assert.deepEqual(searchReferences(targets, '  '), []);
+    assert.deepEqual(searchReferences(targets, 'vas', 2).map((t) => t.id), ['2', '1']);
 });
 
 check('match offsets count code points, as the backend does', () => {
@@ -203,6 +455,18 @@ function freshStore() {
 const reply = (action, data, extra = {}) => ({ type: 'worlds', action, data, ...extra });
 const WORLD = { id: 'w1', name: 'Vael', path: '/worlds/w1', calendar: {}, present: dateOf(1000), now: dateOf(1000) };
 
+// every kind's listing, as opening a world, an accept or a started scene asks
+const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore'];
+const STUBS_REQUEST = { type: 'worlds', action: 'list_stubs', include_ignored: true };
+
+// whether `sent` asked for the stubs and every kind's listing
+function listedEverything(sent) {
+    assert.ok(sent.some((m) => m.action === 'list_stubs' && m.include_ignored === true));
+    for (const kind of ALL_KINDS) {
+        assert.ok(sent.some((m) => m.action === 'list_things' && m.kind === kind), kind);
+    }
+}
+
 check('connect lists the worlds', () => {
     const { sent } = freshStore();
     assert.deepEqual(sent, [{ type: 'worlds', action: 'list_worlds' }]);
@@ -219,7 +483,7 @@ check('opening a world lists its things and scenes', () => {
     assert.deepEqual(store.pending, {});
     assert.deepEqual(
         sent.map((m) => m.kind || m.action),
-        ['character', 'species', 'race', 'mix', 'place', 'lore', 'list_scenes', 'get_present'],
+        [...ALL_KINDS, 'list_stubs', 'list_scenes', 'get_present'],
     );
     store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 'p1', kind: 'place', name: 'Sallowford' }] }));
     assert.equal(store.things.place[0].name, 'Sallowford');
@@ -263,7 +527,8 @@ check('a preview, then accept, opens the new thing', () => {
     assert.equal(store.preview, null);
     assert.equal(store.selectedThingId, 't1');
     assert.equal(store.thing.name, 'Oskar Dell');
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'character' });
+    // the names its facts invented are stubs now, of any kind
+    listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
 check('a failed preview shows its message', () => {
@@ -478,7 +743,9 @@ check('plan, regenerate, edit and start a scene', () => {
     assert.equal(store.sceneSetup, null);
     assert.equal(store.setupRequest, null);
     assert.deepEqual(store.pending, {});
-    assert.deepEqual(sent.slice(-2).map((m) => m.action), ['list_scenes', 'get_present']);
+    assert.deepEqual(sent.slice(-(ALL_KINDS.length + 3), -(ALL_KINDS.length + 1)).map((m) => m.action), ['list_scenes', 'get_present']);
+    // the stubs the setup used are filled in now
+    listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
 check('a failed start keeps the setup and stops its spinner', () => {
@@ -700,7 +967,7 @@ check('a mix drafted for a character is accepted without opening its page', () =
     assert.deepEqual(store.accepted, { id: 'm1', kind: 'mix', name: 'Half-orc' });
     assert.equal(store.selectedThingId, null);
     assert.equal(store.previewRequest, null);
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_things', kind: 'mix' });
+    listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
     // the next accept opens its page again
     store.previewThing('character', 'a smith', { heritage: 'm1' });
     store.handleMessage(reply('preview_thing', { kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', facts: [], prose: {} }));
@@ -837,6 +1104,307 @@ check('other routers are ignored', () => {
     store.handleMessage({ type: 'scene_status', data: {} });
     store.handleMessage({ type: 'worlds', action: 'list_worlds', data: { worlds: [WORLD] } });
     assert.equal(store.worlds.length, 1);
+});
+
+// --- connections: kinds, other names, preview names, stubs ------------------
+
+check('events and items are kinds of their own; a culture stub waits', () => {
+    const top = TOP_KINDS.map((k) => k.kind);
+    assert.ok(top.includes('event') && top.includes('item'));
+    assert.ok(STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race'));
+    assert.equal(canExpand('culture'), false);
+    assert.equal(canExpand('place'), true);
+    assert.equal(expandNote('culture'), 'Cultures arrive in the next slice');
+    assert.equal(expandNote('place'), null);
+});
+
+check('a race or mix stub is made from its species page, not expanded', () => {
+    // its top-level create box has no species (or parents) to give it
+    for (const kind of ['race', 'mix']) {
+        assert.equal(canExpand(kind), false, kind);
+        assert.equal(expandNote(kind), 'Make it from its species page');
+    }
+    for (const kind of STUB_KINDS.filter((k) => k !== 'culture')) {
+        assert.equal(canExpand(kind), true, kind);
+    }
+});
+
+check('other names: add, retag, the everyday pick and remove', () => {
+    const owls = { name: 'Moscavian Owls', tag: 'common', everyday: false };
+    let aka = akaAdded([], '  Moscavian   Owls ', 'common', 'Owl-folk');
+    assert.deepEqual(aka, [owls]);
+    // a blank name, a name it has, or the main name: unchanged
+    assert.equal(akaAdded(aka, ' ', 'common'), aka);
+    assert.equal(akaAdded(aka, 'moscavian owls', 'proper'), aka);
+    assert.equal(akaAdded(aka, 'owl-folk', 'proper', 'Owl-folk'), aka);
+    aka = akaAdded(aka, 'Strigine Folk', 'proper');
+    // only a common name can be everyday, and only one
+    assert.deepEqual(akaEveryday(aka, 1), aka.map((entry) => ({ ...entry, everyday: false })));
+    aka = akaEveryday(aka, 0);
+    assert.deepEqual(aka.map((entry) => entry.everyday), [true, false]);
+    aka = akaAdded(aka, 'Owls', 'common');
+    aka = akaEveryday(aka, 2);
+    assert.deepEqual(aka.map((entry) => entry.everyday), [false, false, true]);
+    assert.deepEqual(akaEveryday(aka, 2).map((entry) => entry.everyday), [false, false, false]);
+    // tagged proper, it's no longer the everyday one
+    const retagged = akaChanged(aka, 2, { tag: 'proper' });
+    assert.deepEqual(retagged[2], { name: 'Owls', tag: 'proper', everyday: false });
+    assert.equal(akaChanged(aka, 2, { name: 'strigine folk' }), aka);
+    assert.equal(akaChanged(aka, 2, { name: '  ' }), aka);
+    assert.equal(akaChanged(aka, 2, { name: 'The Owls' })[2].name, 'The Owls');
+    assert.deepEqual(akaRemoved(aka, 0).map((entry) => entry.name), ['Strigine Folk', 'Owls']);
+    // an entry missing `everyday` (as the AI may write it) gets it
+    assert.deepEqual(akaAdded([{ name: 'Owls', tag: 'common' }], 'Strix', 'proper')[0], { name: 'Owls', tag: 'common', everyday: false });
+});
+
+check('a preview marks the names it invents, whole words only', () => {
+    const names = [
+        { name: 'Tsardom of Moscavia', kind: 'place', aka: [{ name: 'Moscavia', tag: 'common' }], written: [] },
+        { name: 'The Night of Feathers', kind: 'event', aka: [], written: ['Night of Feathers'] },
+    ];
+    const text = 'Born in the Tsardom of Moscavia after the Night of Feathers; Moscavians call it Moscavia.';
+    const segments = previewSegments(text, names);
+    assert.equal(segments.map((s) => s.text).join(''), text);
+    assert.deepEqual(
+        segments.filter((s) => s.fresh).map((s) => [s.text, s.kind]),
+        [['Tsardom of Moscavia', 'place'], ['Night of Feathers', 'event'], ['Moscavia', 'place']],
+    );
+    assert.deepEqual(previewSegments('No names here.', names), [{ text: 'No names here.', ref: null, stub: false }]);
+    assert.deepEqual(previewSegments('', names), []);
+});
+
+const STUB = { id: 's1', name: 'Tsardom of Moscavia', kind: 'place', first_mentioned: { thing_id: 'owl', name: 'Owl-folk' }, mentions: 1, ignored: false };
+
+check('ignoring a stub from another page refreshes that page, the lists and the stubs', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_stubs', { stubs: [STUB] }));
+    assert.deepEqual(store.stubInfo('s1'), STUB);
+    assert.equal(store.stubInfo('nope'), null);
+    store.openThing('owl');
+    store.handleMessage(reply('get_thing', { id: 'owl', kind: 'species' }));
+    sent.length = 0;
+    store.ignoreStub('s1');
+    assert.deepEqual(sent, [{ type: 'worlds', action: 'ignore_stub', id: 's1', ignored: true }]);
+    assert.equal(store.pending.ignore_stub, true);
+    store.handleMessage(reply('ignore_stub', { id: 's1', kind: 'place', stub: { ignored: true } }));
+    assert.equal(store.thing.id, 'owl');
+    assert.deepEqual(store.pending, {});
+    assert.deepEqual(sent.slice(1), [
+        { type: 'worlds', action: 'get_thing', id: 'owl', at: null },
+        { type: 'worlds', action: 'list_things', kind: 'place' },
+        STUBS_REQUEST,
+    ]);
+    // on the stub's own page, the reply is the page
+    store.openThing('s1');
+    store.handleMessage(reply('ignore_stub', { id: 's1', kind: 'place', stub: { ignored: false } }));
+    assert.deepEqual(store.thing.stub, { ignored: false });
+});
+
+check("a stub's new kind lists the old kind and the new", () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_stubs', { stubs: [STUB] }));
+    sent.length = 0;
+    store.changeStubKind('s1', 'event');
+    store.handleMessage(reply('change_stub_kind', { id: 's1', kind: 'event', stub: { ignored: false } }));
+    assert.deepEqual(sent, [
+        { type: 'worlds', action: 'change_stub_kind', id: 's1', kind: 'event' },
+        { type: 'worlds', action: 'list_things', kind: 'place' },
+        { type: 'worlds', action: 'list_things', kind: 'event' },
+        STUBS_REQUEST,
+    ]);
+    // a culture stub isn't listed with the kinds
+    sent.length = 0;
+    store.handleMessage(reply('list_stubs', { stubs: [{ ...STUB, kind: 'event' }] }));
+    store.handleMessage(reply('change_stub_kind', { id: 's1', kind: 'culture', stub: { ignored: false } }));
+    assert.deepEqual(sent, [{ type: 'worlds', action: 'list_things', kind: 'event' }, STUBS_REQUEST]);
+});
+
+check('expanding a stub previews with its id, and accepting ends it', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    store.expandStub(STUB);
+    assert.equal(store.selectedThingId, null);
+    assert.deepEqual(store.expanding, { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' });
+    store.previewThing('place', 'Tsardom of Moscavia', {}, 's1');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'preview_thing', kind: 'place', prompt: 'Tsardom of Moscavia', fields: {}, stub_id: 's1',
+    });
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' }));
+    store.regeneratePreview();
+    assert.equal(sent.at(-1).stub_id, 's1');
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' }));
+    store.acceptPreview();
+    store.handleMessage(reply('accept_preview', { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' }));
+    assert.equal(store.expanding, null);
+    assert.equal(store.selectedThingId, 's1');
+    // a plain preview sends no stub id
+    store.previewThing('place', 'a town');
+    assert.equal('stub_id' in sent.at(-1), false);
+});
+
+check('expanding a stub over an unaccepted preview asks first', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('place', 'a town');
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {} }));
+    sent.length = 0;
+
+    // the preview is kept, and the owner is asked
+    store.expandStub(STUB);
+    assert.deepEqual(store.expandAsk, { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' });
+    assert.equal(store.expanding, null);
+    assert.equal(store.preview.name, 'Kalmara');
+    assert.deepEqual(sent, []);
+
+    // keeping it changes nothing
+    store.keepPreview();
+    assert.equal(store.expandAsk, null);
+    assert.equal(store.preview.name, 'Kalmara');
+    assert.equal(store.expanding, null);
+
+    // discarding it expands the stub
+    store.expandStub(STUB);
+    store.confirmExpand();
+    assert.equal(store.expandAsk, null);
+    assert.equal(store.preview, null);
+    assert.deepEqual(store.expanding, { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'stub_suggestion', id: 's1' });
+
+    // with no preview open, nothing is asked
+    const fresh = freshStore();
+    fresh.store.handleMessage(reply('open_world', WORLD));
+    fresh.store.expandStub(STUB);
+    assert.equal(fresh.store.expandAsk, null);
+    assert.equal(fresh.store.expanding.id, 's1');
+});
+
+check('other names are written whole, and an edit re-lists the stubs', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    const aka = [{ name: 'Moscavian Owls', tag: 'common', everyday: false }];
+    store.setAka(aka);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'set_field', thing_id: 'owl', at: null, field: 'aka', value: aka });
+    sent.length = 0;
+    store.handleMessage(reply('set_field', { id: 'owl', kind: 'species', aka }));
+    assert.deepEqual(store.thing.aka, aka);
+    assert.deepEqual(sent, [STUBS_REQUEST, { type: 'worlds', action: 'list_things', kind: 'species' }]);
+});
+
+check('expanding a stub asks for its suggestion; previews carry the names', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.expandStub(STUB);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'stub_suggestion', id: 's1' });
+    // a suggestion for another stub is dropped
+    store.handleMessage(reply('stub_suggestion', { id: 'other', prompt: 'x', context: [] }));
+    assert.equal(store.stubSuggestion, null);
+    const suggestion = { id: 's1', prompt: 'Tsardom of Moscavia: the owl-folk land.', context: [['Owl-folk (species)', ['A fact.']]] };
+    store.handleMessage(reply('stub_suggestion', suggestion));
+    assert.deepEqual(store.stubSuggestion, suggestion);
+
+    store.previewThing('place', 'A town in Moscavia', {}, null, {
+        picks: { Moscavia: 's1' },
+        newNames: ['Kalmara'],
+        repicks: [{ id: 's1', name: 'Moscavia' }],
+    });
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'preview_thing', kind: 'place', prompt: 'A town in Moscavia', fields: {},
+        picks: { Moscavia: 's1' }, new_names: ['Kalmara'],
+    });
+    store.regeneratePreview();
+    assert.deepEqual(sent.at(-1).picks, { Moscavia: 's1' });
+    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {}, matching_stub_id: 'k1' }));
+
+    // accepting into a stub; once accepted, the re-pick fetches the stub
+    // to teach it the name
+    sent.length = 0;
+    store.acceptPreview({ name: 'Kalmara' }, { intoStub: 'k1' });
+    assert.deepEqual(sent.map((m) => m.action), ['accept_preview']);
+    assert.equal(sent[0].into_stub, 'k1');
+    store.handleMessage(reply('accept_preview', { id: 'k1', kind: 'place', name: 'Kalmara' }));
+    assert.ok(sent.some((m) => m.action === 'get_thing' && m.id === 's1' && m.at === null));
+});
+
+check('fact edits carry spans; re-pointing sends one reference', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    store.correctFact('f1', { text: 'Maren met Maren.' }, { spans: [{ start: 0, end: 5, ref: 'vos' }] });
+    assert.deepEqual(sent.at(-1).spans, [{ start: 0, end: 5, ref: 'vos' }]);
+    store.repointRef('f1', 2, 'holt');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'repoint_ref', thing_id: 'owl', at: null, fact_id: 'f1', occurrence: 2, to_id: 'holt',
+    });
+    store.handleMessage(reply('repoint_ref', { id: 'owl', kind: 'species', facts: [] }));
+    assert.equal(store.pending.repoint_ref, undefined);
+});
+
+check('another name is added once the thing is fetched, unless it has it', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.addOtherName('s1', 'Moscavia');
+    sent.length = 0;
+    store.handleMessage(reply('get_thing', { id: 's1', kind: 'place', name: 'Tsardom of Moscavia', aka: [] }));
+    assert.deepEqual(sent, [{
+        type: 'worlds', action: 'set_field', thing_id: 's1', at: null, field: 'aka',
+        value: [{ name: 'Moscavia', tag: 'common', everyday: false }],
+    }]);
+    assert.deepEqual(store.akaQueue, {});
+    // the page of another thing stays as it was
+    assert.equal(store.thing, null);
+
+    // its main name, or a name it has, writes nothing
+    store.addOtherName('s1', 'tsardom of moscavia');
+    store.addOtherName('s1', 'Moscavia');
+    sent.length = 0;
+    store.handleMessage(reply('get_thing', {
+        id: 's1', kind: 'place', name: 'Tsardom of Moscavia', aka: [{ name: 'Moscavia', tag: 'common', everyday: false }],
+    }));
+    assert.deepEqual(sent, []);
+});
+
+check('fact edits carry their picks and names treated as new; make_stub is an edit', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('owl');
+    store.addFact('general', 'Sailed with Yelena.', null, null, { picks: { Yelena: 'y1' }, newNames: ['Sallowford'] });
+    assert.deepEqual(sent.at(-1).picks, { Yelena: 'y1' });
+    assert.deepEqual(sent.at(-1).new_names, ['Sallowford']);
+    store.correctFact('f1', { text: 'Plain.' });
+    assert.equal('picks' in sent.at(-1), false);
+    store.makeStub('f1', 'Iron Gate', 'place');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'make_stub', thing_id: 'owl', at: null, fact_id: 'f1', text: 'Iron Gate', kind: 'place',
+    });
+    sent.length = 0;
+    store.handleMessage(reply('make_stub', { id: 'owl', kind: 'species', facts: [] }));
+    assert.equal(store.thing.id, 'owl');
+    assert.deepEqual(sent, [STUBS_REQUEST]);
+});
+
+check('unknown phrases belong to the exact text and date asked about', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.matchNames('Past Iron Gate.');
+    store.handleMessage(reply('match_names', { text: 'Past Iron Gate.', at: null, matches: [], unknown: [{ start: 5, end: 14, text: 'Iron Gate' }] }));
+    assert.deepEqual(store.unknownFor('Past Iron Gate.', null), [{ start: 5, end: 14, text: 'Iron Gate' }]);
+    assert.deepEqual(store.unknownFor('Past Iron Gate', null), []);
+});
+
+check('Add reference searches entries and live stubs, not ignored ones', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.handleMessage(reply('list_things', { kind: 'character', things: [{ id: 'v', kind: 'character', name: 'Vasha' }] }));
+    store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 's1', kind: 'place', name: 'Tsardom of Moscavia', stub: { ignored: false } }] }));
+    store.handleMessage(reply('list_stubs', { stubs: [
+        { id: 's1', name: 'Tsardom of Moscavia', kind: 'place', mentions: 1, ignored: false },
+        { id: 'a1', name: 'Aldric', kind: 'character', mentions: 2, ignored: true },
+    ] }));
+    assert.deepEqual(store.referenceTargets.map((t) => [t.id, t.stub]).sort(), [['s1', true], ['v', false]]);
 });
 
 if (failures.length) {

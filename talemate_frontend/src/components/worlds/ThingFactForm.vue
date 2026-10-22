@@ -10,7 +10,21 @@
         </template>
         <template v-else>
             <div v-if="form.mode === 'override'" class="text-caption text-muted mb-2">Replaces {{ form.replaces }}</div>
-            <v-textarea v-model="form.text" label="Fact" rows="1" auto-grow density="compact" variant="outlined" hide-details class="mb-2"></v-textarea>
+            <NameHighlightInput
+                v-model="form.text"
+                v-model:picks="form.picks"
+                v-model:refs="form.refs"
+                v-model:stubs="form.stubs"
+                :linked="linked"
+                @pick-link="pickLink"
+                label="Fact"
+                :rows="1"
+                dense
+                offer-stubs
+                :at="worlds.thingAt"
+                :exclude="exclude"
+                class="mb-2"
+            />
             <div class="d-flex flex-wrap align-center ga-2">
                 <v-select v-model="form.category" label="Category" :items="categories" density="compact" variant="outlined" hide-details class="category"></v-select>
                 <template v-if="form.mode !== 'override'">
@@ -30,10 +44,18 @@
 </template>
 
 <script>
+import { useWorldsStore } from '@/stores/worlds.js';
+import { locateLinks } from './nameHighlights.js';
+import NameHighlightInput from './NameHighlightInput.vue';
+
 // The inline form ThingPage opens to add, edit (correct) or end a fact, or
 // to override an inherited one (text and category only: an override isn't
 // dated). It edits the `form` object ThingPage owns; ThingPage sends the
-// change.
+// change. The text is a `NameHighlightInput` (its names highlighted, open
+// to re-picks, Add reference and "make a stub"), holding the fact's words
+// as they read, with its links kept by position (`form.links`, found again
+// in the text as it's edited); `form.picks`, `form.refs` (Add reference)
+// and `form.stubs` are the owner's choices.
 function isYear(value) {
     return Number.isInteger(value) && value >= 1 && value <= 9999;
 }
@@ -44,13 +66,25 @@ function isEmpty(value) {
 
 export default {
     name: 'ThingFactForm',
+    components: { NameHighlightInput },
     props: {
         form: { type: Object, required: true },
         categories: { type: Array, required: true },
         busy: { type: Boolean, default: false },
     },
     emits: ['save', 'cancel', 'remove'],
+    setup() {
+        return { worlds: useWorldsStore() };
+    },
     computed: {
+        // the fact's existing links, where its text now has them
+        linked() {
+            return locateLinks(this.form.text || '', this.form.links || []);
+        },
+        // a thing's facts never reference the thing itself
+        exclude() {
+            return this.worlds.selectedThingId ? [this.worlds.selectedThingId] : [];
+        },
         valid() {
             const { text, category, fromYear, untilYear } = this.form;
             const yearOk = (value) => isEmpty(value) || isYear(value);
@@ -62,6 +96,10 @@ export default {
     },
     methods: {
         validYear: isYear,
+        // the owner re-picked one existing link (or turned it to new)
+        pickLink({ index, id }) {
+            this.form.links = this.form.links.map((link, i) => (i === index ? { ...link, ref: id } : link));
+        },
     },
 };
 </script>

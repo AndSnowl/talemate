@@ -253,6 +253,12 @@ context that crosses sections as naturally as species context already reaches ch
   automatic matching.
 - **Much later: asking the AI about your world.** This may need an instruct model.
 
+**Later, a quality-of-life item (owner, 2026-10-21): our own spell check.** Browsers don't expose their spell-check suggestions to a page, so the custom right-click menu can't show them. A spell checker of our own would:
+- show its suggestions in the custom menu;
+- accept every word the world knows: entries' names and other names, stubs, and later each culture's language words, so invented names are never flagged.
+
+It can be done whenever.
+
 **Order:** the owner decided (2026-10-21) that Connections is the next slice after plan B, ahead of cultures, because every section relies on it. It takes in "Named things that don't exist yet" above, and it overlaps with mention records (plan D).
 
 **Later, with the map** (owner, 2026-10-19): two places can be in the same world before their
@@ -588,6 +594,9 @@ choices, branching), not this.
   the owner when an output irritates them. A good early candidate is a world-aware version of
   dynamic story v2's random-story mode.
 - **Python, not Lisp/Scheme** (owner): the app is Python, and it will be shared.
+- **Connections reach scenes too** (owner, 2026-10-21, after the Connections slice's acceptance run). The owner pre-made a courier. Following links, they then made the postmaster and the town the courier works in. In the scene, which had the courier and the town as context, the model knew the postmaster's name but probably not her entry, and it invented details about her on the spot. When the scene machinery is reworked:
+  - an entry that the scene's context names, and that comes into play, should bring its own facts into the context, the way create prompts bring in named entries;
+  - names first seen in play should be linked and become stubs, which is the inbox's part.
 - **The player's action comes first** (owner, 2026-10-21). In plan B's run, `@` actions were
   followed less faithfully than in stock Talemate. Parts of an action were ignored, and the
   surrounding context got pulled in instead: the player's character turned curious because their

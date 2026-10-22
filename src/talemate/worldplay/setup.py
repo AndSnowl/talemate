@@ -3,12 +3,22 @@ to play.
 
 - `match_names` finds world thing names in the prompt as the owner types,
   so the screen can highlight them and let the owner pick which thing each
-  one means. Plain string matching, as the slice spec says.
+  one means. Plain string matching, as the slice spec says, by the shared
+  name index (`world.names`).
 - `plan_scene` asks the model (`world/scene-setup`, seeded from the
   scene-setup probe's prompt) who, where and what, given the prompt, the
   owner's picks rendered at the scene's date, and the closest hits from the
   world index. It writes nothing.
 - `start_scene` writes a planned setup as a new world scene.
+- A stub the setup uses -- picked, resolved as a character or the place,
+  or named in the reply's goal or intro, ignored or not -- is filled out:
+  planning previews it (`create.preview_thing` with its `stub_id`, once
+  per stub) and `start_scene` accepts the previews before writing the
+  scene, so the scene plays the full entries. Cancelling leaves the stubs
+  as they were. A stub the index merely finds is neither shown nor pulled
+  in. A culture stub can't be expanded yet, and a race or mix stub has no
+  species or parents to fill it from: those stay stubs, and so does one
+  whose preview fails.
 - `continue_setup` plans the next scene from where an earlier one ended.
 
 What the scene-setup probe (docs/superpowers/probes/2026-10-19-world-create-
@@ -38,12 +48,12 @@ model `reply` instead of asking the model (the websocket plugin's
 `TALEMATE_TEST_FIXED_SETUP`); everything after the model's answer runs as
 usual.
 
-Invented things stay scene-local: nothing here writes to the world.
+Invented things stay scene-local. Planning writes nothing to the world;
+starting writes only the stub previews (and the scene).
 """
 
 from __future__ import annotations
 
-import re
 import uuid
 from typing import Any
 
@@ -57,13 +67,24 @@ from talemate.world import heritage
 from talemate.world.dates import WorldDate
 from talemate.world.index import IndexDoc, WorldIndex
 from talemate.world.kinds import HERITAGE_KINDS
+
+# `NameCandidate` and `NameMatch` are re-exported: they were scene setup's
+from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.context import LOCAL_PLACE_KIND
-from talemate.worldplay.create import current_date, json_objects
+from talemate.worldplay.create import (
+    CREATE_KINDS,
+    CreatePreview,
+    accept_preview,
+    current_date,
+    json_objects,
+    preview_thing,
+)
+from talemate.worldplay.mentions import suggested_prompt
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
 log = structlog.get_logger("talemate.worldplay.setup")
@@ -78,9 +99,6 @@ INDEX_HITS = 8
 # (the place's, `LOCAL_PLACE_KIND`, lives in context.py, which reads it)
 LOCAL_EXTRA_KIND = "extra"
 
-# leading words never matched on their own as a character's first name
-_ARTICLES = {"the", "a", "an"}
-
 # the message kinds whose text goes into a continued scene's summary
 _SUMMARIZED_KINDS = {"narrator", "character", "scene"}
 
@@ -90,22 +108,6 @@ _SCENE_NAME_LENGTH = 60
 
 
 # --- models ------------------------------------------------------------------
-
-
-class NameCandidate(BaseModel):
-    id: str
-    name: str
-    kind: str
-
-
-class NameMatch(BaseModel):
-    """One name found in the prompt: its span, the text as written (without
-    a trailing `'s`), and the things it could mean, best first."""
-
-    start: int
-    end: int
-    text: str
-    candidates: list[NameCandidate]
 
 
 class LocalThing(BaseModel):
@@ -150,6 +152,9 @@ class SceneSetup(BaseModel):
     prompt: str = ""
     summary: str = ""
     continued_from: str | None = None
+    # the stubs the setup uses, filled out: written to the world (each
+    # into its stub, keeping the id) when the scene starts
+    stub_previews: list[CreatePreview] = Field(default_factory=list)
 
 
 # --- name matching -----------------------------------------------------------
@@ -159,77 +164,12 @@ def _norm(text: str) -> str:
     return " ".join(text.split()).casefold()
 
 
-def _name_aliases(view: WorldView) -> dict[str, list[tuple[int, NameCandidate]]]:
-    """Every matchable alias (normalised) and the things it names, with a
-    rank: 0 for a thing's full name, 1 for a character's first name."""
-
-    aliases: dict[str, list[tuple[int, NameCandidate]]] = {}
-    for state in view.things():
-        name = " ".join((view.name_of(state.id) or "").split())
-        if not name:
-            continue
-        candidate = NameCandidate(id=state.id, name=name, kind=state.kind)
-        aliases.setdefault(name.casefold(), []).append((0, candidate))
-        words = name.split()
-        first = words[0].casefold()
-        if state.kind == "character" and len(words) > 1 and first not in _ARTICLES:
-            aliases.setdefault(first, []).append((1, candidate))
-    return aliases
-
-
-def _candidates(
-    aliases: dict[str, list[tuple[int, NameCandidate]]], key: str
-) -> list[NameCandidate]:
-    """The things `key` could mean, best first: full-name matches, then
-    characters it's the first name of, then (for a multi-word name) others
-    sharing its first word, so the owner can pick a different one."""
-
-    ranked = list(aliases.get(key, []))
-    first = key.split()[0]
-    if first != key:
-        ranked += [(rank + 2, c) for rank, c in aliases.get(first, [])]
-    seen: set[str] = set()
-    found: list[NameCandidate] = []
-    for _rank, candidate in sorted(ranked, key=lambda rc: (rc[0], rc[1].name)):
-        if candidate.id not in seen:
-            seen.add(candidate.id)
-            found.append(candidate)
-    return found
-
-
 def match_names(world: World, text: str, at: WorldDate | None) -> list[NameMatch]:
     """Every world thing name in `text`, as the things are named at `at`:
-    case-insensitive, whole words, a character's first name on its own
-    too, and a trailing `'s` allowed. Longer names are tried first, so
-    overlapping names match once ("Maren Vos" never also as "Maren")."""
+    the shared name index's `find_names` (main and other names, a
+    character's first name on its own, stubs, partial suggestions)."""
 
-    aliases = _name_aliases(world.view(at))
-    if not aliases:
-        return []
-
-    alternatives = sorted(aliases, key=len, reverse=True)
-    pattern = re.compile(
-        r"(?<!\w)("
-        + "|".join(r"\s+".join(map(re.escape, alias.split())) for alias in alternatives)
-        + r")(?:['’]s)?(?!\w)",
-        re.IGNORECASE,
-    )
-
-    matches: list[NameMatch] = []
-    for found in pattern.finditer(text):
-        key = _norm(found.group(1))
-        if key not in aliases:
-            # a case mapping regex and casefold disagree on: not a match
-            continue
-        matches.append(
-            NameMatch(
-                start=found.start(1),
-                end=found.end(1),
-                text=found.group(1),
-                candidates=_candidates(aliases, key),
-            )
-        )
-    return matches
+    return find_names(world.view(at), text)
 
 
 # --- the index -------------------------------------------------------------
@@ -299,13 +239,14 @@ def _heritage_label(view: WorldView, state: ThingState) -> str:
 
 
 def _heritages(view: WorldView) -> list[str]:
-    """Species, race and mix names for the setup prompt's `heritages` var."""
+    """Species, race and mix names for the setup prompt's `heritages` var.
+    A stub, ignored or not, has nothing to inherit and isn't offered."""
 
     labels = [
         label
         for kind in HERITAGE_KINDS
         for state in view.things(kind)
-        if (label := _heritage_label(view, state))
+        if not state.is_stub and (label := _heritage_label(view, state))
     ]
     return labels
 
@@ -568,6 +509,120 @@ def _setup_from_reply(
     return setup
 
 
+# --- stubs ---------------------------------------------------------------------
+
+
+# stub kinds setup never fills: a culture can't be expanded yet, and a
+# race needs its species and a mix its parents, which a stub has none of
+_UNFILLED_STUB_KINDS = ("race", "mix")
+
+
+def _stubs_named(view: WorldView, setup: SceneSetup) -> list[str]:
+    """The stubs (not ignored) the setup's goal and intro name in full,
+    in order: lore the scene uses, so it's pulled in and filled out."""
+
+    text = "\n".join((setup.goal, setup.intro))
+    return _dedupe(
+        [
+            match.candidates[0].id
+            for match in find_names(view, text)
+            if not match.suggested and match.candidates[0].stub
+        ]
+    )
+
+
+def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
+    """The stubs `setup` uses that can be filled out, each once, in setup
+    order: the player, the characters, the place, then the pulled-in lore
+    (picked, or named in the reply; a stub the index merely found isn't
+    pulled in). Ignored stubs too: using one revives it. A culture stub
+    can't be expanded yet, and a race or mix stub has no species or
+    parents to fill it from: those are left out (logged) and stay stubs."""
+
+    view = world.view()
+    refs = [setup.player, *setup.characters]
+    if setup.place is not None:
+        refs.append(setup.place)
+    thing_ids = [ref.thing_id for ref in refs if ref.thing_id is not None]
+    stub_ids = []
+    for thing_id in _dedupe([*thing_ids, *setup.pulled_in]):
+        state = view.thing(thing_id)
+        if state is None or not state.is_stub:
+            continue
+        if state.kind not in CREATE_KINDS or state.kind in _UNFILLED_STUB_KINDS:
+            log.info(
+                "setup.stub_skipped",
+                stub_id=thing_id,
+                name=view.name_of(thing_id),
+                kind=state.kind,
+                reason=f"a {state.kind} stub can't be filled out from setup",
+            )
+            continue
+        stub_ids.append(thing_id)
+    return stub_ids
+
+
+async def _stub_previews(
+    world: World, setup: SceneSetup, client: Any
+) -> list[CreatePreview]:
+    """A preview filling out each stub `setup` uses (`stubs_to_fill`), made
+    from the stub's suggested prompt and what its mentions say. A stub
+    whose preview fails is logged and left a stub; the plan goes on. With
+    no `client` (the browser tests' fixed setup) no stub is previewed."""
+
+    stub_ids = stubs_to_fill(world, setup)
+    if client is None:
+        if stub_ids:
+            log.info("setup.stubs_not_previewed", reason="no client", stubs=stub_ids)
+        return []
+
+    view = world.view()
+    previews = []
+    for stub_id in stub_ids:
+        state = view.thing(stub_id)
+        assert state is not None
+        try:
+            preview = await preview_thing(
+                world,
+                state.kind,
+                suggested_prompt(view, stub_id),
+                {},
+                client,
+                stub_id=stub_id,
+            )
+        except Exception as exc:
+            log.warning(
+                "setup.stub_preview_failed",
+                stub_id=stub_id,
+                name=view.name_of(stub_id),
+                error=str(exc),
+            )
+            continue
+        previews.append(preview)
+    return previews
+
+
+def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
+    """Write each stub preview into its stub, keeping the id. A stub
+    deleted since planning refuses the start before anything is written;
+    one already filled out (by hand, in the meantime) is left as it is."""
+
+    view = world.view()
+    todo = []
+    for preview in previews:
+        if preview.stub_id is None:
+            raise ValueError(f"not a stub preview: {preview.name}")
+        state = view.thing(preview.stub_id)
+        if state is None:
+            raise ValueError(f"the stub was deleted: {preview.name}")
+        if not state.is_stub:
+            log.info("setup.stub_already_filled", stub_id=preview.stub_id)
+            continue
+        todo.append(preview)
+    for preview in todo:
+        accept_preview(world, preview)
+
+
 # --- planning ------------------------------------------------------------------
 
 
@@ -604,9 +659,16 @@ async def plan_scene(
     hits = (
         _index_hits(world, prompt, start, embedding_function) if reply is None else []
     )
+    # a stub the index happens to find is no lore the scene uses: only a
+    # picked one, or one the reply uses, is
+    hit_ids = [
+        hit.thing_id
+        for hit in hits
+        if (state := view.thing(hit.thing_id)) is not None and not state.is_stub
+    ]
     shown = [
         thing_id
-        for thing_id in _dedupe([*chosen, *(hit.thing_id for hit in hits)])
+        for thing_id in _dedupe([*chosen, *hit_ids])
         if view.thing(thing_id) is not None
     ]
 
@@ -631,15 +693,17 @@ async def plan_scene(
     )
     setup.pulled_in = [
         thing_id
-        for thing_id in shown
+        for thing_id in _dedupe([*shown, *_stubs_named(view, setup)])
         if (state := view.thing(thing_id)) is not None
         and state.kind not in ("character", "place")
     ]
+    setup.stub_previews = await _stub_previews(world, setup, client)
     log.info(
         "setup.plan",
         characters=len(setup.characters),
         pulled_in=len(setup.pulled_in),
         invented=len(setup.invented),
+        stub_previews=len(setup.stub_previews),
     )
     return setup
 
@@ -675,7 +739,11 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     scene's character sheets are fresh; with no `client` (the browser
     tests) it's left as it is. The intro is the scene's intro, the
     narration Talemate opens the scene with; invented characters, the
-    place and extras become scene-local things."""
+    place and extras become scene-local things. The setup's stub previews
+    are written to the world first, each into its stub
+    (`_accept_stub_previews`), so the scene uses the full entries."""
+
+    _accept_stub_previews(world, setup.stub_previews)
 
     refs: list[SetupRef] = []
     for ref in [setup.player, *setup.characters]:
@@ -957,5 +1025,6 @@ async def continue_setup(
         }
     )
     setup.invented = _invented(setup)
+    setup.stub_previews = await _stub_previews(world, setup, client)
     log.info("setup.continue", scene_id=scene_id, characters=len(cast))
     return setup
