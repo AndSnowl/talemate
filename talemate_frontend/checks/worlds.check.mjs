@@ -46,8 +46,12 @@ import {
     searchReferences,
 } from '../src/components/worlds/nameHighlights.js';
 import {
+    DRAWER_TYPES,
+    ENTRY_DRAWER_TYPES,
+    PART_OF_KINDS,
     STUB_KINDS,
     TOP_KINDS,
+    WRITTEN_DRAWER_TYPES,
     canExpand,
     canPromote,
     drawerTypesFor,
@@ -1482,6 +1486,17 @@ check('a thing may be filed only in the drawers the backend allows, and Unsorted
     assert.deepEqual(partOfDrawers(drawers, 'place').map((d) => d.id), ['d2', 'unsorted']);
     // a sphere stub has no drawers yet
     assert.deepEqual(partOfDrawers(undefined, 'lore'), [{ id: 'unsorted', title: 'Unsorted' }]);
+});
+
+check('the drawer-type constants mirror talemate.world.kinds', () => {
+    // pinned to the backend's values (tests/world/test_kinds.py pins those)
+    assert.deepEqual(WRITTEN_DRAWER_TYPES, ['places', 'practices', 'beliefs', 'knowledge', 'structure']);
+    const entries = ['practices', 'beliefs', 'knowledge', 'structure'];
+    assert.deepEqual(ENTRY_DRAWER_TYPES, { lore: entries, place: ['places'], item: entries, event: entries, sphere: entries });
+    assert.deepEqual(PART_OF_KINDS, ['lore', 'place', 'item', 'event', 'sphere']);
+    assert.ok(WRITTEN_DRAWER_TYPES.every((type) => DRAWER_TYPES.includes(type)));
+    // a kind no drawer holds goes in none
+    assert.deepEqual(drawerTypesFor('character'), []);
 });
 
 check('"Make it a sphere…" is offered on lore, a place not yet a sphere and a stub', () => {

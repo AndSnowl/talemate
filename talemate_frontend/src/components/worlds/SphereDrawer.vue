@@ -116,17 +116,13 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, dateParts, formatDate } from './worldDates.js';
-import { UNSORTED } from './worldKinds.js';
+import { UNSORTED, WRITTEN_DRAWER_TYPES } from './worldKinds.js';
 import DrawerAddForm from './DrawerAddForm.vue';
 import FillPreview from './FillPreview.vue';
 import LinkedText from './LinkedText.vue';
 import SphereFactRow from './SphereFactRow.vue';
 import SpherePreviewCard from './SpherePreviewCard.vue';
 import SphereTimeline from './SphereTimeline.vue';
-
-// the drawer types whose items are entries and statements, which Fill
-// asks the AI for
-const ITEM_TYPES = ['places', 'practices', 'beliefs', 'knowledge', 'structure'];
 
 // One drawer of a sphere's page: its title and dashed type tag, and by
 // type:
@@ -184,7 +180,8 @@ export default {
             return this.drawer.id === UNSORTED;
         },
         fillable() {
-            return ITEM_TYPES.includes(this.drawer.type) && !this.unsorted;
+            // a drawer of entries and statements, which Fill asks the AI for
+            return WRITTEN_DRAWER_TYPES.includes(this.drawer.type) && !this.unsorted;
         },
         addable() {
             return !this.unsorted && this.drawer.type !== 'events';

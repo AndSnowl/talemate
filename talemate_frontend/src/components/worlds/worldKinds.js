@@ -1,6 +1,8 @@
 // The kinds the World tab shows, with their fact categories (mirroring
-// `talemate.world.kinds.KINDS`). Cultures are listed but made through the
-// culture skill, so they can't be opened or created here. Races and mixes
+// `talemate.world.kinds.KINDS`). The legacy culture kind (`viaSkill`) is
+// listed, but can't be opened or created here: a new culture is a sphere
+// (the culture template), and an old culture stub is made one ("Make it a
+// sphere…"). Races and mixes
 // (`nested`) aren't listed at the top level: they're reached from their
 // species page. The Stubs tab (`STUBS_TAB`) sits below the kinds.
 //
@@ -175,12 +177,26 @@ export const DRAWER_TYPES = ['people', 'places', 'practices', 'beliefs', 'knowle
 // the drawer of "no drawer yet" (`UNSORTED_DRAWER_ID`)
 export const UNSORTED = 'unsorted';
 
-// the kinds a sphere's drawer can hold (`create.PART_OF_KINDS`); a
-// character is in a sphere through its ties instead
-export const PART_OF_KINDS = ['lore', 'place', 'item', 'event', 'sphere'];
+// `talemate.world.kinds.WRITTEN_DRAWER_TYPES`: the drawer types whose
+// content is written (entries filed there and statements: Fill, "+ Add",
+// a preview's items); people, events and branches are the app's own
+export const WRITTEN_DRAWER_TYPES = ['places', 'practices', 'beliefs', 'knowledge', 'structure'];
 
-// the drawer types that hold entries a thing can be filed in
-const ITEM_DRAWER_TYPES = ['practices', 'beliefs', 'knowledge', 'structure'];
+const ENTRY_TYPES = ['practices', 'beliefs', 'knowledge', 'structure'];
+
+// `talemate.world.kinds.ENTRY_DRAWER_TYPES`: the drawer types a thing of
+// each kind may be filed in, its keys the kinds a sphere's drawer can hold
+// (`PART_OF_KINDS`); a character is in a sphere through its ties instead
+export const ENTRY_DRAWER_TYPES = {
+    lore: ENTRY_TYPES,
+    place: ['places'],
+    item: ENTRY_TYPES,
+    event: ENTRY_TYPES,
+    sphere: ENTRY_TYPES,
+};
+
+// `talemate.world.kinds.PART_OF_KINDS`
+export const PART_OF_KINDS = Object.keys(ENTRY_DRAWER_TYPES);
 
 // A template's entry, `other`'s for an unknown or missing one.
 export function templateInfo(template) {
@@ -200,10 +216,10 @@ export function sphereGroups(things) {
 }
 
 // The drawer types a `kind` thing may be filed in, as the backend allows
-// (`create.drawer_types_for`): a place in a places drawer, anything else
-// in one that holds entries.
+// (`ENTRY_DRAWER_TYPES`): a place in a places drawer, anything else in one
+// that holds entries; none for a kind no drawer holds.
 export function drawerTypesFor(kind) {
-    return kind === 'place' ? ['places'] : ITEM_DRAWER_TYPES;
+    return ENTRY_DRAWER_TYPES[kind] || [];
 }
 
 // The drawers of a sphere (its payload's `drawers`) a `kind` thing may be

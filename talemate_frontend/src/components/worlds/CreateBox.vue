@@ -15,6 +15,8 @@
                 <v-btn v-for="item in templates" :key="item.template" :value="item.template" size="small">{{ item.label }}</v-btn>
             </v-btn-toggle>
             <span v-if="template" class="text-caption text-muted">{{ templateAgent ? 'acts in the world' : 'a body of knowledge' }}</span>
+            <!-- a nation that's also a territory is a place made a sphere -->
+            <span v-if="template === 'nation' && promoting?.kind !== 'place'" class="text-caption text-muted" data-testid="nation-hint">A land too? Make it a place, then “Make it a sphere…”.</span>
         </div>
 
         <div v-if="speciesName" class="text-caption text-muted mb-2">Race of {{ speciesName }}</div>

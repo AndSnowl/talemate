@@ -67,12 +67,8 @@
 <script>
 import { previewSegments, useWorldsStore } from '@/stores/worlds.js';
 import { formatDate } from './worldDates.js';
-import { UNSORTED } from './worldKinds.js';
+import { UNSORTED, WRITTEN_DRAWER_TYPES } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
-
-// the drawer types an outline's items go in (people, events and branches
-// are made by the app, not written)
-const WRITTEN_TYPES = ['places', 'practices', 'beliefs', 'knowledge', 'structure'];
 
 // A sphere's core before it's written (`preview_sphere`, or a branch's
 // `preview_branch`): its name (editable), template and agent flag, the
@@ -143,7 +139,8 @@ export default {
         formatDate,
         previewSegments,
         fillLater(drawer) {
-            return WRITTEN_TYPES.includes(drawer.type) && drawer.id !== UNSORTED && !drawer.items.length && !drawer.adopted.length;
+            // people, events and branches are made by the app, not written
+            return WRITTEN_DRAWER_TYPES.includes(drawer.type) && drawer.id !== UNSORTED && !drawer.items.length && !drawer.adopted.length;
         },
         keptRow(row) {
             const dropped = row.thing_id ? this.preview.drops : this.preview.rejects;
