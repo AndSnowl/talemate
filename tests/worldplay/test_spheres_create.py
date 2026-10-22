@@ -15,7 +15,12 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
-from talemate.worldplay.create import accept_preview, preview_thing
+from talemate.worldplay.create import (
+    CreatePreview,
+    PreviewFact,
+    accept_preview,
+    preview_thing,
+)
 from talemate.worldplay.spheres import (
     SpherePreview,
     accept_fill,
@@ -1222,3 +1227,119 @@ async def test_end_inherited_item_refused(moscavia, world, full_dawn):
 
     with pytest.raises(ValueError):
         end_item(world, branch, wings, WorldDate.of(1020), None)
+
+
+# --- re-filing an ended item ---------------------------------------------------
+
+
+def _vigil(world, dawn: str) -> spheres.Item:
+    return next(
+        i for i in spheres.items(world.view(), dawn) if i.name == "The Dawn Vigil"
+    )
+
+
+def _guild_core(drawer: str = "Rites") -> str:
+    return json.dumps(
+        {
+            "name": "The Lamp Guild",
+            "summary": "Lamplighters of Kremova.",
+            "aka": [],
+            "timeline": [],
+            "drawers": [{"type": "practices", "title": drawer}],
+            "items": [
+                {
+                    "drawer": drawer,
+                    "name": "The Dawn Vigil",
+                    "text": "The guild keeps the old vigil.",
+                    "kind": "lore",
+                }
+            ],
+            "names": [],
+        }
+    )
+
+
+async def test_core_links_an_ended_item_from_now(moscavia, world, full_dawn):
+    """An item the White Dawn ended is a free stub again; a new sphere's
+    core naming it links it, from now, so the dated end doesn't hide the
+    link."""
+
+    vigil = _vigil(world, moscavia.dawn)
+    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), None)
+
+    preview = await preview_sphere(
+        world, "order", "the lamplighters", {}, None, reply=_guild_core()
+    )
+    (item,) = [i for i in preview.items if i["name"] == "The Dawn Vigil"]
+    assert item["thing_id"] == vigil.thing_id
+    guild = accept_sphere(world, preview)
+
+    view = world.view()
+    assert view.thing(vigil.thing_id).fields["part_of"]["sphere"] == guild
+    assert view.field_since(vigil.thing_id, "part_of") == WorldDate.of(1020)
+    assert vigil.thing_id in {i.thing_id for i in spheres.items(view, guild)}
+    # its time out of any sphere stays told
+    between = world.view(WorldDate.of(1017))
+    assert between.thing(vigil.thing_id).fields.get("part_of") is None
+
+
+async def test_adoption_files_after_a_dated_link(moscavia, world, full_dawn):
+    """An entry part of a stub through a dated link (filed again after an
+    end) is adopted into its drawer from now, not behind that link."""
+
+    vigil = _vigil(world, moscavia.dawn)
+    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), None)
+    with world.revision(Source.manual(note="guild")) as rev:
+        guild = rev.create_thing(
+            "sphere",
+            {"name": "The Lamp Guild", "template": "order", "stub": {"ignored": False}},
+        )
+        rev.set_field(
+            vigil.thing_id,
+            "part_of",
+            {"sphere": guild, "drawer": UNSORTED_DRAWER_ID},
+            WorldDate.of(1018),
+        )
+
+    preview = await preview_sphere(
+        world, "order", "", {}, None, stub_id=guild, reply=_guild_core()
+    )
+    rites = _drawer_ids(preview)["Rites"]
+    assert preview.adopted == [{"thing_id": vigil.thing_id, "drawer_id": rites}]
+    accept_sphere(world, preview)
+
+    view = world.view()
+    assert view.thing(vigil.thing_id).fields["part_of"] == {
+        "sphere": guild,
+        "drawer": rites,
+    }
+    assert view.field_since(vigil.thing_id, "part_of") == WorldDate.of(1020)
+
+
+async def test_accept_preview_files_an_ended_stub_from_now(moscavia, world, full_dawn):
+    """Expanding an ended item stub with a child-first `part_of` files it
+    from now: the dated end doesn't hide it."""
+
+    rites = full_dawn
+    vigil = _vigil(world, moscavia.dawn)
+    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), None)
+    preview = CreatePreview(
+        kind="lore",
+        prompt="the vigil",
+        name="The Dawn Vigil",
+        facts=[PreviewFact(category="general", text="A vigil kept again.")],
+        prose={},
+        stub_id=vigil.thing_id,
+        part_of={"sphere": moscavia.dawn, "drawer": rites},
+    )
+    accept_preview(world, preview)
+
+    view = world.view()
+    assert view.thing(vigil.thing_id).fields["part_of"] == {
+        "sphere": moscavia.dawn,
+        "drawer": rites,
+    }
+    assert view.field_since(vigil.thing_id, "part_of") == WorldDate.of(1020)
+    assert vigil.thing_id in {
+        i.thing_id for i in spheres.items(view, moscavia.dawn) if i.drawer_id == rites
+    }

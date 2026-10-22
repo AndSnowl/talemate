@@ -3472,10 +3472,10 @@ async def test_fixed_branch_answers_without_a_model(plugin, tmp_path, monkeypatc
     preview = _last(plugin, "preview_branch")["data"]
     assert preview["name"] == "The Forge Dawn"
     assert preview["fields"] == {"parent": s.dawn}
-    # F1, the first parent item, mapped back to its thing
+    # F1, the first parent item (the Dawn Vigil), mapped back to its thing
     first = preview["parent_items"][0]
-    assert first["label"] == "F1"
-    assert preview["drops"] == ([first["thing_id"]] if first["thing_id"] else [])
+    assert (first["label"], first["thing_id"]) == ("F1", s.vigil)
+    assert preview["drops"] == [s.vigil]
 
 
 async def test_fixed_sphere_file_missing_asks_the_model(
@@ -3489,3 +3489,31 @@ async def test_fixed_sphere_file_missing_asks_the_model(
         await _drain(plugin)
     assert len(client.prompt_history) == 1
     assert _last(plugin, "preview_sphere")["data"]["name"] == "The Iron Synod"
+
+
+async def test_fixed_sphere_file_without_the_key_asks_the_model(
+    plugin, client, tmp_path, monkeypatch
+):
+    """A fixed file holding only a core reply: Fill and branches still go
+    to the model (or say there's no client)."""
+
+    s = await _open_sphere_world(plugin)
+    path = tmp_path / "fixed-sphere.json"
+    path.write_text(json.dumps({"sphere": json.loads(CORE_SYNOD)}))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_SPHERE", str(path))
+    async with MockClientContext():
+        client_responses.get().append(FILL_RITES)
+        await _act(plugin, "fill_drawer", sphere_id=s.dawn, drawer_id=RITES)
+        await _drain(plugin)
+    assert len(client.prompt_history) == 1
+    items = _last(plugin, "fill_drawer")["data"]["items"]
+    assert [i["text"] for i in items] == [
+        "Smiths sing to the anvil when the bells ring."
+    ]
+
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+    await _act(plugin, "preview_branch", parent_id=s.dawn, prompt="a schism")
+    await _drain(plugin)
+    assert _last(plugin, "preview_branch_failed")["message"] == (
+        "No AI client is configured for the creator agent"
+    )

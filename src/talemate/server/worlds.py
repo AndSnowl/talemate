@@ -190,6 +190,7 @@ from talemate.worldplay.create import (
     drawer_types_for,
     exception_fact,
     matching_stub,
+    part_of_since,
     preview_inherited,
     preview_thing,
 )
@@ -1784,22 +1785,7 @@ class WorldsPlugin(Plugin):
             if drawer is not None and drawer.type not in drawer_types_for(state.kind):
                 raise ValueError(f"a {state.kind} doesn't go in a {drawer.type} drawer")
             value = {"sphere": payload.sphere_id, "drawer": payload.drawer_id}
-        dated = [
-            entry.date
-            for entry in world.timeline(payload.thing_id)
-            if entry.change == "field"
-            and entry.field == "part_of"
-            and entry.date is not None
-        ]
-        since: WorldDate | None = None
-        if dated:
-            since = _date_in(payload.at) or current_date(world)
-            latest = max(dated, key=lambda date: date.instant)
-            if since.instant < latest.instant:
-                raise ValueError(
-                    "it changed spheres in "
-                    f"{world.calendar.format(latest)}: file it from then on"
-                )
+        since = part_of_since(world, payload.thing_id, _date_in(payload.at))
         with world.revision(Source.manual()) as rev:
             rev.set_field(payload.thing_id, "part_of", value, since)
         self._edited("set_part_of", payload.thing_id, _date_in(payload.at), prose=False)

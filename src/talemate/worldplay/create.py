@@ -1449,6 +1449,46 @@ PART_OF_KINDS: tuple[str, ...] = ("lore", "place", "item", "event", "sphere")
 _ITEM_DRAWER_TYPES = ("practices", "beliefs", "knowledge", "structure")
 
 
+def part_of_since(
+    world: World,
+    thing_id: str,
+    at: WorldDate | None = None,
+    *,
+    strict: bool = True,
+) -> WorldDate | None:
+    """The date a new `part_of` value for `thing_id` holds from: `None`
+    (undated) when the field has no dated values; else `at`, or the
+    world's now (`current_date`), since an undated value would stay hidden
+    behind a dated one (an `end_item` end). A date before the latest dated
+    value is refused (`ValueError`) -- that value would still win -- or,
+    with `strict=False` (a writer the owner didn't date), moved up to it."""
+
+    try:
+        entries = world.timeline(thing_id)
+    except KeyError:
+        # made in this revision: no history yet
+        return None
+    dated = [
+        entry.date
+        for entry in entries
+        if entry.change == "field"
+        and entry.field == "part_of"
+        and entry.date is not None
+    ]
+    if not dated:
+        return None
+    since = at or current_date(world)
+    latest = max(dated, key=lambda date: date.instant)
+    if since.instant < latest.instant:
+        if not strict:
+            return latest
+        raise ValueError(
+            f"it changed spheres in {world.calendar.format(latest)}: "
+            "file it from then on"
+        )
+    return since
+
+
 def drawer_types_for(kind: str) -> tuple[str, ...]:
     """The drawer types a `kind` thing may be filed in, as creation files
     them: a place in a places drawer, any other entry in one that holds
@@ -2080,7 +2120,12 @@ def _write_preview(
             )
             rev.remove_field_value(thing_id, "stub", None)
         if preview.part_of is not None:
-            rev.set_field(thing_id, "part_of", preview.part_of, None)
+            rev.set_field(
+                thing_id,
+                "part_of",
+                preview.part_of,
+                part_of_since(world, thing_id, strict=False),
+            )
         if preview.ties:
             held = preview.fields.get("ties")
             rev.set_field(

@@ -730,7 +730,8 @@ def _write_items(
         part_of = {"sphere": sphere_id, "drawer": item["drawer_id"]}
         thing_id = item.get("thing_id")
         if thing_id:
-            rev.set_field(thing_id, "part_of", part_of, None)
+            since = create.part_of_since(world, thing_id, strict=False)
+            rev.set_field(thing_id, "part_of", part_of, since)
         else:
             kind = item["kind"] if item["kind"] in ITEM_KINDS else "lore"
             words = item["name"].split()
@@ -853,7 +854,7 @@ def _write_sphere(
                 adopted["thing_id"],
                 "part_of",
                 {"sphere": thing_id, "drawer": adopted["drawer_id"]},
-                None,
+                create.part_of_since(world, adopted["thing_id"], strict=False),
             )
         linked = _write_items(
             rev,
