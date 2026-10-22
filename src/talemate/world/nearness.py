@@ -114,11 +114,11 @@ def _field_values(
 ) -> Iterable[tuple[str, str, object]]:
     """`(thing id, field, decoded value)` for `fields` (the link fields
     unless told) of live things, each the value in force at the view's
-    date: of the rows live
-    at the revision and from no later than the date, the one with the
-    greatest `valid_from` (NULL lowest), then `row_id` -- the rule of
-    `WorldView._fetch_fields`, picked here in Python rather than with a
-    window function, which costs three times as much over a whole table."""
+    date: of the rows live at the revision and from no later than the
+    date, the one with the greatest `valid_from` (NULL lowest), then
+    `row_id` -- the rule of `WorldView._fetch_fields`, picked here in
+    Python rather than with a window function, which costs three times as
+    much over a whole table."""
 
     placeholders = ", ".join("?" for _ in fields)
     rows = _rows(

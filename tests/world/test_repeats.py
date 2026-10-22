@@ -212,6 +212,31 @@ def test_find_repeats_reads_live_facts_only(world):
     assert hit.fact_id == ids["rediscovery"]
 
 
+def test_find_repeats_reads_every_story_date(world):
+    """A restated fact that has ended, or holds only from a later date,
+    is still in the world: a repeat whatever the view's date."""
+
+    with world.revision(Source.manual()) as rev:
+        ashenmere = rev.create_thing("place", fields={"name": "Ashenmere"})
+        later = rev.add_fact(
+            ashenmere, "history", REDISCOVERY, valid_from=WorldDate.of(947)
+        )
+        ended = rev.add_fact(
+            ashenmere,
+            "general",
+            LAW_947,
+            valid_from=WorldDate.of(947),
+            valid_until=WorldDate.of(990),
+        )
+    before = world.view(at=WorldDate.of(500))
+    [hit] = find_repeats(before, [CAVES_947], [ashenmere], 0.4)
+    assert hit.fact_id == later
+    after = world.view(at=WorldDate.of(999))
+    [hit] = find_repeats(after, [CODEX_947], [ashenmere], 0.4)
+    assert hit.fact_id == ended
+    assert world.view(at=WorldDate.of(999)).thing(ashenmere).facts[0].fact_id == later
+
+
 def test_find_repeats_renders_references(world):
     from talemate.world.refs import ref
 

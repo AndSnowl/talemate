@@ -135,7 +135,7 @@ def test_same_candidates_snapshot_pairs(world):
 
 def test_common_word_not_a_candidate(world):
     ids = _make(world, SNAPSHOT)
-    # "Moskov" is in 6 of the snapshot's 74 names: the city isn't the same
+    # "Moskov" is in 6 of the snapshot's 56 things: the city isn't the same
     # as a foundry in it, nor are the other things named after it
     assert _found(world, "The Moskov Bell Foundry", ids) == []
     # a name that is the city's still finds it
@@ -145,16 +145,86 @@ def test_common_word_not_a_candidate(world):
 
 
 def test_common_word_tsar(world):
-    names = [("lore", f"Thing {n}", [], False) for n in "ABCDEFGHIJKLMNOPQR"]
+    names = [("lore", f"Thing {n}", [], False) for n in "ABCDEFGHIJKLMN"]
     names += [
         ("lore", "Tsar", [], False),
         ("lore", "The Divine Right of the Tsar", [], False),
         ("character", "Tsar Alexei", [], False),
+        ("character", "Tsar Pavel", [], False),
+        ("lore", "The Tsar's Guard", [], False),
+        ("place", "Tsar's Landing", [], False),
     ]
     ids = _make(world, names)
-    # 3 of 21 names hold "tsar": too common to make a candidate on its own
+    # 6 of 20 things hold "tsar": too common to make a candidate on its own
     assert _found(world, "The Tsar's Hunt", ids) == []
     assert _found(world, "Tsar", ids) == [("Tsar", "aka")]
+
+
+def test_common_word_needs_six_things(world):
+    names = [("lore", f"Thing {n}", [], False) for n in "ABCDEFGHIJKLMNOP"]
+    names += [
+        ("lore", "Tsar", [], False),
+        ("lore", "The Divine Right of the Tsar", [], False),
+        ("character", "Tsar Alexei", [], False),
+        ("character", "Tsar Pavel", [], False),
+        ("lore", "The Tsar's Guard", [], False),
+    ]
+    ids = _make(world, names)
+    # 5 of 21 things is over 5%, but under 6 things: not common
+    assert ("Tsar", "inside") in _found(world, "The Tsar's Hunt", ids)
+
+
+def test_common_word_counts_things_not_names(world):
+    # Ashenmere's other name holds the word again; with the Caves made,
+    # "ashenmere" is in 3 things, so nothing is lost
+    ids = _make(world, SNAPSHOT + [("place", "The Ashenmere Caves", [], False)])
+    assert _found(world, "Ashenmere", ids) == [
+        ("Ashenmere", "aka"),
+        ("The Ashenmere Caves", "inside"),
+        ("Ashenmere rune dialect", "inside"),
+    ]
+
+
+def test_exclude_keeps_a_slot_free(world):
+    ids = _make(world, SNAPSHOT + [("place", "The Ashenmere Caves", [], False)])
+    view = world.view()
+    found = same_candidates(
+        view, "Ashenmere", near_ids=[], limit=2, exclude=[ids["Ashenmere"]]
+    )
+    assert [c.thing_id for c in found] == [
+        ids["The Ashenmere Caves"],
+        ids["Ashenmere rune dialect"],
+    ]
+
+
+def test_possessives_match_as_names(world):
+    ids = _make(world, SNAPSHOT)
+    assert _found(world, "Runeweaver's Conclave", ids) == [
+        ("Runeweavers' Conclave", "aka")
+    ]
+    assert _found(world, "Runeweavers' Conclave", ids) == [
+        ("Runeweavers' Conclave", "aka")
+    ]
+
+
+def test_name_index_is_read_once(world):
+    from talemate.world.sameness import name_index
+
+    ids = _make(world, SNAPSHOT)
+    view = world.view()
+    index = name_index(view)
+    assert same_candidates(view, "the Conclave", near_ids=[], index=index) == (
+        same_candidates(view, "the Conclave", near_ids=[])
+    )
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("lore", fields={"name": "The Grey Conclave"})
+    later = world.view()
+    # the index holds the world as it was read
+    assert [
+        c.thing_id
+        for c in same_candidates(later, "the Conclave", near_ids=[], index=index)
+    ] == [ids["Runeweavers' Conclave"]]
+    assert len(same_candidates(later, "the Conclave", near_ids=[])) == 2
 
 
 def test_small_world_has_no_common_words(world):
@@ -166,7 +236,7 @@ def test_small_world_has_no_common_words(world):
             ("character", "Tsar Alexei", [], False),
         ],
     )
-    # under 20 names, only the articles and stop words are common
+    # under 20 things, only the articles and stop words are common
     found = _found(world, "The Tsar's Hunt", ids)
     assert sorted(found) == [
         ("The Divine Right of the Tsar", "word"),

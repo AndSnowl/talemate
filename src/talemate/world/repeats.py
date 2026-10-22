@@ -15,7 +15,9 @@ probe's own, ported unchanged from `scripts/dev/probe_fact_placement_score.py`:
   probe ran it: a new fact against an existing one.
 
 Facts are compared as they read (`WorldView.render`), so a reference counts
-as the name it shows, as in the probe.
+as the name it shows, as in the probe. Every fact not removed at the
+view's revision counts, whatever its story dates (a fact that ended, or
+holds only from later, is still something the world says).
 
 `disagreeing_dates` uses the same words both ways: two dated facts disagree
 when either one's words are mostly in the other (the higher of the two
@@ -26,7 +28,9 @@ as with the Codex's compiling, given as 217 on Runeweaving's timeline and
 
 import json
 import re
+import sqlite3
 from collections.abc import Sequence
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -98,21 +102,25 @@ class Repeat(BaseModel):
 def find_repeats(
     view: WorldView, texts: list[str], owner_ids: list[str], threshold: float
 ) -> list[Repeat]:
-    """For each text, the live fact of `owner_ids` at the view that holds
-    most of its words, when that overlap is at least `threshold`; in text
-    order, a text with no such fact left out. On a tie the first owner
-    given, then its first fact, wins. An owner that isn't live at the view
-    has no facts."""
+    """For each text, the fact of `owner_ids` that holds most of its
+    words, when that overlap is at least `threshold`; in text order, a
+    text with no such fact left out. Every fact not removed at the view's
+    revision counts, whatever its story dates: a fact that has ended, or
+    holds only from a later date, is still in the world. On a tie the
+    first owner given, then its first fact (by start date, undated first,
+    then id), wins. An owner that isn't live at the view has no facts."""
 
-    facts: list[tuple[str, str, set[str]]] = []
-    for owner_id in dict.fromkeys(owner_ids):
-        state = view.thing(owner_id)
-        if state is None:
-            continue
-        for fact in state.facts:
-            facts.append(
-                (owner_id, fact.fact_id, content_words(view.render(fact.text)))
-            )
+    rows = _live_facts(view, "thing_id", owner_ids)
+    by_owner: dict[str, list[tuple[str, set[str]]]] = {}
+    for row in rows:
+        by_owner.setdefault(row["thing_id"], []).append(
+            (row["fact_id"], content_words(view.render(row["text"])))
+        )
+    facts = [
+        (owner_id, fact_id, words)
+        for owner_id in dict.fromkeys(owner_ids)
+        for fact_id, words in by_owner.get(owner_id, [])
+    ]
 
     found: list[Repeat] = []
     for index, text in enumerate(texts):
@@ -138,30 +146,40 @@ class Disagreement(BaseModel):
     years: tuple[int, int]
 
 
+def _live_facts(
+    view: WorldView, column: Literal["thing_id", "fact_id"], ids: Sequence[str]
+) -> list[sqlite3.Row]:
+    """The fact rows (`thing_id`, `fact_id`, `text`, `valid_from`,
+    `from_precision`) not removed at the view's revision, of a live owner,
+    whose `column` (`thing_id` or `fact_id`) is one of `ids`, whatever
+    their story dates; ordered by start date (undated first), then id."""
+
+    if not ids:
+        return []
+    things_filter, params = view._live_things_filter("t.")
+    return view._conn.execute(
+        f"""
+        SELECT f.thing_id, f.fact_id, f.text, f.valid_from, f.from_precision
+        FROM facts f
+        JOIN things t ON t.id = f.thing_id AND {things_filter}
+        WHERE f.{column} IN (SELECT value FROM json_each(?))
+          AND f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
+        ORDER BY f.valid_from ASC, f.fact_id ASC
+        """,
+        (*params, json.dumps(list(ids)), view.rev, view.rev),
+    ).fetchall()
+
+
 def _dated_facts(
     view: WorldView, fact_ids: Sequence[str]
 ) -> dict[str, tuple[int, str]]:
     """`fact id -> (start year, text as it reads)` for each of `fact_ids`
-    live at the view's revision, with a live owner and a start date. The
-    story date isn't checked: the caller picked these facts (a timeline's
-    lines, an ended one included)."""
+    not removed at the view's revision, with a live owner and a start
+    date. The story date isn't checked: the caller picked these facts (a
+    timeline's lines, an ended one included)."""
 
-    if not fact_ids:
-        return {}
-    things_filter, params = view._live_things_filter("t.")
-    rows = view._conn.execute(
-        f"""
-        SELECT f.fact_id, f.text, f.valid_from, f.from_precision
-        FROM facts f
-        JOIN things t ON t.id = f.thing_id AND {things_filter}
-        WHERE f.fact_id IN (SELECT value FROM json_each(?))
-          AND f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
-          AND f.valid_from IS NOT NULL
-        """,
-        (*params, json.dumps(list(fact_ids)), view.rev, view.rev),
-    ).fetchall()
     found: dict[str, tuple[int, str]] = {}
-    for row in rows:
+    for row in _live_facts(view, "fact_id", fact_ids):
         start = _decode_date(row["valid_from"], row["from_precision"])
         if start is not None:
             found[row["fact_id"]] = (start.to_datetime().year, row["text"])
