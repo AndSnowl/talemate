@@ -15,8 +15,10 @@ def test_kinds_table():
         "voice",
         "color",
         "heritage",
+        "ties",
         "aka",
         "stub",
+        "part_of",
     ]
     assert [f.type for f in character.fields] == [
         "text",
@@ -27,6 +29,8 @@ def test_kinds_table():
         "thing",
         "json",
         "json",
+        "json",
+        "json",
     ]
     assert character.categories == [
         "appearance",
@@ -35,6 +39,7 @@ def test_kinds_table():
         "ability",
         "relationship",
         "speech",
+        "ties",
     ]
 
     with pytest.raises(KeyError):
@@ -46,6 +51,7 @@ def test_every_kind_has_aka_and_stub():
         types = {f.name: f.type for f in kind.fields}
         assert types["aka"] == "json", kind.name
         assert types["stub"] == "json", kind.name
+        assert types["part_of"] == "json", kind.name
 
 
 def test_aka_shape_validated():
@@ -113,12 +119,14 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
+        "part_of",
     ]
     assert [f.type for f in species.fields] == [
         "text",
         "thing",
         "number",
         "number",
+        "json",
         "json",
         "json",
         "json",
@@ -134,12 +142,14 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
+        "part_of",
     ]
     assert [f.type for f in race.fields] == [
         "text",
         "thing",
         "number",
         "number",
+        "json",
         "json",
         "json",
         "json",
@@ -155,12 +165,14 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
+        "part_of",
     ]
     assert [f.type for f in mix.fields] == [
         "text",
         "things",
         "number",
         "number",
+        "json",
         "json",
         "json",
         "json",

@@ -3,12 +3,15 @@
 A `KindSpec` names a kind's fields and the fact categories it accepts.
 `KINDS` is the whole catalog; adding a kind later is one entry here.
 
-Every kind also has two fields of its own:
+Every kind also has three fields of its own:
 - `aka`, its other names: a list of `{"name": str, "tag": "proper" |
   "common", "everyday": bool}`, with at most one everyday name, which must
   be a common one. The main name (`name`) is always the most proper;
 - `stub`, present while the thing is a stub (a name mentioned but not made
   yet): `{"ignored": bool}`.
+- `part_of`, the sphere drawer the thing currently belongs to, or `None`:
+  `{"sphere": <32-hex thing id>, "drawer": <8-hex drawer id>}`. A dated
+  `None` value ends the membership.
 """
 
 import re
@@ -38,9 +41,48 @@ class KindSpec(BaseModel):
 
 
 # the fields every kind has, after its own
-_SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (("aka", "json"), ("stub", "json"))
+_SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (
+    ("aka", "json"),
+    ("stub", "json"),
+    ("part_of", "json"),
+)
 
 AKA_TAGS: tuple[str, ...] = ("proper", "common")
+
+# a sphere's (or sphere-shaped place's) template, and whether it acts as an
+# agent (has its own stance and can act) under that template
+SPHERE_TEMPLATES: tuple[str, ...] = (
+    "religion",
+    "nation",
+    "order",
+    "culture",
+    "field",
+    "other",
+)
+
+TEMPLATE_AGENT: dict[str, bool] = {
+    "religion": True,
+    "nation": True,
+    "order": True,
+    "culture": False,
+    "field": False,
+    "other": False,
+}
+
+# a sphere's fixed drawers, in no particular order here -- a sphere's own
+# `drawers` field value carries the display order
+DRAWER_TYPES: tuple[str, ...] = (
+    "people",
+    "places",
+    "practices",
+    "beliefs",
+    "knowledge",
+    "structure",
+    "branches",
+    "events",
+)
+
+_DRAWER_ID_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
 def _fields(*pairs: tuple[str, FieldType]) -> list[FieldSpec]:
@@ -61,6 +103,7 @@ KINDS: dict[str, KindSpec] = {
             ("voice", "json"),
             ("color", "text"),
             ("heritage", "thing"),
+            ("ties", "json"),
         ),
         categories=[
             "appearance",
@@ -69,6 +112,7 @@ KINDS: dict[str, KindSpec] = {
             "ability",
             "relationship",
             "speech",
+            "ties",
         ],
     ),
     "species": KindSpec(
@@ -111,9 +155,27 @@ KINDS: dict[str, KindSpec] = {
             ("kind", "text"),
             ("parent", "thing"),
             ("cultures", "shares"),
+            ("template", "text"),
+            ("agent", "json"),
+            ("drawers", "json"),
         ),
-        categories=["description", "history", "law", "general"],
+        categories=["description", "history", "law", "general", "statement"],
     ),
+    "sphere": KindSpec(
+        name="sphere",
+        fields=_fields(
+            ("name", "text"),
+            ("template", "text"),
+            ("agent", "json"),
+            ("drawers", "json"),
+            ("parent", "thing"),
+            ("drops", "things"),
+            ("language", "json"),
+        ),
+        categories=["timeline", "about", "statement"],
+    ),
+    # legacy: readable in old worlds, no longer created or guessed
+    # (Task 4). `language` on `sphere` carries what a `culture` held.
     "culture": KindSpec(
         name="culture",
         fields=_fields(
@@ -150,6 +212,10 @@ KINDS: dict[str, KindSpec] = {
 
 HERITAGE_KINDS: tuple[str, ...] = ("species", "race", "mix")
 
+# kinds kept in KINDS so old worlds still read, but no longer created or
+# guessed in fresh ones (superseded by the sphere kind)
+LEGACY_KINDS: tuple[str, ...] = ("culture",)
+
 
 def get_kind(name: str) -> KindSpec:
     """Look up a kind by name, raising `KeyError` for an unknown one."""
@@ -176,6 +242,8 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
     if spec.type == "text":
         if not isinstance(value, str):
             raise ValueError(f"{field!r} must be a string")
+        if field == "template" and value not in SPHERE_TEMPLATES:
+            raise ValueError(f"{field!r} must be one of {SPHERE_TEMPLATES}")
     elif spec.type == "date":
         if isinstance(value, WorldDate):
             return
@@ -225,6 +293,15 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
             _validate_aka(field, value)
         elif field == "stub":
             _validate_stub(field, value)
+        elif field == "agent":
+            if not isinstance(value, bool):
+                raise ValueError(f"{field!r} must be a bool")
+        elif field == "drawers":
+            _validate_drawers(field, value)
+        elif field == "part_of":
+            _validate_part_of(field, value)
+        elif field == "ties":
+            _validate_ties(field, value)
         # otherwise any JSON-serializable value is accepted
 
 
@@ -279,3 +356,74 @@ def _validate_stub(field: str, value: object) -> None:
         or not isinstance(value["ignored"], bool)
     ):
         raise ValueError(f'{field!r} must be {{"ignored": bool}}')
+
+
+def _validate_drawers(field: str, value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list of drawers")
+    ids: list[str] = []
+    for drawer in value:
+        if (
+            not isinstance(drawer, dict)
+            or set(drawer) != {"id", "type", "title"}
+            or not isinstance(drawer.get("id"), str)
+            or not _DRAWER_ID_RE.match(drawer.get("id", ""))
+            or drawer.get("type") not in DRAWER_TYPES
+            or not isinstance(drawer.get("title"), str)
+            or not drawer["title"].strip()
+        ):
+            raise ValueError(
+                f"{field!r} entries must be "
+                '{"id": <8-hex>, "type": <drawer type>, "title": non-blank str}'
+            )
+        ids.append(drawer["id"])
+    if len(set(ids)) != len(ids):
+        raise ValueError(f"{field!r} ids must be unique")
+
+
+def _validate_part_of(field: str, value: object) -> None:
+    if value is None:
+        return
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"sphere", "drawer"}
+        or not isinstance(value.get("sphere"), str)
+        or not _THING_ID_RE.match(value["sphere"])
+        or not isinstance(value.get("drawer"), str)
+        or not _DRAWER_ID_RE.match(value["drawer"])
+    ):
+        raise ValueError(
+            f'{field!r} must be {{"sphere": <32-hex>, "drawer": <8-hex>}} or null'
+        )
+
+
+def _validate_world_date_or_null(field: str, key: str, value: object) -> None:
+    if value is None or isinstance(value, WorldDate):
+        return
+    if isinstance(value, dict):
+        try:
+            WorldDate(**value)
+        except Exception as exc:
+            raise ValueError(f"{field!r} {key} must be a valid date") from exc
+        return
+    raise ValueError(f"{field!r} {key} must be a WorldDate, its dict form, or null")
+
+
+def _validate_ties(field: str, value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list of ties")
+    for tie in value:
+        if (
+            not isinstance(tie, dict)
+            or set(tie) != {"sphere", "role", "since", "until"}
+            or not isinstance(tie.get("sphere"), str)
+            or not _THING_ID_RE.match(tie["sphere"])
+            or not isinstance(tie.get("role"), str)
+        ):
+            raise ValueError(
+                f"{field!r} entries must be "
+                '{"sphere": <32-hex>, "role": str, "since": WorldDate|null, '
+                '"until": WorldDate|null}'
+            )
+        _validate_world_date_or_null(field, "since", tie.get("since"))
+        _validate_world_date_or_null(field, "until", tie.get("until"))

@@ -55,6 +55,7 @@ def _decode_field_value(kind_spec: KindSpec, field: str, value_json: str) -> obj
 
 
 def _fact_state_from_row(row: sqlite3.Row) -> "FactState":
+    origin_json = row["origin_json"]
     return FactState(
         fact_id=row["fact_id"],
         category=row["category"],
@@ -63,6 +64,7 @@ def _fact_state_from_row(row: sqlite3.Row) -> "FactState":
         valid_until=_decode_date(row["valid_until"], row["until_precision"]),
         source_rev=row["rev_added"],
         refs=parse_refs(row["text"]),
+        origin=json.loads(origin_json) if origin_json is not None else None,
     )
 
 
@@ -75,6 +77,7 @@ class FactState(BaseModel):
     source_rev: int
     refs: list[str]
     overrides: list[str] = []
+    origin: dict[str, object] | None = None
 
 
 class ThingState(BaseModel):
@@ -225,7 +228,7 @@ class WorldView:
             f"""
             SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
                    f.from_precision, f.valid_until, f.until_precision, f.rev_added,
-                   fo.fact_id AS override_fact_id
+                   f.origin_json, fo.fact_id AS override_fact_id
             FROM facts f
             JOIN things t ON t.id = f.thing_id AND {things_filter}
             LEFT JOIN fact_overrides fo ON fo.row_id = f.row_id
@@ -393,7 +396,8 @@ class WorldView:
         rows = self._conn.execute(
             f"""
             SELECT f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
-                   f.from_precision, f.valid_until, f.until_precision, f.rev_added
+                   f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+                   f.origin_json
             FROM facts f
             JOIN fact_refs fr ON fr.row_id = f.row_id
             WHERE fr.thing_id = :thing_id
