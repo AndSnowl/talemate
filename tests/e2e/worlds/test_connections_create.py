@@ -408,6 +408,12 @@ def test_repoint_link_keeps_words(app, page):
     link = fact.get_by_test_id("linked-ref")
     expect(link).to_have_count(1)
     expect(link).to_have_text("Maren")
+    # the words are the same before the reply lands: its card names the
+    # thing the link means now
+    link.hover()
+    expect(page.get_by_test_id("link-card").locator(".link-name")).to_have_text(
+        "Maren Holt", timeout=TIMEOUT_MS
+    )
     link.click()
     _opened(page, "Maren Holt")
 
