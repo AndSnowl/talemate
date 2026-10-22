@@ -148,7 +148,7 @@ No line of it is repeated anywhere in the block (0 duplicate lines out of 45). F
 
 1. **The Dawn Vigil was written around Vasha (fixed in part, Fix 3).**
    - Its stub's own fact (the core's "A daily morning prayer service…") and its sphere never reached the create prompt. `suggested_prompt` started from mentions only, and the first mention was Vasha's exception. So the prompt was "The Dawn Vigil: She faithfully observes the Dawn Vigil… but privately considers the Doctrine of Transcendence…".
-   - **7 of its 13 facts were about Vasha.** It also drifted to a "Church of Ilarion" and "Ilarion, the First Dawn".
+   - **8 of its 13 facts were about Vasha.** It also drifted to a "Church of Ilarion" and "Ilarion, the First Dawn".
    - **After Fix 3 (run 4):** the prompt leads with the stub's own fact and "Part of Church of the Divine Sovanie, under Rites and Ceremonies.". The Vigil now names its church correctly ("one of the primary rites and ceremonies of the Church of the Divine Sovanie"). But **4 of its 13 facts are still about Vasha**: her mentions still come after, and in "Mentioned elsewhere (keep these true)". It also repeats its own fact nearly word for word ("The Dawn Vigil is a daily morning prayer service…" next to "A daily morning prayer service…").
 2. **The summary grew after Fill.**
    - The core's summary was 53 words. Accepting Fill on Doctrines kept a statement, and Task 8's rule (decision 2) then regenerated the church's description prose from all its facts. **The summary became 126 words**, retelling statements and the timeline: parish holy sites, clergy training, "All Sovy must live…", Elder Marfa.
@@ -160,6 +160,13 @@ No line of it is repeated anywhere in the block (0 duplicate lines out of 45). F
 
 ## Fixes made
 
+**After the runs (Task 10 fix round 1, no Skyfall re-run):** rulings P18, P19 and P20 were applied after these runs, so the numbers above are from before them.
+- **P18:** a sphere's description prose (its summary) is written without its statements and timeline facts.
+- **P19:** `accept_fill` and `add_statement` schedule no prose for a sphere, and neither does an `end_item` `by` sphere's timeline fact.
+- **P20:** a nested sphere with its own block is left out of its parent's key facts.
+
+Together, P18 and P19 address the "summary grew after Fill" finding: Fill now leaves the core's summary as it is.
+
 All are in worldplay prompt or context assembly, each with a test written first (RED, then GREEN).
 
 1. **A sphere's item pulled in as lore shows once** (`worldplay/context.py`, `world/spheres.key_facts(skip=…)`).
@@ -168,7 +175,7 @@ All are in worldplay prompt or context assembly, each with a test written first 
    - Task 7's `test_context_touched_sphere_key_facts` pinned the doubled line (the Doctrine of Separation was pulled in, and DAWN_BLOCK listed it too). It now pins the plain case, and `test_pulled_in_item_shows_once` covers the other.
    - Seen working in runs 3 and 4.
 2. **The create prompt's names rule** (`world/create-thing.jinja2`): faiths, orders, academies, guilds, councils, cultures and fields are `"sphere"` with a `"template"`.
-   - This is the sphere core's wording, verbatim. It was probe-mandated by Task 3, and Fill and the branch prompt already use it.
+   - This is the sphere core's wording (probe-mandated by Task 3, and used by Fill and the branch prompt too), plus one extension: the core's closing "(a country or realm is a place; a rank or office is lore)" goes on with "; so is any other group or faction, and a law, code, script or language", carrying over what the old create-thing line said about those.
    - It replaces "culture … lore (a group, order or faction is lore; …)". "Any other group or faction" stays lore.
    - Evidence:
      - run 2: the state church came back as `lore`;

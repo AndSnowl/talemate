@@ -869,10 +869,75 @@ async def test_child_first_sphere_stub_gets_part_of(moscavia, world):
     assert dawn.is_stub and dawn.fields == dawn_before.fields and dawn.facts == []
     assert [i.thing_id for i in spheres.items(view, moscavia.dawn)] == [council]
 
-    # the White Dawn's prompt names the council, now part of it: no cycle
+    # the White Dawn, mentioned by the Tsardom's law (no sphere's item) and
+    # naming no sphere stub in its prompt, joins nothing; the council is
+    # adopted (the cycle guard: test_child_first_never_joins_its_own_child)
     preview, _ = await _dawn_preview(world, moscavia.dawn, CORE_AFTER_COUNCIL)
     assert preview.part_of is None
     assert [a["thing_id"] for a in preview.adopted] == [council]
+
+
+async def test_child_first_never_joins_its_own_child(moscavia, world):
+    """A sphere stub expanded after a child that's part of it is never made
+    part of that child (`create._sits_in`): not when its only mention is a
+    statement of the child, an order sphere in its drawers; nor when its
+    prompt names a child that's still a stub."""
+
+    with world.revision(Source.manual(note="grey dawn")) as rev:
+        grey = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Grey Dawn",
+                "template": "religion",
+                "stub": {"ignored": False},
+            },
+        )
+        council = rev.create_thing(
+            "sphere",
+            {
+                "name": "Grey Council",
+                "template": "order",
+                "drawers": [{"id": "0000000b", "type": "structure", "title": "Seats"}],
+                "part_of": {"sphere": grey, "drawer": UNSORTED_DRAWER_ID},
+            },
+        )
+        # the Grey Dawn's only mention: a statement of the council
+        rev.add_fact(
+            council,
+            "statement",
+            f"Seven seats rule {ref(grey, 'the Grey Dawn')}.",
+            origin={"drawer": "0000000b"},
+        )
+        pale = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Pale Dawn",
+                "template": "religion",
+                "stub": {"ignored": False},
+            },
+        )
+        rev.create_thing(
+            "sphere",
+            {
+                "name": "Pale Council",
+                "template": "order",
+                "stub": {"ignored": False},
+                "part_of": {"sphere": pale, "drawer": UNSORTED_DRAWER_ID},
+            },
+        )
+
+    client = MockClient("test")
+    for stub, prompt in (
+        (grey, "The Grey Dawn: Seven seats rule the Grey Dawn."),
+        (pale, "The Pale Dawn: a faith ruled by the Pale Council."),
+    ):
+        async with MockClientContext():
+            _queue(CORE_RELIGION)
+            preview = await preview_sphere(
+                world, "religion", prompt, {}, client, stub_id=stub
+            )
+        assert preview.part_of is None, prompt
+    assert len(client.prompt_history) == 2
 
 
 async def test_child_first_character_gets_no_part_of(moscavia, world):

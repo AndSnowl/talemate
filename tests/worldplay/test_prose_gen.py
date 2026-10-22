@@ -396,3 +396,88 @@ async def test_species_fact_splits_the_cached_stretch(
     assert cached is not None
     assert cached.stretch_end is not None
     assert cached.stretch_end.instant == WorldDate.of(1000).instant
+
+
+async def test_sphere_description_leaves_out_statements_and_timeline(world):
+    """Ruling P18: a sphere's description (its summary, ruling P1) is
+    written from its `about` facts and its template, never from its
+    statements or timeline -- in its facts or its background -- so Fill
+    and dated declarations can't turn the summary into a retelling of its
+    drawers (spheres Task 10 session: 53 words grew to 126)."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        dawn = rev.create_thing(
+            "sphere", fields={"name": "The White Dawn", "template": "religion"}
+        )
+        rev.add_fact(dawn, "about", "The state church of Moscavia.")
+        rev.add_fact(dawn, "statement", "Snowy owl-folk are the purest of the folk.")
+        rev.add_fact(
+            dawn,
+            "timeline",
+            "Issued the Doctrine of Separation.",
+            valid_from=WorldDate.of(1019),
+        )
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("The White Dawn is the state church of Moscavia.")
+        await prose_gen.generate_section(world, dawn, "description", None, client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "The state church of Moscavia." in prompt
+    assert "A religion sphere." in prompt
+    assert "purest of the folk" not in prompt
+    assert "Doctrine of Separation" not in prompt
+
+
+async def test_place_sphere_description_leaves_out_statements_and_timeline(world):
+    """A place that is a sphere is described from its place facts: its
+    statements and timeline feed its sphere's key facts, not its prose."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={"name": "Moscavia", "kind": "country", "template": "nation"},
+        )
+        rev.add_fact(tsardom, "description", "A northern realm of pine forest.")
+        rev.add_fact(tsardom, "statement", "Only owl-folk may hold land.")
+        rev.add_fact(
+            tsardom, "timeline", "Crowned the first Tsar.", valid_from=WorldDate.of(990)
+        )
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("Moscavia is a northern realm.")
+        await prose_gen.generate_section(world, tsardom, "description", None, client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "A northern realm of pine forest." in prompt
+    assert "A nation sphere." in prompt
+    assert "Only owl-folk may hold land." not in prompt
+    assert "Crowned the first Tsar." not in prompt
+
+
+async def test_sphere_with_nothing_to_describe_keeps_its_summary(world):
+    """A sphere whose summary came from its core has no fact its prose
+    reads (P18): regenerating it (a rename, say) asks the model nothing
+    and keeps the summary, rather than caching an empty one."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        dawn = rev.create_thing(
+            "sphere", fields={"name": "The White Dawn", "template": "religion"}
+        )
+        rev.add_fact(dawn, "statement", "Snowy owl-folk are the purest of the folk.")
+    start, end = prose_gen.stretch_containing(world, dawn, None)
+    world.prose().put(dawn, "description", start, end, "The church of the dawn.")
+    with world.revision(Source.manual(note="rename")) as rev:
+        rev.set_field(dawn, "name", "The Pale Dawn", None)
+
+    client = MockClient("test")
+    async with MockClientContext():
+        text = await prose_gen.generate_section(
+            world, dawn, "description", None, client
+        )
+
+    assert client.prompt_history == []
+    assert text == "The church of the dawn."
+    assert world.prose().get(dawn, "description", None).text == text

@@ -106,13 +106,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
   items}` writes them. `add_statement {sphere_id, drawer_id, text, picks,
   new_names, spans, at}` writes a statement by hand into a drawer that
   holds items (own or inherited; not Unsorted), linked like `add_fact`,
-  and answers with the sphere, its prose refreshed. `set_drawers {sphere_id, drawers}`, `set_part_of
+  and answers with the sphere. `set_drawers {sphere_id, drawers}`, `set_part_of
   {thing_id, sphere_id|null, drawer_id}`, `set_ties {character_id, ties:
   [{sphere_id, role, since, until}]}`, `add_exception {character_id,
   sphere_id, text, rejects: {thing_id}|{fact_id}|null}` and `end_item
   {sphere_id, thing_id|fact_id, at, by}` answer with the thing edited (the
   sphere, for `end_item`). Prose is refreshed only when rendered text
-  changed: drawers, part-of and ties are no prose's input.
+  changed: drawers, part-of and ties are no prose's input, nor are a
+  sphere's statements and timeline (rulings P18, P19).
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -1717,20 +1718,16 @@ class WorldsPlugin(Plugin):
 
     async def handle_accept_fill(self, data: dict):
         """Write the Fill items the owner kept and answer with the sphere.
-        A statement is a fact of the sphere, so its prose is refreshed
-        when one was written; named items are new stubs, with no prose."""
+        No prose is scheduled: a statement is no input to the sphere's
+        description (ruling P18; P19: prose only when its input changes),
+        and named items are new stubs."""
 
         payload = AcceptFillPayload(**data)
         world = self._require_world()
         sphereplay.accept_fill(
             world, payload.sphere_id, payload.drawer_id, payload.items
         )
-        self._edited(
-            "accept_fill",
-            payload.sphere_id,
-            None,
-            prose=any(not item.get("name") for item in payload.items),
-        )
+        self._edited("accept_fill", payload.sphere_id, None, prose=False)
 
     def _require_sphere(self, world: World, sphere_id: str) -> ThingState:
         state = world.view().thing(sphere_id)
@@ -1930,8 +1927,9 @@ class WorldsPlugin(Plugin):
         own or inherited) that holds items: a `statement` fact of the
         sphere, undated, its drawer as its origin, as Fill and creation
         write one (`worldplay.spheres`). The text is linked like
-        `add_fact`'s. Not people, events, branches or Unsorted. A fact of
-        the sphere feeds its prose, which is refreshed."""
+        `add_fact`'s. Not people, events, branches or Unsorted. A
+        statement feeds no prose (rulings P18, P19), so none is
+        scheduled."""
 
         payload = AddStatementPayload(**data)
         world = self._require_world()
@@ -1964,7 +1962,8 @@ class WorldsPlugin(Plugin):
             rev.add_fact(
                 payload.sphere_id, "statement", text, origin={"drawer": drawer.id}
             )
-        self._edited("add_statement", payload.sphere_id, at)
+        # a statement is no input to the sphere's prose (rulings P18, P19)
+        self._edited("add_statement", payload.sphere_id, at, prose=False)
 
     async def handle_preview_branch(self, data: dict):
         """A branch of a sphere, in the background: answers
@@ -1994,9 +1993,10 @@ class WorldsPlugin(Plugin):
     async def handle_end_item(self, data: dict):
         """End one of a sphere's own items at `at` (`thing_id` or
         `fact_id`), noting `by` (`worldplay.spheres.end_item`), and answer
-        with the sphere. The facts it writes are rendered text: prose is
-        refreshed for each full entry that got one -- the thing item, or
-        the sphere for a statement, and `by` when it's a sphere."""
+        with the sphere. Prose is refreshed for the full entry whose input
+        it changed: the thing item (its note), or the sphere for a
+        statement (its `about` note). A `by` sphere's `timeline` fact feeds
+        no prose (rulings P18, P19)."""
 
         payload = EndItemPayload(**data)
         world = self._require_world()
@@ -2020,15 +2020,12 @@ class WorldsPlugin(Plugin):
             payload.by,
         )
         self._edited("end_item", payload.sphere_id, None, prose=False)
-        changed = [item.thing_id or payload.sphere_id]
-        by = view.thing(payload.by) if payload.by is not None else None
-        if by is not None and spheres.is_sphere(by):
-            changed.append(by.id)
-        after = world.view()
-        for thing_id in dict.fromkeys(changed):
-            state = after.thing(thing_id)
-            if state is not None and not state.is_stub:
-                self._schedule_prose(thing_id, None)
+        # the item's note (an `about` or `general` fact) is prose input; a
+        # `by` sphere's timeline fact isn't (rulings P18, P19)
+        changed = item.thing_id or payload.sphere_id
+        state = world.view().thing(changed)
+        if state is not None and not state.is_stub:
+            self._schedule_prose(changed, None)
 
     # --- stubs ------------------------------------------------------------
 

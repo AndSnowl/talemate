@@ -245,12 +245,13 @@ def _sphere_entries(
     sphere_ids: list[str],
     shown: set[str],
     things: list[ThingState],
-    as_lore: set[str],
+    shown_elsewhere: set[str],
 ) -> list[dict[str, Any]]:
     """The spheres block, one entry per sphere in `sphere_ids`: its key
-    facts (`spheres.key_facts`, with its summary, less the items shown
-    `as_lore` in the block already) and, for a nested sphere whose parent
-    isn't `shown` in the block already, the parent's summary alone."""
+    facts (`spheres.key_facts`, with its summary, less the items
+    `shown_elsewhere` in the block: as lore, or a nested sphere's own
+    block) and, for a nested sphere whose parent isn't `shown` in the
+    block already, the parent's summary alone."""
 
     entries: list[dict[str, Any]] = []
     for sphere_id in sphere_ids:
@@ -270,7 +271,7 @@ def _sphere_entries(
                 _sphere_summary(world, view, sphere_id) or None,
                 world.calendar,
                 things,
-                as_lore,
+                shown_elsewhere,
             ),
         }
         parent_id = _sphere_parent(view, state)
@@ -293,7 +294,8 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     The spheres the scene touches (`_touched_spheres`) follow the lore,
     one block each under one lead line (the spheres probe's (d)), with
     their key facts; a pulled-in sphere shows there, not as lore, and a
-    pulled-in item of a sphere shows as lore, not again in its key facts.
+    pulled-in item of a sphere shows as lore, and a nested sphere in its
+    own block, not again in its parent's key facts.
     When the
     scene's place is itself a sphere, it shows once, as the place: its own
     place facts, then its key facts (summary from its `about` fact, since
@@ -367,8 +369,10 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
 
     touched = _touched_spheres(view, record, place_thing_id, things)
     in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
+    # a nested sphere with a block of its own is left out of its parent's
+    # key facts too (ruling P20)
     sphere_entries = _sphere_entries(
-        world, view, in_block, set(touched), things, as_lore
+        world, view, in_block, set(touched), things, as_lore | set(in_block)
     )
 
     return str(

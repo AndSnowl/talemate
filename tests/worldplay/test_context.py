@@ -477,6 +477,10 @@ def test_context_touched_sphere_key_facts(world, spheres_world):
     block = _sphere_scene(world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn])
 
     assert f"\n{SPHERES_LEAD}\n{DAWN_BLOCK}" in block
+    # the Council, nested in the Dawn with no block of its own, stays one
+    # of the Dawn's key facts (ruling P20)
+    assert "- The Council of Elders: Seven elders seated in Kremova." in block
+    assert "The Council of Elders (order)" not in block
     assert block.count("The White Dawn") == 2  # the heading and the summary
     assert block.count("Snowy owl-folk are the purest") == 1
     assert "A faith of the dawn." not in block
@@ -510,15 +514,19 @@ def test_context_touched_by_territory_and_members(world, spheres_world):
     practitioner of the Dawn; Brenna, present, an elder of the Council,
     nested in the Dawn: the Council brings its parent's summary only, and
     not when the parent is in the block itself. Territory, then named,
-    then members."""
+    then members. With a block of its own, the Council is left out of the
+    Dawn's key facts (ruling P20), so its line shows once."""
 
     s = spheres_world
     block = _sphere_scene(
         world, place_thing_id=s.kremova, characters=_present(s.vasha, s.brenna)
     )
+    council_line = "- The Council of Elders: Seven elders seated in Kremova.\n"
+    dawn = DAWN_BLOCK.replace(council_line, "")
     council = "The Council of Elders (order)\n- Seven elders seated in Kremova.\n"
-    assert f"{SPHERES_LEAD}\n{TSARDOM_BLOCK}\n{DAWN_BLOCK}\n{council}" in block
+    assert f"{SPHERES_LEAD}\n{TSARDOM_BLOCK}\n{dawn}\n{council}" in block
     assert block.count(SPHERES_LEAD) == 1
+    assert block.count("Seven elders seated in Kremova.") == 1
 
     block = _sphere_scene(
         world, place_thing_id=s.kremova, characters=_present(s.brenna)

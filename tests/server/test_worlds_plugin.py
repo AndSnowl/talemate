@@ -2823,9 +2823,8 @@ async def test_fill_drawer_then_accept(plugin, client):
             "Dawn Vigil",
             "Smiths sing to the anvil when the bells ring.",
         ]
-        # a statement was written on the sphere: its prose is refreshed
-        assert plugin.tasks
-        await _drain(plugin)
+        # a statement feeds no prose (ruling P19): nothing is scheduled
+        assert not plugin.tasks
 
 
 async def test_fill_failure_is_reported(plugin, client):
@@ -3146,8 +3145,9 @@ async def test_end_item(plugin, client):
         items = [i["thing_id"] for d in dawn["sphere"]["drawers"] for i in d["items"]]
         assert s.vigil not in items
         assert s.world.head_rev() == head + 1
-        # the Vigil and the Tsardom got facts: their prose is refreshed
-        assert len(plugin.tasks) == 2
+        # the Vigil got a fact: its prose is refreshed; the Tsardom's
+        # timeline fact feeds no prose (ruling P19)
+        assert len(plugin.tasks) == 1
         await _drain(plugin)
 
         await _act(
@@ -3595,7 +3595,8 @@ async def test_fixed_preview_carries_ties_and_part_of(plugin, tmp_path, monkeypa
 async def test_add_statement(plugin, client):
     """A statement written by hand into a drawer: a `statement` fact of
     the sphere with the drawer as its origin, linked like `add_fact`'s
-    text, shown in that drawer; the sphere's prose is refreshed."""
+    text, shown in that drawer. A statement feeds no prose (ruling P19):
+    none is scheduled."""
 
     s = await _open_sphere_world(plugin)
     async with MockClientContext():
@@ -3607,8 +3608,7 @@ async def test_add_statement(plugin, client):
             text="Light is purity, as seen from Dawn Peak.",
         )
         assert not _errors(plugin)
-        assert plugin.tasks, "no prose task was scheduled"
-        await _drain(plugin)
+        assert not plugin.tasks, "a prose task was scheduled"
     dawn = _last(plugin, "add_statement")["data"]
     assert dawn["id"] == s.dawn
     doctrines = next(d for d in dawn["sphere"]["drawers"] if d["id"] == DOCTRINES)

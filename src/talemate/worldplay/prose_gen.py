@@ -50,7 +50,7 @@ from typing import Any
 import structlog
 
 from talemate.prompts import Prompt
-from talemate.world import heritage
+from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
@@ -120,12 +120,24 @@ def sections_for(kind: str) -> tuple[str, ...]:
     return ("description",)
 
 
+# the sphere categories no description is written from (ruling P18): a
+# sphere's summary (ruling P1) stays its own, never a retelling of its
+# drawers' statements or its timeline, and a place sphere is described
+# from its place facts
+_NOT_DESCRIBED: tuple[str, ...] = ("statement", "timeline")
+
+
 def section_categories(kind: str, section: str) -> tuple[str, ...]:
-    """The fact categories `section` of a `kind` thing is generated from."""
+    """The fact categories `section` of a `kind` thing is generated from:
+    for `description`, never a sphere's statements or timeline
+    (`_NOT_DESCRIBED`)."""
 
     if kind == "character":
         return _SECTION_CATEGORIES[section]
-    return tuple(get_kind(kind).categories)
+    categories = tuple(get_kind(kind).categories)
+    if section == "description":
+        categories = tuple(c for c in categories if c not in _NOT_DESCRIBED)
+    return categories
 
 
 def inherited_categories(section: str) -> dict[str, tuple[str, ...]]:
@@ -226,11 +238,15 @@ def background_for_section(
 
     `personality` also drops the thing's own `appearance` facts, for the
     same reason `_section_facts` drops the inherited physical/variation
-    ones; `description`'s background is unaffected."""
+    ones; `description` drops a sphere's statements and timeline
+    (`_NOT_DESCRIBED`, ruling P18), so they don't come back as background.
+    A sphere's `template` is a core field too ("A religion sphere.")."""
 
     categories = set(section_categories(kind, section))
     if section == "personality":
         categories.add("appearance")
+    elif section == "description":
+        categories.update(_NOT_DESCRIBED)
     background = [text for category, text in facts if category not in categories]
     background.extend(inherited or [])
 
@@ -245,6 +261,9 @@ def background_for_section(
             background.append(f"A {value}.")
         elif field == "name":
             background.append(f"Named {value}.")
+    template = fields.get("template")
+    if isinstance(template, str) and template:
+        background.append(f"A {template} sphere.")
 
     return background
 
@@ -318,7 +337,8 @@ async def generate_section(
 ) -> str:
     """Generate `section`'s prose from the thing's facts at `at` and what
     it inherits then, cache it for the stretch containing `at`, and return
-    the text."""
+    the text. A sphere with no fact the section reads (a core's summary,
+    ruling P18) keeps the prose it has: no call, nothing cached."""
 
     view = world.view(at)
     state = view.thing(thing_id)
@@ -327,6 +347,11 @@ async def generate_section(
 
     name = view.name_of(thing_id) or ""
     facts, inherited_background = _section_facts(view, state, section)
+    if not facts and spheres.is_sphere(state):
+        # a sphere's summary from its core reads no fact (P18): nothing new
+        # to write from, so the summary it has stays, uncached anew
+        kept = world.prose().get(thing_id, section, at)
+        return kept.text if kept is not None else ""
     background = background_for_section(
         world.calendar,
         state.kind,

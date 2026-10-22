@@ -12,8 +12,8 @@ judge it"), in a fresh world.
 3. The White Dawn is expanded from its stub: its one call sees the council
    as "Already part of it", the reply relists it under Hierarchy, and it's
    adopted there rather than made again.
-4. Fill Doctrines: a repeat of a held item is dropped, the rest kept; a
-   kept statement has the White Dawn's summary written again.
+4. Fill Doctrines: a repeat of a held item is dropped, the rest kept; the
+   White Dawn's summary stays its core's (a statement feeds no prose).
 5. Vasha, an Owl-folk courier, is created: the White Dawn is in her
    prompt's spheres block, and her reply's tie and its "but..." exception
    (rejecting a labelled doctrine) are written.
@@ -192,8 +192,6 @@ FILL_REPLY = json.dumps(
         "names": [],
     }
 )
-
-REFILLED_PROSE = "The White Dawn is the state church of Moscavia."
 
 VASHA_PROMPT = (
     "Vasha, an owl-folk courier raised in the White Dawn, who keeps the "
@@ -488,11 +486,10 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         ("", FEATHER),
         ("The Silent Hour", "No word is spoken from dusk until the first star."),
     ]
-    # a statement is a fact of the sphere: its summary is written again
+    # a statement is no input to the summary (rulings P18, P19): no prose
     dawn = await _send(
         plugin,
         "accept_fill",
-        REFILLED_PROSE,
         sphere_id=dawn_id,
         drawer_id=doctrines_id,
         items=filled["items"],
@@ -503,7 +500,7 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         PURITY,
         FEATHER,
     ]
-    assert world.prose().get(dawn_id, "description", None).text == REFILLED_PROSE
+    assert world.prose().get(dawn_id, "description", None).text == DAWN_SUMMARY
 
     # 5. Vasha: the White Dawn is in her prompt's spheres block, its items
     # labelled; her tie rejects the purity doctrine by its label
@@ -590,7 +587,7 @@ async def test_spheres_end_to_end(plugin, client, loadable):
     )
     # the key facts, each once: summary, top items, latest timeline
     for line in (
-        REFILLED_PROSE,
+        DAWN_SUMMARY,
         COUNCIL_TEXT,
         PURITY,
         SEPARATION,
@@ -621,7 +618,7 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         calls = client.prompt_history[before:]
         assert [call["kind"] for call in calls] == ["narrate_512"]
         turn_prompt = str(calls[0]["prompt"])
-        assert turn_prompt.count(REFILLED_PROSE) == 1
+        assert turn_prompt.count(DAWN_SUMMARY) == 1
         assert turn_prompt.count(PURITY) == 1
     finally:
         close_world_scene(scene)
@@ -633,9 +630,9 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         # species, Tsardom, council, Vasha, the scene's plan and the Pale
         # Spire's stub preview; the White Dawn's core
         "creative_instruction_2048": 7,
-        # the creates' prose (two sections for Vasha), the Pale Spire's,
-        # and the White Dawn's summary after Fill kept a statement
-        "analyze": 7,
+        # the creates' prose (two sections for Vasha) and the Pale Spire's;
+        # none for the White Dawn, whose summary is its core's
+        "analyze": 6,
         # Fill
         "creative_instruction_1024": 1,
         # the one turn
