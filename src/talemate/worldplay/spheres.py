@@ -38,6 +38,21 @@ The probe's guards on what the model writes:
   (nearly) the same words;
 - month names never become names, and `create.name_guess` maps the names'
   kinds and templates (council and guild templates are orders).
+
+**A branch** (`preview_branch`, `world/sphere-branch`) is a `sphere` whose
+`parent` is another, linked from now (the date it splits), in the core's
+flat shape. The prompt lists the parent's items labelled F1...Fn; the
+reply's `"drops"` and an item's `"overrides"` name labels, mapped back as
+Connections maps inherited facts' labels:
+- a thing item's label goes to the branch's `drops`;
+- a statement's label, on a statement the branch writes, makes it
+  override that fact; dropped outright or replaced by a named item, the
+  branch rejects it with an `about` fact overriding it (`rejects`).
+Its drawers are the parent's, plus any of a title the parent lacks.
+
+**Ending an item** (`end_item`, the owner's "End this..."): its part-of
+link or statement ends at a date, it notes when and by what, and the
+sphere that ended it gets a timeline fact linking it.
 """
 
 from __future__ import annotations
@@ -52,6 +67,7 @@ from pydantic import Field
 from talemate.prompts import Prompt
 from talemate.world import spheres
 from talemate.world.calendar import Calendar
+from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
     SPHERE_TEMPLATES,
     TEMPLATE_AGENT,
@@ -60,7 +76,7 @@ from talemate.world.kinds import (
     validate_field,
 )
 from talemate.world.names import ARTICLES, everyday_name
-from talemate.world.refs import parse_refs
+from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Revision, Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import create, prose_gen
@@ -130,6 +146,7 @@ _REPEAT_OVERLAP = 0.75
 
 _CREATED_NOTE = "sphere created from prompt"
 _FILLED_NOTE = "sphere drawer filled"
+_ENDED_NOTE = "sphere item ended"
 
 
 class SpherePreview(CreatePreview):
@@ -144,7 +161,18 @@ class SpherePreview(CreatePreview):
       a stub part of the sphere, a nameless one (`name` "") a statement.
       One with a `thing_id` links that stub instead of making one;
     - `adopted`: `{"thing_id", "drawer_id"}`, the entries already part of
-      the stub or promoted thing, and the drawer each is filed in."""
+      the stub or promoted thing, and the drawer each is filed in.
+
+    A branch (`preview_branch`) has `fields["parent"]`, linked from
+    `split`; its `drawers` are only those it adds to its parent's.
+    - `parent_items`: `{"label", "thing_id", "fact_id", "source_id",
+      "name", "text", "drawer_id"}`, the parent's items as the prompt
+      labelled them, so the owner can drop one the model missed;
+    - `drops`: the inherited thing items it drops (its `drops` field);
+    - `rejects`: the inherited statements it drops, each written as an
+      `about` fact overriding it;
+    - an item's `overrides`: on a statement, the inherited statements it
+      replaces."""
 
     template: str
     agent: bool
@@ -153,6 +181,11 @@ class SpherePreview(CreatePreview):
     adopted: list[dict[str, str]] = Field(default_factory=list)
     # the lore entry, place or stub this preview promotes
     promote_id: str | None = None
+    # a branch: the date its `parent` link holds from, and what it drops
+    split: WorldDate | None = None
+    parent_items: list[dict[str, Any]] = Field(default_factory=list)
+    drops: list[str] = Field(default_factory=list)
+    rejects: list[str] = Field(default_factory=list)
 
 
 # --- reading replies -----------------------------------------------------------
@@ -276,7 +309,14 @@ def _as_statement(item: dict[str, Any]) -> dict[str, Any]:
     name, text = item["name"], item["text"]
     if name_key(name) not in text.casefold():
         text = f"{name}: {text}"
-    return {"drawer_id": item["drawer_id"], "name": "", "text": text, "kind": ""}
+    kept = {"overrides": item["overrides"]} if item.get("overrides") else {}
+    return {
+        "drawer_id": item["drawer_id"],
+        "name": "",
+        "text": text,
+        "kind": "",
+        **kept,
+    }
 
 
 def _settle_items(
@@ -725,6 +765,7 @@ def _write_items(
                 "statement",
                 linked_text(item["text"], sphere_id),
                 origin={"drawer": item["drawer_id"]},
+                overrides=item.get("overrides") or None,
             )
     return linked
 
@@ -740,7 +781,11 @@ def _write_core(
         fields: dict[str, Any] = {**preview.fields, "name": preview.name}
         if preview.aka:
             fields["aka"] = preview.aka
+        # a branch's parent link holds from the date it splits
+        parent = fields.pop("parent", None) if preview.split is not None else None
         thing_id = rev.create_thing(preview.kind, fields)
+        if parent is not None:
+            rev.set_field(thing_id, "parent", parent, preview.split)
     else:
         thing_id = target.id
         if target.kind != preview.kind:
@@ -756,7 +801,19 @@ def _write_core(
     rev.set_field(thing_id, "template", preview.template, None)
     rev.set_field(thing_id, "agent", preview.agent, None)
     rev.set_field(thing_id, "drawers", preview.drawers, None)
+    if preview.drops:
+        rev.set_field(thing_id, "drops", preview.drops, None)
     return thing_id
+
+
+def _fact_text(view: WorldView, fact_id: str) -> str | None:
+    """The live fact's text as stored (links kept), or `None`."""
+
+    for state in view.things():
+        for fact in state.facts:
+            if fact.fact_id == fact_id:
+                return fact.text
+    return None
 
 
 def _orphans(
@@ -810,7 +867,18 @@ def _write_sphere(
                 as_new=preview.treated_as_new,
             )
             linked.update(parse_refs(text))
-            rev.add_fact(thing_id, fact.category, text, valid_from=fact.since)
+            rev.add_fact(
+                thing_id,
+                fact.category,
+                text,
+                valid_from=fact.since,
+                overrides=fact.overrides or None,
+            )
+        for fact_id in preview.rejects:
+            rejected = _fact_text(view, fact_id)
+            if rejected is None:
+                raise ValueError(f"the rejected fact is gone: {fact_id}")
+            rev.add_fact(thing_id, "about", f"Rejects: {rejected}", overrides=[fact_id])
         unlinked = _orphans(view, stubs, new_names, linked)
         if unlinked:
             raise create._UnlinkedNames([n.name for n in unlinked])
@@ -927,6 +995,20 @@ def _summary(world: World, view: WorldView, state: ThingState) -> str:
     return view.render(about[0].text) if about else ""
 
 
+def _timeline_lines(world: World, view: WorldView, sphere_id: str) -> list[str]:
+    """The sphere's timeline as prompts list it, "<year>: <text>" (an
+    undated fact without a year)."""
+
+    lines = []
+    for fact in spheres.timeline(view, sphere_id):
+        text = view.render(fact.text)
+        if fact.valid_from is not None:
+            year = fact.valid_from.to_datetime().year
+            text = f"{create._shown_year(world.calendar, year)}: {text}"
+        lines.append(text)
+    return lines
+
+
 def _repeats(item: dict[str, Any], held: list[spheres.Item]) -> bool:
     """Whether a Fill item says what an item the sphere holds says: the
     same name, ignoring case and a leading article, or (nearly) the same
@@ -989,13 +1071,6 @@ async def fill_drawer(
     template = state.fields.get("template")
     template = template if template in TEMPLATE_LABELS else "other"
     name = view.name_of(sphere_id) or ""
-    timeline = []
-    for fact in spheres.timeline(view, sphere_id):
-        text = view.render(fact.text)
-        if fact.valid_from is not None:
-            year = create._shown_year(calendar, fact.valid_from.to_datetime().year)
-            text = f"{year}: {text}"
-        timeline.append(text)
 
     template_vars: dict[str, Any] = {
         "name": name,
@@ -1004,7 +1079,7 @@ async def fill_drawer(
         "drawer_type": drawer.type,
         "drawer_help": TYPE_HELP[drawer.type],
         "summary": _summary(world, view, state),
-        "timeline": timeline,
+        "timeline": _timeline_lines(world, view, sphere_id),
         "drawers": lines,
         "existing": [line for *_, ls, target in lines if target for line in ls],
         "mentions": mentions,
@@ -1089,3 +1164,300 @@ def accept_fill(
         except create._UnlinkedNames as unlinked_names:
             new_names = _without_unlinked(new_names, unlinked_names)
     log.info("spheres.fill_accept", sphere_id=sphere_id, items=len(items))
+
+
+# --- branches ----------------------------------------------------------------
+
+
+def _parent_items(
+    view: WorldView, parent_id: str, drawers: list[spheres.Drawer]
+) -> list[dict[str, Any]]:
+    """The parent's items a branch inherits, in `spheres.items` order,
+    labelled F1...Fn: those in a drawer the core writes, or unsorted (not
+    people, the timeline or branches)."""
+
+    titles = {d.id: d.title for d in drawers if d.type in TYPE_HELP}
+    titles[spheres.UNSORTED.id] = spheres.UNSORTED.title
+    rows: list[dict[str, Any]] = []
+    for item in spheres.items(view, parent_id):
+        if item.drawer_id not in titles:
+            continue
+        rows.append(
+            {
+                "label": f"F{len(rows) + 1}",
+                "thing_id": item.thing_id,
+                "fact_id": item.fact_id,
+                "source_id": item.source_id,
+                "name": item.name,
+                "text": _item_line(view, item),
+                "drawer_id": item.drawer_id,
+            }
+        )
+    return rows
+
+
+def _branch_labels(
+    value: object, rows: dict[str, dict[str, Any]]
+) -> tuple[list[str], list[str]]:
+    """The thing ids and the fact ids of the `F1`-style labels in `value`
+    (a list, or one label), each once. Unknown labels are dropped."""
+
+    things: list[str] = []
+    facts: list[str] = []
+    for label in value if isinstance(value, list) else [value]:
+        row = rows.get(label.strip().upper()) if isinstance(label, str) else None
+        if row is None:
+            log.debug("spheres.unknown_label", label=label)
+        elif row["thing_id"] and row["thing_id"] not in things:
+            things.append(row["thing_id"])
+        elif row["fact_id"] and row["fact_id"] not in facts:
+            facts.append(row["fact_id"])
+    return things, facts
+
+
+def _branch_outline(
+    raw: object, parent_drawers: list[spheres.Drawer], template: str
+) -> list[dict[str, str]]:
+    """A branch's own drawers: the reply's of a type it may write and a
+    title its parent lacks (the parent's serve it otherwise), then the
+    template's app drawers of a type the parent lacks."""
+
+    taken = {d.id for d in parent_drawers}
+    titles = {d.title.casefold() for d in parent_drawers}
+    types = {d.type for d in parent_drawers}
+    found: list[dict[str, str]] = []
+    for drawer in raw if isinstance(raw, list) else []:
+        if not isinstance(drawer, dict):
+            continue
+        type_ = _tidy(drawer.get("type")).lower()
+        title = _tidy(drawer.get("title"))
+        if type_ not in TYPE_HELP or not title or title.casefold() in titles:
+            continue
+        titles.add(title.casefold())
+        found.append({"id": _new_drawer_id(taken), "type": type_, "title": title})
+    for type_, title in spheres.TEMPLATE_DRAWERS[template]:
+        if type_ not in TYPE_HELP and type_ not in types:
+            types.add(type_)
+            found.append({"id": _new_drawer_id(taken), "type": type_, "title": title})
+    return found
+
+
+async def preview_branch(
+    world: World, parent_id: str, prompt: str, client: Any
+) -> SpherePreview:
+    """A branch of the sphere `parent_id` from `prompt`, without writing
+    anything: one call (`world/sphere-branch`). It's a `sphere` under its
+    parent's template and agent flag, whose `parent` link holds from now
+    (`split`). The prompt lists the parent's items labelled F1...Fn
+    (`parent_items`); the reply's labels are mapped back (see the module
+    docstring) to `drops`, `rejects` and its statements' `overrides`.
+
+    An item naming one the branch inherits isn't made again; the rest are
+    matched against the world as the core's are."""
+
+    if not prompt.strip():
+        raise ValueError("a branch needs a prompt")
+    view = world.view()
+    parent = _sphere_state(view, parent_id)
+    if parent.kind != "sphere":
+        # a place sphere's `parent` is the place it lies in
+        raise ValueError("only a sphere has branches")
+    prose_gen.require_client(client)
+    template = parent.fields.get("template")
+    template = template if template in TEMPLATE_LABELS else "other"
+    agent = parent.fields.get("agent")
+    agent = agent if isinstance(agent, bool) else TEMPLATE_AGENT[template]
+    parent_name = view.name_of(parent_id) or ""
+
+    parent_drawers = spheres.drawers(view, parent_id)
+    rows = _parent_items(view, parent_id, parent_drawers)
+    by_label = {row["label"]: row for row in rows}
+    titles = {d.id: d.title for d in parent_drawers}
+    titles[spheres.UNSORTED.id] = spheres.UNSORTED.title
+    in_context = {parent_id, *(row["thing_id"] for row in rows if row["thing_id"])}
+    picks = create._found_in_prompt(view, prompt, {}, [], in_context)
+    named = create._named_in_prompt(view, picks, None)
+
+    template_vars: dict[str, Any] = {
+        "label": TEMPLATE_LABELS[template],
+        "agent": agent,
+        "prompt": prompt,
+        "parent_name": parent_name,
+        "parent_summary": _summary(world, view, parent),
+        "parent_timeline": _timeline_lines(world, view, parent_id),
+        "inherited": [
+            (row["label"], titles[row["drawer_id"]], row["text"]) for row in rows
+        ],
+        "named": named,
+        "drawers": [(d.type, d.title) for d in parent_drawers if d.type in TYPE_HELP],
+        "types": list(TYPE_HELP.items()),
+        **_calendar_vars(world),
+    }
+    with world_ai_call():
+        _response, extracted = await Prompt.request(
+            "world.sphere-branch", client, CORE_PROMPT_KIND, vars=template_vars
+        )
+    reply = extracted["response"]
+    core = _reply_object(reply, "items") or _reply_object(reply, "drawers")
+    if core is None:
+        raise ValueError("the model's reply had no items in it")
+
+    drops, rejects = _branch_labels(core.get("drops") or [], by_label)
+    calendar = world.calendar
+    now_year = create.current_date(world).to_datetime().year
+    facts: list[PreviewFact] = []
+    for entry in core.get("timeline") or []:
+        text = _tidy(entry.get("text")) if isinstance(entry, dict) else ""
+        if text and all(fact.text != text for fact in facts):
+            since = create._parse_since(entry.get("year"), calendar, now_year)
+            things, overrides = _branch_labels(entry.get("overrides") or [], by_label)
+            drops += [thing_id for thing_id in things if thing_id not in drops]
+            facts.append(
+                PreviewFact(
+                    category="timeline" if since is not None else "about",
+                    text=text,
+                    since=since,
+                    overrides=overrides,
+                )
+            )
+
+    drawers = _branch_outline(core.get("drawers"), parent_drawers, template)
+    every_drawer = drawers + [d.model_dump() for d in parent_drawers]
+    raw_items = []
+    for raw in core.get("items") or []:
+        if not isinstance(raw, dict):
+            continue
+        item = _item(raw, _drawer_for(raw.get("drawer"), every_drawer))
+        if item is None:
+            continue
+        things, overrides = _branch_labels(raw.get("overrides") or [], by_label)
+        drops += [thing_id for thing_id in things if thing_id not in drops]
+        if overrides:
+            item["overrides"] = overrides
+        raw_items.append(item)
+
+    name = _tidy(core.get("name")).strip(" .") or create._fallback_name(prompt)
+    # an item naming one the branch still inherits isn't made again
+    kept = [row for row in rows if row["thing_id"] and row["thing_id"] not in drops]
+    own_keys = {name_key(name)} | {name_key(row["name"]) for row in kept}
+    items = _settle_items(view, raw_items, own_keys, [], {})
+    for item in items:
+        # a named item can't carry an override: the branch rejects the
+        # statements it replaces instead
+        if item["name"] and item.get("overrides"):
+            rejects += [f for f in item.pop("overrides") if f not in rejects]
+
+    aka = clean_aka(create._aka_entries(core.get("aka")), name, name_keys(view))
+    own_names = [name, *(str(entry["name"]) for entry in aka)]
+    own_names += [item["name"] for item in items if item["name"]]
+    own_names += [row["name"] for row in kept]
+    stub_names = create._new_names(
+        view,
+        _listed_names(core.get("names"), calendar),
+        [fact.text for fact in facts] + [item["text"] for item in items],
+        own_names,
+        list(picks),
+    )
+    summary = _tidy(core.get("summary"))
+    log.info(
+        "spheres.preview_branch",
+        parent_id=parent_id,
+        name=name,
+        drawers=len(drawers),
+        items=len(items),
+        drops=len(drops),
+        rejects=len(rejects),
+        new_names=len(stub_names),
+    )
+    return SpherePreview(
+        kind="sphere",
+        prompt=prompt,
+        fields={"parent": parent_id},
+        name=name,
+        facts=facts,
+        prose={"description": summary} if summary else {},
+        aka=aka,
+        new_names=stub_names,
+        matching_stub_id=create.matching_stub(view, "sphere", name),
+        context=[
+            (f'Named in this prompt: "{written}" means {label}', texts)
+            for written, label, texts in named
+        ],
+        picks=picks,
+        template=template,
+        agent=agent,
+        drawers=drawers,
+        items=items,
+        split=create.current_date(world),
+        parent_items=rows,
+        drops=drops,
+        rejects=rejects,
+    )
+
+
+# --- ending an item ------------------------------------------------------------
+
+
+def end_item(
+    world: World, sphere_id: str, item: spheres.Item, at: WorldDate, by: str | None
+) -> None:
+    """End one of the sphere's own items at `at` (the owner's "End
+    this..."), in one revision:
+
+    - a thing item's `part_of` becomes `None` from `at`, and it gets an
+      `about` fact (`general` for a kind without one), "Ended in <date>",
+      with " by <by>" when something ended it;
+    - a statement's fact ends at `at`, and the sphere gets that `about`
+      fact, followed by the statement;
+    - when `by` is a sphere, it gets a `timeline` fact at `at` linking the
+      item (a statement: the sphere it was part of).
+
+    An inherited item is ended in the sphere it comes from, never here: a
+    `ValueError`, as is an item the sphere doesn't hold or a `by` that's
+    no thing."""
+
+    view = world.view()
+    _sphere_state(view, sphere_id)
+    if item.inherited or item.source_id != sphere_id:
+        raise ValueError("an inherited item is ended in the sphere it comes from")
+    by_state = view.thing(by) if by is not None else None
+    if by is not None and by_state is None:
+        raise ValueError(f"no such thing: {by}")
+    note = f"Ended in {world.calendar.format(at)}"
+    if by is not None:
+        note += f" by {ref(by, view.name_of(by) or '')}"
+
+    with world.revision(Source.manual(note=_ENDED_NOTE)) as rev:
+        if item.thing_id is not None:
+            state = view.thing(item.thing_id)
+            link = state.fields.get("part_of") if state is not None else None
+            if (
+                state is None
+                or not isinstance(link, dict)
+                or link.get("sphere") != sphere_id
+            ):
+                raise ValueError(f"not part of the sphere: {item.thing_id}")
+            rev.set_field(state.id, "part_of", None, at)
+            category = (
+                "about" if "about" in get_kind(state.kind).categories else "general"
+            )
+            rev.add_fact(state.id, category, note, valid_from=at)
+            linked = ref(state.id, view.name_of(state.id) or item.name)
+        elif item.fact_id is not None:
+            text = _fact_text(view, item.fact_id)
+            if text is None:
+                raise ValueError(f"no such statement: {item.fact_id}")
+            rev.end_fact(item.fact_id, at)
+            rev.add_fact(sphere_id, "about", f"{note}: {text}", valid_from=at)
+            linked = f'{ref(sphere_id, view.name_of(sphere_id) or "")}\'s "{text}"'
+        else:
+            raise ValueError("an item is a thing or a statement")
+        if by_state is not None and spheres.is_sphere(by_state):
+            rev.add_fact(by_state.id, "timeline", f"Ended {linked}", valid_from=at)
+    log.info(
+        "spheres.end_item",
+        sphere_id=sphere_id,
+        thing_id=item.thing_id,
+        fact_id=item.fact_id,
+        by=by,
+    )

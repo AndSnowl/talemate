@@ -20,7 +20,9 @@ from talemate.worldplay.spheres import (
     SpherePreview,
     accept_fill,
     accept_sphere,
+    end_item,
     fill_drawer,
+    preview_branch,
     preview_sphere,
 )
 
@@ -887,3 +889,237 @@ async def test_fill_targets_drawer_by_id(moscavia, world, full_dawn):
     assert "Twin drawer statement." in already
     assert "Dawn Vigil" not in already
     assert rites != twin["id"]
+
+
+# --- branches and ending an item ----------------------------------------------
+
+# a branch of the White Dawn, written by hand in the core's flat shape (no
+# probe ran branches): it drops the Purification Doctrine (F1), replaces the
+# Dawn Vigil (F4) with its own vigil and the mark-of-grace statement (F15)
+# with its own; F99 is no label
+BRANCH_REPLY = '{ "name": "The Reformed Dawn", "summary": "The Reformed Dawn broke from the White Dawn over the doctrine of purification. It teaches that the unchanged are no less blessed.", "aka": [], "timeline": [{"year": 1019, "text": "The Reformed Dawn breaks with the Synod of Dawns over the Purification Doctrine."}], "drawers": [{"type": "beliefs", "title": "Doctrines"}, {"type": "beliefs", "title": "Reformed Teachings"}], "drops": ["F1", "F99"], "items": [{"drawer": "Doctrines", "text": "The owl-form is a trial, not a mark of grace, and the unchanged are equals in the dawn.", "overrides": ["F15"]}, {"drawer": "Rites and Ceremonies", "name": "The Open Vigil", "text": "A dawn prayer open to the feathered and the unchanged alike.", "kind": "lore", "overrides": ["F4"]}, {"drawer": "Reformed Teachings", "text": "Any soul may approach the dawn, feathered or not."}], "names": [] }'
+
+
+async def _reformed_preview(world, dawn: str):
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(BRANCH_REPLY)
+        preview = await preview_branch(
+            world, dawn, "the Reformed Dawn, who reject the purification", client
+        )
+    return preview, client
+
+
+async def test_branch_preview_maps_drops_and_overrides(moscavia, world, full_dawn):
+    view = world.view()
+    held = {item.name: item for item in spheres.items(view, moscavia.dawn)}
+    grace = next(i for i in held.values() if i.text.startswith("All owl-folk bear"))
+    before = _snapshot(world)
+
+    preview, client = await _reformed_preview(world, moscavia.dawn)
+
+    # nothing written, one call, the parent's items labelled in the prompt
+    assert _snapshot(world) == before
+    assert len(client.prompt_history) == 1
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "a branch of The White Dawn" in prompt
+    assert "- F1 (Doctrines): The Purification Doctrine: " in prompt
+    assert "- F4 (Rites and Ceremonies): The Dawn Vigil: " in prompt
+    assert "- F15 (Doctrines): All owl-folk bear the mark of grace" in prompt
+    assert '"drops": ["F2"]' in prompt
+
+    labels = {row["label"]: row for row in preview.parent_items}
+    assert labels["F1"]["thing_id"] == held["The Purification Doctrine"].thing_id
+    assert labels["F15"]["fact_id"] == grace.fact_id
+
+    # a branch of its parent, dated now, under its parent's template
+    assert preview.fields["parent"] == moscavia.dawn
+    assert preview.split == WorldDate.of(1020)
+    assert (preview.template, preview.agent) == ("religion", True)
+    assert preview.name == "The Reformed Dawn"
+    # a drawer titled like the parent's is the parent's; only new ones are
+    # its own, and the parent's people and timeline serve it
+    parent_drawers = {d.title: d.id for d in spheres.drawers(view, moscavia.dawn)}
+    assert [(d["type"], d["title"]) for d in preview.drawers] == [
+        ("beliefs", "Reformed Teachings")
+    ]
+    # dropped: F1, and F4, which the Open Vigil replaces
+    assert preview.drops == [
+        held["The Purification Doctrine"].thing_id,
+        held["The Dawn Vigil"].thing_id,
+    ]
+    assert preview.rejects == []
+
+    def by_text(start):
+        return next(i for i in preview.items if i["text"].startswith(start))
+
+    assert by_text("The owl-form")["overrides"] == [grace.fact_id]
+    assert by_text("The owl-form")["drawer_id"] == parent_drawers["Doctrines"]
+    vigil = by_text("A dawn prayer")
+    assert vigil["name"] == "The Open Vigil"
+    assert vigil["drawer_id"] == parent_drawers["Rites and Ceremonies"]
+    assert by_text("Any soul")["drawer_id"] == preview.drawers[0]["id"]
+
+    branch = accept_sphere(world, preview)
+
+    view = world.view()
+    state = view.thing(branch)
+    assert state.fields["parent"] == moscavia.dawn
+    assert view.field_since(branch, "parent") == WorldDate.of(1020)
+    assert state.fields["drops"] == preview.drops
+    found = spheres.items(view, branch)
+    names = {item.name for item in found}
+    assert "The Purification Doctrine" not in names
+    assert "The Dawn Vigil" not in names
+    assert {"The Three Wings", "The Open Vigil"} <= names
+    texts = {item.text for item in found if item.thing_id is None}
+    assert grace.text not in texts
+    assert any(text.startswith("The owl-form is a trial") for text in texts)
+    # the parent keeps all it had
+    assert {"The Purification Doctrine", "The Dawn Vigil"} <= {
+        item.name for item in spheres.items(view, moscavia.dawn)
+    }
+
+
+async def test_branch_drops_a_statement_by_rejecting_it(moscavia, world, full_dawn):
+    """A dropped statement can't be in `drops` (a thing list), nor can a
+    named item override it: the branch rejects it with an `about` fact
+    overriding it."""
+
+    view = world.view()
+    grace = next(
+        i
+        for i in spheres.items(view, moscavia.dawn)
+        if i.text.startswith("All owl-folk bear")
+    )
+    sites = next(
+        i
+        for i in spheres.items(view, moscavia.dawn)
+        if i.text.startswith("Every city and town")
+    )
+    # F15 dropped outright; F16 replaced by a named item
+    reply = BRANCH_REPLY.replace('"drops": ["F1", "F99"]', '"drops": ["F15"]').replace(
+        '"overrides": ["F4"]', '"overrides": ["F4", "F16"]'
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        preview = await preview_branch(world, moscavia.dawn, "the Reformed", client)
+
+    assert preview.rejects == [grace.fact_id, sites.fact_id]
+    branch = accept_sphere(world, preview)
+    view = world.view()
+    held = {i.fact_id for i in spheres.items(view, branch)}
+    assert not {grace.fact_id, sites.fact_id} & held
+    about = [
+        view.render(f.text) for f in view.thing(branch).facts if f.category == "about"
+    ]
+    assert f"Rejects: {grace.text}" in about
+    assert grace.fact_id in {i.fact_id for i in spheres.items(view, moscavia.dawn)}
+
+
+def _synod(world) -> str:
+    with world.revision(Source.manual(note="synod")) as rev:
+        return rev.create_thing(
+            "sphere", {"name": "The Iron Synod", "template": "order"}
+        )
+
+
+async def test_end_item_links_both_sides(moscavia, world, full_dawn):
+    rites = full_dawn
+    synod = _synod(world)
+    view = world.view()
+    vigil = next(
+        i for i in spheres.items(view, moscavia.dawn) if i.name == "The Dawn Vigil"
+    )
+    head = world.head_rev()
+
+    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), synod)
+
+    assert world.head_rev() == head + 1
+
+    def in_rites(at):
+        return vigil.thing_id in {
+            i.thing_id
+            for i in spheres.items(world.view(at), moscavia.dawn)
+            if i.drawer_id == rites
+        }
+
+    assert in_rites(WorldDate.of(1014))
+    assert not in_rites(WorldDate.of(1016))
+    assert not in_rites(None)
+
+    view = world.view()
+    ended = [
+        f
+        for f in view.thing(vigil.thing_id).facts
+        if view.render(f.text).startswith("Ended in")
+    ]
+    assert [(f.category, view.render(f.text), f.valid_from) for f in ended] == [
+        ("general", "Ended in 1015 by The Iron Synod", WorldDate.of(1015))
+    ]
+    assert synod in parse_refs(ended[0].text)
+    (banned,) = spheres.timeline(view, synod)
+    assert banned.valid_from == WorldDate.of(1015)
+    assert vigil.thing_id in parse_refs(banned.text)
+    assert view.render(banned.text) == "Ended The Dawn Vigil"
+
+    # a statement: its fact ends, and the sphere notes it
+    offering = next(
+        i
+        for i in spheres.items(view, moscavia.dawn)
+        if i.text.startswith("On each anniversary")
+    )
+    end_item(world, moscavia.dawn, offering, WorldDate.of(1016), None)
+    view = world.view()
+    assert offering.fact_id not in {
+        i.fact_id for i in spheres.items(view, moscavia.dawn)
+    }
+    assert offering.fact_id in {
+        i.fact_id for i in spheres.items(world.view(WorldDate.of(1015)), moscavia.dawn)
+    }
+    about = [
+        view.render(f.text)
+        for f in view.thing(moscavia.dawn).facts
+        if f.category == "about"
+    ]
+    assert about == [f"Ended in 1016: {offering.text}"]
+    # no `by`, no timeline fact anywhere
+    assert len(spheres.timeline(view, synod)) == 1
+
+
+async def test_end_item_then_undo(moscavia, world, full_dawn):
+    rites = full_dawn
+    synod = _synod(world)
+    view = world.view()
+    vigil = next(
+        i for i in spheres.items(view, moscavia.dawn) if i.name == "The Dawn Vigil"
+    )
+    dates = [f.valid_from for f in spheres.timeline(view, moscavia.dawn)]
+    vigil_facts = sorted(f.fact_id for f in view.thing(vigil.thing_id).facts)
+
+    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), synod)
+    report = world.undo([world.head_rev()])
+
+    assert report.conflicts == []
+    view = world.view()
+    held = {i.thing_id: i for i in spheres.items(view, moscavia.dawn)}
+    assert held[vigil.thing_id].drawer_id == rites
+    assert view.thing(vigil.thing_id).fields["part_of"] == {
+        "sphere": moscavia.dawn,
+        "drawer": rites,
+    }
+    assert sorted(f.fact_id for f in view.thing(vigil.thing_id).facts) == vigil_facts
+    assert [f.valid_from for f in spheres.timeline(view, moscavia.dawn)] == dates
+    assert spheres.timeline(view, synod) == []
+
+
+async def test_end_inherited_item_refused(moscavia, world, full_dawn):
+    preview, _ = await _reformed_preview(world, moscavia.dawn)
+    branch = accept_sphere(world, preview)
+    view = world.view()
+    wings = next(i for i in spheres.items(view, branch) if i.name == "The Three Wings")
+    assert wings.inherited
+
+    with pytest.raises(ValueError):
+        end_item(world, branch, wings, WorldDate.of(1020), None)
