@@ -33,6 +33,7 @@ from . import schema
 from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .kinds import KindSpec, get_kind, validate_field
+from .nearness import CurationSettings
 from .refs import parse_refs
 from .view import FactState, WorldView, _fact_state_from_row
 
@@ -743,6 +744,18 @@ class World:
 
     def set_calendar(self, calendar: Calendar) -> None:
         self._set_meta("calendar", calendar.model_dump_json())
+
+    def curation(self) -> CurationSettings:
+        """The world's curation knobs; the defaults until `set_curation`
+        is called."""
+
+        try:
+            return CurationSettings.model_validate_json(self._meta("curation"))
+        except KeyError:
+            return CurationSettings()
+
+    def set_curation(self, settings: CurationSettings) -> None:
+        self._set_meta("curation", settings.model_dump_json())
 
     def present(self) -> WorldDate:
         """The world's "present": the in-world date its owner is working
