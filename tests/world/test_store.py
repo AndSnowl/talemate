@@ -342,3 +342,35 @@ def test_present_defaults_to_year_one_and_round_trips(tmp_path):
         assert reopened.present() == WorldDate.of(1000)
     finally:
         reopened.close()
+
+
+def test_correct_fact_replaces_the_origin(world):
+    """`correct_fact(origin=...)` replaces a fact's origin, keeping the
+    rest; undo brings the old one back."""
+
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", {"name": "A"})
+        fact_id = rev.add_fact(
+            a, "general", "Ended once.", valid_until=WorldDate.of(20), origin={"x": 1}
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(fact_id, origin={"tie": a})
+    [fact] = world.live_facts(a)
+    assert (fact.fact_id, fact.text, fact.valid_until) == (
+        fact_id,
+        "Ended once.",
+        WorldDate.of(20),
+    )
+    assert fact.origin == {"tie": a}
+    world.undo([world.head_rev()])
+    assert world.live_facts(a)[0].origin == {"x": 1}
+
+
+def test_live_facts_lists_every_date(world):
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", {"name": "A"})
+        rev.add_fact(a, "general", "Now.")
+        rev.add_fact(a, "general", "Then.", valid_until=WorldDate.of(5))
+        rev.add_fact(a, "general", "Later.", valid_from=WorldDate.of(500))
+    assert sorted(f.text for f in world.live_facts(a)) == ["Later.", "Now.", "Then."]
+    assert len(world.view(WorldDate.of(100)).thing(a).facts) == 1

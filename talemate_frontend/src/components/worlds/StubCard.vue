@@ -24,6 +24,7 @@
             <v-btn variant="outlined" size="small" :prepend-icon="stub.ignored ? 'mdi-eye' : 'mdi-eye-off'" :loading="!!worlds.pending.ignore_stub" :disabled="busy" @click="worlds.ignoreStub(stub.id, !stub.ignored)">
                 {{ stub.ignored ? 'Unignore' : 'Ignore' }}
             </v-btn>
+            <StubRepointButton v-if="onPage && !stub.ignored" :stub="stub" :disabled="busy" />
             <slot></slot>
         </div>
         <div v-if="stub.kind && !expandable" class="text-caption text-muted mt-2" data-testid="expand-later">{{ expandNote(stub.kind) }}</div>
@@ -33,15 +34,18 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { STUB_KINDS, canExpand, expandLabel, expandNote, kindInfo } from './worldKinds.js';
+import StubRepointButton from './StubRepointButton.vue';
 
 // One stub's card: its name (opening its page) and "not made yet", its
 // kind (a guess the owner can change), its mention count, Expand (its
 // kind's create box, from the stub; a race or mix can't be, with a note
 // why; a legacy culture stub has "Make it a sphere…" instead) and Ignore (or Unignore), then whatever the slot adds (a
 // link's "Re-point…"). Shown on hover over a stub link, and on the stub's
-// own page (`onPage`, without the name).
+// own page (`onPage`, without the name), where "Re-point…" moves every
+// link to the stub (`StubRepointButton`).
 export default {
     name: 'StubCard',
+    components: { StubRepointButton },
     props: {
         // `{id, name, kind, mentions, ignored}`; `kind` and `mentions` may
         // be null while the stubs aren't listed yet

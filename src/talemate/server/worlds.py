@@ -40,6 +40,19 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `change_stub_kind {id, kind}` answer with the stub's payload.
   `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
   starting prompt for the stub and the mention context its expansion gets.
+  `repoint_stub {stub_id, target_id}` (`talemate.worldplay.repoint`)
+  points everything naming the stub at the target (an entry, or another
+  live stub) -- fact links, fields, filings, ties, the stub's own facts
+  and filing -- teaches the target its names and removes the stub, in one
+  revision. It answers `{stub_id, stub_name, target, links, aka_added,
+  facts_moved, notes}` (`target` the target's payload; `notes` what didn't
+  carry over as the stub had it). Refused, writing nothing: the stub
+  itself, a deleted thing or an ignored stub as the target, and a use the
+  target can't take (a scene's, a field of another kind, a filing or tie
+  when it isn't a sphere, a loop of parents or filings, a mix's parents or
+  shares naming it twice, its own). Prose is refreshed where its input
+  changed: the target's for facts or rendered fields it took, another
+  thing's for a rendered field rewritten.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
   `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
@@ -212,6 +225,7 @@ from talemate.worldplay.links import (
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
+from talemate.worldplay.repoint import repoint_stub
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -374,6 +388,11 @@ class ListStubsPayload(pydantic.BaseModel):
 class IgnoreStubPayload(pydantic.BaseModel):
     id: str
     ignored: bool
+
+
+class RepointStubPayload(pydantic.BaseModel):
+    stub_id: str
+    target_id: str
 
 
 class ChangeStubKindPayload(pydantic.BaseModel):
@@ -2125,6 +2144,31 @@ class WorldsPlugin(Plugin):
                 ],
             },
         )
+
+    async def handle_repoint_stub(self, data: dict):
+        """Point everything that names a stub at `target_id` and remove the
+        stub, in one revision (`worldplay.repoint.repoint_stub`). Prose
+        is refreshed only where its input changed: the target's, for the
+        stub's facts or rendered fields it took, and another thing's, for a
+        rendered field rewritten (a parent, a culture, a heritage)."""
+
+        payload = RepointStubPayload(**data)
+        world = self._require_world()
+        done = repoint_stub(world, payload.stub_id, payload.target_id)
+        self._reply(
+            "repoint_stub",
+            {
+                "stub_id": payload.stub_id,
+                "stub_name": done.stub_name,
+                "target": self._thing_payload(world, payload.target_id, None),
+                "links": done.links,
+                "aka_added": done.aka_added,
+                "facts_moved": done.facts_moved,
+                "notes": done.notes,
+            },
+        )
+        for thing_id in done.prose:
+            self._schedule_prose(thing_id, None)
 
     # --- edits ------------------------------------------------------------
 

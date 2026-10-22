@@ -97,6 +97,22 @@
 // preview's proposed ties can be dropped, whole or one exception at a
 // time, before it's accepted (`dropPreviewTie`, `dropPreviewException`).
 //
+// History (the thing page's back arrow): `section` is the World tab's
+// open section (a kind's list, or 'stubs'), and a page is `{section,
+// thingId, at}` (`thingId` null for the section itself). Opening a page
+// (`openThing`: a link, a card, a drawer item, a tie, a reference; a
+// section from the side list, `showSection`; an accepted preview's page)
+// pushes the page left onto `history`, unless it's the same page (a thing
+// as of another date is the same page). `goBack` pops it without pushing,
+// skipping things deleted (or re-pointed away) since (`gone`); with
+// nothing left it shows the section. Each entry keeps the date its page
+// was viewed as of, so back returns to it as it was. A world switch starts
+// the history afresh.
+//
+// Re-pointing a stub: `repointStub` sends `repoint_stub`; the reply (in
+// `stubRepointed`, for the Stubs page's note) forgets the stub, and a
+// page on the stub opens the target instead.
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
@@ -208,6 +224,53 @@ export function pageAfterDelete(thing, heritage, openedFrom) {
         return first ? speciesOf(heritage, first) : null;
     }
     return null;
+}
+
+// The Stubs page's (and the target page's) note on a `stubRepointed`.
+export function repointedNote(done) {
+    const links = `${done.links} link${done.links === 1 ? '' : 's'}`;
+    const facts = done.factsMoved ? `, which took ${done.factsMoved} fact${done.factsMoved === 1 ? '' : 's'} from it` : '';
+    const names = done.akaAdded.length ? ` ${done.target.name} is now also known as ${done.akaAdded.join(', ')}.` : '';
+    const notes = done.notes.map((note) => ` ${note}.`).join('');
+    return `${done.stubName}: ${links} now point to ${done.target.name}${facts}.${names}${notes}`;
+}
+
+// the most pages the back arrow remembers
+const HISTORY_CAP = 50;
+
+// Whether two pages (`{section, thingId, at}`) are the same: the same
+// thing, whatever its date, or the same section with no thing open.
+export function samePage(a, b) {
+    if (!a || !b) {
+        return false;
+    }
+    if (a.thingId || b.thingId) {
+        return a.thingId === b.thingId;
+    }
+    return a.section === b.section;
+}
+
+// `history` once `current` is left for `next`: `current` pushed, unless
+// `next` is the same page or `current` is on top already; the oldest
+// dropped past `cap`. Unchanged, it's the same array.
+export function historyPushed(history, current, next, cap = HISTORY_CAP) {
+    if (!current || samePage(current, next) || samePage(history.at(-1), current)) {
+        return history;
+    }
+    return [...history, current].slice(-cap);
+}
+
+// `{page, history}`: the page back goes to (null when none is left) and
+// the history after it, skipping pages whose thing `isGone`.
+export function historyBack(history, isGone) {
+    const rest = [...history];
+    while (rest.length) {
+        const page = rest.pop();
+        if (!(page.thingId && isGone(page.thingId))) {
+            return { page, history: rest };
+        }
+    }
+    return { page: null, history: [] };
 }
 
 // An `aka` entry as the backend keeps it, `everyday` always set.
@@ -382,6 +445,18 @@ function emptyThings() {
 function worldState() {
     // everything that belongs to the open world
     return {
+        // the open section: a kind's list, or 'stubs'
+        section: 'character',
+        // the pages left, oldest first (`{section, thingId, at}`), and the
+        // things deleted or re-pointed away since, which back skips
+        history: [],
+        gone: [],
+        // the last `repoint_stub` done: `{stubName, target: {id, name},
+        // links, akaAdded, factsMoved, notes}`, until the owner moves on
+        stubRepointed: null,
+        // the thing page `goBack` opened, until it loads: if it fails to,
+        // it's gone and back goes on
+        backOpening: null,
         things: emptyThings(),
         // every species, race and mix: `list_heritage`'s `{id, kind, name,
         // species_ids}`
@@ -678,7 +753,48 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('list_heritage');
         },
 
+        // the page shown now, as the history keeps it
+        currentPage() {
+            return { section: this.section, thingId: this.selectedThingId, at: this.selectedThingId ? this.thingAt : null };
+        },
+
+        // the owner opens `next`: the page left goes on the history
+        visit(next) {
+            this.stubRepointed = null;
+            this.history = historyPushed(this.history, this.currentPage(), { section: this.section, at: null, ...next });
+        },
+
+        // a section from the side list (a kind's list, or 'stubs')
+        showSection(section) {
+            this.visit({ section, thingId: null });
+            this.section = section;
+            this.closeThing();
+        },
+
+        // the back arrow: the page before, else the section home
+        goBack() {
+            const { page, history } = historyBack(this.history, (id) => this.gone.includes(id));
+            this.history = history;
+            if (!page) {
+                this.closeThing();
+                return;
+            }
+            this.section = page.section;
+            if (page.thingId) {
+                this.backOpening = page.thingId;
+                this.showThing(page.thingId, page.at);
+            } else {
+                this.closeThing();
+            }
+        },
+
+        // a page the owner opens (see the history, in the module comment)
         openThing(id, at = null) {
+            this.visit({ thingId: id, at });
+            this.showThing(id, at);
+        },
+
+        showThing(id, at = null) {
             if (id !== this.selectedThingId) {
                 this.openedFrom = this.selectedThingId;
             }
@@ -700,7 +816,7 @@ export const useWorldsStore = defineStore('worlds', {
 
         viewThingAt(at) {
             if (this.selectedThingId) {
-                this.openThing(this.selectedThingId, at);
+                this.showThing(this.selectedThingId, at);
             }
         },
 
@@ -780,6 +896,18 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('ignore_stub', { id, ignored });
         },
 
+        // point every link to the stub `stubId` at `targetId`; the stub's
+        // names become the target's other names and the stub goes
+        repointStub(stubId, targetId) {
+            this.stubRepointed = null;
+            this.pending = { ...this.pending, repoint_stub: true };
+            this.request('repoint_stub', { stub_id: stubId, target_id: targetId });
+        },
+
+        clearStubRepointed() {
+            this.stubRepointed = null;
+        },
+
         changeStubKind(id, kind) {
             this.pending = { ...this.pending, change_stub_kind: true };
             this.request('change_stub_kind', { id, kind });
@@ -803,6 +931,8 @@ export const useWorldsStore = defineStore('worlds', {
             this.cancelPreview();
             this.cancelSpherePreview();
             this.promoting = null;
+            this.visit({ section: target.kind, thingId: null });
+            this.section = target.kind;
             this.closeThing();
             this.expanding = target;
             this.stubSuggestion = null;
@@ -847,6 +977,8 @@ export const useWorldsStore = defineStore('worlds', {
             this.cancelPreview();
             this.cancelSpherePreview();
             this.expanding = null;
+            this.visit({ section: 'sphere', thingId: null });
+            this.section = 'sphere';
             this.closeThing();
             this.promoting = { id: thing.id, kind: thing.kind, name: thing.name };
         },
@@ -1318,6 +1450,9 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 }
                 case 'get_thing':
+                    if (data.id === this.backOpening) {
+                        this.backOpening = null;
+                    }
                     if (data.id === this.selectedThingId) {
                         this.thing = data;
                     }
@@ -1365,6 +1500,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.promoting = null;
                     }
                     this.sphereAccepting = null;
+                    this.visit({ thingId: data.id });
                     this.openedFrom = this.selectedThingId;
                     this.selectedThingId = data.id;
                     this.thingAt = null;
@@ -1399,14 +1535,39 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'thing_deleted':
                     this.clearPending('delete_thing');
                     this.deleteCheck = null;
+                    this.gone = [...this.gone, data.id];
                     this.listStubs();
                     if (data.id === this.selectedThingId) {
                         const back = pageAfterDelete(this.thing, this.heritage, this.openedFrom);
                         this.closeThing();
                         if (back) {
-                            this.openThing(back);
+                            this.showThing(back);
                         }
                     }
+                    break;
+                case 'repoint_stub':
+                    this.gone = [...this.gone, data.stub_id];
+                    this.stubRepointed = {
+                        stubName: data.stub_name,
+                        target: { id: data.target.id, name: data.target.name },
+                        links: data.links,
+                        akaAdded: data.aka_added,
+                        factsMoved: data.facts_moved || 0,
+                        notes: data.notes || [],
+                    };
+                    if (data.stub_id === this.selectedThingId) {
+                        // the stub's page is gone: the target's stands in
+                        this.closeThing();
+                        this.showThing(data.target.id);
+                        this.thing = data.target;
+                    } else if (data.target.id === this.selectedThingId && !this.thingAt) {
+                        this.thing = data.target;
+                    } else {
+                        // the open page's links to the stub point elsewhere
+                        this.refreshThing();
+                    }
+                    this.listStubs();
+                    this.listAllThings();
                     break;
                 case 'match_names':
                     // a reply for text (or a date) since changed is dropped
@@ -1470,6 +1631,7 @@ export const useWorldsStore = defineStore('worlds', {
                     this.previewRequest = null;
                     this.expanding = null;
                     if (this.acceptOpens) {
+                        this.visit({ thingId: data.id });
                         this.openedFrom = this.selectedThingId;
                         this.selectedThingId = data.id;
                         this.thingAt = null;
@@ -1536,6 +1698,14 @@ export const useWorldsStore = defineStore('worlds', {
                         }
                         this.tieQueue = {};
                         this.sphereWanted = [];
+                        // the page back opened is gone: back goes on
+                        const failed = this.backOpening;
+                        this.backOpening = null;
+                        if (failed && failed === this.selectedThingId) {
+                            this.gone = [...this.gone, failed];
+                            this.error = null;
+                            this.goBack();
+                        }
                     }
                     break;
                 default:

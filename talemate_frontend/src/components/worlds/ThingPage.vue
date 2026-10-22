@@ -1,7 +1,7 @@
 <template>
     <div class="thing-page" data-testid="thing-page">
         <div class="d-flex align-center flex-wrap ga-2 mb-2">
-            <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" @click="worlds.closeThing()">Back</v-btn>
+            <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" data-testid="thing-back" @click="worlds.goBack()">Back</v-btn>
             <template v-if="thing">
                 <div v-if="rename" class="d-flex align-center ga-2" data-testid="rename-field">
                     <v-text-field
@@ -93,6 +93,18 @@
         </div>
 
         <template v-else>
+            <v-alert
+                v-if="worlds.stubRepointed && worlds.stubRepointed.target.id === thing.id"
+                type="success"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+                closable
+                data-testid="stub-repointed"
+                @click:close="worlds.clearStubRepointed()"
+            >
+                {{ repointedNote(worlds.stubRepointed) }}
+            </v-alert>
             <div v-if="thing.stub" class="stub-panel pa-3 mb-4" data-testid="stub-panel">
                 <div class="text-subtitle-2 mb-1">A stub</div>
                 <StubCard :stub="stubOfPage" on-page />
@@ -231,7 +243,7 @@
 </template>
 
 <script>
-import { listedFacts, useWorldsStore } from '@/stores/worlds.js';
+import { listedFacts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { HERITAGE_KINDS, INHERITING_KINDS, PART_OF_KINDS, canPromote, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
@@ -538,6 +550,7 @@ export default {
         },
     },
     methods: {
+        repointedNote,
         canPromote,
         formatDate,
         spanLabel,
