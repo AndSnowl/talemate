@@ -27,7 +27,6 @@ def test_lineage_order(world, heritage_world):
         h.lowlander,
         h.human,
         h.orc,
-        h.riverfolk,
     ]
     assert [layer.name for layer in layers] == [
         "Brenna",
@@ -35,7 +34,6 @@ def test_lineage_order(world, heritage_world):
         "Lowlander",
         "Human",
         "Orc",
-        "Riverfolk",
     ]
     assert [layer.kind for layer in layers] == [
         "character",
@@ -43,11 +41,24 @@ def test_lineage_order(world, heritage_world):
         "race",
         "species",
         "species",
-        "culture",
     ]
     depths = [layer.depth for layer in layers]
     assert depths[0] == 0
     assert depths == sorted(set(depths))
+
+
+def test_lineage_has_no_culture_layer(world, heritage_world):
+    """A character's legacy `culture` field is no longer a lineage layer:
+    the culture passes no facts down (cultures are spheres, tied to)."""
+
+    h = heritage_world
+    view = world.view()
+
+    assert h.riverfolk not in [layer.thing_id for layer in lineage(view, h.brenna)]
+    assert h.customs not in [item.fact.fact_id for item in inherited(view, h.brenna)]
+    assert h.customs not in [
+        fact.fact_id for fact, _ in effective_facts(view, h.brenna)
+    ]
 
 
 def test_lineage_survives_a_parent_cycle(world, heritage_world):
@@ -141,7 +152,7 @@ def test_inherited_skips_deleted_layer(world, heritage_world):
 
     view = world.view()
     ids = [layer.thing_id for layer in lineage(view, h.brenna)]
-    assert ids == [h.brenna, h.half_orc, h.orc, h.riverfolk]
+    assert ids == [h.brenna, h.half_orc, h.orc]
     sources = {item.source_id for item in inherited(view, h.brenna)}
     assert h.lowlander not in sources
     assert h.human not in sources
@@ -234,7 +245,7 @@ def test_members_and_species_of(world, heritage_world):
 
     assert members(view, h.owl_folk) == [h.vasha]
     assert members(view, h.human) == [h.brenna]
-    assert members(view, h.riverfolk) == [h.brenna]
+    assert members(view, h.riverfolk) == []
     assert species_of(view, h.half_orc) == [h.human, h.orc]
     assert species_of(view, h.snowy) == [h.owl_folk]
     assert species_of(view, h.orc) == [h.orc]

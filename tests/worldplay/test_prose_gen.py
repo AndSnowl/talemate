@@ -234,14 +234,15 @@ async def test_character_description_includes_inherited_physical(
     facts = requests[0]["facts"]
     assert facts == ["Blue eyes.", "White plumage.", "Wings in place of arms."]
     assert "Yellow eyes." not in facts
-    # the instinct and customs facts belong to personality: background only
+    # the instinct fact belongs to personality: background only; the
+    # culture's customs aren't inherited (cultures left the lineage)
     background = requests[0]["background"]
     assert "Hunts at dusk." in background
-    assert "Name their boats." in background
+    assert "Name their boats." not in background
     assert "Yellow eyes." not in background
 
 
-async def test_personality_includes_instinct_and_customs(
+async def test_personality_includes_instinct_not_customs(
     world, heritage_world, monkeypatch
 ):
     requests = _capture_requests(monkeypatch)
@@ -251,7 +252,8 @@ async def test_personality_includes_instinct_and_customs(
     )
 
     facts = requests[0]["facts"]
-    assert facts == ["Quiet and observant.", "Hunts at dusk.", "Name their boats."]
+    # the culture's customs no longer pass down: cultures left the lineage
+    assert facts == ["Quiet and observant.", "Hunts at dusk."]
     # the heritage line keeps identity in view; the body does not (acceptance
     # probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md)
     assert "Heritage: Snowy, Owl-folk." in requests[0]["background"]
@@ -291,7 +293,8 @@ async def test_description_background_still_includes_inherited_body(
     """The description section's background is unchanged by the
     personality fix -- it still carries whatever the character inherits
     that isn't mapped to description's own facts (here, the species'
-    instinct and the culture's customs)."""
+    instinct; the culture's customs aren't inherited since cultures left
+    the lineage)."""
 
     requests = _capture_requests(monkeypatch)
     await prose_gen.generate_section(
@@ -300,7 +303,7 @@ async def test_description_background_still_includes_inherited_body(
 
     background = requests[0]["background"]
     assert "Hunts at dusk." in background
-    assert "Name their boats." in background
+    assert "Name their boats." not in background
 
 
 async def test_species_page_prose_uses_all_facts(world, heritage_world, monkeypatch):

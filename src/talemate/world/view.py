@@ -296,6 +296,23 @@ class WorldView:
 
         return self._name_at(thing_id, self._at_instant())
 
+    def field_since(self, thing_id: str, field: str) -> WorldDate | None:
+        """The story date the thing's `field` holds its current value from
+        at `(at, rev)`: the `valid_from` of the row `thing()` reads it from.
+        `None` when that value is undated, or the field has none."""
+
+        row = self._conn.execute(
+            "SELECT valid_from, from_precision FROM field_values "
+            "WHERE thing_id = ? AND field = ? "
+            "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?) "
+            "AND (valid_from IS NULL OR valid_from <= ?) "
+            "ORDER BY valid_from DESC, row_id DESC LIMIT 1",
+            (thing_id, field, self.rev, self.rev, self._at_instant()),
+        ).fetchone()
+        if row is None:
+            return None
+        return _decode_date(row["valid_from"], row["from_precision"])
+
     def _is_live(self, thing_id: str) -> bool:
         things_filter, things_params = self._live_things_filter("", thing_id=thing_id)
         row = self._conn.execute(
