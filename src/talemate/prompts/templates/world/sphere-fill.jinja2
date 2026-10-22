@@ -1,0 +1,73 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+
+Fill one drawer of a sphere. Wording from
+docs/superpowers/probes/2026-10-22-spheres.md, "Recommended prompt text"
+(b): the reply key "new_items" and the {"text"} statement form, which the
+probe found kept Fill from repeating the drawer's items and from breaking
+on a statement.
+
+`drawers` is `[(title, type, lines)]` for the sphere's writable drawers,
+`existing` the lines of the drawer to fill, `timeline` its timeline lines
+("<year>: <text>"). The Connections blocks are as in sphere-core, without
+the entries already part of the sphere.
+-#}
+<|SECTION:TASK|>
+You add items to one drawer of {{ name }}, a {{ label }} in a fantasy world. The owner asked to fill its "{{ drawer_title }}" drawer ({{ drawer_type }}: {{ drawer_help }}).
+
+{{ name }} so far:
+{{ summary }}
+{% if timeline -%}
+Timeline:
+{% for line in timeline -%}
+- {{ line }}
+{% endfor -%}
+{% endif -%}
+{% for title, type, lines in drawers -%}
+{{ title }} ({{ type }}){% if title == drawer_title %}, the drawer to fill{% endif %}:
+{% for line in lines -%}
+- {{ line }}
+{% else -%}
+- (empty)
+{% endfor -%}
+{% endfor %}
+{%- if mentions %}
+
+Mentioned elsewhere in the world (keep these true):
+{% for lead, text in mentions -%}
+- {{ lead }}: {{ text }}
+{% endfor %}
+{%- if about %}
+About those (they already exist in the world; let the {{ label }} reflect them):
+{% for heading, facts in about -%}
+{{ heading }}:
+{% for text in facts -%}
+- {{ text }}
+{% endfor %}
+{%- endfor %}
+{%- endif %}
+{%- endif %}
+{%- if existing %}
+
+Already in {{ drawer_title }} (never write these again, under their own name or another):
+{% for line in existing -%}
+- {{ line }}
+{% endfor %}
+{%- endif %}
+
+Write 3 to 5 new items for {{ drawer_title }} that fit with everything above. Never repeat an item already in any drawer, by its name or in other words; a new item may build on one.
+
+The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"new_items": [{"name": "...", "text": "One short sentence.", "kind": "lore"}, {"text": "A plain statement, in one short sentence."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+
+- Each item is {"name", "text", "kind"}. When the item is a thing of its own that could get its own entry (a rite, an office, a council, a doctrine, a text, a site), "name" is its proper name, such as "the Dawn Vigil", and "kind" is lore, place (a site), item (an object) or event. For a plain statement ("Priests may not marry."), give only "text". "text" is one short sentence, under 20 words.
+- "names": after the rest, every proper name your items use, other than {{ name }}'s own and the new items' own names: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as you wrote it; "kind" one of character, place, species, race, sphere, event, item, lore; "aka" any other names you used for the same thing. A faith or church, an order, academy, guild or council, a culture, or a field of knowledge or magic is "sphere", with a "template": religion, order, culture or field, only these (a country or realm is a place; a rank or office is lore). Proper names only: never a description such as "the postmaster" or "a war", nor a title on its own such as "the Tsar", nor a people's adjective such as "Moscavian" on its own. An empty list is fine.
+- "new_items": only what {{ drawer_title }} doesn't hold yet: the items listed under it above are already there, so never write them again.
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

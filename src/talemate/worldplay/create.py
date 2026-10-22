@@ -55,6 +55,14 @@ suggestions. A stub is expanded under its own id, with what its mentions
 say as context, and the entries the owner matched in the prompt are shown
 as "Named in this prompt".
 
+Spheres (docs/superpowers/probes/2026-10-22-spheres.md) are made by
+`worldplay.spheres`, not here. A listed name's kind is read as a stub
+guess (`name_guess`): a culture or order is a sphere with that template,
+so the legacy `culture` kind is never made. An expanded stub that belongs
+in a sphere -- mentioned only inside one sphere's items, or with a sphere
+stub named in its prompt -- joins it (`CreatePreview.part_of`); the parent
+is never written to.
+
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -73,10 +81,16 @@ import structlog
 from pydantic import BaseModel, Field
 
 from talemate.prompts import Prompt
-from talemate.world import heritage
+from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import AKA_TAGS, HERITAGE_KINDS, get_kind, validate_field
+from talemate.world.kinds import (
+    AKA_TAGS,
+    HERITAGE_KINDS,
+    UNSORTED_DRAWER_ID,
+    get_kind,
+    validate_field,
+)
 from talemate.world.refs import parse_refs
 from talemate.world.names import (
     ARTICLES,
@@ -103,7 +117,8 @@ from talemate.worldplay.mentions import entry_label, gather_mentions, mention_co
 
 log = structlog.get_logger("talemate.worldplay.create")
 
-# the kinds the create box offers in the slice
+# the kinds the create box offers in the slice (a sphere is made by
+# `worldplay.spheres`, from a template; the legacy `culture` kind isn't)
 CREATE_KINDS: tuple[str, ...] = (
     "character",
     "place",
@@ -113,20 +128,34 @@ CREATE_KINDS: tuple[str, ...] = (
     "mix",
     "event",
     "item",
+    "sphere",
 )
 
 # the kinds the reply's "names" may give a name (the prompt lists them);
-# an entry with any other kind ("title") is dropped, one with none is lore
+# an entry with any other kind ("title") is dropped, one with none is lore.
+# `name_guess` maps a few others first: "culture" (the legacy kind) and
+# "order" to a sphere, "office" to lore
 NAME_KINDS: tuple[str, ...] = (
     "character",
     "place",
     "species",
     "race",
-    "culture",
+    "sphere",
     "event",
     "item",
     "lore",
 )
+
+# the templates a sphere name guess may carry (the spheres probe's names
+# rule lists them; a country is a place), and the ones it maps
+GUESS_TEMPLATES: tuple[str, ...] = ("religion", "nation", "order", "culture", "field")
+_TEMPLATE_GUESSES = {"council": "order", "guild": "order"}
+# kinds a reply gives a name that are really another kind (and template)
+_KIND_GUESSES: dict[str, tuple[str, str | None]] = {
+    "culture": ("sphere", "culture"),
+    "order": ("sphere", "order"),
+    "office": ("lore", None),
+}
 
 # how many facts the prompt asks for, and the most a preview keeps
 MIN_FACTS = 8
@@ -233,6 +262,9 @@ class CreatePreview(BaseModel):
     # names written in the prompt the owner treats as new: never linked to
     # the world's thing of that name, and a stub of their own if listed
     treated_as_new: list[str] = Field(default_factory=list)
+    # the sphere drawer an expanded stub joins (`_child_part_of`), as the
+    # `part_of` field holds it, or None
+    part_of: dict[str, str] | None = None
 
 
 # --- the calendar ------------------------------------------------------------
@@ -544,7 +576,7 @@ def _list_at(text: str, match: re.Match[str] | None) -> list[Any] | None:
 def parse_names(reply: str) -> tuple[list[dict[str, Any]], list[NewName]]:
     """`(aka, names)` from a `world/create-thing` reply: the thing's own
     other names, and the proper names its facts use, as the reply gives
-    them (`NewName`, kind as written; `_new_names` decides which count).
+    them (`name_entries`; `_new_names` decides which count).
 
     Both lists are decoded on their own when the wrapper object broke, so
     a cut-off reply keeps them: the thing's `aka` from before the facts,
@@ -561,6 +593,32 @@ def parse_names(reply: str) -> tuple[list[dict[str, Any]], list[NewName]]:
         for last in _NAMES_LIST_RE.finditer(reply):
             pass
         raw_names = _list_at(reply, last)
+    return _aka_entries(raw_aka), name_entries(raw_names)
+
+
+def name_guess(kind: str, template: object) -> tuple[str, str | None]:
+    """A listed name's `(kind, template)` as a stub guess, from the kind and
+    template a reply gave it (the spheres probe's guards): the legacy
+    "culture" kind is a culture sphere and an "order" an order sphere; an
+    "office" is lore; a sphere's "council" or "guild" template is an order,
+    and a template outside `GUESS_TEMPLATES` is dropped. Only a sphere
+    keeps a template."""
+
+    kind = kind.strip().lower()
+    if kind in _KIND_GUESSES:
+        return _KIND_GUESSES[kind]
+    if kind != "sphere":
+        return kind, None
+    guess = template.strip().lower() if isinstance(template, str) else ""
+    guess = _TEMPLATE_GUESSES.get(guess, guess)
+    return kind, guess if guess in GUESS_TEMPLATES else None
+
+
+def name_entries(raw_names: object) -> list[NewName]:
+    """A reply's "names" list as `NewName`s, kind as `name_guess` reads it
+    (`_new_names` decides which count). An entry with no name, the format
+    example's placeholder, and an `aka` object a cut-off reply left on its
+    own are skipped."""
 
     names: list[NewName] = []
     for item in raw_names if isinstance(raw_names, list) else []:
@@ -573,15 +631,19 @@ def parse_names(reply: str) -> tuple[list[dict[str, Any]], list[NewName]]:
         name = " ".join(item["name"].split())
         if not name.strip(" ."):
             continue
-        kind = item.get("kind")
+        raw_kind = item.get("kind")
+        kind, template = name_guess(
+            raw_kind if isinstance(raw_kind, str) else "", item.get("template")
+        )
         names.append(
             NewName(
                 name=name,
-                kind=kind.strip().lower() if isinstance(kind, str) else "",
+                kind=kind,
                 aka=_aka_entries(item.get("aka")),
+                template=template,
             )
         )
-    return _aka_entries(raw_aka), names
+    return names
 
 
 # --- the names the facts use -------------------------------------------------
@@ -712,7 +774,15 @@ def _new_names(
             continue
         if any(name_key(form) in claimed | picks for form in forms):
             continue
-        kept.append(NewName(name=item.name, kind=kind, aka=item.aka, written=forms))
+        kept.append(
+            NewName(
+                name=item.name,
+                kind=kind,
+                aka=item.aka,
+                written=forms,
+                template=item.template,
+            )
+        )
         claimed |= {key, *map(name_key, forms)}
     return kept
 
@@ -1033,6 +1103,104 @@ def _found_in_prompt(
     return found
 
 
+# drawer types a non-place child may join by its mention's drawer: people
+# come from ties, events are the timeline, branches are spheres
+_ITEM_DRAWER_TYPES = ("practices", "beliefs", "knowledge", "structure")
+
+
+def _item_home(view: WorldView, owner_id: str, fact: Any) -> tuple[str, str] | None:
+    """`(sphere id, drawer id)` when a fact mentioning a thing is inside a
+    sphere's items: a sphere's `statement` (in the drawer its origin
+    names), or a fact of a thing part of a sphere (in that thing's
+    drawer). `None` for any other fact."""
+
+    owner = view.thing(owner_id)
+    if owner is None:
+        return None
+    if spheres.is_sphere(owner) and fact.category == "statement":
+        drawer = (fact.origin or {}).get("drawer")
+        return owner.id, drawer if isinstance(drawer, str) else UNSORTED_DRAWER_ID
+    link = owner.fields.get("part_of")
+    if isinstance(link, dict) and isinstance(link.get("sphere"), str):
+        home = view.thing(link["sphere"])
+        if home is not None and spheres.is_sphere(home):
+            drawer = link.get("drawer")
+            return home.id, drawer if isinstance(drawer, str) else UNSORTED_DRAWER_ID
+    return None
+
+
+def _guessed_drawer(
+    view: WorldView, sphere_id: str, kind: str, mentioned_in: list[str]
+) -> str:
+    """The drawer a `kind` child of the sphere goes in: a place in the
+    sphere's first places drawer; anything else in the first drawer its
+    mentions are in that holds entries; else unsorted."""
+
+    drawers = spheres.drawers(view, sphere_id)
+    if kind == "place":
+        wanted = [d.id for d in drawers if d.type == "places"]
+    else:
+        holding = {d.id for d in drawers if d.type in _ITEM_DRAWER_TYPES}
+        wanted = [drawer for drawer in mentioned_in if drawer in holding]
+    return wanted[0] if wanted else UNSORTED_DRAWER_ID
+
+
+def _child_part_of(
+    view: WorldView, stub: Any, prompt: str, picks: dict[str, str]
+) -> dict[str, str] | None:
+    """The sphere drawer an expanded stub joins (child first, as the
+    spheres spec has it), or `None`:
+
+    - every fact mentioning it is inside one sphere's items (its
+      statements, or facts of things part of it): that sphere, in
+      `_guessed_drawer`;
+    - else its prompt names a sphere stub (picked, or matched in full):
+      that stub, unsorted -- the stub has no drawers yet, and expanding it
+      later files its children (`worldplay.spheres` adoption).
+
+    A stub that's part of a sphere already stays where it is. The parent is
+    never written to: expanding a child never creates its sphere."""
+
+    if stub.fields.get("part_of") is not None:
+        return None
+    mentioning = [
+        (owner_id, fact)
+        for owner_id, fact in view.referencing(stub.id, any_date=True)
+        if owner_id != stub.id
+    ]
+    homes = [
+        home
+        for owner_id, fact in mentioning
+        if (home := _item_home(view, owner_id, fact)) is not None
+    ]
+    if mentioning and len(homes) == len(mentioning):
+        sphere_ids = {sphere_id for sphere_id, _drawer in homes}
+        if len(sphere_ids) == 1:
+            sphere_id = sphere_ids.pop()
+            drawers = [drawer for _sphere, drawer in homes]
+            return {
+                "sphere": sphere_id,
+                "drawer": _guessed_drawer(view, sphere_id, stub.kind, drawers),
+            }
+
+    named = [*picks.values()]
+    named += [
+        match.candidates[0].id
+        for match in find_names(view, prompt)
+        if not match.suggested
+    ]
+    for thing_id in named:
+        state = view.thing(thing_id)
+        if (
+            thing_id != stub.id
+            and state is not None
+            and state.kind == "sphere"
+            and state.is_stub
+        ):
+            return {"sphere": thing_id, "drawer": UNSORTED_DRAWER_ID}
+    return None
+
+
 def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
     """A live stub of `kind` whose name or other name is `name` (ignoring
     case and a leading article), if any."""
@@ -1087,6 +1255,12 @@ async def preview_thing(
       ("treat as new"): a pick for one is dropped, so it's no context, and
       accept never links it to the world's thing of that name; listed by
       the model, it becomes a stub of its own.
+    - an expanded stub that belongs in a sphere (`_child_part_of`: its
+      mentions are all inside one sphere's items, or its prompt names a
+      sphere stub) carries the `part_of` accept gives it.
+
+    A sphere isn't made here: `worldplay.spheres.preview_sphere` makes one
+    from a template.
 
     The reply's `aka` becomes the preview's other names and its `names`
     the `new_names` accept makes stubs for (`_new_names`). Without a
@@ -1101,6 +1275,8 @@ async def preview_thing(
             raise ValueError(f"a {kind} stub can't be expanded yet")
     if kind not in CREATE_KINDS:
         raise ValueError(f"can't create a {kind!r} from a prompt")
+    if kind == "sphere":
+        raise ValueError("a sphere is made from a template: preview_sphere")
     prose_gen.require_client(client)
     kind_spec = get_kind(kind)
     fields = dict(fields or {})
@@ -1138,6 +1314,7 @@ async def preview_thing(
     }
     picks.update(_found_in_prompt(view, prompt, picks, treated_as_new, in_context))
     named = _named_in_prompt(view, picks, stub_id)
+    part_of = _child_part_of(view, stub, prompt, picks) if stub is not None else None
     groups = _labelled_facts(view, sources)
     rows = [row for group in groups for row in group]
     labels = {row.label: row.fact_id for row in rows}
@@ -1295,6 +1472,7 @@ async def preview_thing(
         context=context,
         picks=picks,
         treated_as_new=treated_as_new,
+        part_of=part_of,
     )
 
 
@@ -1438,6 +1616,37 @@ def accept_preview(
     return thing_id
 
 
+def name_thing(
+    rev: Any,
+    view: WorldView,
+    state: Any,
+    name: str,
+    aka: list[dict],
+    *,
+    keep_aka: bool = False,
+) -> None:
+    """Give a thing already in the world (a stub being filled, a thing
+    promoted) `name` and the other names `aka`, in `rev`. With `keep_aka`,
+    its own other names are kept as well. Named anew, it keeps its old
+    name, which text still calls it by, as a common other name."""
+
+    thing_id = state.id
+    old_name = view.name_of(thing_id) or ""
+    if old_name != name:
+        rev.set_field(thing_id, "name", name, None)
+    taken = name_keys(view, skip=thing_id)
+    if keep_aka:
+        aka = clean_aka([*aka, *_aka_entries(state.fields.get("aka"))], name, taken)
+    if name_key(old_name) != name_key(name):
+        aka = clean_aka(
+            [*aka, {"name": old_name, "tag": "common", "everyday": False}],
+            name,
+            taken,
+        )
+    if aka or "aka" in state.fields:
+        rev.set_field(thing_id, "aka", aka, None)
+
+
 class _UnlinkedNames(Exception):
     """New names whose stubs no fact linked to: the write is rolled back
     and made again without them."""
@@ -1471,31 +1680,21 @@ def _write_preview(
             thing_id = stub.id
             if stub.kind != preview.kind:
                 rev.change_stub_kind(thing_id, preview.kind)
-            if view.name_of(thing_id) != preview.name:
-                rev.set_field(thing_id, "name", preview.name, None)
             for field, value in preview.fields.items():
                 rev.set_field(thing_id, field, value, None)
-            aka = preview.aka
-            if stub.id != preview.stub_id:
-                # filling a stub the preview wasn't made from keeps the
-                # stub's own other names too
-                aka = clean_aka(
-                    [*preview.aka, *_aka_entries(stub.fields.get("aka"))],
-                    preview.name,
-                    name_keys(view, skip=thing_id),
-                )
-            old_name = view.name_of(thing_id) or ""
-            if name_key(old_name) != name_key(preview.name):
-                # filled under another name: the old one, which text still
-                # calls it by, is kept as a common other name
-                aka = clean_aka(
-                    [*aka, {"name": old_name, "tag": "common", "everyday": False}],
-                    preview.name,
-                    name_keys(view, skip=thing_id),
-                )
-            if aka or "aka" in stub.fields:
-                rev.set_field(thing_id, "aka", aka, None)
+            # filling a stub the preview wasn't made from keeps the stub's
+            # own other names too
+            name_thing(
+                rev,
+                view,
+                stub,
+                preview.name,
+                preview.aka,
+                keep_aka=stub.id != preview.stub_id,
+            )
             rev.remove_field_value(thing_id, "stub", None)
+        if preview.part_of is not None:
+            rev.set_field(thing_id, "part_of", preview.part_of, None)
 
         # the revision's own view: the stubs just made and the thing's own
         # names are in it, so a name meaning the thing itself stays plain

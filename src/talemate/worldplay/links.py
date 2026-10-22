@@ -69,12 +69,13 @@ class NewName(BaseModel):
     holds the other ways the text writes it that aren't other names: the
     name without its article ("Night of Feathers" for "The Night of
     Feathers"), or the part of it the text uses ("Vladislav I" for "Tsar
-    Vladislav I")."""
+    Vladislav I"). A `sphere` guess carries its `template` guess, if any."""
 
     name: str
     kind: str
     aka: list[dict] = []
     written: list[str] = []
+    template: str | None = None
 
 
 def _norm(text: str) -> str:
@@ -480,9 +481,9 @@ def make_stubs(
     of another species, race or mix, or held whole by just one's name
     ("Owl-folk" for the Owl-folk of Moscavia). Any other name becomes a
     thing of its kind (`lore` for a kind we don't know) with its name,
-    other names and `stub={"ignored": False}`; a lowercase leading "the"
-    isn't part of a new stub's name ("the Kremlin" makes "Kremlin"), though
-    it still maps as written.
+    other names and `stub={"ignored": False}` (and a `sphere` guess's
+    `template`); a lowercase leading "the" isn't part of a new stub's name
+    ("the Kremlin" makes "Kremlin"), though it still maps as written.
 
     A name the owner treats as new (`fresh`, by `is_new`) never reuses a
     thing `view` has, only one an earlier name in `names` made."""
@@ -512,9 +513,14 @@ def make_stubs(
         name = " ".join(words[1:]) if len(words) > 1 and words[0] == "the" else written
         taken = {k for thing in known for k in thing.keys}
         aka = clean_aka(new.aka, name, taken)
-        thing_id = rev.create_thing(
-            kind, fields={"name": name, "aka": aka, "stub": {"ignored": False}}
-        )
+        fields: dict[str, object] = {
+            "name": name,
+            "aka": aka,
+            "stub": {"ignored": False},
+        }
+        if kind == "sphere" and new.template:
+            fields["template"] = new.template
+        thing_id = rev.create_thing(kind, fields=fields)
         others = [str(entry["name"]) for entry in aka]
         thing = _Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)])
         known.append(thing)

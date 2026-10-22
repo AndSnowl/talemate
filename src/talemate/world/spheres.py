@@ -28,7 +28,7 @@ from pydantic import BaseModel, ValidationError
 
 from .dates import WorldDate
 from .heritage import overriders
-from .kinds import TEMPLATE_AGENT
+from .kinds import TEMPLATE_AGENT, UNSORTED_DRAWER_ID
 from .view import FactState, ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.spheres")
@@ -46,7 +46,7 @@ class Drawer(BaseModel):
 
 
 # where an item goes when its drawer isn't among the sphere's drawers
-UNSORTED = Drawer(id="unsorted", type="knowledge", title="Unsorted")
+UNSORTED = Drawer(id=UNSORTED_DRAWER_ID, type="knowledge", title="Unsorted")
 
 # a template's starting drawers, as (type, title), in display order
 TEMPLATE_DRAWERS: dict[str, list[tuple[str, str]]] = {

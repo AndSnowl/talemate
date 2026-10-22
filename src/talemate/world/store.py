@@ -497,6 +497,49 @@ class Revision:
             (self.rev, thing_id),
         )
 
+    def _is_stub(self, thing_id: str) -> bool:
+        """Whether the thing has a live `stub` value at any date."""
+
+        return (
+            self._conn.execute(
+                "SELECT 1 FROM field_values "
+                "WHERE thing_id = ? AND field = 'stub' AND rev_removed IS NULL",
+                (thing_id,),
+            ).fetchone()
+            is not None
+        )
+
+    def _check_fields_fit(
+        self, thing_id: str, old_kind: str, new_spec: KindSpec
+    ) -> None:
+        """Raise `ValueError` when a live field of the thing has no field of
+        the same type on `new_spec`."""
+
+        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
+        new_types = {spec.name: spec.type for spec in new_spec.fields}
+        for (field,) in self._conn.execute(
+            "SELECT DISTINCT field FROM field_values "
+            "WHERE thing_id = ? AND rev_removed IS NULL",
+            (thing_id,),
+        ):
+            if new_types.get(field) != old_types[field]:
+                raise ValueError(
+                    f"{new_spec.name!r} has no {old_types[field]} field {field!r}"
+                )
+
+    def _rekind(self, thing_id: str, kind: str) -> None:
+        """Retire the thing's row and add one of `kind` with the same id, so
+        undo reverses it like any other write."""
+
+        self._conn.execute(
+            "UPDATE things SET rev_removed = ? WHERE id = ? AND rev_removed IS NULL",
+            (self.rev, thing_id),
+        )
+        self._conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES (?, ?, ?)",
+            (thing_id, kind, self.rev),
+        )
+
     @_require_open
     def change_stub_kind(self, thing_id: str, kind: str) -> None:
         """Give a stub another kind: its thing row is retired and a row of
@@ -508,27 +551,12 @@ class Revision:
 
         new_spec = _kind_for(kind)
         old_kind = self._require_thing(thing_id)
-        if (
-            self._conn.execute(
-                "SELECT 1 FROM field_values "
-                "WHERE thing_id = ? AND field = 'stub' AND rev_removed IS NULL",
-                (thing_id,),
-            ).fetchone()
-            is None
-        ):
+        if not self._is_stub(thing_id):
             raise ValueError(f"only a stub's kind can be changed: {thing_id}")
         if kind == old_kind:
             return
 
-        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
-        new_types = {spec.name: spec.type for spec in new_spec.fields}
-        for (field,) in self._conn.execute(
-            "SELECT DISTINCT field FROM field_values "
-            "WHERE thing_id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ):
-            if new_types.get(field) != old_types[field]:
-                raise ValueError(f"{kind!r} has no {old_types[field]} field {field!r}")
+        self._check_fields_fit(thing_id, old_kind, new_spec)
         for (category,) in self._conn.execute(
             "SELECT DISTINCT category FROM facts "
             "WHERE thing_id = ? AND rev_removed IS NULL",
@@ -537,14 +565,39 @@ class Revision:
             if category not in new_spec.categories:
                 raise ValueError(f"{kind!r} has no fact category {category!r}")
 
-        self._conn.execute(
-            "UPDATE things SET rev_removed = ? WHERE id = ? AND rev_removed IS NULL",
-            (self.rev, thing_id),
-        )
-        self._conn.execute(
-            "INSERT INTO things (id, kind, rev_added) VALUES (?, ?, ?)",
-            (thing_id, kind, self.rev),
-        )
+        self._rekind(thing_id, kind)
+
+    @_require_open
+    def promote_to_sphere(self, thing_id: str) -> None:
+        """Make a lore entry, or a stub of any kind, a `sphere`, keeping its
+        id, so every link to it holds: its thing row is retired and a
+        `sphere` row with the same id added, as `change_stub_kind` does.
+        Its field values are kept, and so are its facts, by id: one in a
+        category a sphere doesn't have becomes a `timeline` fact when it's
+        dated and an `about` fact when it isn't (a new version of the fact,
+        as `correct_fact` writes). A stub stays a stub. Raises `ValueError`
+        for anything else (a place takes on a template as a place), for a
+        sphere already, and when a live field doesn't exist on `sphere`."""
+
+        new_spec = _kind_for("sphere")
+        old_kind = self._require_thing(thing_id)
+        if old_kind == "sphere":
+            raise ValueError(f"already a sphere: {thing_id}")
+        if old_kind != "lore" and not self._is_stub(thing_id):
+            raise ValueError(f"only lore or a stub becomes a sphere: {thing_id}")
+
+        self._check_fields_fit(thing_id, old_kind, new_spec)
+        self._rekind(thing_id, "sphere")
+        facts = self._conn.execute(
+            "SELECT fact_id, category, valid_from FROM facts "
+            "WHERE thing_id = ? AND rev_removed IS NULL",
+            (thing_id,),
+        ).fetchall()
+        for fact_id, category, valid_from in facts:
+            if category not in new_spec.categories:
+                self.correct_fact(
+                    fact_id, category="timeline" if valid_from is not None else "about"
+                )
 
 
 class World:

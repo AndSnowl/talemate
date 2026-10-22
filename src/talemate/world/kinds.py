@@ -11,7 +11,9 @@ Every kind also has three fields of its own:
   yet): `{"ignored": bool}`.
 - `part_of`, the sphere drawer the thing currently belongs to, or `None`:
   `{"sphere": <32-hex thing id>, "drawer": <8-hex drawer id>}`. A dated
-  `None` value ends the membership.
+  `None` value ends the membership. The drawer may be `UNSORTED_DRAWER_ID`
+  instead: the thing is part of the sphere, in no drawer yet (a child
+  expanded before its sphere has drawers).
 """
 
 import re
@@ -83,6 +85,10 @@ DRAWER_TYPES: tuple[str, ...] = (
 )
 
 _DRAWER_ID_RE = re.compile(r"^[0-9a-f]{8}$")
+
+# the drawer id of "no drawer yet": `spheres.UNSORTED`'s, never a real
+# drawer's (those are 8-hex)
+UNSORTED_DRAWER_ID = "unsorted"
 
 
 def _fields(*pairs: tuple[str, FieldType]) -> list[FieldSpec]:
@@ -390,7 +396,10 @@ def _validate_part_of(field: str, value: object) -> None:
         or not isinstance(value.get("sphere"), str)
         or not _THING_ID_RE.match(value["sphere"])
         or not isinstance(value.get("drawer"), str)
-        or not _DRAWER_ID_RE.match(value["drawer"])
+        or not (
+            _DRAWER_ID_RE.match(value["drawer"])
+            or value["drawer"] == UNSORTED_DRAWER_ID
+        )
     ):
         raise ValueError(
             f'{field!r} must be {{"sphere": <32-hex>, "drawer": <8-hex>}} or null'

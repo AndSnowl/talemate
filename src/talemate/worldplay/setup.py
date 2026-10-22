@@ -16,9 +16,10 @@ to play.
   per stub) and `start_scene` accepts the previews before writing the
   scene, so the scene plays the full entries. Cancelling leaves the stubs
   as they were. A stub the index merely finds is neither shown nor pulled
-  in. A culture stub can't be expanded yet, and a race or mix stub has no
-  species or parents to fill it from: those stay stubs, and so does one
-  whose preview fails.
+  in. A culture stub can't be expanded yet, a race or mix stub has no
+  species or parents to fill it from, and a sphere stub waits for its
+  owner's template: those stay stubs, and so does one whose preview
+  fails.
 - `continue_setup` plans the next scene from where an earlier one ended.
 
 What the scene-setup probe (docs/superpowers/probes/2026-10-19-world-create-
@@ -512,9 +513,10 @@ def _setup_from_reply(
 # --- stubs ---------------------------------------------------------------------
 
 
-# stub kinds setup never fills: a culture can't be expanded yet, and a
-# race needs its species and a mix its parents, which a stub has none of
-_UNFILLED_STUB_KINDS = ("race", "mix")
+# stub kinds setup never fills: a culture can't be expanded yet, a race
+# needs its species and a mix its parents, which a stub has none of, and a
+# sphere is made from a template the owner picks (`worldplay.spheres`)
+_UNFILLED_STUB_KINDS = ("race", "mix", "sphere")
 
 
 def _stubs_named(view: WorldView, setup: SceneSetup) -> list[str]:
@@ -536,8 +538,9 @@ def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
     order: the player, the characters, the place, then the pulled-in lore
     (picked, or named in the reply; a stub the index merely found isn't
     pulled in). Ignored stubs too: using one revives it. A culture stub
-    can't be expanded yet, and a race or mix stub has no species or
-    parents to fill it from: those are left out (logged) and stay stubs."""
+    can't be expanded yet, a race or mix stub has no species or parents to
+    fill it from, and a sphere stub waits for its owner's template: those
+    are left out (logged) and stay stubs."""
 
     view = world.view()
     refs = [setup.player, *setup.characters]

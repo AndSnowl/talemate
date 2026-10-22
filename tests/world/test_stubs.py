@@ -1,7 +1,9 @@
-"""The stub marker, and changing a stub's kind."""
+"""The stub marker, changing a stub's kind, and promoting to a sphere."""
 
 import pytest
 
+from talemate.world.dates import WorldDate
+from talemate.world.refs import ref
 from talemate.world.replay import History, Replay
 from talemate.world.store import Source
 
@@ -163,3 +165,65 @@ def test_undo_kind_change_kept_when_a_later_field_needs_the_new_kind(world):
     assert [c.thing_id for c in report.conflicts] == [stub]
     assert world.view().thing(stub).kind == "place"
     _check_replay(world)
+
+
+def test_promote_to_sphere_keeps_id_facts_and_links(world):
+    """A lore entry becomes a `sphere` under its own id. Its facts keep
+    their ids: a dated one joins the timeline, an undated one is "about"
+    (the spec's promotion rule), and a link to it still resolves."""
+
+    with world.revision(Source.manual()) as rev:
+        council = rev.create_thing("lore", fields={"name": "Council of Elders"})
+        undated = rev.add_fact(council, "general", "Seven snowy elders.")
+        dated = rev.add_fact(
+            council, "general", "First met in Kremova.", valid_from=WorldDate.of(996)
+        )
+        kremova = rev.create_thing("place", fields={"name": "Kremova"})
+        rev.add_fact(kremova, "general", f"Seat of the {ref(council, 'Council')}.")
+    with world.revision(Source.manual()) as rev:
+        rev.promote_to_sphere(council)
+        promote_rev = rev.rev
+
+    state = world.view().thing(council)
+    assert state.kind == "sphere"
+    assert state.fields["name"] == "Council of Elders"
+    facts = {f.fact_id: (f.category, f.text) for f in state.facts}
+    assert facts == {
+        undated: ("about", "Seven snowy elders."),
+        dated: ("timeline", "First met in Kremova."),
+    }
+    assert [owner for owner, _ in world.view().referencing(council)] == [kremova]
+    _check_replay(world)
+
+    report = world.undo([promote_rev])
+    assert report.conflicts == []
+    state = world.view().thing(council)
+    assert state.kind == "lore"
+    assert sorted(f.category for f in state.facts) == ["general", "general"]
+    _check_replay(world)
+
+
+def test_promote_to_sphere_lore_and_stubs_only(world):
+    stub, _, _ = _lore_stub(world)
+    with world.revision(Source.manual()) as rev:
+        character = rev.create_thing("character", fields={"name": "Vasha"})
+        place = rev.create_thing("place", fields={"name": "Kremova"})
+        char_stub = rev.create_thing(
+            "character", fields={"name": "Orel", "stub": {"ignored": False}}
+        )
+
+    for thing in (character, place):
+        with pytest.raises(ValueError):
+            with world.revision(Source.manual()) as rev:
+                rev.promote_to_sphere(thing)
+    with world.revision(Source.manual()) as rev:
+        rev.promote_to_sphere(stub)
+        rev.promote_to_sphere(char_stub)
+    view = world.view()
+    assert view.thing(stub).kind == "sphere"
+    assert view.thing(stub).is_stub
+    assert view.thing(char_stub).kind == "sphere"
+    # already a sphere
+    with pytest.raises(ValueError):
+        with world.revision(Source.manual()) as rev:
+            rev.promote_to_sphere(stub)
