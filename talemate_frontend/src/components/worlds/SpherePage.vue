@@ -1,7 +1,11 @@
 <template>
     <div class="sphere-page mb-4" data-testid="sphere-page">
-        <div v-if="summary" class="summary mb-1" data-testid="sphere-summary">
-            <LinkedText :segments="(thing.prose_segments || {}).description" :text="summary" />
+        <!-- the summary: its prose, else its summary fact, which Edit corrects -->
+        <div v-if="summary || summaryFact" class="summary mb-1" data-testid="sphere-summary">
+            <SphereFactRow :fact-id="summaryFactId" :removable="false">
+                <LinkedText v-if="summary" :segments="(thing.prose_segments || {}).description" :text="summary" />
+                <LinkedText v-else :segments="summaryFact.segments" :text="summaryFact.rendered" />
+            </SphereFactRow>
         </div>
         <!-- what's known about it, undated -->
         <div class="about mb-1" data-testid="sphere-about">
@@ -54,8 +58,10 @@ import SphereFactRow from './SphereFactRow.vue';
 import SphereTimeline from './SphereTimeline.vue';
 
 // The sphere part of a thing's page (a sphere, or a place that took on a
-// template), following the approved mockup: the summary and what's known
-// about it (its `about` facts, each editable, "+ Add about it"), the branch's
+// template), following the approved mockup: the summary (its description
+// prose, else its summary fact; Edit corrects that fact, ruling P21) and
+// what else is known about it (its other `about` facts, each editable,
+// "+ Add about it"), the branch's
 // parent, the typed and titled drawers in order (`SphereDrawer`), and
 // "+ Add a drawer". Drawers are edited here and written whole
 // (`set_drawers`, every drawer the page shows): add one of any type with
@@ -86,9 +92,17 @@ export default {
         summary() {
             return this.thing.prose?.description?.text || '';
         },
-        // its undated `about` facts, under the summary
+        // the about fact the summary is written from (null for a sphere
+        // from before there was one)
+        summaryFactId() {
+            return this.sphere.summary_fact_id || null;
+        },
+        summaryFact() {
+            return this.thing.facts.find((fact) => fact.fact_id === this.summaryFactId) || null;
+        },
+        // its other undated `about` facts, under the summary
         about() {
-            return this.thing.facts.filter((fact) => fact.category === 'about');
+            return this.thing.facts.filter((fact) => fact.category === 'about' && fact.fact_id !== this.summaryFactId);
         },
         hasEvents() {
             return this.sphere.drawers.some((drawer) => drawer.type === 'events');

@@ -425,7 +425,12 @@ try:
                     _refs(fact["text"], ids),
                     valid_from=_year(fact.get("since")),
                     valid_until=_year(fact.get("until")),
-                    origin=fact.get("origin"),
+                    # an exception's tie names its sphere, an earlier thing
+                    origin=(
+                        {**fact["origin"], "tie": ids[fact["origin"]["tie"]]}
+                        if "tie" in (fact.get("origin") or {})
+                        else fact.get("origin")
+                    ),
                 )
     for scene in spec["scenes"]:
         world.scenes().create(
@@ -465,7 +470,8 @@ def seed_fm_world(
     <8-hex>}|None, "ties": [{"sphere": name, "role", "since": year|None,
     "until": year|None}]|None, "facts": [{"category", "text", "since":
     year|None, "until": year|None, "origin": dict|None}]}``, written in one
-    revision, in order.
+    revision, in order. An origin's ``"tie"`` (an exception's) names its
+    sphere, written as its id.
     A link names things listed before it (e.g. a race's ``{"species":
     "Owl-folk"}``) and is written as their ids; so does a reference in a
     fact's text, written ``[[@Name|shown text]]``. ``stub`` makes the thing

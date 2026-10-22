@@ -102,6 +102,8 @@ VASHA = {
         {
             "category": "ties",
             "text": "Never bows to [[@The Council of Elders|the Council of Elders]].",
+            # filed under its tie (ruling P22)
+            "origin": {"tie": "The White Dawn"},
         }
     ],
 }
@@ -394,6 +396,57 @@ def test_child_first_then_sphere_adopts(app, page, fixed_preview, fixed_sphere):
     accepted = _sent(page, "accept_sphere")[-1]["preview"]
     assert accepted["stub_id"] == dawn
     assert accepted["adopted"][0]["thing_id"] == council
+
+    # its summary shows once, as the summary, never as an about row; Edit
+    # corrects its fact, which can't be removed (ruling P21)
+    summary = sphere.get_by_test_id("sphere-summary")
+    summary.filter(has_text="The state church of Moscavia.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(sphere.get_by_test_id("about-row")).to_have_count(0)
+    expect(summary.get_by_test_id("sphere-fact-remove")).to_have_count(0)
+    summary.get_by_test_id("sphere-fact-edit").click()
+    form = summary.get_by_test_id("fact-form")
+    expect(form.get_by_role("button", name="Remove")).to_have_count(0)
+    form.get_by_label("Fact", exact=True).fill("The state church of all Moscavia.")
+    form.get_by_role("button", name="Save").click()
+    expect(form).to_have_count(0)
+    corrected = _sent(page, "correct_fact")[-1]
+    assert corrected["text"] == "The state church of all Moscavia."
+    expect(sphere.get_by_test_id("about-row")).to_have_count(0)
+
+    # made by the core, with no drawer seeded by hand: its Branches drawer
+    # offers "+ New branch", and the branch shows on its parent (P23)
+    branches = _drawer_of(sphere, "Branches")
+    assert "branches" in branches.get_by_test_id("drawer-type").inner_text()
+    fixed_sphere(
+        {
+            "branch": {
+                "name": "The Forge Dawn",
+                "summary": "Smiths who keep the Dawn at the anvil.",
+                "aka": [],
+                "timeline": [],
+                "drawers": [],
+                "drops": [],
+                "items": [{"drawer": "Doctrines", "text": "The forge is a dawn too."}],
+                "names": [],
+            }
+        }
+    )
+    branches.get_by_role("button", name="New branch").click()
+    branches.get_by_label("Describe the branch").fill("the smiths' Dawn")
+    branches.get_by_role("button", name="Preview").click()
+    branch_preview = branches.get_by_test_id("sphere-preview")
+    branch_preview.wait_for(state="visible", timeout=TIMEOUT_MS)
+    branch_preview.get_by_role("button", name="Accept").click()
+    branch = _opened(page, "The Forge Dawn")
+    branch.get_by_test_id("sphere-parent").get_by_test_id("linked-ref").filter(
+        has_text="The White Dawn"
+    ).click()
+    sphere = _opened(page, "The White Dawn")
+    _drawer_of(sphere, "Branches").get_by_test_id("sphere-branch").filter(
+        has_text="The Forge Dawn"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
 
     # its Hierarchy drawer holds the council, now an entry's link
     hierarchy = _drawer_of(sphere, "Hierarchy")

@@ -37,7 +37,7 @@
                 <v-btn color="accent" variant="flat" size="small" :loading="busy" :disabled="!valid" @click="$emit('save')">Save</v-btn>
                 <v-btn variant="text" size="small" :disabled="busy" @click="$emit('cancel')">Cancel</v-btn>
                 <v-spacer></v-spacer>
-                <v-btn v-if="form.mode === 'edit'" variant="text" size="small" color="danger" prepend-icon="mdi-delete" :disabled="busy" @click="$emit('remove')">Remove</v-btn>
+                <v-btn v-if="form.mode === 'edit' && removable" variant="text" size="small" color="danger" prepend-icon="mdi-delete" :disabled="busy" @click="$emit('remove')">Remove</v-btn>
             </div>
         </template>
     </v-card>
@@ -67,6 +67,8 @@ export default {
         form: { type: Object, required: true },
         categories: { type: Array, required: true },
         busy: { type: Boolean, default: false },
+        // false: an edited fact can't be removed here (a sphere's summary)
+        removable: { type: Boolean, default: true },
     },
     emits: ['save', 'cancel', 'remove'],
     setup() {

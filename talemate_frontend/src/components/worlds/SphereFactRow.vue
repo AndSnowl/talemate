@@ -6,6 +6,7 @@
             <template v-if="fact">
                 <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit" title="Edit" data-testid="sphere-fact-edit" @click="editor.edit(fact)"></v-btn>
                 <v-btn
+                    v-if="removable"
                     icon="mdi-delete-outline"
                     variant="text"
                     size="x-small"
@@ -19,7 +20,15 @@
             </template>
         </div>
         <div v-if="editing" class="my-2">
-            <ThingFactForm :form="editor.form()" :categories="[editor.form().category]" :busy="editor.busy()" @save="editor.save()" @cancel="editor.cancel()" @remove="editor.remove(fact)" />
+            <ThingFactForm
+                :form="editor.form()"
+                :categories="[editor.form().category]"
+                :busy="editor.busy()"
+                :removable="removable"
+                @save="editor.save()"
+                @cancel="editor.cancel()"
+                @remove="editor.remove(fact)"
+            />
         </div>
     </div>
 </template>
@@ -43,6 +52,8 @@ export default {
     props: {
         // the fact's id, or null for a row that isn't one of the page's own
         factId: { type: String, default: null },
+        // false: Edit only (the summary's fact, corrected but never removed)
+        removable: { type: Boolean, default: true },
     },
     setup() {
         return { worlds: useWorldsStore() };
