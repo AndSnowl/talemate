@@ -278,6 +278,49 @@ def test_add_reference_menu_inserts_pick(app, page):
     assert _sent(page, "add_fact")[-1]["picks"] == {"Yelena": world.things["Yelena"]}
 
 
+def test_reference_menu_undo_redo_select_all_delete_and_shift_bypass(app, page):
+    name = _world_name("Vasel")
+    seed_fm_world(app.root, name, present_year=1026, things=[YELENA, VASHA])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-character").click()
+    vasha = _open_thing(page, "Vasha")
+    vasha.get_by_role("button", name="Add fact").click()
+    form = vasha.get_by_test_id("fact-form")
+    text = form.get_by_label("Fact", exact=True)
+    text.click()
+    text.press_sequentially("Sailed north")
+    expect(text).to_have_value("Sailed north")
+
+    # shift+right-click skips the custom menu, for the browser's own
+    # (whose spell-check scripts can't see)
+    menu = page.get_by_test_id("reference-menu")
+    text.click(button="right", modifiers=["Shift"])
+    expect(menu).not_to_be_visible()
+
+    # Undo, through the menu, reverts all of what was just typed
+    text.click(button="right")
+    menu.wait_for(state="visible", timeout=TIMEOUT_MS)
+    menu.get_by_text("Undo", exact=True).click()
+    expect(text).to_have_value("")
+
+    # Redo brings it back
+    text.click(button="right")
+    menu.wait_for(state="visible", timeout=TIMEOUT_MS)
+    menu.get_by_text("Redo", exact=True).click()
+    expect(text).to_have_value("Sailed north")
+
+    # Select all, then Delete (each its own menu, since picking one closes
+    # it), empties the field
+    text.click(button="right", position={"x": 5, "y": 5})
+    menu.wait_for(state="visible", timeout=TIMEOUT_MS)
+    menu.get_by_text("Select all", exact=True).click()
+    text.click(button="right", position={"x": 5, "y": 5})
+    menu.wait_for(state="visible", timeout=TIMEOUT_MS)
+    menu.get_by_text("Delete", exact=True).click()
+    expect(text).to_have_value("")
+
+
 def test_edit_linked_fact_keeps_links_and_makes_stubs(app, page):
     name = _world_name("Moscavia")
     world = seed_fm_world(

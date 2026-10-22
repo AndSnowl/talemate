@@ -94,6 +94,10 @@
             @cut="cut"
             @copy="copy"
             @paste="paste"
+            @delete="deleteSelection"
+            @undo="undo"
+            @redo="redo"
+            @select-all="selectAll"
             @pick="addReference"
         />
     </div>
@@ -123,9 +127,16 @@ let nextId = 0;
 //   as matched to their own things, whatever the name would match; a
 //   re-pick or "treat as new" in their popover changes that link alone
 //   (`pick-link {index, id}`), never the other words like it.
-// Right-clicking opens `ReferenceMenu`: Cut, Copy, Paste and Add
-// reference…, which inserts the thing's name at the cursor and records a
-// reference for it (`refs`: pickKey -> `{id, text}`), so it links there.
+// Right-clicking opens `ReferenceMenu`: Cut, Copy, Paste, Delete, Undo,
+// Redo, Select all, and Add reference…, which inserts the thing's name at
+// the cursor and records a reference for it (`refs`: pickKey ->
+// `{id, text}`), so it links there. Shift+right-click skips the custom
+// menu for the browser's own (its spell-check, which scripts can't see).
+// Cut/Copy/Paste/Delete/Undo/Redo run as the textarea's own editing
+// commands (`execCommand`, deprecated but still the only way to reach its
+// native undo history), so they land on that history and a later Undo (or
+// Ctrl+Z) can revert them; `syncFromInput` brings the model back in step
+// when the command changed the value without firing its own `input`.
 //
 // The highlights are a layer over the textarea, in the same font and box,
 // with transparent text: only the marks show (and take the hover).
@@ -287,6 +298,10 @@ export default {
             if (this.disabled) {
                 return;
             }
+            if (event.shiftKey) {
+                // the owner's way to the browser's own menu (spell-check)
+                return;
+            }
             event.preventDefault();
             const input = this.$refs.input;
             this.selection = input ? [input.selectionStart, input.selectionEnd] : [this.modelValue.length, this.modelValue.length];
@@ -304,18 +319,62 @@ export default {
         selectedText() {
             return this.modelValue.slice(this.selection[0], this.selection[1]);
         },
+        // focuses the textarea and restores the selection the menu opened
+        // with (the click on a menu item may have moved focus off it)
+        focusSelection() {
+            const input = this.$refs.input;
+            if (!input) {
+                return null;
+            }
+            input.focus();
+            input.setSelectionRange(this.selection[0], this.selection[1]);
+            return input;
+        },
+        // after an execCommand that may have changed the textarea's value
+        // without firing its own `input` event: bring the model into step
+        syncFromInput(input) {
+            if (input && input.value !== this.modelValue) {
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        },
         cut() {
-            this.copy();
-            this.insertAt('');
+            const input = this.focusSelection();
+            document.execCommand('cut');
+            this.syncFromInput(input);
         },
         copy() {
-            navigator.clipboard?.writeText(this.selectedText()).catch(() => {});
+            this.focusSelection();
+            document.execCommand('copy');
         },
         paste() {
             navigator.clipboard
                 ?.readText()
-                .then((text) => this.insertAt(text))
+                .then((text) => {
+                    const input = this.focusSelection();
+                    document.execCommand('insertText', false, text);
+                    this.syncFromInput(input);
+                })
                 .catch(() => {});
+        },
+        deleteSelection() {
+            const input = this.focusSelection();
+            document.execCommand('delete');
+            this.syncFromInput(input);
+        },
+        selectAll() {
+            this.$refs.input?.select();
+        },
+        undo() {
+            const input = this.$refs.input;
+            input?.focus();
+            document.execCommand('undo');
+            this.syncFromInput(input);
+        },
+        redo() {
+            const input = this.$refs.input;
+            input?.focus();
+            document.execCommand('redo');
+            this.syncFromInput(input);
         },
         // the thing's name goes in at the cursor, linked to it
         addReference(target) {

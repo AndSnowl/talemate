@@ -11,8 +11,16 @@
                 <v-list-item prepend-icon="mdi-content-cut" title="Cut" :disabled="!hasSelection" @click="act('cut')"></v-list-item>
                 <v-list-item prepend-icon="mdi-content-copy" title="Copy" :disabled="!hasSelection" @click="act('copy')"></v-list-item>
                 <v-list-item prepend-icon="mdi-content-paste" title="Paste" @click="act('paste')"></v-list-item>
+                <v-list-item prepend-icon="mdi-delete-outline" title="Delete" :disabled="!hasSelection" @click="act('delete')"></v-list-item>
+                <v-divider></v-divider>
+                <v-list-item prepend-icon="mdi-undo" title="Undo" @click="act('undo')"></v-list-item>
+                <v-list-item prepend-icon="mdi-redo" title="Redo" @click="act('redo')"></v-list-item>
+                <v-divider></v-divider>
+                <v-list-item prepend-icon="mdi-select-all" title="Select all" @click="act('selectAll')"></v-list-item>
                 <v-divider></v-divider>
                 <v-list-item prepend-icon="mdi-link-variant" title="Add reference…" @click="searching = true"></v-list-item>
+                <v-divider></v-divider>
+                <div class="px-4 py-2 text-caption text-muted" data-testid="spell-check-hint">Spell check: Shift+right-click</div>
             </v-list>
             <div v-else class="pa-2" data-testid="reference-search">
                 <v-text-field
@@ -46,11 +54,13 @@ import { searchReferences } from './nameHighlights.js';
 import { kindInfo } from './worldKinds.js';
 
 // The right-click menu of a text box the owner writes in
-// (`NameHighlightInput`): the browser's Cut, Copy and Paste, which it
-// emits for the box to do, and "Add reference…", which turns the menu into
-// a search over the world's entries and live stubs
-// (`worlds.referenceTargets`) and emits the thing picked. `searchOnly`
-// opens straight on the search (re-pointing a link, from `LinkedText`).
+// (`NameHighlightInput`): the browser's Cut, Copy, Paste and Delete, Undo
+// and Redo, Select all, which it emits for the box to do, and "Add
+// reference…", which turns the menu into a search over the world's
+// entries and live stubs (`worlds.referenceTargets`) and emits the thing
+// picked. `searchOnly` opens straight on the search (re-pointing a link,
+// from `LinkedText`). A last muted line points to the browser's own menu
+// (Shift+right-click), since browsers give scripts no spell-check API.
 // Shown at `target`, a point (`[x, y]`) or an element.
 export default {
     name: 'ReferenceMenu',
@@ -63,7 +73,7 @@ export default {
         exclude: { type: Array, default: () => [] },
         searchLabel: { type: String, default: 'Find an entry or stub' },
     },
-    emits: ['update:modelValue', 'cut', 'copy', 'paste', 'pick'],
+    emits: ['update:modelValue', 'cut', 'copy', 'paste', 'delete', 'undo', 'redo', 'selectAll', 'pick'],
     setup() {
         return { worlds: useWorldsStore() };
     },
