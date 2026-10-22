@@ -686,7 +686,8 @@ def _known_in_view(view: WorldView, name: str, kind: str) -> bool:
     or is wholly a suggested part of a thing's name ("Moscavia" of the
     Tsardom of Moscavia), which stays a suggestion. A species, race or mix
     name held by just one other's name isn't: `make_stubs` maps it to that
-    one, so the facts link it."""
+    one, so the facts link it. Nor is a name that's only another entry's
+    adjective form ("Magian" of the Magi)."""
 
     if existing_id(view, name, kind) is not None:
         return True
@@ -694,6 +695,7 @@ def _known_in_view(view: WorldView, name: str, kind: str) -> bool:
         match
         for match in find_names(view, name)
         if (match.start, match.end) == (0, len(name))
+        and any(c.via != "adjective" for c in match.candidates)
     ]
     if any(not match.suggested for match in whole):
         return True

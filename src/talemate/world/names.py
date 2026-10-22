@@ -14,15 +14,16 @@ trailing `'s` allowed and longer names tried first:
   name ("Moscavia" for "Tsardom of Moscavia"), but no title word. That's
   only a *suggested* match, offered after any real one;
 - an adjective form of a one-word main or other name of four letters or
-  more ("Moscavian" for Moscavia, "Kalmaran" for Kalmara), matched like an
-  other name: the name, or the name less a final vowel, with one of
-  `ADJECTIVE_ENDINGS`.
+  more ("Moscavian" for Moscavia, "Kalmaran" for Kalmara) of a place,
+  sphere, species or race (`ADJECTIVE_KINDS`; "Julian" never means Julia):
+  the name, or the name less a final vowel, with one of
+  `ADJECTIVE_ENDINGS`. It ranks after the other names.
 
 A stub whose name is a common word ("Hope") mustn't link the "hope" in
 "I hope", so a stub, like another name ("the Pier") or a suggestion,
 matches only text written with a capital letter (a leading article may
 stay lowercase: "the Drowned Stag"). A stub the owner ignored isn't
-matched at all. The main name (and a character's first name) of an
+matched at all. An adjective form needs a capital too. The main name (and a character's first name) of an
 entry that isn't a stub matches in any case, as scene setup always has.
 
 `unknown_proper_phrases` finds the capitalised phrases no match covers
@@ -42,7 +43,7 @@ from .view import ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.names")
 
-Via = Literal["name", "aka", "first_name", "partial"]
+Via = Literal["name", "aka", "first_name", "adjective", "partial"]
 
 # leading words never matched on their own as a character's first name,
 # and stripped from the front of an unknown phrase
@@ -69,6 +70,8 @@ PARTIAL_MIN_LETTERS = 5
 # none)
 ADJECTIVE_ENDINGS = ("n", "an", "ian", "ish", "ese")
 ADJECTIVE_MIN_LETTERS = 4
+# the kinds whose names have adjective forms
+ADJECTIVE_KINDS = frozenset({"place", "sphere", "species", "race"})
 _VOWELS = "aeiou"
 
 # lowercase words an unknown phrase may run across ("Night of Feathers")
@@ -128,7 +131,13 @@ _SENTENCE_OPENERS = set(
 _ABBREVIATIONS = {"St"}
 
 # how a candidate ranks among others for the same text: lower is better
-_RANKS: dict[str, int] = {"name": 0, "aka": 1, "first_name": 2, "partial": 9}
+_RANKS: dict[str, int] = {
+    "name": 0,
+    "aka": 1,
+    "first_name": 2,
+    "adjective": 8,
+    "partial": 9,
+}
 # added to the ranks of things that only share a longer name's first word
 _FIRST_WORD_RANK = 3
 
@@ -290,14 +299,14 @@ def _aliases(view: WorldView) -> Aliases:
         ]
         for other in others:
             add(other, state, name, "aka")
-        # an adjective form needs a capital, as another name does
-        adjectives = {
-            _norm(form)
-            for written in [name, *others]
-            for form in adjective_forms(" ".join(written.split()))
-        }
-        for form in sorted(adjectives):
-            add(form, state, name, "aka")
+        if state.kind in ADJECTIVE_KINDS:
+            adjectives = {
+                _norm(form)
+                for written in [name, *others]
+                for form in adjective_forms(" ".join(written.split()))
+            }
+            for form in sorted(adjectives):
+                add(form, state, name, "adjective")
         words = name.split()
         first = _first_name(words) if state.kind == "character" else None
         if first is not None:
@@ -342,10 +351,10 @@ def _capitalised(written: str) -> bool:
 
 def _needs_capital(candidate: NameCandidate) -> bool:
     """Only a main name (or a character's first name) of a thing that
-    isn't a stub matches in any case; a stub, another name ("the Pier")
-    or a partial needs a capital."""
+    isn't a stub matches in any case; a stub, another name ("the Pier"),
+    an adjective form or a partial needs a capital."""
 
-    return candidate.stub or candidate.via in ("aka", "partial")
+    return candidate.stub or candidate.via in ("aka", "adjective", "partial")
 
 
 def find_names(view: WorldView, text: str) -> list[NameMatch]:

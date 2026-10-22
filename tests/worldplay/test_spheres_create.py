@@ -987,18 +987,18 @@ async def test_branch_drops_a_statement_by_rejecting_it(moscavia, world, full_da
     overriding it."""
 
     view = world.view()
-    grace = next(
+    offering = next(
         i
         for i in spheres.items(view, moscavia.dawn)
-        if i.text.startswith("All owl-folk bear")
+        if i.text.startswith("On each anniversary")
     )
     sites = next(
         i
         for i in spheres.items(view, moscavia.dawn)
         if i.text.startswith("Every city and town")
     )
-    # F15 dropped outright; F16 replaced by a named item
-    reply = BRANCH_REPLY.replace('"drops": ["F1", "F99"]', '"drops": ["F15"]').replace(
+    # F17 dropped outright; F16 replaced by a named item
+    reply = BRANCH_REPLY.replace('"drops": ["F1", "F99"]', '"drops": ["F17"]').replace(
         '"overrides": ["F4"]', '"overrides": ["F4", "F16"]'
     )
     client = MockClient("test")
@@ -1006,16 +1006,34 @@ async def test_branch_drops_a_statement_by_rejecting_it(moscavia, world, full_da
         _queue(reply)
         preview = await preview_branch(world, moscavia.dawn, "the Reformed", client)
 
-    assert preview.rejects == [grace.fact_id, sites.fact_id]
+    assert preview.rejects == [offering.fact_id, sites.fact_id]
     branch = accept_sphere(world, preview)
     view = world.view()
     held = {i.fact_id for i in spheres.items(view, branch)}
-    assert not {grace.fact_id, sites.fact_id} & held
+    assert not {offering.fact_id, sites.fact_id} & held
     about = [
         view.render(f.text) for f in view.thing(branch).facts if f.category == "about"
     ]
-    assert f"Rejects: {grace.text}" in about
-    assert grace.fact_id in {i.fact_id for i in spheres.items(view, moscavia.dawn)}
+    assert f"Rejects: {offering.text}" in about
+    assert offering.fact_id in {i.fact_id for i in spheres.items(view, moscavia.dawn)}
+
+
+async def test_branch_onto_stub_keeps_split_date(moscavia, world, full_dawn):
+    """A branch accepted onto a stub of its name still splits at `split`."""
+
+    with world.revision(Source.manual(note="stub")) as rev:
+        stub = rev.create_thing(
+            "sphere", {"name": "The Reformed Dawn", "stub": {"ignored": False}}
+        )
+    preview, _ = await _reformed_preview(world, moscavia.dawn)
+    assert preview.matching_stub_id == stub
+
+    branch = accept_sphere(world, preview.model_copy(update={"stub_id": stub}))
+
+    assert branch == stub
+    view = world.view()
+    assert view.thing(branch).fields["parent"] == moscavia.dawn
+    assert view.field_since(branch, "parent") == preview.split == WorldDate.of(1020)
 
 
 def _synod(world) -> str:
@@ -1089,8 +1107,10 @@ async def test_end_item_links_both_sides(moscavia, world, full_dawn):
 
 
 async def test_end_item_then_undo(moscavia, world, full_dawn):
+    """The White Dawn ends its own Dawn Vigil; undoing that puts the Vigil
+    back in its drawer, at every date, and the timeline back as it was."""
+
     rites = full_dawn
-    synod = _synod(world)
     view = world.view()
     vigil = next(
         i for i in spheres.items(view, moscavia.dawn) if i.name == "The Dawn Vigil"
@@ -1098,20 +1118,99 @@ async def test_end_item_then_undo(moscavia, world, full_dawn):
     dates = [f.valid_from for f in spheres.timeline(view, moscavia.dawn)]
     vigil_facts = sorted(f.fact_id for f in view.thing(vigil.thing_id).facts)
 
-    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), synod)
+    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), moscavia.dawn)
+    ended = [f.valid_from for f in spheres.timeline(world.view(), moscavia.dawn)]
+    assert ended == sorted([*dates, WorldDate.of(1015)], key=lambda d: d.instant)
     report = world.undo([world.head_rev()])
 
     assert report.conflicts == []
+    for at in (None, WorldDate.of(1015), WorldDate.of(1020)):
+        view = world.view(at)
+        held = {i.thing_id: i for i in spheres.items(view, moscavia.dawn)}
+        assert held[vigil.thing_id].drawer_id == rites
     view = world.view()
-    held = {i.thing_id: i for i in spheres.items(view, moscavia.dawn)}
-    assert held[vigil.thing_id].drawer_id == rites
     assert view.thing(vigil.thing_id).fields["part_of"] == {
         "sphere": moscavia.dawn,
         "drawer": rites,
     }
     assert sorted(f.fact_id for f in view.thing(vigil.thing_id).facts) == vigil_facts
     assert [f.valid_from for f in spheres.timeline(view, moscavia.dawn)] == dates
-    assert spheres.timeline(view, synod) == []
+
+
+async def test_end_statement_then_undo(moscavia, world, full_dawn):
+    view = world.view()
+    offering = next(
+        i
+        for i in spheres.items(view, moscavia.dawn)
+        if i.text.startswith("On each anniversary")
+    )
+    about = [
+        f.fact_id for f in view.thing(moscavia.dawn).facts if f.category == "about"
+    ]
+
+    end_item(world, moscavia.dawn, offering, WorldDate.of(1016), None)
+    report = world.undo([world.head_rev()])
+
+    assert report.conflicts == []
+    for at in (None, WorldDate.of(1017)):
+        view = world.view(at)
+        fact = next(
+            f for f in view.thing(moscavia.dawn).facts if f.fact_id == offering.fact_id
+        )
+        assert fact.valid_until is None
+        assert offering.fact_id in {
+            i.fact_id for i in spheres.items(view, moscavia.dawn)
+        }
+    view = world.view()
+    assert [
+        f.fact_id for f in view.thing(moscavia.dawn).facts if f.category == "about"
+    ] == about
+
+
+async def test_end_item_before_its_part_of_refused(moscavia, world, full_dawn):
+    """An item can't end before it joined the sphere: nothing is written."""
+
+    rites = full_dawn
+    view = world.view()
+    vigil = next(
+        i for i in spheres.items(view, moscavia.dawn) if i.name == "The Dawn Vigil"
+    )
+    with world.revision(Source.manual(note="joined")) as rev:
+        rev.set_field(
+            vigil.thing_id,
+            "part_of",
+            {"sphere": moscavia.dawn, "drawer": rites},
+            WorldDate.of(1010),
+        )
+    head = world.head_rev()
+
+    with pytest.raises(ValueError):
+        end_item(world, moscavia.dawn, vigil, WorldDate.of(1005), None)
+
+    assert world.head_rev() == head
+
+
+async def test_branch_statement_overridden_once(moscavia, world, full_dawn):
+    """A statement label both dropped and replaced by a statement is only
+    replaced: no `about` rejection beside the override."""
+
+    reply = BRANCH_REPLY.replace('"drops": ["F1", "F99"]', '"drops": ["F1", "F15"]')
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        preview = await preview_branch(world, moscavia.dawn, "the Reformed", client)
+
+    view = world.view()
+    grace = next(
+        i
+        for i in spheres.items(view, moscavia.dawn)
+        if i.text.startswith("All owl-folk bear")
+    )
+    assert preview.rejects == []
+    overriding = [i for i in preview.items if grace.fact_id in i.get("overrides", [])]
+    assert len(overriding) == 1
+    branch = accept_sphere(world, preview)
+    assert not [f for f in world.view().thing(branch).facts if f.category == "about"]
 
 
 async def test_end_inherited_item_refused(moscavia, world, full_dawn):

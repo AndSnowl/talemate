@@ -775,17 +775,17 @@ def _write_core(
 ) -> str:
     """The sphere's own thing, in `rev`: a new one, or the stub or promoted
     thing kept under its id -- made a `sphere` (`promote_to_sphere`), or a
-    place staying a place. Then its template, agent flag and drawers."""
+    place staying a place. Then its template, agent flag and drawers; a
+    branch's `parent` is linked from its `split` either way."""
 
+    fields: dict[str, Any] = dict(preview.fields)
+    # a branch's parent link holds from the date it splits
+    parent = fields.pop("parent", None) if preview.split is not None else None
     if target is None:
-        fields: dict[str, Any] = {**preview.fields, "name": preview.name}
+        fields["name"] = preview.name
         if preview.aka:
             fields["aka"] = preview.aka
-        # a branch's parent link holds from the date it splits
-        parent = fields.pop("parent", None) if preview.split is not None else None
         thing_id = rev.create_thing(preview.kind, fields)
-        if parent is not None:
-            rev.set_field(thing_id, "parent", parent, preview.split)
     else:
         thing_id = target.id
         if target.kind != preview.kind:
@@ -793,11 +793,13 @@ def _write_core(
             # would refuse the facts a sphere has no category for (an item
             # stub's text), which this files as about or timeline
             rev.promote_to_sphere(thing_id)
-        for field, value in preview.fields.items():
+        for field, value in fields.items():
             rev.set_field(thing_id, field, value, None)
         create.name_thing(rev, view, target, preview.name, preview.aka)
         if target.is_stub:
             rev.remove_field_value(thing_id, "stub", None)
+    if parent is not None:
+        rev.set_field(thing_id, "parent", parent, preview.split)
     rev.set_field(thing_id, "template", preview.template, None)
     rev.set_field(thing_id, "agent", preview.agent, None)
     rev.set_field(thing_id, "drawers", preview.drawers, None)
@@ -1346,6 +1348,16 @@ async def preview_branch(
         # statements it replaces instead
         if item["name"] and item.get("overrides"):
             rejects += [f for f in item.pop("overrides") if f not in rejects]
+    # each statement is overridden once: by the first of the branch's
+    # statements replacing it, else by a rejection
+    replaced: set[str] = set()
+    for item in items:
+        if item.get("overrides"):
+            item["overrides"] = [f for f in item["overrides"] if f not in replaced]
+            replaced.update(item["overrides"])
+            if not item["overrides"]:
+                del item["overrides"]
+    rejects = [f for f in rejects if f not in replaced]
 
     aka = clean_aka(create._aka_entries(core.get("aka")), name, name_keys(view))
     own_names = [name, *(str(entry["name"]) for entry in aka)]
@@ -1413,8 +1425,8 @@ def end_item(
       item (a statement: the sphere it was part of).
 
     An inherited item is ended in the sphere it comes from, never here: a
-    `ValueError`, as is an item the sphere doesn't hold or a `by` that's
-    no thing."""
+    `ValueError`, as is an item the sphere doesn't hold, an `at` before the
+    thing became part of it, or a `by` that's no thing."""
 
     view = world.view()
     _sphere_state(view, sphere_id)
@@ -1423,6 +1435,10 @@ def end_item(
     by_state = view.thing(by) if by is not None else None
     if by is not None and by_state is None:
         raise ValueError(f"no such thing: {by}")
+    if item.thing_id is not None:
+        joined = view.field_since(item.thing_id, "part_of")
+        if joined is not None and at.instant < joined.instant:
+            raise ValueError("an item can't end before it became part of the sphere")
     note = f"Ended in {world.calendar.format(at)}"
     if by is not None:
         note += f" by {ref(by, view.name_of(by) or '')}"

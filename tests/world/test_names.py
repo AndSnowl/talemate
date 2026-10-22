@@ -276,9 +276,10 @@ def test_title_words_are_no_first_name(world):
 
 
 def test_adjective_forms_link_like_other_names(world):
-    """A capitalised adjective form of a name or other name ("Moscavian",
-    "Kalmaran") links to its entry like an other name; lowercase it
-    doesn't, and a short name ("Uz") makes none."""
+    """A capitalised adjective form of a place's, sphere's, species' or
+    race's name or other name ("Moscavian", "Kalmaran") links to it, via
+    "adjective"; lowercase it doesn't, and a short name ("Uz") makes
+    none."""
 
     with world.revision(Source.manual(note="setup")) as rev:
         moscavia = rev.create_thing("place", fields={"name": "Moscavia"})
@@ -288,12 +289,13 @@ def test_adjective_forms_link_like_other_names(world):
         )
         rev.create_thing("place", fields={"name": "Uz"})
         rev.create_thing("place", fields={"name": "Velm", "stub": {"ignored": True}})
+        rev.create_thing("place", fields={"name": "Hume"})
     view = world.view(None)
 
     (match,) = find_names(view, "Moscavian merchants came.")
     assert match.text == "Moscavian"
     assert match.suggested is False
-    assert [(c.id, c.via) for c in match.candidates] == [(moscavia, "aka")]
+    assert [(c.id, c.via) for c in match.candidates] == [(moscavia, "adjective")]
 
     (match,) = find_names(view, "The Kalmaran fleet sailed.")
     assert match.text == "Kalmaran"
@@ -301,5 +303,45 @@ def test_adjective_forms_link_like_other_names(world):
 
     assert find_names(view, "moscavian merchants came.") == []
     assert find_names(view, "Uzian traders came.") == []
+    # "Hum" + "an": a capital is needed, so "human" stays plain
+    assert find_names(view, "a human trader came.") == []
     # an ignored stub makes no adjective either
     assert find_names(view, "Velmish traders came.") == []
+
+
+def test_adjective_forms_only_for_peoples_and_places(world):
+    """A character, item or lore entry makes no adjective forms: "Julian"
+    never means Julia."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        rev.create_thing("character", fields={"name": "Julia"})
+        rev.create_thing("item", fields={"name": "Drago"})
+        rev.create_thing("lore", fields={"name": "Vesta"})
+        magi = rev.create_thing("sphere", fields={"name": "Magi"})
+        owls = rev.create_thing("species", fields={"name": "Strix"})
+    view = world.view(None)
+
+    assert find_names(view, "Julian, Dragon and Vestan came.") == []
+    assert [c.id for c in find_names(view, "A Magian came.")[0].candidates] == [magi]
+    assert [c.id for c in find_names(view, "A Strixian came.")[0].candidates] == [owls]
+
+
+def test_other_name_beats_adjective_form(world):
+    """An entry's other name that's also another's adjective form means
+    that entry first."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        rev.create_thing("place", fields={"name": "Moscavia"})
+        people = rev.create_thing(
+            "race", fields={"name": "Moscavian folk", "aka": [_aka("Moscavians")]}
+        )
+        tongue = rev.create_thing(
+            "lore", fields={"name": "Old tongue", "aka": [_aka("Moscavian")]}
+        )
+    view = world.view(None)
+
+    (match,) = find_names(view, "Moscavian is spoken.")
+    # the other name, then the adjective, then the partial suggestion
+    assert [(c.id, c.via) for c in match.candidates][0] == (tongue, "aka")
+    assert [c.via for c in match.candidates] == ["aka", "adjective", "partial"]
+    assert match.candidates[2].id == people

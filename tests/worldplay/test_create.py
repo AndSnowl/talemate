@@ -1871,3 +1871,29 @@ async def test_preview_finds_prompt_names_the_picks_miss(at_1020):
     assert "- A ferrywoman." not in sent
     kept, _sent = await preview(picks={"maren": maren})
     assert kept.picks == {"maren": maren, "Tsardom of Moscavia": tsardom}
+
+
+def test_adjective_form_name_is_still_stubbed(at_1020):
+    """A new name that's only another entry's adjective form ("Magian" of
+    the Magi) isn't known: it's stubbed, and its stub, once made, is what
+    the text links."""
+
+    from talemate.worldplay.create import _new_names, name_entries
+    from talemate.worldplay.links import link_text
+    from talemate.world.refs import parse_refs
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        magi = rev.create_thing("sphere", fields={"name": "Magi"})
+    view = world.view()
+    listed = name_entries([{"name": "Magian", "kind": "character", "aka": []}])
+
+    kept = _new_names(view, listed, ["Magian the seer came to the Magi."], [])
+
+    assert [n.name for n in kept] == ["Magian"]
+    with world.revision(Source.manual(note="stub")) as rev:
+        magian = rev.create_thing(
+            "character", fields={"name": "Magian", "stub": {"ignored": False}}
+        )
+    linked = link_text(world.view(), "Magian the seer came to the Magi.")
+    assert parse_refs(linked) == [magian, magi]
