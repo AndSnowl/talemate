@@ -126,6 +126,8 @@ import ThingPage from './ThingPage.vue';
 // switches to its kind, whose create box takes it up, and "Make it a
 // sphere…" (`promoting`) to Spheres. Spheres are listed by template
 // (`sphereGroups`), place spheres among them, their stubs dimmed in place.
+// The open section is the store's `section`, so the thing page's back
+// arrow can return to a list or the Stubs page (`worlds.goBack`).
 export default {
     name: 'WorldTab',
     components: { CreateBox, ExpandAskDialog, StubsTab, ThingPage },
@@ -134,12 +136,15 @@ export default {
     },
     data() {
         return {
-            kind: 'character',
             kinds: TOP_KINDS,
             stubsTab: STUBS_TAB,
         };
     },
     computed: {
+        // the open section, kept in the store for the back arrow's history
+        kind() {
+            return this.worlds.section;
+        },
         info() {
             return kindInfo(this.kind);
         },
@@ -162,13 +167,13 @@ export default {
     watch: {
         'worlds.expanding'(stub) {
             if (stub) {
-                this.kind = stub.kind;
+                this.worlds.section = stub.kind;
             }
         },
         // "Make it a sphere…" promotes in the Spheres create box
         'worlds.promoting'(thing) {
             if (thing) {
-                this.kind = 'sphere';
+                this.worlds.section = 'sphere';
             }
         },
     },
@@ -178,8 +183,7 @@ export default {
             return (this.worlds.things[kind] || []).filter((thing) => !thing.stub);
         },
         selectKind(kind) {
-            this.kind = kind;
-            this.worlds.closeThing();
+            this.worlds.showSection(kind);
             if (this.worlds.expanding && this.worlds.expanding.kind !== kind) {
                 this.worlds.stopExpanding();
             }

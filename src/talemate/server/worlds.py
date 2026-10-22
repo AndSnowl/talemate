@@ -46,7 +46,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   name, its other names and each distinct shown text to the target's other
   names (common, not everyday; never the target's own name, one it has, or
   another thing's), and removes the stub, all in one revision. It answers
-  `{stub_id, target, links, aka_added}` (`target` the target's payload).
+  `{stub_id, stub_name, target, links, aka_added}` (`target` the target's
+  payload).
   Refused, writing nothing: the stub itself, a deleted thing or an ignored
   stub as the target, and a stub used other than by fact links (a field,
   a sphere filing or tie, a scene). No prose is scheduled: the rendered
@@ -2230,6 +2231,7 @@ class WorldsPlugin(Plugin):
             "repoint_stub",
             {
                 "stub_id": stub.id,
+                "stub_name": stub_name,
                 "target": self._thing_payload(world, target.id, None),
                 "links": links,
                 "aka_added": added,

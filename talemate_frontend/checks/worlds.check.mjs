@@ -19,11 +19,14 @@ import {
     currentNameFrom,
     defaultOverrideIndex,
     heritageFromMatches,
+    historyBack,
+    historyPushed,
     listedFacts,
     pageAfterDelete,
     parseWorldTarget,
     previewSegments,
     rejectableItems,
+    samePage,
     sameParents,
     tiesPayload,
     useWorldsStore,
@@ -1840,6 +1843,171 @@ check('a fact form needs text, a category and sane years; a timeline fact a year
     assert.equal(factFormValid({ ...form, category: 'timeline' }), false);
     assert.equal(factFormValid({ ...form, category: 'timeline', fromYear: 994 }), true);
     assert.equal(factFormValid({ ...form, mode: 'edit', category: 'timeline', fromYear: '' }), false);
+});
+
+// --- the World tab's history (the page's back arrow) -------------------------
+
+const page = (thingId, section = 'species', at = null) => ({ section, thingId, at });
+const sectionPage = (section) => ({ section, thingId: null, at: null });
+
+check('a page is its thing (any date), or a section when no thing is open', () => {
+    assert.equal(samePage(page('a'), page('a', 'lore', dateOf(900))), true);
+    assert.equal(samePage(page('a'), page('b')), false);
+    assert.equal(samePage(sectionPage('stubs'), sectionPage('stubs')), true);
+    assert.equal(samePage(sectionPage('stubs'), sectionPage('lore')), false);
+    assert.equal(samePage(sectionPage('lore'), page('a', 'lore')), false);
+    assert.equal(samePage(null, page('a')), false);
+});
+
+check('a visit pushes the page left, once; the same page twice pushes nothing', () => {
+    let history = historyPushed([], sectionPage('species'), page('a'));
+    assert.deepEqual(history, [sectionPage('species')]);
+    history = historyPushed(history, page('a'), page('b'));
+    assert.deepEqual(history, [sectionPage('species'), page('a')]);
+    // opening the open page again (or it as of another date)
+    assert.equal(historyPushed(history, page('b'), page('b', 'species', dateOf(900))), history);
+    // the page left already on top: not pushed twice
+    assert.equal(historyPushed(history, page('a'), page('c')), history);
+    // capped, oldest first out
+    const long = Array.from({ length: 60 }, (_v, i) => page(`t${i}`));
+    const capped = historyPushed(long, page('x'), page('y'), 50);
+    assert.equal(capped.length, 50);
+    assert.deepEqual(capped.at(-1), page('x'));
+});
+
+check('back pops the last page, skipping things that are gone', () => {
+    const history = [sectionPage('species'), page('a'), page('gone'), page('b'), page('gone')];
+    const gone = (id) => id === 'gone';
+    let back = historyBack(history, gone);
+    assert.deepEqual(back.page, page('b'));
+    assert.deepEqual(back.history, [sectionPage('species'), page('a'), page('gone')]);
+    back = historyBack(back.history, gone);
+    assert.deepEqual(back.page, page('a'));
+    back = historyBack(back.history, gone);
+    assert.deepEqual(back.page, sectionPage('species'));
+    back = historyBack(back.history, gone);
+    assert.deepEqual(back, { page: null, history: [] });
+});
+
+check('back from a race opened on its species page returns to the species page', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.showSection('species');
+    store.openThing('owlfolk');
+    store.openThing('snowy');
+    assert.equal(store.selectedThingId, 'snowy');
+    store.goBack();
+    assert.equal(store.selectedThingId, 'owlfolk');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_thing', id: 'owlfolk', at: null });
+    // back again: the Species list
+    store.goBack();
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.section, 'species');
+    // then the Characters list it was opened from; nothing is left after
+    store.goBack();
+    assert.equal(store.section, 'character');
+    assert.deepEqual(store.history, []);
+    store.openThing('maren');
+    store.goBack();
+    store.goBack();
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.section, 'character');
+});
+
+check('a link chain goes back step by step, as of the date each page was viewed', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('a');
+    store.viewThingAt(dateOf(900));
+    // a new date on the same page is no visit
+    assert.equal(store.history.length, 1);
+    store.openThing('b');
+    store.openThing('b');
+    store.openThing('c');
+    assert.equal(store.history.length, 3);
+    store.goBack();
+    assert.equal(store.selectedThingId, 'b');
+    // back doesn't push
+    assert.equal(store.history.length, 2);
+    store.goBack();
+    assert.equal(store.selectedThingId, 'a');
+    assert.deepEqual(store.thingAt, dateOf(900));
+});
+
+check('back skips a deleted thing, and returns to the Stubs page it came from', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.showSection('stubs');
+    store.openThing('maren');
+    store.openThing('doomed');
+    store.openThing('harbour');
+    store.handleMessage(reply('thing_deleted', { id: 'doomed', kind: 'lore' }));
+    store.goBack();
+    assert.equal(store.selectedThingId, 'maren');
+    store.goBack();
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.section, 'stubs');
+});
+
+check('the history is per world: opening another world starts it afresh', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('a');
+    store.openThing('b');
+    store.handleMessage(reply('open_world', { ...WORLD, id: 'w2', path: '/worlds/w2' }));
+    assert.deepEqual(store.history, []);
+    assert.equal(store.section, 'character');
+});
+
+check('an accepted preview opens its page as a visit', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.showSection('lore');
+    store.preview = { kind: 'lore', name: 'Hope', facts: [] };
+    store.acceptPreview();
+    store.handleMessage(reply('accept_preview', { id: 'hope', kind: 'lore', name: 'Hope' }));
+    assert.equal(store.selectedThingId, 'hope');
+    store.goBack();
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.section, 'lore');
+});
+
+// --- re-pointing a stub's links ------------------------------------------------
+
+check('repointStub sends the stub and the target; the reply forgets the stub', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.showSection('stubs');
+    store.openThing('tsardom');
+    store.showSection('stubs');
+    store.repointStub('tsardom', 'moscavy');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'repoint_stub', stub_id: 'tsardom', target_id: 'moscavy' });
+    assert.equal(store.pending.repoint_stub, true);
+    sent.length = 0;
+    const target = { id: 'moscavy', kind: 'place', name: 'Moscavy', aka: [] };
+    store.handleMessage(reply('repoint_stub', { stub_id: 'tsardom', stub_name: 'Tsardom', target, links: 2, aka_added: ['Tsardom'] }));
+    assert.deepEqual(store.pending, {});
+    assert.deepEqual(store.stubRepointed, { stubName: 'Tsardom', target: { id: 'moscavy', name: 'Moscavy' }, links: 2, akaAdded: ['Tsardom'] });
+    listedEverything(sent);
+    // the stub's page is gone from the history
+    store.openThing('moscavy');
+    store.goBack();
+    assert.equal(store.selectedThingId, null);
+    assert.equal(store.section, 'stubs');
+});
+
+check("re-pointing the open stub's page opens the target's", () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('tsardom');
+    store.repointStub('tsardom', 'moscavy');
+    const target = { id: 'moscavy', kind: 'place', name: 'Moscavy', aka: [] };
+    store.handleMessage(reply('repoint_stub', { stub_id: 'tsardom', stub_name: 'Tsardom', target, links: 1, aka_added: [] }));
+    assert.equal(store.selectedThingId, 'moscavy');
+    assert.deepEqual(store.thing, target);
+    // the stub's page isn't somewhere back goes
+    store.goBack();
+    assert.equal(store.selectedThingId, null);
 });
 
 if (failures.length) {

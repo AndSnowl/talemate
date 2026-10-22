@@ -2035,6 +2035,7 @@ async def test_repoint_stub_moves_every_link_and_names_the_target(plugin, monkey
 
     reply = _last(plugin, "repoint_stub")["data"]
     assert reply["stub_id"] == s.tsardom
+    assert reply["stub_name"] == "Tsardom of Moscavia"
     assert reply["target"]["id"] == s.moscavy
     assert reply["links"] == 6
     assert reply["aka_added"] == ["Tsardom of Moscavia", "Moscavia", "the Tsardom"]

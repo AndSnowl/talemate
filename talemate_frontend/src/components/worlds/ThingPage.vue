@@ -1,7 +1,7 @@
 <template>
     <div class="thing-page" data-testid="thing-page">
         <div class="d-flex align-center flex-wrap ga-2 mb-2">
-            <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" @click="worlds.closeThing()">Back</v-btn>
+            <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" data-testid="thing-back" @click="worlds.goBack()">Back</v-btn>
             <template v-if="thing">
                 <div v-if="rename" class="d-flex align-center ga-2" data-testid="rename-field">
                     <v-text-field

@@ -7,6 +7,19 @@
             <v-checkbox v-model="showIgnored" label="show ignored" density="compact" hide-details class="flex-grow-0"></v-checkbox>
         </div>
 
+        <v-alert
+            v-if="worlds.stubRepointed"
+            type="success"
+            variant="tonal"
+            density="compact"
+            class="mb-3"
+            closable
+            data-testid="stub-repointed"
+            @click:close="worlds.clearStubRepointed()"
+        >
+            {{ repointedNote }}
+        </v-alert>
+
         <div v-if="!shown.length" class="empty-hint pa-4 text-body-2">
             {{ showIgnored ? 'No stubs.' : 'No stubs to follow. Names the AI invents in new entries show up here.' }}
         </div>
@@ -60,7 +73,8 @@
                                 :title="expandNote(stub.kind) || ''"
                                 @click="worlds.expandStub(stub)"
                             >{{ expandLabel(stub.kind) }}</v-btn>
-                            <v-btn variant="outlined" size="x-small" :disabled="busy" @click="worlds.ignoreStub(stub.id, true)">Ignore</v-btn>
+                            <v-btn variant="outlined" size="x-small" class="mr-1" :disabled="busy" @click="worlds.ignoreStub(stub.id, true)">Ignore</v-btn>
+                            <StubRepointButton :stub="stub" size="x-small" :disabled="busy" />
                             <div v-if="!canExpand(stub.kind)" class="text-caption text-muted" data-testid="expand-later">{{ expandNote(stub.kind) }}</div>
                         </template>
                     </td>
@@ -73,13 +87,16 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { STUB_KINDS, canExpand, expandLabel, expandNote, kindInfo } from './worldKinds.js';
+import StubRepointButton from './StubRepointButton.vue';
 
 // The World tab's Stubs: every name mentioned but not made yet, with its
 // kind (changeable), where it was first mentioned, its mention count,
-// Expand and Ignore. Ignored stubs are hidden until "show ignored", and can
-// be brought back.
+// Expand, Ignore and Re-point… (every link to the stub moved to an entry,
+// which takes its names; a note says what was done). Ignored stubs are
+// hidden until "show ignored", and can be brought back.
 export default {
     name: 'StubsTab',
+    components: { StubRepointButton },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -91,7 +108,13 @@ export default {
             return this.worlds.stubs.filter((stub) => this.showIgnored || !stub.ignored);
         },
         busy() {
-            return !!this.worlds.pending.ignore_stub || !!this.worlds.pending.change_stub_kind;
+            return !!this.worlds.pending.ignore_stub || !!this.worlds.pending.change_stub_kind || !!this.worlds.pending.repoint_stub;
+        },
+        repointedNote() {
+            const done = this.worlds.stubRepointed;
+            const links = `${done.links} link${done.links === 1 ? '' : 's'}`;
+            const names = done.akaAdded.length ? ` ${done.target.name} is now also known as ${done.akaAdded.join(', ')}.` : '';
+            return `${done.stubName}: ${links} now point to ${done.target.name}.${names}`;
         },
     },
     mounted() {
