@@ -33,6 +33,10 @@ log = structlog.get_logger("talemate.world.view")
 # either clock
 UNKNOWN_NAME = "⟨unknown⟩"
 
+# the row id of a `things` row's thing's first row (its creation order),
+# as a correlated subquery over the outer `things` row
+_FIRST_THING_ROW = "SELECT MIN(t0.row_id) FROM things t0 WHERE t0.id = things.id"
+
 # an instant past the proleptic-Gregorian range (years 1-9999), used as
 # "+infinity" for at=None so the ordinary <=/> comparisons just work
 _FAR_FUTURE = 10**15
@@ -65,6 +69,7 @@ def _fact_state_from_row(row: sqlite3.Row) -> "FactState":
         source_rev=row["rev_added"],
         refs=parse_refs(row["text"]),
         origin=json.loads(origin_json) if origin_json is not None else None,
+        created=row["created"],
     )
 
 
@@ -78,6 +83,9 @@ class FactState(BaseModel):
     refs: list[str]
     overrides: list[str] = []
     origin: dict[str, object] | None = None
+    # the fact's creation order: the row id of its first version, so a
+    # correction keeps its place (fact ids are random)
+    created: int = 0
 
 
 class ThingState(BaseModel):
@@ -85,6 +93,9 @@ class ThingState(BaseModel):
     kind: str
     fields: dict[str, object]
     facts: list[FactState]
+    # the thing's creation order: the row id of its first `things` row, so
+    # a kind change keeps its place (thing ids are random)
+    created: int = 0
 
     @property
     def is_stub(self) -> bool:
@@ -228,7 +239,9 @@ class WorldView:
             f"""
             SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
                    f.from_precision, f.valid_until, f.until_precision, f.rev_added,
-                   f.origin_json, fo.fact_id AS override_fact_id
+                   f.origin_json, fo.fact_id AS override_fact_id,
+                   (SELECT MIN(f0.row_id) FROM facts f0
+                    WHERE f0.fact_id = f.fact_id) AS created
             FROM facts f
             JOIN things t ON t.id = f.thing_id AND {things_filter}
             LEFT JOIN fact_overrides fo ON fo.row_id = f.row_id
@@ -257,7 +270,9 @@ class WorldView:
 
         things_filter, things_params = self._live_things_filter("", thing_id=thing_id)
         row = self._conn.execute(
-            f"SELECT kind FROM things WHERE {things_filter}", things_params
+            f"SELECT kind, ({_FIRST_THING_ROW}) AS created "
+            f"FROM things WHERE {things_filter}",
+            things_params,
         ).fetchone()
         if row is None:
             return None
@@ -265,7 +280,9 @@ class WorldView:
         kind = row["kind"]
         fields = self._fetch_fields([thing_id], thing_id=thing_id)[thing_id]
         facts = self._fetch_facts([thing_id], thing_id=thing_id)[thing_id]
-        return ThingState(id=thing_id, kind=kind, fields=fields, facts=facts)
+        return ThingState(
+            id=thing_id, kind=kind, fields=fields, facts=facts, created=row["created"]
+        )
 
     def things(self, kind: str | None = None) -> list[ThingState]:
         """Every thing that exists at `rev`, optionally restricted to one
@@ -273,11 +290,13 @@ class WorldView:
 
         things_filter, things_params = self._live_things_filter("", kind=kind)
         rows = self._conn.execute(
-            f"SELECT id, kind FROM things WHERE {things_filter} ORDER BY id",
+            f"SELECT id, kind, ({_FIRST_THING_ROW}) AS created "
+            f"FROM things WHERE {things_filter} ORDER BY id",
             things_params,
         ).fetchall()
 
         kinds = {row["id"]: row["kind"] for row in rows}
+        created = {row["id"]: row["created"] for row in rows}
         fields_by_id = self._fetch_fields(list(kinds), kind=kind)
         facts_by_id = self._fetch_facts(list(kinds), kind=kind)
 
@@ -287,6 +306,7 @@ class WorldView:
                 kind=thing_kind,
                 fields=fields_by_id[thing_id],
                 facts=facts_by_id[thing_id],
+                created=created[thing_id],
             )
             for thing_id, thing_kind in kinds.items()
         ]
@@ -414,7 +434,9 @@ class WorldView:
             f"""
             SELECT f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
                    f.from_precision, f.valid_until, f.until_precision, f.rev_added,
-                   f.origin_json
+                   f.origin_json,
+                   (SELECT MIN(f0.row_id) FROM facts f0
+                    WHERE f0.fact_id = f.fact_id) AS created
             FROM facts f
             JOIN fact_refs fr ON fr.row_id = f.row_id
             WHERE fr.thing_id = :thing_id

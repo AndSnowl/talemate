@@ -563,18 +563,20 @@ def test_key_facts_capped(world, spheres):
     view = world.view()
     lines = key_facts(view, s.dawn)
 
-    assert len(lines) == 8
-    # the summary falls back to the first `about` fact
-    assert lines[0] == "A faith of the snowy owl-folk."
-    # then the latest three timeline facts, oldest first, at the end
-    assert lines[-3:] == [
+    # the summary falls back to the first `about` fact; then one item per
+    # drawer type in turn (beliefs, practices, structure for an agent),
+    # first-written first, shown grouped by type; then the latest three
+    # timeline facts, oldest first
+    assert lines == [
+        "A faith of the snowy owl-folk.",
+        "Snowy owl-folk are the purest of the folk.",
+        "Doctrine 0.",
+        "The Feather Rite",
+        "The Council of Elders: Seven elders rule the faith.",
         "Issued the Doctrine of Separation.",
         "Synod of 1020.",
         "Synod of 1021.",
     ]
-    middle = lines[1:-3]
-    assert any("Doctrine" in line or "purest" in line for line in middle)
-    assert any("Rite" in line or "Prayers" in line for line in middle)
 
     summarised = key_facts(view, s.dawn, summary="The church of the dawn.")
     assert summarised[0] == "The church of the dawn."
@@ -598,6 +600,61 @@ def test_key_facts_small_sphere(world, spheres):
     ]
     # a missing sphere has none
     assert key_facts(view, "f" * 32) == []
+
+
+def test_first_and_order_follow_writing(world, spheres):
+    """'First' and drawer order go by when facts were written, not by
+    their random ids: a thing item's text, statements in a drawer, and the
+    `about` fallback summary."""
+
+    s = spheres
+    with world.revision(Source.manual()) as rev:
+        for n in range(6):
+            rev.add_fact(s.council, "general", f"Council fact {n}.")
+            rev.add_fact(
+                s.dawn, "statement", f"Doctrine {n}.", origin={"drawer": DOCTRINES}
+            )
+            rev.add_fact(s.dawn, "about", f"About {n}.")
+    with world.revision(Source.manual()) as rev:
+        # a correction keeps the fact's place
+        rev.correct_fact(s.about, text="A faith of the dawn.")
+
+    view = world.view()
+    found = items(view, s.dawn)
+    council = next(item for item in found if item.thing_id == s.council)
+    assert council.text == "Seven elders rule the faith."
+    doctrines = [item.text for item in found if item.drawer_id == DOCTRINES]
+    assert doctrines == [
+        "Snowy owl-folk are the purest of the folk.",
+        *[f"Doctrine {n}." for n in range(6)],
+    ]
+    assert key_facts(view, s.dawn)[0] == "A faith of the dawn."
+
+
+def test_things_in_a_drawer_in_creation_order(world, spheres):
+    s = spheres
+    with world.revision(Source.manual()) as rev:
+        made = [
+            rev.create_thing(
+                "lore",
+                fields={
+                    "name": f"Office {n}",
+                    "part_of": {"sphere": s.dawn, "drawer": HIERARCHY},
+                },
+            )
+            for n in range(6)
+        ]
+
+    found = [
+        item.thing_id
+        for item in items(world.view(), s.dawn)
+        if item.drawer_id == HIERARCHY
+    ]
+    assert found == [s.council, *made]
+
+
+def test_plain_place_has_no_territory(world, spheres):
+    assert territory(world.view(), spheres.kovask) == []
 
 
 def test_template_drawers():

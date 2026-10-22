@@ -200,13 +200,29 @@ def _part_of(state: ThingState) -> tuple[str, str] | None:
     return None
 
 
+def _authored(facts: list[FactState]) -> list[FactState]:
+    """`facts` in the order they were written (a view orders them by date,
+    then by their random ids)."""
+
+    return sorted(facts, key=lambda fact: fact.created)
+
+
 def _statement_drawer(fact: FactState) -> str:
     drawer = (fact.origin or {}).get("drawer")
     return drawer if isinstance(drawer, str) else UNSORTED.id
 
 
+def _first_text(view: WorldView, thing: ThingState) -> str:
+    """The thing's first written fact that's visible, rendered ("" for
+    none)."""
+
+    facts = _authored(thing.facts)
+    return view.render(facts[0].text) if facts else ""
+
+
 def items(view: WorldView, sphere_id: str) -> list[Item]:
-    """The sphere's items: the things part of it, then its statement facts;
+    """The sphere's items: the things part of it, then its statement facts,
+    each in the order they were made;
     for a branch, then each parent's in turn, less the things a more
     specific sphere in the chain drops and the facts its facts override.
     An item whose drawer the sphere doesn't have is in `UNSORTED`."""
@@ -219,7 +235,7 @@ def items(view: WorldView, sphere_id: str) -> list[Item]:
     overridden = overriders(chain, _parent_ids)
 
     members: dict[str, list[tuple[ThingState, str]]] = {}
-    for thing in view.things():
+    for thing in sorted(view.things(), key=lambda thing: thing.created):
         link = _part_of(thing)
         if link is not None and link[0] in chain_ids and thing.id not in chain_ids:
             members.setdefault(link[0], []).append((thing, link[1]))
@@ -238,14 +254,14 @@ def items(view: WorldView, sphere_id: str) -> list[Item]:
                     thing_id=thing.id,
                     fact_id=None,
                     name=_name(thing),
-                    text=view.render(thing.facts[0].text) if thing.facts else "",
+                    text=_first_text(view, thing),
                     drawer_id=placed(drawer_id),
                     source_id=state.id,
                     inherited=depth > 0,
                     stub=thing.is_stub,
                 )
             )
-        for fact in state.facts:
+        for fact in _authored(state.facts):
             if fact.category != "statement" or fact.fact_id in overridden:
                 continue
             text = view.render(fact.text)
@@ -324,12 +340,13 @@ def ties_of(view: WorldView, character_id: str, *, live: bool = False) -> list[T
 
 
 def people(view: WorldView, sphere_id: str) -> list[Tie]:
-    """The ties pointing at the sphere that hold at `view.at`, by character
-    id. A branch's people are its own, not its parent's."""
+    """The ties pointing at the sphere that hold at `view.at`, in the order
+    the characters were made. A branch's people are its own, not its parent's."""
 
+    characters = sorted(view.things("character"), key=lambda thing: thing.created)
     return [
         tie
-        for character in view.things("character")
+        for character in characters
         for tie in _ties(character)
         if tie.sphere_id == sphere_id and _tie_live(tie, view.at)
     ]
@@ -345,12 +362,12 @@ def territory(view: WorldView, sphere_id: str) -> list[str]:
         return []
     places = {place.id: place for place in view.things("place")}
     children: dict[str, list[str]] = {}
-    for place in places.values():
+    for place in sorted(places.values(), key=lambda thing: thing.created):
         parent = place.fields.get("parent")
         if isinstance(parent, str):
             children.setdefault(parent, []).append(place.id)
 
-    roots = [sphere_id] if state.kind == "place" else []
+    roots = [sphere_id] if state.kind == "place" and is_sphere(state) else []
     types = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
     roots += [
         item.thing_id
@@ -371,8 +388,12 @@ def territory(view: WorldView, sphere_id: str) -> list[str]:
     return held
 
 
-def _date_key(fact: FactState) -> tuple[int, int]:
-    return (0, 0) if fact.valid_from is None else (1, fact.valid_from.instant)
+def _date_key(fact: FactState) -> tuple[int, int, int]:
+    """Date order, undated first, then the order the facts were written."""
+
+    if fact.valid_from is None:
+        return (0, 0, fact.created)
+    return (1, fact.valid_from.instant, fact.created)
 
 
 def _timeline(view: WorldView, sphere_id: str, path: frozenset[str]) -> list[FactState]:
@@ -458,8 +479,9 @@ def key_facts(view: WorldView, sphere_id: str, summary: str | None = None) -> li
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, the caller's cached
     `description` prose, or else the sphere's first `about` fact), then its
-    top beliefs and practices items (and structure, for an agent), taken a
-    drawer type at a time in turn, then its latest timeline facts."""
+    top beliefs and practices items (and structure, for an agent) -- the
+    first in `items` order, taken a drawer type at a time in turn -- then
+    its latest timeline facts."""
 
     state = view.thing(sphere_id)
     if state is None:
@@ -469,7 +491,7 @@ def key_facts(view: WorldView, sphere_id: str, summary: str | None = None) -> li
     if summary:
         head.append(summary)
     else:
-        about = next((f for f in state.facts if f.category == "about"), None)
+        about = next((f for f in _authored(state.facts) if f.category == "about"), None)
         if about is not None:
             head.append(view.render(about.text))
 
