@@ -74,10 +74,7 @@ def test_held_fact_renders_as_belief_in_scene(world, spheres_world):
 
     block = _scene(world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn, light])
 
-    assert (
-        "- The White Dawn holds that snowy owl-folk are the purest of the folk."
-        in block
-    )
+    assert "- The White Dawn holds: Snowy owl-folk are the purest of the folk." in block
     assert "The White Dawn holds that every owl lost its sight for a night." in block
     assert "The White Dawn holds that Kremova burned for three days." in block
     assert "The White Dawn teaches that the night was a judgement." in block
@@ -102,9 +99,7 @@ def test_held_text_plain_and_deleted_holder(world, spheres_world):
     view = world.view()
     owner = view.thing(lore)
     fact = next(f for f in owner.facts if f.fact_id == held)
-    assert (
-        held_text(view, fact, owner) == "The Iron Guild holds that owls keep the vigil."
-    )
+    assert held_text(view, fact, owner) == "The Iron Guild holds: Owls keep the vigil."
 
     with world.revision(Source.manual()) as rev:
         rev.remove_thing(s.guild)
@@ -273,9 +268,7 @@ def test_setup_prompt_shows_held_facts_as_belief(world, spheres_world):
             lore, "general", "Owls see in the dark.", origin={"held_by": s.dawn}
         )
     groups = dict(_world_things(world.view(), [lore]))
-    assert groups["Lore"][0]["facts"] == [
-        "The White Dawn holds that owls see in the dark."
-    ]
+    assert groups["Lore"][0]["facts"] == ["The White Dawn holds: Owls see in the dark."]
 
 
 def test_held_by_a_character_or_a_being(world, spheres_world):
@@ -306,3 +299,36 @@ def test_held_by_a_character_or_a_being(world, spheres_world):
     assert texts[by_vasha] == "Vasha holds that the vigil is pointless."
     assert texts[self_said] == "Vasha believes the vigil is pointless."
     assert texts[by_light] == "The Eternal Light holds that the vigil pleases it."
+
+
+def test_held_text_forms(world, spheres_world):
+    """Ruling C6: a held text with a subject of its own (a name, a pronoun,
+    a determiner) follows "holds that", lowered unless it opens with a
+    name; one opening with a verb or anything else follows "holds:",
+    its first letter kept a capital."""
+
+    s = spheres_world
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("being", fields={"name": "The Light"})
+        lore = rev.create_thing("lore", fields={"name": "The Miracle"})
+        texts = [
+            "Healed a blind child.",
+            "His touch healed a blind child.",
+            "The Light chose the Tsar.",
+            "Kremova burned for three days.",
+            "healed the lame?",
+        ]
+        ids = [
+            rev.add_fact(lore, "general", text, origin={"held_by": s.dawn})
+            for text in texts
+        ]
+    view = world.view()
+    owner = view.thing(lore)
+    by_id = {f.fact_id: held_text(view, f, owner) for f in owner.facts}
+    assert [by_id[fact_id] for fact_id in ids] == [
+        "The White Dawn holds: Healed a blind child.",
+        "The White Dawn holds that his touch healed a blind child.",
+        "The White Dawn holds that the Light chose the Tsar.",
+        "The White Dawn holds that Kremova burned for three days.",
+        "The White Dawn holds: Healed the lame?",
+    ]

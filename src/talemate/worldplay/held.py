@@ -1,6 +1,7 @@
 """Held by, in words: a fact a sphere, a character or a being holds as a
-belief reaches a scene or a prose prompt as "<Holder> holds that <text>"
-(`held_text`), unless its text already says who holds it
+belief reaches a scene or a prose prompt as "<Holder> holds that <text>",
+or "<Holder> holds: <Text>" when the text has no subject of its own
+(`held_text`, ruling C6), unless its text already says who holds it
 (`attributes_itself`).
 
 Low-level on purpose: it imports only `talemate.world`, so `prose_gen`
@@ -88,15 +89,35 @@ def attributes_itself(text: str, names: list[str]) -> bool:
     return False
 
 
+# the first words that give a held text a subject of its own (ruling C6):
+# pronouns, then determiners and articles
+_SUBJECT_WORDS = frozenset(
+    "i he she it they we you his her its their one".split()
+    + "the a an this that these those every each all some no any many most".split()
+)
+
+
+def has_subject(view: WorldView, raw: str, text: str) -> bool:
+    """Whether `text` (rendered from `raw`) opens with a subject of its
+    own: a name (`_opens_with_a_name`), a pronoun or a determiner. One
+    that doesn't ("Healed a blind child") opens with a verb or something
+    else, and can't follow "holds that"."""
+
+    word = text.strip().split(" ", 1)[0].split("'", 1)[0].strip(',;:"(').casefold()
+    return word in _SUBJECT_WORDS or _opens_with_a_name(view, raw, text.strip())
+
+
 def held_text(
     view: WorldView, fact: FactState, owner: ThingState, text: str | None = None
 ) -> str:
     """`fact` (of `owner`) as a scene is told it, `text` its rendering
-    (`view.render(fact.text)` when not given): held by someone
+    (`view.render(fact.text)` when not given). Held by someone
     (`spheres.held_by`), it's "<Holder> holds that <text>", the text
-    lowered as `_mid_sentence` lowers it (not when it opens with a name);
-    as it is when it isn't held, its holder has no name, or it already
-    says who holds it (`attributes_itself`)."""
+    lowered as `_mid_sentence` lowers it (not when it opens with a name,
+    but a name's leading "The" is), when it has a subject of its own (`has_subject`); otherwise
+    "<Holder> holds: <Text>", its first letter capitalised (ruling C6).
+    It's as it is when it isn't held, its holder has no name, or it
+    already says who holds it (`attributes_itself`)."""
 
     rendered = view.render(fact.text) if text is None else text
     holder_id = spheres.held_by(view, fact, owner)
@@ -111,8 +132,19 @@ def held_text(
     ]
     if attributes_itself(rendered, names):
         return rendered
-    body = _mid_sentence(view, fact.text, rendered)
+    holder_name = f"{name[0].upper()}{name[1:]}"
+    if has_subject(view, fact.text, rendered):
+        body = _mid_sentence(view, fact.text, rendered)
+        # a name's leading article reads mid-sentence too: "holds that the
+        # Light chose ..."
+        if body.startswith("The "):
+            body = "the " + body[4:]
+        lead = f"{holder_name} holds that "
+    else:
+        body = rendered.strip().rstrip(".").rstrip()
+        body = body[:1].upper() + body[1:]
+        lead = f"{holder_name} holds: "
     if not body:
         return rendered
     end = "" if body[-1] in "?!" else "."
-    return f"{name[0].upper()}{name[1:]} holds that {body}{end}"
+    return f"{lead}{body}{end}"

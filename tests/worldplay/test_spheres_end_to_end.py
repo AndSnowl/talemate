@@ -120,7 +120,7 @@ DAWN_SUMMARY = (
 )
 PURITY = "Snowy owl-folk are the purest of the folk."
 # as a scene is told it: a Doctrines statement is held by the White Dawn
-HELD_PURITY = "The White Dawn holds that snowy owl-folk are the purest of the folk."
+HELD_PURITY = "The White Dawn holds: Snowy owl-folk are the purest of the folk."
 SEPARATION = "The faithful may not marry humans."
 VIGIL = "The faithful watch the first light in silence on high galleries."
 SPIRE = "A white tower in Kremova where pilgrims climb at midwinter."

@@ -439,7 +439,7 @@ DAWN_BLOCK = (
     "The White Dawn (religion)\n"
     "- The White Dawn is the state church of Moscavia.\n"
     "- The Doctrine of Separation forbids the faithful to marry humans.\n"
-    "- The White Dawn holds that snowy owl-folk are the purest of the folk.\n"
+    "- The White Dawn holds: Snowy owl-folk are the purest of the folk.\n"
     "- The Council of Elders: Seven elders seated in Kremova.\n"
     "- In 994: Declared the Night of Feathers a purification.\n"
     "- In 1019: Issued the Doctrine of Separation.\n"
@@ -483,7 +483,7 @@ def test_context_touched_sphere_key_facts(world, spheres_world):
     assert "The Council of Elders (order)" not in block
     # the heading, the summary and the held doctrine
     assert block.count("The White Dawn") == 3
-    assert block.count("snowy owl-folk are the purest") == 1
+    assert block.count("Snowy owl-folk are the purest") == 1
     assert "A faith of the dawn." not in block
     assert "[[thing:" not in block
     assert block.endswith(DAWN_BLOCK + "\n[end of world]")
