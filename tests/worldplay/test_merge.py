@@ -1047,3 +1047,31 @@ def test_merge_refuses_conflicting_choices_for_one_fact(world, mere):
     accept_merge(world, preview, main_name="Ashenmere", keep={one: "a", two: "a"})
     texts = _texts(world, m.ashenmere)
     assert LICHEN_B in texts and LICHEN_A not in texts
+
+
+def test_merge_pairs_an_ended_claim_with_another_start(world):
+    """Ruling C23: a merge reconciles two histories, so an ended dated
+    claim ("ruled 900-950") still pairs with the other side's same claim
+    from another year -- unlike a timeline, where ending one settles it."""
+
+    with world.revision(Source.manual()) as rev:
+        old = rev.create_thing("lore", {"name": "The Old Tsars"})
+        ruled_from = rev.add_fact(
+            old,
+            "general",
+            "Vladislav ruled the Tsardom from the Ice Throne.",
+            valid_from=WorldDate.of(900),
+            valid_until=WorldDate.of(950),
+        )
+        tsars = rev.create_thing("lore", {"name": "The Tsars"})
+        ruled_into = rev.add_fact(
+            tsars,
+            "general",
+            "Vladislav ruled the Tsardom from the Ice Throne.",
+            valid_from=WorldDate.of(910),
+        )
+    preview = preview_merge(world, old, tsars)
+    assert [(p.a, p.b, p.years) for p in preview.pairs] == [
+        (ruled_from, ruled_into, (900, 910))
+    ]
+    assert contradiction_pairs(world.view(), old, tsars)[0].years == (900, 910)

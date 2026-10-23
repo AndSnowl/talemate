@@ -335,3 +335,7 @@ def test_disagreeing_dates_skips_ended_facts(world):
     assert disagreeing_dates(before, [compiled_217, compiled_312], 0.4) == [
         Disagreement(a=compiled_217, b=compiled_312, years=(217, 312))
     ]
+    # a merge reads ended facts too (ruling C23)
+    assert disagreeing_dates(
+        world.view(), [compiled_217, compiled_312], 0.4, include_ended=True
+    ) == [Disagreement(a=compiled_217, b=compiled_312, years=(217, 312))]

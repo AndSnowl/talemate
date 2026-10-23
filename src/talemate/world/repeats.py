@@ -191,19 +191,24 @@ def fact_texts(view: WorldView, owner_ids: Sequence[str]) -> list[tuple[str, str
 
 
 def _dated_facts(
-    view: WorldView, fact_ids: Sequence[str]
+    view: WorldView, fact_ids: Sequence[str], include_ended: bool = False
 ) -> dict[str, tuple[int, str]]:
     """`fact id -> (start year, text as it reads)` for each of `fact_ids`
     not removed at the view's revision, with a live owner and a start
     date, that hasn't ended at the view (ruling C22: `valid_until` on or
     before its date, as `timelines.entry_timeline` reads `until`; with no
-    date, any end). Its start isn't checked: the caller picked these facts
-    (a timeline's lines)."""
+    date, any end) -- or ended too, with `include_ended` (a merge, ruling
+    C23). Its start isn't checked: the caller picked these facts (a
+    timeline's lines)."""
 
     at = view._at_instant()
     found: dict[str, tuple[int, str]] = {}
     for row in _live_facts(view, "fact_id", fact_ids):
-        if row["valid_until"] is not None and row["valid_until"] <= at:
+        if (
+            not include_ended
+            and row["valid_until"] is not None
+            and row["valid_until"] <= at
+        ):
             continue
         start = _decode_date(row["valid_from"], row["from_precision"])
         if start is not None:
@@ -212,16 +217,22 @@ def _dated_facts(
 
 
 def disagreeing_dates(
-    view: WorldView, fact_ids: list[str], threshold: float
+    view: WorldView,
+    fact_ids: list[str],
+    threshold: float,
+    *,
+    include_ended: bool = False,
 ) -> list[Disagreement]:
     """The pairs among `fact_ids` that say much the same (either one's
     `overlap` with the other at least `threshold`) with different start
     years (`valid_from`), in the order given. A fact with no start date,
     not live at the view's revision, or ended at the view (ruling C22: a
     pick that ends one settles the pair) is never in a pair; an id given
-    twice counts once."""
+    twice counts once. `include_ended` keeps ended facts in (a merge
+    reconciles two histories, so an ended claim still conflicts, ruling
+    C23)."""
 
-    dated = _dated_facts(view, fact_ids)
+    dated = _dated_facts(view, fact_ids, include_ended)
     ordered = [fact_id for fact_id in dict.fromkeys(fact_ids) if fact_id in dated]
     words = {
         fact_id: content_words(view.render(dated[fact_id][1])) for fact_id in ordered

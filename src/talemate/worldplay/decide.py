@@ -235,7 +235,9 @@ def contradiction_pairs(view: WorldView, from_id: str, into_id: str) -> list[Pai
     a_ids = {fact_id for _owner, fact_id, _text in a_facts}
     texts = {fact_id: text for _owner, fact_id, text in a_facts + b_facts}
     ids = [fact_id for _owner, fact_id, _text in a_facts + b_facts]
-    for found in disagreeing_dates(view, ids, PAIR_OVERLAP):
+    # an ended claim still conflicts: a merge reconciles two histories
+    # (ruling C23)
+    for found in disagreeing_dates(view, ids, PAIR_OVERLAP, include_ended=True):
         if (found.a in a_ids) == (found.b in a_ids):
             continue
         a, b, years = found.a, found.b, found.years
