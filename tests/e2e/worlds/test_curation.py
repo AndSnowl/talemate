@@ -315,7 +315,13 @@ def test_same_thing_fill_existing(app, page, fixed_preview):
         .get_by_test_id("stub-same")
     )
     assert "new" in stub_same.inner_text()
-    _pick(page, stub_same, "Runeweavers' Conclave")
+    # each choice shows the entry's summary, to tell two of a name apart
+    stub_same.locator(".v-field").click()
+    option = page.get_by_test_id("stub-same-option").filter(
+        has_text="Runeweavers' Conclave"
+    )
+    expect(option).to_contain_text("Keepers of the runic arts.")
+    option.click()
     expect(counts).to_contain_text("1 elsewhere")
     expect(counts).not_to_contain_text("new stub")
 
@@ -671,6 +677,15 @@ LIGHT = {
 
 MAREN = {"kind": "character", "name": "Maren", "born": 1000}
 
+DAWN_ORDER = {
+    "kind": "sphere",
+    "name": "Order of the Dawn",
+    "fields": {
+        "template": "order",
+        "drawers": [{"id": "9e0b1e5a", "type": "people", "title": "Members"}],
+    },
+}
+
 
 def _player_field(dialog):
     return dialog.locator(".v-select").filter(has_text="You play").locator(".v-field")
@@ -682,7 +697,7 @@ def test_being_existence(app, page):
         app.root,
         name,
         present_year=1026,
-        things=[ARMY_SPHERE, WHITE_TALON, LIGHT, MAREN],
+        things=[ARMY_SPHERE, WHITE_TALON, LIGHT, MAREN, DAWN_ORDER],
     )
     talon = world.things["The White Talon"]
     page.evaluate(SEND_SPY_JS)
@@ -725,6 +740,16 @@ def test_being_existence(app, page):
     expect(tie).to_contain_text("within The White Talon")
     saved = _sent(page, "set_ties")[-1]["ties"]
     assert saved[0]["within"] == talon
+
+    # a sphere's People "+ Add" offers it now, as a character
+    page.get_by_test_id("kind-sphere").click()
+    order = _open_thing(page, "Order of the Dawn")
+    order.get_by_test_id("drawer-add").click()
+    _pick(
+        page,
+        order.get_by_test_id("drawer-add-form").locator(".v-autocomplete"),
+        "The Eternal Light",
+    )
 
     # real: now a player can be it
     page.get_by_role("tab", name="Worlds", exact=True).click()

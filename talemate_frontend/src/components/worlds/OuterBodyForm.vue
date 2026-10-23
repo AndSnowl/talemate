@@ -8,7 +8,7 @@
             data-testid="outer-body-open"
             @click="start"
         >Part of a body not yet made…</v-btn>
-        <div v-else class="outer-form pa-2 my-1" data-testid="outer-body-form" @keydown.esc.stop="open = false">
+        <div v-else class="outer-form pa-2 my-1" data-testid="outer-body-form" @keydown.esc.stop="escape">
             <div class="text-caption text-muted mb-1">{{ rowName }} is part of a body the world doesn't have yet: name it, and it's made as a sphere around it.</div>
             <div class="d-flex align-center flex-wrap ga-2">
                 <v-text-field
@@ -68,7 +68,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { SPHERE_TEMPLATES, UNSORTED, partOfDrawers } from './worldKinds.js';
+import { SPHERE_TEMPLATES, UNSORTED, escapeCloses, partOfDrawers } from './worldKinds.js';
 
 // "Part of a body not yet made…" (bodies within bodies, ruling C10): the
 // owner names the body a part belongs to (`rowName`: a stub row, a named
@@ -135,6 +135,11 @@ export default {
         },
     },
     methods: {
+        escape(event) {
+            if (escapeCloses(event)) {
+                this.open = false;
+            }
+        },
         start() {
             this.name = `${this.rowName}'s parent`;
             this.template = null;

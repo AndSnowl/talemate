@@ -468,15 +468,18 @@ function plural(count, one, many = `${one}s`) {
 }
 
 // What accepting a preview (create, a sphere's core or Fill) would write:
-// `{here, elsewhere, stubs, movedIn, refiled}` -- its own facts (or items)
-// ticked, the elsewhere facts ticked, the new stubs it'd make (its new
-// names, the new entries a ticked elsewhere fact goes onto; not one the
-// owner marked as some thing already), the facts moving in and the
-// entries re-filed, each ticked.
+// `{facts, items, here, elsewhere, stubs, movedIn, refiled}` -- its own
+// facts ticked, its items ticked (a sphere's or Fill's: a statement, or
+// one linking an entry the world has; a named new one counts only as the
+// stub it makes), `here` the two together, the elsewhere facts ticked, the
+// new stubs it'd make (its new names, the new entries a ticked elsewhere
+// fact goes onto, its named new items; not one the owner marked as some
+// thing already), and the facts moving in and entries re-filed, ticked.
 export function previewCounts(preview) {
     const ticked = (rows) => (rows || []).filter((row) => row.ticked !== false);
-    const own = [...(preview?.facts || []), ...(preview?.items || [])];
+    const isNewItem = (item) => !!item.name && !item.thing_id && !item.same_target_id;
     const elsewhere = ticked(preview?.elsewhere);
+    const items = ticked(preview?.items);
     const stubs = new Set();
     for (const row of preview?.new_names || []) {
         if (!row.same_target_id) {
@@ -488,13 +491,17 @@ export function previewCounts(preview) {
             stubs.add(nameKey(row.new.name));
         }
     }
-    for (const item of ticked(preview?.items)) {
-        if (item.name && !item.thing_id && !item.same_target_id) {
+    for (const item of items) {
+        if (isNewItem(item)) {
             stubs.add(nameKey(item.name));
         }
     }
+    const facts = ticked(preview?.facts).length;
+    const kept = items.filter((item) => !isNewItem(item)).length;
     return {
-        here: ticked(own).length,
+        facts,
+        items: kept,
+        here: facts + kept,
         elsewhere: elsewhere.length,
         stubs: stubs.size,
         movedIn: (preview?.move_in || []).filter((row) => row.ticked).length,
@@ -502,10 +509,22 @@ export function previewCounts(preview) {
     };
 }
 
-// The Accept line: "writes 3 facts here, 4 elsewhere, 1 new stub" (`onto`:
-// the entry the owner said it is, "writes 3 facts onto Ashenmere").
+// The Accept line: "writes 3 facts here, 4 elsewhere, 1 new stub", "writes
+// 1 fact and 2 items here" (`onto`: the entry the owner said it is,
+// "writes 3 facts onto Ashenmere"); `noun` for what there's none of
+// ("writes 0 items here" for Fill).
 export function countsLine(counts, onto = null, noun = 'fact') {
-    const parts = [`writes ${plural(counts.here, noun)} ${onto ? `onto ${onto}` : 'here'}`];
+    let what;
+    if (counts.facts && counts.items) {
+        what = `${plural(counts.facts, 'fact')} and ${plural(counts.items, 'item')}`;
+    } else if (counts.items) {
+        what = plural(counts.items, 'item');
+    } else if (counts.facts) {
+        what = plural(counts.facts, 'fact');
+    } else {
+        what = plural(0, noun);
+    }
+    const parts = [`writes ${what} ${onto ? `onto ${onto}` : 'here'}`];
     if (counts.elsewhere) {
         parts.push(`${counts.elsewhere} elsewhere`);
     }
@@ -578,14 +597,14 @@ export function lineDates(calendar, line) {
     return line.until ? `${from}–${formatDate(calendar, line.until)}` : from;
 }
 
-// fact id -> the other lines it disagrees with on the year, among lines
-// still running: a line that has ended (the one a pick ended, or a state
-// that's over) isn't flagged.
+// fact id -> the other lines (shown on this timeline) it disagrees with on
+// the year, as the server worked it out; an ended fact disagrees with
+// nothing there (ruling C22), so a pick that ends one settles its flag.
 export function disagreements(lines) {
-    const running = new Map((lines || []).filter((line) => !line.until).map((line) => [line.fact_id, line]));
+    const byId = new Map((lines || []).map((line) => [line.fact_id, line]));
     const found = {};
-    for (const line of running.values()) {
-        const others = (line.disagrees_with || []).map((id) => running.get(id)).filter(Boolean);
+    for (const line of byId.values()) {
+        const others = (line.disagrees_with || []).map((id) => byId.get(id)).filter(Boolean);
         if (others.length) {
             found[line.fact_id] = others;
         }
@@ -721,8 +740,9 @@ function worldState() {
         sphereWanted: [],
         // character id -> the ties to add to it once it's fetched
         tieQueue: {},
-        // which preview an `add_outer_body` is out for: 'create',
-        // 'sphere', 'branch' or 'fill'
+        // the preview an `add_outer_body` is out for (`outerToken`): its
+        // type ('create', 'sphere', 'branch' or 'fill') and which one it
+        // was; a reply for one since replaced is dropped
         outerFor: null,
         // the last reply's notes to show: `{action, notes}`
         notes: null,
@@ -738,6 +758,10 @@ function worldState() {
 
 // the function actions send with; set by `connect`
 let send = null;
+
+// how many Fills have been asked for: each Fill's `ask`, so a reply for an
+// earlier Fill of the same drawer is told apart
+let fillAsks = 0;
 
 export const useWorldsStore = defineStore('worlds', {
     state: () => ({
@@ -1256,7 +1280,8 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         fillDrawer(sphereId, drawerId) {
-            this.fill = { sphereId, drawerId, pending: true, items: null, error: null };
+            fillAsks += 1;
+            this.fill = { sphereId, drawerId, ask: fillAsks, pending: true, items: null, error: null };
             this.request('fill_drawer', { sphere_id: sphereId, drawer_id: drawerId });
         },
 
@@ -1449,15 +1474,41 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
+        // which preview of `type` is shown now: its request (a Fill: its
+        // sphere and drawer), so a reply can tell it's still the one
+        outerToken(type) {
+            if (type === 'create') {
+                return { type, request: this.previewRequest, pending: this.previewPending };
+            }
+            if (type === 'sphere') {
+                return { type, request: this.spherePreviewRequest, pending: this.spherePreviewPending };
+            }
+            if (type === 'branch') {
+                return { type, request: this.branchRequest, pending: this.branchPending };
+            }
+            return { type, request: this.fill ? `${this.fill.sphereId}:${this.fill.drawerId}:${this.fill.ask}` : null, pending: !!this.fill?.pending };
+        },
+
+        // whether an `add_outer_body` reply (`previewType` as sent) is for
+        // the preview the token was taken for, still shown and not being
+        // asked for again
+        outerStillFor(token, previewType) {
+            if (!token || (token.type === 'branch' ? 'sphere' : token.type) !== previewType) {
+                return false;
+            }
+            const now = this.outerToken(token.type);
+            return now.request === token.request && !now.pending && !!this.previewOf(token.type);
+        },
+
         // put a body the owner names (`outer`: `{name, template,
         // part_of}`) around the part `rowName` of a preview; the reply
-        // replaces the preview
+        // replaces that preview, if it's still the one shown
         addOuterBody(type, rowName, outer, asSphere = false) {
             const preview = this.previewOf(type);
             if (!preview) {
                 return;
             }
-            this.outerFor = type;
+            this.outerFor = this.outerToken(type);
             this.pending = { ...this.pending, add_outer_body: true };
             this.request('add_outer_body', {
                 preview_type: type === 'branch' ? 'sphere' : type,
@@ -1981,9 +2032,10 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'add_outer_body': {
                     // the preview it's for, if it's still the one shown
-                    const type = this.outerFor;
+                    const token = this.outerFor;
                     this.outerFor = null;
-                    if (type && this.previewOf(type)) {
+                    const type = token?.type;
+                    if (this.outerStillFor(token, data.preview_type)) {
                         const preview = data.preview;
                         if (type === 'fill') {
                             this.fill = {

@@ -318,3 +318,50 @@ export function existenceOf(thing) {
 export function actsInWorld(thing) {
     return thing?.kind === 'character' || (thing?.kind === 'being' && existenceOf(thing) === 'real');
 }
+
+// --- same thing? ----------------------------------------------------------------
+
+// Whether "Make X a sphere…" is offered on a same-thing offer (a
+// `SameOffer`: `{kind, stub}`), as `canPromote` offers it on a page: a lore
+// entry, a place, or a stub of any kind but sphere -- by its `stub` flag,
+// never by the words of its line.
+export function promotableOffer(offer) {
+    if (!offer || offer.kind === 'sphere') {
+        return false;
+    }
+    return offer.kind === 'lore' || offer.kind === 'place' || !!offer.stub;
+}
+
+// A same-thing offer's candidate line ("Name (kind; part of Y, in its Z
+// drawer; stub): its summary") without its name and kind, which show
+// beside it: "part of Y, in its Z drawer: its summary", or just the
+// summary. A line of another shape is shown as it is.
+export function offerSummary(offer) {
+    let line = (offer?.line || '').trim();
+    if (offer?.name && line.startsWith(offer.name)) {
+        line = line.slice(offer.name.length).trim();
+    }
+    const found = /^\(([^)]*)\)(?::\s*([\s\S]*))?$/.exec(line);
+    if (!found) {
+        return line;
+    }
+    // the kind (and a sphere's template) first; "stub" is shown apart
+    const bits = found[1].split(';').map((bit) => bit.trim()).slice(1).filter((bit) => bit && bit !== 'stub');
+    const summary = (found[2] || '').trim();
+    if (!bits.length) {
+        return summary;
+    }
+    return summary ? `${bits.join('; ')}: ${summary}` : bits.join('; ');
+}
+
+// --- inline editors -------------------------------------------------------------
+
+// Whether Esc (`event`, its keydown) closes an inline editor: not when it
+// closes a picker of it first (a select or autocomplete it came from) or
+// an open menu or popover.
+export function escapeCloses(event) {
+    if (event?.target?.closest?.('.v-select, .v-autocomplete, .v-combobox')) {
+        return false;
+    }
+    return typeof document === 'undefined' || !document.querySelector('.v-overlay--active');
+}

@@ -15,6 +15,9 @@
         <template #selection="{ item }">
             <span class="text-caption">{{ item.raw.value === NEW ? 'new' : `same as ${item.raw.name}` }}</span>
         </template>
+        <template #item="{ props: itemProps, item }">
+            <v-list-item v-bind="itemProps" :subtitle="item.raw.summary" data-testid="stub-same-option"></v-list-item>
+        </template>
     </v-select>
 
     <!-- the entry's own question, at the top of its preview -->
@@ -32,6 +35,7 @@
         >
             <span class="candidate-name">{{ offer.name }}</span>
             <v-chip size="x-small" label variant="tonal" color="muted">{{ offer.kind }}</v-chip>
+            <v-chip v-if="offer.stub" size="x-small" label variant="outlined" color="foreign">stub</v-chip>
             <span class="text-caption text-muted flex-grow-1">{{ summary(offer) }}</span>
             <span v-if="hint(offer)" class="hint text-caption" data-testid="same-hint" :title="'A hint, not a default'">
                 <v-icon size="x-small" icon="mdi-robot-outline"></v-icon>
@@ -39,7 +43,7 @@
             </span>
             <template v-if="variant === 'promote'">
                 <v-btn v-if="offer.kind === 'sphere'" variant="outlined" size="x-small" @click="worlds.openThing(offer.thing_id)">Open {{ offer.name }}</v-btn>
-                <v-btn v-else-if="promotable(offer)" variant="outlined" size="x-small" prepend-icon="mdi-orbit" @click="$emit('promote', offer)">Make {{ offer.name }} a sphere…</v-btn>
+                <v-btn v-else-if="promotableOffer(offer)" variant="outlined" size="x-small" prepend-icon="mdi-orbit" @click="$emit('promote', offer)">Make {{ offer.name }} a sphere…</v-btn>
             </template>
             <v-btn
                 v-else
@@ -65,13 +69,14 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import { offerSummary, promotableOffer } from './worldKinds.js';
 
 // the row choice's value for "new"
 const NEW = '__new__';
 
 // "Same thing?" (curation goal 4): what the world has that a new entry or
 // stub may already be (`same_as`, `SameOffer`s: name, kind, its candidate
-// line, so two of one name can be told apart).
+// line, so two of one name can be told apart; a stub marked so).
 // - `entry`: the question at the top of a create preview. The AI's
 //   verdict (`verdict`, id -> {verdict, why}) is only a hint beside its
 //   candidate, never a default: the answer starts as "new". "Yes, fill
@@ -98,8 +103,13 @@ export default {
     computed: {
         rowItems() {
             return [
-                { title: 'new', value: NEW, name: '' },
-                ...this.offers.map((offer) => ({ title: `same as ${offer.name} (${offer.kind})`, value: offer.thing_id, name: offer.name })),
+                { title: 'new', value: NEW, name: '', summary: 'a stub of its own' },
+                ...this.offers.map((offer) => ({
+                    title: `same as ${offer.name} (${offer.kind}${offer.stub ? ', stub' : ''})`,
+                    value: offer.thing_id,
+                    name: offer.name,
+                    summary: offerSummary(offer),
+                })),
             ];
         },
         chosenName() {
@@ -107,19 +117,14 @@ export default {
         },
     },
     methods: {
-        // its candidate line without the name it starts with: kind, filing
-        // and summary
+        // its candidate line without its name and kind (shown beside it)
         summary(offer) {
-            const line = offer.line || '';
-            return line.startsWith(offer.name) ? line.slice(offer.name.length).trim() : line;
+            return offerSummary(offer);
         },
         hint(offer) {
             return this.verdict?.[offer.thing_id] || null;
         },
-        // what "Make it a sphere…" is offered on (`canPromote`'s kinds)
-        promotable(offer) {
-            return offer.kind === 'lore' || offer.kind === 'place' || /\bstub\b/.test(offer.line || '');
-        },
+        promotableOffer,
     },
 };
 </script>

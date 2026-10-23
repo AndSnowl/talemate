@@ -107,7 +107,7 @@ export default {
         },
         // something to write
         anything() {
-            return this.counts.here + this.counts.elsewhere + this.counts.refiled > 0;
+            return this.counts.here + this.counts.elsewhere + this.counts.stubs + this.counts.refiled > 0;
         },
     },
     methods: {

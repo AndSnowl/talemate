@@ -46,6 +46,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { factFormValid, locateLinks } from './nameHighlights.js';
+import { escapeCloses } from './worldKinds.js';
 import NameHighlightInput from './NameHighlightInput.vue';
 
 // The inline form ThingPage opens to add, edit (correct) or end a fact, or
@@ -93,8 +94,7 @@ export default {
         // Esc closes the form, unless a menu or popover of it is open (Esc
         // closes that first)
         escape(event) {
-            const inPicker = event?.target?.closest?.('.v-select, .v-autocomplete, .v-combobox');
-            if (!this.busy && !inPicker && !document.querySelector('.v-overlay--active')) {
+            if (!this.busy && escapeCloses(event)) {
                 this.$emit('cancel');
             }
         },

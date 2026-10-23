@@ -75,10 +75,13 @@ import {
     drawersMoved,
     drawersPayload,
     existenceOf,
+    escapeCloses,
     expandLabel,
     expandNote,
     overrideCategory,
+    offerSummary,
     partOfDrawers,
+    promotableOffer,
     sphereGroups,
     templateInfo,
     tieLead,
@@ -687,10 +690,47 @@ check('an outer body is asked for on the preview it is for, and its reply replac
     assert.deepEqual(store.fill.refile, refile);
     assert.deepEqual(store.fill.new_names, [army]);
     assert.equal(store.fill.sphereId, 'dawn');
-    // an error clears what was waiting
+    // a reply for a preview since replaced is dropped: another drawer's
+    // Fill, or a preview asked for again meanwhile
+    const before = store.fill.items;
     store.addOuterBody('fill', 'Talon', outer);
+    store.fillDrawer('dawn', 'd2');
+    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd2', items: [{ name: 'Other', text: 'o' }], elsewhere: [], new_names: [], refile: [] }));
+    store.handleMessage(reply('add_outer_body', { preview_type: 'fill', preview: { sphere_id: 'dawn', drawer_id: 'd1', items: before, elsewhere: [], new_names: [army], refile } }));
+    assert.deepEqual(store.fill.items, [{ name: 'Other', text: 'o' }]);
+    assert.deepEqual(store.fill.new_names, []);
+    store.previewThing('lore', 'a doctrine');
+    store.handleMessage(reply('preview_thing', { kind: 'lore', name: 'Doctrine', facts: [], elsewhere: [], new_names: [], refile: [], prose: {} }));
+    store.addOuterBody('create', 'White Talon', outer);
+    store.regeneratePreview();
+    store.handleMessage(reply('add_outer_body', { preview_type: 'create', preview: { name: 'Stale', new_names: [army] } }));
+    assert.equal(store.preview, null);
+    store.handleMessage(reply('preview_thing', { kind: 'lore', name: 'Doctrine', facts: [], elsewhere: [], new_names: [], refile: [], prose: {} }));
+    // a reply of another type than the one asked for is dropped too
+    store.addOuterBody('create', 'White Talon', outer);
+    store.handleMessage(reply('add_outer_body', { preview_type: 'fill', preview: { name: 'Odd', new_names: [army] } }));
+    assert.deepEqual(store.preview.new_names, []);
+    // an error clears what was waiting
+    store.addOuterBody('fill', 'Other', outer);
     store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'a part can\'t be its own outer body' } });
     assert.equal(store.outerFor, null);
+});
+
+check('a same-thing offer: a stub by its flag, never by its words; its summary without the kind', () => {
+    const lake = { thing_id: 'a', name: 'Ashenmere', kind: 'place', line: 'Ashenmere (place): A stub of land juts into the lake.', stub: false };
+    const candle = { thing_id: 'c', name: 'Old Candle', kind: 'item', line: 'Old Candle (item; part of Church, in its Rites drawer): a stub of wax.', stub: false };
+    const shore = { thing_id: 's', name: 'Ashenmere Shore', kind: 'place', line: 'Ashenmere Shore (place; stub)', stub: true };
+    const relic = { thing_id: 'r', name: 'Relic', kind: 'item', line: 'Relic (item; stub)', stub: true };
+    const dawn = { thing_id: 'd', name: 'Dawn', kind: 'sphere', line: 'Dawn (sphere: religion; stub)', stub: true };
+    // a full item whose summary says "stub" isn't one
+    assert.equal(promotableOffer(candle), false);
+    assert.equal(promotableOffer(relic), true);
+    assert.equal(promotableOffer(lake), true);
+    assert.equal(promotableOffer(dawn), false);
+    assert.equal(offerSummary(lake), 'A stub of land juts into the lake.');
+    assert.equal(offerSummary(candle), 'part of Church, in its Rites drawer: a stub of wax.');
+    assert.equal(offerSummary(shore), '');
+    assert.equal(offerSummary({ name: 'X', kind: 'lore', line: 'Something else' }), 'Something else');
 });
 
 check('the Accept line counts what an accept writes', () => {
@@ -709,14 +749,28 @@ check('the Accept line counts what an accept writes', () => {
         refile: [{ ticked: true }],
     };
     const counts = previewCounts(preview);
-    assert.deepEqual(counts, { here: 2, elsewhere: 4, stubs: 2, movedIn: 1, refiled: 1 });
+    assert.deepEqual(counts, { facts: 2, items: 0, here: 2, elsewhere: 4, stubs: 2, movedIn: 1, refiled: 1 });
     assert.equal(countsLine(counts), 'writes 2 facts here, 4 elsewhere, 2 new stubs, moves 1 in, re-files 1');
-    assert.equal(countsLine({ here: 1, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0 }, 'Ashenmere'), 'writes 1 fact onto Ashenmere, 1 new stub');
-    assert.equal(countsLine({ here: 3, elsewhere: 0, stubs: 0, movedIn: 0, refiled: 0 }, null, 'item'), 'writes 3 items here');
-    // a sphere's (or Fill's) items count, a named new one a stub
-    assert.deepEqual(previewCounts({ items: [{ name: 'Vigil', ticked: true }, { name: 'Fair', thing_id: 'f', ticked: true }, { name: 'Old', ticked: false }] }), {
-        here: 2, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0,
+    const one = { facts: 1, items: 0, here: 1, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0 };
+    assert.equal(countsLine(one, 'Ashenmere'), 'writes 1 fact onto Ashenmere, 1 new stub');
+    // a sphere's (or Fill's) items count apart from its facts; a named new
+    // one only as a stub, one that links an entry (or is marked one) as an
+    // item
+    const sphere = previewCounts({
+        facts: [{ ticked: true }],
+        items: [
+            { name: 'Vigil', ticked: true },
+            { name: 'Fair', thing_id: 'f', ticked: true },
+            { name: '', text: 'Light is purity.', ticked: true },
+            { name: 'Synod', same_target_id: 's', ticked: true },
+            { name: 'Old', ticked: false },
+        ],
     });
+    assert.deepEqual(sphere, { facts: 1, items: 3, here: 4, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0 });
+    assert.equal(countsLine(sphere), 'writes 1 fact and 3 items here, 1 new stub');
+    const fill = previewCounts({ items: [{ name: 'Vigil', ticked: true }, { name: '', text: 'x', ticked: true }, { name: '', text: 'y', ticked: true }] });
+    assert.equal(countsLine(fill, null, 'item'), 'writes 2 items here, 1 new stub');
+    assert.equal(countsLine(previewCounts({ items: [{ name: 'Vigil', ticked: true }] }), null, 'item'), 'writes 0 items here, 1 new stub');
 });
 
 check('elsewhere rows group by entry, untick together, and a stub row answers "same as"', () => {
@@ -737,21 +791,32 @@ check('elsewhere rows group by entry, untick together, and a stub row answers "s
     assert.equal(nameKey('The  White Talon'), 'white talon');
 });
 
-check('timeline lines: an ended one shows its span, and only running lines are flagged', () => {
+check('timeline lines: an ended one shows its span; the flags are the server\'s', () => {
     const label = (year) => ({ ...dateOf(year), label: String(year) });
     assert.equal(lineDates(null, { date: label(900), until: label(1010) }), '900–1010');
     assert.equal(lineDates(null, { date: label(947), until: null }), '947');
     assert.equal(lineDates(null, { date: null, until: null }), '—');
+    // an ended fact disagrees with nothing (ruling C22): the server leaves
+    // it out of `disagrees_with`, and the page shows what it says
     const lines = [
         { fact_id: 'a', date: label(217), until: null, disagrees_with: ['b'] },
-        { fact_id: 'b', date: label(312), until: null, disagrees_with: ['a', 'c'] },
-        { fact_id: 'c', date: label(300), until: label(1026), disagrees_with: ['b'] },
+        { fact_id: 'b', date: label(312), until: null, disagrees_with: ['a', 'gone'] },
+        { fact_id: 'c', date: label(300), until: label(1026), disagrees_with: [] },
     ];
     const found = disagreements(lines);
     assert.deepEqual(Object.keys(found), ['a', 'b']);
+    // a line the timeline doesn't show is no flag
     assert.deepEqual(found.b.map((line) => line.fact_id), ['a']);
-    // the one a pick ended: nothing is flagged
-    assert.deepEqual(disagreements([lines[0], { ...lines[1], until: label(1026) }]), {});
+    assert.deepEqual(disagreements([{ ...lines[0], disagrees_with: [] }]), {});
+});
+
+check('Esc closes an inline editor, unless it closes a picker or popover in it first', () => {
+    const inPicker = { target: { closest: (selector) => (selector.includes('.v-select') ? {} : null) } };
+    const plain = { target: { closest: () => null } };
+    assert.equal(escapeCloses(inPicker), false);
+    // no open overlay (no document in node): it closes
+    assert.equal(escapeCloses(plain), true);
+    assert.equal(escapeCloses(null), true);
 });
 
 check('a merge: its preview, the owner\'s picks, and the merged entry opened', () => {

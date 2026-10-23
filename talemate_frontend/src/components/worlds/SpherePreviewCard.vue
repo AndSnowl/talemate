@@ -23,15 +23,21 @@
 
         <template v-if="timeline.length || about.length">
             <div class="heading">Timeline</div>
-            <div v-for="row in timeline" :key="'t' + row.index" class="row d-flex align-center ga-2">
-                <v-checkbox-btn :model-value="row.fact.ticked !== false" density="compact" class="flex-grow-0" :aria-label="'Write ' + row.fact.text" @update:model-value="tickFact(row.index, $event)"></v-checkbox-btn>
-                <span class="year">{{ formatDate(worlds.calendar, row.fact.since) }}</span>
-                <span :class="{ dropped: row.fact.ticked === false }"><LinkedText :segments="previewSegments(row.fact.text, preview.new_names)" :text="row.fact.text" /></span>
-            </div>
-            <div v-for="row in about" :key="'a' + row.index" class="row d-flex align-center ga-2">
-                <v-checkbox-btn :model-value="row.fact.ticked !== false" density="compact" class="flex-grow-0" :aria-label="'Write ' + row.fact.text" @update:model-value="tickFact(row.index, $event)"></v-checkbox-btn>
-                <span :class="{ dropped: row.fact.ticked === false }"><span class="text-muted">about: </span><LinkedText :segments="previewSegments(row.fact.text, preview.new_names)" :text="row.fact.text" /></span>
-            </div>
+            <template v-for="row in timeline" :key="'t' + row.index">
+                <div class="row d-flex align-center ga-2">
+                    <v-checkbox-btn :model-value="row.fact.ticked !== false" density="compact" class="flex-grow-0" :aria-label="'Write ' + row.fact.text" @update:model-value="tickFact(row.index, $event)"></v-checkbox-btn>
+                    <span class="year">{{ formatDate(worlds.calendar, row.fact.since) }}</span>
+                    <span :class="{ dropped: row.fact.ticked === false }"><LinkedText :segments="previewSegments(row.fact.text, preview.new_names)" :text="row.fact.text" /></span>
+                </div>
+                <div v-if="row.fact.repeat_of" class="match text-caption" data-testid="fact-match">≈ on {{ row.fact.repeat_of.owner_name || 'an entry' }}: {{ row.fact.repeat_of.text }}</div>
+            </template>
+            <template v-for="row in about" :key="'a' + row.index">
+                <div class="row d-flex align-center ga-2">
+                    <v-checkbox-btn :model-value="row.fact.ticked !== false" density="compact" class="flex-grow-0" :aria-label="'Write ' + row.fact.text" @update:model-value="tickFact(row.index, $event)"></v-checkbox-btn>
+                    <span :class="{ dropped: row.fact.ticked === false }"><span class="text-muted">about: </span><LinkedText :segments="previewSegments(row.fact.text, preview.new_names)" :text="row.fact.text" /></span>
+                </div>
+                <div v-if="row.fact.repeat_of" class="match text-caption" data-testid="fact-match">≈ on {{ row.fact.repeat_of.owner_name || 'an entry' }}: {{ row.fact.repeat_of.text }}</div>
+            </template>
         </template>
 
         <div class="heading">{{ branch ? 'Its own drawers' : 'Drawers' }}</div>
@@ -62,6 +68,9 @@
                         :chosen="row.item.same_target_id || null"
                         @choose="changeItem(row.index, { same_target_id: $event })"
                     />
+                </div>
+                <div v-if="matchOf(row.item)" class="match text-caption" data-testid="fact-match">
+                    ≈ on {{ matchOf(row.item).owner_name || row.item.name || 'the sphere' }}: {{ matchOf(row.item).text }}<template v-if="row.item.text_repeat_of && row.item.text_ticked === false"> (its text isn't written again)</template>
                 </div>
                 <OuterBodyForm v-if="row.item.name && !row.item.thing_id && !row.item.same_target_id" :row-name="row.item.name" @submit="worlds.addOuterBody(type, row.item.name, $event)" />
             </div>
@@ -131,7 +140,9 @@ import SameThingAsk from './SameThingAsk.vue';
 // as can the sphere itself (ruling C11); the outer bodies show among its
 // new stubs, the entries they re-file below. The sphere itself may be one
 // the world has: that one is offered "Make X a sphere…" (promotion), never
-// accepted onto. The Accept line counts what it'll write. Edits go to the
+// accepted onto. A fact or item that repeats what the world holds shows its
+// match, as Fill's do. The Accept line counts what it'll write: facts and
+// items apart, a named new item as its stub. Edits go to the
 // store's preview (`worlds.editPreview`).
 export default {
     name: 'SpherePreviewCard',
@@ -206,14 +217,18 @@ export default {
         tickFact(index, ticked) {
             this.edit({ facts: rowChanged(this.preview.facts, index, { ticked }) });
         },
+        // what an item repeats: its own text's match, or, for an item
+        // linking a place the world has, what that place says already
+        matchOf(item) {
+            return item.repeat_of || item.text_repeat_of || null;
+        },
         changeItem(index, changes) {
             this.edit({ items: rowChanged(this.preview.items, index, changes) });
         },
         // the entry the sphere may be is made a sphere instead (a stub is
         // expanded as one)
         promote(offer) {
-            const stub = /\bstub\b/.test(offer.line || '');
-            this.worlds.makeSphere({ id: offer.thing_id, kind: offer.kind, name: offer.name, stub });
+            this.worlds.makeSphere({ id: offer.thing_id, kind: offer.kind, name: offer.name, stub: !!offer.stub });
         },
         fillLater(drawer) {
             // people, events and branches are made by the app, not written
@@ -282,6 +297,11 @@ export default {
 
 .dropped {
     text-decoration: line-through;
+    color: rgb(var(--v-theme-muted));
+}
+
+.match {
+    margin-left: 34px;
     color: rgb(var(--v-theme-muted));
 }
 

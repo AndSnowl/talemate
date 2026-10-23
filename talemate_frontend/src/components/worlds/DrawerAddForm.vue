@@ -55,7 +55,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf } from './worldDates.js';
-import { PART_OF_KINDS, drawerTypesFor } from './worldKinds.js';
+import { PART_OF_KINDS, actsInWorld, drawerTypesFor } from './worldKinds.js';
 import { factLinkPayload } from './nameHighlights.js';
 import NameHighlightInput from './NameHighlightInput.vue';
 
@@ -64,7 +64,7 @@ function validYear(year) {
 }
 
 // A drawer's "+ Add", by type:
-// - people: a character, a role and a year it's tied from (`worlds.addTie`,
+// - people: a character (or real being), a role and a year it's tied from (`worlds.addTie`,
 //   written from the character's side);
 // - branches: the new branch's prompt (`worlds.previewBranch`);
 // - any other: a statement written by hand (`add_statement`, its names
@@ -97,9 +97,12 @@ export default {
         };
     },
     computed: {
+        // characters and real beings (only those can be tied), not tied
+        // already
         characterOptions() {
             const tied = new Set(this.thing.sphere.people.map((person) => person.character_id));
-            return (this.worlds.things.character || []).filter((thing) => !tied.has(thing.id));
+            const beings = (this.worlds.things.being || []).filter((thing) => !thing.stub && actsInWorld(thing));
+            return [...(this.worlds.things.character || []), ...beings].filter((thing) => !tied.has(thing.id));
         },
         // entries this drawer may hold, not in it already, not the sphere
         entryOptions() {

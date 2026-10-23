@@ -13,7 +13,7 @@
                 @click="target = null"
             ></v-btn>
         </template>
-        <v-card class="pa-3" min-width="300" data-testid="fact-move-menu" @keydown.esc="moving = false">
+        <v-card class="pa-3" min-width="300" data-testid="fact-move-menu" @keydown.esc="escape($event, 'moving')">
             <div class="text-caption text-muted mb-2">Move this fact onto the entry it's about. It leaves this page.</div>
             <v-autocomplete
                 v-model="target"
@@ -51,7 +51,7 @@
                 @click="holder = fact.held_by?.id || null"
             ></v-btn>
         </template>
-        <v-card class="pa-3" min-width="300" data-testid="fact-held-menu" @keydown.esc="holding = false">
+        <v-card class="pa-3" min-width="300" data-testid="fact-held-menu" @keydown.esc="escape($event, 'holding')">
             <div class="text-caption text-muted mb-2">A belief someone holds rather than the world's truth: in a scene, the faithful speak of it as fact, but the narration doesn't confirm it.</div>
             <v-autocomplete
                 v-model="holder"
@@ -76,6 +76,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import { escapeCloses } from './worldKinds.js';
 
 // A fact row's curation actions (curation goals 1 and 7), for one of the
 // open page's own facts:
@@ -83,7 +84,7 @@ import { useWorldsStore } from '@/stores/worlds.js';
 //   with a new id and removed here, one revision);
 // - "Held by…": a sphere, character or being holds it as a belief
 //   (`set_held_by`), or Clear makes it the world's truth again.
-// Each opens a small menu; Esc closes it.
+// Each opens a small menu; Esc closes it (once its picker's list is shut).
 export default {
     name: 'FactRowActions',
     props: {
@@ -109,6 +110,12 @@ export default {
         },
     },
     methods: {
+        // Esc closes the menu, unless it closes its picker's list first
+        escape(event, menu) {
+            if (escapeCloses(event)) {
+                this[menu] = false;
+            }
+        },
         move() {
             if (this.target) {
                 this.worlds.moveFact(this.fact.fact_id, this.target);
