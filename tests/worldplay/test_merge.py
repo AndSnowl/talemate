@@ -920,3 +920,130 @@ def test_merge_link_words_offered_as_akas(world, mere):
         _aka("The Ashenmere Caves"),
         _aka("the Deeps", tag="proper"),
     ]
+
+
+# --- fix round 2 -----------------------------------------------------------------
+
+LAWS = "1a5a0001"
+
+
+def test_merge_into_a_place_sphere_inherits_no_drawers(world):
+    """A place sphere's parent is where it lies, not a branch's parent: the
+    Guild's Laws (whose id the Realm's Laws share) is added to the City's
+    own drawers, and the Charter and the Guild's statement keep it."""
+
+    laws = [{"id": LAWS, "type": "beliefs", "title": "Laws"}]
+    with world.revision(Source.manual(note="realm")) as rev:
+        realm = rev.create_thing(
+            "place", {"name": "The Realm", "template": "nation", "drawers": laws}
+        )
+        city = rev.create_thing(
+            "place", {"name": "The City", "template": "nation", "parent": realm}
+        )
+        guild = rev.create_thing(
+            "sphere", {"name": "The Guild", "template": "order", "drawers": laws}
+        )
+        charter = rev.create_thing(
+            "lore",
+            {"name": "The Charter", "part_of": {"sphere": guild, "drawer": LAWS}},
+        )
+        rev.add_fact(
+            guild, "statement", "Dues are paid at midwinter.", origin={"drawer": LAWS}
+        )
+    preview = preview_merge(world, guild, city)
+    accept_merge(world, preview, main_name="The City")
+    view = world.view()
+    assert view.thing(city).fields["drawers"] == laws
+    assert view.thing(charter).fields["part_of"] == {"sphere": city, "drawer": LAWS}
+    (statement,) = [f for f in world.live_facts(city) if f.category == "statement"]
+    assert statement.origin["drawer"] == LAWS
+
+
+def test_merge_drawer_id_match_needs_its_type(world, host):
+    """A drawer of the same id but another type isn't the same drawer: the
+    Host's Divisions goes by title to the Army's, and its Feasts, whose id
+    the Army's Oaths has, is added under a fresh id, its part following."""
+
+    h = host
+    with world.revision(Source.manual(note="drawers")) as rev:
+        rev.set_field(
+            h.host,
+            "drawers",
+            [
+                {"id": RANKS, "type": "structure", "title": "Divisions"},
+                {"id": "fea50001", "type": "practices", "title": "Feasts"},
+            ],
+            None,
+        )
+        rev.set_field(
+            h.army,
+            "drawers",
+            [
+                {"id": DIVISIONS, "type": "structure", "title": "Divisions"},
+                {"id": RANKS, "type": "beliefs", "title": "Creed"},
+                {"id": "fea50001", "type": "beliefs", "title": "Oaths"},
+            ],
+            None,
+        )
+        feast = rev.create_thing(
+            "lore",
+            {
+                "name": "The Thaw Feast",
+                "part_of": {"sphere": h.host, "drawer": "fea50001"},
+            },
+        )
+    preview = preview_merge(world, h.host, h.army)
+    accept_merge(world, preview, main_name="The Tsar's Army")
+    view = world.view()
+    assert view.thing(h.frost).fields["part_of"] == {
+        "sphere": h.army,
+        "drawer": DIVISIONS,
+    }
+    drawers = view.thing(h.army).fields["drawers"]
+    assert len(drawers) == 4
+    added = drawers[3]
+    assert (added["type"], added["title"]) == ("practices", "Feasts")
+    assert added["id"] not in (DIVISIONS, RANKS, "fea50001")
+    assert view.thing(feast).fields["part_of"] == {
+        "sphere": h.army,
+        "drawer": added["id"],
+    }
+
+
+def test_merge_retired_value_note_says_what_shows(world, mere):
+    """The Caves' parent was Northreach, then from 990 Ashenmere: merged
+    with Ashenmere (no parent of its own), the 990 value is retired and the
+    note says Northreach shows again."""
+
+    m = mere
+    with world.revision(Source.manual(note="moved")) as rev:
+        rev.set_field(m.caves, "parent", m.ashenmere, WorldDate.of(990))
+    preview = preview_merge(world, m.ashenmere, m.caves)
+    done = accept_merge(world, preview, main_name="The Ashenmere Caves")
+    assert world.view().thing(m.caves).fields["parent"] == m.northreach
+    assert any(
+        "falls back to its earlier parent, Northreach" in note for note in done.notes
+    )
+    assert not any("cleared" in note for note in done.notes)
+
+
+def test_merge_refuses_conflicting_choices_for_one_fact(world, mere):
+    """The Caves' lichen pairs with two of Ashenmere's facts: kept in one
+    pair and dropped in the other is refused, writing nothing."""
+
+    m = mere
+    with world.revision(Source.manual(note="floors")) as rev:
+        floors = rev.add_fact(
+            m.ashenmere, "description", "Green lichen covers the floors."
+        )
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    one = next(p.key for p in preview.pairs if (p.a, p.b) == (m.lichen_b, m.lichen_a))
+    two = next(p.key for p in preview.pairs if (p.a, p.b) == (m.lichen_b, floors))
+    head = world.head_rev()
+    with pytest.raises(ValueError, match="kept in one pair and dropped in another"):
+        accept_merge(world, preview, main_name="Ashenmere", keep={one: "a", two: "b"})
+    assert world.head_rev() == head
+    # the same way in both is fine
+    accept_merge(world, preview, main_name="Ashenmere", keep={one: "a", two: "a"})
+    texts = _texts(world, m.ashenmere)
+    assert LICHEN_B in texts and LICHEN_A not in texts

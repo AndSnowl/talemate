@@ -289,6 +289,18 @@ def accept_merge(
         elif choice == "b":
             from_losers.add(pair.a)
             winner.setdefault(pair.a, pair.b)
+    for fact_id in sorted(
+        (picked & from_losers) | (set(winner.values()) & into_losers)
+    ):
+        text = next(
+            (pair.a_text if pair.a == fact_id else pair.b_text)
+            for pair in pairs.values()
+            if fact_id in (pair.a, pair.b)
+        )
+        raise ValueError(
+            f"“{text}” is kept in one pair and dropped in another:"
+            " pick it the same way in both"
+        )
     # a pick of "a" ticks its fact; an untick otherwise stands
     copied = [
         row.fact_id

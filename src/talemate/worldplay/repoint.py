@@ -861,20 +861,24 @@ def _norm_title(title: str) -> str:
 
 def _drawer_plan(job: _Job) -> None:
     """A sphere merged into a sphere (ruling C15): each of the stub's own
-    drawers is the target's of the same id, else one of the same type and
-    title (case and spaces aside), else a copy added to the target's own
-    drawers (a fresh id when its id is taken). The target's drawers after
-    count its own and those it inherits from its parent after the merge
-    (the stub's parent, when its parent was the stub)."""
+    drawers is the target's of the same id and type, else one of the same
+    type and title (case and spaces aside), else a copy added to the
+    target's own drawers (a fresh id when its id is taken). The target's
+    drawers after count its own and, for a `sphere` (a branch; never a
+    place sphere, whose parent is where it lies), those it inherits from
+    its parent after the merge (the stub's parent, when its parent was the
+    stub)."""
 
     view, stub, target = job.view, job.stub, job.target
     if not (spheres.is_sphere(stub) and spheres.is_sphere(target)):
         return
     own = [d for d in target.fields.get("drawers") or [] if isinstance(d, dict)]
     available = list(spheres._own_drawers(target))
-    parent = target.fields.get("parent")
+    # a branch inherits its parent's drawers; a place sphere's parent is
+    # where it lies, not a branch (as `spheres._parent_ids`)
+    parent = target.fields.get("parent") if target.kind == "sphere" else None
     if parent == stub.id:
-        parent = stub.fields.get("parent")
+        parent = stub.fields.get("parent") if stub.kind == "sphere" else None
     if (
         isinstance(parent, str)
         and parent not in (stub.id, target.id)
@@ -889,7 +893,10 @@ def _drawer_plan(job: _Job) -> None:
             drawer = spheres.Drawer.model_validate(raw)
         except ValueError:
             continue
-        same = next((d for d in available if d.id == drawer.id), None) or next(
+        same = next(
+            (d for d in available if d.id == drawer.id and d.type == drawer.type),
+            None,
+        ) or next(
             (
                 d
                 for d in available
@@ -943,6 +950,49 @@ def _inside_either(job: _Job, thing_id: str) -> bool:
     return spheres.sits_in(job.view, thing_id, job.target.id) or spheres.sits_in(
         job.view, thing_id, job.stub.id
     )
+
+
+def _said(view: WorldView, value: object) -> str:
+    """A field value as the owner reads it: a thing's name, a filing's
+    sphere and drawer, else a short form."""
+
+    if isinstance(value, str):
+        return view.name_of(value) or value
+    if isinstance(value, dict) and isinstance(value.get("sphere"), str):
+        return _where(view, value["sphere"], str(value.get("drawer")))
+    if isinstance(value, list):
+        return ", ".join(_said(view, item) for item in value) or "none"
+    return str(value)
+
+
+def _shown_before(
+    job: _Job, field: str, date: object, uses: list[_FieldUse]
+) -> str | None:
+    """What the target's `field` shows from `date` once its value there is
+    retired: its latest value dated before (as already redirected in
+    `uses`), or `None` when there's none and the field is empty."""
+
+    if date is None:
+        return None
+    instant = getattr(date, "instant", None)
+    changed = {
+        (use.field, getattr(use.date, "instant", None)): use
+        for use in uses
+        if use.thing_id == job.target.id
+    }
+    found: object = None
+    for entry in job.world.timeline(job.target.id):
+        if entry.change != "field" or entry.field != field:
+            continue
+        at = getattr(entry.date, "instant", None)
+        if at is not None and instant is not None and at >= instant:
+            break
+        use = changed.get((field, at))
+        if use is not None and use.clear:
+            # retired too: the one before shows
+            continue
+        found = entry.value if use is None else use.value
+    return _said(job.view, found) if found is not None else None
 
 
 def _self_uses(job: _Job) -> list[_FieldUse]:
@@ -1022,8 +1072,14 @@ def _self_uses(job: _Job) -> list[_FieldUse]:
             continue
         label = field.replace("_", " ")
         if new is None:
+            earlier = _shown_before(job, field, entry.date, uses)
             job.notes.append(
-                f"{job.target_name}'s {label} was {job.stub_name}: it's cleared"
+                f"{job.target_name}'s {label} was {job.stub_name}: "
+                + (
+                    f"it falls back to its earlier {label}, {earlier}"
+                    if earlier is not None
+                    else "it's cleared"
+                )
             )
         elif field in ("part_of", "parent") or kind == "thing":
             where = (
