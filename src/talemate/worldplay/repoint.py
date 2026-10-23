@@ -10,10 +10,11 @@ revision, so one undo restores it all:
   thing filed in it (`part_of`) and every tie to it or `within` it
   (`ties`), at each story date the field holds it, and the exceptions filed under such a
   tie (their origin `tie`);
-- the stub's own facts, copied to the target as new facts with their
-  dates and origin (a category the target's kind lacks becomes its
-  catch-all one), every override of one pointed at its copy; a fact never
-  changes thing, since replay and undo key a fact by its id;
+- the stub's own facts, moved to the target (`copy_facts`: copied as
+  new facts with their dates and origin, a category the target's kind
+  lacks becoming `default_category`'s, every override of one pointed at
+  its copy, the original removed); a fact never changes thing, since
+  replay and undo key a fact by its id;
 - the stub's own filing (`part_of`): the target is filed where the stub
   was, unless it's filed already (it stays where it is, and a note says
   so) or can't be (a note says why);
@@ -41,7 +42,7 @@ target, for the stub it expanded).
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import structlog
 from pydantic import BaseModel
@@ -56,18 +57,26 @@ from talemate.world.kinds import (
 from talemate.world.refs import REF_PATTERN, ref
 from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.store import Revision, Source, World
-from talemate.world.view import ThingState, WorldView
+from talemate.world.view import FactState, ThingState, WorldView
 from talemate.worldplay.create import (
     default_category,
     drawer_types_for,
     part_of_since,
+    prose_reads,
 )
 from talemate.worldplay.links import name_key
 from talemate.worldplay.references import thing_references
 
 log = structlog.get_logger("talemate.worldplay.repoint")
 
-__all__ = ["RepointPlan", "RepointResult", "plan_repoint", "repoint_stub"]
+__all__ = [
+    "RepointPlan",
+    "RepointResult",
+    "copy_facts",
+    "move_fact",
+    "plan_repoint",
+    "repoint_stub",
+]
 
 # the kinds a field may point at, where that isn't the stub's own kind
 FIELD_TARGET_KINDS: dict[str, tuple[str, ...]] = {
@@ -344,7 +353,7 @@ def _fact_changes(
     links to the stub pointed at the target; `origin`, a tie to the stub
     filed under the target, a belief the stub held held by the target),
     the fact links moved, and the stub's own
-    facts (`FactState`s), which `_move_facts` copies to the target."""
+    facts (`FactState`s), which `copy_facts` moves to the target."""
 
     view, stub_id, target_id = job.view, job.stub.id, job.target.id
     rewrite = _rewriter(view, stub_id, target_id, shown_texts)
@@ -372,61 +381,108 @@ def _fact_changes(
     return changes, links, job.world.live_facts(stub_id)
 
 
-def _move_facts(job: _Job, rev: Revision, own: list, changes: dict[str, dict]) -> None:
-    """Copy the stub's own facts to the target as new facts (text with
-    self-links made words, a category its kind has, dates, origin), and
-    point every override of one at its copy, in `rev`. The stub's facts go
-    with the stub (`remove_thing`). A fact never changes thing: replay and
-    undo key a fact by its id."""
+def _relinked(
+    view: WorldView, text: str, same: set[str], target_id: str, plain: bool
+) -> str:
+    """`text` with its links to `same` (the target, and what stands for it)
+    pointed at the target: as their words, plain, when `plain` (a thing
+    never links to itself)."""
 
-    view, stub_id, target_id = job.view, job.stub.id, job.target.id
-    rewrite = _rewriter(view, stub_id, target_id, [])
-    categories = get_kind(job.target.kind).categories
+    def one(found: re.Match[str]) -> str:
+        if found.group(1) not in same:
+            return str(found.group(0))
+        shown = str(
+            found.group(2) or "".join(seg.text for seg in view.segments(found.group(0)))
+        )
+        return shown if plain else ref(target_id, shown)
+
+    return REF_PATTERN.sub(one, text)
+
+
+def _moved_category(kind: str, category: str, dated: bool) -> str:
+    """`category`, if a `kind` thing has it; else `default_category`'s, a
+    catch-all one, or its kind's first."""
+
+    categories = get_kind(kind).categories
+    if category in categories:
+        return category
+    fallback = default_category(kind, dated)
+    if fallback in categories:
+        return fallback
+    return next((c for c in _CATCH_ALL if c in categories), categories[0])
+
+
+def copy_facts(
+    rev: Revision,
+    view: WorldView,
+    fact_ids: Sequence[str],
+    target_id: str,
+    *,
+    plain_self_links: bool,
+    standing_for: Sequence[str] = (),
+) -> dict[str, str]:
+    """Move the facts `fact_ids` (of any owners) onto `target_id`, in `rev`,
+    the way a fact changes thing (ruling R1): each is copied as a new fact
+    and the original removed, since replay and undo key a fact by its id.
+    Returns `old id -> new id`. `view` is the revision's own
+    (`world.view()` inside it), so what `rev` wrote is seen.
+
+    Each copy keeps its dates and origin; a category the target's kind
+    lacks becomes `default_category`'s (`_moved_category`). Its holder
+    stays its holder, and one its old owner held implicitly (a beliefs
+    drawer's statement, `spheres.held_by`) is written into its origin, so
+    it stays a belief away from the drawer. Links to the target, and to
+    `standing_for` (a stub being re-pointed onto it, whose holdings become
+    the target's too), point at the target: as plain words, with
+    `plain_self_links`. An override among the moved facts points at its
+    copy, the copies' own and every other live fact's, on any date.
+
+    A `KeyError` for a fact or target that isn't live."""
+
+    target = view.thing(target_id)
+    if target is None:
+        raise KeyError(f"no such thing: {target_id}")
+    same = {target_id, *standing_for}
+    found: list[tuple[str, FactState]] = []
+    for fact_id in dict.fromkeys(fact_ids):
+        hit = view.fact(fact_id)
+        if hit is None:
+            raise KeyError(f"no such fact: {fact_id}")
+        found.append(hit)
+    moving = {fact.fact_id for _owner, fact in found}
     copies: dict[str, str] = {}
-    recategorised = 0
-    own_ids = {fact.fact_id for fact in own}
-    for fact in own:
-        text, _moved = rewrite(fact.text or "", target_id, False)
-        category = fact.category
-        if category not in categories:
-            fallback = default_category(job.target.kind, fact.valid_from is not None)
-            category = next(
-                (c for c in _CATCH_ALL if c in categories),
-                fallback if fallback in categories else categories[0],
-            )
-            recategorised += 1
+    for owner_id, fact in found:
+        origin = dict(fact.origin) if fact.origin is not None else None
+        owner = view.thing(owner_id)
+        if owner is not None and "held_by" not in (origin or {}):
+            holder = spheres.held_by(view, fact, owner)
+            if holder is not None:
+                origin = spheres.with_held_by(origin, holder)
+        if origin is not None and origin.get("held_by") in standing_for:
+            origin["held_by"] = target_id
         copies[fact.fact_id] = rev.add_fact(
             target_id,
-            category,
-            text,
+            _moved_category(target.kind, fact.category, fact.valid_from is not None),
+            _relinked(view, fact.text, same, target_id, plain_self_links),
             valid_from=fact.valid_from,
             valid_until=fact.valid_until,
-            # a belief the stub held of itself is the target's now
-            origin=(
-                {**fact.origin, "held_by": target_id}
-                if fact.origin and fact.origin.get("held_by") == stub_id
-                else fact.origin
-            ),
-            overrides=[o for o in fact.overrides if o not in own_ids] or None,
+            origin=origin,
+            overrides=[o for o in fact.overrides if o not in moving] or None,
         )
-    if recategorised:
-        job.notes.append(
-            f"{recategorised} of {job.stub_name}'s facts moved under another"
-            f" category: a {job.target.kind} has no such category"
-        )
-    # overrides of the stub's facts: the copies' own, then everyone else's
-    for fact in own:
-        if any(o in own_ids for o in fact.overrides):
+    for _owner, fact in found:
+        if any(o in moving for o in fact.overrides):
             rev.correct_fact(
                 copies[fact.fact_id],
                 overrides=[copies.get(o, o) for o in fact.overrides],
             )
-    for fact in job.world.live_facts():
-        if fact.fact_id in own_ids or not any(o in own_ids for o in fact.overrides):
-            continue
-        changes.setdefault(fact.fact_id, {})["overrides"] = [
-            copies.get(o, o) for o in fact.overrides
-        ]
+    for _owner, fact in view.overriding(list(moving)):
+        if fact.fact_id not in moving:
+            rev.correct_fact(
+                fact.fact_id, overrides=[copies.get(o, o) for o in fact.overrides]
+            )
+    for fact_id in moving:
+        rev.remove_fact(fact_id)
+    return copies
 
 
 def _own_filing(job: _Job) -> tuple[dict, object] | None:
@@ -645,7 +701,26 @@ class RepointPlan:
         changes = {fact_id: dict(change) for fact_id, change in self._changes.items()}
         for use in self._uses:
             rev.set_field(use.thing_id, use.field, use.value, use.date)
-        _move_facts(job, rev, self._own, changes)
+        recategorised = sum(
+            1
+            for fact in self._own
+            if fact.category not in get_kind(job.target.kind).categories
+        )
+        if recategorised:
+            job.notes.append(
+                f"{recategorised} of {job.stub_name}'s facts moved under another"
+                f" category: a {job.target.kind} has no such category"
+            )
+        # the stub's own facts, copied to the target (the stub's links in
+        # them its words), then everyone else's changes
+        copy_facts(
+            rev,
+            job.world.view(),
+            [fact.fact_id for fact in self._own],
+            target_id,
+            plain_self_links=True,
+            standing_for=[self.stub_id],
+        )
         for fact_id, change in changes.items():
             rev.correct_fact(fact_id, **change)
         if self._added:
@@ -741,3 +816,67 @@ def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
         aka_added=result.aka_added,
     )
     return result
+
+
+def move_fact(
+    world: World,
+    fact_id: str,
+    target_id: str,
+    *,
+    notes: list[str] | None = None,
+    prose: list[str] | None = None,
+) -> str:
+    """Move one fact onto another entry (a fact row's "Move to..."), in
+    one revision (`copy_facts`, ruling R1): a new fact on the target with
+    its dates, origin and holder, the original removed, every override of
+    it pointed at the copy, its links to the target made words. Returns
+    the copy's id.
+
+    Refused with `ValueError`, writing nothing: a fact that isn't live
+    (removed, or never was), a target that's gone or an ignored stub, and
+    the fact's own entry. A category the target's kind lacks becomes
+    `default_category`'s, with a note in `notes`. `prose` gains each of
+    the two entries whose prose is written from the fact's category (the
+    old owner's, the copy's)."""
+
+    view = world.view()
+    found = view.fact(fact_id)
+    if found is None:
+        raise ValueError(f"no such fact, or it was removed: {fact_id}")
+    owner_id, fact = found
+    target = view.thing(target_id)
+    if target is None or target.stub_ignored:
+        raise ValueError(f"no such entry to move it to: {target_id}")
+    owner = view.thing(owner_id)
+    assert owner is not None
+    owner_name = view.name_of(owner_id) or owner_id
+    target_name = view.name_of(target_id) or target_id
+    if owner_id == target_id:
+        raise ValueError(f"the fact is already {target_name}'s")
+    category = _moved_category(target.kind, fact.category, fact.valid_from is not None)
+    if category != fact.category and notes is not None:
+        notes.append(
+            f"a {target.kind} has no {fact.category} facts:"
+            f" it's under {category} on {target_name}"
+        )
+    note = f"moved a fact from {owner_name} to {target_name}"
+    with world.revision(Source.manual(note=note)) as rev:
+        new_id = copy_facts(
+            rev, world.view(), [fact_id], target_id, plain_self_links=True
+        )[fact_id]
+    if prose is not None:
+        for thing_id, kind, read in (
+            (owner_id, owner.kind, fact.category),
+            (target_id, target.kind, category),
+        ):
+            if prose_reads(kind, read) and thing_id not in prose:
+                prose.append(thing_id)
+    log.info(
+        "worlds.fact_moved",
+        fact=fact_id,
+        copy=new_id,
+        owner=owner_id,
+        target=target_id,
+        category=category,
+    )
+    return new_id

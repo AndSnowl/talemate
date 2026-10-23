@@ -42,6 +42,13 @@ from docs/superpowers/probes/2026-10-22-curation.md, "Wording, if the
 owner goes ahead" (create-thing, v3: with the relation-claim rule). The
 probe's held-by rule isn't here (probe 4 fell back to tagging by hand),
 though the example carries "held_by": null as probed.
+
+The generic branch with `broader` (`[(label, text)]`, the broader entry's
+facts labelled M1..., a dated one led "(In 994)" or "(Since 994)", and
+`broader_name`) gets the move-in block after the nearby one, "move_in" in
+its example object and its rule after the elsewhere rules, verbatim from
+docs/superpowers/probes/2026-10-22-curation.md, "Probe 2: moving in",
+"Wording".
 -#}
 <|SECTION:TASK|>
 {% if kind == "species" -%}
@@ -149,6 +156,13 @@ Entries near this one in the world:
 - {{ line }}
 {% endfor %}
 {%- endif %}
+{%- if broader %}
+
+{{ broader_name }} is the broader entry this {{ kind }} is part of. What {{ broader_name }} says now, labelled M1, M2...:
+{% for label, text in broader -%}
+- {{ label }}: {{ text }}
+{% endfor %}
+{%- endif %}
 
 The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
 <|CLOSE_SECTION|>
@@ -183,7 +197,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}; "YEAR" in the example stands for that number. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- else -%}
-{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"{% if nearby %}, "held_by": null{% endif %}}, {"category": "{{ categories[-1] }}", "text": "Another claim."{% if nearby %}, "held_by": null{% endif %}}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if nearby %}, "elsewhere": [{"entry": "<an entry's name>", "text": "A claim mainly about that entry, in a full sentence.", "held_by": null}]{% endif %}{% if spheres %}, "ties": [{"sphere": "...", "role": "practitioner", "since": "YEAR", "exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]{% endif %}}
+{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"{% if nearby %}, "held_by": null{% endif %}}, {"category": "{{ categories[-1] }}", "text": "Another claim."{% if nearby %}, "held_by": null{% endif %}}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if nearby %}, "elsewhere": [{"entry": "<an entry's name>", "text": "A claim mainly about that entry, in a full sentence.", "held_by": null}]{% endif %}{% if broader %}, "move_in": ["<an M label>"]{% endif %}{% if spheres %}, "ties": [{"sphere": "...", "role": "practitioner", "since": "YEAR", "exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]{% endif %}}
 
 - "name": the {{ kind }}'s name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 {% if kind == "character" -%}
@@ -199,6 +213,9 @@ Reply with only one JSON object, shaped exactly like this example:
 - Keep "facts" to claims mainly about the {{ kind }} itself: a claim mainly about another entry goes in "elsewhere".
 - "elsewhere": after the names, what you would add about other entries, each {"entry", "text", "held_by"}: "entry" the entry's name as the list of entries near this one writes it, or a new name you also list in "names"; "text" one claim in a full sentence. Never the {{ kind }} itself. An empty list is fine.
 - A claim that ties another entry to the {{ kind }} ("it is taught at X", "unlike X, it...", "X uses it") is the {{ kind }}'s own: it goes in "facts". "elsewhere" is only for what another entry's page should say even if the {{ kind }} didn't exist.
+{%- endif %}
+{%- if broader %}
+- "move_in": the labels of {{ broader_name }}'s facts above that are mainly about this {{ kind }}, so they belong on its page rather than on {{ broader_name }}'s. They move here: don't write them again in "facts". A fact that only mentions the {{ kind }} in passing stays where it is. An empty list is fine.
 {%- endif %}
 {%- if spheres %}
 - "ties": after the names, the spheres above this character belongs to, each {"sphere", "role", "since", "exceptions"}: "sphere" its name as written above; "role" a word or two for how they belong (practitioner, priest, elder, scholar, member); "since" the year they joined, as a bare number no later than {{ now_year }}, or left out. Only the spheres above: never invent one here. An empty list is fine.

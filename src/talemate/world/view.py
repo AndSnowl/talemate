@@ -448,3 +448,57 @@ class WorldView:
         ).fetchall()
 
         return [(row["thing_id"], _fact_state_from_row(row)) for row in rows]
+
+    _ANY_DATE_FACT = """
+        SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
+               f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+               f.origin_json,
+               (SELECT MIN(f0.row_id) FROM facts f0
+                WHERE f0.fact_id = f.fact_id) AS created
+        FROM facts f
+        JOIN things t ON t.id = f.thing_id AND {things}
+        WHERE f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
+          AND {where}
+        ORDER BY created
+    """
+
+    def _with_overrides(self, row: sqlite3.Row) -> FactState:
+        state = _fact_state_from_row(row)
+        state.overrides = [
+            r[0]
+            for r in self._conn.execute(
+                "SELECT fact_id FROM fact_overrides WHERE row_id = ? ORDER BY rowid",
+                (row["row_id"],),
+            )
+        ]
+        return state
+
+    def fact(self, fact_id: str) -> tuple[str, FactState] | None:
+        """`(owner id, fact)` for the fact `fact_id` live at `rev`, of a
+        live owner, whatever story dates it's true between (an ended fact
+        too), with its overrides; `None` for none."""
+
+        things, params = self._live_things_filter("t.")
+        row = self._conn.execute(
+            self._ANY_DATE_FACT.format(things=things, where="f.fact_id = ?"),
+            (*params, self.rev, self.rev, fact_id),
+        ).fetchone()
+        return (row["thing_id"], self._with_overrides(row)) if row else None
+
+    def overriding(self, fact_ids: list[str]) -> list[tuple[str, FactState]]:
+        """`(owner id, fact)` for every fact live at `rev` (of a live owner,
+        on any story date) that overrides one of `fact_ids`, in creation
+        order, with all its overrides."""
+
+        if not fact_ids:
+            return []
+        things, params = self._live_things_filter("t.")
+        rows = self._conn.execute(
+            self._ANY_DATE_FACT.format(
+                things=things,
+                where="f.row_id IN (SELECT row_id FROM fact_overrides "
+                "WHERE fact_id IN (SELECT value FROM json_each(?)))",
+            ),
+            (*params, self.rev, self.rev, json.dumps(list(fact_ids))),
+        ).fetchall()
+        return [(row["thing_id"], self._with_overrides(row)) for row in rows]

@@ -53,6 +53,12 @@ through `signal_operation_failed` (an `operation_done` envelope with
   shares naming it twice, its own). Prose is refreshed where its input
   changed: the target's for facts or rendered fields it took, another
   thing's for a rendered field rewritten.
+  `move_fact {fact_id, target_id}` (`repoint.move_fact`) moves one fact
+  onto another entry in one revision (a new fact, the original removed,
+  its overrides re-pointed) and answers `{fact_id, target, notes}` (the
+  copy's id and the target's payload). Refused, writing nothing: a removed
+  fact, a deleted target, the fact's own entry. Prose is refreshed for
+  each side whose prose reads the fact's category.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
   `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
@@ -240,7 +246,7 @@ from talemate.worldplay.links import (
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
-from talemate.worldplay.repoint import repoint_stub
+from talemate.worldplay.repoint import move_fact, repoint_stub
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -409,6 +415,11 @@ class IgnoreStubPayload(pydantic.BaseModel):
 
 class RepointStubPayload(pydantic.BaseModel):
     stub_id: str
+    target_id: str
+
+
+class MoveFactPayload(pydantic.BaseModel):
+    fact_id: str
     target_id: str
 
 
@@ -2312,6 +2323,29 @@ class WorldsPlugin(Plugin):
             },
         )
         for thing_id in done.prose:
+            self._schedule_prose(thing_id, None)
+
+    async def handle_move_fact(self, data: dict):
+        """Move one fact onto another entry (`worldplay.repoint.move_fact`),
+        in one revision. Prose is refreshed for each side whose prose reads
+        the fact."""
+
+        payload = MoveFactPayload(**data)
+        world = self._require_world()
+        notes: list[str] = []
+        prose: list[str] = []
+        new_id = move_fact(
+            world, payload.fact_id, payload.target_id, notes=notes, prose=prose
+        )
+        self._reply(
+            "move_fact",
+            {
+                "fact_id": new_id,
+                "target": self._thing_payload(world, payload.target_id, None),
+                "notes": notes,
+            },
+        )
+        for thing_id in prose:
             self._schedule_prose(thing_id, None)
 
     # --- edits ------------------------------------------------------------

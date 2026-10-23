@@ -150,7 +150,7 @@ from talemate.world.kinds import (
 )
 from talemate.world.nearness import near
 from talemate.world.refs import parse_refs, ref
-from talemate.world.repeats import content_words, find_repeats
+from talemate.world.repeats import content_words, find_repeats, overlap
 from talemate.world.sameness import NameIndex, name_index, same_candidates
 from talemate.world.names import (
     ARTICLES,
@@ -159,7 +159,7 @@ from talemate.world.names import (
     unknown_proper_phrases,
 )
 from talemate.world.store import Source, World
-from talemate.world.view import ThingState, WorldView
+from talemate.world.view import FactState, ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
@@ -342,6 +342,19 @@ class ElsewhereFact(BaseModel):
     repeat_of: dict | None = None
 
 
+class MoveInFact(BaseModel):
+    """A fact of the broader entry the new one is part of (`from_id`: the
+    sphere it's filed in, a place's parent, the outer body the owner
+    named), offered to move onto it (spec goal 2). Every one of its facts
+    is offered (ruling C2): the reply's picks ticked, the rest not. `text`
+    is the fact as it reads."""
+
+    fact_id: str
+    from_id: str
+    text: str
+    ticked: bool = False
+
+
 class PreviewInherited(BaseModel):
     """One inherited fact the preview was made with, as the model was
     shown it, so the owner can mark it overridden before accepting."""
@@ -429,6 +442,9 @@ class CreatePreview(BaseModel):
     # "from": part_of, "to": {"name", "drawer"}, "ticked"}`, all unticked
     # until the owner ticks them
     refile: list[dict[str, Any]] = Field(default_factory=list)
+    # the broader entry's facts, offered to move onto this one
+    # (`MoveInFact`): the reply's picks ticked and first
+    move_in: list[MoveInFact] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -1525,6 +1541,252 @@ def flag_elsewhere_repeats(
             item.repeat_of, item.ticked = repeat_of, ticked
 
 
+# --- moving in (spec goal 2) --------------------------------------------------
+
+# the most of a broader entry's facts a create prompt labels: the probe's
+# biggest case, the Tsardom's 22, took the prompt to 4644 tokens; past
+# these, a fact is still offered (unticked), only not shown to the model
+MOVE_IN_SHOWN = 30
+
+_MOVE_IN_LIST_RE = re.compile(r'"move_in"\s*:\s*\[')
+
+
+def broader_entry(
+    view: WorldView,
+    *,
+    part_of: object,
+    fields: dict[str, Any],
+    stub: ThingState | None = None,
+    new_names: Sequence[NewName] = (),
+) -> str | None:
+    """The broader entry a new one is part of, whose facts may move onto
+    it: the sphere its `part_of` names (the preview's, else the owner's
+    field, else the stub's own filing), else its `parent` (a place's).
+    A `part_of` naming an outer body (`{"name", "drawer"}`, ruling C11) is
+    the sphere the world has by that name (or the one the owner marked
+    its row the same as); a new one has no facts yet: `None`. Never the
+    stub itself, a thing the view lacks, or one with no facts."""
+
+    link = part_of if part_of is not None else fields.get("part_of")
+    if link is None and stub is not None:
+        link = stub.fields.get("part_of")
+    found: object = None
+    if isinstance(link, dict) and isinstance(link.get("sphere"), str):
+        found = link["sphere"]
+    elif isinstance(link, dict) and isinstance(link.get("name"), str):
+        key = name_key(link["name"])
+        row = next((r for r in new_names if name_key(r.name) == key), None)
+        found = (row.same_target_id if row is not None else None) or existing_id(
+            view, link["name"], "sphere"
+        )
+        if found is None:
+            return None
+    else:
+        found = fields.get("parent")
+        if found is None and stub is not None:
+            found = stub.fields.get("parent")
+    if not isinstance(found, str) or (stub is not None and found == stub.id):
+        return None
+    state = view.thing(found)
+    if state is None or not _broader_facts(state):
+        return None
+    return found
+
+
+def _broader_facts(state: ThingState) -> list[FactState]:
+    """The broader entry's own facts, as the move-in probe listed them: in
+    the order they were written, never a sphere's summary (it's the
+    sphere's own)."""
+
+    return sorted(
+        (f for f in state.facts if not spheres.is_summary_fact(f)),
+        key=lambda f: f.created,
+    )
+
+
+def broader_lines(
+    view: WorldView, calendar: Calendar, broader_id: str
+) -> tuple[list[tuple[str, str]], dict[str, str]]:
+    """`(lines, labels)`: the broader entry's first `MOVE_IN_SHOWN` facts
+    as the create prompt shows them, `(label, text)` labelled M1..., a
+    dated one led "(In 994)" on a timeline and "(Since 994)" otherwise;
+    and `label -> fact id`."""
+
+    state = view.thing(broader_id)
+    facts = _broader_facts(state)[:MOVE_IN_SHOWN] if state is not None else []
+    lines: list[tuple[str, str]] = []
+    labels: dict[str, str] = {}
+    for number, fact in enumerate(facts, 1):
+        text = view.render(fact.text)
+        if fact.valid_from is not None:
+            lead = "In" if fact.category == "timeline" else "Since"
+            year = _shown_year(calendar, fact.valid_from.to_datetime().year)
+            text = f"({lead} {year}) {text}"
+        label = f"M{number}"
+        lines.append((label, text))
+        labels[label] = fact.fact_id
+    return lines, labels
+
+
+def parse_move_in(
+    reply: str, wrapper: dict[str, Any] | None, labels: dict[str, str]
+) -> list[str]:
+    """The fact ids the reply's `"move_in"` labels pick, in order: the
+    wrapper's list, or, when the reply was cut off, the last one written.
+    An unknown label is dropped."""
+
+    if wrapper is not None:
+        value = wrapper.get("move_in")
+    else:
+        last = None
+        for last in _MOVE_IN_LIST_RE.finditer(reply):
+            pass
+        value = _list_at(reply, last)
+    return _mapped_labels(value, labels) if value is not None else []
+
+
+def move_in_rows(
+    view: WorldView, broader_id: str, picked: Sequence[str] = ()
+) -> list[MoveInFact]:
+    """Every one of the broader entry's facts as a move-in row (ruling
+    C2): the `picked` ones ticked and first, the rest unticked, each group
+    in the order they were written."""
+
+    state = view.thing(broader_id)
+    if state is None:
+        return []
+    rows = [
+        MoveInFact(
+            fact_id=fact.fact_id,
+            from_id=broader_id,
+            text=view.render(fact.text),
+            ticked=fact.fact_id in picked,
+        )
+        for fact in _broader_facts(state)
+    ]
+    return sorted(rows, key=lambda row: not row.ticked)
+
+
+def untick_moved_repeats(
+    view: WorldView,
+    facts: Sequence[PreviewFact],
+    move_in: Sequence[MoveInFact],
+    settings: CurationSettings,
+) -> None:
+    """A fact of the new entry's own that says again what a ticked move
+    says (the probe's Zakonnik wrote the law code it moved in again): it
+    starts unticked, a repeat of that move, at the world's
+    `repeat_untick_threshold` with at least `UNTICK_MIN_WORDS` content
+    words. The move stays ticked."""
+
+    moves = [row for row in move_in if row.ticked]
+    if not moves:
+        return
+    for fact in facts:
+        text = view.render(fact.text)
+        if len(content_words(text)) < UNTICK_MIN_WORDS:
+            continue
+        score, row = max(
+            ((overlap(text, row.text), row) for row in moves), key=lambda p: p[0]
+        )
+        if score < settings.repeat_untick_threshold:
+            continue
+        fact.ticked = False
+        fact.repeat_of = {
+            "fact_id": row.fact_id,
+            "owner_id": row.from_id,
+            "owner_name": view.name_of(row.from_id) or "",
+            "text": row.text,
+            "score": score,
+        }
+
+
+def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
+    """The preview's move-in rows, for the broader entry it has now (an
+    outer body the owner named, `bodies.add_outer_body`): kept while it's
+    the same entry; else that entry's facts, every one unticked, since
+    the model never saw them; none for a new outer body."""
+
+    if not _generic_branch(
+        preview.kind, _lineage_sources(preview.kind, preview.fields)
+    ):
+        return
+    stub = view.thing(preview.stub_id) if preview.stub_id is not None else None
+    broader = broader_entry(
+        view,
+        part_of=preview.part_of,
+        fields=preview.fields,
+        stub=stub,
+        new_names=preview.new_names,
+    )
+    if broader is None:
+        preview.move_in = []
+    elif not any(row.from_id == broader for row in preview.move_in):
+        preview.move_in = move_in_rows(view, broader)
+
+
+def prose_reads(kind: str, category: str) -> bool:
+    """Whether some section of a `kind` thing's prose is written from its
+    `category` facts (`prose_gen.unread_categories`)."""
+
+    return any(
+        category not in prose_gen.unread_categories(kind, section)
+        for section in prose_gen.sections_for(kind)
+    )
+
+
+def _write_move_in(
+    rev: Any,
+    world: World,
+    before: WorldView,
+    move_in: Sequence[MoveInFact],
+    thing_id: str,
+    notes: list[str],
+) -> None:
+    """Move each ticked row's fact onto `thing_id`, in `rev`
+    (`repoint.copy_facts`, ruling R1): a new fact with its dates, origin
+    and holder, the original removed, its overrides re-pointed; its links
+    to the entry itself become words. A fact gone from its entry since the
+    preview stays where it is, with a note."""
+
+    # imported here: `worldplay.repoint` imports this module
+    from talemate.worldplay.repoint import copy_facts
+
+    live = world.view()
+    fact_ids: list[str] = []
+    for row in move_in:
+        if not row.ticked or row.from_id == thing_id:
+            continue
+        found = live.fact(row.fact_id)
+        if found is None or found[0] != row.from_id:
+            name = before.name_of(row.from_id) or row.from_id
+            notes.append(
+                f'{name}\'s fact "{_clip(row.text, 60)}" was moved or removed '
+                "since the preview, so it doesn't move in"
+            )
+            continue
+        fact_ids.append(row.fact_id)
+    if fact_ids:
+        copy_facts(rev, live, fact_ids, thing_id, plain_self_links=True)
+
+
+def _move_in_prose(
+    view: WorldView, move_in: Sequence[MoveInFact], skip: str
+) -> list[str]:
+    """The entries a ticked move takes a fact from that their prose reads
+    (the new entry's own prose is the preview's)."""
+
+    changed: list[str] = []
+    for row in move_in:
+        state = view.thing(row.from_id)
+        if not row.ticked or state is None or row.from_id in (skip, *changed):
+            continue
+        fact = next((f for f in state.facts if f.fact_id == row.fact_id), None)
+        if fact is not None and prose_reads(state.kind, fact.category):
+            changed.append(row.from_id)
+    return changed
+
+
 # the most same-thing candidates a preview shows (the spec's cap)
 SAME_CANDIDATES = 5
 
@@ -2548,6 +2810,15 @@ async def preview_thing(
     A sphere isn't made here: `worldplay.spheres.preview_sphere` makes one
     from a template.
 
+    A thing written in the generic branch that's part of a broader entry
+    (`broader_entry`: the sphere it's filed in, a place's parent) is shown
+    that entry's facts, labelled M1... (`broader_lines`, at most
+    `MOVE_IN_SHOWN`), and the reply's `"move_in"` picks become the
+    preview's `move_in`: every fact of the broader entry, the picks ticked
+    and first (ruling C2), and an own fact that writes a pick again
+    unticked (`untick_moved_repeats`). The broader entry isn't "Named in
+    this prompt" too.
+
     The reply's `aka` becomes the preview's other names and its `names`
     the `new_names` accept makes stubs for (`_new_names`). Without a
     `stub_id`, a live stub of the same kind and name is offered as
@@ -2604,12 +2875,23 @@ async def preview_thing(
     sphere_block, sphere_labels = spheres_block(
         view, sphere_ids, lambda sphere_id: cached_summary(world, sphere_id)
     )
+    part_of = child_part_of(view, stub, prompt, picks) if stub is not None else None
+    # the broader entry it's part of, whose facts may move in (spec goal
+    # 2): shown in its own block, so not "Named in this prompt" too
+    broader_id = (
+        broader_entry(view, part_of=part_of, fields=fields, stub=stub)
+        if _generic_branch(kind, sources)
+        else None
+    )
     named = _named_in_prompt(
         view,
-        {w: thing_id for w, thing_id in picks.items() if thing_id not in sphere_ids},
+        {
+            w: thing_id
+            for w, thing_id in picks.items()
+            if thing_id not in sphere_ids and thing_id != broader_id
+        },
         stub_id,
     )
-    part_of = child_part_of(view, stub, prompt, picks) if stub is not None else None
     # the entries near it: today's context first (the sphere it's part of,
     # what mentions it, what the prompt names), then nearness from the stub
     # and the named things
@@ -2629,6 +2911,10 @@ async def preview_thing(
             focus.append(stub.id)
         elif home is not None:
             focus.append(home)
+    elif broader_id is not None:
+        # a new entry: the entry it's part of is its context
+        first.append(broader_id)
+        focus.append(broader_id)
     first += list(picks.values())
     focus += list(picks.values())
     near_ids = nearby_ids(
@@ -2644,6 +2930,11 @@ async def preview_thing(
     now_year = now.to_datetime().year
     shown_now = _shown_year(calendar, now_year)
     era = _era_at(calendar, now_year)
+    broader, broader_labels = (
+        broader_lines(view, calendar, broader_id)
+        if broader_id is not None
+        else ([], {})
+    )
 
     template_vars: dict[str, Any] = {
         "kind": kind,
@@ -2665,6 +2956,8 @@ async def preview_thing(
         "named": named,
         "spheres": sphere_block,
         "nearby": nearby,
+        "broader": broader,
+        "broader_name": view.name_of(broader_id) or "" if broader_id else "",
     }
     context: list[tuple[str, list[str]]] = []
     if stub is not None and gathered is not None:
@@ -2806,6 +3099,18 @@ async def preview_thing(
             holder=lambda held: holder_named(view, held),
         )
         flag_elsewhere_repeats(view, elsewhere, settings)
+    # moving in: every fact of the broader entry, the reply's picks ticked
+    # (ruling C2); an own fact that writes a pick again starts unticked
+    move_in = (
+        move_in_rows(
+            view,
+            broader_id,
+            parse_move_in(reply, _reply_wrapper(reply), broader_labels),
+        )
+        if broader_id is not None
+        else []
+    )
+    untick_moved_repeats(view, facts, move_in, settings)
 
     # same thing?: what the entry and each stub it would make may already
     # be, from one read of the world's names; never the stub being filled,
@@ -2851,6 +3156,7 @@ async def preview_thing(
         repeats=sum(1 for f in facts if f.repeat_of is not None),
         unticked=sum(1 for f in facts if not f.ticked),
         elsewhere=len(elsewhere),
+        move_in=sum(1 for row in move_in if row.ticked),
         new_names=len(stub_names),
         stub_id=stub_id,
         same_as=len(same_as),
@@ -2876,6 +3182,7 @@ async def preview_thing(
         elsewhere=elsewhere,
         same_as=same_as,
         verdict=verdict,
+        move_in=move_in,
     )
 
 
@@ -3012,6 +3319,13 @@ def accept_preview(
     - A new name the owner marked as a thing the world has
       (`NewName.same_target_id`) makes no stub: the facts link it to that
       thing, which takes it as a common other name (`_row_stubs`).
+    - Each ticked `move_in` row's fact moves from the broader entry onto
+      the entry (onto X, with `same_target_id`), in the same revision
+      (`repoint.copy_facts`, ruling R1): a new fact with its dates, origin
+      and holder, the original removed, its overrides re-pointed, its
+      links to the entry made words. One gone from its entry since the
+      preview stays, with a note. The broader entry goes in `prose` when
+      its prose reads what it lost; the entry's own is the preview's.
     - With `same_target_id` ("Is this X?" -- yes) nothing new is made for
       the entry: its material goes onto X (`_accept_same`)."""
 
@@ -3073,6 +3387,11 @@ def _accept_new(
             notes.extend(fold.result().notes)
     if prose is not None and fold is not None:
         prose.extend(t for t in fold.result().prose if t != thing_id)
+    if prose is not None:
+        # what a fact moved in from has lost
+        prose.extend(
+            t for t in _move_in_prose(view, preview.move_in, thing_id) if t not in prose
+        )
 
     # the prose was written from every fact, which is how the thing reads
     # at the open, "now" end of its timeline -- unless the owner left a
@@ -3284,6 +3603,9 @@ def _write_preview(
                 linked.update(parse_refs(text))
                 text, origin = exception_fact(text, tie, exception)
                 rev.add_fact(thing_id, "ties", text, origin=origin)
+        # the broader entry's ticked facts move in, after the entry's own
+        # (whose overrides name them as they are)
+        _write_move_in(rev, world, view, preview.move_in, thing_id, notes)
         linked |= write_elsewhere(
             rev,
             linking,
@@ -3479,7 +3801,11 @@ def _accept_same(
         if plan is not None:
             notes.extend(plan.result().notes)
     if prose is not None:
-        changed = [target_id, *(plan.result().prose if plan is not None else [])]
+        changed = [
+            target_id,
+            *(plan.result().prose if plan is not None else []),
+            *_move_in_prose(view, preview.move_in, target_id),
+        ]
         prose.extend(t for t in dict.fromkeys(changed) if t not in prose)
     log.info(
         "create.accept_same",
@@ -3736,6 +4062,7 @@ def _write_same(
                     linked_text(exception.text), tie, exception
                 )
                 rev.add_fact(target_id, "ties", text, origin=origin)
+        _write_move_in(rev, world, view, preview.move_in, target_id, notes)
         linked |= write_elsewhere(
             rev,
             linking,

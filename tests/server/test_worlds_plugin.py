@@ -4608,3 +4608,31 @@ async def test_accept_preview_onto_target_schedules_its_prose(plugin, monkeypatc
     assert len(list(view.things())) == things
     assert "Sails at dawn." in [f.text for f in view.thing(maren).facts]
     assert scheduled == [maren]
+
+
+async def test_move_fact_moves_one_fact(plugin, monkeypatch):
+    """`move_fact` moves one fact onto another entry in one revision: a new
+    fact, the original gone, prose for both sides. A refusal writes
+    nothing."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    head = world.head_rev()
+    await _act(plugin, "move_fact", fact_id=s.ships, target_id=s.moscavy)
+    assert not _errors(plugin)
+    assert world.head_rev() == head + 1
+    reply = _last(plugin, "move_fact")["data"]
+    assert reply["fact_id"] != s.ships
+    assert reply["target"]["id"] == s.moscavy
+    assert reply["notes"] == []
+    assert s.ships not in [f.fact_id for f in world.live_facts(s.harbour)]
+    moved = next(
+        f for f in world.live_facts(s.moscavy) if f.fact_id == reply["fact_id"]
+    )
+    assert moved.text == f"Ships from {ref(s.tsardom, 'Moscavia')} dock here."
+    assert s.prose == [s.harbour, s.moscavy]
+
+    head = world.head_rev()
+    await _act(plugin, "move_fact", fact_id=reply["fact_id"], target_id=s.moscavy)
+    assert "already" in _last(plugin, "operation_done")["error"]["message"]
+    assert world.head_rev() == head

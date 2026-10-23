@@ -22,7 +22,10 @@ pre-filled as `outer_name` gives it ("<inner part>'s parent"), and
   filing);
 - every entry the world has filed in the drawer the outer body goes into
   (the Frosted Wing in the Tsardom's Military) gets a re-file row, all
-  unticked: no model judges which are its siblings, the owner ticks them.
+  unticked: no model judges which are its siblings, the owner ticks them;
+- the entry itself put into an outer body takes that body's facts as what
+  may move in (`create.offer_move_in`, spec goal 2): none for a new one,
+  every fact of one the world has, unticked.
 
 Accept (`create.accept_preview`, `spheres.accept_sphere`,
 `spheres.accept_fill`) makes the chain outer first and files it in one
@@ -40,7 +43,12 @@ from talemate.world import spheres
 from talemate.world.kinds import PART_OF_KINDS, SPHERE_TEMPLATES, UNSORTED_DRAWER_ID
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
-from talemate.worldplay.create import CreatePreview, ElsewhereFact, home_name
+from talemate.worldplay.create import (
+    CreatePreview,
+    ElsewhereFact,
+    home_name,
+    offer_move_in,
+)
 from talemate.worldplay.links import NewName, existing_id, name_key
 from talemate.worldplay.spheres import FillPreview, SpherePreview, _item_kind
 
@@ -395,6 +403,10 @@ def add_outer_body(
             }
         )
     preview.refile.extend(r for r in rows if r["thing_id"] not in taken)
+    if type(preview) is CreatePreview and part.row is None and part.item is None:
+        # the outer body is the entry's broader one now: its facts may move
+        # in, or none, when it's new (`create.offer_move_in`)
+        offer_move_in(view, preview)
     return preview
 
 
