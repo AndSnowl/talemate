@@ -15,8 +15,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   marker; ignored stubs left out), `get_thing {id, at}`. A thing's payload
   holds its fields, the facts visible at `at` (each with the inherited
   facts it `overrides`), its cached prose per section (with whether it's
-  stale, following its lineage), its whole timeline and the scenes it
-  appears in. From `talemate.world.heritage` it adds what it inherits
+  stale, following its lineage), its whole change history (`timeline`)
+  and the scenes it appears in. From `talemate.world.heritage` it adds what it inherits
   (`inherited`, each with what overrides it), its resolved `numbers`, a
   character's `life_stage` (from `born`, at `at` or else the world's
   "now"), and, on a species page, its `races` and `mixes`.
@@ -32,6 +32,46 @@ through `signal_operation_failed` (an `operation_done` envelope with
   (`aka`), its `stub` marker (`null` or `{ignored}`; `fields` holds
   neither), its `mentions` (every other entry's fact that references it)
   and `named_stubs` (`{id, name, kind}` of the stubs its facts link to).
+- Curation (curation spec): each own and inherited fact row, and each
+  drawer item, carries `held_by`, `{id, name}` of the sphere, character
+  or being that holds it as a belief (`spheres.held_by`, the implicit
+  holder of a religion's or culture's beliefs statement included), or
+  `null`. Every kind's payload has `entry_timeline`
+  (`world.timelines.entry_timeline` at the world's `timeline_reach`,
+  disagreements worked out): `[{fact_id, owner_id, owner_name, date,
+  until, segments, here, disagrees_with}]` in date order -- its own
+  dated facts and, for a sphere, the lines it gathers (`here` false,
+  `owner_*` whose they are); `until` is set once the fact has ended (the
+  screen shows "900–1010"), and a held line's `segments` read "<Holder>
+  holds that ..." (`worldplay.held`), the holder linked.
+  `set_held_by {thing_id, fact_id, holder_id|null, at}` sets or clears
+  one own fact's holder in one revision (null makes it world truth, also
+  for a beliefs statement) and answers with the thing; held-ness feeds
+  description prose (ruling C3), so prose is refreshed when the thing's
+  prose reads the fact's category. `pick_date {keep_fact_id,
+  drop_fact_id, mode: "end"|"remove", thing_id?, at?}` settles a
+  timeline disagreement: refused unless the two disagree now
+  (`repeats.disagreeing_dates`, worked out again, never the client's
+  word); "end" ends the dropped fact at the world's now, "remove" removes
+  it, in one revision; answers `{keep_fact_id, drop_fact_id, mode,
+  owner_id, notes, thing?}` and refreshes the dropped fact's entry's
+  prose as an edit would. `get_curation` and `set_curation {settings}`
+  (a part of `CurationSettings`, the rest kept; unknown or out of range
+  refused) answer `{settings, defaults}`.
+  Previews (`preview_thing`, `preview_sphere`, `preview_branch`,
+  `fill_drawer`, `add_outer_body`) are the preview's dump plus names for
+  display: `held_by_name` on each fact and elsewhere fact, `from_name`
+  on each `move_in` row, `name`, `from_name` and `to_name` on each
+  `refile` row. Everything curation adds is in the dump: facts' `ticked`,
+  `repeat_of`, `held_by`; `elsewhere` (`target_id`, `target_name`, `new`,
+  `category`, `text`, `since`, `held_by`, `ticked`, `repeat_of`);
+  `same_as` and `verdict` (with its `why`); `new_names` (with `part_of`,
+  `same_as`, `same_target_id`); `refile`; `move_in`. The accepts take the
+  owner's edits to all of it back, validated (`RefileRow`, `ItemIn`, the
+  preview models), and every accept answers `notes`. An accept schedules
+  prose for each entry the world has whose prose reads what it took (an
+  elsewhere fact, an item's text, a fact moved off it), never for a
+  sphere's statements or timeline (rulings P18, P19).
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
   ignored stub) and links that phrase in the fact (its first plain
@@ -90,7 +130,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   facts, prose, fields?, ties?}`) that previews are answered from instead
   of the model (listing what the request's fields inherit, and for a
   `stub_id` its kind, name, mention context and sphere `part_of`, as a
-  real preview does).
+  real preview does). The file's facts may name a `held_by` holder, and
+  it may hold `elsewhere` (`[{entry, text, since?, held_by?}]`) and
+  `move_in` (`["M1", ...]`, the broader entry's facts as labelled), each
+  read through the real parsers (`create.holder_named`,
+  `parse_elsewhere`, `broader_entry` and `parse_move_in`).
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
@@ -123,9 +167,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   items: [{thing_id, fact_id, name, segments, inherited, stub}]}], people:
   [{character_id, name, role, since, until, within, within_name}],
   territory: [{id, name}],
-  timeline: [{fact_id, date, segments}], branches: [{id, name}], parent:
-  {id, name} | null}`; an item in no drawer the sphere has is in a last
-  `unsorted` drawer), `part_of` (`null`, or `{sphere_id, sphere_name,
+  timeline, branches: [{id, name}], parent: {id, name} | null}`; an item
+  in no drawer the sphere has is in a last `unsorted` drawer; `timeline`
+  is the payload's `entry_timeline` lines after its undated `timeline`
+  facts, a branch's inherited ones included, each a line with a null
+  `date`), `part_of` (`null`, or `{sphere_id, sphere_name,
   drawer_id, drawer_title}`, Unsorted's title for a drawer that's gone)
   and, for a character, `ties` (`[{sphere_id, sphere_name, role, since,
   until, within, within_name, exceptions: [{fact_id, segments}]}]`). `list_things {kind:
@@ -134,7 +180,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   fields, stub_id, picks, new_names, promote_id}` and `preview_branch
   {parent_id, prompt}` run in the background like `preview_thing`
   (answering with `{preview}` data, or `preview_sphere_failed` /
-  `preview_branch_failed`); `accept_sphere {preview}` writes either.
+  `preview_branch_failed`); `accept_sphere {preview}` writes either,
+  answering with the sphere and `notes`.
   `fill_drawer {sphere_id, drawer_id}` answers the `FillPreview`,
   `{sphere_id, drawer_id, items, elsewhere, new_names, refile}` (or
   `fill_failed`) and `accept_fill {sphere_id,
@@ -186,7 +233,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   {...}, "fill": [...], "branch": {...}}` of model replies (the core's,
   Fill's items, a branch's) that `preview_sphere`, `fill_drawer` and
   `preview_branch` read through their real parsing instead of asking the
-  model; a missing file or key asks the model as usual.
+  model; a missing file or key asks the model as usual. `fill` may also
+  be the whole reply object, `{new_items, elsewhere, names}`, so a fixed
+  Fill carries elsewhere facts (each with its `held_by`) through the real
+  parser. A core has no elsewhere and no move-in (ruling C1), and a merge
+  asks no model, so it has no fixed reply.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -196,7 +247,7 @@ import asyncio
 import json
 import os
 import uuid
-from collections.abc import Coroutine
+from collections.abc import Collection, Coroutine
 from pathlib import Path
 from typing import Any, Literal
 
@@ -208,6 +259,7 @@ from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
 from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar
+from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
     DRAWER_TYPES,
@@ -221,9 +273,11 @@ from talemate.world.kinds import (
 from talemate.world.names import find_names, unknown_proper_phrases
 from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.refs import REF_PATTERN
+from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
 from talemate.world.timeline import TimelineEntry
+from talemate.world.timelines import TimelineLine, entry_timeline
 from talemate.world.view import FactState, Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay import spheres as sphereplay
@@ -234,24 +288,38 @@ from talemate.worldplay.create import (
     PART_OF_KINDS,
     CreatePreview,
     ElsewhereFact,
+    MoveInFact,
     PreviewException,
+    PreviewFact,
     PreviewTie,
     accept_preview,
+    broader_entry,
+    broader_lines,
     child_part_of,
     current_date,
     drawer_types_for,
     exception_fact,
+    flag_elsewhere_repeats,
+    holder_named,
     matching_stub,
+    move_in_rows,
+    offer_same,
+    parse_elsewhere,
+    parse_move_in,
     part_of_since,
     preview_inherited,
     preview_thing,
+    prose_reads,
+    untick_moved_repeats,
 )
+from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
     LinkSpan,
     NewName,
     link_phrase,
     link_text,
     make_stubs,
+    name_key,
     repoint_ref,
 )
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
@@ -362,12 +430,63 @@ class PreviewPayload(pydantic.BaseModel):
     new_names: list[str] = pydantic.Field(default_factory=list)
 
 
+class RefileRow(pydantic.BaseModel):
+    """A re-file row as `add_outer_body` makes it and the owner sends it
+    back: the entry, where it's filed now, where it goes, and the owner's
+    tick. Other keys (the names shown with it) pass through."""
+
+    model_config = pydantic.ConfigDict(extra="allow", populate_by_name=True)
+
+    thing_id: str
+    from_: dict[str, Any] | None = pydantic.Field(default=None, alias="from")
+    to: dict[str, str]
+    ticked: bool = False
+
+
+class ItemIn(pydantic.BaseModel):
+    """A sphere core's or Fill's item as the owner sends it back: its text,
+    and, for a named one, its name and kind; the owner's tick, and an
+    entry the world has it's the same as. Other keys pass through as they
+    came."""
+
+    model_config = pydantic.ConfigDict(extra="allow")
+
+    text: str
+    name: str | None = None
+    kind: str | None = None
+    drawer_id: str | None = None
+    thing_id: str | None = None
+    same_target_id: str | None = None
+    ticked: bool = True
+    repeat_of: dict[str, Any] | None = None
+    part_of: dict[str, str] | None = None
+
+
+def _refile_in(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Re-file rows validated (`RefileRow`), as dicts the accept reads."""
+
+    return [RefileRow.model_validate(row).model_dump(by_alias=True) for row in rows]
+
+
+def _items_in(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Items validated (`ItemIn`), each the dict it was sent as."""
+
+    return [
+        ItemIn.model_validate(item).model_dump(exclude_unset=True) for item in items
+    ]
+
+
 class AcceptPreviewPayload(pydantic.BaseModel):
     preview: CreatePreview
     # "fill the stub instead": the stub a preview made without one fills
     into_stub: str | None = None
     # "Is this X?" -- yes: the entry the preview's material goes onto
     same_target_id: str | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _rows(self) -> "AcceptPreviewPayload":
+        self.preview.refile = _refile_in(self.preview.refile)
+        return self
 
 
 class _ThingEdit(pydantic.BaseModel):
@@ -464,6 +583,37 @@ class RemoveFactPayload(_ThingEdit):
     fact_id: str
 
 
+class SetHeldByPayload(_ThingEdit):
+    fact_id: str
+    # the sphere, character or being that holds the fact as a belief;
+    # null makes it world truth (also for a beliefs drawer's statement).
+    # Required, so a client that leaves it out clears nothing.
+    holder_id: str | None
+
+
+class PickDatePayload(pydantic.BaseModel):
+    keep_fact_id: str
+    drop_fact_id: str
+    # "end": the dropped fact ends at the world's now; "remove": it goes
+    mode: Literal["end", "remove"]
+    # the page the owner picked on: the reply carries its payload
+    thing_id: str | None = None
+    at: dict | None = None
+
+
+class SetCurationPayload(pydantic.BaseModel):
+    # the knobs to change (`CurationSettings`' fields); the rest are kept
+    settings: dict[str, Any]
+
+    @pydantic.field_validator("settings")
+    @classmethod
+    def _known(cls, value: dict[str, Any]) -> dict[str, Any]:
+        unknown = set(value) - set(CurationSettings.model_fields)
+        if unknown:
+            raise ValueError(f"no such curation setting: {', '.join(sorted(unknown))}")
+        return value
+
+
 class OverrideFactPayload(_ThingEdit):
     overridden_fact_id: str
     text: str
@@ -504,6 +654,12 @@ class PreviewSpherePayload(pydantic.BaseModel):
 class AcceptSpherePayload(pydantic.BaseModel):
     preview: sphereplay.SpherePreview
 
+    @pydantic.model_validator(mode="after")
+    def _rows(self) -> "AcceptSpherePayload":
+        self.preview.items = _items_in(self.preview.items)
+        self.preview.refile = _refile_in(self.preview.refile)
+        return self
+
 
 class FillDrawerPayload(pydantic.BaseModel):
     sphere_id: str
@@ -519,6 +675,12 @@ class AcceptFillPayload(FillDrawerPayload):
     # (`add_outer_body`), as it left them
     new_names: list[NewName] = pydantic.Field(default_factory=list)
     refile: list[dict[str, Any]] = pydantic.Field(default_factory=list)
+
+    @pydantic.model_validator(mode="after")
+    def _rows(self) -> "AcceptFillPayload":
+        self.items = _items_in(self.items)
+        self.refile = _refile_in(self.refile)
+        return self
 
 
 class AddOuterBodyPayload(pydantic.BaseModel):
@@ -682,7 +844,9 @@ def _fixed_sphere_reply(key: str) -> str | None:
     """The browser tests' fixed sphere reply for `key` (`sphere`, `fill`
     or `branch`), as the model's reply text, so the real parsing reads it:
     `None` when the setting is unset, its file isn't there, or the file has
-    no `key`. A `fill` list is wrapped as `{"new_items": [...]}`."""
+    no `key`. A `fill` list is wrapped as `{"new_items": [...]}`; a `fill`
+    object is the whole reply, so it can carry `elsewhere` (each with its
+    `held_by`) and `names`."""
 
     path = _fixed_file(FIXED_SPHERE_ENV)
     if path is None:
@@ -691,6 +855,8 @@ def _fixed_sphere_reply(key: str) -> str | None:
     reply = fixed.get(key)
     if reply is None:
         return None
+    # a list is Fill's items alone; an object (`{"new_items", "elsewhere",
+    # "names"}`) is the whole reply
     if key == "fill" and isinstance(reply, list):
         reply = {"new_items": reply}
     return json.dumps(reply)
@@ -709,7 +875,7 @@ def _fixed_file(env: str) -> Path | None:
 
 
 async def _fixed_preview(
-    path: Path, payload: PreviewPayload, view: WorldView
+    path: Path, payload: PreviewPayload, world: World
 ) -> CreatePreview:
     """The browser tests' stand-in for `preview_thing`: the preview in
     `path`, for the request's kind, prompt, fields and picks, listing what
@@ -721,12 +887,22 @@ async def _fixed_preview(
     its `part_of` as the real one does (`create.child_part_of`), and a
     character's `ties` are the file's own, each `{sphere_id, sphere, role,
     since?, exceptions: [{text, item, thing_id?, fact_id?}]}`.
+
+    Curation, read through the real parsers: a fact's `held_by` (a
+    holder's name, `create.holder_named`); `elsewhere`, the model's
+    `[{entry, text, since?, held_by?}]` (`create.parse_elsewhere`, repeats
+    flagged, a new entry's row offered what it may be the same as); and
+    `move_in`, the model's labels (`["M1", ...]`) of the broader entry's
+    facts (`create.broader_entry`, `parse_move_in`, `move_in_rows`).
     Async so it runs through the same background task and reply path as
     the real one."""
+
+    view = world.view()
 
     fixed = json.loads(path.read_text(encoding="utf-8"))
     fields = {**payload.fields, **fixed.get("fields", {})}
     kind, name = payload.kind, fixed["name"]
+    holder = lambda held: holder_named(view, held)  # noqa: E731
     context: list[tuple[str, list[str]]] = []
     stub = view.thing(payload.stub_id) if payload.stub_id is not None else None
     if payload.stub_id is not None:
@@ -737,12 +913,60 @@ async def _fixed_preview(
         kind = stub.kind
         name = view.name_of(stub.id) or name
         context = mention_context(view, stub.id)
+    part_of = (
+        child_part_of(view, stub, payload.prompt, payload.picks)
+        if stub is not None
+        else None
+    )
+    # a fact's `held_by` is a holder's name, as the model writes it
+    facts = [
+        PreviewFact.model_validate(
+            {
+                **fact,
+                "held_by": (
+                    holder(fact["held_by"])
+                    if isinstance(fact.get("held_by"), str)
+                    else None
+                ),
+            }
+        )
+        for fact in fixed["facts"]
+    ]
+    settings = world.curation()
+    calendar = world.calendar
+    now_year = current_date(world).to_datetime().year
+    elsewhere = parse_elsewhere(
+        fixed.get("elsewhere") or [],
+        view,
+        own_keys={name_key(name)},
+        own_ids={stub.id} if stub is not None else set(),
+        listed=[],
+        calendar=calendar,
+        now_year=now_year,
+        holder=holder,
+    )
+    flag_elsewhere_repeats(view, elsewhere, settings)
+    offer_same(
+        view,
+        [e.new for e in elsewhere if e.new is not None],
+        near_ids=[],
+        exclude=[stub.id] if stub is not None else [],
+    )
+    move_in: list[MoveInFact] = []
+    if "move_in" in fixed:
+        broader_id = broader_entry(view, part_of=part_of, fields=fields, stub=stub)
+        if broader_id is not None:
+            _lines, labels = broader_lines(view, calendar, broader_id)
+            wrapper = {"move_in": fixed["move_in"]}
+            picked = parse_move_in(json.dumps(wrapper), wrapper, labels)
+            move_in = move_in_rows(view, broader_id, picked)
+            untick_moved_repeats(view, facts, move_in, settings)
     return CreatePreview(
         kind=kind,
         prompt=payload.prompt,
         fields=fields,
         name=name,
-        facts=fixed["facts"],
+        facts=facts,
         prose=fixed["prose"],
         inherited=preview_inherited(view, kind, fields),
         stub_id=payload.stub_id,
@@ -750,12 +974,10 @@ async def _fixed_preview(
         context=context,
         picks=payload.picks,
         treated_as_new=payload.new_names,
-        part_of=(
-            child_part_of(view, stub, payload.prompt, payload.picks)
-            if stub is not None
-            else None
-        ),
+        part_of=part_of,
         ties=fixed.get("ties", []) if kind == "character" else [],
+        elsewhere=elsewhere,
+        move_in=move_in,
     )
 
 
@@ -846,6 +1068,167 @@ class _Links:
         return found
 
 
+# --- curation -----------------------------------------------------------------
+
+
+def _held_out(
+    view: WorldView, fact: FactState, owner: ThingState | None
+) -> dict | None:
+    """Who holds `fact` (of `owner`) as a belief (`spheres.held_by`), as
+    `{id, name}`, or `None` for world truth."""
+
+    if owner is None:
+        return None
+    holder = spheres.held_by(view, fact, owner)
+    if holder is None:
+        return None
+    return {"id": holder, "name": view.name_of(holder) or ""}
+
+
+def _trimmed(runs: list[Segment], start: int, end: int) -> list[Segment]:
+    """The characters `start:end` of `runs`' joined text, as runs."""
+
+    out: list[Segment] = []
+    position = 0
+    for run in runs:
+        lo, hi = max(start, position), min(end, position + len(run.text))
+        if lo < hi:
+            out.append(
+                Segment(text=run.text[lo - position : hi - position], ref=run.ref)
+            )
+        position += len(run.text)
+    return out
+
+
+def _held_segments(
+    view: WorldView,
+    links: "_Links",
+    fact: FactState | None,
+    owner: ThingState | None,
+    text: str,
+) -> list[dict]:
+    """A fact's text as linked runs, held-aware (`worldplay.held`): a held
+    fact reads "<Holder> holds that <text>" (or "holds: <Text>"), the
+    holder's name linked and the text's own links kept. `text` is the
+    rendered text; a fact that isn't held is its plain linked runs."""
+
+    if fact is None or owner is None:
+        return [{"text": text, "ref": None, "stub": False}]
+    plain = view.segments(fact.text)
+    held = held_text(view, fact, owner, text)
+    if held == text:
+        return links._out(plain)
+    holder = spheres.held_by(view, fact, owner)
+    name = view.name_of(holder) if holder is not None else None
+    fallback = [{"text": held, "ref": None, "stub": False}]
+    if not name:
+        return fallback
+    shown = f"{name[0].upper()}{name[1:]}"
+    lead = next(
+        (
+            lead
+            for lead in (" holds that ", " holds: ")
+            if held.startswith(shown + lead)
+        ),
+        None,
+    )
+    if lead is None:
+        return fallback
+    body = held[len(shown) + len(lead) :]
+    # the text the body is worded from: stripped, its closing period gone,
+    # only its first letter's case changed (`held.held_text`)
+    start = len(text) - len(text.lstrip())
+    core = text.strip().rstrip(".").rstrip()
+    if not core or body[1 : len(core)] != core[1:]:
+        return fallback
+    runs = _trimmed(plain, start, start + len(core))
+    runs[0] = Segment(text=body[0] + runs[0].text[1:], ref=runs[0].ref)
+    pieces = [
+        Segment(text=shown, ref=holder),
+        Segment(text=lead, ref=None),
+        *runs,
+        Segment(text=body[len(core) :], ref=None),
+    ]
+    return links._out([piece for piece in pieces if piece.text])
+
+
+def _line_out(
+    view: WorldView, links: "_Links", calendar: Calendar, line: TimelineLine
+) -> dict:
+    """One timeline line for the wire (`world.timelines`): whose it is, its
+    dates (`until` only once it has ended: "900–1010"), its text as linked
+    runs worded held-aware, and the lines it disagrees with on the year."""
+
+    owner = view.thing(line.owner_id)
+    return {
+        "fact_id": line.fact_id,
+        "owner_id": line.owner_id,
+        "owner_name": view.name_of(line.owner_id) or "",
+        "date": _date_out(calendar, line.date),
+        "until": _date_out(calendar, line.until),
+        "segments": _held_segments(view, links, line.fact, owner, line.text),
+        "here": line.here,
+        "disagrees_with": list(line.disagrees_with),
+    }
+
+
+def _undated_line(
+    view: WorldView, links: "_Links", owner_id: str, here: str, fact: FactState
+) -> dict:
+    """A sphere's undated `timeline` fact as a sphere page's timeline line
+    (it has no place on an entry timeline: `date` is null)."""
+
+    owner = view.thing(owner_id)
+    return {
+        "fact_id": fact.fact_id,
+        "owner_id": owner_id,
+        "owner_name": view.name_of(owner_id) or "",
+        "date": None,
+        "until": None,
+        "segments": _held_segments(view, links, fact, owner, view.render(fact.text)),
+        "here": owner_id == here,
+        "disagrees_with": [],
+    }
+
+
+def _preview_out(world: World, preview: pydantic.BaseModel) -> dict:
+    """A preview (create, sphere core or branch, Fill) for the wire: its
+    dump, sent back as it is on accept, with the names the screen shows
+    beside ids -- `held_by_name` on each fact and elsewhere fact,
+    `from_name` on each move-in row, and `name`, `from_name`, `to_name` on
+    each re-file row. The models ignore these on the way back in."""
+
+    view = world.view()
+    out = preview.model_dump(mode="json")
+
+    def name(thing_id: object) -> str | None:
+        return (view.name_of(thing_id) or "") if isinstance(thing_id, str) else None
+
+    def home(link: object) -> str | None:
+        if not isinstance(link, dict):
+            return None
+        if isinstance(link.get("name"), str):
+            return link["name"]
+        return name(link.get("sphere"))
+
+    for row in [*out.get("facts", []), *out.get("elsewhere", [])]:
+        row["held_by_name"] = name(row.get("held_by"))
+    for row in out.get("move_in", []):
+        row["from_name"] = name(row.get("from_id"))
+    for row in out.get("refile", []):
+        row["name"] = name(row.get("thing_id"))
+        row["from_name"] = home(row.get("from"))
+        row["to_name"] = home(row.get("to"))
+    return out
+
+
+def _settings_out(settings: CurationSettings) -> dict:
+    return {
+        "settings": settings.model_dump(mode="json"),
+        "defaults": CurationSettings().model_dump(mode="json"),
+    }
+
+
 # --- spheres ------------------------------------------------------------------
 
 
@@ -861,10 +1244,11 @@ def _item_out(view: WorldView, links: _Links, item: spheres.Item) -> dict:
     summary), as linked runs."""
 
     if item.thing_id is not None:
-        thing = view.thing(item.thing_id)
-        fact = spheres.item_fact(thing) if thing is not None else None
+        owner = view.thing(item.thing_id)
+        fact = spheres.item_fact(owner) if owner is not None else None
     else:
-        fact = _own_fact(view.thing(item.source_id), item.fact_id)
+        owner = view.thing(item.source_id)
+        fact = _own_fact(owner, item.fact_id)
     return {
         "thing_id": item.thing_id,
         "fact_id": item.fact_id,
@@ -872,6 +1256,7 @@ def _item_out(view: WorldView, links: _Links, item: spheres.Item) -> dict:
         "segments": links.segments(fact.text) if fact is not None else [],
         "inherited": item.inherited,
         "stub": item.stub,
+        "held_by": _held_out(view, fact, owner) if fact is not None else None,
     }
 
 
@@ -887,14 +1272,24 @@ def _own_drawer_ids(state: ThingState) -> set[str]:
 
 
 def _sphere_out(
-    view: WorldView, links: _Links, calendar: Calendar, state: ThingState
+    view: WorldView,
+    links: _Links,
+    calendar: Calendar,
+    state: ThingState,
+    timeline: list[dict],
 ) -> dict | None:
     """A sphere's own part of the thing payload (`None` for a thing that's
     no sphere): its template and agent flag; its drawers in order (a
     branch's inherited ones after its own, each marked `inherited`), each
     with its items, then `UNSORTED` when anything is in no drawer it has;
-    its people (from ties), territory, dated timeline, branches and the
-    sphere it branches from."""
+    its people (from ties), territory, timeline, branches and the sphere
+    it branches from.
+
+    The timeline is the entry timeline the payload has (`timeline`, the
+    lines of `world.timelines.entry_timeline`: its own dated facts and
+    what it gathers), after its undated `timeline` facts and a branch's
+    inherited undated ones (`spheres.timeline`, which has no date to place
+    them by)."""
 
     if not spheres.is_sphere(state):
         return None
@@ -937,6 +1332,12 @@ def _sphere_out(
         key=lambda other: other.created,
     )
     summary = spheres.summary_fact(state)
+    # whose each undated timeline fact is: the sphere's, or a parent's
+    owners = {
+        fact.fact_id: other.id
+        for other in spheres._chain(view, sphere_id)
+        for fact in other.facts
+    }
     return {
         "template": template if isinstance(template, str) else None,
         "agent": agent,
@@ -965,12 +1366,14 @@ def _sphere_out(
             for place_id in spheres.territory(view, sphere_id)
         ],
         "timeline": [
-            {
-                "fact_id": fact.fact_id,
-                "date": _date_out(calendar, fact.valid_from),
-                "segments": links.segments(fact.text),
-            }
-            for fact in spheres.timeline(view, sphere_id)
+            *(
+                _undated_line(
+                    view, links, owners.get(fact.fact_id, sphere_id), sphere_id, fact
+                )
+                for fact in spheres.timeline(view, sphere_id)
+                if fact.valid_from is None
+            ),
+            *timeline,
         ],
         "branches": [
             {"id": other.id, "name": view.name_of(other.id) or ""} for other in branches
@@ -1186,6 +1589,7 @@ class WorldsPlugin(Plugin):
                 "valid_until": _date_out(calendar, fact.valid_until),
                 "source_rev": fact.source_rev,
                 "overrides": list(fact.overrides),
+                "held_by": _held_out(view, fact, state),
             }
             for fact in state.facts
         ]
@@ -1199,8 +1603,19 @@ class WorldsPlugin(Plugin):
                 "source_kind": item.source_kind,
                 "source_name": item.source_name,
                 "overridden_by": item.overridden_by,
+                "held_by": _held_out(view, item.fact, view.thing(item.source_id)),
             }
             for item in heritage.inherited(view, thing_id)
+        ]
+        settings = world.curation()
+        entry_lines = [
+            _line_out(view, links, calendar, line)
+            for line in entry_timeline(
+                view,
+                thing_id,
+                reach=settings.timeline_reach,
+                threshold=settings.repeat_threshold,
+            )
         ]
 
         cache = world.prose()
@@ -1262,10 +1677,13 @@ class WorldsPlugin(Plugin):
             "prose_segments": prose_segments,
             "mentions": [m.model_dump() for m in mentions(view, thing_id)],
             "named_stubs": links.named_stubs(state),
-            "sphere": _sphere_out(view, links, calendar, state),
+            "sphere": _sphere_out(view, links, calendar, state, entry_lines),
             "part_of": _part_of_out(view, state),
             "ties": _ties_out(view, links, calendar, state),
+            # every change made to the thing (`World.timeline`)
             "timeline": timeline,
+            # its dated facts, and what a sphere gathers (curation goal 6)
+            "entry_timeline": entry_lines,
             "appears_in": self._appears_in(world, [thing_id]),
             "referenced_in": {
                 **thing_references(world, thing_id),
@@ -1403,7 +1821,7 @@ class WorldsPlugin(Plugin):
                     prompt=suggested_prompt(view, stub_id),
                     stub_id=stub_id,
                 ),
-                view,
+                world,
             )
             for stub_id in stubs_to_fill(world, setup)
             if (state := view.thing(stub_id)) is not None
@@ -1551,6 +1969,65 @@ class WorldsPlugin(Plugin):
         self._reply(action, self._thing_payload(self._require_world(), thing_id, at))
         if prose:
             self._schedule_prose(thing_id, at)
+
+    @staticmethod
+    def _wrote_prose_input(
+        world: World, candidates: list[str], skip: Collection[str] = ()
+    ) -> list[str]:
+        """Of `candidates` (the entries an accept may have written onto:
+        its elsewhere targets, the entries its items link), those whose
+        prose input the accept's revision changed: a full entry (no stub)
+        with a fact written in that revision in a category its prose reads
+        (`create.prose_reads`). A sphere's statements and timeline feed no
+        prose (rulings P18, P19), so they schedule none."""
+
+        rev = world.head_rev()
+        view = world.view()
+        changed: list[str] = []
+        for thing_id in dict.fromkeys(candidates):
+            if thing_id in skip:
+                continue
+            state = view.thing(thing_id)
+            if state is None or state.is_stub:
+                continue
+            if any(
+                entry.source_rev == rev
+                and entry.category is not None
+                and prose_reads(state.kind, entry.category)
+                for entry in world.timeline(thing_id)
+                if entry.change != "field"
+            ):
+                changed.append(thing_id)
+        return changed
+
+    @staticmethod
+    def _elsewhere_targets(elsewhere: list[ElsewhereFact]) -> list[str]:
+        """The entries the ticked elsewhere facts go onto: a listed target,
+        or the entry the owner marked a new one's row the same as."""
+
+        found: list[str] = []
+        for item in elsewhere:
+            if not item.ticked:
+                continue
+            target = item.target_id or (
+                item.new.same_target_id if item.new is not None else None
+            )
+            if target is not None:
+                found.append(target)
+        return found
+
+    @staticmethod
+    def _item_targets(items: list[dict[str, Any]]) -> list[str]:
+        """The entries the world has that ticked items link (their text is
+        written onto them)."""
+
+        return [
+            target
+            for item in items
+            if item.get("ticked", True)
+            for target in (item.get("thing_id") or item.get("same_target_id"),)
+            if isinstance(target, str)
+        ]
 
     # --- worlds -----------------------------------------------------------
 
@@ -1717,7 +2194,7 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         fixed = _fixed_file(FIXED_PREVIEW_ENV)
         if fixed is not None:
-            preview = _fixed_preview(fixed, payload, world.view())
+            preview = _fixed_preview(fixed, payload, world)
         else:
             client = self._client()
             preview = preview_thing(
@@ -1736,7 +2213,7 @@ class WorldsPlugin(Plugin):
                 "preview_thing",
                 "preview_failed",
                 "Error previewing a world thing",
-                success_data=lambda preview: preview.model_dump(mode="json"),
+                success_data=lambda preview: _preview_out(world, preview),
             ),
         )
 
@@ -1758,7 +2235,15 @@ class WorldsPlugin(Plugin):
             "accept_preview",
             {**self._thing_payload(world, thing_id, None), "notes": notes},
         )
-        for changed in prose:
+        # the accept's own list (a re-pointed stub, a move-in's broader
+        # entry, a same-thing target), then the elsewhere targets whose
+        # prose reads what they took
+        prose += self._wrote_prose_input(
+            world,
+            self._elsewhere_targets(payload.preview.elsewhere),
+            skip={thing_id, *prose},
+        )
+        for changed in dict.fromkeys(prose):
             self._schedule_prose(changed, None)
 
     # --- spheres ----------------------------------------------------------
@@ -1790,20 +2275,35 @@ class WorldsPlugin(Plugin):
                 "preview_sphere",
                 "preview_sphere_failed",
                 "Error previewing a sphere",
-                success_data=lambda preview: preview.model_dump(mode="json"),
+                success_data=lambda preview: _preview_out(world, preview),
             ),
         )
 
     async def handle_accept_sphere(self, data: dict):
         """Write a `preview_sphere` or `preview_branch` preview and answer
-        with the sphere. Its summary is cached as its description, as
-        `accept_preview` caches a thing's prose, so no prose is
-        scheduled."""
+        with the sphere and `notes` (what was left out, and why). Its
+        summary is cached as its description, as `accept_preview` caches a
+        thing's prose; prose is scheduled only for an entry the world has
+        whose prose reads what the accept wrote onto it (an item linking
+        it, an elsewhere fact)."""
 
         payload = AcceptSpherePayload(**data)
         world = self._require_world()
-        thing_id = sphereplay.accept_sphere(world, payload.preview)
-        self._reply("accept_sphere", self._thing_payload(world, thing_id, None))
+        notes: list[str] = []
+        thing_id = sphereplay.accept_sphere(world, payload.preview, notes=notes)
+        self._reply(
+            "accept_sphere",
+            {**self._thing_payload(world, thing_id, None), "notes": notes},
+        )
+        for changed in self._wrote_prose_input(
+            world,
+            [
+                *self._item_targets(payload.preview.items),
+                *self._elsewhere_targets(payload.preview.elsewhere),
+            ],
+            skip={thing_id},
+        ):
+            self._schedule_prose(changed, None)
 
     async def handle_fill_drawer(self, data: dict):
         """New items for one drawer, in the background: answers
@@ -1827,7 +2327,7 @@ class WorldsPlugin(Plugin):
                 "fill_failed",
                 "Error filling a sphere drawer",
                 # the whole Fill preview, sent back as it is on accept
-                success_data=lambda filled: filled.model_dump(mode="json"),
+                success_data=lambda filled: _preview_out(world, filled),
                 failure_data={
                     "sphere_id": payload.sphere_id,
                     "drawer_id": payload.drawer_id,
@@ -1836,10 +2336,12 @@ class WorldsPlugin(Plugin):
         )
 
     async def handle_accept_fill(self, data: dict):
-        """Write the Fill items the owner kept and answer with the sphere.
-        No prose is scheduled: a statement is no input to the sphere's
-        description (ruling P18; P19: prose only when its input changes),
-        and named items are new stubs."""
+        """Write the Fill items the owner kept and answer with the sphere
+        and `notes`. The sphere's prose isn't scheduled: a statement is no
+        input to its description (ruling P18; P19: prose only when its
+        input changes), and named items are new stubs. An entry the world
+        has gets its prose scheduled when it took text its prose reads (an
+        item linking it, an elsewhere fact)."""
 
         payload = AcceptFillPayload(**data)
         world = self._require_world()
@@ -1861,6 +2363,15 @@ class WorldsPlugin(Plugin):
                 "notes": notes,
             },
         )
+        for changed in self._wrote_prose_input(
+            world,
+            [
+                *self._item_targets(payload.items),
+                *self._elsewhere_targets(payload.elsewhere),
+            ],
+            skip={payload.sphere_id},
+        ):
+            self._schedule_prose(changed, None)
 
     async def handle_add_outer_body(self, data: dict):
         """Put the outer body the owner named around a part of a preview
@@ -1891,7 +2402,7 @@ class WorldsPlugin(Plugin):
             "add_outer_body",
             {
                 "preview_type": payload.preview_type,
-                "preview": preview.model_dump(mode="json"),
+                "preview": _preview_out(world, preview),
             },
         )
 
@@ -2177,7 +2688,7 @@ class WorldsPlugin(Plugin):
                 "preview_branch",
                 "preview_branch_failed",
                 "Error previewing a branch",
-                success_data=lambda preview: preview.model_dump(mode="json"),
+                success_data=lambda preview: _preview_out(world, preview),
             ),
         )
 
@@ -2514,6 +3025,141 @@ class WorldsPlugin(Plugin):
         with world.revision(Source.manual()) as rev:
             rev.remove_fact(payload.fact_id)
         self._edited("remove_fact", payload.thing_id, _date_in(payload.at))
+
+    async def handle_set_held_by(self, data: dict):
+        """Set or clear who holds one of a thing's own facts as a belief
+        (`spheres.with_held_by`): a sphere, a character or a being, or null
+        for world truth (an explicit clear, so a beliefs drawer's statement
+        can read plain too). One revision; nothing is written when the fact
+        is already held so. Answers with the thing. Held-ness feeds
+        description prose (ruling C3): prose is refreshed when the thing's
+        prose reads the fact's category (not a sphere's statement or
+        timeline fact, rulings P18, P19)."""
+
+        payload = SetHeldByPayload(**data)
+        world = self._require_world()
+        at = _date_in(payload.at)
+        self._require_fact_of(world, payload.thing_id, payload.fact_id)
+        view = world.view()
+        state = view.thing(payload.thing_id)
+        found = view.fact(payload.fact_id)
+        if state is None or found is None or found[0] != payload.thing_id:
+            raise KeyError(f"no such fact on {payload.thing_id}: {payload.fact_id}")
+        fact = found[1]
+        holder_id = payload.holder_id
+        if holder_id is not None:
+            holder = view.thing(holder_id)
+            if holder is None or holder.stub_ignored:
+                raise KeyError(f"no such thing: {holder_id}")
+            if not (spheres.is_sphere(holder) or holder.kind in ("character", "being")):
+                raise ValueError(
+                    "only a sphere, a character or a being can hold a belief"
+                )
+        if spheres.held_by(view, fact, state) == holder_id:
+            self._edited("set_held_by", payload.thing_id, at, prose=False)
+            return
+        with world.revision(Source.manual()) as rev:
+            rev.correct_fact(
+                payload.fact_id, origin=spheres.with_held_by(fact.origin, holder_id)
+            )
+        self._edited(
+            "set_held_by",
+            payload.thing_id,
+            at,
+            prose=not state.is_stub and prose_reads(state.kind, fact.category),
+        )
+
+    async def handle_pick_date(self, data: dict):
+        """Settle a timeline disagreement (`repeats.disagreeing_dates`):
+        keep `keep_fact_id`'s year, and end `drop_fact_id` at the world's
+        now ("end") or remove it ("remove"), in one revision. Refused,
+        writing nothing, unless the two are a disagreeing pair now
+        (worked out again here, never taken from the client), at the
+        world's repeat threshold. A dropped fact that has ended already is
+        left as it is, and one that starts at or after now is removed
+        instead of ended, each with a note. Answers `{keep_fact_id,
+        drop_fact_id, mode, owner_id, notes}` (`owner_id` the dropped
+        fact's entry), with `thing`, the payload of `thing_id` at `at`,
+        when given. Prose is refreshed for the dropped fact's entry when
+        its prose reads the fact's category."""
+
+        payload = PickDatePayload(**data)
+        world = self._require_world()
+        view = world.view()
+        keep, drop = payload.keep_fact_id, payload.drop_fact_id
+        if keep == drop:
+            raise ValueError("a fact can't disagree with itself")
+        found = view.fact(drop)
+        if view.fact(keep) is None or found is None:
+            raise KeyError("no such fact")
+        threshold = world.curation().repeat_threshold
+        if not disagreeing_dates(view, [keep, drop], threshold):
+            raise ValueError("those two facts don't disagree on the year")
+        owner_id, fact = found
+        notes: list[str] = []
+        now = current_date(world)
+        mode = payload.mode
+        if mode == "end" and fact.valid_until is not None:
+            if fact.valid_until.instant <= now.instant:
+                notes.append("That fact has ended already, so it's left as it is")
+                mode = "none"
+        if mode == "end" and (
+            fact.valid_from is not None and fact.valid_from.instant >= now.instant
+        ):
+            notes.append(
+                "That fact starts at or after the world's now, so it's removed "
+                "instead of ended"
+            )
+            mode = "remove"
+        if mode != "none":
+            with world.revision(Source.manual(note="picked a date")) as rev:
+                if mode == "end":
+                    rev.end_fact(drop, now)
+                else:
+                    rev.remove_fact(drop)
+        reply: dict[str, Any] = {
+            "keep_fact_id": keep,
+            "drop_fact_id": drop,
+            "mode": payload.mode,
+            "owner_id": owner_id,
+            "notes": notes,
+        }
+        if payload.thing_id is not None:
+            reply["thing"] = self._thing_payload(
+                world, payload.thing_id, _date_in(payload.at)
+            )
+        self._reply("pick_date", reply)
+        owner = world.view().thing(owner_id)
+        if (
+            mode != "none"
+            and owner is not None
+            and not owner.is_stub
+            and prose_reads(owner.kind, fact.category)
+        ):
+            self._schedule_prose(owner_id, None)
+
+    # --- curation settings ------------------------------------------------
+
+    async def handle_get_curation(self, data: dict):
+        """The world's curation knobs (`World.curation`) and their
+        defaults: `{settings, defaults}`."""
+
+        self._reply("get_curation", _settings_out(self._require_world().curation()))
+
+    async def handle_set_curation(self, data: dict):
+        """Change the curation knobs given (`settings`, a part of
+        `CurationSettings`; the rest are kept), validated by
+        `CurationSettings` -- an unknown knob or one out of range is
+        refused, writing nothing -- and answer as `get_curation` does. No
+        rendered text changes: no prose is scheduled."""
+
+        payload = SetCurationPayload(**data)
+        world = self._require_world()
+        settings = CurationSettings.model_validate(
+            {**world.curation().model_dump(), **payload.settings}
+        )
+        world.set_curation(settings)
+        self._reply("set_curation", _settings_out(settings))
 
     async def handle_set_field(self, data: dict):
         """Set one field. The fields with an action of their own, which

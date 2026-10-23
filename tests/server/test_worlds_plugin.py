@@ -864,6 +864,7 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "source_kind": "race",
             "source_name": "Lowlander",
             "overridden_by": None,
+            "held_by": None,
         },
         {
             "fact_id": h.bare_skin,
@@ -876,6 +877,7 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "source_kind": "species",
             "source_name": "Human",
             "overridden_by": h.tattoos,
+            "held_by": None,
         },
     ]
     # the race sets no numbers: the species' resolve through it
@@ -2812,6 +2814,8 @@ async def test_payload_sphere_part_of_ties(plugin):
             "segments": [_plain("The unchanged are unblessed.")],
             "inherited": False,
             "stub": False,
+            # a statement in a religion's beliefs drawer: the Dawn holds it
+            "held_by": {"id": s.dawn, "name": "The White Dawn"},
         }
     ]
     assert rites["items"] == [
@@ -2822,6 +2826,7 @@ async def test_payload_sphere_part_of_ties(plugin):
             "segments": [_plain("A nightly prayer at first light.")],
             "inherited": False,
             "stub": False,
+            "held_by": None,
         }
     ]
     assert [i["thing_id"] for i in sites["items"]] == [s.peak]
@@ -3664,8 +3669,11 @@ async def test_end_item(plugin, client):
         i["fact_id"] for d in dawn["sphere"]["drawers"] for i in d["items"]
     ]
     tsardom = await _get_thing(plugin, s.tsardom)
+    # the Vigil's own note names the Tsardom, so its timeline gathers it
+    # (curation goal 6), beside the Tsardom's own line
     assert [_text(t["segments"]) for t in tsardom["sphere"]["timeline"]] == [
-        "Ended Dawn Vigil"
+        "Ended in 1015 by Tsardom",
+        "Ended Dawn Vigil",
     ]
 
     head = s.world.head_rev()
@@ -4679,3 +4687,702 @@ async def test_preview_and_accept_merge(plugin, monkeypatch):
     await _act(plugin, "preview_merge", from_id=s.maren, into_id=s.maren)
     assert "itself" in _last(plugin, "operation_done")["error"]["message"]
     assert world.head_rev() == head + 1
+
+
+# --- curation (Task 11): the router's actions and payloads -------------------
+
+
+def _record_prose(plugin, monkeypatch):
+    scheduled: list[str] = []
+    monkeypatch.setattr(
+        plugin, "_schedule_prose", lambda thing_id, at, **kw: scheduled.append(thing_id)
+    )
+    return scheduled
+
+
+async def _timeline_world(plugin):
+    """The sphere world with dated facts on every kind: Vasha's vows (she
+    joined the Dawn, a line the Dawn gathers), an ended posting and a
+    belief the Dawn holds of her; Dawn Peak's first climb and a Synod line
+    that disagrees with the Dawn's own (998 against 996, the Dawn's
+    belief); the Vigil's
+    start; the Tsardom's founding; and an undated timeline fact on the
+    Dawn."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="dated")) as rev:
+        s.joined = rev.add_fact(
+            s.vasha,
+            "background",
+            f"Vasha joined {ref(s.dawn, 'the White Dawn')}.",
+            valid_from=WorldDate.of(1010),
+        )
+        s.posted = rev.add_fact(
+            s.vasha,
+            "background",
+            "Vasha kept the gate at the harbour.",
+            valid_from=WorldDate.of(1005),
+            valid_until=WorldDate.of(1009),
+        )
+        s.chosen = rev.add_fact(
+            s.vasha,
+            "background",
+            "Vasha was chosen by the Light.",
+            valid_from=WorldDate.of(1012),
+            origin={"held_by": s.dawn},
+        )
+        s.climbed = rev.add_fact(
+            s.peak,
+            "general",
+            "Pilgrims first climbed the white slopes.",
+            valid_from=WorldDate.of(990),
+        )
+        s.met = rev.add_fact(
+            s.peak,
+            "general",
+            "The First Synod met on Dawn Peak.",
+            valid_from=WorldDate.of(998),
+            origin={"held_by": s.dawn},
+        )
+        s.began = rev.add_fact(
+            s.vigil,
+            "general",
+            "The Vigil was first kept by hermits.",
+            valid_from=WorldDate.of(995),
+        )
+        s.founded = rev.add_fact(
+            s.tsardom,
+            "history",
+            "The Tsardom was founded by the first Tsar.",
+            valid_from=WorldDate.of(900),
+        )
+        s.undated = rev.add_fact(s.dawn, "timeline", "The Dawn keeps no calendar.")
+    return s
+
+
+async def test_payload_timeline_every_kind(plugin):
+    """Every kind's payload has `entry_timeline`: its dated facts and, for
+    a sphere, what it gathers, each line `{fact_id, owner_id, owner_name,
+    date, until, segments, here, disagrees_with}` -- an ended fact with its
+    `until`, a held one worded as belief. The sphere page's
+    `sphere.timeline` reads the same lines, keeping an undated timeline
+    fact and a branch's inherited lines."""
+
+    s = await _timeline_world(plugin)
+    keys = {
+        "fact_id",
+        "owner_id",
+        "owner_name",
+        "date",
+        "until",
+        "segments",
+        "here",
+        "disagrees_with",
+    }
+
+    vasha = await _get_thing(plugin, s.vasha)
+    lines = vasha["entry_timeline"]
+    assert all(set(line) == keys for line in lines)
+    assert [line["fact_id"] for line in lines] == [s.posted, s.joined, s.chosen]
+    assert all(line["here"] and line["owner_id"] == s.vasha for line in lines)
+    assert lines[0]["date"]["label"].startswith("1005")
+    assert lines[0]["until"]["instant"] == WorldDate.of(1009).instant
+    assert lines[1]["until"] is None
+    joined = lines[1]["segments"]
+    assert _text(joined) == "Vasha joined the White Dawn."
+    assert [run["ref"] for run in joined if run["ref"]] == [s.dawn]
+    chosen = lines[2]["segments"]
+    assert _text(chosen) == "The White Dawn holds that Vasha was chosen by the Light."
+    assert chosen[0] == {"text": "The White Dawn", "ref": s.dawn, "stub": False}
+
+    peak = await _get_thing(plugin, s.peak)
+    assert [line["fact_id"] for line in peak["entry_timeline"]] == [
+        s.climbed,
+        s.met,
+    ]
+    vigil = await _get_thing(plugin, s.vigil)
+    assert [line["fact_id"] for line in vigil["entry_timeline"]] == [s.began]
+    tsardom = await _get_thing(plugin, s.tsardom)
+    assert [line["fact_id"] for line in tsardom["entry_timeline"]] == [s.founded]
+    maren = await _get_thing(plugin, s.maren)
+    assert maren["entry_timeline"] == []
+
+    dawn = await _get_thing(plugin, s.dawn)
+    gathered = {line["fact_id"]: line for line in dawn["entry_timeline"]}
+    assert list(gathered) == [s.climbed, s.began, s.synod, s.met, s.joined]
+    assert gathered[s.climbed]["owner_name"] == "Dawn Peak"
+    assert not gathered[s.climbed]["here"] and gathered[s.synod]["here"]
+    assert gathered[s.synod]["disagrees_with"] == [s.met]
+    assert gathered[s.met]["disagrees_with"] == [s.synod]
+    # held, mid-sentence: the text's first letter lowered after "holds that"
+    assert gathered[s.met]["segments"] == [
+        {"text": "The White Dawn", "ref": s.dawn, "stub": False},
+        {
+            "text": " holds that the First Synod met on Dawn Peak.",
+            "ref": None,
+            "stub": False,
+        },
+    ]
+    assert gathered[s.synod]["segments"][1]["ref"] == s.peak
+    # the sphere page: the same lines, the undated timeline fact first
+    page = dawn["sphere"]["timeline"]
+    assert [line["fact_id"] for line in page] == [s.undated, *gathered]
+    assert page[0]["date"] is None and page[0]["here"]
+    assert set(page[0]) == keys
+
+    # a branch keeps its parent's timeline (an undated parent link: all of it)
+    reformed = await _get_thing(plugin, s.reformed)
+    inherited = {line["fact_id"]: line for line in reformed["sphere"]["timeline"]}
+    assert s.synod in inherited and s.undated in inherited
+    assert inherited[s.synod]["owner_id"] == s.dawn
+    assert not inherited[s.synod]["here"]
+
+    # the change history keeps its own key
+    assert any(e["change"] == "fact_start" for e in vasha["timeline"])
+
+
+async def test_fact_rows_carry_held_by(plugin):
+    """Each fact row, and a statement item, carries `held_by: {id, name}`
+    or null: a fact's own holder, and the implicit holder of a statement
+    in a religion's beliefs drawer."""
+
+    s = await _timeline_world(plugin)
+    vasha = await _get_thing(plugin, s.vasha)
+    rows = {f["fact_id"]: f for f in vasha["facts"]}
+    assert rows[s.chosen]["held_by"] == {"id": s.dawn, "name": "The White Dawn"}
+    assert rows[s.joined]["held_by"] is None
+
+    dawn = await _get_thing(plugin, s.dawn)
+    rows = {f["fact_id"]: f for f in dawn["facts"]}
+    assert rows[s.unblessed]["held_by"] == {"id": s.dawn, "name": "The White Dawn"}
+    assert rows[s.synod]["held_by"] is None
+    doctrines = next(d for d in dawn["sphere"]["drawers"] if d["id"] == DOCTRINES)
+    (item,) = doctrines["items"]
+    assert item["held_by"] == {"id": s.dawn, "name": "The White Dawn"}
+    rites = next(d for d in dawn["sphere"]["drawers"] if d["id"] == RITES)
+    assert rites["items"][0]["held_by"] is None
+
+
+async def test_set_held_by(plugin, monkeypatch):
+    """`set_held_by` sets or clears one fact's holder in one revision and
+    answers with the thing. Held-ness feeds description prose (ruling
+    C3): a character's fact schedules its prose, a sphere's statement
+    doesn't (P18, P19). Refused, writing nothing: a holder that can't
+    hold a belief, one that isn't there, another thing's fact."""
+
+    s = await _timeline_world(plugin)
+    scheduled = _record_prose(plugin, monkeypatch)
+    world = s.world
+    head = world.head_rev()
+
+    await _act(
+        plugin, "set_held_by", thing_id=s.vasha, fact_id=s.joined, holder_id=s.dawn
+    )
+    assert not _errors(plugin)
+    assert world.head_rev() == head + 1
+    reply = _last(plugin, "set_held_by")["data"]
+    row = next(f for f in reply["facts"] if f["fact_id"] == s.joined)
+    assert row["held_by"] == {"id": s.dawn, "name": "The White Dawn"}
+    assert scheduled == [s.vasha]
+
+    await _act(
+        plugin, "set_held_by", thing_id=s.vasha, fact_id=s.joined, holder_id=None
+    )
+    row = next(
+        f
+        for f in _last(plugin, "set_held_by")["data"]["facts"]
+        if f["fact_id"] == s.joined
+    )
+    assert row["held_by"] is None
+    assert scheduled == [s.vasha, s.vasha]
+
+    # the implicit holder of a beliefs statement can be cleared too; a
+    # statement feeds no prose
+    await _act(
+        plugin, "set_held_by", thing_id=s.dawn, fact_id=s.unblessed, holder_id=None
+    )
+    assert not _errors(plugin)
+    row = next(
+        f
+        for f in _last(plugin, "set_held_by")["data"]["facts"]
+        if f["fact_id"] == s.unblessed
+    )
+    assert row["held_by"] is None
+    assert scheduled == [s.vasha, s.vasha]
+
+    head = world.head_rev()
+    for thing_id, fact_id, holder_id in (
+        (s.vasha, s.joined, s.vigil),  # lore holds nothing
+        (s.vasha, s.joined, "0" * 32),  # no such thing
+        (s.dawn, s.joined, s.dawn),  # not the Dawn's fact
+    ):
+        before = len(_errors(plugin))
+        await _act(
+            plugin,
+            "set_held_by",
+            thing_id=thing_id,
+            fact_id=fact_id,
+            holder_id=holder_id,
+        )
+        assert len(_errors(plugin)) == before + 1
+    assert world.head_rev() == head
+
+
+async def test_pick_date(plugin, monkeypatch):
+    """`pick_date` settles a timeline disagreement: "end" ends the dropped
+    fact at the world's now, "remove" removes it, each in one revision,
+    with prose for the dropped fact's entry. Two facts that aren't a
+    disagreeing pair now are refused, writing nothing."""
+
+    s = await _timeline_world(plugin)
+    scheduled = _record_prose(plugin, monkeypatch)
+    world = s.world
+    head = world.head_rev()
+
+    for keep, drop in ((s.synod, s.began), (s.synod, s.synod), (s.synod, "f" * 32)):
+        before = len(_errors(plugin))
+        await _act(
+            plugin, "pick_date", keep_fact_id=keep, drop_fact_id=drop, mode="end"
+        )
+        assert len(_errors(plugin)) == before + 1
+    assert world.head_rev() == head
+    assert scheduled == []
+    errors = len(_errors(plugin))
+
+    await _act(
+        plugin,
+        "pick_date",
+        keep_fact_id=s.synod,
+        drop_fact_id=s.met,
+        mode="end",
+        thing_id=s.dawn,
+    )
+    assert len(_errors(plugin)) == errors
+    assert world.head_rev() == head + 1
+    reply = _last(plugin, "pick_date")["data"]
+    assert (reply["keep_fact_id"], reply["drop_fact_id"], reply["mode"]) == (
+        s.synod,
+        s.met,
+        "end",
+    )
+    assert reply["owner_id"] == s.peak
+    assert reply["notes"] == []
+    assert reply["thing"]["id"] == s.dawn
+    _owner, ended = world.view().fact(s.met)
+    assert ended.valid_until == WorldDate.of(1020)
+    assert scheduled == [s.peak]
+    # no longer a disagreement: the timeline shows the span
+    line = next(
+        line for line in reply["thing"]["entry_timeline"] if line["fact_id"] == s.met
+    )
+    assert line["until"] is not None
+
+    # a fact on the Tsardom restating its founding, ten years out: removed
+    with world.revision(Source.manual(note="again")) as rev:
+        again = rev.add_fact(
+            s.tsardom,
+            "history",
+            "The Tsardom was founded by the first Tsar.",
+            valid_from=WorldDate.of(910),
+        )
+    head = world.head_rev()
+    await _act(
+        plugin, "pick_date", keep_fact_id=s.founded, drop_fact_id=again, mode="remove"
+    )
+    assert len(_errors(plugin)) == errors
+    assert world.head_rev() == head + 1
+    assert world.view().fact(again) is None
+    assert "thing" not in _last(plugin, "pick_date")["data"]
+    assert scheduled[-1] == s.tsardom
+
+
+async def test_get_and_set_curation(plugin):
+    """`get_curation` answers the world's curation knobs; `set_curation`
+    changes the ones given, validated by `CurationSettings`, and answers
+    the same way. Out of range or unknown knobs are refused."""
+
+    s = await _open_sphere_world(plugin)
+    await _act(plugin, "get_curation")
+    got = _last(plugin, "get_curation")["data"]
+    assert got["settings"] == {
+        "reach": 1,
+        "entries": 12,
+        "facts_per_entry": 6,
+        "repeat_threshold": 0.4,
+        "repeat_untick_threshold": 0.7,
+        "timeline_reach": 2,
+    }
+    assert got["defaults"] == got["settings"]
+
+    await _act(plugin, "set_curation", settings={"reach": 2, "timeline_reach": 3})
+    assert not _errors(plugin)
+    changed = _last(plugin, "set_curation")["data"]["settings"]
+    assert (changed["reach"], changed["timeline_reach"], changed["entries"]) == (
+        2,
+        3,
+        12,
+    )
+    assert s.world.curation().reach == 2
+
+    for bad in ({"reach": 4}, {"repeat_threshold": 1.5}, {"nearness": 1}):
+        before = len(_errors(plugin))
+        await _act(plugin, "set_curation", settings=bad)
+        assert len(_errors(plugin)) == before + 1
+    assert s.world.curation().reach == 2
+
+
+async def test_accept_sphere_answers_notes(plugin, client):
+    """`accept_sphere` answers with the sphere and `notes`, like the other
+    accepts: an item marked the same as an entry that's gone since becomes
+    a stub, and says so."""
+
+    s = await _open_sphere_world(plugin)
+    reply = json.dumps(
+        {
+            "name": "The Iron Synod",
+            "summary": "A council of smiths who keep the forges.",
+            "aka": [],
+            "timeline": [],
+            "drawers": [{"type": "practices", "title": "Rites"}],
+            "items": [
+                {"drawer": "Rites", "name": "Anvil Song", "text": "Sung at noon."}
+            ],
+            "names": [],
+        }
+    )
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "preview_sphere", template="order", prompt="smiths")
+        await _drain(plugin)
+    preview = _last(plugin, "preview_sphere")["data"]
+    with s.world.revision(Source.manual(note="song")) as rev:
+        song = rev.create_thing("lore", {"name": "Old Anvil Song"})
+        rev.add_fact(song, "general", "An old song.")
+    with s.world.revision(Source.manual(note="gone")) as rev:
+        rev.remove_thing(song)
+    item = next(i for i in preview["items"] if i.get("name") == "Anvil Song")
+    item["same_target_id"] = song
+
+    await _act(plugin, "accept_sphere", preview=preview)
+    assert not _errors(plugin)
+    data = _last(plugin, "accept_sphere")["data"]
+    assert data["name"] == "The Iron Synod"
+    assert any("Anvil Song" in note for note in data["notes"])
+
+
+def _ember_preview(s, **extra):
+    from talemate.worldplay.create import ElsewhereFact
+
+    return CreatePreview(
+        kind="lore",
+        prompt="the ember rite",
+        name="Ember Rite",
+        facts=[PreviewFact(category="general", text="Embers are carried uphill.")],
+        prose={},
+        elsewhere=[
+            ElsewhereFact(
+                target_id=s.vasha,
+                target_name="Vasha",
+                category="background",
+                text="Vasha once carried the embers.",
+            ),
+            ElsewhereFact(
+                target_id=s.dawn,
+                target_name="The White Dawn",
+                category="timeline",
+                text="The Ember Rite began.",
+                since=WorldDate.of(1001),
+            ),
+            ElsewhereFact(
+                target_id=s.peak,
+                target_name="Dawn Peak",
+                category="general",
+                text="Embers glow on the summit.",
+                ticked=False,
+            ),
+        ],
+        **extra,
+    )
+
+
+async def test_accepts_schedule_prose_for_elsewhere_targets(plugin, monkeypatch):
+    """An accept schedules prose for each entry its elsewhere facts went
+    onto when its prose reads them: Vasha's background does, the Dawn's
+    timeline doesn't (P18, P19), and an unticked one isn't written. Fill
+    does the same, and for an item's text written onto an entry the world
+    has."""
+
+    s = await _open_sphere_world(plugin)
+    scheduled = _record_prose(plugin, monkeypatch)
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=_ember_preview(s).model_dump(mode="json"),
+    )
+    assert not _errors(plugin)
+    assert scheduled == [s.vasha]
+
+    scheduled.clear()
+    await _act(
+        plugin,
+        "accept_fill",
+        sphere_id=s.dawn,
+        drawer_id=RITES,
+        items=[
+            {
+                "drawer_id": RITES,
+                "name": "Dawn Vigil",
+                "thing_id": s.vigil,
+                "kind": "lore",
+                "text": "It is sung in the cold.",
+                "names": [],
+                "ticked": True,
+            }
+        ],
+        elsewhere=[
+            {
+                "target_id": s.vasha,
+                "target_name": "Vasha",
+                "category": "background",
+                "text": "Vasha sings the vigil.",
+            }
+        ],
+    )
+    assert not _errors(plugin)
+    assert sorted(scheduled) == sorted([s.vasha, s.vigil])
+
+
+async def test_accept_payloads_validate_shapes(plugin):
+    """The accepts validate the rows the owner sends back: a re-file row
+    names its thing and where it goes; an item has its text. A bad shape
+    is refused, writing nothing."""
+
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    bad = [
+        (
+            "accept_fill",
+            {
+                "sphere_id": s.dawn,
+                "drawer_id": RITES,
+                "items": [],
+                "refile": [{"to": {"sphere": s.dawn, "drawer": RITES}}],
+            },
+        ),
+        (
+            "accept_fill",
+            {
+                "sphere_id": s.dawn,
+                "drawer_id": RITES,
+                "items": [{"name": "Dawn Rite", "ticked": True}],
+            },
+        ),
+        (
+            "accept_preview",
+            {
+                "preview": {
+                    **_ember_preview(s).model_dump(mode="json"),
+                    "refile": [{"thing_id": s.vigil, "ticked": "maybe"}],
+                }
+            },
+        ),
+    ]
+    for action, data in bad:
+        before = len(_errors(plugin))
+        await _act(plugin, action, **data)
+        assert len(_errors(plugin)) == before + 1, action
+    assert s.world.head_rev() == head
+
+
+def _fixed_preview_file(tmp_path, monkeypatch, **fixed):
+    path = tmp_path / "fixed-preview.json"
+    path.write_text(json.dumps(fixed))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(path))
+    return path
+
+
+async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
+    """A create preview carries what curation adds -- each fact's
+    `ticked`, `repeat_of` and `held_by` (with `held_by_name`); the
+    elsewhere facts (category, held_by, ticked, repeat_of, a new entry's
+    row with `same_as`); the facts that may move in (`move_in`, with
+    `from_name`) -- and `accept_preview` takes the owner's edits to them.
+    The browser tests' fixed preview reads its `held_by`, `elsewhere` and
+    `move_in` through the real parsers."""
+
+    s = await _open_sphere_world(plugin)
+    _fixed_preview_file(
+        tmp_path,
+        monkeypatch,
+        name="Ember Keeper",
+        facts=[
+            {
+                "category": "general",
+                "text": "The keeper tends the embers.",
+                "held_by": "the White Dawn",
+            },
+            {"category": "general", "text": "The keeper walks the peak."},
+        ],
+        prose={"description": "A keeper of embers."},
+        elsewhere=[
+            {
+                "entry": "Vasha",
+                "text": "Vasha trained the Ember Keeper.",
+                "held_by": "The White Dawn",
+            },
+            {"entry": "Ashen Gate", "text": "The Ashen Gate opens at dawn."},
+            {"entry": "Dawn Vigils", "text": "The Dawn Vigils end with embers."},
+        ],
+        move_in=["M2"],
+    )
+    await _act(
+        plugin,
+        "preview_thing",
+        kind="lore",
+        prompt="a keeper of embers",
+        fields={"part_of": {"sphere": s.dawn, "drawer": RITES}},
+    )
+    await _drain(plugin)
+    assert not _replies(plugin, "preview_failed")
+    preview = _last(plugin, "preview_thing")["data"]
+
+    held, plain = preview["facts"]
+    assert (held["held_by"], held["held_by_name"]) == (s.dawn, "The White Dawn")
+    assert (plain["held_by"], plain["held_by_name"]) == (None, None)
+    assert all({"ticked", "repeat_of"} <= set(f) for f in preview["facts"])
+
+    to_vasha, gate, vigils = preview["elsewhere"]
+    assert (to_vasha["target_id"], to_vasha["category"]) == (s.vasha, "background")
+    assert (to_vasha["held_by"], to_vasha["held_by_name"]) == (
+        s.dawn,
+        "The White Dawn",
+    )
+    assert to_vasha["ticked"] is True and "repeat_of" in to_vasha
+    assert gate["target_id"] is None and gate["new"]["name"] == "Ashen Gate"
+    assert {"same_as", "same_target_id", "part_of"} <= set(gate["new"])
+    assert s.vigil in [offer["thing_id"] for offer in vigils["new"]["same_as"]]
+
+    rows = preview["move_in"]
+    assert rows[0]["from_id"] == s.dawn and rows[0]["ticked"]
+    assert rows[0]["from_name"] == "The White Dawn"
+    assert rows[0]["text"] == "The state church."
+    assert not any(row["ticked"] for row in rows[1:])
+    for key in ("same_as", "verdict", "refile", "new_names"):
+        assert key in preview
+
+    # the owner's edits: the Ashen Gate unticked, the Vigils are the Dawn
+    # Vigil, the plain fact held by Vasha
+    gate["ticked"] = False
+    vigils["new"]["same_target_id"] = s.vigil
+    plain["held_by"] = s.vasha
+    head = s.world.head_rev()
+    await _act(plugin, "accept_preview", preview=preview)
+    assert not _errors(plugin)
+    assert s.world.head_rev() == head + 1
+    data = _last(plugin, "accept_preview")["data"]
+    assert data["notes"] == []
+    view = s.world.view()
+    keeper = view.thing(data["id"])
+    by_text = {f.text: f for f in keeper.facts}
+    assert spheres.held_by(view, by_text["The keeper walks the peak."], keeper) == (
+        s.vasha
+    )
+    assert "The state church." in by_text
+    assert "The state church." not in [f.text for f in view.thing(s.dawn).facts]
+    vasha_fact = next(
+        f for f in view.thing(s.vasha).facts if "trained" in view.render(f.text)
+    )
+    assert vasha_fact.origin["held_by"] == s.dawn
+    assert "The Dawn Vigils end with embers." in [
+        view.render(f.text) for f in view.thing(s.vigil).facts
+    ]
+    assert not [t for t in view.things() if view.name_of(t.id) == "Ashen Gate"]
+
+
+async def test_fixed_fill_carries_elsewhere(plugin, tmp_path, monkeypatch):
+    """A fixed Fill reply given as an object keeps its `elsewhere`, read
+    through the real parser (with `held_by`)."""
+
+    s = await _open_sphere_world(plugin)
+    _fixed_sphere_file(
+        tmp_path,
+        monkeypatch,
+        fill={
+            "new_items": [{"name": "Ember Rite", "text": "Coals go up the peak."}],
+            "elsewhere": [
+                {
+                    "entry": "Vasha",
+                    "text": "Vasha carries the coals.",
+                    "held_by": "The White Dawn",
+                }
+            ],
+        },
+    )
+    await _act(plugin, "fill_drawer", sphere_id=s.dawn, drawer_id=RITES)
+    await _drain(plugin)
+    filled = _last(plugin, "fill_drawer")["data"]
+    assert [i["name"] for i in filled["items"]] == ["Ember Rite"]
+    (elsewhere,) = filled["elsewhere"]
+    assert (elsewhere["target_id"], elsewhere["held_by"]) == (s.vasha, s.dawn)
+    assert elsewhere["held_by_name"] == "The White Dawn"
+
+
+async def test_preview_rows_carry_names(plugin, client):
+    """`add_outer_body`'s re-file rows name the entry they move and the
+    bodies they move between."""
+
+    s = await _open_sphere_world(plugin)
+    preview = CreatePreview(
+        kind="character",
+        prompt="A keeper of the Vigil Watch.",
+        name="Olya",
+        facts=[PreviewFact(category="background", text="Olya keeps the Vigil Watch.")],
+        prose={},
+        new_names=[{"name": "Vigil Watch", "kind": "lore"}],
+    )
+    await _act(
+        plugin,
+        "add_outer_body",
+        preview_type="create",
+        preview=preview.model_dump(mode="json"),
+        row_name="Vigil Watch",
+        outer={
+            "name": "Order of the Dawn",
+            "template": "order",
+            "part_of": {"sphere": s.dawn, "drawer": RITES},
+        },
+    )
+    (row,) = _last(plugin, "add_outer_body")["data"]["preview"]["refile"]
+    assert (row["name"], row["from_name"], row["to_name"]) == (
+        "Dawn Vigil",
+        "The White Dawn",
+        "Order of the Dawn",
+    )
+
+
+async def test_preview_merge_payload_and_akas(plugin, monkeypatch):
+    """`preview_merge` answers the names, both sides' facts, the pairs, the
+    counts of what moves and the links' words (`akas`); `accept_merge`
+    adds only the `akas` the owner kept."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    with s.world.revision(Source.manual(note="harbour link")) as rev:
+        rev.add_fact(
+            s.maren, "background", f"Grew up at {ref(s.harbour, 'the docks')}."
+        )
+    await _act(plugin, "preview_merge", from_id=s.harbour, into_id=s.moscavy)
+    preview = _last(plugin, "preview_merge")["data"]["preview"]
+    assert {"names", "facts", "pairs", "moves", "akas", "notes"} <= set(preview)
+    assert "the docks" in preview["akas"]
+    await _act(
+        plugin,
+        "accept_merge",
+        preview=preview,
+        main_name="Moscavy",
+        keep={},
+        akas=[],
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "accept_merge")["data"]
+    assert "the docks" not in [a["name"] for a in reply["into"]["aka"]]
+    assert reply["notes"] == [] or isinstance(reply["notes"], list)
