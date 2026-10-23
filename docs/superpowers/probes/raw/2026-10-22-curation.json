@@ -27391,10 +27391,11 @@
    "else": ""
   },
   "v3:create:The Divine Right of the Tsar|r2|0": {
-   "own": "ooooooooooo",
+   "own": "oooooooooxo",
    "else": "frrf",
    "held": "bapaapapppp",
-   "else_held": "pppa"
+   "else_held": "pppa",
+   "fix_round_1": "o9 ('In practice, the Tsar wields both legislative and judicial power…') rescored off topic, as v1's 'The Tsar's authority extends over all matters…' items were"
   },
   "v3:create:The Divine Right of the Tsar|r2|1": {
    "own": "",
@@ -28654,8 +28655,8 @@
    "per_case_variant": {
     "create:The Divine Right of the Tsar|r2": {
      "runs": 2,
-     "own_on_topic": "11/11 (100%)",
-     "on_share": 1.0,
+     "own_on_topic": "10/11 (91%)",
+     "on_share": 0.9090909090909091,
      "elsewhere_items": 4,
      "elsewhere_right": "2/4 (50%)",
      "right_share": 0.5,
@@ -28716,8 +28717,8 @@
    "per_prompt_variant": {
     "create|r2": {
      "runs": 6,
-     "own_on_topic": "46/58 (79%)",
-     "on_share": 0.7931034482758621,
+     "own_on_topic": "45/58 (78%)",
+     "on_share": 0.7758620689655172,
      "elsewhere_items": 24,
      "elsewhere_right": "18/24 (75%)",
      "right_share": 0.75,
@@ -28731,8 +28732,8 @@
     },
     "create|all": {
      "runs": 6,
-     "own_on_topic": "46/58 (79%)",
-     "on_share": 0.7931034482758621,
+     "own_on_topic": "45/58 (78%)",
+     "on_share": 0.7758620689655172,
      "elsewhere_items": 24,
      "elsewhere_right": "18/24 (75%)",
      "right_share": 0.75,
@@ -30378,5 +30379,740 @@
     }
    ]
   }
- ]
+ ],
+ "ranking": {
+  "note": "Code only, no model: which expected elsewhere targets each candidate\nranking would put in probe 1's lists (curation probe, fix round 1).",
+  "cases": {
+   "create:The Divine Right of the Tsar|r1": {
+    "wanted": [
+     "Tsardom of Moscavia",
+     "Church of the Eternal Light",
+     "Moscavian Owl-folk",
+     "Snowy Moscavian Owls",
+     "Zakonnik",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Moscavian Owl-folk",
+      "Snowy Moscavian Owls",
+      "Zakonnik",
+      "Moskov"
+     ],
+     "tie": [
+      "Moscavian Owl-folk",
+      "Snowy Moscavian Owls",
+      "Zakonnik",
+      "Moskov"
+     ],
+     "sib07": [
+      "Moscavian Owl-folk",
+      "Snowy Moscavian Owls",
+      "Zakonnik",
+      "Moskov"
+     ],
+     "sib07+tie": [
+      "Moscavian Owl-folk",
+      "Snowy Moscavian Owls",
+      "Zakonnik",
+      "Moskov"
+     ],
+     "cap3": [
+      "Moscavian Owl-folk",
+      "Snowy Moscavian Owls",
+      "Zakonnik",
+      "Moskov"
+     ],
+     "cap3+tie": [
+      "Moscavian Owl-folk",
+      "Snowy Moscavian Owls",
+      "Zakonnik",
+      "Moskov"
+     ]
+    }
+   },
+   "create:The Divine Right of the Tsar|r2": {
+    "wanted": [
+     "Tsardom of Moscavia",
+     "Church of the Eternal Light",
+     "Moscavian Owl-folk",
+     "Snowy Moscavian Owls",
+     "Zakonnik",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "tie": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "sib07": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "sib07+tie": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "cap3": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "cap3+tie": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ]
+    }
+   },
+   "create:The Divine Right of the Tsar|r3": {
+    "wanted": [
+     "Tsardom of Moscavia",
+     "Church of the Eternal Light",
+     "Moscavian Owl-folk",
+     "Snowy Moscavian Owls",
+     "Zakonnik",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "tie": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "sib07": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "sib07+tie": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "cap3": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ],
+     "cap3+tie": [
+      "Snowy Moscavian Owls",
+      "Zakonnik"
+     ]
+    }
+   },
+   "create:The Divine Right of the Tsar|r3w": {
+    "wanted": [
+     "Tsardom of Moscavia",
+     "Church of the Eternal Light",
+     "Moscavian Owl-folk",
+     "Snowy Moscavian Owls",
+     "Zakonnik",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "create:The Illumination|r1": {
+    "wanted": [
+     "Moscavian Owl-folk",
+     "Church of the Eternal Light",
+     "Tsardom of Moscavia",
+     "Snowy Moscavian Owls",
+     "Eared Moscavian Owls",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ],
+     "tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ],
+     "sib07": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ],
+     "sib07+tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ],
+     "cap3": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ],
+     "cap3+tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ]
+    }
+   },
+   "create:The Illumination|r2": {
+    "wanted": [
+     "Moscavian Owl-folk",
+     "Church of the Eternal Light",
+     "Tsardom of Moscavia",
+     "Snowy Moscavian Owls",
+     "Eared Moscavian Owls",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "sib07": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "sib07+tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "cap3": [
+      "Snowy Moscavian Owls"
+     ],
+     "cap3+tie": [
+      "Snowy Moscavian Owls"
+     ]
+    }
+   },
+   "create:The Illumination|r3": {
+    "wanted": [
+     "Moscavian Owl-folk",
+     "Church of the Eternal Light",
+     "Tsardom of Moscavia",
+     "Snowy Moscavian Owls",
+     "Eared Moscavian Owls",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Moscavian Owl-folk",
+      "Tsardom of Moscavia",
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls",
+      "Moskov"
+     ],
+     "tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "sib07": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "sib07+tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "cap3": [
+      "Tsardom of Moscavia",
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ],
+     "cap3+tie": [
+      "Snowy Moscavian Owls",
+      "Eared Moscavian Owls"
+     ]
+    }
+   },
+   "create:The Illumination|r3w": {
+    "wanted": [
+     "Moscavian Owl-folk",
+     "Church of the Eternal Light",
+     "Tsardom of Moscavia",
+     "Snowy Moscavian Owls",
+     "Eared Moscavian Owls",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [
+      "Snowy Moscavian Owls"
+     ],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [
+      "Snowy Moscavian Owls"
+     ],
+     "cap3+tie": []
+    }
+   },
+   "create:Deepcarving|r1": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "create:Deepcarving|r2": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "create:Deepcarving|r3": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "create:Deepcarving|r3w": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Eternal Light|r1": {
+    "wanted": [
+     "Church of the Eternal Light"
+    ],
+    "missing": {
+     "as_run": [
+      "Church of the Eternal Light"
+     ],
+     "tie": [
+      "Church of the Eternal Light"
+     ],
+     "sib07": [
+      "Church of the Eternal Light"
+     ],
+     "sib07+tie": [
+      "Church of the Eternal Light"
+     ],
+     "cap3": [
+      "Church of the Eternal Light"
+     ],
+     "cap3+tie": [
+      "Church of the Eternal Light"
+     ]
+    }
+   },
+   "core:Eternal Light|r2": {
+    "wanted": [
+     "Church of the Eternal Light"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Eternal Light|r3": {
+    "wanted": [
+     "Church of the Eternal Light"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Eternal Light|r3w": {
+    "wanted": [
+     "Church of the Eternal Light"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Runeweavers' Conclave|r1": {
+    "wanted": [
+     "The Ashenmere Caves",
+     "First Codex of Aelberth",
+     "Runeweaving"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Runeweavers' Conclave|r2": {
+    "wanted": [
+     "The Ashenmere Caves",
+     "First Codex of Aelberth",
+     "Runeweaving"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Runeweavers' Conclave|r3": {
+    "wanted": [
+     "The Ashenmere Caves",
+     "First Codex of Aelberth",
+     "Runeweaving"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Runeweavers' Conclave|r3w": {
+    "wanted": [
+     "The Ashenmere Caves",
+     "First Codex of Aelberth",
+     "Runeweaving"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Tsardom of Moscavia|r1": {
+    "wanted": [
+     "Church of the Eternal Light",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Tsardom of Moscavia|r2": {
+    "wanted": [
+     "Church of the Eternal Light",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Tsardom of Moscavia|r3": {
+    "wanted": [
+     "Church of the Eternal Light",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "core:Tsardom of Moscavia|r3w": {
+    "wanted": [
+     "Church of the Eternal Light",
+     "Moskov"
+    ],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Church of the Eternal Light/Hierarchy|r1": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Church of the Eternal Light/Hierarchy|r2": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Church of the Eternal Light/Hierarchy|r3": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Church of the Eternal Light/Hierarchy|r3w": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Runeweaving/Sites|r1": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Runeweaving/Sites|r2": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Runeweaving/Sites|r3": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Runeweaving/Sites|r3w": {
+    "wanted": [],
+    "missing": {
+     "as_run": [],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [],
+     "cap3+tie": []
+    }
+   },
+   "fill:Tsardom of Moscavia/Governance & Military|r1": {
+    "wanted": [
+     "White Talon"
+    ],
+    "missing": {
+     "as_run": [
+      "White Talon"
+     ],
+     "tie": [],
+     "sib07": [
+      "White Talon"
+     ],
+     "sib07+tie": [],
+     "cap3": [
+      "White Talon"
+     ],
+     "cap3+tie": []
+    }
+   },
+   "fill:Tsardom of Moscavia/Governance & Military|r2": {
+    "wanted": [
+     "White Talon"
+    ],
+    "missing": {
+     "as_run": [
+      "White Talon"
+     ],
+     "tie": [],
+     "sib07": [
+      "White Talon"
+     ],
+     "sib07+tie": [],
+     "cap3": [
+      "White Talon"
+     ],
+     "cap3+tie": []
+    }
+   },
+   "fill:Tsardom of Moscavia/Governance & Military|r3": {
+    "wanted": [
+     "White Talon"
+    ],
+    "missing": {
+     "as_run": [
+      "White Talon"
+     ],
+     "tie": [],
+     "sib07": [
+      "White Talon"
+     ],
+     "sib07+tie": [],
+     "cap3": [
+      "White Talon"
+     ],
+     "cap3+tie": []
+    }
+   },
+   "fill:Tsardom of Moscavia/Governance & Military|r3w": {
+    "wanted": [
+     "White Talon"
+    ],
+    "missing": {
+     "as_run": [
+      "White Talon"
+     ],
+     "tie": [],
+     "sib07": [],
+     "sib07+tie": [],
+     "cap3": [
+      "White Talon"
+     ],
+     "cap3+tie": []
+    }
+   }
+  },
+  "missing_total": {
+   "as_run": 24,
+   "tie": 16,
+   "sib07": 19,
+   "sib07+tie": 16,
+   "cap3": 21,
+   "cap3+tie": 15
+  }
+ },
+ "repeats": {
+  "note": "Code only, no model: the repeat detector (Task 2's `find_repeats`, 0.4)\non probe 1's runs (curation probe), against the after-run judgments.",
+  "threshold": 0.4,
+  "elsewhere": {
+   "core|f|fresh": 1,
+   "core|r|fresh": 5,
+   "core|r|repeat": 72,
+   "core|w|repeat": 3,
+   "core|x|new": 1,
+   "create|f|fresh": 20,
+   "create|f|repeat": 11,
+   "create|n|new": 2,
+   "create|r|fresh": 34,
+   "create|r|repeat": 8,
+   "fill|f|fresh": 7,
+   "fill|f|repeat": 1,
+   "fill|r|fresh": 28,
+   "fill|r|repeat": 5,
+   "fill|w|fresh": 1
+  },
+  "own_create_facts": {
+   "create:Deepcarving|o|fresh": 88,
+   "create:Deepcarving|o|repeat": 3,
+   "create:The Divine Right of the Tsar|o|fresh": 25,
+   "create:The Divine Right of the Tsar|o|repeat": 22,
+   "create:The Divine Right of the Tsar|x|fresh": 10,
+   "create:The Divine Right of the Tsar|x|repeat": 8,
+   "create:The Illumination|o|fresh": 14,
+   "create:The Illumination|o|repeat": 24,
+   "create:The Illumination|x|fresh": 12,
+   "create:The Illumination|x|repeat": 32
+  }
+ },
+ "loose_reading": {
+  "rule": "A relation claim (one that ties another entry to the entry being written, or to a new item of the same Fill) is acceptable on either entry. Items judged 'f' under the strict reading that are relation claims count as right; the ones listed stay false.",
+  "create_v1_still_false": [
+   "create:The Divine Right of the Tsar|r2|0 e0: 'The Divine Right of the Tsar is the doctrinal cornerstone upon which the Church's relationship with the state is built, asserting that the Tsar's authority is … sacred' (the doctrine's own content)",
+   "create:The Illumination|r3w|1 e3: 'The Illumination is also known in some theological texts as the Blinding Transformation' (a name of the Illumination itself)"
+  ],
+  "create_v3_still_false": [],
+  "core_v1_still_false": [],
+  "fill_v1_still_false": [],
+  "fill_v3_still_false": [],
+  "borderline": "create:The Divine Right of the Tsar|r1|1 e0 ('…the Tsar serves as the Eternal Light's visible representative on earth') is the doctrine's content attributed to the Church; counted as a relation. Counting it false gives 3/75."
+ },
+ "fill_filter": {
+  "rule": "drop an elsewhere item whose text opens with the name of one of the same reply's new items (post hoc, on existing data)",
+  "v1": {
+   "false_dropped": 7,
+   "false_kept": 1,
+   "right_dropped": 0,
+   "kept": "33 right, 1 wrong entry, 1 false of 35"
+  },
+  "v3": {
+   "false_dropped": 3,
+   "false_kept": 0,
+   "right_dropped": 0,
+   "kept": "4 right of 4"
+  }
+ }
 }
