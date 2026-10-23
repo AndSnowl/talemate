@@ -62,7 +62,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `preview_merge {from_id, into_id}` (`talemate.worldplay.merge`) answers
   `preview_merge {preview}`, writing nothing and asking no model: both
   names, both sides' facts (repeats unticked), the pairs that may disagree
-  and what moves. `accept_merge {preview, main_name, keep, lose}` folds
+  and what moves, and the links' words it would add as other names
+  (`akas`). `accept_merge {preview, main_name, keep, lose, akas}` folds
   `from_id` into `into_id` in one revision (`keep`: each pair's key ->
   "a", "b" or "both"; `lose`: "remove" or "end") and answers `{from_id,
   into, main_name, links, aka_added, facts_moved, notes}`. Refused as
@@ -444,6 +445,9 @@ class AcceptMergePayload(pydantic.BaseModel):
     main_name: str
     keep: dict[str, Literal["a", "b", "both"]] = {}
     lose: Literal["remove", "end"] = "remove"
+    # the links' words to add as other names (of `preview.akas`); all when
+    # left out
+    akas: list[str] | None = None
 
 
 class ChangeStubKindPayload(pydantic.BaseModel):
@@ -2393,6 +2397,7 @@ class WorldsPlugin(Plugin):
             main_name=payload.main_name,
             keep=payload.keep,
             lose=payload.lose,
+            akas=payload.akas,
         )
         self._reply(
             "accept_merge",

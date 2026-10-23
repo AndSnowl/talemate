@@ -12,7 +12,6 @@ from typing import NamedTuple
 import pytest
 
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
 from talemate.worldplay.decide import contradiction_pairs
@@ -387,6 +386,7 @@ def test_merge_refusals_write_nothing(world, mere):
             "place", {"name": "Rumour", "stub": {"ignored": False}}
         )
         gone = rev.create_thing("place", {"name": "Gone"})
+        oskar = rev.create_thing("character", {"name": "Oskar"})
     with world.revision(Source.manual(note="gone")) as rev:
         rev.remove_thing(gone)
     world.scenes().create("Descent", WorldDate.of(1000), player_thing_id=m.vasha)
@@ -396,12 +396,15 @@ def test_merge_refusals_write_nothing(world, mere):
         (m.caves, gone, KeyError, "no such thing"),
         (m.caves, hope, ValueError, "ignored"),
         (m.caves, rumour, ValueError, "stub"),
-        # Deepvault's parent can't be lore
-        (m.caves, saltlore, ValueError, "Deepvault's parent"),
+        # ruling C17: one kind, or a place and a sphere
+        (m.caves, saltlore, ValueError, "only entries of one kind"),
+        (m.vasha, m.caves, ValueError, "a character and The Ashenmere Caves a place"),
+        # Deepvault's parent can't be a sphere
+        (m.caves, m.tsardom, ValueError, "Deepvault's parent can't be a sphere"),
         # a sphere with parts can't fold into a place
         (m.tsardom, m.northreach, ValueError, "isn't a sphere"),
         # a scene's player
-        (m.vasha, saltlore, ValueError, "the scene Descent"),
+        (m.vasha, oskar, ValueError, "the scene Descent"),
     ):
         with pytest.raises(error, match=words):
             preview_merge(world, from_id, into_id)
@@ -561,11 +564,14 @@ def test_merge_sphere_repoints_parts_and_ties(world, host):
     accept_merge(world, preview, main_name="The Tsar's Army")
     view = world.view()
     assert view.thing(h.host) is None
-    # the Host's Divisions drawer isn't the Army's (by id): Unsorted
+    # ruling C15: the Host's Divisions is the Army's by type and title
     assert view.thing(h.frost).fields["part_of"] == {
         "sphere": h.army,
-        "drawer": UNSORTED_DRAWER_ID,
+        "drawer": DIVISIONS,
     }
+    assert view.thing(h.army).fields["drawers"] == [
+        {"id": DIVISIONS, "type": "structure", "title": "Divisions"}
+    ]
     assert view.thing(h.army).fields["part_of"] == {
         "sphere": h.tsardom,
         "drawer": MILITARY,
@@ -578,10 +584,104 @@ def test_merge_sphere_repoints_parts_and_ties(world, host):
 
 def test_merge_sphere_into_non_sphere_refused(world, host):
     h = host
+    with world.revision(Source.manual(note="camp")) as rev:
+        camp = rev.create_thing("place", {"name": "The Winter Camp"})
     head = world.head_rev()
     with pytest.raises(ValueError, match="parts or ties"):
-        preview_merge(world, h.host, h.talon)
+        preview_merge(world, h.host, camp)
     assert world.head_rev() == head
+
+
+def test_merge_sphere_drawers_matched_or_added(world, host):
+    """Ruling C15: a drawer of the Host's the Army has none like (by id,
+    or type and title) is added to the Army's, and its part follows it; a
+    statement in a drawer matched by title keeps its drawer, the Army's;
+    one in the added drawer keeps it too."""
+
+    h = host
+    with world.revision(Source.manual(note="drawers")) as rev:
+        rev.set_field(
+            h.host,
+            "drawers",
+            [
+                {"id": RANKS, "type": "structure", "title": "Divisions"},
+                {"id": "c0de0001", "type": "beliefs", "title": " the  CODE "},
+                {"id": "fea50001", "type": "practices", "title": "Feasts"},
+            ],
+            None,
+        )
+        rev.set_field(
+            h.army,
+            "drawers",
+            [
+                {"id": DIVISIONS, "type": "structure", "title": "Divisions"},
+                {"id": "c0de0002", "type": "beliefs", "title": "The Code"},
+            ],
+            None,
+        )
+        feast = rev.create_thing(
+            "lore",
+            {
+                "name": "The Thaw Feast",
+                "part_of": {"sphere": h.host, "drawer": "fea50001"},
+            },
+        )
+        oath = rev.add_fact(
+            h.host, "statement", "No rider flies alone.", origin={"drawer": "c0de0001"}
+        )
+        toast = rev.add_fact(
+            h.host,
+            "statement",
+            "The first cup goes to the fallen.",
+            origin={"drawer": "fea50001"},
+        )
+    preview = preview_merge(world, h.host, h.army)
+    done = accept_merge(world, preview, main_name="The Tsar's Army")
+    view = world.view()
+    assert view.thing(h.army).fields["drawers"] == [
+        {"id": DIVISIONS, "type": "structure", "title": "Divisions"},
+        {"id": "c0de0002", "type": "beliefs", "title": "The Code"},
+        {"id": "fea50001", "type": "practices", "title": "Feasts"},
+    ]
+    assert view.thing(feast).fields["part_of"] == {
+        "sphere": h.army,
+        "drawer": "fea50001",
+    }
+    assert any("Feasts" in note for note in done.notes)
+    statements = {
+        f.text: f.origin for f in world.live_facts(h.army) if f.category == "statement"
+    }
+    assert statements["No rider flies alone."]["drawer"] == "c0de0002"
+    assert statements["The first cup goes to the fallen."]["drawer"] == "fea50001"
+    assert oath not in [f.fact_id for f in world.live_facts(h.army)]
+    assert toast not in [f.fact_id for f in world.live_facts(h.army)]
+
+
+def test_merge_sphere_into_its_own_branch(world, host):
+    """The Host merged into its branch, the Northern Host: the branch sits
+    where the Host sat (its parent, the Host, is cleared since the Host has
+    none; it takes the Host's filing), keeps the Host's drawers, and its
+    parts and people follow."""
+
+    h = host
+    with world.revision(Source.manual(note="branch")) as rev:
+        branch = rev.create_thing(
+            "sphere",
+            {"name": "The Northern Host", "template": "order", "parent": h.host},
+        )
+    preview = preview_merge(world, h.host, branch)
+    done = accept_merge(world, preview, main_name="The Northern Host")
+    view = world.view()
+    state = view.thing(branch)
+    assert "parent" not in state.fields or state.fields["parent"] is None
+    assert state.fields["part_of"] == {"sphere": h.tsardom, "drawer": MILITARY}
+    assert state.fields["drawers"] == [
+        {"id": RANKS, "type": "structure", "title": "Divisions"}
+    ]
+    assert view.thing(h.frost).fields["part_of"] == {"sphere": branch, "drawer": RANKS}
+    (ilya,) = view.thing(h.ilya).fields["ties"]
+    assert (ilya["sphere"], ilya["within"]) == (h.tsardom, branch)
+    assert any("parent was The Tsar's Host" in note for note in done.notes)
 
 
 def test_merge_character_ties_carry_over(world, host):
@@ -668,3 +768,155 @@ def test_merge_tie_within_a_part_outside_its_sphere(world, host):
     assert (ilya["sphere"], ilya["within"]) == (h.tsardom, None)
     assert any("Ilya's tie" in note for note in done.notes)
     assert world.view().thing(h.army).fields["part_of"]["sphere"] == rivals
+
+
+# --- fix round 1 -----------------------------------------------------------------
+
+
+def test_merge_untick_on_a_paired_fact_stands(world, mere):
+    """A paired from-fact the owner unticked isn't copied when its pair is
+    left as both (or kept as B); picking A ticks it."""
+
+    m = mere
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    for fact in preview.facts:
+        if fact.fact_id in (m.dialect_b, m.lichen_b):
+            fact.ticked = False
+    accept_merge(
+        world,
+        preview,
+        main_name="Ashenmere",
+        keep={_key(preview, m.dialect_b): "a"},
+    )
+    texts = _texts(world, m.ashenmere)
+    assert LICHEN_B not in texts
+    assert DIALECT_B in texts
+    assert DIALECT_A not in texts
+
+
+def test_merge_refuses_forged_pairs_and_repeats(world, mere):
+    """The client's preview is checked: a pair the world doesn't find (one
+    naming a third entry's fact) and a repeat of no into-side fact are
+    refused, writing nothing."""
+
+    m = mere
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    forged = preview.pairs[0].model_copy(
+        update={"key": f"{m.smugglers}:{m.explored}", "a": m.smugglers, "b": m.explored}
+    )
+    preview.pairs.append(forged)
+    head = world.head_rev()
+    with pytest.raises(ValueError, match="no such pair"):
+        accept_merge(world, preview, main_name="Ashenmere", keep={forged.key: "a"})
+    assert world.head_rev() == head
+    # listed without a choice, it's ignored: Vasha's fact stays
+    accept_merge(world, preview, main_name="Ashenmere")
+    assert any(f.fact_id == m.explored for f in world.live_facts(m.vasha))
+    world.undo([world.head_rev()])
+
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    for fact in preview.facts:
+        if fact.fact_id == m.system_b:
+            fact.repeat_of = {**fact.repeat_of, "fact_id": m.explored}
+    head = world.head_rev()
+    with pytest.raises(ValueError, match="a repeat of no fact"):
+        accept_merge(world, preview, main_name="Ashenmere")
+    assert world.head_rev() == head
+
+
+def test_merge_redirects_the_into_sides_own_field(world, mere):
+    """Ashenmere merged into the Caves, whose parent is Ashenmere: the
+    Caves take Ashenmere's own parent, Northreach, and its filing, with a
+    note; with no parent of Ashenmere's, the Caves' parent is cleared."""
+
+    m = mere
+    with world.revision(Source.manual(note="parents")) as rev:
+        rev.set_field(m.caves, "parent", m.ashenmere, None)
+        rev.set_field(m.ashenmere, "parent", m.northreach, None)
+    preview = preview_merge(world, m.ashenmere, m.caves)
+    done = accept_merge(world, preview, main_name="Ashenmere")
+    caves = world.view().thing(m.caves)
+    assert caves.fields["parent"] == m.northreach
+    assert caves.fields["part_of"] == {"sphere": m.tsardom, "drawer": LANDS}
+    assert any("parent was Ashenmere" in note for note in done.notes)
+    assert world.view().name_of(m.caves) == "Ashenmere"
+
+    world.undo([world.head_rev()])
+    with world.revision(Source.manual(note="no parent")) as rev:
+        rev.remove_field_value(m.ashenmere, "parent", None)
+    preview = preview_merge(world, m.ashenmere, m.caves)
+    done = accept_merge(world, preview, main_name="Ashenmere")
+    assert world.view().thing(m.caves).fields.get("parent") is None
+    assert any("cleared" in note for note in done.notes)
+
+
+def test_merge_repeat_adds_no_word(world, mere):
+    """Ruling C16: a fact that restates another but for a word of its own
+    is a pair, not a repeat."""
+
+    m = mere
+    with world.revision(Source.manual(note="scales")) as rev:
+        golden = rev.add_fact(m.ashenmere, "description", "golden scales edged in red")
+        black = rev.add_fact(m.caves, "description", "black scales edged in red")
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    row = next(f for f in preview.facts if f.fact_id == black)
+    assert row.ticked is True and row.repeat_of is None
+    assert any(p.a == black and p.b == golden for p in preview.pairs)
+    # the plain restatement is still a repeat
+    assert next(f for f in preview.facts if f.fact_id == m.system_b).ticked is False
+
+
+def test_merge_overrides_and_rejects_follow_replacements(world, mere):
+    """An override of a repeat that went follows what replaced it, through
+    a pair the owner settled, to a live fact; one of a fact that went with
+    nothing in its place is dropped, with a note. An exception rejecting a
+    fact that moved, or went, follows the same way."""
+
+    m = mere
+    with world.revision(Source.manual(note="links")) as rev:
+        south = rev.add_fact(
+            m.caves,
+            "general",
+            "Ashenmere is a cave system beneath the southern hills, not the northern.",
+        )
+        rev.correct_fact(m.explored, overrides=[m.system_b, m.smugglers])
+        rejects_moved = rev.add_fact(
+            m.vasha,
+            "ties",
+            "Doubts the smugglers.",
+            origin={"rejects_fact": m.lichen_b},
+        )
+        rejects_gone = rev.add_fact(
+            m.vasha, "ties", "Doubts the hills.", origin={"rejects_fact": m.system_b}
+        )
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    for fact in preview.facts:
+        if fact.fact_id == m.smugglers:
+            fact.ticked = False
+    pair = next(p for p in preview.pairs if p.a == south and p.b == m.system_a)
+    done = accept_merge(world, preview, main_name="Ashenmere", keep={pair.key: "a"})
+    by_text = {f.text: f.fact_id for f in world.live_facts(m.ashenmere)}
+    south_copy = by_text[
+        "Ashenmere is a cave system beneath the southern hills, not the northern."
+    ]
+    lichen_copy = by_text[LICHEN_B]
+    vasha = {f.fact_id: f for f in world.live_facts(m.vasha)}
+    assert vasha[m.explored].overrides == [south_copy]
+    assert any("no longer overrides" in note for note in done.notes)
+    assert vasha[rejects_moved].origin == {"rejects_fact": lichen_copy}
+    assert vasha[rejects_gone].origin == {"rejects_fact": south_copy}
+
+
+def test_merge_link_words_offered_as_akas(world, mere):
+    """The links' words the merge would add as other names are listed in
+    the preview; unticked, they aren't added."""
+
+    m = mere
+    preview = preview_merge(world, m.caves, m.ashenmere)
+    assert preview.akas == ["the Caves"]
+    accept_merge(world, preview, main_name="Ashenmere", akas=[])
+    assert world.view().thing(m.ashenmere).fields["aka"] == [
+        _aka("the Mere", everyday=True),
+        _aka("The Ashenmere Caves"),
+        _aka("the Deeps", tag="proper"),
+    ]

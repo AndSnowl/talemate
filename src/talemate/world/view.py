@@ -502,3 +502,23 @@ class WorldView:
             (*params, self.rev, self.rev, json.dumps(list(fact_ids))),
         ).fetchall()
         return [(row["thing_id"], self._with_overrides(row)) for row in rows]
+
+    def rejecting(self, fact_ids: list[str]) -> list[tuple[str, FactState]]:
+        """`(owner id, fact)` for every fact live at `rev` (of a live owner,
+        on any story date) whose origin's `rejects_fact` is one of
+        `fact_ids` (an exception to a sphere's statement), in creation
+        order, with its overrides."""
+
+        if not fact_ids:
+            return []
+        things, params = self._live_things_filter("t.")
+        rows = self._conn.execute(
+            self._ANY_DATE_FACT.format(
+                things=things,
+                where="f.origin_json IS NOT NULL AND "
+                "json_extract(f.origin_json, '$.rejects_fact') IN "
+                "(SELECT value FROM json_each(?))",
+            ),
+            (*params, self.rev, self.rev, json.dumps(list(fact_ids))),
+        ).fetchall()
+        return [(row["thing_id"], self._with_overrides(row)) for row in rows]

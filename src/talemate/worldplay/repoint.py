@@ -38,11 +38,19 @@ where its input changed (`RepointResult.prose`).
 re-point a stub in its own revision (`create.accept_preview` with a same
 target, for the stub it expanded).
 
-The same mover folds any thing into any thing (`plan_merge`, for
-`worldplay.merge`): the same refusals, and a thing merged into itself; a
-sphere with parts filed in it or people tied to it can't fold into a thing
-that isn't a sphere, and a full entry doesn't fold into a stub (re-point
-the stub instead). It differs from a re-point in what the owner picks:
+The same mover folds any thing into another of its kind, or a place and
+a sphere either way (ruling C17), for `worldplay.merge` (`plan_merge`):
+the same refusals, and a thing merged into itself; a sphere with parts
+filed in it or people tied to it can't fold into a thing that isn't a
+sphere, and a full entry doesn't fold into a stub (re-point the stub
+instead). The target's own fields naming the stub aren't refused but
+redirected: the merged entry sits where the stub sat (its parent and
+filing take the stub's, cleared when the stub has none or they'd make a
+loop; a list drops the stub), each with a note. A sphere merged into a
+sphere keeps its drawers (ruling C15): each is the target's of that id,
+else the target's of that type and title, else added to the target's, and
+the parts and statements filed in it follow. It differs from a re-point
+in what the owner picks:
 - only the facts named move (`fact_ids`, the owner's ticks); the rest go
   with the thing;
 - the main name (`main_name`, either side's): the other becomes a common
@@ -51,13 +59,15 @@ the stub instead). It differs from a re-point in what the owner picks:
 - a character's or real being's ties are combined, one per sphere and
   role, the into-side's kept; a tie re-pointed `within` the into-side to a
   sphere it won't be inside after the merge is within no part (noted);
+- of the links' words, only `link_akas` become other names;
 - the into-side's prose is always refreshed.
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+import secrets
+from collections.abc import Callable, Mapping, Sequence
 
 import structlog
 from pydantic import BaseModel
@@ -134,6 +144,8 @@ class _FieldUse(BaseModel):
     field: str
     date: object
     value: object
+    # the value at `date` is retired, not replaced (a merge's redirect)
+    clear: bool = False
 
 
 def _where(view: WorldView, sphere_id: str, drawer_id: str) -> str:
@@ -181,14 +193,20 @@ def _field_uses(
     target: ThingState,
     blocked: list[str],
     notes: list[str],
+    *,
+    drawer: Callable[[str, str], str] | None = None,
+    skip_target: bool = False,
 ) -> list[_FieldUse]:
     """Every field value of another thing naming the stub, rewritten to
-    name the target, at its date. What can't be is added to `blocked`."""
+    name the target, at its date. What can't be is added to `blocked`.
+    `drawer` (a merge's) gives the drawer a part filed in the stub at
+    `(drawer id, kind)` goes in; with `skip_target`, the target's own
+    values are left to the caller (a merge redirects them)."""
 
     uses: list[_FieldUse] = []
     is_sphere = spheres.is_sphere(target)
     for state in view.things():
-        if state.id == stub.id:
+        if state.id == stub.id or (skip_target and state.id == target.id):
             continue
         name = view.name_of(state.id) or state.id
         types = {spec.name: spec.type for spec in get_kind(state.kind).fields}
@@ -209,8 +227,12 @@ def _field_uses(
                     continue
                 new = {
                     "sphere": target.id,
-                    "drawer": _drawer_for(
-                        view, target.id, str(value.get("drawer")), state.kind
+                    "drawer": (
+                        drawer(str(value.get("drawer")), state.kind)
+                        if drawer is not None
+                        else _drawer_for(
+                            view, target.id, str(value.get("drawer")), state.kind
+                        )
                     ),
                 }
             elif field == "ties":
@@ -366,6 +388,18 @@ class _Job(BaseModel):
     fact_ids: list[str] | None = None
     # a merge's main name, either side's; `None`, the target's own
     main_name: str | None = None
+    # a merge's link words to add as other names; `None`, every one
+    link_akas: list[str] | None = None
+    # a sphere merge's drawers (ruling C15): the stub's drawer id -> the
+    # target's, the drawers the target has after (its own, those it
+    # inherits), and its own list to write when it grew (else `None`)
+    drawer_map: dict[str, str] = {}
+    available: list[spheres.Drawer] = []
+    drawers: list[dict[str, object]] | None = None
+    # the target's own fields that named the stub, redirected
+    redirected: set[str] = set()
+    # a merge's other names added from the links' words
+    link_names: list[str] = []
 
     @property
     def verb(self) -> str:
@@ -450,6 +484,7 @@ def copy_facts(
     *,
     plain_self_links: bool,
     standing_for: Sequence[str] = (),
+    drawer_map: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Move the facts `fact_ids` (of any owners) onto `target_id`, in `rev`,
     the way a fact changes thing (ruling R1): each is copied as a new fact
@@ -466,7 +501,10 @@ def copy_facts(
     `standing_for` (a stub being re-pointed onto it, whose holdings become
     the target's too), point at the target: as plain words, with
     `plain_self_links`. An override among the moved facts points at its
-    copy, the copies' own and every other live fact's, on any date.
+    copy, the copies' own and every other live fact's, on any date; so
+    does an exception's `rejects_fact` (its origin). With `drawer_map`
+    (a sphere merged into a sphere: the old drawer id -> the target's), a
+    statement's drawer is mapped first.
 
     A `KeyError` for a fact or target that isn't live."""
 
@@ -482,6 +520,8 @@ def copy_facts(
         found.append(hit)
     moving = {fact.fact_id for _owner, fact in found}
     copies: dict[str, str] = {}
+    # each copy's origin, as written
+    origins: dict[str, dict[str, object] | None] = {}
     for owner_id, fact in found:
         origin = dict(fact.origin) if fact.origin is not None else None
         owner = view.thing(owner_id)
@@ -491,6 +531,8 @@ def copy_facts(
                 origin = spheres.with_held_by(origin, holder)
         if origin is not None and origin.get("held_by") in standing_for:
             origin["held_by"] = target_id
+        if origin is not None and drawer_map and origin.get("drawer") in drawer_map:
+            origin["drawer"] = drawer_map[str(origin["drawer"])]
         # a statement's drawer, when the target has none of that id
         if (
             origin is not None
@@ -498,6 +540,7 @@ def copy_facts(
             and origin["drawer"] not in {d.id for d in spheres.drawers(view, target_id)}
         ):
             del origin["drawer"]
+        origins[fact.fact_id] = origin
         copies[fact.fact_id] = rev.add_fact(
             target_id,
             _moved_category(target.kind, fact.category, fact.valid_from is not None),
@@ -518,6 +561,19 @@ def copy_facts(
             rev.correct_fact(
                 fact.fact_id, overrides=[copies.get(o, o) for o in fact.overrides]
             )
+    for _owner, fact in found:
+        rejected = (fact.origin or {}).get("rejects_fact")
+        if rejected in moving:
+            origin = dict(origins[fact.fact_id] or {})
+            origin["rejects_fact"] = copies[str(rejected)]
+            rev.correct_fact(copies[fact.fact_id], origin=origin)
+    copied = set(copies.values())
+    for _owner, fact in view.rejecting(list(moving)):
+        if fact.fact_id in moving or fact.fact_id in copied:
+            continue
+        origin = dict(fact.origin or {})
+        origin["rejects_fact"] = copies[str(origin["rejects_fact"])]
+        rev.correct_fact(fact.fact_id, origin=origin)
     for fact_id in moving:
         rev.remove_fact(fact_id)
     return copies
@@ -529,6 +585,10 @@ def _own_filing(job: _Job) -> tuple[dict, object] | None:
 
     view, target = job.view, job.target
     own = job.stub.fields.get("part_of")
+    if "part_of" in job.redirected:
+        # the target was filed in the stub: it takes the stub's filing
+        # there (`_self_uses`)
+        return None
     if not (isinstance(own, dict) and isinstance(own.get("sphere"), str)):
         return None
     sphere_id, drawer_id = own["sphere"], str(own.get("drawer"))
@@ -597,8 +657,13 @@ def _carried_fields(job: _Job) -> dict[str, object]:
     for field, value in job.stub.fields.items():
         if field in _OWN_HANDLED or value is None:
             continue
-        if job.merge and field == "ties":
-            # combined, one per sphere and role (`_merged_ties`)
+        if job.merge and field in ("ties", "drawers"):
+            # combined: one tie per sphere and role (`_merged_ties`), the
+            # drawers matched or added (`_drawer_plan`)
+            continue
+        if field in job.redirected:
+            # the target's own value named the stub: redirected
+            # (`_self_uses`)
             continue
         held = target.fields.get(field)
         if held == value:
@@ -679,15 +744,22 @@ def _merge_names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[st
         if isinstance(entry, dict) and isinstance(entry.get("name"), str):
             tag = entry.get("tag")
             wanted.append((entry["name"], tag if isinstance(tag, str) else "common"))
+    if job.link_akas is not None:
+        allowed = {name_key(name) for name in job.link_akas}
+        shown_texts = [text for text in shown_texts if name_key(text) in allowed]
+    names_first = len(wanted)
     wanted += [(text, "common") for text in shown_texts]
     added: list[str] = []
-    for name, tag in wanted:
+    job.link_names = []
+    for index, (name, tag) in enumerate(wanted):
         name = " ".join(name.split())
         key = name_key(name)
         if not key or key in held or key in taken:
             continue
         held.add(key)
         added.append(name)
+        if index >= names_first:
+            job.link_names.append(name)
         aka.append({"name": name, "tag": tag, "everyday": False})
     return aka, added
 
@@ -783,6 +855,201 @@ def _within_checked(job: _Job, uses: list[_FieldUse], filing: object) -> None:
         use.value = fixed
 
 
+def _norm_title(title: str) -> str:
+    return " ".join(title.split()).casefold()
+
+
+def _drawer_plan(job: _Job) -> None:
+    """A sphere merged into a sphere (ruling C15): each of the stub's own
+    drawers is the target's of the same id, else one of the same type and
+    title (case and spaces aside), else a copy added to the target's own
+    drawers (a fresh id when its id is taken). The target's drawers after
+    count its own and those it inherits from its parent after the merge
+    (the stub's parent, when its parent was the stub)."""
+
+    view, stub, target = job.view, job.stub, job.target
+    if not (spheres.is_sphere(stub) and spheres.is_sphere(target)):
+        return
+    own = [d for d in target.fields.get("drawers") or [] if isinstance(d, dict)]
+    available = list(spheres._own_drawers(target))
+    parent = target.fields.get("parent")
+    if parent == stub.id:
+        parent = stub.fields.get("parent")
+    if (
+        isinstance(parent, str)
+        and parent not in (stub.id, target.id)
+        and not spheres.sits_in(view, parent, target.id)
+    ):
+        ids = {d.id for d in available}
+        available += [d for d in spheres.drawers(view, parent) if d.id not in ids]
+    grown = list(own)
+    added: list[str] = []
+    for raw in stub.fields.get("drawers") or []:
+        try:
+            drawer = spheres.Drawer.model_validate(raw)
+        except ValueError:
+            continue
+        same = next((d for d in available if d.id == drawer.id), None) or next(
+            (
+                d
+                for d in available
+                if d.type == drawer.type
+                and _norm_title(d.title) == _norm_title(drawer.title)
+            ),
+            None,
+        )
+        if same is not None:
+            job.drawer_map[drawer.id] = same.id
+            continue
+        new_id = drawer.id
+        taken = {d.id for d in available}
+        while new_id in taken:
+            new_id = secrets.token_hex(4)
+        copy = drawer.model_copy(update={"id": new_id})
+        grown.append(copy.model_dump())
+        available.append(copy)
+        job.drawer_map[drawer.id] = new_id
+        added.append(drawer.title)
+    job.available = available
+    if added:
+        job.drawers = grown
+        job.notes.append(
+            f"{job.target_name} takes {job.stub_name}'s drawers: {', '.join(added)}"
+        )
+
+
+def _merge_drawer(job: _Job) -> Callable[[str, str], str]:
+    """The drawer of the target a part filed in the stub's `drawer id`
+    goes in, for its `kind`: the mapped one (`_drawer_plan`), when a
+    `kind` thing goes in it, else Unsorted; one the map lacks (an
+    inherited drawer, Unsorted) as a re-point files it."""
+
+    def pick(drawer_id: str, kind: str) -> str:
+        mapped = job.drawer_map.get(drawer_id)
+        if mapped is None:
+            return _drawer_for(job.view, job.target.id, drawer_id, kind)
+        drawer = next((d for d in job.available if d.id == mapped), None)
+        if drawer is None or drawer.type not in drawer_types_for(kind):
+            return UNSORTED_DRAWER_ID
+        return mapped
+
+    return pick
+
+
+def _inside_either(job: _Job, thing_id: str) -> bool:
+    """Whether `thing_id` is, or sits inside, the target or the stub (which
+    becomes the target)."""
+
+    return spheres.sits_in(job.view, thing_id, job.target.id) or spheres.sits_in(
+        job.view, thing_id, job.stub.id
+    )
+
+
+def _self_uses(job: _Job) -> list[_FieldUse]:
+    """A merge's target values naming the stub, redirected rather than
+    refused: the merged entry sits where the stub sat. Its parent (or any
+    single thing field) and its filing take the stub's own value (a filing
+    in a drawer the target goes in), cleared when the stub has none, or
+    when its value would name the target or make a loop; a list drops the
+    stub; a tie to the stub goes, one within it is within no part. Each
+    one is noted."""
+
+    view, stub, target = job.view, job.stub, job.target
+    types = {spec.name: spec.type for spec in get_kind(target.kind).fields}
+    uses: list[_FieldUse] = []
+    for entry in job.world.timeline(target.id):
+        if entry.change != "field" or entry.field is None:
+            continue
+        field, value = entry.field, entry.value
+        kind = types.get(field)
+        new: object = None
+        if field == "part_of":
+            if not (isinstance(value, dict) and value.get("sphere") == stub.id):
+                continue
+            own = stub.fields.get("part_of")
+            sphere = own.get("sphere") if isinstance(own, dict) else None
+            if (
+                isinstance(own, dict)
+                and isinstance(sphere, str)
+                and view.thing(sphere) is not None
+                and target.kind in PART_OF_KINDS
+                and not _inside_either(job, sphere)
+            ):
+                new = {
+                    "sphere": sphere,
+                    "drawer": _drawer_for(
+                        view, sphere, str(own.get("drawer")), target.kind
+                    ),
+                }
+        elif field == "ties" and isinstance(value, list):
+            if not any(
+                isinstance(tie, dict)
+                and stub.id in (tie.get("sphere"), tie.get("within"))
+                for tie in value
+            ):
+                continue
+            new = [
+                {**tie, "within": None} if tie.get("within") == stub.id else tie
+                for tie in value
+                if isinstance(tie, dict) and tie.get("sphere") != stub.id
+            ]
+        elif kind == "thing" and value == stub.id:
+            own_value = stub.fields.get(field)
+            other = view.thing(own_value) if isinstance(own_value, str) else None
+            allowed = FIELD_TARGET_KINDS.get(field, (target.kind,))
+            if (
+                other is not None
+                and other.kind in allowed
+                and not _inside_either(job, other.id)
+            ):
+                new = other.id
+        elif kind == "things" and isinstance(value, list) and stub.id in value:
+            new = [thing_id for thing_id in value if thing_id != stub.id] or None
+        elif (
+            kind == "shares"
+            and isinstance(value, list)
+            and any(
+                isinstance(share, dict) and share.get("thing_id") == stub.id
+                for share in value
+            )
+        ):
+            new = [
+                share
+                for share in value
+                if not (isinstance(share, dict) and share.get("thing_id") == stub.id)
+            ] or None
+        else:
+            continue
+        label = field.replace("_", " ")
+        if new is None:
+            job.notes.append(
+                f"{job.target_name}'s {label} was {job.stub_name}: it's cleared"
+            )
+        elif field in ("part_of", "parent") or kind == "thing":
+            where = (
+                view.name_of(str(new["sphere"])) if isinstance(new, dict) else None
+            ) or view.name_of(str(new))
+            job.notes.append(
+                f"{job.target_name}'s {label} was {job.stub_name}: it takes"
+                f" {job.stub_name}'s, {where}"
+            )
+        else:
+            job.notes.append(
+                f"{job.target_name}'s {label} named {job.stub_name}: it no longer does"
+            )
+        job.redirected.add(field)
+        uses.append(
+            _FieldUse(
+                thing_id=target.id,
+                field=field,
+                date=entry.date,
+                value=new,
+                clear=new is None,
+            )
+        )
+    return uses
+
+
 def _job(world: World, stub_id: str, target_id: str, *, merge: bool = False) -> _Job:
     view = world.view()
     stub = view.thing(stub_id)
@@ -803,6 +1070,19 @@ def _job(world: World, stub_id: str, target_id: str, *, merge: bool = False) -> 
     target_name = view.name_of(target_id) or target_id
     if target.stub_ignored:
         raise ValueError(f"{target_name} is an ignored stub")
+    if (
+        merge
+        and stub.kind != target.kind
+        and {stub.kind, target.kind}
+        != {
+            "place",
+            "sphere",
+        }
+    ):
+        raise ValueError(
+            f"{stub_name} is a {stub.kind} and {target_name} a {target.kind}:"
+            " only entries of one kind merge (or a place and a sphere)"
+        )
     if merge and target.is_stub and not stub.is_stub:
         raise ValueError(
             f"{target_name} is a stub: re-point it onto {stub_name} instead"
@@ -878,6 +1158,13 @@ class RepointPlan:
         return list(self._added)
 
     @property
+    def link_akas(self) -> list[str]:
+        """A merge's other names that come from the words of links to the
+        stub (not its names), for the owner to untick."""
+
+        return list(self._job.link_names)
+
+    @property
     def uses(self) -> int:
         """How many field values that point at the stub are re-pointed."""
 
@@ -916,8 +1203,19 @@ class RepointPlan:
 
         job, target_id = self._job, self.target_id
         changes = {fact_id: dict(change) for fact_id, change in self._changes.items()}
+        if job.drawers is not None:
+            # first: the parts and statements filed in them need them
+            rev.set_field(
+                target_id,
+                "drawers",
+                job.drawers,
+                job.view.field_since(target_id, "drawers"),
+            )
         for use in self._uses:
-            rev.set_field(use.thing_id, use.field, use.value, use.date)
+            if use.clear:
+                rev.remove_field_value(use.thing_id, use.field, use.date)
+            else:
+                rev.set_field(use.thing_id, use.field, use.value, use.date)
         recategorised = sum(
             1
             for fact in self._own
@@ -937,6 +1235,7 @@ class RepointPlan:
             target_id,
             plain_self_links=True,
             standing_for=[self.stub_id],
+            drawer_map=job.drawer_map,
         )
         for fact_id, change in changes.items():
             rev.correct_fact(fact_id, **change)
@@ -1019,7 +1318,21 @@ def _plan(job: _Job) -> RepointPlan:
         f"the scene {scene['name']}"
         for scene in thing_references(world, job.stub.id)["scenes"]
     ]
-    uses = _field_uses(world, job.view, job.stub, job.target, blocked, job.notes)
+    if job.merge:
+        _drawer_plan(job)
+        uses = _self_uses(job)
+        uses += _field_uses(
+            world,
+            job.view,
+            job.stub,
+            job.target,
+            blocked,
+            job.notes,
+            drawer=_merge_drawer(job),
+            skip_target=True,
+        )
+    else:
+        uses = _field_uses(world, job.view, job.stub, job.target, blocked, job.notes)
     if blocked:
         raise ValueError(
             f"{job.stub_name} can't be {job.verb} {job.target_name}:"
@@ -1048,11 +1361,13 @@ def plan_merge(
     *,
     fact_ids: Sequence[str] | None = None,
     main_name: str | None = None,
+    link_akas: Sequence[str] | None = None,
 ) -> RepointPlan:
     """Read and decide a merge of the thing `from_id` into `into_id` (any
     two things; see the module docstring), writing nothing: the facts
     `fact_ids` of `from_id` move (`None`, all of them), and `into_id`
-    takes `main_name` (either side's name; `None`, its own). Raises
+    takes `main_name` (either side's name; `None`, its own) and, of the
+    links' words, only `link_akas` as other names (`None`, all). Raises
     `KeyError` for a missing thing and `ValueError` for what's refused."""
 
     job = _job(world, from_id, into_id, merge=True)
@@ -1066,6 +1381,7 @@ def plan_merge(
         main_name = names[name_key(main_name)]
     job.main_name = main_name
     job.fact_ids = list(fact_ids) if fact_ids is not None else None
+    job.link_akas = list(link_akas) if link_akas is not None else None
     return _plan(job)
 
 
