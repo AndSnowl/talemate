@@ -4689,6 +4689,61 @@ async def test_preview_and_accept_merge(plugin, monkeypatch):
     assert world.head_rev() == head + 1
 
 
+def _page(thing: dict) -> tuple:
+    """What a thing's page shows of it: name, other names, facts."""
+
+    return (
+        thing["name"],
+        [a["name"] for a in thing["aka"]],
+        sorted((f["fact_id"], f["rendered"]) for f in thing["facts"]),
+    )
+
+
+async def test_undo_after_a_merge(plugin, monkeypatch):
+    """A merge through the router is one revision, undone in one step:
+    both entries' pages read as before, the from-side back."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    before = {t: _page(await _get_thing(plugin, t)) for t in (s.harbour, s.moscavy)}
+    await _act(plugin, "preview_merge", from_id=s.harbour, into_id=s.moscavy)
+    preview = _last(plugin, "preview_merge")["data"]["preview"]
+    await _act(
+        plugin,
+        "accept_merge",
+        preview=preview,
+        main_name="The Harbour",
+        keep={},
+        lose="end",
+    )
+    assert not _errors(plugin)
+    assert world.view().thing(s.harbour) is None
+
+    report = world.undo([world.head_rev()])
+    assert report.undo_rev is not None and report.conflicts == []
+    after = {t: _page(await _get_thing(plugin, t)) for t in (s.harbour, s.moscavy)}
+    assert after == before
+
+
+async def test_undo_after_a_move_fact(plugin, monkeypatch):
+    """`move_fact` through the router, undone: the fact is back where it
+    was, under its own id, and the copy is gone."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    before = {t: _page(await _get_thing(plugin, t)) for t in (s.harbour, s.moscavy)}
+    await _act(plugin, "move_fact", fact_id=s.ships, target_id=s.moscavy)
+    assert not _errors(plugin)
+    moved = _last(plugin, "move_fact")["data"]["fact_id"]
+
+    report = world.undo([world.head_rev()])
+    assert report.undo_rev is not None and report.conflicts == []
+    after = {t: _page(await _get_thing(plugin, t)) for t in (s.harbour, s.moscavy)}
+    assert after == before
+    assert s.ships in [f.fact_id for f in world.live_facts(s.harbour)]
+    assert moved not in [f.fact_id for f in world.live_facts(s.moscavy)]
+
+
 # --- curation (Task 11): the router's actions and payloads -------------------
 
 
