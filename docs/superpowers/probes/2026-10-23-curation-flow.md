@@ -22,6 +22,9 @@ Fix round 2 followed a review of round 1, with more tests:
 - **C24, the other half:** ticking a move-in pick unticks the own facts repeating it in the preview, and unticking it gives them back. At accept, an own fact still ticked that repeats a ticked move isn't written twice; a note says so.
 - **C29:** candidate lines say "part of Y" without the drawer it's filed in (run 5's facts took up "the Techniques drawer").
 
+Fix round 3:
+- **C30:** candidate lines also drop the sphere's own "drawers: …" list, so no drawer title reaches a prompt through them.
+
 ## The runs
 
 Run 5 is the scored session. Runs 1 to 4 stopped or went off the owner's path because of the harness, not the app. Each fix is in the script, and each run is kept in the raw JSON.
@@ -58,20 +61,26 @@ All of these are from run 5, before the fixes above.
 
 ### Own facts on topic
 
-**Like for like, the 5 entries both runs expanded: 56/57 against 44/56.** These are the model's own facts in each preview, ticked or not.
+**Like for like, the 5 entries both runs expanded: 57/58 against 44/56.**
 
-| Entry | New world | Old world (labels) |
-|---|---|---|
-| The Divine Right of the Tsar | 11/12 | 1/11 |
-| White Talon | 11/11 | 12/12 |
-| Deepcarving | 12/12 (one arrived unticked, a repeat of its own drawer line) | 11/11 |
-| The site (Collegium of Aeltham / Ashenmere) | 12/12 | 9/11 |
-| The First Codex | 11/11 | 11/11 |
-| **The 5 comparable entries** | **56/57 (98%)** | **44/56 (79%)** |
-| The inner place (Deep Inscription Chambers) | 12/12 | (none) |
-| The Ashenmere Caves | (merged away) | 11/12, all restating |
-| The Illumination, the Law of Resonance, the Unwritten Rune | (not made) | 23/33 |
-| **All own facts** | 68/69 | 78/101 (77%) |
+The table gives two views of the new world's own facts:
+- **All the model wrote:** every own fact in each preview, ticked or not;
+- **Written:** only the ticked ones, which the accept wrote. The one difference is Deepcarving's twelfth fact, which arrived unticked as a repeat of its own drawer line.
+
+The headline uses the first view, because it is the like-for-like one. The old world's labels cover everything its model wrote, and the old pipeline unticked nothing.
+
+| Entry | New: all the model wrote | New: written (ticked) | Old world (labels) |
+|---|---|---|---|
+| The Divine Right of the Tsar | 11/12 | 11/12 | 1/11 |
+| White Talon | 11/11 | 11/11 | 12/12 |
+| Deepcarving | 12/12 | 11/11 | 11/11 |
+| The site (Collegium of Aeltham / Ashenmere) | 12/12 | 12/12 | 9/11 |
+| The First Codex | 11/11 | 11/11 | 11/11 |
+| **The 5 comparable entries** | **57/58 (98%)** | 56/57 (98%) | **44/56 (79%)** |
+| The inner place (Deep Inscription Chambers) | 12/12 | 12/12 | (none) |
+| The Ashenmere Caves | (merged away) | (merged away) | 11/12, all restating |
+| The Illumination, the Law of Resonance, the Unwritten Rune | (not made) | (not made) | 23/33 |
+| **All own facts** | **69/70 (99%)** | 68/69 (99%) | **78/101 (77%)** |
 
 The one miss, on the Divine Right: "No secular law enacted by the Tsar may contradict Church doctrine". That is a law, which belongs to the Tsardom or the Church.
 
@@ -198,7 +207,7 @@ Runeweaving's timeline has 16 lines (after the merge).
 ## Cohesion: what the owner will notice
 
 What the model writes is far more cohesive than last time:
-- every expansion's own facts are about the entry, the Divine Right included (56/57 against 44/56 on the entries both runs made, judged more leniently this time);
+- every expansion's own facts are about the entry, the Divine Right included (57/58 against 44/56 on the entries both runs made, judged more leniently this time);
 - restatements happen at under half the old rate even below the filter's threshold (about 23% of facts against 54% at 0.5);
 - sub-parts feed their sphere's timeline instead of retelling it.
 
@@ -215,7 +224,7 @@ Both are now fixed (C24, C25). With them, the session should read as the cohesiv
 
 ## Concerns, for the controller
 
-As raised after the run. Concerns 1, 2, 3 and 6 are fixed (C24, C25, C26, C27), and so is part of 4 (C29). 5 and 7 stand.
+As raised after the run. Concerns 1, 2, 3, 4 and 6 are fixed (C24, C25, C26, C29 and C30, C27). 5 and 7 stand.
 
 1. **Move-in picks are ticked by default (ruling C2), and in the session they were right 2 times of 20.** The spec's probe-2 fallback is "list all the broader entry's facts, unticked". *Recommendation:* untick model picks by default (keep them sorted first), or show them only as a hint. This is a code default, not wording. No wording change was made, so no step was re-run.
 2. **Scene planning's stub previews accept elsewhere and move-in silently.** `worldplay/setup.py`, `_stub_previews` and then `_accept_stub_previews` call `accept_preview` with the preview's defaults. In run 5 the scene start:
@@ -225,7 +234,7 @@ As raised after the run. Concerns 1, 2, 3 and 6 are fixed (C24, C25, C26, C27), 
 
    The MockClient test shows the verdict call too. Run 3's start moved a Church statement into a new stub. This breaks "Nothing is moved … without the owner's tick". *Recommendation:* when accepting a stub preview at scene start, untick elsewhere and move-in, and skip the verdict.
 3. **A sphere core with malformed JSON fails whole** ("no drawer outline in it") even when the drawers are there. That happened 1 time in 10 live sphere-core calls across runs 1 to 5. Lenient parsing, or a retry, would hide it.
-4. **Candidate-list structure words leak into facts.** Two facts and one prose paragraph said "the Techniques drawer" or "the Frontier drawer" (0 in the old world). The candidate line's "in its Techniques drawer; drawers: …" format was probe-mandated. Ruling C29 dropped the "in its … drawer" part; the sphere's own "drawers: …" list is still in the line, so "the Frontier drawer" could still come from there.
+4. **Candidate-list structure words leak into facts.** Two facts and one prose paragraph said "the Techniques drawer" or "the Frontier drawer" (0 in the old world). The candidate line's "in its Techniques drawer; drawers: …" format was probe-mandated. Ruling C29 dropped the "in its … drawer" part, and C30 dropped the sphere's own "drawers: …" list, so no drawer title is in the line now.
 5. **The god-as-religion guess comes back.** Run 1's Tsardom listed its god as a `religion` sphere, and the stub kind lists for names stay probe-mandated (C5).
 6. **Held render:** a fact that already says "X holds that…" becomes "holds that the doctrine holds that…".
 7. **Timeline clutter:**

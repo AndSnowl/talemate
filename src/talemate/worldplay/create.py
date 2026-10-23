@@ -1238,15 +1238,11 @@ def _part_of_link(state: ThingState) -> tuple[str, str | None] | None:
 
 def candidate_line(view: WorldView, state: ThingState) -> str:
     """One entry of the "Entries near this one" list, as the curation probe
-    wrote it, less the drawer an entry is filed in (ruling C29): "Name
-    (kind; usually called X; part of Y; drawers: ...; stub): its summary
-    or first fact", the text cut at
+    wrote it, less every drawer title (rulings C29, C30: the curation flow
+    probe's facts took them up): "Name (kind; usually called X; part of Y;
+    stub): its summary or first fact", the text cut at
     `CANDIDATE_LINE_CHARS`. A sphere's kind reads "sphere: <template>"
-    ("place, sphere: nation" for a place sphere), and lists the drawers a
-    prompt fills."""
-
-    # imported here: `worldplay.spheres` imports this module
-    from talemate.worldplay.spheres import TYPE_HELP
+    ("place, sphere: nation" for a place sphere)."""
 
     is_sphere = spheres.is_sphere(state)
     template = state.fields.get("template")
@@ -1266,12 +1262,7 @@ def candidate_line(view: WorldView, state: ThingState) -> str:
         # no drawer title (ruling C29: the curation flow probe's facts took
         # it up, "the Techniques drawer of Runeweaving")
         bits.append(f"part of {view.name_of(link[0])}")
-    if is_sphere:
-        titles = [
-            d.title for d in spheres.drawers(view, state.id) if d.type in TYPE_HELP
-        ]
-        if titles:
-            bits.append("drawers: " + ", ".join(titles))
+    # nor the sphere's own drawer titles (ruling C30, completing C29)
     if state.is_stub:
         bits.append("stub")
     fact = spheres.summary_fact(state) if is_sphere else None

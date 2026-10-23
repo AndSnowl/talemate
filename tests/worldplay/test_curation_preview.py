@@ -412,11 +412,13 @@ async def test_candidates_come_from_nearness(world, eternal):
     block = block.split("The world's calendar", 1)[0]
     lines = [line[2:] for line in block.strip().splitlines()]
     # today's context first: its sphere, then what mentions it
+    # no drawer titles at all (rulings C29, C30): the curation flow
+    # probe's facts took them up ("the Frontier drawer of Runeweaving")
     assert lines[0].startswith(
-        "Church of the Eternal Light (sphere: religion; usually called The Church; "
-        "drawers: Doctrines, Rites and Ceremonies, Holy Sites, Hierarchy): "
+        "Church of the Eternal Light (sphere: religion; usually called The Church): "
         "The Church of the Eternal Light is the state religion"
     )
+    assert not [line for line in lines if "drawer" in line.split("):", 1)[0]]
     assert lines[1].startswith(
         "Tsardom of Moscavia (place; usually called Moscavia): The Tsardom of "
         "Moscavia is a vast northern kingdom"
