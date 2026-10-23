@@ -57,7 +57,11 @@ from talemate.world.refs import REF_PATTERN, ref
 from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.store import Revision, Source, World
 from talemate.world.view import ThingState, WorldView
-from talemate.worldplay.create import drawer_types_for, part_of_since
+from talemate.worldplay.create import (
+    default_category,
+    drawer_types_for,
+    part_of_since,
+)
 from talemate.worldplay.links import name_key
 from talemate.worldplay.references import thing_references
 
@@ -363,7 +367,11 @@ def _move_facts(job: _Job, rev: Revision, own: list, changes: dict[str, dict]) -
         text, _moved = rewrite(fact.text or "", target_id, False)
         category = fact.category
         if category not in categories:
-            category = next((c for c in _CATCH_ALL if c in categories), categories[0])
+            fallback = default_category(job.target.kind, fact.valid_from is not None)
+            category = next(
+                (c for c in _CATCH_ALL if c in categories),
+                fallback if fallback in categories else categories[0],
+            )
             recategorised += 1
         copies[fact.fact_id] = rev.add_fact(
             target_id,
@@ -659,12 +667,19 @@ class RepointPlan:
         )
 
 
-def plan_repoint(world: World, stub_id: str, target_id: str) -> RepointPlan:
+def plan_repoint(
+    world: World, stub_id: str, target_id: str, *, as_kind: str | None = None
+) -> RepointPlan:
     """Read and decide a re-point of the stub `stub_id` onto `target_id`
     (see the module docstring), writing nothing. Raises `KeyError` for a
-    missing thing and `ValueError` for what's refused."""
+    missing thing and `ValueError` for what's refused. With `as_kind`, the
+    target is taken to be that kind (a stub whose kind changes in the same
+    revision, before the plan is written): fields, filing and the moved
+    facts' categories are decided for it."""
 
     job = _job(world, stub_id, target_id)
+    if as_kind is not None and as_kind != job.target.kind:
+        job.target = job.target.model_copy(update={"kind": as_kind})
     blocked = [
         f"the scene {scene['name']}"
         for scene in thing_references(world, stub_id)["scenes"]

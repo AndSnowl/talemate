@@ -64,9 +64,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   or `preview_failed {message}`; it writes nothing. `stub_id` expands that
   stub, `picks` maps a name written in the prompt to the thing the owner
   matched it to, and `new_names` are written names the owner treats as new.
-  `accept_preview {preview, into_stub}` writes it (into the stub
-  `into_stub`, if given) and answers with the thing and `notes` (an
-  elsewhere fact whose target was deleted since the preview). For the browser
+  `accept_preview {preview, into_stub, same_target_id}` writes it (into
+  the stub `into_stub`, or onto the entry `same_target_id`, "Is this
+  X?", if given) and answers with the thing and `notes` (what was left
+  out, as an elsewhere fact whose target was deleted since the preview);
+  the prose of what else it changed is scheduled. For the browser
   tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
   facts, prose, fields?, ties?}`) that previews are answered from instead
   of the model (listing what the request's fields inherit, and for a
@@ -336,6 +338,8 @@ class AcceptPreviewPayload(pydantic.BaseModel):
     preview: CreatePreview
     # "fill the stub instead": the stub a preview made without one fills
     into_stub: str | None = None
+    # "Is this X?" -- yes: the entry the preview's material goes onto
+    same_target_id: str | None = None
 
 
 class _ThingEdit(pydantic.BaseModel):
@@ -1658,6 +1662,7 @@ class WorldsPlugin(Plugin):
             world,
             payload.preview,
             into_stub=payload.into_stub,
+            same_target_id=payload.same_target_id,
             notes=notes,
             prose=prose,
         )

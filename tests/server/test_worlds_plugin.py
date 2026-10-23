@@ -21,6 +21,7 @@ from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
+from talemate.worldplay.create import CreatePreview, PreviewFact
 from talemate.worldplay.context import WorldSceneContext
 from talemate.worldplay.persistence import WorldSceneRef
 
@@ -4381,3 +4382,36 @@ async def test_repoint_stub_sphere_fields_and_prose(plugin, monkeypatch):
         "kind" in note for note in _last(plugin, "repoint_stub")["data"]["notes"]
     )
     assert s.harbour in s.prose
+
+
+async def test_accept_preview_onto_target_schedules_its_prose(plugin, monkeypatch):
+    """Accept with a same-thing target ("Is this X?" -- yes): the
+    preview's facts go onto X, and X's prose is scheduled again."""
+
+    world, maren, _harbour = await _open_world_with_maren(plugin)
+    scheduled: list[str] = []
+    monkeypatch.setattr(
+        plugin, "_schedule_prose", lambda thing_id, at, **kw: scheduled.append(thing_id)
+    )
+    preview = CreatePreview(
+        kind="character",
+        prompt="Maren of Vael",
+        name="Maren of Vael",
+        facts=[PreviewFact(category="background", text="Sails at dawn.")],
+        prose={},
+    )
+    things = len(list(world.view().things()))
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "accept_preview",
+            "preview": preview.model_dump(mode="json"),
+            "same_target_id": maren,
+        }
+    )
+
+    assert _last(plugin, "accept_preview")["data"]["id"] == maren
+    view = world.view()
+    assert len(list(view.things())) == things
+    assert "Sails at dawn." in [f.text for f in view.thing(maren).facts]
+    assert scheduled == [maren]

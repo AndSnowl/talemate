@@ -781,3 +781,323 @@ async def test_promotion_prefers_own_child(world):
     )
     capital = next(item for item in preview.items if item["name"] == "Moskov")
     assert capital["thing_id"] == moskov
+
+
+# --- fix round 2 -----------------------------------------------------------------
+
+
+def _keth_character(world, ids):
+    with world.revision(Source.manual(note="keth")) as rev:
+        ids["keth"] = rev.create_thing("character", {"name": "Keth"})
+        rev.add_fact(ids["keth"], "background", "A weaver of Stonehold.")
+        ids["hollow"] = rev.create_thing("place", {"name": "Rest Hollow"})
+        rev.add_fact(ids["hollow"], "description", "A quiet dell.")
+
+
+async def _fill_rest(world, faith):
+    text = "Keth's Rest is a cairn where weavers leave a rune each spring."
+    reply = json.dumps(
+        {
+            "new_items": [{"name": "Keth's Rest", "text": text, "kind": "place"}],
+            "names": [],
+            "elsewhere": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        filled = await fill_drawer(world, faith, SITES, client)
+    return filled, text
+
+
+async def test_fill_offers_fit_the_drawer(world):
+    ids = _make(world, stub=False)
+    faith = _faith(world, ids)
+    _keth_character(world, ids)
+    filled, _text = await _fill_rest(world, faith)
+    (item,) = filled.items
+    offered = [o["thing_id"] for o in item["same_as"]]
+    # a character is never filed in Holy Sites: not offered; a place is
+    assert ids["keth"] not in offered
+    assert offered == [ids["hollow"]]
+
+
+async def test_forced_character_target_links_with_note(world):
+    ids = _make(world, stub=False)
+    faith = _faith(world, ids)
+    _keth_character(world, ids)
+    filled, text = await _fill_rest(world, faith)
+    (item,) = filled.items
+    item["same_target_id"] = ids["keth"]
+    notes: list[str] = []
+
+    accept_fill(world, faith, SITES, filled.items, notes=notes)
+
+    view = world.view()
+    keth = view.thing(ids["keth"])
+    assert keth.fields.get("part_of") is None
+    fact = next(f for f in keth.facts if view.render(f.text) == text)
+    assert fact.category == "background"
+    assert _named(view, "Keth's Rest") == []
+    assert any("Keth" in note and "filed" in note for note in notes)
+
+
+async def test_target_the_sphere_sits_in_is_not_filed_inside_it(world):
+    ids = _make(world, stub=False)
+    lands = "1a4d0001"
+    with world.revision(Source.manual(note="tsardom")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            {
+                "name": "Tsardom of Ashenmere Lands",
+                "template": "nation",
+                "drawers": [{"id": lands, "type": "places", "title": "Lands"}],
+            },
+        )
+        rev.add_fact(tsardom, "description", "A kingdom of caves.")
+    faith = _faith(world, ids)
+    with world.revision(Source.manual(note="file")) as rev:
+        rev.set_field(faith, "part_of", {"sphere": tsardom, "drawer": lands}, None)
+    text = "The Ashenmere Lands are holy to the faith."
+    reply = json.dumps(
+        {
+            "new_items": [{"name": "Ashenmere Lands", "text": text, "kind": "place"}],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        filled = await fill_drawer(world, faith, SITES, client)
+    (item,) = filled.items
+    item["same_target_id"] = tsardom
+    notes: list[str] = []
+
+    accept_fill(world, faith, SITES, filled.items, notes=notes)
+
+    view = world.view()
+    assert view.thing(tsardom).fields.get("part_of") is None
+    assert text in _texts(view, tsardom)
+    assert notes
+
+
+async def test_fold_recategorises_for_the_preview_kind(world):
+    world.set_present(WorldDate.of(1000))
+    with world.revision(Source.manual(note="kethstubs")) as rev:
+        keth = rev.create_thing(
+            "lore", {"name": "Keth the Weaver", "stub": {"ignored": False}}
+        )
+        old = rev.create_thing("lore", {"name": "Keth", "stub": {"ignored": False}})
+        rev.add_fact(old, "general", "Keth was seen at Stonehold.")
+    preview = create.CreatePreview(
+        kind="character",
+        prompt="Keth the Weaver",
+        name="Keth the Weaver",
+        facts=[create.PreviewFact(category="background", text="Weaves runes.")],
+        prose={},
+        stub_id=keth,
+    )
+
+    thing_id = accept_preview(world, preview, same_target_id=old)
+
+    view = world.view()
+    assert thing_id == keth and view.thing(old) is None
+    state = view.thing(keth)
+    assert state.kind == "character" and not state.is_stub
+    moved = next(f for f in state.facts if "seen at Stonehold" in f.text)
+    assert moved.category == "background"
+
+
+async def test_fold_undo(world):
+    ids = _make(world, stub=True, ashenmere_facts=False)
+    preview, _client = await _caves_preview(world, ids, verdict=None)
+    head = world.head_rev()
+    accept_preview(world, preview, same_target_id=ids["ashenmere"])
+
+    world.undo([head + 1])
+
+    view = world.view()
+    assert view.thing(ids["ashenmere"]).is_stub
+    assert view.thing(ids["caves"]).is_stub
+    mention = next(
+        f for f in view.thing(ids["stonehold"]).facts if f.fact_id == ids["mention"]
+    )
+    assert parse_refs(mention.text) == [ids["caves"]]
+
+
+async def test_merge_part_of_only_when_none_and_fitted(world):
+    ids = _make(world, stub=False)
+    faith = _faith(world, ids)
+    preview = create.CreatePreview(
+        kind="place",
+        prompt="the caves",
+        name="Ashenmere Caverns",
+        facts=[create.PreviewFact(category="description", text="Dark and deep.")],
+        prose={},
+        # a place in a practices drawer: fitted to the places drawer
+        part_of={"sphere": faith, "drawer": RITES},
+    )
+    accept_preview(world, preview.model_copy(), same_target_id=ids["ashenmere"])
+    assert world.view().thing(ids["ashenmere"]).fields["part_of"] == {
+        "sphere": faith,
+        "drawer": SITES,
+    }
+
+    # filed already: it stays, with a note
+    other = _faith_named(world, "The Second Faith")
+    notes: list[str] = []
+    again = preview.model_copy(
+        update={
+            "name": "Ashenmere Hollows",
+            "part_of": {"sphere": other, "drawer": SITES},
+        }
+    )
+    accept_preview(world, again, same_target_id=ids["ashenmere"], notes=notes)
+    assert world.view().thing(ids["ashenmere"]).fields["part_of"]["sphere"] == faith
+    assert any("filed" in note for note in notes)
+
+
+def _faith_named(world, name):
+    with world.revision(Source.manual(note=name)) as rev:
+        return rev.create_thing(
+            "sphere",
+            {
+                "name": name,
+                "template": "religion",
+                "drawers": [{"id": SITES, "type": "places", "title": "Holy Sites"}],
+            },
+        )
+
+
+async def test_merge_fields_compare_stored_forms(world):
+    ids = _make(world, stub=False)
+    _faith(world, ids)
+    with world.revision(Source.manual(note="keth")) as rev:
+        keth = rev.create_thing(
+            "character", {"name": "Keth", "born": WorldDate.of(970)}
+        )
+        rev.add_fact(keth, "background", "A weaver.")
+    preview = create.CreatePreview(
+        kind="character",
+        prompt="Keth",
+        name="Keth of Stonehold",
+        # as a preview comes back from the page: the date as JSON
+        fields={"born": WorldDate.of(970).model_dump(mode="json")},
+        facts=[create.PreviewFact(category="background", text="Reads runes.")],
+        prose={},
+    )
+    notes: list[str] = []
+    accept_preview(world, preview, same_target_id=keth, notes=notes)
+    assert not any("born" in note for note in notes)
+
+
+async def test_same_item_target_gone_makes_stub_with_note(world):
+    ids = _make(world, stub=False)
+    faith = _faith(world, ids)
+    _keth_character(world, ids)
+    filled, _text = await _fill_rest(world, faith)
+    (item,) = filled.items
+    item["same_target_id"] = ids["hollow"]
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(ids["hollow"])
+    notes: list[str] = []
+
+    accept_fill(world, faith, SITES, filled.items, notes=notes)
+
+    (rest,) = _named(world.view(), "Keth's Rest")
+    assert rest.is_stub
+    assert any("Keth's Rest" in note for note in notes)
+
+
+async def test_linked_place_filed_since_stays_with_note(world):
+    world.set_present(WorldDate.of(1000))
+    with world.revision(Source.manual(note="tsardom")) as rev:
+        tsardom = rev.create_thing("place", {"name": "Tsardom of Moscavia"})
+        rev.add_fact(tsardom, "description", "A vast northern kingdom.")
+        moskov = rev.create_thing("place", {"name": "Moskov", "parent": tsardom})
+        rev.add_fact(moskov, "description", "The Tsar's city.")
+    preview = await preview_sphere(
+        world, "nation", "", {}, None, promote_id=tsardom, reply=CORE_TSARDOM
+    )
+    other = _faith_named(world, "The Old Faith")
+    with world.revision(Source.manual(note="filed")) as rev:
+        rev.set_field(moskov, "part_of", {"sphere": other, "drawer": SITES}, None)
+    notes: list[str] = []
+
+    accept_sphere(world, preview, notes=notes)
+
+    assert world.view().thing(moskov).fields["part_of"]["sphere"] == other
+    assert any("Moskov" in note for note in notes)
+
+
+async def test_free_place_wins_over_a_filed_child(world):
+    world.set_present(WorldDate.of(1000))
+    other = _faith_named(world, "The Old Faith")
+    with world.revision(Source.manual(note="two moskovs")) as rev:
+        tsardom = rev.create_thing("place", {"name": "Tsardom of Moscavia"})
+        rev.add_fact(tsardom, "description", "A vast northern kingdom.")
+        child = rev.create_thing(
+            "place",
+            {
+                "name": "Moskov",
+                "parent": tsardom,
+                "part_of": {"sphere": other, "drawer": SITES},
+            },
+        )
+        free = rev.create_thing("place", {"name": "Moskov"})
+        rev.add_fact(free, "description", "Another Moskov.")
+    preview = await preview_sphere(
+        world, "nation", "", {}, None, promote_id=tsardom, reply=CORE_TSARDOM
+    )
+    capital = next(item for item in preview.items if item["name"] == "Moskov")
+    assert capital["thing_id"] == free and child
+
+
+async def test_held_by_the_repointed_stub_is_the_target(world):
+    ids = _make(world)
+    preview, _client = await _caves_preview(world, ids)
+    preview.facts[0].held_by = ids["caves"]
+
+    accept_preview(world, preview, same_target_id=ids["ashenmere"])
+
+    view = world.view()
+    fact = next(
+        f
+        for f in view.thing(ids["ashenmere"]).facts
+        if view.render(f.text) == CAVES_FACTS[0]
+    )
+    assert fact.origin["held_by"] == ids["ashenmere"]
+
+
+async def test_row_notes_not_doubled_on_retry(world):
+    ids = _make(world, stub=False)
+    preview = create.CreatePreview(
+        kind="place",
+        prompt="caves",
+        name="The Ashenmere Caves",
+        facts=[
+            create.PreviewFact(
+                category="description",
+                text="They lie beneath the Greymarch Mountains.",
+            )
+        ],
+        prose={},
+        new_names=[
+            create.NewName(
+                name="Greymarch Mountains",
+                kind="place",
+                same_target_id=ids["stonehold"],
+            ),
+            # listed, but no fact uses it: its stub is an orphan, and the
+            # accept is written again without it
+            create.NewName(name="Zzyzx", kind="lore"),
+        ],
+    )
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(ids["stonehold"])
+    notes: list[str] = []
+
+    accept_preview(world, preview, notes=notes)
+
+    assert len([n for n in notes if "Greymarch Mountains" in n]) == 1
+    assert _named(world.view(), "Zzyzx") == []

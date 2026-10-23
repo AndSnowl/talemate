@@ -432,8 +432,9 @@ def _named_place(
     view: WorldView, name: str, home_id: str | None, near_ids: Sequence[str]
 ) -> ThingState | None:
     """The live place (not an ignored stub, not a sphere's `home_id`)
-    whose name or other name is `name`: one whose `parent` is `home_id`
-    first, then the nearest (`near_ids`), then the first made."""
+    whose name or other name is `name` and that can be filed (in no
+    sphere yet, and not one `home_id` sits in): one whose `parent` is
+    `home_id` first, then the nearest (`near_ids`), then the first made."""
 
     key = name_key(name)
     rank = {thing_id: i for i, thing_id in reversed(list(enumerate(near_ids)))}
@@ -443,6 +444,9 @@ def _named_place(
         if not state.stub_ignored
         and state.id != home_id
         and key in _named_keys(view, state)
+        # only one that can be linked and filed counts
+        and state.fields.get("part_of") is None
+        and not (home_id is not None and spheres.sits_in(view, home_id, state.id))
     ]
     if not found:
         return None
@@ -454,6 +458,27 @@ def _named_place(
             state.created,
         ),
     )
+
+
+def _fit_offers(items: list[dict[str, Any]], drawer_types: dict[str, str]) -> None:
+    """Each item's `same_as` less the things its drawer can't hold
+    (`create.drawer_types_for`: a place in a places drawer, another entry
+    in practices, beliefs, knowledge or structure; any entry unsorted)."""
+
+    for item in items:
+        offers = item.get("same_as")
+        if not offers:
+            continue
+        type_ = drawer_types.get(item.get("drawer_id") or "")
+        item["same_as"] = [
+            offer
+            for offer in offers
+            if (
+                offer["kind"] in PART_OF_KINDS
+                if type_ is None
+                else type_ in create.drawer_types_for(offer["kind"])
+            )
+        ]
 
 
 def _place_item(item: dict[str, Any], places_drawers: set[str]) -> bool:
@@ -813,6 +838,7 @@ async def preview_sphere(
         index=index,
         as_new=treated_as_new,
     )
+    _fit_offers(items, {d["id"]: d["type"] for d in drawers})
 
     context = [(f"Part of it: {heading}", texts) for heading, texts in held]
     if stub_id is not None and target is not None:
@@ -904,23 +930,57 @@ def _without_article(name: str) -> str:
     return name
 
 
+def _unfileable(view: WorldView, sphere_id: str, thing_id: str) -> str | None:
+    """Why the linked thing `thing_id` isn't filed in the sphere, or
+    `None` when it can be: a kind no drawer holds, the sphere sitting in
+    it (it would be inside itself), or a filing it has already."""
+
+    state = view.thing(thing_id)
+    if state is None:
+        return "a linked entry is gone"
+    name = view.name_of(thing_id) or thing_id
+    where = view.name_of(sphere_id) or sphere_id
+    if state.kind not in PART_OF_KINDS:
+        return f"{name} is linked, not filed in {where}: a {state.kind} never is"
+    if spheres.sits_in(view, sphere_id, thing_id):
+        return f"{name} is linked, not filed in {where}: it would be inside itself"
+    held = state.fields.get("part_of")
+    if held is not None:
+        if isinstance(held, dict) and held.get("sphere") == sphere_id:
+            return None
+        return f"{name} stays where it's filed, not in {where}"
+    return None
+
+
 def _same_items(
-    rev: Revision, world: World, items: list[dict[str, Any]]
+    rev: Revision,
+    world: World,
+    items: list[dict[str, Any]],
+    notes: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """`items`, each named one the owner marked as a thing the world has
     (`same_target_id`) linking that thing as a `thing_id` does: it takes
     the item's name as a common other name, and the item's text is
     written onto it unless it repeats what it says (`create.repeat_flags`,
     as `text_ticked`). One whose thing is gone (or ignored) makes a stub
-    after all."""
+    after all, with a note."""
 
     view = world.view()
     settings = world.curation()
     kept: list[dict[str, Any]] = []
     for item in items:
         target = item.get("same_target_id")
-        state = view.thing(target) if item.get("name") and target else None
-        if state is None or state.stub_ignored or item.get("thing_id"):
+        if not (item.get("name") and target) or item.get("thing_id"):
+            kept.append(item)
+            continue
+        state = view.thing(target)
+        if state is None or state.stub_ignored:
+            log.info("spheres.same_item_gone", name=item["name"], target=target)
+            if notes is not None:
+                notes.append(
+                    f"The entry {item['name']} was marked the same as is gone, "
+                    f"so {item['name']} is a new stub"
+                )
             kept.append(item)
             continue
         linked = {**item, "thing_id": state.id}
@@ -943,18 +1003,24 @@ def _write_items(
     *,
     picks: dict[str, str] | None = None,
     as_new: Sequence[str] = (),
+    notes: list[str] | None = None,
 ) -> set[str]:
     """Write `items` into the sphere, in `rev`: a named item is a stub of
     its kind part of the sphere in its drawer (or, with a `thing_id` or
     an owner's `same_target_id` (`_same_items`), that thing put there,
     unless it's filed elsewhere already), with its text as a fact; a nameless one is a
     `statement` fact of the sphere whose origin names its drawer, each in
-    a drawer it may go in (`_filed`). `made`
+    a drawer it may go in (`_filed`). A linked thing is filed only when
+    it's of a kind a drawer holds (`PART_OF_KINDS`), the sphere doesn't
+    sit in it, and it's filed nowhere yet; else it's still linked and its
+    text written, with a note. Its text goes in the category its kind
+    has for an item (`create.default_category` when it lacks that one).
+    `made`
     (written name -> id, from `make_stubs`) gains the item stubs, so every
     text links them; texts are linked once all are made. Returns the ids
     the written texts link to."""
 
-    items = _same_items(rev, world, items)
+    items = _same_items(rev, world, items, notes)
     # filed in drawers they may go in, whatever the preview said
     items = _filed(world.view(), items, spheres.drawers(world.view(), sphere_id))
     placed: list[tuple[str, dict[str, Any]]] = []
@@ -964,11 +1030,12 @@ def _write_items(
         part_of = {"sphere": sphere_id, "drawer": item["drawer_id"]}
         thing_id = item.get("thing_id")
         if thing_id:
-            # a thing filed elsewhere already stays where it is
-            held = world.view().thing(thing_id)
-            if held is not None and held.fields.get("part_of") is None:
+            why = _unfileable(world.view(), sphere_id, thing_id)
+            if why is None:
                 since = create.part_of_since(world, thing_id, strict=False)
                 rev.set_field(thing_id, "part_of", part_of, since)
+            elif notes is not None:
+                notes.append(why)
         else:
             kind = item["kind"] if item["kind"] in ITEM_KINDS else "lore"
             words = item["name"].split()
@@ -1003,7 +1070,10 @@ def _write_items(
             # a place the world has, whose text only repeats what it says
             continue
         state = linking.thing(thing_id)
-        category = _ITEM_CATEGORY.get(state.kind if state else "", "general")
+        kind = state.kind if state is not None else "lore"
+        category = _ITEM_CATEGORY.get(kind, "general")
+        if category not in get_kind(kind).categories:
+            category = create.default_category(kind, False)
         rev.add_fact(thing_id, category, linked_text(item["text"], thing_id))
     for item in items:
         if not item.get("name"):
@@ -1084,10 +1154,11 @@ def _write_sphere(
     preview: SpherePreview,
     target: ThingState | None,
     new_names: list[NewName],
+    notes: list[str],
 ) -> str:
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
         made = create._row_stubs(
-            rev, world, world.view(), new_names, preview.treated_as_new
+            rev, world, world.view(), new_names, preview.treated_as_new, notes=notes
         )
         stubs = dict(made)
         thing_id = _write_core(rev, view, preview, target)
@@ -1113,6 +1184,7 @@ def _write_sphere(
             made,
             picks=preview.picks,
             as_new=preview.treated_as_new,
+            notes=notes,
         )
         linking = world.view()
         summary = preview.prose.get("description", "").strip()
@@ -1169,7 +1241,9 @@ def _without_unlinked(
     return kept
 
 
-def accept_sphere(world: World, preview: SpherePreview) -> str:
+def accept_sphere(
+    world: World, preview: SpherePreview, *, notes: list[str] | None = None
+) -> str:
     """Write `preview` in one revision, then cache its summary as the
     sphere's description. Returns the sphere's id.
 
@@ -1199,12 +1273,15 @@ def accept_sphere(world: World, preview: SpherePreview) -> str:
     new_names = list(preview.new_names)
     while True:
         try:
-            thing_id = _write_sphere(world, view, preview, target, new_names)
+            written: list[str] = []
+            thing_id = _write_sphere(world, view, preview, target, new_names, written)
             break
         except create._UnlinkedNames as unlinked:
             # written again without them, in a fresh revision: the first
             # was rolled back whole
             new_names = _without_unlinked(new_names, unlinked)
+    if notes is not None:
+        notes.extend(dict.fromkeys(written))
 
     if "description" in preview.prose:
         # the summary was written from everything, as the sphere reads at
@@ -1438,6 +1515,7 @@ async def fill_drawer(
     create.offer_same(
         view, [*new, *items], near_ids=near_ids, exclude=skip, index=index
     )
+    _fit_offers(items, {d.id: d.type for d in spheres.drawers(view, sphere_id)})
     for item in items:
         item["names"] = []
     for new_name in new:
@@ -1542,7 +1620,7 @@ def accept_fill(
                     notes=written,
                 )
                 stubs = dict(made)
-                linked = _write_items(rev, world, sphere_id, items, made)
+                linked = _write_items(rev, world, sphere_id, items, made, notes=written)
                 linked |= create.write_elsewhere(rev, world.view(), view, others, made)
                 unlinked = _orphans(view, stubs, new_names, linked)
                 if unlinked:
@@ -1551,7 +1629,7 @@ def accept_fill(
         except create._UnlinkedNames as unlinked_names:
             new_names = _without_unlinked(new_names, unlinked_names)
     if notes is not None:
-        notes.extend(written)
+        notes.extend(dict.fromkeys(written))
     log.info(
         "spheres.fill_accept",
         sphere_id=sphere_id,
@@ -1783,6 +1861,7 @@ async def preview_branch(
     create.offer_same(
         view, [*stub_names, *items], near_ids=near_ids, exclude=skip, index=index
     )
+    _fit_offers(items, {d["id"]: d["type"] for d in every_drawer})
     log.info(
         "spheres.preview_branch",
         parent_id=parent_id,

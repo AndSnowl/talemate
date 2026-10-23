@@ -2927,6 +2927,9 @@ def _write_preview(
     ]
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
         if fold is not None:
+            # the kind first: the folded stub's facts are written for it
+            if stub is not None and stub.kind != preview.kind:
+                rev.change_stub_kind(stub.id, preview.kind)
             fold.write(rev)
         made = _row_stubs(
             rev,
@@ -2944,7 +2947,7 @@ def _write_preview(
             thing_id = rev.create_thing(preview.kind, fields)
         else:
             thing_id = stub.id
-            if stub.kind != preview.kind:
+            if stub.kind != preview.kind and fold is None:
                 rev.change_stub_kind(thing_id, preview.kind)
             for field, value in preview.fields.items():
                 rev.set_field(thing_id, field, value, None)
@@ -3194,7 +3197,7 @@ def _accept_same(
     if target.is_stub:
         if stub is None:
             return _accept_new(world, preview, target_id, notes, prose)
-        fold = plan_repoint(world, target_id, stub.id)
+        fold = plan_repoint(world, target_id, stub.id, as_kind=preview.kind)
         return _accept_new(world, preview, None, notes, prose, fold=fold)
     plan = plan_repoint(world, stub.id, target_id) if stub is not None else None
     elsewhere = live_elsewhere(
@@ -3243,18 +3246,36 @@ def _tie_value(tie: PreviewTie) -> dict[str, Any]:
     }
 
 
+def _stored(value: object, type_: str) -> object:
+    """A field value as stored, for comparing: a date (a `WorldDate` or
+    its JSON) as a `WorldDate`, a model as its JSON."""
+
+    if type_ == "date" and isinstance(value, dict):
+        try:
+            return WorldDate.model_validate(value)
+        except ValueError:
+            return value
+    return value
+
+
 def _merge_entry(
     rev: Any,
     world: World,
     preview: CreatePreview,
     target_id: str,
     notes: list[str],
+    redirect: dict[str, str] | None = None,
 ) -> list[PreviewTie]:
     """The preview's own entry material onto the target, in `rev`: its
     other names, the fields the target leaves empty (a conflicting one, or
-    one the target's kind lacks, is noted), its sphere when the target has
-    none, and the ties the target lacks by sphere and role (when it can be
+    one the target's kind lacks, is noted; values compared as stored, a
+    thing named through `redirect`), its sphere when the target has none
+    (in a drawer the target's kind goes in, `spheres.entry_drawer`; one
+    it can't take is noted),
+    and the ties the target lacks by sphere and role (when it can be
     tied). Returns the ties added, whose exceptions the caller writes."""
+
+    moved = redirect or {}
 
     view = world.view()
     state = view.thing(target_id)
@@ -3264,13 +3285,20 @@ def _merge_entry(
         if isinstance(entry.get("name"), str):
             _common_name(rev, world.view(), target_id, entry["name"])
 
-    kind_fields = {spec.name for spec in get_kind(state.kind).fields}
+    types = {spec.name: spec.type for spec in get_kind(state.kind).fields}
     skipped: list[str] = []
     for field, value in preview.fields.items():
         if field == "ties":
             continue
+        if types.get(field) == "thing" and isinstance(value, str):
+            value = moved.get(value, value)
+        elif types.get(field) == "things" and isinstance(value, list):
+            value = [moved.get(v, v) if isinstance(v, str) else v for v in value]
         held = state.fields.get(field)
-        if field not in kind_fields or (held is not None and held != value):
+        if field not in types or (
+            held is not None
+            and _stored(held, types[field]) != _stored(value, types[field])
+        ):
             skipped.append(field)
             continue
         if held is None:
@@ -3284,19 +3312,31 @@ def _merge_entry(
             "differed, or doesn't fit it"
         )
 
-    if preview.part_of is not None:
+    sphere = (preview.part_of or {}).get("sphere")
+    if isinstance(sphere, str) and view.thing(sphere) is not None:
         home = state.fields.get("part_of")
-        sphere = preview.part_of.get("sphere")
-        if home is None and state.kind in PART_OF_KINDS and sphere:
-            if not spheres.sits_in(view, sphere, target_id):
-                rev.set_field(
-                    target_id,
-                    "part_of",
-                    preview.part_of,
-                    part_of_since(world, target_id, strict=False),
-                )
-        elif home is not None and home != preview.part_of:
-            notes.append(f"{name} stays where it's filed")
+        where = view.name_of(sphere) or sphere
+        if home is not None:
+            if home != preview.part_of:
+                notes.append(f"{name} stays where it's filed, not in {where}")
+        elif state.kind not in PART_OF_KINDS:
+            notes.append(f"{name} isn't filed in {where}: a {state.kind} never is")
+        elif spheres.sits_in(view, sphere, target_id):
+            notes.append(f"{name} isn't filed in {where}: it would be inside itself")
+        else:
+            wanted = (preview.part_of or {}).get("drawer")
+            drawer = spheres.entry_drawer(
+                spheres.drawers(view, sphere),
+                state.kind,
+                wanted if isinstance(wanted, str) else None,
+                name,
+            )
+            rev.set_field(
+                target_id,
+                "part_of",
+                {"sphere": sphere, "drawer": drawer},
+                part_of_since(world, target_id, strict=False),
+            )
 
     held_ties = preview.fields.get("ties")
     wanted: list[dict[str, Any]] = [
@@ -3366,7 +3406,7 @@ def _write_same(
         if plan is not None:
             plan.write(rev)
         _common_name(rev, world.view(), target_id, preview.name)
-        ties = _merge_entry(rev, world, preview, target_id, notes)
+        ties = _merge_entry(rev, world, preview, target_id, notes, redirect)
         made = _row_stubs(
             rev,
             world,
