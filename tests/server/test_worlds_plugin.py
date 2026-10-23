@@ -5061,8 +5061,7 @@ async def test_pick_date_remove_repoints_overrides(plugin):
 # founding against the 947 rediscovery is a false pair at 0.4 (overlap
 # 0.43), the Codex's compiling in 217 against 312 a true one (0.63)
 CONCLAVE_642 = (
-    "The Runeweavers' Conclave is founded in Stonehold to regulate and teach "
-    "the art."
+    "The Runeweavers' Conclave is founded in Stonehold to regulate and teach the art."
 )
 REDISCOVERY_947 = (
     "In the year 947, a party of Runeweavers from the Conclave in Stonehold "
@@ -5236,9 +5235,7 @@ async def test_sphere_stub_expansion_offers_move_in(plugin, client, monkeypatch)
     (realm,) = [f.fact_id for f in world.live_facts(s.tsardom)]
     async with MockClientContext():
         client_responses.get().append(CORE_SYNOD)
-        await _act(
-            plugin, "preview_sphere", template="order", prompt="", stub_id=guard
-        )
+        await _act(plugin, "preview_sphere", template="order", prompt="", stub_id=guard)
         await _drain(plugin)
     preview = _last(plugin, "preview_sphere")["data"]
     assert preview["move_in"] == [

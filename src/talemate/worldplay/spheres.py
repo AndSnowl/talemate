@@ -1436,9 +1436,7 @@ def accept_sphere(
     if prose is not None:
         # what a fact moved in from has lost
         prose.extend(
-            t
-            for t in create._move_in_prose(view, preview, thing_id)
-            if t not in prose
+            t for t in create._move_in_prose(view, preview, thing_id) if t not in prose
         )
 
     if "description" in preview.prose:

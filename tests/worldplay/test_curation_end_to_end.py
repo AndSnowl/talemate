@@ -784,7 +784,10 @@ async def test_curation_end_to_end(plugin, client, loadable):
     assert tsardom_id not in plugin.scheduled_prose[scheduled:]
     # its regiments stay inside it
     assert sorted(
-        i["thing_id"] for d in army["sphere"]["drawers"] for i in d["items"] if i["thing_id"]
+        i["thing_id"]
+        for d in army["sphere"]["drawers"]
+        for i in d["items"]
+        if i["thing_id"]
     ) == sorted([talon_id, wing_id])
 
     # 5. Runeweaving from a prompt; Ashenmere, its site, from its stub

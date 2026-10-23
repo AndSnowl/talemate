@@ -827,7 +827,9 @@ async def test_new_sphere_in_an_outer_body_offers_its_facts(world, tsardom):
     is offered that body's facts, unticked."""
 
     t = tsardom
-    preview = await preview_sphere(world, "order", "the Host", {}, None, reply=HOST_CORE)
+    preview = await preview_sphere(
+        world, "order", "the Host", {}, None, reply=HOST_CORE
+    )
     assert preview.move_in == []
     add_outer_body(
         world,
