@@ -262,6 +262,32 @@ async def test_preview_prose_tells_held_facts_as_belief(world, spheres_world):
     assert "- Every owl lost its sight." not in prose_prompt
 
 
+def test_candidate_and_move_in_lines_tell_held_facts_as_belief(world, spheres_world):
+    """Ruling C33: an "Entries near this one" line and a move-in label
+    tell a held fact as belief, never as plain truth; a fact nobody holds
+    reads as it is."""
+
+    from talemate.worldplay.create import broader_lines, candidate_line
+
+    s = spheres_world
+    with world.revision(Source.manual()) as rev:
+        night = rev.create_thing("lore", fields={"name": "The Night of Feathers"})
+        rev.add_fact(
+            night, "general", "Every owl lost its sight.", origin={"held_by": s.dawn}
+        )
+        rev.add_fact(night, "general", "It fell in 994.")
+    view = world.view()
+    assert candidate_line(view, view.thing(night)) == (
+        "The Night of Feathers (lore): The White Dawn holds that every owl lost "
+        "its sight."
+    )
+    lines, _labels = broader_lines(view, world.calendar, night)
+    assert lines == [
+        ("M1", "The White Dawn holds that every owl lost its sight."),
+        ("M2", "It fell in 994."),
+    ]
+
+
 def test_repoint_carries_held_by(world, spheres_world):
     """A stub merged into its entry hands over what it held: a fact held by
     the stub is held by the entry after, and so is a belief the stub held

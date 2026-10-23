@@ -1243,7 +1243,8 @@ def candidate_line(view: WorldView, state: ThingState) -> str:
     probe's facts took them up): "Name (kind; usually called X; part of Y;
     stub): its summary or first fact", the text cut at
     `CANDIDATE_LINE_CHARS`. A sphere's kind reads "sphere: <template>"
-    ("place, sphere: nation" for a place sphere)."""
+    ("place, sphere: nation" for a place sphere); a held fact reads as
+    belief (`held.held_text`, ruling C33)."""
 
     is_sphere = spheres.is_sphere(state)
     template = state.fields.get("template")
@@ -1269,8 +1270,11 @@ def candidate_line(view: WorldView, state: ThingState) -> str:
     fact = spheres.summary_fact(state) if is_sphere else None
     if fact is None and state.facts:
         fact = min(state.facts, key=lambda f: f.created)
+    # a held fact as belief (ruling C33), never as plain truth
     line = (
-        _clip(view.render(fact.text)) if fact is not None else "(nothing written yet)"
+        _clip(held_text(view, fact, state))
+        if fact is not None
+        else "(nothing written yet)"
     )
     return f"{view.name_of(state.id)} ({'; '.join(bits)}): {line}"
 
@@ -1603,15 +1607,16 @@ def broader_lines(
 ) -> tuple[list[tuple[str, str]], dict[str, str]]:
     """`(lines, labels)`: the broader entry's first `MOVE_IN_SHOWN` facts
     as the create prompt shows them, `(label, text)` labelled M1..., a
-    dated one led "(In 994)" on a timeline and "(Since 994)" otherwise;
-    and `label -> fact id`."""
+    dated one led "(In 994)" on a timeline and "(Since 994)" otherwise, a
+    held one as belief (ruling C33); and `label -> fact id`."""
 
     state = view.thing(broader_id)
     facts = _broader_facts(state)[:MOVE_IN_SHOWN] if state is not None else []
     lines: list[tuple[str, str]] = []
     labels: dict[str, str] = {}
     for number, fact in enumerate(facts, 1):
-        text = view.render(fact.text)
+        # a held fact as belief (ruling C33)
+        text = held_text(view, fact, state) if state is not None else ""
         if fact.valid_from is not None:
             lead = "In" if fact.category == "timeline" else "Since"
             year = _shown_year(calendar, fact.valid_from.to_datetime().year)

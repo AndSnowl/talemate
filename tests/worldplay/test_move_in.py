@@ -267,7 +267,8 @@ def _fact(world, thing_id, text):
 
 async def test_move_in_offered_for_part_of_new_entry(world, tsardom):
     """A new entry filed in a sphere is shown the sphere's facts (not its
-    summary), labelled M1..., with the probe's wording; the Tsardom isn't
+    summary), labelled M1..., with the probe's wording, a held one as
+    belief (ruling C33); the Tsardom isn't
     "Named in this prompt" too. Every fact is offered unticked
     (ruling C24): the model's pick marked `picked` and first, an unknown
     label dropped, the rest in order."""
@@ -282,7 +283,8 @@ async def test_move_in_offered_for_part_of_new_entry(world, tsardom):
     )
     assert _block(prompt) == [
         f"- M1: {CAPITAL}",
-        f"- M2: (In 994) {TRANSFORMATION}",
+        # held by the Church: told as belief (ruling C33)
+        f"- M2: (In 994) Church of the Eternal Light holds: {TRANSFORMATION}",
         f"- M3: {LAW_CODE.format('the Zakonnik')}",
         f"- M4: {ARCHITECTURE}",
     ]
