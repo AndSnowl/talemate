@@ -61,7 +61,7 @@ log = structlog.get_logger("talemate.world.spheres")
 # the most lines `key_facts` gives one sphere, and how many of them are
 # its latest timeline facts
 KEY_FACTS_CAP = 8
-_KEY_TIMELINE = 3
+KEY_TIMELINE = _KEY_TIMELINE = 3
 
 
 class Drawer(BaseModel):
@@ -892,21 +892,67 @@ def _round_robin(sizes: list[int], budget: int) -> list[int]:
     return taken
 
 
-def dated_line(calendar: Calendar, date: WorldDate | None, text: str) -> str:
-    """A timeline line as key facts give it: "In <year>: <text>", the year
-    as `calendar` labels it, or the text alone when it's undated (the
-    spheres probe's (d) wording)."""
+def _year(date: WorldDate) -> WorldDate:
+    return WorldDate(instant=date.instant, precision=Precision.YEAR)
+
+
+def dated_line(
+    calendar: Calendar,
+    date: WorldDate | None,
+    text: str,
+    until: WorldDate | None = None,
+) -> str:
+    """A timeline line as key facts give it: "In <year>: <text>" (the
+    spheres probe's (d) wording), or "From <year> to <year>: <text>" for
+    one that has ended (`until`, ruling C18), each year as `calendar`
+    labels it; the text alone when it's undated."""
 
     if date is None:
         return text
-    year = WorldDate(instant=date.instant, precision=Precision.YEAR)
-    return f"In {calendar.format(year)}: {text}"
+    if until is not None:
+        return (
+            f"From {calendar.format(_year(date))} to "
+            f"{calendar.format(_year(until))}: {text}"
+        )
+    return f"In {calendar.format(_year(date))}: {text}"
 
 
 def _timeline_line(view: WorldView, fact: FactState, calendar: Calendar) -> str:
     """A timeline fact as key facts give it (`dated_line`)."""
 
     return dated_line(calendar, fact.valid_from, view.render(fact.text))
+
+
+def _summary_lines(view: WorldView, sphere_id: str, summary: str | None) -> list[str]:
+    return [line for line in [summary or _summary_of(view, sphere_id)] if line]
+
+
+def key_items(
+    view: WorldView,
+    sphere_id: str,
+    used: int,
+    things: list[ThingState] | None = None,
+    skip: Collection[str] = (),
+) -> list[Item]:
+    """The items `key_facts` prints for the sphere when `used` of its
+    lines go to the summary and the timeline: its top beliefs and
+    practices items (and structure, for an agent), the first in `items`
+    order, a drawer type at a time in turn, less those in `skip`."""
+
+    state = view.thing(sphere_id)
+    if state is None:
+        return []
+    types = ["beliefs", "practices"] + (["structure"] if _is_agent(state) else [])
+    type_of = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
+    sphere_items = [
+        item for item in items(view, sphere_id, things) if item.thing_id not in skip
+    ]
+    groups = [
+        [item for item in sphere_items if type_of.get(item.drawer_id) == type_]
+        for type_ in types
+    ]
+    taken = _round_robin([len(group) for group in groups], KEY_FACTS_CAP - used)
+    return [item for group, count in zip(groups, taken) for item in group[:count]]
 
 
 def key_facts(
@@ -917,51 +963,42 @@ def key_facts(
     things: list[ThingState] | None = None,
     skip: Collection[str] = (),
     fact_line: FactLine | None = None,
-    latest: Sequence[str] | None = None,
+    latest: Sequence[tuple[str, str]] | None = None,
 ) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, as the caller found it,
-    else the sphere's summary fact: module `summary`), then its
-    top beliefs and practices items (and structure, for an agent) -- the
-    first in `items` order, taken a drawer type at a time in turn, a thing
-    item as `item_line` gives it -- then its latest timeline facts, each
-    "In <year>: <text>" by `calendar` (the default one when not given).
-    `things`, a snapshot of the view's things, saves `items` a scan. A
-    thing item in `skip` (shown elsewhere in full) is left out, and the
-    next item takes its place. `fact_line`, when given, words each item's
-    fact (`_item_line`). `latest`, when given, is the timeline lines to end
-    with, worded by the caller (its gathered timeline, `timelines`): the
-    last `_KEY_TIMELINE` of them are taken."""
+    else the sphere's summary fact: module `summary`), then its top items
+    (`key_items`, a thing item as `item_line` gives it), then its latest
+    timeline lines, each "In <year>: <text>" by `calendar` (the default one
+    when not given). `things`, a snapshot of the view's things, saves
+    `items` a scan. A thing item in `skip` (shown elsewhere in full) is
+    left out, and the next item takes its place. `fact_line`, when given,
+    words each item's fact (`_item_line`).
+
+    `latest`, when given, is the timeline lines as `(owner id, text)`,
+    worded by the caller (its gathered timeline, `timelines`); otherwise
+    the sphere's own timeline facts. A line of a thing printed as an item
+    is left out, so nothing shows twice, and the last `_KEY_TIMELINE` of
+    the rest are taken."""
 
     state = view.thing(sphere_id)
     if state is None:
         return []
 
-    head = [line for line in [summary or _summary_of(view, sphere_id)] if line]
-
+    head = _summary_lines(view, sphere_id, summary)
     calendar = calendar or Calendar()
     lines = (
-        [_timeline_line(view, fact, calendar) for fact in timeline(view, sphere_id)]
+        [
+            (sphere_id, _timeline_line(view, fact, calendar))
+            for fact in timeline(view, sphere_id)
+        ]
         if latest is None
         else list(latest)
     )
-    tail = lines[-_KEY_TIMELINE:] if lines else []
-
-    types = ["beliefs", "practices"] + (["structure"] if _is_agent(state) else [])
-    type_of = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
-    sphere_items = [
-        item for item in items(view, sphere_id, things) if item.thing_id not in skip
-    ]
-    groups = [
-        [item for item in sphere_items if type_of.get(item.drawer_id) == type_]
-        for type_ in types
-    ]
-    taken = _round_robin(
-        [len(group) for group in groups], KEY_FACTS_CAP - len(head) - len(tail)
+    shown = key_items(
+        view, sphere_id, len(head) + min(len(lines), _KEY_TIMELINE), things, skip
     )
-    middle = [
-        _item_line(item, view, fact_line)
-        for group, count in zip(groups, taken)
-        for item in group[:count]
-    ]
+    printed = {item.thing_id for item in shown if item.thing_id}
+    tail = [text for owner, text in lines if owner not in printed][-_KEY_TIMELINE:]
+    middle = [_item_line(item, view, fact_line) for item in shown]
     return (head + middle + tail)[:KEY_FACTS_CAP]

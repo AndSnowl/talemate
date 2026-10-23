@@ -227,5 +227,9 @@ def disagreeing_dates(
                 continue
             score = max(_share(words[a], words[b]), _share(words[b], words[a]))
             if score >= threshold:
-                found.append(Disagreement(a=a, b=b, years=(year_a, year_b)))
+                # built unchecked (ruling C19): a timeline of templated
+                # lines can make thousands of pairs
+                found.append(
+                    Disagreement.model_construct(a=a, b=b, years=(year_a, year_b))
+                )
     return found

@@ -338,3 +338,109 @@ def test_isolated_entry(world):
     with world.revision(Source.manual()) as rev:
         rev.remove_thing(alone)
     assert _timeline(world, alone) == []
+
+
+def test_ended_fact_shows_its_span(world):
+    """Ruling C18: a fact ended by the view's date carries its end
+    (`until`); one still running, or seen before it ends, doesn't."""
+
+    with world.revision(Source.manual()) as rev:
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        married = rev.add_fact(
+            maren,
+            "relationship",
+            "Married to Oskar.",
+            valid_from=WorldDate.of(310),
+            valid_until=WorldDate.of(330),
+        )
+    (line,) = _timeline(world, maren, at=WorldDate.of(335))
+    assert line.fact_id == married
+    assert line.until is not None and line.until.to_datetime().year == 330
+    (line,) = _timeline(world, maren, at=WorldDate.of(320))
+    assert line.until is None
+    # the latest telling: it has ended
+    (line,) = _timeline(world, maren)
+    assert line.until is not None
+
+
+def test_non_place_sphere_never_gathers_the_place_tree(world):
+    """Only a place sphere gathers the places inside it: a religion with
+    Kremova filed under it has Kremova's lines, not its districts'."""
+
+    with world.revision(Source.manual()) as rev:
+        dawn = rev.create_thing(
+            "sphere",
+            fields={
+                "name": "White Dawn",
+                "template": "religion",
+                "drawers": [{"id": DRAWER, "type": "places", "title": "Holy Sites"}],
+            },
+        )
+        kremova = rev.create_thing(
+            "place", fields={"name": "Kremova", "part_of": _part_of(dawn)}
+        )
+        district = rev.create_thing(
+            "place", fields={"name": "Spire Quarter", "parent": kremova}
+        )
+        seated = rev.add_fact(
+            kremova, "history", "The church seated here.", valid_from=WorldDate.of(900)
+        )
+        rev.add_fact(
+            district, "history", "The quarter walled.", valid_from=WorldDate.of(950)
+        )
+    assert _ids(_timeline(world, dawn, reach=3)) == [seated]
+
+
+def test_a_character_filed_in_a_sphere_gives_no_births(world):
+    """A character (or a real being) filed as a part is a member, not a
+    part: its own dated facts stay its own."""
+
+    with world.revision(Source.manual()) as rev:
+        order = rev.create_thing(
+            "sphere", fields={"name": "Order", "template": "order"}
+        )
+        vasha = rev.create_thing(
+            "character", fields={"name": "Vasha", "part_of": _part_of(order)}
+        )
+        god = rev.create_thing(
+            "being",
+            fields={"name": "Dawn", "existence": "real", "part_of": _part_of(order)},
+        )
+        rev.add_fact(vasha, "background", "Born.", valid_from=WorldDate.of(990))
+        rev.add_fact(god, "deeds", "Woke.", valid_from=WorldDate.of(10))
+        joined = rev.add_fact(
+            vasha,
+            "background",
+            f"Joined {ref(order)}.",
+            valid_from=WorldDate.of(1010),
+        )
+    assert _ids(_timeline(world, order)) == [joined]
+
+
+def test_timeline_line_dump_round_trips(world):
+    r = _runeweaving(world)
+    for line in _timeline(world, r.sphere):
+        dumped = line.model_dump()
+        assert "fact" not in dumped
+        again = TimelineLine.model_validate(dumped)
+        assert again.fact is None and again.fact_id == line.fact_id
+
+
+def test_prompt_timeline_skips_disagreements(world, monkeypatch):
+    """A prompt's timeline never asks which dates disagree."""
+
+    from talemate.world import timelines
+
+    r = _runeweaving(world)
+
+    def no_pairs(*_args, **_kwargs):
+        raise AssertionError("disagreements computed for a prompt")
+
+    monkeypatch.setattr(timelines, "disagreeing_dates", no_pairs)
+    assert _ids(
+        timelines.prompt_timeline(world.view(), r.sphere, reach=2, threshold=0.4)
+    ) == [r.founded, r.rediscovered, r.carved]
+    lines = timelines.entry_timeline(
+        world.view(), r.sphere, reach=2, threshold=0.4, disagreements=False
+    )
+    assert all(line.disagrees_with == [] for line in lines)

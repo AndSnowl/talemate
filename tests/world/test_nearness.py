@@ -441,3 +441,19 @@ def test_near_never_caches_inside_an_open_revision(world, monkeypatch):
     # nothing from inside was kept: after it's written, it's built afresh
     assert _ids(near(world.view(), moskov, reach=1)) == [brenna]
     assert len(built) == 3
+
+
+def test_near_after_undo_builds_a_new_graph(world, monkeypatch):
+    built = _counting_graphs(monkeypatch)
+    with world.revision(Source.manual()) as rev:
+        moskov = rev.create_thing("place", fields={"name": "Moskov"})
+        brenna = rev.create_thing("character", fields={"name": "Brenna"})
+    with world.revision(Source.manual()) as rev:
+        linked = rev.rev
+        rev.add_fact(brenna, "background", f"Born in {ref(moskov)}.")
+    assert _ids(near(world.view(), moskov, reach=1)) == [brenna]
+    assert len(built) == 1
+    report = world.undo([linked])
+    assert report.undo_rev is not None
+    assert _ids(near(world.view(), moskov, reach=1)) == []
+    assert len(built) == 2

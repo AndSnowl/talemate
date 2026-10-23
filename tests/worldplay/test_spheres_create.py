@@ -1797,3 +1797,46 @@ def test_timeline_lines_gather_and_hold(world, spheres_world):
         "994: Declared the Night of Feathers a purification.",
         "1019: Issued the Doctrine of Separation.",
     ]
+
+
+def test_timeline_lines_show_an_ended_span(world, spheres_world):
+    from talemate.worldplay.spheres import _timeline_lines
+
+    s = spheres_world
+    with world.revision(Source.manual(note="later")) as rev:
+        rev.add_fact(
+            s.dawn,
+            "timeline",
+            "Held the old spire.",
+            valid_from=WorldDate.of(1001),
+            valid_until=WorldDate.of(1010),
+        )
+    assert "From 1001 to 1010: Held the old spire." in _timeline_lines(
+        world, world.view(WorldDate.of(1020)), s.dawn
+    )
+    # seen before it ended, it's an "in" line
+    assert "1001: Held the old spire." in _timeline_lines(
+        world, world.view(WorldDate.of(1005)), s.dawn
+    )
+
+
+async def test_branch_parent_timeline_skips_listed_items(moscavia, world, full_dawn):
+    """The branch core lists each inherited item in full: a dated fact of
+    one isn't given again among the parent's timeline lines."""
+
+    view = world.view()
+    vigil = next(
+        item
+        for item in spheres.items(view, moscavia.dawn)
+        if item.name == "The Dawn Vigil"
+    )
+    with world.revision(Source.manual(note="dated")) as rev:
+        rev.add_fact(
+            vigil.thing_id,
+            "general",
+            "The first vigil was kept on the high gallery.",
+            valid_from=WorldDate.of(1001),
+        )
+    _preview, client = await _reformed_preview(world, moscavia.dawn)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert prompt.count("The first vigil was kept on the high gallery.") == 1

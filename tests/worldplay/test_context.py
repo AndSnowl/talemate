@@ -806,3 +806,40 @@ def test_scene_sphere_timeline_gathers_its_parts(world, spheres_world):
     )
     assert block.count("shrine on the peak") == 1
     assert "- In 1015:" not in block
+
+
+def test_sphere_item_with_a_dated_first_fact_shows_once(world, spheres_world):
+    """An item the key facts print (its first fact dated) isn't told
+    again among the timeline lines; an ended timeline fact shows its span
+    (ruling C18)."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="later")) as rev:
+        light = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Doctrine of Light",
+                "part_of": {"sphere": s.dawn, "drawer": "d0000001"},
+            },
+        )
+        rev.add_fact(
+            light,
+            "general",
+            "The Doctrine of Light was proclaimed.",
+            valid_from=WorldDate.of(1000),
+        )
+        rev.add_fact(
+            s.dawn,
+            "timeline",
+            "Held the old spire.",
+            valid_from=WorldDate.of(1001),
+            valid_until=WorldDate.of(1010),
+        )
+    block = _sphere_scene(world, place_thing_id=s.kremova, characters=_present(s.vasha))
+    assert block.count("The Doctrine of Light was proclaimed.") == 1
+    assert "In 1000:" not in block
+    assert (
+        "- In 994: Declared the Night of Feathers a purification.\n"
+        "- From 1001 to 1010: Held the old spire.\n"
+        "- In 1019: Issued the Doctrine of Separation.\n"
+    ) in block

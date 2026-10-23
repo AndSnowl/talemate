@@ -30,6 +30,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS, SPHERE_CATEGORIES
 from talemate.world.names import everyday_name
 from talemate.world.nearness import near
+from talemate.world.spheres import KEY_TIMELINE as _KEY_TIMELINE
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
 from talemate.world.view import FactState, ThingState, WorldView
@@ -259,23 +260,45 @@ def _latest(
     sphere_id: str,
     things: list[ThingState],
     shown: set[str],
+    skip: set[str],
+    summary: str | None,
     settings: CurationSettings,
-) -> list[str]:
-    """The sphere's timeline lines for its key facts: its gathered
-    timeline (`timelines.prompt_timeline`, as far out as `timeline_reach`)
-    less the lines of the things `shown` in the block, each "In <year>:
-    <text>" (the spheres probe's (d) wording), a held one as belief."""
+) -> list[tuple[str, str]]:
+    """The sphere's timeline lines for its key facts, as `(owner id,
+    text)`: its gathered timeline (`timelines.prompt_timeline`, as far out
+    as `timeline_reach`) less the lines of the things `shown` in the block
+    and of the items its key facts print (`spheres.key_items`, `skip` left
+    out of them, after the summary: `summary`, else its summary fact), the
+    last `_KEY_TIMELINE` of the rest, each "In <year>: <text>" (the
+    spheres probe's (d) wording) or "From <year> to <year>: <text>" when
+    it has ended (ruling C18), a held one as belief. Only those are worded:
+    wording a held line looks names up."""
 
-    return [
-        spheres.dated_line(world.calendar, line.date, timeline_text(view, line))
-        for line in timelines.prompt_timeline(
-            view,
-            sphere_id,
-            shown,
-            reach=settings.timeline_reach,
-            threshold=settings.repeat_threshold,
-            things=things,
+    lines = timelines.prompt_timeline(
+        view,
+        sphere_id,
+        shown,
+        reach=settings.timeline_reach,
+        threshold=settings.repeat_threshold,
+        things=things,
+    )
+    head = 1 if (summary or spheres.summary(view, sphere_id)) else 0
+    printed = {
+        item.thing_id
+        for item in spheres.key_items(
+            view, sphere_id, head + min(len(lines), _KEY_TIMELINE), things, skip
         )
+        if item.thing_id
+    }
+    kept = [line for line in lines if line.owner_id not in printed][-_KEY_TIMELINE:]
+    return [
+        (
+            line.owner_id,
+            spheres.dated_line(
+                world.calendar, line.date, timeline_text(view, line), line.until
+            ),
+        )
+        for line in kept
     ]
 
 
@@ -303,6 +326,7 @@ def _sphere_entries(
         if state is None:
             continue
         template = state.fields.get("template")
+        summary = _sphere_summary(world, view, sphere_id) or None
         entry: dict[str, Any] = {
             "name": view.name_of(sphere_id) or "",
             "template": template if isinstance(template, str) else "sphere",
@@ -312,7 +336,7 @@ def _sphere_entries(
             "key_facts": spheres.key_facts(
                 view,
                 sphere_id,
-                _sphere_summary(world, view, sphere_id) or None,
+                summary,
                 world.calendar,
                 things,
                 shown_elsewhere,
@@ -323,6 +347,8 @@ def _sphere_entries(
                     sphere_id,
                     things,
                     shown_elsewhere | ({place_thing_id} if place_thing_id else set()),
+                    shown_elsewhere,
+                    summary,
                     settings,
                 ),
             ),
@@ -387,6 +413,10 @@ def _near_lore(
     best: dict[str, tuple[float, int, int]] = {}
     order = 0
     for seed in seeds:
+        # each list is cut before the filter below, which skips what's
+        # shown and what can't be lore: the limit leaves room for those,
+        # so a seed's list can still come up short of `room` when most of
+        # its nearest are skipped (the next seed's then fill in)
         for found in near(
             view, seed, reach=settings.reach, limit=room + len(shown) + settings.entries
         ):
@@ -515,7 +545,16 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 things,
                 as_lore,
                 _held_line(view),
-                _latest(world, view, place_thing_id, things, as_lore, settings),
+                _latest(
+                    world,
+                    view,
+                    place_thing_id,
+                    things,
+                    as_lore,
+                    as_lore,
+                    None,
+                    settings,
+                ),
             )
         place = {
             "name": view.name_of(place_thing_id) or "",

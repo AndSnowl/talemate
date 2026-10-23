@@ -1412,17 +1412,26 @@ def _summary(world: World, view: WorldView, state: ThingState) -> str:
 def _timeline_lines(
     world: World, view: WorldView, sphere_id: str, shown: Collection[str] = ()
 ) -> list[str]:
-    """The sphere's timeline as prompts list it, "<year>: <text>", a held
-    line as belief (`held.timeline_text`): its gathered timeline
+    """The sphere's timeline as prompts list it, "<year>: <text>", or
+    "From <year> to <year>: <text>" for one that has ended (ruling C18), a
+    held line as belief (`held.timeline_text`): its gathered timeline
     (`timelines.entry_timeline`, as far out as the world's
     `timeline_reach`), less what the prompt already shows another way
     (`timelines.prompt_timeline`): its own dated facts that aren't
     `timeline` facts, and the lines of the things in `shown`."""
 
     settings = world.curation()
+
+    def year(date: WorldDate) -> int:
+        return create._shown_year(world.calendar, date.to_datetime().year)
+
     return [
-        f"{create._shown_year(world.calendar, line.date.to_datetime().year)}: "
-        f"{timeline_text(view, line)}"
+        (
+            f"From {year(line.date)} to {year(line.until)}: "
+            if line.until is not None
+            else f"{year(line.date)}: "
+        )
+        + timeline_text(view, line)
         for line in timelines.prompt_timeline(
             view,
             sphere_id,
@@ -1854,7 +1863,9 @@ async def preview_branch(
         "prompt": prompt,
         "parent_name": parent_name,
         "parent_summary": _summary(world, view, parent),
-        "parent_timeline": _timeline_lines(world, view, parent_id),
+        "parent_timeline": _timeline_lines(
+            world, view, parent_id, {row["thing_id"] for row in rows if row["thing_id"]}
+        ),
         "inherited": [
             (row["label"], titles[row["drawer_id"]], row["text"]) for row in rows
         ],

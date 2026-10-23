@@ -155,9 +155,10 @@ def held_text(
 def timeline_text(view: WorldView, line: TimelineLine) -> str:
     """A timeline line's text as a scene or prompt is told it: as belief
     when its fact is held (`held_text`, of the line's owner); its plain
-    text when the owner is gone from the view."""
+    text when the owner is gone from the view, or the line carries no
+    fact (one read back from a dump)."""
 
     owner = view.thing(line.owner_id)
-    if owner is None:
+    if owner is None or line.fact is None:
         return line.text
     return held_text(view, line.fact, owner, line.text)
