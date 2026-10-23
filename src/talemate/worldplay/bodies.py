@@ -404,9 +404,10 @@ def add_outer_body(
             }
         )
     preview.refile.extend(r for r in rows if r["thing_id"] not in taken)
-    if type(preview) is CreatePreview and part.row is None and part.item is None:
+    if isinstance(preview, CreatePreview) and part.row is None and part.item is None:
         # the outer body is the entry's broader one now: its facts may move
-        # in, or none, when it's new (`create.offer_move_in`)
+        # in, or none, when it's new (`create.offer_move_in`); a sphere
+        # core's too (ruling C32)
         offer_move_in(view, preview)
     return preview
 

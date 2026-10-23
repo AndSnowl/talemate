@@ -15,7 +15,10 @@ judge it"), in a fresh world (present year 1000).
    and the Divine Right of the Tsar, a doctrine item.
 4. **The Divine Right**, expanded from its stub: its own facts stay on it,
    and its elsewhere items land on Moskov, the army and the Tsardom (a
-   law). The owner marks one of its own facts held by the Church.
+   law). The owner marks one of its own facts held by the Church. Then
+   **the army**, expanded from its stub as an order (ruling C32): it sits
+   in the Tsardom's Military, so the Tsardom's facts are offered to move
+   in, unticked; the owner ticks the army's raising, and it moves.
 5. **Runeweaving**, a field sphere, made from a prompt; **Ashenmere**, its
    site, expanded with the 947 rediscovery; **the First Codex**, whose
    reply names "the Ashenmere Caves" (offered as the same as Ashenmere:
@@ -24,6 +27,9 @@ judge it"), in a fresh world (present year 1000).
 6. **The Deep Galleries**, a place inside Ashenmere: the fact about them
    is the model's pick to move in from Ashenmere: it arrives unticked
    (ruling C24), the owner ticks it, and it moves (moved, not copied).
+   Then **Fill** of Runeweaving's Techniques: new items, and the reply's
+   facts about the art's children go elsewhere, onto Ashenmere and the
+   Deepcarving stub.
 7. **A merge:** the Conclave into Runeweavers' Conclave; the Codex's link
    follows. Then **"Is this X?"**: the Ashenmere Hollows, written from a
    prompt, has Ashenmere (with facts) as its top candidate, so the model's
@@ -95,6 +101,7 @@ TSARDOM_SUMMARY = (
     "from Moskov."
 )
 TALON_LINE = "An elite regiment of snowy owl-folk."
+ARMY_RAISED = "The Tsar raised a standing army of owl-folk regiments."
 TSARDOM_CORE = json.dumps(
     {
         "name": "Tsardom of Moscavia",
@@ -102,6 +109,7 @@ TSARDOM_CORE = json.dumps(
         "aka": [{"name": "Moscavia", "tag": "common", "everyday": True}],
         "timeline": [
             {"year": 994, "text": "Every Moscavian awoke as owl-folk."},
+            {"year": 996, "text": ARMY_RAISED},
         ],
         "drawers": [
             {"type": "beliefs", "title": "Laws"},
@@ -168,6 +176,29 @@ TALON_REPLY = json.dumps(
 )
 TALON_PROSE = "An elite regiment."
 ARMY = "The Tsar's Army"
+
+# --- 4b. the army, expanded: a Tsardom fact moves in (ruling C32) -------------
+
+ARMY_SUMMARY = "The Tsar's Army is the Tsardom's standing host of regiments."
+ARMY_CORE = json.dumps(
+    {
+        "name": ARMY,
+        "summary": ARMY_SUMMARY,
+        "aka": [],
+        "timeline": [],
+        "drawers": [{"type": "structure", "title": "Regiments"}],
+        "items": [
+            {
+                "drawer": "Regiments",
+                "name": "White Talon",
+                "text": TALON_LINE,
+                "kind": "lore",
+            },
+            {"drawer": "Regiments", "text": "Every regiment flies a white banner."},
+        ],
+        "names": [],
+    }
+)
 
 # --- 3. the Church --------------------------------------------------------------
 
@@ -372,6 +403,25 @@ GALLERIES_REPLY = json.dumps(
     }
 )
 GALLERIES_PROSE = "Deep chambers."
+
+# --- 6b. Fill: Runeweaving's techniques, with facts for other entries ---------
+
+ETCHING_LINE = "Runes scratched into the surface fade within a season."
+TO_ASHENMERE = "Ashenmere's walls show every technique of the art, layered deep."
+TO_DEEPCARVING = "Deepcarving takes a master a full day for a single rune."
+FILL_TECHNIQUES = json.dumps(
+    {
+        "new_items": [
+            {"name": "Shallow Etching", "text": ETCHING_LINE, "kind": "lore"},
+            {"text": "Every rune is carved facing the carver's own heart."},
+        ],
+        "names": [],
+        "elsewhere": [
+            {"entry": "Ashenmere", "text": TO_ASHENMERE, "held_by": None},
+            {"entry": "Deepcarving", "text": TO_DEEPCARVING, "held_by": None},
+        ],
+    }
+)
 
 # --- 7b. "Is this X?" with the model's verdict ---------------------------------
 
@@ -699,6 +749,44 @@ async def test_curation_end_to_end(plugin, client, loadable):
     [held] = [f for f in right["facts"] if f["fact_id"] == held["fact_id"]]
     assert held["held_by"]["id"] == church_id
 
+    # 4b. the army stub, named as the White Talon's outer body, expanded as
+    # an order (ruling C32): it sits in the Tsardom's Military, so every
+    # Tsardom fact is offered to move in, unticked and never picked; the
+    # owner ticks the army's raising, and it moves (moved, not copied)
+    before = len(client.prompt_history)
+    preview = await _send(
+        plugin,
+        "preview_sphere",
+        ARMY_CORE,
+        template="order",
+        prompt=(await _send(plugin, "stub_suggestion", id=army_id))["prompt"],
+        fields={},
+        stub_id=army_id,
+    )
+    assert [c["kind"] for c in client.prompt_history[before:]] == [
+        "creative_instruction_2048"
+    ]
+    assert "M1:" not in str(client.prompt_history[-1]["prompt"])
+    rows = preview["move_in"]
+    assert rows and {row["from_id"] for row in rows} == {tsardom_id}
+    assert not any(row["ticked"] or row["picked"] for row in rows)
+    assert {row["from_name"] for row in rows} == {"Tsardom of Moscavia"}
+    [raised] = [row for row in rows if row["text"] == ARMY_RAISED]
+    raised["ticked"] = True
+    scheduled = len(plugin.scheduled_prose)
+    army = await _send(plugin, "accept_sphere", preview=preview)
+    assert army["id"] == army_id and army["stub"] is None
+    assert ARMY_RAISED in _facts(army)
+    assert TO_ARMY in _facts(army)
+    assert ARMY_RAISED not in _facts(await _thing(plugin, tsardom_id))
+    # a sphere's timeline feeds no prose (rulings P18, P19): the Tsardom's
+    # isn't refreshed for losing it
+    assert tsardom_id not in plugin.scheduled_prose[scheduled:]
+    # its regiments stay inside it
+    assert sorted(
+        i["thing_id"] for d in army["sphere"]["drawers"] for i in d["items"] if i["thing_id"]
+    ) == sorted([talon_id, wing_id])
+
     # 5. Runeweaving from a prompt; Ashenmere, its site, from its stub
     preview = await _send(
         plugin,
@@ -766,6 +854,41 @@ async def test_curation_end_to_end(plugin, client, loadable):
     assert GALLERIES_FACT in _facts(galleries)
     ashenmere = await _thing(plugin, ashenmere_id)
     assert GALLERIES_FACT not in _facts(ashenmere)
+
+    # 6b. Fill Runeweaving's Techniques: new items beside Deepcarving, and
+    # the reply's facts about other entries, the runic magic's children,
+    # offered elsewhere -- Ashenmere's and the Deepcarving stub's
+    techniques = _drawer(runeweaving, "Techniques")
+    deepcarving_id = _item_id(runeweaving, "Techniques", "Deepcarving")
+    filled = await _send(
+        plugin,
+        "fill_drawer",
+        FILL_TECHNIQUES,
+        sphere_id=runeweaving_id,
+        drawer_id=techniques["id"],
+    )
+    assert [i["text"] for i in filled["items"]][:1] == [ETCHING_LINE]
+    assert {(e["target_id"], e["text"], e["ticked"]) for e in filled["elsewhere"]} == {
+        (ashenmere_id, TO_ASHENMERE, True),
+        (deepcarving_id, TO_DEEPCARVING, True),
+    }
+    scheduled = len(plugin.scheduled_prose)
+    runeweaving = await _send(
+        plugin,
+        "accept_fill",
+        sphere_id=runeweaving_id,
+        drawer_id=techniques["id"],
+        items=filled["items"],
+        elsewhere=filled["elsewhere"],
+        new_names=filled["new_names"],
+        refile=filled["refile"],
+    )
+    names = [i["name"] for i in _drawer(runeweaving, "Techniques")["items"]]
+    assert "Deepcarving" in names and "Shallow Etching" in names
+    assert TO_ASHENMERE in _facts(await _thing(plugin, ashenmere_id))
+    assert TO_DEEPCARVING in _facts(await _thing(plugin, deepcarving_id))
+    # Ashenmere's prose reads what it took; a stub has none
+    assert plugin.scheduled_prose[scheduled:] == [ashenmere_id]
 
     # 7. merge the Conclave into Runeweavers' Conclave: the link follows
     merge = await _send(
@@ -891,8 +1014,11 @@ async def test_curation_end_to_end(plugin, client, loadable):
         # the Hollows (onto Ashenmere),
         # the Deep Galleries, and the Cathedral's stub preview at planning
         "creative_instruction_3072": 8,
-        # the Tsardom's, the Church's and Runeweaving's cores; the plan
-        "creative_instruction_2048": 4,
+        # the Tsardom's, the army's, the Church's and Runeweaving's cores;
+        # the plan
+        "creative_instruction_2048": 5,
+        # Fill of Runeweaving's Techniques
+        "creative_instruction_1024": 1,
         # each create's prose (8); no same-thing verdict for the Cathedral's
         # stub preview at planning, though the Church shares its name words
         # and both have facts (ruling C25: nobody would see it)

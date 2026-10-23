@@ -5176,6 +5176,51 @@ async def test_accept_sphere_answers_notes(plugin, client):
     assert any("Anvil Song" in note for note in data["notes"])
 
 
+async def test_sphere_stub_expansion_offers_move_in(plugin, client, monkeypatch):
+    """Ruling C32 through the router: a sphere stub filed in the Tsardom,
+    expanded, carries the Tsardom's facts as `move_in` rows (unticked,
+    never picked, `from_name` beside the id); a ticked one moves onto the
+    sphere on `accept_sphere`, and the Tsardom's prose is scheduled."""
+
+    s = await _open_sphere_world(plugin)
+    world = s.world
+    with world.revision(Source.manual(note="guard")) as rev:
+        guard = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Iron Synod",
+                "stub": {"ignored": False},
+                "part_of": {"sphere": s.tsardom, "drawer": LANDS},
+            },
+        )
+    (realm,) = [f.fact_id for f in world.live_facts(s.tsardom)]
+    async with MockClientContext():
+        client_responses.get().append(CORE_SYNOD)
+        await _act(
+            plugin, "preview_sphere", template="order", prompt="", stub_id=guard
+        )
+        await _drain(plugin)
+    preview = _last(plugin, "preview_sphere")["data"]
+    assert preview["move_in"] == [
+        {
+            "fact_id": realm,
+            "from_id": s.tsardom,
+            "from_name": "Tsardom",
+            "text": "A northern realm.",
+            "ticked": False,
+            "picked": False,
+        }
+    ]
+
+    scheduled = _record_prose(plugin, monkeypatch)
+    preview["move_in"][0]["ticked"] = True
+    await _act(plugin, "accept_sphere", preview=preview)
+    assert not _errors(plugin)
+    assert world.live_facts(s.tsardom) == []
+    assert [f.text for f in world.live_facts(guard)].count("A northern realm.") == 1
+    assert scheduled == [s.tsardom]
+
+
 def _ember_preview(s, **extra):
     from talemate.worldplay.create import ElsewhereFact
 

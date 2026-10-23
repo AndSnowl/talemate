@@ -947,7 +947,7 @@ async def preview_sphere(
         stub_id=stub_id,
         promote_id=promote_id,
     )
-    return SpherePreview(
+    preview = SpherePreview(
         kind=kind,
         prompt=prompt,
         fields=fields,
@@ -971,6 +971,11 @@ async def preview_sphere(
         same_as=same_as,
         salvaged=salvaged,
     )
+    # moving in (ruling C32): with a broader entry -- the sphere it's
+    # filed in, a place sphere's parent -- every one of its facts,
+    # unticked; the core prompt has no move-in block, so none is picked
+    create.offer_move_in(view, preview)
+    return preview
 
 
 # --- writing -----------------------------------------------------------------
@@ -1358,6 +1363,9 @@ def _write_sphere(
             if rejected is None:
                 raise ValueError(f"the rejected fact is gone: {fact_id}")
             rev.add_fact(thing_id, "about", f"Rejects: {rejected}", overrides=[fact_id])
+        # the broader entry's ticked facts, moved in (ruling C32): its
+        # sources worked out again, never the rows' word
+        create._write_move_in(rev, world, view, preview, thing_id, notes)
         unlinked = _orphans(view, stubs, new_names, linked)
         if unlinked:
             raise create._UnlinkedNames([n.name for n in unlinked])
@@ -1375,7 +1383,11 @@ def _without_unlinked(
 
 
 def accept_sphere(
-    world: World, preview: SpherePreview, *, notes: list[str] | None = None
+    world: World,
+    preview: SpherePreview,
+    *,
+    notes: list[str] | None = None,
+    prose: list[str] | None = None,
 ) -> str:
     """Write `preview` in one revision, then cache its summary as the
     sphere's description. Returns the sphere's id.
@@ -1391,7 +1403,10 @@ def accept_sphere(
     filed in their drawers, its items written (`_write_items`), its new
     names made stubs and its timeline written, every text linked. As in
     `create.accept_preview`, a new name nothing ends up linking makes no
-    stub. A deleted stub or promoted thing is a `ValueError`."""
+    stub, and each ticked `move_in` row's fact moves from the broader
+    entry onto the sphere (ruling C32), an own fact repeating it left out;
+    the broader entry goes in `prose` when its prose reads what it lost.
+    A deleted stub or promoted thing is a `ValueError`."""
 
     view = world.view()
     target: ThingState | None = None
@@ -1402,6 +1417,9 @@ def accept_sphere(
         if target is None:
             raise ValueError(f"the thing was deleted: {preview.promote_id}")
 
+    # an own fact saying again what a ticked move brings in isn't written
+    skipped: list[str] = []
+    create._skip_moved_repeats(view, preview, world.curation(), skipped)
     before = world.head_rev()
     new_names = list(preview.new_names)
     while True:
@@ -1414,17 +1432,26 @@ def accept_sphere(
             # was rolled back whole
             new_names = _without_unlinked(new_names, unlinked)
     if notes is not None:
-        notes.extend(dict.fromkeys(written))
+        notes.extend(dict.fromkeys([*skipped, *written]))
+    if prose is not None:
+        # what a fact moved in from has lost
+        prose.extend(
+            t
+            for t in create._move_in_prose(view, preview, thing_id)
+            if t not in prose
+        )
 
     if "description" in preview.prose:
         # the summary was written from everything, as the sphere reads at
         # the open, "now" end of its timeline
         start, end = prose_gen.stretch_containing(world, thing_id, None)
         # as `create.accept_preview` has it: a summary written from a fact
-        # or item the owner left unticked is cached as of before the
-        # accept, so it reads stale
-        unticked = any(not fact.ticked for fact in preview.facts) or any(
-            not item.get("ticked", True) for item in preview.items
+        # or item the owner left unticked, or without a fact ticked to
+        # move in, is cached as of before the accept, so it reads stale
+        unticked = (
+            any(not fact.ticked for fact in preview.facts)
+            or any(not item.get("ticked", True) for item in preview.items)
+            or any(row.ticked and row.from_id != thing_id for row in preview.move_in)
         )
         world.prose().put(
             thing_id,

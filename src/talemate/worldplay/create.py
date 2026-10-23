@@ -1660,6 +1660,32 @@ def move_in_rows(
     return sorted(rows, key=lambda row: not row.picked)
 
 
+def _moved_repeats(
+    view: WorldView,
+    facts: Sequence[PreviewFact],
+    moves: Sequence[MoveInFact],
+    settings: CurationSettings,
+) -> list[tuple[PreviewFact, MoveInFact, float]]:
+    """The move-overlap rule, for the preview and the accept alike: each
+    of `facts` that says again what one of `moves` says -- at the world's
+    `repeat_untick_threshold`, with at least `UNTICK_MIN_WORDS` content
+    words -- with the move it repeats most and the overlap."""
+
+    found: list[tuple[PreviewFact, MoveInFact, float]] = []
+    if not moves:
+        return found
+    for fact in facts:
+        text = view.render(fact.text)
+        if len(content_words(text)) < UNTICK_MIN_WORDS:
+            continue
+        score, row = max(
+            ((overlap(text, row.text), row) for row in moves), key=lambda p: p[0]
+        )
+        if score >= settings.repeat_untick_threshold:
+            found.append((fact, row, score))
+    return found
+
+
 def untick_moved_repeats(
     view: WorldView,
     facts: Sequence[PreviewFact],
@@ -1675,17 +1701,7 @@ def untick_moved_repeats(
     be lost from the new entry. The move stays as it is."""
 
     moves = [row for row in move_in if row.ticked or row.picked]
-    if not moves:
-        return
-    for fact in facts:
-        text = view.render(fact.text)
-        if len(content_words(text)) < UNTICK_MIN_WORDS:
-            continue
-        score, row = max(
-            ((overlap(text, row.text), row) for row in moves), key=lambda p: p[0]
-        )
-        if score < settings.repeat_untick_threshold:
-            continue
+    for fact, row, score in _moved_repeats(view, facts, moves, settings):
         fact.ticked = fact.ticked and not row.ticked
         fact.repeat_of = {
             "fact_id": row.fact_id,
@@ -1694,6 +1710,27 @@ def untick_moved_repeats(
             "text": row.text,
             "score": score,
         }
+
+
+def preview_broader(view: WorldView, preview: CreatePreview) -> str | None:
+    """The broader entry of a preview (`broader_entry`): of the thing it
+    fills or promotes as well -- a stub, or a sphere preview's promoted
+    thing, falls back on its own filing or parent (ruling C32). A sphere's
+    `parent` is the sphere it branches from, which is no broader entry:
+    only a place's parent is."""
+
+    home_id = preview.stub_id or getattr(preview, "promote_id", None)
+    home = view.thing(home_id) if home_id is not None else None
+    fields = preview.fields
+    if preview.kind != "place" and "parent" in fields:
+        fields = {k: v for k, v in fields.items() if k != "parent"}
+    return broader_entry(
+        view,
+        part_of=preview.part_of,
+        fields=fields,
+        stub=home,
+        new_names=preview.new_names,
+    )
 
 
 def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
@@ -1715,14 +1752,7 @@ def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
         preview.kind, _lineage_sources(preview.kind, preview.fields)
     ):
         return
-    stub = view.thing(preview.stub_id) if preview.stub_id is not None else None
-    broader = broader_entry(
-        view,
-        part_of=preview.part_of,
-        fields=preview.fields,
-        stub=stub,
-        new_names=preview.new_names,
-    )
+    broader = preview_broader(view, preview)
     link = preview.part_of
     if isinstance(link, dict) and isinstance(link.get("name"), str):
         key = name_key(link["name"])
@@ -1759,14 +1789,7 @@ def move_in_sources(view: WorldView, preview: CreatePreview) -> set[str]:
         return set()
     copy = preview.model_copy(deep=True)
     offer_move_in(view, copy)
-    stub = view.thing(preview.stub_id) if preview.stub_id is not None else None
-    broader = broader_entry(
-        view,
-        part_of=preview.part_of,
-        fields=preview.fields,
-        stub=stub,
-        new_names=preview.new_names,
-    )
+    broader = preview_broader(view, preview)
     sources = {broader} if broader is not None else set()
     link = preview.part_of
     if isinstance(link, dict) and isinstance(link.get("name"), str):
@@ -1829,16 +1852,22 @@ def _write_move_in(
         copy_facts(rev, live, fact_ids, thing_id, plain_self_links=True)
 
 
-def _move_in_prose(
-    view: WorldView, move_in: Sequence[MoveInFact], skip: str
-) -> list[str]:
+def _move_in_prose(view: WorldView, preview: CreatePreview, skip: str) -> list[str]:
     """The entries a ticked move takes a fact from that their prose reads
-    (the new entry's own prose is the preview's)."""
+    (the new entry's own prose is the preview's), at `view`, before the
+    accept: only an entry the preview offers moves from
+    (`move_in_sources`), as `_write_move_in` has it."""
 
+    sources = move_in_sources(view, preview)
     changed: list[str] = []
-    for row in move_in:
+    for row in preview.move_in:
         state = view.thing(row.from_id)
-        if not row.ticked or state is None or row.from_id in (skip, *changed):
+        if (
+            not row.ticked
+            or state is None
+            or row.from_id not in sources
+            or row.from_id in (skip, *changed)
+        ):
             continue
         fact = next((f for f in state.facts if f.fact_id == row.fact_id), None)
         if fact is not None and prose_reads(state.kind, fact.category):
@@ -3480,19 +3509,9 @@ def _skip_moved_repeats(
 
     sources = move_in_sources(view, preview) or set()
     moves = [row for row in preview.move_in if row.ticked and row.from_id in sources]
-    if not moves:
-        return
-    for fact in preview.facts:
-        if not fact.ticked:
-            continue
+    ticked = [fact for fact in preview.facts if fact.ticked]
+    for fact, _row, _score in _moved_repeats(view, ticked, moves, settings):
         text = view.render(fact.text)
-        if len(content_words(text)) < UNTICK_MIN_WORDS:
-            continue
-        if (
-            max(overlap(text, row.text) for row in moves)
-            < settings.repeat_untick_threshold
-        ):
-            continue
         fact.ticked = False
         log.info("create.own_repeat_of_move_skipped", text=text[:60])
         if notes is not None:
@@ -3553,7 +3572,7 @@ def _accept_new(
     if prose is not None:
         # what a fact moved in from has lost
         prose.extend(
-            t for t in _move_in_prose(view, preview.move_in, thing_id) if t not in prose
+            t for t in _move_in_prose(view, preview, thing_id) if t not in prose
         )
 
     # the prose was written from every fact, which is how the thing reads
@@ -3976,7 +3995,7 @@ def _accept_same(
         changed = [
             target_id,
             *(plan.result().prose if plan is not None else []),
-            *_move_in_prose(view, preview.move_in, target_id),
+            *_move_in_prose(view, preview, target_id),
         ]
         prose.extend(t for t in dict.fromkeys(changed) if t not in prose)
     log.info(

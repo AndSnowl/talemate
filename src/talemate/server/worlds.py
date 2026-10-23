@@ -2334,25 +2334,31 @@ class WorldsPlugin(Plugin):
         summary is cached as its description, as `accept_preview` caches a
         thing's prose; prose is scheduled only for an entry the world has
         whose prose reads what the accept wrote onto it (an item linking
-        it, an elsewhere fact)."""
+        it, an elsewhere fact) or took from it (a fact moved in, ruling
+        C32)."""
 
         payload = AcceptSpherePayload(**data)
         world = self._require_world()
         notes: list[str] = []
-        thing_id = sphereplay.accept_sphere(world, payload.preview, notes=notes)
+        # the broader entries a ticked move-in took a fact from
+        moved_from: list[str] = []
+        thing_id = sphereplay.accept_sphere(
+            world, payload.preview, notes=notes, prose=moved_from
+        )
         self._reply(
             "accept_sphere",
             {**self._thing_payload(world, thing_id, None), "notes": notes},
         )
-        for changed in self._wrote_prose_input(
+        changed = self._wrote_prose_input(
             world,
             [
                 *self._item_targets(payload.preview.items),
                 *self._elsewhere_targets(payload.preview.elsewhere),
             ],
-            skip={thing_id},
-        ):
-            self._schedule_prose(changed, None)
+            skip={thing_id, *moved_from},
+        )
+        for entry_id in dict.fromkeys([*moved_from, *changed]):
+            self._schedule_prose(entry_id, None)
 
     async def handle_fill_drawer(self, data: dict):
         """New items for one drawer, in the background: answers

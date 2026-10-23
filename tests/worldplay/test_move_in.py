@@ -35,8 +35,14 @@ from talemate.worldplay.create import (
     preview_thing,
     untick_moved_repeats,
 )
+from talemate.worldplay.create import move_in_sources
 from talemate.worldplay.repoint import move_fact, repoint_stub
-from talemate.worldplay.spheres import SUMMARY_ORIGIN
+from talemate.worldplay.spheres import (
+    SUMMARY_ORIGIN,
+    SpherePreview,
+    accept_sphere,
+    preview_sphere,
+)
 
 from conftest import MockClient, MockClientContext, client_responses
 
@@ -705,6 +711,154 @@ async def test_undo_redo_move_in(world, tsardom):
     assert moved in _live_ids(world, t.zakonnik)
     waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
     assert waiver.overrides == [moved]
+
+
+# --- sphere expansions (ruling C32) ------------------------------------------------
+
+# the army's core, as the sphere-core prompt answers (no "move_in": the
+# core prompt has no move-in block)
+HOST_CORE = json.dumps(
+    {
+        "name": "The Tsar's Host",
+        "summary": "The Tsar's Host is the standing army of Owl-folk regiments.",
+        "aka": [],
+        "timeline": [
+            {"year": 995, "text": "The Host was raised from the first regiments."}
+        ],
+        "drawers": [{"type": "structure", "title": "Regiments"}],
+        "items": [
+            {
+                "drawer": "Regiments",
+                "name": "",
+                "text": "Every regiment flies under a white banner.",
+                "kind": "lore",
+            }
+        ],
+        "names": [],
+    }
+)
+
+
+def _army_stub(world, t):
+    with world.revision(Source.manual(note="army")) as rev:
+        return rev.create_thing(
+            "sphere",
+            {
+                "name": "The Tsar's Host",
+                "stub": {"ignored": False},
+                "part_of": {"sphere": t.tsardom, "drawer": LAWS},
+            },
+        )
+
+
+async def _host(world, stub_id):
+    return await preview_sphere(
+        world, "order", "", {}, None, stub_id=stub_id, reply=HOST_CORE
+    )
+
+
+async def test_sphere_stub_expansion_offers_its_spheres_facts(world, tsardom):
+    """Expanding a sphere stub filed in the Tsardom offers every Tsardom
+    fact but its summary, unticked and never picked (the core prompt asks
+    for no picks)."""
+
+    t = tsardom
+    host = _army_stub(world, t)
+    preview = await _host(world, host)
+    rows = [(m.fact_id, m.from_id, m.ticked, m.picked) for m in preview.move_in]
+    assert rows == [
+        (fact_id, t.tsardom, False, False)
+        for fact_id in (t.capital, t.transformation, t.law_code, t.architecture)
+    ]
+    assert move_in_sources(world.view(), preview) == {t.tsardom}
+
+
+async def test_sphere_accept_moves_ticked_facts(world, tsardom):
+    """A ticked row moves onto the sphere in the accept's one revision
+    (`copy_facts`, the same mover as a create's); the Tsardom goes in
+    `prose`, and the sphere's summary is cached reading stale. A forged
+    row naming an entry the preview offers nothing from moves nothing,
+    with a note."""
+
+    t = tsardom
+    host = _army_stub(world, t)
+    preview = await _host(world, host)
+    for row in preview.move_in:
+        row.ticked = row.fact_id == t.architecture
+    preview.move_in.append(
+        MoveInFact(fact_id=t.cathedral, from_id=t.moskov, text="x", ticked=True)
+    )
+    head = world.head_rev()
+    notes: list[str] = []
+    prose: list[str] = []
+    thing_id = accept_sphere(world, preview, notes=notes, prose=prose)
+    assert thing_id == host
+    assert world.head_rev() == head + 1
+    assert t.architecture not in _live_ids(world, t.tsardom)
+    moved = _fact(world, host, ARCHITECTURE)
+    assert moved.fact_id != t.architecture
+    assert t.cathedral in _live_ids(world, t.moskov)
+    assert any("isn't offered to move in" in note for note in notes)
+    assert prose == [t.tsardom]
+    assert world.prose().stale(
+        host,
+        "description",
+        None,
+        prose_gen.staleness_also(world, host, "description", None),
+        prose_gen.unread_categories("sphere", "description"),
+    )
+
+
+async def test_sphere_accept_skips_an_own_fact_repeating_a_move(world, tsardom):
+    t = tsardom
+    host = _army_stub(world, t)
+    preview = await _host(world, host)
+    for row in preview.move_in:
+        row.ticked = row.fact_id == t.architecture
+    preview.facts.append(PreviewFact(category="about", text=ARCHITECTURE))
+    notes: list[str] = []
+    accept_sphere(world, preview, notes=notes)
+    _fact(world, host, ARCHITECTURE)
+    assert any("moved in" in note for note in notes)
+
+
+async def test_new_sphere_in_an_outer_body_offers_its_facts(world, tsardom):
+    """A new sphere put into a body the world has (ruling C11's name form)
+    is offered that body's facts, unticked."""
+
+    t = tsardom
+    preview = await preview_sphere(world, "order", "the Host", {}, None, reply=HOST_CORE)
+    assert preview.move_in == []
+    add_outer_body(
+        world,
+        preview,
+        "The Tsar's Host",
+        OuterBody(name="Church of the Eternal Light", template="religion"),
+        as_sphere=True,
+    )
+    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    assert rows == [(t.light, t.church, False)]
+
+
+def test_a_branchs_parent_is_no_broader_entry(world, tsardom):
+    """A sphere's `parent` is the sphere it branches from, never a source
+    of move-ins; a place sphere's parent is."""
+
+    t = tsardom
+    view = world.view()
+    branch = SpherePreview(
+        kind="sphere",
+        prompt="",
+        fields={"parent": t.tsardom},
+        name="The Reformed Tsardom",
+        facts=[],
+        prose={},
+        template="nation",
+        agent=True,
+    )
+    assert move_in_sources(view, branch) == set()
+    place = branch.model_copy(update={"kind": "place", "name": "Upper Moskov"})
+    assert move_in_sources(view, place) == {t.tsardom}
 
 
 # --- one fact, by hand -------------------------------------------------------------
