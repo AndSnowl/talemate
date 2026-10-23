@@ -16,6 +16,7 @@
                 <span class="flex-grow-1">
                     {{ tieLead(tie.role) }}
                     <LinkedText :segments="[{ text: tie.sphere_name, ref: tie.sphere_id, stub: isStub(tie.sphere_id) }]" />
+                    <template v-if="tie.within && tie.within_name">, within <LinkedText :segments="[{ text: tie.within_name, ref: tie.within, stub: false }]" /></template>
                     <span v-if="dates(tie)" class="text-muted"> · {{ dates(tie) }}</span>
                 </span>
                 <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit tie" @click="startEdit(tie, index)"></v-btn>
@@ -79,8 +80,10 @@ function yearOf(date) {
     return date ? dateParts(date).year : null;
 }
 
-// A character's Ties: each tie to a sphere with its role and dates ("Practitioner of
-// the White Dawn · since 1010"), and only its "but…" exceptions, each a
+// A character's (or real being's) Ties: each tie to a sphere with its
+// role, the part of it it's within, and its dates ("Practitioner of the
+// White Dawn · since 1010", "Trooper of the Tsar's Army, within the White
+// Talon"), and only its "but…" exceptions, each a
 // `ties` fact of the character (removable like any fact). "+ Add tie"
 // picks a sphere, a role and dates; a tie can be edited or removed (the
 // whole list is written, `set_ties`). "+ Add exception" writes one
@@ -159,13 +162,14 @@ export default {
         },
         startAdd() {
             this.exception = null;
-            this.form = { index: null, sphereId: null, role: '', since: null, until: null, sent: false };
+            this.form = { index: null, sphereId: null, within: null, role: '', since: null, until: null, sent: false };
         },
         startEdit(tie, index) {
             this.exception = null;
             this.form = {
                 index,
                 sphereId: tie.sphere_id,
+                within: tie.within || null,
                 role: tie.role || '',
                 since: yearOf(tie.since),
                 until: yearOf(tie.until),
@@ -188,6 +192,7 @@ export default {
                 role: form.role.trim(),
                 since: year(form.since, original?.since),
                 until: year(form.until, original?.until),
+                within: form.within || null,
             };
             if (form.index === null) {
                 ties.push(tie);

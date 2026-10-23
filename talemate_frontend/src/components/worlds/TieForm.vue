@@ -13,6 +13,22 @@
             :disabled="busy"
             data-testid="tie-sphere"
         ></v-select>
+        <v-select
+            v-if="form.sphereId"
+            v-model="form.within"
+            :items="withinOptions"
+            item-title="name"
+            item-value="id"
+            label="Within (optional)"
+            clearable
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="picker"
+            :loading="!sphereInfo"
+            :disabled="busy"
+            data-testid="tie-within"
+        ></v-select>
         <v-text-field v-model="form.role" label="Role" placeholder="practitioner, elder, courier…" density="compact" variant="outlined" hide-details class="picker" :disabled="busy"></v-text-field>
         <v-text-field v-model.number="form.since" label="Since (year)" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year" :disabled="busy"></v-text-field>
         <v-text-field v-model.number="form.until" label="Until (year)" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details class="year" :disabled="busy"></v-text-field>
@@ -22,12 +38,16 @@
 </template>
 
 <script>
+import { useWorldsStore } from '@/stores/worlds.js';
+
 function validYear(year) {
     return year === null || year === '' || (Number.isInteger(year) && year >= 1 && year <= 9999);
 }
 
-// A tie's form: its sphere, role and dates (years). `form` is the Ties
-// section's, edited in place; Save and Cancel are emitted.
+// A tie's form: its sphere, the part of it the tie is within (one of the
+// entries filed in it, optional: the White Talon of the Tsar's Army), role
+// and dates (years). `form` is the Ties section's, edited in place; Save
+// and Cancel are emitted, Esc cancels.
 export default {
     name: 'TieForm',
     props: {
@@ -38,11 +58,44 @@ export default {
         busy: { type: Boolean, default: false },
     },
     emits: ['save', 'cancel'],
+    setup() {
+        return { worlds: useWorldsStore() };
+    },
     computed: {
+        sphereInfo() {
+            return this.form.sphereId ? this.worlds.sphereInfo[this.form.sphereId] || null : null;
+        },
+        // the entries filed in the sphere's drawers (not its statements),
+        // each once
+        withinOptions() {
+            const found = new Map();
+            for (const drawer of this.sphereInfo?.sphere?.drawers || []) {
+                for (const item of drawer.items || []) {
+                    if (item.thing_id && !found.has(item.thing_id)) {
+                        found.set(item.thing_id, { id: item.thing_id, name: item.name });
+                    }
+                }
+            }
+            return [...found.values()];
+        },
         valid() {
             const { since, until } = this.form;
             const ordered = !Number.isInteger(since) || !Number.isInteger(until) || since <= until;
             return !!this.form.sphereId && validYear(since) && validYear(until) && ordered && !this.busy;
+        },
+    },
+    watch: {
+        // another sphere: its parts, and no part of the old one
+        'form.sphereId': {
+            handler(id, before) {
+                if (before !== undefined && id !== before) {
+                    this.form.within = null;
+                }
+                if (id) {
+                    this.worlds.fetchSphere(id);
+                }
+            },
+            immediate: true,
         },
     },
 };

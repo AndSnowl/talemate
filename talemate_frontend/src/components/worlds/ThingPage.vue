@@ -77,6 +77,15 @@
                 >Regenerate prose</v-btn>
 
                 <v-btn
+                    v-if="!thing.stub"
+                    variant="outlined"
+                    size="small"
+                    prepend-icon="mdi-call-merge"
+                    data-testid="merge-into"
+                    @click="merging = true"
+                >Merge into…</v-btn>
+
+                <v-btn
                     variant="outlined"
                     size="small"
                     color="danger"
@@ -142,6 +151,22 @@
                         <v-chip v-if="field.pastLifespan" size="x-small" label variant="tonal" color="warning" prepend-icon="mdi-alert" data-testid="past-lifespan">past lifespan</v-chip>
                         <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
+                    <div v-if="thing.kind === 'being'" class="field d-flex align-center flex-wrap ga-2" data-testid="being-existence">
+                        <span class="field-label">Exists</span>
+                        <v-btn-toggle
+                            :model-value="existence"
+                            density="compact"
+                            variant="outlined"
+                            divided
+                            mandatory
+                            color="accent"
+                            :disabled="!!worlds.pending.set_field"
+                            @update:model-value="setExistence"
+                        >
+                            <v-btn v-for="value in existenceValues" :key="value" :value="value" size="small">{{ value }}</v-btn>
+                        </v-btn-toggle>
+                        <span class="text-caption text-muted">{{ existenceNote }}</span>
+                    </div>
                     <PartOfLine v-if="hasPartOf" :thing="thing" />
                     <ThingNumbers v-if="isHeritage" />
                     <ThingAka />
@@ -164,9 +189,11 @@
                             <span class="flex-grow-1">
                                 <LinkedText :segments="fact.segments" :text="fact.rendered" repoint :exclude="[thing.id]" @repoint="repointLink(fact, $event)" />
                                 <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
+                                <span v-if="fact.held_by" class="held" data-testid="held-by-tag">held by {{ fact.held_by.name }}</span>
                             </span>
                             <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
                             <span class="fact-date">{{ spanLabel(worlds.calendar, fact.valid_from, fact.valid_until) }}</span>
+                            <FactRowActions :fact="fact" />
                             <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(fact)"></v-btn>
                             <v-btn v-if="!fact.valid_until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End fact" @click="startEnd(fact)"></v-btn>
                         </div>
@@ -186,7 +213,12 @@
                         @save="saveForm"
                         @cancel="form = null"
                     />
-                    <TiesSection v-if="thing.kind === 'character'" :thing="thing" />
+                    <!-- every page's Timeline (a sphere's shows in its sphere part) -->
+                    <template v-if="!thing.sphere">
+                        <div class="text-overline text-muted mt-4">Timeline</div>
+                        <EntryTimeline :lines="thing.entry_timeline || []" />
+                    </template>
+                    <TiesSection v-if="actsInWorld(thing)" :thing="thing" />
                     <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
                     <NamedStubs :stubs="thing.named_stubs || []" />
                 </v-col>
@@ -239,17 +271,21 @@
         </template>
 
         <ThingDeleteDialog />
+        <MergeDialog v-if="thing" v-model="merging" :thing="thing" />
     </div>
 </template>
 
 <script>
 import { listedFacts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
-import { HERITAGE_KINDS, INHERITING_KINDS, PART_OF_KINDS, canPromote, kindInfo, overrideCategory } from './worldKinds.js';
+import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, PART_OF_KINDS, actsInWorld, canPromote, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
 import { NEW_THING, factEditState, factLinkPayload, refOccurrence, repicks } from './nameHighlights.js';
+import EntryTimeline from './EntryTimeline.vue';
+import FactRowActions from './FactRowActions.vue';
 import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
+import MergeDialog from './MergeDialog.vue';
 import NamedStubs from './NamedStubs.vue';
 import PartOfLine from './PartOfLine.vue';
 import SpherePage from './SpherePage.vue';
@@ -268,8 +304,15 @@ import TiesSection from './TiesSection.vue';
 // reading (voice, colour)
 const HIDDEN_FIELDS = [
     'name', 'culture', 'cultures', 'voice', 'color', 'lifespan', 'adult_age', 'measures',
-    'template', 'agent', 'drawers', 'part_of', 'ties', 'drops', 'language',
+    'template', 'agent', 'drawers', 'part_of', 'ties', 'drops', 'language', 'existence',
 ];
+
+// what a being's existence means for it
+const EXISTENCE_NOTES = {
+    real: 'It acts in the world like a character: it can be cast in scenes and hold ties.',
+    believed: 'Only ever spoken of in scenes.',
+    undecided: 'Treated as believed until you decide.',
+};
 
 const FIELD_LABELS = {
     born: 'Born',
@@ -326,11 +369,21 @@ function cut(text, length = 28) {
 // (`TiesSection`), its "but…" facts shown there rather than among its
 // facts. "Make it a sphere…" shows on a lore entry, a place that isn't a
 // sphere and a stub (`worlds.makeSphere`).
+//
+// Curation: every page has a Timeline (`EntryTimeline`, its
+// `entry_timeline`; a sphere's shows in its sphere part); each own fact
+// row has "Move to…" and "Held by…" (`FactRowActions`), a held one tagged
+// "held by X"; "Merge into…" opens the merge dialog (`MergeDialog`). A
+// being has its existence picked here (real, believed or undecided); only
+// a real one has Ties, as a character does.
 export default {
     name: 'ThingPage',
     components: {
+        EntryTimeline,
+        FactRowActions,
         HeritageSections,
         LinkedText,
+        MergeDialog,
         NamedStubs,
         StubCard,
         ThingAka,
@@ -379,11 +432,20 @@ export default {
             afterSave: null,
             // the name being edited: {text, sent}
             rename: null,
+            // the merge dialog is open
+            merging: false,
+            existenceValues: EXISTENCE,
         };
     },
     computed: {
         thing() {
             return this.worlds.thing;
+        },
+        existence() {
+            return existenceOf(this.thing);
+        },
+        existenceNote() {
+            return EXISTENCE_NOTES[this.existence];
         },
         info() {
             return this.thing ? kindInfo(this.thing.kind) : null;
@@ -534,6 +596,9 @@ export default {
             if (!thing || thing.id !== before?.id || this.rename?.sent) {
                 this.rename = null;
             }
+            if (!thing || thing.id !== before?.id) {
+                this.merging = false;
+            }
         },
         editing(now) {
             // the edit failed (no reply replaced the thing): keep the form
@@ -552,6 +617,12 @@ export default {
     methods: {
         repointedNote,
         canPromote,
+        actsInWorld,
+        setExistence(value) {
+            if (value && value !== this.existence) {
+                this.worlds.setField('existence', value);
+            }
+        },
         formatDate,
         spanLabel,
         validYear(year) {
@@ -810,6 +881,12 @@ export default {
     min-width: 80px;
     font-weight: 600;
     color: rgb(var(--v-theme-muted));
+}
+
+.held {
+    margin-left: 6px;
+    font-size: 11px;
+    color: rgb(var(--v-theme-foreign));
 }
 
 .override-note {

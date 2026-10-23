@@ -113,10 +113,26 @@
 // `stubRepointed`, for the Stubs page's note) forgets the stub, and a
 // page on the stub opens the target instead.
 //
+// Curation: a preview is edited in place before it's accepted
+// (`editPreview(type, changes)`, type 'create', 'sphere', 'branch' or
+// 'fill'): its own facts' and items' ticks, the elsewhere facts (ticks,
+// categories, a stub row's "same as X?"), the move-in and re-file rows. An
+// accept sends the preview as the owner left it, ticks and all.
+// `addOuterBody` asks `add_outer_body` to put a body the owner names
+// around a part; the reply replaces that preview. The answer to "Is this
+// X?" goes with the accept (`acceptPreview(..., {sameTargetId})`). Every
+// accept's `notes` (what was left out, and why) land in `notes` for the
+// World tab to show, as do a move's, a merge's and a date pick's. A merge
+// (`previewMerge`, `acceptMerge`) keeps its preview in `merge`; the merged
+// entry's page opens once it's done. `moveFact`, `setHeldBy` and
+// `pickDate` edit a fact where its page shows it; `getCuration` and
+// `setCuration` read and write the world's curation knobs (`curation`).
+//
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
 
+import { formatDate } from '../components/worlds/worldDates.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
@@ -368,32 +384,10 @@ export function previewSegments(text, newNames = []) {
 }
 
 // replies to these clear their own spinner (`pending[action]`)
-const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref'];
+const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref', 'set_held_by'];
 
 // sphere edits: each answers with the thing it changed, which may not be
 // the open page
-// INTERIM until the curation preview UI (Task 12, ruling C8): these
-// screens don't show the curation preview's ticks, repeats or "elsewhere"
-// facts yet, so an accept would write facts about other entries the owner
-// never saw, and skip rows the screen shows as kept. Until then every own
-// fact and Fill item goes out ticked and no elsewhere fact is sent; no
-// fact moves in, so every move-in row goes out unticked (ruling C20). Task
-// 12 removes this (and its check in checks/worlds.check.mjs).
-export function interimCurationGuard(payload) {
-    const ticked = (rows) => (Array.isArray(rows) ? rows.map((row) => ({ ...row, ticked: true })) : rows);
-    const guarded = { ...payload, elsewhere: [] };
-    if ('facts' in payload) {
-        guarded.facts = ticked(payload.facts);
-    }
-    if ('items' in payload) {
-        guarded.items = ticked(payload.items);
-    }
-    if (Array.isArray(payload.move_in)) {
-        guarded.move_in = payload.move_in.map((row) => ({ ...row, ticked: false }));
-    }
-    return guarded;
-}
-
 const SPHERE_EDITS = ['set_drawers', 'set_part_of', 'set_ties', 'add_exception', 'end_item', 'accept_fill', 'add_statement'];
 
 // what a sphere page shows in its drawers, Timeline and summary rather
@@ -419,13 +413,16 @@ export function dateIn(date) {
     return date ? { instant: date.instant, precision: date.precision } : null;
 }
 
-// A character payload's `ties` as `set_ties` takes them.
+// A character's (or real being's) payload `ties` as `set_ties` takes
+// them, each with the part of its sphere it's `within` (null: the sphere
+// as a whole).
 export function tiesPayload(ties) {
     return (ties || []).map((tie) => ({
         sphere_id: tie.sphere_id,
         role: tie.role || '',
         since: dateIn(tie.since),
         until: dateIn(tie.until),
+        within: tie.within || null,
     }));
 }
 
@@ -449,6 +446,166 @@ export function branchKept(preview, row, kept) {
     const id = row.thing_id || row.fact_id;
     const others = (preview[key] || []).filter((other) => other !== id);
     return { ...preview, [key]: kept ? others : [...others, id] };
+}
+
+// --- curation -----------------------------------------------------------------
+
+// the articles a name may lead with (`talemate.world.names.ARTICLES`)
+const ARTICLES = ['the', 'a', 'an'];
+
+// A name as the backend compares it (`links.name_key`): its words
+// normalised, without a leading article.
+export function nameKey(name) {
+    const words = (name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length > 1 && ARTICLES.includes(words[0])) {
+        words.shift();
+    }
+    return words.join(' ');
+}
+
+function plural(count, one, many = `${one}s`) {
+    return `${count} ${count === 1 ? one : many}`;
+}
+
+// What accepting a preview (create, a sphere's core or Fill) would write:
+// `{here, elsewhere, stubs, movedIn, refiled}` -- its own facts (or items)
+// ticked, the elsewhere facts ticked, the new stubs it'd make (its new
+// names, the new entries a ticked elsewhere fact goes onto; not one the
+// owner marked as some thing already), the facts moving in and the
+// entries re-filed, each ticked.
+export function previewCounts(preview) {
+    const ticked = (rows) => (rows || []).filter((row) => row.ticked !== false);
+    const own = [...(preview?.facts || []), ...(preview?.items || [])];
+    const elsewhere = ticked(preview?.elsewhere);
+    const stubs = new Set();
+    for (const row of preview?.new_names || []) {
+        if (!row.same_target_id) {
+            stubs.add(nameKey(row.name));
+        }
+    }
+    for (const row of elsewhere) {
+        if (row.new && !row.new.same_target_id) {
+            stubs.add(nameKey(row.new.name));
+        }
+    }
+    for (const item of ticked(preview?.items)) {
+        if (item.name && !item.thing_id && !item.same_target_id) {
+            stubs.add(nameKey(item.name));
+        }
+    }
+    return {
+        here: ticked(own).length,
+        elsewhere: elsewhere.length,
+        stubs: stubs.size,
+        movedIn: (preview?.move_in || []).filter((row) => row.ticked).length,
+        refiled: (preview?.refile || []).filter((row) => row.ticked).length,
+    };
+}
+
+// The Accept line: "writes 3 facts here, 4 elsewhere, 1 new stub" (`onto`:
+// the entry the owner said it is, "writes 3 facts onto Ashenmere").
+export function countsLine(counts, onto = null, noun = 'fact') {
+    const parts = [`writes ${plural(counts.here, noun)} ${onto ? `onto ${onto}` : 'here'}`];
+    if (counts.elsewhere) {
+        parts.push(`${counts.elsewhere} elsewhere`);
+    }
+    if (counts.stubs) {
+        parts.push(plural(counts.stubs, 'new stub'));
+    }
+    if (counts.movedIn) {
+        parts.push(`moves ${counts.movedIn} in`);
+    }
+    if (counts.refiled) {
+        parts.push(`re-files ${counts.refiled}`);
+    }
+    return parts.join(', ');
+}
+
+// A preview's elsewhere facts grouped by the entry they're for, in the
+// order each entry first comes: `{key, name, targetId, new, rows: [index]}`
+// (`new` the first row's new name, for an entry not made yet).
+export function elsewhereGroups(rows) {
+    const groups = [];
+    const byKey = new Map();
+    (rows || []).forEach((row, index) => {
+        const key = row.target_id || `new:${nameKey(row.new?.name || row.target_name)}`;
+        let group = byKey.get(key);
+        if (!group) {
+            group = { key, name: row.target_name, targetId: row.target_id || null, new: row.new || null, rows: [] };
+            byKey.set(key, group);
+            groups.push(group);
+        }
+        group.rows.push(index);
+    });
+    return groups;
+}
+
+// The indices of the rows (a preview's facts, Fill's items) that came
+// unticked as repeats of what the world holds: "Already in the world"
+// shows these, kept apart however the owner ticks them; a repeat that came
+// ticked stays among the rest, showing its match.
+export function shelvedRows(rows) {
+    return (rows || []).flatMap((row, index) => (row.repeat_of && row.ticked === false ? [index] : []));
+}
+
+// `rows` with those at `indices` ticked (or not); the rest as they are.
+export function rowsTicked(rows, indices, ticked) {
+    const picked = new Set(indices);
+    return (rows || []).map((row, index) => (picked.has(index) ? { ...row, ticked } : row));
+}
+
+// `rows` with row `index` changed (`changes` merged in).
+export function rowChanged(rows, index, changes) {
+    return (rows || []).map((row, i) => (i === index ? { ...row, ...changes } : row));
+}
+
+// The elsewhere rows of the new entry `name` (by name key) answered "same
+// as `targetId`" (null: new): each row's `new.same_target_id`.
+export function elsewhereSame(rows, name, targetId) {
+    const key = nameKey(name);
+    return (rows || []).map((row) => (row.new && nameKey(row.new.name) === key
+        ? { ...row, new: { ...row.new, same_target_id: targetId } }
+        : row));
+}
+
+// A timeline line's dates as the page shows them: its start, and once it
+// has ended its span ("900–1010", ruling C18); "—" for an undated one.
+export function lineDates(calendar, line) {
+    if (!line?.date) {
+        return '—';
+    }
+    const from = formatDate(calendar, line.date);
+    return line.until ? `${from}–${formatDate(calendar, line.until)}` : from;
+}
+
+// fact id -> the other lines it disagrees with on the year, among lines
+// still running: a line that has ended (the one a pick ended, or a state
+// that's over) isn't flagged.
+export function disagreements(lines) {
+    const running = new Map((lines || []).filter((line) => !line.until).map((line) => [line.fact_id, line]));
+    const found = {};
+    for (const line of running.values()) {
+        const others = (line.disagrees_with || []).map((id) => running.get(id)).filter(Boolean);
+        if (others.length) {
+            found[line.fact_id] = others;
+        }
+    }
+    return found;
+}
+
+// `accept_merge`'s request from a `preview_merge` preview and the owner's
+// picks: the main name, each pair's keep ("a", "b" or "both"), what a
+// losing fact gets ("remove" or "end"), the other names kept, and the
+// from-side facts' ticks (`ticked`: fact id -> bool).
+export function mergeRequest(preview, { mainName, keep = {}, lose = 'remove', akas = null, ticked = {} }) {
+    const facts = preview.facts.map((fact) => (fact.fact_id in ticked ? { ...fact, ticked: ticked[fact.fact_id] } : fact));
+    return {
+        preview: { ...preview, facts },
+        main_name: mainName,
+        keep: Object.fromEntries(preview.pairs.map((pair) => [pair.key, keep[pair.key] || 'both'])),
+        lose,
+        ...(akas ? { akas } : {}),
+    };
 }
 
 // `{picks, new_names, spans}` for a request, leaving out the empty ones
@@ -496,6 +653,9 @@ function worldState() {
         previewPending: false,
         preview: null,
         previewError: null,
+        // the indices of its facts that came unticked as repeats
+        // (`shelvedRows`)
+        previewShelved: [],
         // the parents a `find_mix` is out for, and the last reply taken
         // (`{parents, mix_id}`)
         mixLookup: null,
@@ -552,7 +712,8 @@ function worldState() {
         // which preview an `accept_sphere` is out for: 'sphere' or 'branch'
         sphereAccepting: null,
         // Fill, one drawer at a time: `{sphereId, drawerId, pending, items,
-        // error}`
+        // elsewhere, new_names, refile, shelved, error}` (the Fill
+        // preview's parts; `shelved` as `previewShelved`)
         fill: null,
         // sphere id -> its payload, for editors that need its drawers
         sphereInfo: {},
@@ -560,6 +721,17 @@ function worldState() {
         sphereWanted: [],
         // character id -> the ties to add to it once it's fetched
         tieQueue: {},
+        // which preview an `add_outer_body` is out for: 'create',
+        // 'sphere', 'branch' or 'fill'
+        outerFor: null,
+        // the last reply's notes to show: `{action, notes}`
+        notes: null,
+        // the merge dialog's: `{fromId, intoId, preview, pending}`
+        merge: null,
+        // the world's curation knobs (`{settings, defaults}`), and whether
+        // the last `set_curation` is answered
+        curation: null,
+        curationSaved: false,
         pending: {},
     };
 }
@@ -1092,8 +1264,9 @@ export const useWorldsStore = defineStore('worlds', {
             this.fill = null;
         },
 
-        // the Fill items the owner kept, as `fill_drawer` gave them
-        acceptFill(items) {
+        // Fill's preview as the owner left it: its items (each with its
+        // tick), elsewhere facts, outer bodies and re-file rows
+        acceptFill() {
             const fill = this.fill;
             if (!fill?.items) {
                 return;
@@ -1102,7 +1275,10 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('accept_fill', {
                 sphere_id: fill.sphereId,
                 drawer_id: fill.drawerId,
-                ...interimCurationGuard({ items }),
+                items: fill.items,
+                elsewhere: fill.elsewhere || [],
+                new_names: fill.new_names || [],
+                refile: fill.refile || [],
             });
         },
 
@@ -1221,9 +1397,10 @@ export const useWorldsStore = defineStore('worlds', {
         // `open: false` keeps the page where it is (the mix drafted for a
         // character): the new thing lands in `accepted` instead
         // `intoStub`: "fill the stub instead", the stub a preview made
-        // without one fills. The owner's re-picks are taught to their
-        // things once it's accepted (the `accept_preview` reply).
-        acceptPreview(changes = {}, { open = true, intoStub = null } = {}) {
+        // without one fills; `sameTargetId`: "Is this X?" answered yes, the
+        // entry the material goes onto. The owner's re-picks are taught to
+        // their things once it's accepted (the `accept_preview` reply).
+        acceptPreview(changes = {}, { open = true, intoStub = null, sameTargetId = null } = {}) {
             if (!this.preview) {
                 return;
             }
@@ -1231,9 +1408,129 @@ export const useWorldsStore = defineStore('worlds', {
             this.accepted = null;
             this.pending = { ...this.pending, accept_preview: true };
             this.request('accept_preview', {
-                preview: interimCurationGuard({ ...this.preview, ...changes }),
+                preview: { ...this.preview, ...changes },
                 ...(intoStub ? { into_stub: intoStub } : {}),
+                ...(sameTargetId ? { same_target_id: sameTargetId } : {}),
             });
+        },
+
+        // --- curation -----------------------------------------------------
+
+        // the preview of `type` ('create', 'sphere', 'branch', 'fill')
+        previewOf(type) {
+            if (type === 'create') {
+                return this.preview;
+            }
+            if (type === 'sphere') {
+                return this.spherePreview;
+            }
+            if (type === 'branch') {
+                return this.branchPreview;
+            }
+            const fill = this.fill;
+            return fill?.items
+                ? { sphere_id: fill.sphereId, drawer_id: fill.drawerId, items: fill.items, elsewhere: fill.elsewhere || [], new_names: fill.new_names || [], refile: fill.refile || [] }
+                : null;
+        },
+
+        // the owner's edits to a preview before it's accepted
+        editPreview(type, changes) {
+            if (!this.previewOf(type)) {
+                return;
+            }
+            if (type === 'create') {
+                this.preview = { ...this.preview, ...changes };
+            } else if (type === 'sphere') {
+                this.spherePreview = { ...this.spherePreview, ...changes };
+            } else if (type === 'branch') {
+                this.branchPreview = { ...this.branchPreview, ...changes };
+            } else {
+                this.fill = { ...this.fill, ...changes };
+            }
+        },
+
+        // put a body the owner names (`outer`: `{name, template,
+        // part_of}`) around the part `rowName` of a preview; the reply
+        // replaces the preview
+        addOuterBody(type, rowName, outer, asSphere = false) {
+            const preview = this.previewOf(type);
+            if (!preview) {
+                return;
+            }
+            this.outerFor = type;
+            this.pending = { ...this.pending, add_outer_body: true };
+            this.request('add_outer_body', {
+                preview_type: type === 'branch' ? 'sphere' : type,
+                preview,
+                row_name: rowName,
+                outer,
+                as_sphere: asSphere,
+            });
+        },
+
+        clearNotes() {
+            this.notes = null;
+        },
+
+        // a reply's notes, shown until the owner closes them (none: the
+        // last ones go)
+        showNotes(action, notes) {
+            this.notes = notes?.length ? { action, notes } : null;
+        },
+
+        // what merging `fromId` into `intoId` would do (`preview_merge`)
+        previewMerge(fromId, intoId) {
+            this.merge = { fromId, intoId, preview: null, pending: true };
+            this.pending = { ...this.pending, preview_merge: true };
+            this.request('preview_merge', { from_id: fromId, into_id: intoId });
+        },
+
+        // the owner's picks (`mergeRequest`'s)
+        acceptMerge(choices) {
+            if (!this.merge?.preview) {
+                return;
+            }
+            this.pending = { ...this.pending, accept_merge: true };
+            this.request('accept_merge', mergeRequest(this.merge.preview, choices));
+        },
+
+        closeMerge() {
+            this.merge = null;
+        },
+
+        // move the open page's fact `factId` onto `targetId` (one revision)
+        moveFact(factId, targetId) {
+            this.pending = { ...this.pending, move_fact: true };
+            this.request('move_fact', { fact_id: factId, target_id: targetId });
+        },
+
+        // who holds the open page's fact `factId` as a belief (null: world
+        // truth)
+        setHeldBy(factId, holderId) {
+            this.edit('set_held_by', { fact_id: factId, holder_id: holderId });
+        },
+
+        // a timeline disagreement settled: keep `keepId`'s date, and end or
+        // remove `dropId` (`mode`); the reply carries the open page
+        pickDate(keepId, dropId, mode) {
+            this.pending = { ...this.pending, pick_date: true };
+            this.request('pick_date', {
+                keep_fact_id: keepId,
+                drop_fact_id: dropId,
+                mode,
+                ...(this.selectedThingId ? { thing_id: this.selectedThingId, at: this.thingAt } : {}),
+            });
+        },
+
+        getCuration() {
+            this.request('get_curation');
+        },
+
+        // only the knobs that change (`set_curation` keeps the rest)
+        setCuration(settings) {
+            this.curationSaved = false;
+            this.pending = { ...this.pending, set_curation: true };
+            this.request('set_curation', { settings });
         },
 
         // mark the preview's inherited fact `factId` as replaced by its own
@@ -1407,6 +1704,7 @@ export const useWorldsStore = defineStore('worlds', {
             }
             if (action === 'accept_fill') {
                 this.fill = null;
+                this.showNotes(action, data.notes);
                 this.listAllThings();
             }
             this.listStubs();
@@ -1526,6 +1824,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.promoting = null;
                     }
                     this.sphereAccepting = null;
+                    this.showNotes(action, data.notes);
                     this.visit({ thingId: data.id });
                     this.openedFrom = this.selectedThingId;
                     this.selectedThingId = data.id;
@@ -1536,7 +1835,15 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'fill_drawer':
                     if (this.fill?.pending && this.fill.sphereId === data.sphere_id && this.fill.drawerId === data.drawer_id) {
-                        this.fill = { ...this.fill, pending: false, items: data.items };
+                        this.fill = {
+                            ...this.fill,
+                            pending: false,
+                            items: data.items,
+                            elsewhere: data.elsewhere || [],
+                            new_names: data.new_names || [],
+                            refile: data.refile || [],
+                            shelved: shelvedRows(data.items),
+                        };
                     }
                     break;
                 case 'fill_failed':
@@ -1639,6 +1946,7 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'preview_thing':
                     if (this.previewPending) {
                         this.preview = data;
+                        this.previewShelved = shelvedRows(data.facts);
                         this.previewPending = false;
                     }
                     break;
@@ -1656,6 +1964,7 @@ export const useWorldsStore = defineStore('worlds', {
                     this.preview = null;
                     this.previewRequest = null;
                     this.expanding = null;
+                    this.showNotes(action, data.notes);
                     if (this.acceptOpens) {
                         this.visit({ thingId: data.id });
                         this.openedFrom = this.selectedThingId;
@@ -1669,6 +1978,74 @@ export const useWorldsStore = defineStore('worlds', {
                     // the names its facts invent are stubs now, of any kind
                     this.listStubs();
                     this.listAllThings();
+                    break;
+                case 'add_outer_body': {
+                    // the preview it's for, if it's still the one shown
+                    const type = this.outerFor;
+                    this.outerFor = null;
+                    if (type && this.previewOf(type)) {
+                        const preview = data.preview;
+                        if (type === 'fill') {
+                            this.fill = {
+                                ...this.fill,
+                                items: preview.items,
+                                elsewhere: preview.elsewhere || [],
+                                new_names: preview.new_names || [],
+                                refile: preview.refile || [],
+                            };
+                        } else {
+                            this.editPreview(type, preview);
+                        }
+                    }
+                    break;
+                }
+                case 'preview_merge':
+                    if (this.merge && this.merge.fromId === data.preview.from_id && this.merge.intoId === data.preview.into_id) {
+                        this.merge = { ...this.merge, preview: data.preview, pending: false };
+                    }
+                    break;
+                case 'accept_merge': {
+                    this.merge = null;
+                    this.gone = [...this.gone, data.from_id];
+                    const into = data.into;
+                    const lines = [
+                        `Merged into ${data.main_name}: ${data.facts_moved} fact${data.facts_moved === 1 ? '' : 's'} and ${data.links} link${data.links === 1 ? '' : 's'} moved over`,
+                        ...(data.aka_added?.length ? [`now also known as ${data.aka_added.join(', ')}`] : []),
+                        ...(data.notes || []),
+                    ];
+                    this.showNotes(action, lines);
+                    this.visit({ thingId: into.id });
+                    this.openedFrom = null;
+                    this.selectedThingId = into.id;
+                    this.thingAt = null;
+                    this.thing = into;
+                    this.listStubs();
+                    this.listAllThings();
+                    break;
+                }
+                case 'move_fact':
+                    this.showNotes(action, [`Moved to ${data.target.name}`, ...(data.notes || [])]);
+                    if (data.target.id === this.selectedThingId && !this.thingAt) {
+                        this.thing = data.target;
+                    } else {
+                        this.refreshThing();
+                    }
+                    this.listStubs();
+                    break;
+                case 'pick_date':
+                    this.showNotes(action, data.notes);
+                    if (data.thing && data.thing.id === this.selectedThingId) {
+                        this.thing = data.thing;
+                    } else {
+                        this.refreshThing();
+                    }
+                    break;
+                case 'get_curation':
+                    this.curation = data;
+                    break;
+                case 'set_curation':
+                    this.curation = data;
+                    this.curationSaved = true;
                     break;
                 case 'find_mix':
                     // a reply for parents since changed is dropped
@@ -1724,6 +2101,11 @@ export const useWorldsStore = defineStore('worlds', {
                         }
                         this.tieQueue = {};
                         this.sphereWanted = [];
+                        // or a merge's preview, or an outer body
+                        if (this.merge?.pending) {
+                            this.merge = { ...this.merge, pending: false };
+                        }
+                        this.outerFor = null;
                         // the page back opened is gone: back goes on
                         const failed = this.backOpening;
                         this.backOpening = null;

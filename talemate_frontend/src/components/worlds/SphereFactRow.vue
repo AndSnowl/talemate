@@ -4,6 +4,8 @@
             <span class="flex-grow-1"><slot></slot></span>
             <slot name="actions"></slot>
             <template v-if="fact">
+                <span v-if="removable && fact.held_by && !heldShown" class="held" data-testid="held-by-tag">held by {{ fact.held_by.name }}</span>
+                <FactRowActions v-if="removable" :fact="fact" />
                 <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit" title="Edit" data-testid="sphere-fact-edit" @click="editor.edit(fact)"></v-btn>
                 <v-btn
                     v-if="removable"
@@ -35,6 +37,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import FactRowActions from './FactRowActions.vue';
 import ThingFactForm from './ThingFactForm.vue';
 
 // One of a sphere's own facts where its page shows it (a drawer's
@@ -44,16 +47,21 @@ import ThingFactForm from './ThingFactForm.vue';
 // row: a correction keeps the fact's links by position and, for a
 // statement, its drawer; its category stays what it is (a place sphere's
 // own categories don't list a sphere's). A fact the page doesn't own (a branch's
-// inherited one) gets no Edit or Remove.
+// inherited one) gets no Edit or Remove. An own fact that can be removed
+// also has "Move to…" and "Held by…" (`FactRowActions`), and is tagged
+// "held by X" when it's held.
 export default {
     name: 'SphereFactRow',
-    components: { ThingFactForm },
+    components: { FactRowActions, ThingFactForm },
     inject: { editor: { from: 'factEditor', default: null } },
     props: {
         // the fact's id, or null for a row that isn't one of the page's own
         factId: { type: String, default: null },
-        // false: Edit only (the summary's fact, corrected but never removed)
+        // false: Edit only (the summary's fact, corrected but never removed
+        // or moved)
         removable: { type: Boolean, default: true },
+        // the row's content shows who holds it already (a drawer item)
+        heldShown: { type: Boolean, default: false },
     },
     setup() {
         return { worlds: useWorldsStore() };
@@ -73,5 +81,11 @@ export default {
 <style scoped>
 .v-btn {
     flex: none;
+}
+
+.held {
+    flex: none;
+    font-size: 11px;
+    color: rgb(var(--v-theme-foreign));
 }
 </style>

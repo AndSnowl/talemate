@@ -1,5 +1,5 @@
 <template>
-    <v-card variant="tonal" class="pa-3 fact-form" data-testid="fact-form">
+    <v-card variant="tonal" class="pa-3 fact-form" data-testid="fact-form" @keydown.esc="escape">
         <template v-if="form.mode === 'end'">
             <div class="text-caption text-muted mb-2">The fact stops being true from this year on.</div>
             <div class="d-flex align-center ga-2">
@@ -55,7 +55,8 @@ import NameHighlightInput from './NameHighlightInput.vue';
 // to re-picks, Add reference and "make a stub"), holding the fact's words
 // as they read, with its links kept by position (`form.links`, found again
 // in the text as it's edited); `form.picks`, `form.refs` (Add reference)
-// and `form.stubs` are the owner's choices.
+// and `form.stubs` are the owner's choices. Esc cancels it (unless it
+// closes one of its own menus or popovers first).
 function isYear(value) {
     return Number.isInteger(value) && value >= 1 && value <= 9999;
 }
@@ -89,6 +90,14 @@ export default {
     },
     methods: {
         validYear: isYear,
+        // Esc closes the form, unless a menu or popover of it is open (Esc
+        // closes that first)
+        escape(event) {
+            const inPicker = event?.target?.closest?.('.v-select, .v-autocomplete, .v-combobox');
+            if (!this.busy && !inPicker && !document.querySelector('.v-overlay--active')) {
+                this.$emit('cancel');
+            }
+        },
         // the owner re-picked one existing link (or turned it to new)
         pickLink({ index, id }) {
             this.form.links = this.form.links.map((link, i) => (i === index ? { ...link, ref: id } : link));

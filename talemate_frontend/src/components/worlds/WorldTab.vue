@@ -32,6 +32,15 @@
                         <span class="text-caption text-muted">{{ liveStubCount }}</span>
                     </template>
                 </v-list-item>
+                <v-list-item
+                    :active="kind === settingsTab.kind"
+                    color="accent"
+                    :prepend-icon="settingsTab.icon"
+                    :data-testid="'kind-' + settingsTab.kind"
+                    @click="selectKind(settingsTab.kind)"
+                >
+                    <v-list-item-title>{{ settingsTab.label }}</v-list-item-title>
+                </v-list-item>
             </v-list>
         </div>
 
@@ -40,9 +49,23 @@
             <v-alert v-if="worlds.error" type="error" variant="tonal" density="compact" class="mb-3" closable @click:close="worlds.clearError()">
                 {{ worlds.error }}
             </v-alert>
+            <!-- what the last accept, move, merge or date pick left out, and why -->
+            <v-alert
+                v-if="worlds.notes"
+                type="info"
+                variant="tonal"
+                density="compact"
+                class="mb-3"
+                closable
+                data-testid="accept-notes"
+                @click:close="worlds.clearNotes()"
+            >
+                <div v-for="(note, index) in worlds.notes.notes" :key="index">{{ note }}</div>
+            </v-alert>
 
             <ThingPage v-if="worlds.selectedThingId" />
             <StubsTab v-else-if="kind === stubsTab.kind" />
+            <CurationSettings v-else-if="kind === settingsTab.kind" />
             <template v-else>
                 <CreateBox :kind="kind" :key="kind" />
                 <div v-if="!entries.length && !(kind === 'sphere' && stubs.length)" class="empty-hint pa-4 text-body-2">
@@ -112,8 +135,9 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { STUBS_TAB, TOP_KINDS, kindInfo, sphereGroups } from './worldKinds.js';
+import { SETTINGS_TAB, STUBS_TAB, TOP_KINDS, kindInfo, sphereGroups } from './worldKinds.js';
 import CreateBox from './CreateBox.vue';
+import CurationSettings from './CurationSettings.vue';
 import ExpandAskDialog from './ExpandAskDialog.vue';
 import StubsTab from './StubsTab.vue';
 import ThingPage from './ThingPage.vue';
@@ -127,10 +151,14 @@ import ThingPage from './ThingPage.vue';
 // it a sphere…" (`promoting`) to Spheres. Spheres are listed by template
 // (`sphereGroups`), place spheres among them, their stubs dimmed in place.
 // The open section is the store's `section`, so the thing page's back
-// arrow can return to a list or the Stubs page (`worlds.goBack`).
+// arrow can return to a list or the Stubs page (`worlds.goBack`). Below
+// the Stubs tab, Settings holds the world's curation knobs
+// (`CurationSettings`). The notes a reply brings (what an accept, a move,
+// a merge or a date pick left out, and why) show above the page until
+// closed.
 export default {
     name: 'WorldTab',
-    components: { CreateBox, ExpandAskDialog, StubsTab, ThingPage },
+    components: { CreateBox, CurationSettings, ExpandAskDialog, StubsTab, ThingPage },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -138,6 +166,7 @@ export default {
         return {
             kinds: TOP_KINDS,
             stubsTab: STUBS_TAB,
+            settingsTab: SETTINGS_TAB,
         };
     },
     computed: {

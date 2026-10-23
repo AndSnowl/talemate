@@ -33,10 +33,10 @@
             </template>
         </SphereDrawer>
 
-        <!-- the Timeline, when no drawer shows it -->
-        <div v-if="!hasEvents && sphere.timeline.length" class="mt-3">
+        <!-- the Timeline, when no drawer shows it: every page has one -->
+        <div v-if="!hasEvents" class="mt-3">
             <div class="timeline-title">Timeline</div>
-            <SphereTimeline :timeline="sphere.timeline" />
+            <SphereTimeline :timeline="sphere.timeline" :sphere="sphere" />
         </div>
 
         <div class="d-flex align-center ga-2 mt-3">
@@ -68,7 +68,8 @@ import SphereTimeline from './SphereTimeline.vue';
 // a title, retitle, move up or down among the sphere's own, drop. A
 // branch's inherited drawer can be retitled (that keeps an own copy
 // overriding its parent's) but not moved or dropped. With no events
-// drawer, the Timeline still shows below the drawers.
+// drawer, the Timeline still shows below the drawers (every page has one,
+// curation goal 6).
 export default {
     name: 'SpherePage',
     components: { DrawerForm, LinkedText, SphereDrawer, SphereFactAdd, SphereFactRow, SphereTimeline },

@@ -16,17 +16,27 @@ import {
     akaRemoved,
     branchKept,
     ALREADY_TIED,
+    countsLine,
     currentNameFrom,
     defaultOverrideIndex,
+    disagreements,
+    elsewhereGroups,
+    elsewhereSame,
     heritageFromMatches,
     historyBack,
     historyPushed,
+    lineDates,
     listedFacts,
+    nameKey,
     pageAfterDelete,
     parseWorldTarget,
+    previewCounts,
     previewSegments,
     rejectableItems,
     repointedNote,
+    rowChanged,
+    rowsTicked,
+    shelvedRows,
     samePage,
     sameParents,
     tiesPayload,
@@ -52,16 +62,19 @@ import {
 import {
     DRAWER_TYPES,
     ENTRY_DRAWER_TYPES,
+    EXISTENCE,
     PART_OF_KINDS,
     STUB_KINDS,
     TOP_KINDS,
     WRITTEN_DRAWER_TYPES,
+    actsInWorld,
     canExpand,
     canPromote,
     drawerTypesFor,
     drawersDropped,
     drawersMoved,
     drawersPayload,
+    existenceOf,
     expandLabel,
     expandNote,
     overrideCategory,
@@ -486,7 +499,7 @@ const reply = (action, data, extra = {}) => ({ type: 'worlds', action, data, ...
 const WORLD = { id: 'w1', name: 'Vael', path: '/worlds/w1', calendar: {}, present: dateOf(1000), now: dateOf(1000) };
 
 // every kind's listing, as opening a world, an accept or a started scene asks
-const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'sphere'];
+const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being', 'sphere'];
 const STUBS_REQUEST = { type: 'worlds', action: 'list_stubs', include_ignored: true };
 
 // whether `sent` asked for the stubs and every kind's listing
@@ -561,9 +574,7 @@ check('a preview, then accept, opens the new thing', () => {
     listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
-// INTERIM until the curation preview UI (Task 12, ruling C8): remove
-// with `interimCurationGuard`
-check('interim curation guard: accepts send every fact and item ticked, nothing elsewhere, nothing moved in', () => {
+check("accepts send the preview as the owner left it: ticks, elsewhere facts and move-in rows", () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.previewThing('lore', 'a doctrine');
@@ -576,31 +587,288 @@ check('interim curation guard: accepts send every fact and item ticked, nothing 
             { category: 'general', text: 'A copy.', ticked: false, repeat_of: { fact_id: 'f1' } },
             { category: 'general', text: 'Fresh.', ticked: true, repeat_of: null },
         ],
-        elsewhere: [{ target_id: 't1', target_name: 'Tsardom', category: 'general', text: 'About it.', ticked: true }],
-        move_in: [{ fact_id: 'm1', from_id: 'tsardom', text: 'Its law code.', ticked: true }],
+        elsewhere: [
+            { target_id: 't1', target_name: 'Tsardom', category: 'about', text: 'About it.', ticked: true },
+            { target_id: null, target_name: 'White Talon', new: { name: 'White Talon', kind: 'lore', same_as: [{ thing_id: 'wt' }], same_target_id: null }, category: 'general', text: 'Trains.', ticked: true },
+        ],
+        move_in: [
+            { fact_id: 'm1', from_id: 'tsardom', text: 'Its law code.', ticked: true },
+            { fact_id: 'm2', from_id: 'tsardom', text: 'Its army.', ticked: false },
+        ],
+        refile: [{ thing_id: 'fw', from: { sphere: 'tsardom', drawer: 'mil' }, to: { name: 'Army', drawer: 'unsorted' }, ticked: false }],
         prose: {},
     };
     store.handleMessage(reply('preview_thing', preview));
+    // the repeat that came unticked shows under "Already in the world",
+    // wherever the owner ticks it
+    assert.deepEqual(store.previewShelved, [0]);
+    assert.deepEqual(shelvedRows([{ repeat_of: {}, ticked: true }, { repeat_of: null, ticked: false }, { repeat_of: {}, ticked: false }]), [2]);
+    // the owner's edits: the repeat ticked in, the Tsardom row unticked,
+    // the stub row is the White Talon the world has, one re-file ticked
+    store.editPreview('create', { facts: rowsTicked(store.preview.facts, [0], true) });
+    store.editPreview('create', { elsewhere: rowsTicked(store.preview.elsewhere, [0], false) });
+    store.editPreview('create', { elsewhere: elsewhereSame(store.preview.elsewhere, 'the White Talon', 'wt') });
+    store.editPreview('create', { refile: rowsTicked(store.preview.refile, [0], true) });
+    store.acceptPreview({ name: 'The Divine Right of the Tsar' }, { sameTargetId: 'church' });
+    const request = sent.at(-1);
+    assert.equal(request.action, 'accept_preview');
+    assert.equal(request.same_target_id, 'church');
+    const out = request.preview;
+    assert.equal(out.name, 'The Divine Right of the Tsar');
+    assert.deepEqual(out.facts.map((fact) => fact.ticked), [true, true]);
+    assert.deepEqual(out.elsewhere.map((row) => row.ticked), [false, true]);
+    assert.equal(out.elsewhere[1].new.same_target_id, 'wt');
+    assert.deepEqual(out.move_in.map((row) => row.ticked), [true, false]);
+    assert.deepEqual(out.refile.map((row) => row.ticked), [true]);
+    // no same target, no key
     store.acceptPreview();
-    const sentPreview = sent.at(-1).preview;
-    assert.deepEqual(sentPreview.elsewhere, []);
-    assert.deepEqual(sentPreview.facts.map((fact) => fact.ticked), [true, true]);
-    // nothing moves in until the screen shows the rows (ruling C20)
-    assert.deepEqual(sentPreview.move_in.map((row) => row.ticked), [false]);
-    // the store's own preview is left as it came
-    assert.equal(store.preview.facts[0].ticked, false);
-    assert.equal(store.preview.move_in[0].ticked, true);
+    assert.equal('same_target_id' in sent.at(-1), false);
+    // the reply's notes are kept to show
+    store.handleMessage(reply('accept_preview', { id: 'dr', kind: 'lore', name: 'The Divine Right', notes: ['Kalmara was deleted, so its fact is left out'] }));
+    assert.deepEqual(store.notes, { action: 'accept_preview', notes: ['Kalmara was deleted, so its fact is left out'] });
+    store.clearNotes();
+    assert.equal(store.notes, null);
 
+    // Fill: the whole preview, ticks as the owner left them
     store.openThing('dawn');
     store.fillDrawer('dawn', 'd1');
     const items = [
-        { drawer_id: 'd1', name: '', text: 'A copy.', kind: '', names: [], ticked: false },
+        { drawer_id: 'd1', name: '', text: 'A copy.', kind: '', names: [], ticked: false, repeat_of: { fact_id: 'f2' } },
         { drawer_id: 'd1', name: 'Vigil', text: 'A prayer.', kind: 'lore', names: [], ticked: true },
     ];
-    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items, elsewhere: [{ text: 'x' }] }));
-    store.acceptFill(items);
-    assert.deepEqual(sent.at(-1).elsewhere, []);
-    assert.deepEqual(sent.at(-1).items.map((item) => item.ticked), [true, true]);
+    const elsewhere = [{ target_id: 't1', target_name: 'Tsardom', category: 'about', text: 'x', ticked: true }];
+    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items, elsewhere, new_names: [], refile: [] }));
+    assert.deepEqual(store.fill.shelved, [0]);
+    store.editPreview('fill', { elsewhere: rowsTicked(store.fill.elsewhere, [0], false) });
+    store.acceptFill();
+    assert.deepEqual(sent.at(-1).items.map((item) => item.ticked), [false, true]);
+    assert.deepEqual(sent.at(-1).elsewhere.map((row) => row.ticked), [false]);
+    store.handleMessage(reply('accept_fill', { id: 'dawn', kind: 'sphere', name: 'The White Dawn', sphere: {}, notes: ['one left out'] }));
+    assert.deepEqual(store.notes.notes, ['one left out']);
+});
+
+check('an outer body is asked for on the preview it is for, and its reply replaces that one', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('lore', 'a doctrine');
+    store.handleMessage(reply('preview_thing', { kind: 'lore', name: 'Doctrine', facts: [], elsewhere: [], new_names: [], refile: [], prose: {} }));
+    const outer = { name: "The Tsar's Army", template: 'order', part_of: { sphere: 'tsardom', drawer: 'mil' } };
+    store.addOuterBody('create', 'White Talon', outer);
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds',
+        action: 'add_outer_body',
+        preview_type: 'create',
+        preview: store.preview,
+        row_name: 'White Talon',
+        outer,
+        as_sphere: false,
+    });
+    const army = { name: "The Tsar's Army", kind: 'sphere', template: 'order', part_of: { sphere: 'tsardom', drawer: 'mil' } };
+    store.handleMessage(reply('add_outer_body', { preview_type: 'create', preview: { ...store.preview, new_names: [army] } }));
+    assert.deepEqual(store.preview.new_names, [army]);
+    assert.equal(store.outerFor, null);
+
+    // a branch goes as a sphere preview, and comes back as the branch
+    store.previewBranch('dawn', 'the smiths');
+    store.handleMessage(reply('preview_branch', { name: 'The Forge Dawn', items: [], new_names: [], refile: [], drops: [], rejects: [], parent_items: [] }));
+    store.addOuterBody('branch', 'The Forge', { name: 'Guild', template: 'order', part_of: null });
+    assert.equal(sent.at(-1).preview_type, 'sphere');
+    store.handleMessage(reply('add_outer_body', { preview_type: 'sphere', preview: { ...store.branchPreview, new_names: [army] } }));
+    assert.deepEqual(store.branchPreview.new_names, [army]);
+    assert.equal(store.spherePreview, null);
+
+    // Fill's comes back into the Fill
+    store.fillDrawer('dawn', 'd1');
+    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items: [{ name: 'Talon', text: 't' }], elsewhere: [], new_names: [], refile: [] }));
+    store.addOuterBody('fill', 'Talon', outer);
+    assert.deepEqual(sent.at(-1).preview, { sphere_id: 'dawn', drawer_id: 'd1', items: [{ name: 'Talon', text: 't' }], elsewhere: [], new_names: [], refile: [] });
+    const refile = [{ thing_id: 'fw', to: { name: "The Tsar's Army", drawer: 'unsorted' }, ticked: false }];
+    store.handleMessage(reply('add_outer_body', { preview_type: 'fill', preview: { sphere_id: 'dawn', drawer_id: 'd1', items: [{ name: 'Talon', text: 't', part_of: { name: "The Tsar's Army" } }], elsewhere: [], new_names: [army], refile } }));
+    assert.deepEqual(store.fill.refile, refile);
+    assert.deepEqual(store.fill.new_names, [army]);
+    assert.equal(store.fill.sphereId, 'dawn');
+    // an error clears what was waiting
+    store.addOuterBody('fill', 'Talon', outer);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'a part can\'t be its own outer body' } });
+    assert.equal(store.outerFor, null);
+});
+
+check('the Accept line counts what an accept writes', () => {
+    const preview = {
+        facts: [{ ticked: true }, { ticked: true }, { ticked: false, repeat_of: {} }],
+        elsewhere: [
+            { ticked: true, target_id: 'm' },
+            { ticked: false, target_id: 't' },
+            { ticked: true, new: { name: 'White Talon', same_target_id: null } },
+            { ticked: true, new: { name: 'the White Talon', same_target_id: null } },
+            { ticked: true, new: { name: 'Conclave', same_target_id: 'c1' } },
+            { ticked: false, new: { name: 'Frosted Wing', same_target_id: null } },
+        ],
+        new_names: [{ name: "The Tsar's Army" }, { name: 'Synod', same_target_id: 's1' }],
+        move_in: [{ ticked: true }, { ticked: false }],
+        refile: [{ ticked: true }],
+    };
+    const counts = previewCounts(preview);
+    assert.deepEqual(counts, { here: 2, elsewhere: 4, stubs: 2, movedIn: 1, refiled: 1 });
+    assert.equal(countsLine(counts), 'writes 2 facts here, 4 elsewhere, 2 new stubs, moves 1 in, re-files 1');
+    assert.equal(countsLine({ here: 1, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0 }, 'Ashenmere'), 'writes 1 fact onto Ashenmere, 1 new stub');
+    assert.equal(countsLine({ here: 3, elsewhere: 0, stubs: 0, movedIn: 0, refiled: 0 }, null, 'item'), 'writes 3 items here');
+    // a sphere's (or Fill's) items count, a named new one a stub
+    assert.deepEqual(previewCounts({ items: [{ name: 'Vigil', ticked: true }, { name: 'Fair', thing_id: 'f', ticked: true }, { name: 'Old', ticked: false }] }), {
+        here: 2, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0,
+    });
+});
+
+check('elsewhere rows group by entry, untick together, and a stub row answers "same as"', () => {
+    const rows = [
+        { target_id: 'm', target_name: 'Moskov', ticked: true },
+        { target_id: 't', target_name: 'Tsardom', ticked: true },
+        { target_id: null, target_name: 'White Talon', new: { name: 'White Talon' }, ticked: true },
+        { target_id: 't', target_name: 'Tsardom', ticked: true },
+        { target_id: null, target_name: 'The White Talon', new: { name: 'The White Talon' }, ticked: true },
+    ];
+    const groups = elsewhereGroups(rows);
+    assert.deepEqual(groups.map((group) => [group.name, group.rows]), [['Moskov', [0]], ['Tsardom', [1, 3]], ['White Talon', [2, 4]]]);
+    assert.equal(groups[2].new.name, 'White Talon');
+    assert.deepEqual(rowsTicked(rows, groups[1].rows, false).map((row) => row.ticked), [true, false, true, false, true]);
+    assert.deepEqual(rowChanged(rows, 0, { category: 'description' })[0], { ...rows[0], category: 'description' });
+    const same = elsewhereSame(rows, 'white talon', 'wt');
+    assert.deepEqual(same.map((row) => row.new?.same_target_id ?? null), [null, null, 'wt', null, 'wt']);
+    assert.equal(nameKey('The  White Talon'), 'white talon');
+});
+
+check('timeline lines: an ended one shows its span, and only running lines are flagged', () => {
+    const label = (year) => ({ ...dateOf(year), label: String(year) });
+    assert.equal(lineDates(null, { date: label(900), until: label(1010) }), '900–1010');
+    assert.equal(lineDates(null, { date: label(947), until: null }), '947');
+    assert.equal(lineDates(null, { date: null, until: null }), '—');
+    const lines = [
+        { fact_id: 'a', date: label(217), until: null, disagrees_with: ['b'] },
+        { fact_id: 'b', date: label(312), until: null, disagrees_with: ['a', 'c'] },
+        { fact_id: 'c', date: label(300), until: label(1026), disagrees_with: ['b'] },
+    ];
+    const found = disagreements(lines);
+    assert.deepEqual(Object.keys(found), ['a', 'b']);
+    assert.deepEqual(found.b.map((line) => line.fact_id), ['a']);
+    // the one a pick ended: nothing is flagged
+    assert.deepEqual(disagreements([lines[0], { ...lines[1], until: label(1026) }]), {});
+});
+
+check('a merge: its preview, the owner\'s picks, and the merged entry opened', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('caves');
+    store.handleMessage(reply('get_thing', { id: 'caves', kind: 'place', name: 'The Ashenmere Caves' }));
+    store.previewMerge('caves', 'ash');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'preview_merge', from_id: 'caves', into_id: 'ash' });
+    const preview = {
+        from_id: 'caves',
+        into_id: 'ash',
+        from_name: 'The Ashenmere Caves',
+        into_name: 'Ashenmere',
+        names: ['Ashenmere', 'The Ashenmere Caves'],
+        facts: [
+            { fact_id: 'f1', side: 'from', text: 'Garrison.', ticked: true, repeat_of: null },
+            { fact_id: 'f2', side: 'from', text: 'Runes.', ticked: false, repeat_of: { owner_name: 'Ashenmere' } },
+            { fact_id: 'f3', side: 'into', text: 'Runes.', ticked: true, repeat_of: null },
+        ],
+        pairs: [{ key: 'a1:b1', a: 'a1', b: 'b1', a_text: 'x', b_text: 'y', score: 1, years: [950, 947] }, { key: 'a2:b2', a: 'a2', b: 'b2' }],
+        moves: { facts: 1, links: 2 },
+        notes: [],
+        akas: ['the caves'],
+    };
+    // a stale reply (another pair) is dropped
+    store.handleMessage(reply('preview_merge', { preview: { ...preview, into_id: 'other' } }));
+    assert.equal(store.merge.preview, null);
+    store.handleMessage(reply('preview_merge', { preview }));
+    assert.deepEqual(store.merge.preview, preview);
+    assert.equal(store.merge.pending, false);
+    store.acceptMerge({ mainName: 'The Ashenmere Caves', keep: { 'a1:b1': 'b' }, lose: 'end', akas: [], ticked: { f2: true } });
+    const request = sent.at(-1);
+    assert.equal(request.action, 'accept_merge');
+    assert.equal(request.main_name, 'The Ashenmere Caves');
+    // every pair answered: an unanswered one keeps both
+    assert.deepEqual(request.keep, { 'a1:b1': 'b', 'a2:b2': 'both' });
+    assert.equal(request.lose, 'end');
+    assert.deepEqual(request.akas, []);
+    assert.deepEqual(request.preview.facts.map((fact) => fact.ticked), [true, true, true]);
+    store.handleMessage(reply('accept_merge', {
+        from_id: 'caves',
+        into: { id: 'ash', kind: 'place', name: 'The Ashenmere Caves' },
+        main_name: 'The Ashenmere Caves',
+        links: 2,
+        aka_added: ['Ashenmere'],
+        facts_moved: 2,
+        notes: ['one fact ended'],
+    }));
+    assert.equal(store.merge, null);
+    assert.equal(store.selectedThingId, 'ash');
+    assert.equal(store.thing.name, 'The Ashenmere Caves');
+    assert.ok(store.gone.includes('caves'));
+    assert.deepEqual(store.notes.notes, [
+        'Merged into The Ashenmere Caves: 2 facts and 2 links moved over',
+        'now also known as Ashenmere',
+        'one fact ended',
+    ]);
+    // back skips the merged-away page
+    assert.equal(historyBack(store.history, (id) => store.gone.includes(id)).page?.thingId ?? null, null);
+});
+
+check('a fact moves, is held or not, and a timeline pick refreshes the page', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('dr', dateOf(1020));
+    store.moveFact('f1', 'moskov');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'move_fact', fact_id: 'f1', target_id: 'moskov' });
+    store.handleMessage(reply('move_fact', { fact_id: 'f9', target: { id: 'moskov', name: 'Moskov' }, notes: [] }));
+    // the page it left is fetched again, as of its date
+    assert.deepEqual(sent.at(-2), { type: 'worlds', action: 'get_thing', id: 'dr', at: dateOf(1020) });
+    assert.deepEqual(store.notes.notes, ['Moved to Moskov']);
+    assert.deepEqual(store.pending, {});
+
+    store.setHeldBy('f2', 'church');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'set_held_by', thing_id: 'dr', at: dateOf(1020), fact_id: 'f2', holder_id: 'church' });
+    store.setHeldBy('f2', null);
+    assert.equal(sent.at(-1).holder_id, null);
+    assert.ok('holder_id' in sent.at(-1));
+    store.handleMessage(reply('set_held_by', { id: 'dr', kind: 'lore', name: 'The Divine Right' }));
+    assert.equal(store.thing.name, 'The Divine Right');
+    assert.deepEqual(store.pending, {});
+
+    store.pickDate('a', 'b', 'end');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'pick_date', keep_fact_id: 'a', drop_fact_id: 'b', mode: 'end', thing_id: 'dr', at: dateOf(1020) });
+    store.handleMessage(reply('pick_date', { keep_fact_id: 'a', drop_fact_id: 'b', mode: 'end', owner_id: 'codex', notes: [], thing: { id: 'dr', kind: 'lore', name: 'After' } }));
+    assert.equal(store.thing.name, 'After');
+    assert.equal(store.notes, null);
+});
+
+check('curation settings: asked for, and only the changes sent', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.getCuration();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_curation' });
+    const knobs = { reach: 1, entries: 12, facts_per_entry: 6, repeat_threshold: 0.4, repeat_untick_threshold: 0.7, timeline_reach: 2 };
+    store.handleMessage(reply('get_curation', { settings: knobs, defaults: knobs }));
+    assert.deepEqual(store.curation.settings, knobs);
+    store.setCuration({ reach: 2 });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'set_curation', settings: { reach: 2 } });
+    assert.equal(store.curationSaved, false);
+    store.handleMessage(reply('set_curation', { settings: { ...knobs, reach: 2 }, defaults: knobs }));
+    assert.equal(store.curation.settings.reach, 2);
+    assert.equal(store.curationSaved, true);
+    assert.deepEqual(store.pending, {});
+});
+
+check('a being acts in the world only once it is real', () => {
+    assert.deepEqual(EXISTENCE, ['real', 'believed', 'undecided']);
+    assert.equal(existenceOf({ kind: 'being', fields: {} }), 'undecided');
+    assert.equal(existenceOf({ kind: 'being', existence: 'real' }), 'real');
+    assert.equal(actsInWorld({ kind: 'being', fields: { existence: 'believed' } }), false);
+    assert.equal(actsInWorld({ kind: 'being', existence: 'real' }), true);
+    assert.equal(actsInWorld({ kind: 'character' }), true);
+    assert.equal(actsInWorld({ kind: 'lore' }), false);
+    assert.ok(TOP_KINDS.some((k) => k.kind === 'being'));
+    assert.ok(STUB_KINDS.includes('being'));
 });
 
 check('a failed preview shows its message', () => {
@@ -1538,8 +1806,15 @@ check('the drawer-type constants mirror talemate.world.kinds', () => {
     // pinned to the backend's values (tests/world/test_kinds.py pins those)
     assert.deepEqual(WRITTEN_DRAWER_TYPES, ['places', 'practices', 'beliefs', 'knowledge', 'structure']);
     const entries = ['practices', 'beliefs', 'knowledge', 'structure'];
-    assert.deepEqual(ENTRY_DRAWER_TYPES, { lore: entries, place: ['places'], item: entries, event: entries, sphere: entries });
-    assert.deepEqual(PART_OF_KINDS, ['lore', 'place', 'item', 'event', 'sphere']);
+    assert.deepEqual(ENTRY_DRAWER_TYPES, {
+        lore: entries,
+        place: ['places'],
+        item: entries,
+        event: entries,
+        sphere: entries,
+        being: ['beliefs', 'practices', 'structure'],
+    });
+    assert.deepEqual(PART_OF_KINDS, ['lore', 'place', 'item', 'event', 'sphere', 'being']);
     assert.ok(WRITTEN_DRAWER_TYPES.every((type) => DRAWER_TYPES.includes(type)));
     // a kind no drawer holds goes in none
     assert.deepEqual(drawerTypesFor('character'), []);
@@ -1564,7 +1839,12 @@ check('tie lines lead with the role; payloads drop labels and Unsorted', () => {
     const since = { ...dateOf(1010), label: '1010' };
     assert.deepEqual(
         tiesPayload([{ sphere_id: 'dawn', sphere_name: 'The White Dawn', role: 'elder', since, until: null, exceptions: [] }]),
-        [{ sphere_id: 'dawn', role: 'elder', since: dateOf(1010), until: null }],
+        [{ sphere_id: 'dawn', role: 'elder', since: dateOf(1010), until: null, within: null }],
+    );
+    // the part of the sphere it's within goes back as it is
+    assert.deepEqual(
+        tiesPayload([{ sphere_id: 'army', role: 'trooper', since: null, until: null, within: 'talon', within_name: 'The White Talon', exceptions: [] }]),
+        [{ sphere_id: 'army', role: 'trooper', since: null, until: null, within: 'talon' }],
     );
     assert.deepEqual(
         drawersPayload([
@@ -1660,14 +1940,16 @@ check('Fill keeps its items for the drawer asked about, then writes those kept',
     const items = [{ drawer_id: 'd1', name: 'Dawn Vigil', text: 'A prayer.', kind: 'lore', names: [] }];
     store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items }));
     assert.deepEqual(store.fill.items, items);
-    store.acceptFill(items);
+    store.acceptFill();
     assert.deepEqual(sent.at(-1), {
         type: 'worlds',
         action: 'accept_fill',
         sphere_id: 'dawn',
         drawer_id: 'd1',
-        items: items.map((item) => ({ ...item, ticked: true })),
+        items,
         elsewhere: [],
+        new_names: [],
+        refile: [],
     });
     sent.length = 0;
     store.handleMessage(reply('accept_fill', { id: 'dawn', kind: 'sphere', name: 'The White Dawn', sphere: {} }));
@@ -1728,7 +2010,7 @@ check('a tie added from the sphere waits for its character, then writes the whol
         action: 'set_ties',
         character_id: 'vasha',
         ties: [
-            { sphere_id: 'post', role: 'courier', since: dateOf(1009), until: null },
+            { sphere_id: 'post', role: 'courier', since: dateOf(1009), until: null, within: null },
             { sphere_id: 'dawn', role: 'elder', since: dateOf(1012), until: null },
         ],
         at: null,

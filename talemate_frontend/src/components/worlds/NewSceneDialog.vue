@@ -96,6 +96,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
 import { linkPayload } from './nameHighlights.js';
+import { actsInWorld } from './worldKinds.js';
 import NameHighlightInput from './NameHighlightInput.vue';
 import SceneSetupCards from './SceneSetupCards.vue';
 
@@ -149,7 +150,9 @@ export default {
             return setup?.invented || this.lastInvented;
         },
         playerOptions() {
-            return [{ id: null, name: 'Let the setup choose' }, ...(this.worlds.things.character || [])];
+            // a character, or a real being (only those act in the world)
+            const beings = (this.worlds.things.being || []).filter((thing) => !thing.stub && actsInWorld(thing));
+            return [{ id: null, name: 'Let the setup choose' }, ...(this.worlds.things.character || []), ...beings];
         },
         startOptions() {
             const calendar = this.worlds.calendar;

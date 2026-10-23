@@ -11,6 +11,10 @@
 // list grouped by template (`sphereGroups`), the drawers a thing may be
 // filed in (`partOfDrawers`) and what "Make it a sphere…" is offered on
 // (`canPromote`).
+//
+// Beings (`talemate.world.kinds`, curation goal 8): a being's `existence`
+// (`EXISTENCE`), and whether it acts in the world like a character
+// (`actsInWorld`: only a real one is cast, played or tied).
 
 const HERITAGE_CATEGORIES = ['origin', 'physical', 'instinct', 'variation', 'general'];
 
@@ -74,6 +78,15 @@ export const WORLD_KINDS = [
         categories: ['general'],
     },
     {
+        // a god, a spirit, a legendary creature: real (it acts in the world
+        // like a character), believed or undecided (`EXISTENCE`)
+        kind: 'being',
+        label: 'Beings',
+        singular: 'being',
+        icon: 'mdi-star-four-points-outline',
+        categories: ['nature', 'deeds', 'worship', 'general'],
+    },
+    {
         kind: 'sphere',
         label: 'Spheres',
         singular: 'sphere',
@@ -99,10 +112,13 @@ export const TOP_KINDS = WORLD_KINDS.filter((k) => !k.nested);
 // the World tab's list of stubs, below the kinds
 export const STUBS_TAB = { kind: 'stubs', label: 'Stubs', icon: 'mdi-help-circle-outline' };
 
+// the World tab's settings (curation), below the stubs
+export const SETTINGS_TAB = { kind: 'settings', label: 'Settings', icon: 'mdi-tune-variant' };
+
 // the kinds a stub's kind can be changed to: races and mixes are made from
 // their species page, so a stub isn't guessed as one; a culture is a
 // legacy kind (a culture is a sphere now)
-export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'sphere'];
+export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'being', 'sphere'];
 
 // Why a stub of `kind` can't be expanded here (null when it can): a race
 // or mix needs its species (or parents), which only its species page's
@@ -193,6 +209,8 @@ export const ENTRY_DRAWER_TYPES = {
     item: ENTRY_TYPES,
     event: ENTRY_TYPES,
     sphere: ENTRY_TYPES,
+    // a god in its faith's Doctrines, a spirit in a culture's customs
+    being: ['beliefs', 'practices', 'structure'],
 };
 
 // `talemate.world.kinds.PART_OF_KINDS`
@@ -279,4 +297,24 @@ export function drawersMoved(drawers, id, delta) {
 // Unsorted then).
 export function drawersDropped(drawers, id) {
     return drawersPayload(drawers).filter((d) => d.id !== id);
+}
+
+// --- beings -------------------------------------------------------------------
+
+// `talemate.world.kinds.EXISTENCE_VALUES`, and what an unset one reads as
+export const EXISTENCE = ['real', 'believed', 'undecided'];
+export const DEFAULT_EXISTENCE = 'undecided';
+
+// A being's existence (`fields.existence` of its payload, or `existence`
+// of its listing), the default when unset.
+export function existenceOf(thing) {
+    const value = thing?.existence ?? thing?.fields?.existence;
+    return EXISTENCE.includes(value) ? value : DEFAULT_EXISTENCE;
+}
+
+// Whether `thing` (a payload or a listing) acts in the world like a
+// character: a character, or a real being (`spheres.acts_in_world`). Only
+// these are cast in scenes, played, or tied to spheres.
+export function actsInWorld(thing) {
+    return thing?.kind === 'character' || (thing?.kind === 'being' && existenceOf(thing) === 'real');
 }

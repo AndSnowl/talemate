@@ -194,8 +194,12 @@ def test_sphere_page_drawers_and_fill(app, page, fixed_sphere):
         state="visible", timeout=TIMEOUT_MS
     )
     assert "Crowning" not in rites.inner_text()
+    # every item goes back with its tick: only the ticked one is written
     kept = _sent(page, "accept_fill")[-1]["items"]
-    assert [item["name"] for item in kept] == ["The Dawn Vigil"]
+    assert [(item["name"], item["ticked"]) for item in kept] == [
+        ("The Dawn Vigil", True),
+        ("The Crowning of the Tsar", False),
+    ]
 
     # a new drawer, typed and titled by the owner
     thing.get_by_role("button", name="Add a drawer").click()

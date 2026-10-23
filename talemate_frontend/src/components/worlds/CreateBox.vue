@@ -57,6 +57,7 @@
                 v-if="kind === 'place'"
                 v-model="parentId"
                 label="Inside (place)"
+                data-testid="place-parent"
                 :items="parentOptions"
                 item-title="name"
                 item-value="id"
@@ -195,22 +196,55 @@
                 </div>
             </v-alert>
 
+            <!-- "Is this X?": one question for the entry, at the top -->
+            <SameThingAsk
+                v-if="preview.same_as && preview.same_as.length"
+                :name="preview.name"
+                :offers="preview.same_as"
+                :verdict="preview.verdict"
+                :chosen="sameTarget"
+                @choose="sameTarget = $event"
+            />
+
             <div v-for="(text, section) in preview.prose" :key="section" class="mb-2">
                 <div class="text-caption text-muted text-uppercase">{{ section }}</div>
                 <div class="prose">{{ text }}</div>
             </div>
 
-            <div class="text-caption text-muted text-uppercase mt-2">Facts</div>
-            <div v-for="(fact, index) in preview.facts" :key="index" class="fact d-flex align-center ga-2">
-                <span class="flex-grow-1"><LinkedText :segments="previewSegments(fact.text, preview.new_names)" :text="fact.text" /></span>
-                <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
-                <span class="fact-date">{{ fact.since ? formatDate(worlds.calendar, fact.since) + ' →' : 'always' }}</span>
+            <div class="text-caption text-muted text-uppercase mt-2">Its facts</div>
+            <div v-for="row in ownFacts" :key="row.index" class="fact" data-testid="preview-fact">
+                <div class="d-flex align-center ga-2">
+                    <v-checkbox-btn
+                        :model-value="row.fact.ticked !== false"
+                        density="compact"
+                        class="flex-grow-0"
+                        :aria-label="'Write ' + row.fact.text"
+                        @update:model-value="tickFact(row.index, $event)"
+                    ></v-checkbox-btn>
+                    <span class="flex-grow-1" :class="{ dropped: row.fact.ticked === false }">
+                        <LinkedText :segments="previewSegments(row.fact.text, preview.new_names)" :text="row.fact.text" />
+                        <span v-if="row.fact.held_by" class="held" data-testid="held-by-tag">held by {{ row.fact.held_by_name || 'another entry' }}<v-btn
+                            icon="mdi-close"
+                            variant="text"
+                            size="x-small"
+                            density="compact"
+                            :aria-label="'Not held: ' + row.fact.text"
+                            @click="clearHeld(row.index)"
+                        ></v-btn></span>
+                    </span>
+                    <v-chip size="x-small" label variant="tonal" color="muted">{{ row.fact.category }}</v-chip>
+                    <span class="fact-date">{{ row.fact.since ? formatDate(worlds.calendar, row.fact.since) + ' →' : 'always' }}</span>
+                </div>
+                <div v-if="row.fact.repeat_of" class="match text-caption" data-testid="fact-match">≈ on {{ row.fact.repeat_of.owner_name || 'an entry' }}: {{ row.fact.repeat_of.text }}</div>
             </div>
+            <PreviewRepeats :key="'repeats-' + previewKey" :rows="repeatRows" @tick="tickFact" />
 
-            <!-- the sphere drawer an expanded stub joins -->
+            <!-- the sphere drawer an expanded stub joins, or the body the
+                 owner put it in -->
             <div v-if="preview.part_of" class="text-body-2 mt-2" data-testid="preview-part-of">
                 <span class="text-muted">Part of</span> {{ partOfName }} <span class="text-muted">— {{ partOfDrawer }}</span>
             </div>
+            <OuterBodyForm :row-name="preview.name" @submit="worlds.addOuterBody('create', preview.name, $event)" />
 
             <CharacterTiesPreview :preview="preview" />
 
@@ -249,32 +283,52 @@
                 </div>
             </template>
 
-            <div class="d-flex ga-2 mt-3">
+            <PreviewElsewhere :rows="preview.elsewhere || []" type="create" :new-names="preview.new_names || []" @update="edit({ elsewhere: $event })" />
+            <PreviewStubs :rows="preview.new_names || []" type="create" @update="edit({ new_names: $event })" />
+            <MoveInSection :rows="preview.move_in || []" :refile="preview.refile || []" @update="edit({ move_in: $event })" @update-refile="edit({ refile: $event })" />
+
+            <div class="d-flex align-center flex-wrap ga-2 mt-3">
                 <v-btn
                     color="accent"
                     variant="flat"
                     size="small"
                     prepend-icon="mdi-check"
                     :loading="!!worlds.pending.accept_preview"
-                    :disabled="!previewName.trim()"
+                    :disabled="!previewName.trim() || !!worlds.pending.add_outer_body"
                     @click="accept()"
                 >Accept</v-btn>
                 <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :disabled="!!worlds.pending.accept_preview" @click="worlds.regeneratePreview()">Regenerate</v-btn>
                 <v-btn variant="outlined" size="small" prepend-icon="mdi-pencil" :disabled="!!worlds.pending.accept_preview" @click="worlds.discardPreview()">Edit</v-btn>
+                <span class="text-caption text-muted" data-testid="accept-counts">{{ countsText }}</span>
             </div>
         </v-card>
     </v-card>
 </template>
 
 <script>
-import { defaultOverrideIndex, heritageFromMatches, previewSegments, sameParents, useWorldsStore } from '@/stores/worlds.js';
+import {
+    countsLine,
+    defaultOverrideIndex,
+    heritageFromMatches,
+    previewCounts,
+    previewSegments,
+    rowChanged,
+    sameParents,
+    useWorldsStore,
+} from '@/stores/worlds.js';
 import { dateOf, formatDate } from './worldDates.js';
 import { SPHERE_TEMPLATES, UNSORTED, kindInfo, templateInfo } from './worldKinds.js';
 import { NEW_THING, linkPayload, pickedId, repicks } from './nameHighlights.js';
 import CharacterTiesPreview from './CharacterTiesPreview.vue';
 import HeritagePicker from './HeritagePicker.vue';
 import LinkedText from './LinkedText.vue';
+import MoveInSection from './MoveInSection.vue';
 import NameHighlightInput from './NameHighlightInput.vue';
+import OuterBodyForm from './OuterBodyForm.vue';
+import PreviewElsewhere from './PreviewElsewhere.vue';
+import PreviewRepeats from './PreviewRepeats.vue';
+import PreviewStubs from './PreviewStubs.vue';
+import SameThingAsk from './SameThingAsk.vue';
 import SpherePreviewCard from './SpherePreviewCard.vue';
 
 const PLACEHOLDERS = {
@@ -287,6 +341,7 @@ const PLACEHOLDERS = {
     event: 'The night the river froze solid and the ferries stopped…',
     sphere: 'The state church of the north, which teaches the change was a purification…',
     item: 'A tarnished ferryman’s bell said to wake the drowned…',
+    being: 'The river spirit the ferrymen leave bread for…',
 };
 
 // a year field as a wire date, or null when unset or out of range
@@ -334,7 +389,19 @@ function yearDate(year) {
 // stub's preview the sphere it joins (`part_of`).
 export default {
     name: 'CreateBox',
-    components: { CharacterTiesPreview, HeritagePicker, LinkedText, NameHighlightInput, SpherePreviewCard },
+    components: {
+        CharacterTiesPreview,
+        HeritagePicker,
+        LinkedText,
+        MoveInSection,
+        NameHighlightInput,
+        OuterBodyForm,
+        PreviewElsewhere,
+        PreviewRepeats,
+        PreviewStubs,
+        SameThingAsk,
+        SpherePreviewCard,
+    },
     props: {
         kind: { type: String, required: true },
         // `{species}` for a race, `{parents}` for a mix
@@ -374,6 +441,10 @@ export default {
             // a sphere's template
             template: null,
             templates: SPHERE_TEMPLATES,
+            // "Is this X?": the entry picked (null: it's new)
+            sameTarget: null,
+            // bumped for each new preview, so its sections start afresh
+            previewKey: 0,
         };
     },
     computed: {
@@ -514,6 +585,23 @@ export default {
             const names = this.parents.map((id) => this.heritageName(id) || 'this parent');
             return `${names.join(' and ')} have no mix yet. Every character of two parents shares one mix, so draft it here first; once you accept it, this character carries on with it as heritage.`;
         },
+        // its own facts, `{index, fact}`: not one that came unticked as a
+        // repeat of what the world holds (those show under "Already in the
+        // world")
+        ownFacts() {
+            const shelved = this.worlds.previewShelved;
+            return (this.preview?.facts || []).map((fact, index) => ({ index, fact })).filter((row) => !shelved.includes(row.index));
+        },
+        repeatRows() {
+            return this.worlds.previewShelved
+                .map((index) => ({ index, fact: this.preview.facts[index] }))
+                .filter((row) => row.fact)
+                .map(({ index, fact }) => ({ index, text: fact.text, ticked: fact.ticked, repeat_of: fact.repeat_of }));
+        },
+        countsText() {
+            const onto = this.sameTarget ? this.preview.same_as.find((offer) => offer.thing_id === this.sameTarget)?.name : null;
+            return countsLine(previewCounts(this.preview), onto);
+        },
         ownFactItems() {
             return (this.preview?.facts || []).map((fact, index) => ({ title: fact.text, value: index }));
         },
@@ -570,11 +658,20 @@ export default {
         },
         // immediate: the box is keyed by kind, so it remounts (switching
         // kinds and back) with a preview already there
-        preview: {
-            handler(preview) {
-                this.previewName = preview?.name || '';
+        // (not the whole preview: a tick replaces it, and keeps the name
+        // the owner typed)
+        'preview.name': {
+            handler(name) {
+                this.previewName = name || '';
             },
             immediate: true,
+        },
+        // a new preview asked for: its question and sections start afresh
+        'worlds.previewPending'(now) {
+            if (now) {
+                this.sameTarget = null;
+                this.previewKey += 1;
+            }
         },
         // the request is gone once its preview is accepted (or the world
         // changes): start the box afresh
@@ -728,7 +825,19 @@ export default {
         // `intoStub`: fill that stub instead of making a new thing
         accept(intoStub = null) {
             this.accepting = this.stay;
-            this.worlds.acceptPreview({ name: this.previewName.trim() }, { open: !this.stay, intoStub });
+            this.worlds.acceptPreview(
+                { name: this.previewName.trim() },
+                { open: !this.stay, intoStub, sameTargetId: intoStub ? null : this.sameTarget },
+            );
+        },
+        edit(changes) {
+            this.worlds.editPreview('create', changes);
+        },
+        tickFact(index, ticked) {
+            this.edit({ facts: rowChanged(this.preview.facts, index, { ticked }) });
+        },
+        clearHeld(index) {
+            this.edit({ facts: rowChanged(this.preview.facts, index, { held_by: null, held_by_name: null }) });
         },
         cancel() {
             if (this.mine) {
@@ -784,6 +893,21 @@ export default {
 }
 
 .inherited {
+    color: rgb(var(--v-theme-muted));
+}
+
+.dropped {
+    color: rgb(var(--v-theme-muted));
+}
+
+.held {
+    margin-left: 6px;
+    font-size: 11px;
+    color: rgb(var(--v-theme-foreign));
+}
+
+.match {
+    margin-left: 34px;
     color: rgb(var(--v-theme-muted));
 }
 

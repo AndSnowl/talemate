@@ -24,7 +24,7 @@
         <!-- the Timeline: the sphere's dated facts -->
         <template v-else-if="drawer.type === 'events'">
             <div v-if="timelineElsewhere" class="empty" data-testid="timeline-elsewhere">The timeline shows under {{ timelineElsewhere }}.</div>
-            <SphereTimeline v-else :timeline="sphere.timeline" />
+            <SphereTimeline v-else :timeline="sphere.timeline" :sphere="sphere" />
         </template>
 
         <!-- Branches -->
@@ -41,12 +41,20 @@
                 Not written yet. Fill asks the AI for this drawer, from the page so far and everything part of it.
             </div>
             <template v-for="item in drawer.items" :key="item.thing_id || item.fact_id">
-                <SphereFactRow :fact-id="item.inherited ? null : item.fact_id" class="item" :class="{ inherited: item.inherited }" data-testid="drawer-item">
+                <SphereFactRow
+                    :id="item.thing_id ? null : `sphere-item-${item.fact_id}`"
+                    :fact-id="item.inherited || item.thing_id ? null : item.fact_id"
+                    class="item"
+                    :class="{ inherited: item.inherited }"
+                    held-shown
+                    data-testid="drawer-item"
+                >
                     <template v-if="item.thing_id">
                         <LinkedText :segments="[{ text: item.name, ref: item.thing_id, stub: item.stub }]" />
                         <template v-if="item.segments.length"><span class="text-muted"> — </span><LinkedText :segments="item.segments" /></template>
                     </template>
                     <LinkedText v-else :segments="item.segments" :text="item.name" />
+                    <span v-if="item.held_by" class="held" data-testid="held-by-tag">held by {{ item.held_by.name }}</span>
                     <span v-if="item.inherited" class="text-caption text-muted ml-1">(inherited)</span>
                     <template #actions>
                         <v-btn
@@ -134,8 +142,9 @@ import SphereTimeline from './SphereTimeline.vue';
 //   with its first fact, or a statement), each own one open to "End this…"
 //   (a date, and what ended it), an own statement to Edit and Remove too
 //   (`SphereFactRow`); an inherited item is dimmed, and ends in the sphere
-//   it comes from. Fill (`FillPreview`: the AI's items, each kept unless
-//   unticked) and "+ Add" (`DrawerAddForm`: a statement, or an entry filed
+//   it comes from. A held statement (a religion's or culture's beliefs, or
+//   one the owner marked) is tagged "held by X". Fill (`FillPreview`: the
+//   AI's items, each kept unless unticked) and "+ Add" (`DrawerAddForm`: a statement, or an entry filed
 //   here). A places drawer may note the territory it holds besides its
 //   items.
 // Unsorted holds what's part of the sphere in no drawer it has: no Fill,
@@ -289,6 +298,16 @@ export default {
 
 .item.inherited {
     opacity: 0.6;
+}
+
+.item.pointed {
+    background: rgba(var(--v-theme-accent), 0.15);
+}
+
+.held {
+    margin-left: 6px;
+    font-size: 11px;
+    color: rgb(var(--v-theme-foreign));
 }
 
 .empty {

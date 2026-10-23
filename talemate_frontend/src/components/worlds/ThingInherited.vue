@@ -10,6 +10,7 @@
                 <span class="flex-grow-1 inherited-text">
                     <s v-if="fact.overridden_by"><LinkedText :segments="fact.segments" :text="fact.rendered" /></s>
                     <LinkedText v-else :segments="fact.segments" :text="fact.rendered" />
+                    <span v-if="fact.held_by" class="held" data-testid="held-by-tag">held by {{ fact.held_by.name }}</span>
                     <span v-if="fact.overridden_by" class="replaced ml-2">replaced by its own fact</span>
                 </span>
                 <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
@@ -62,6 +63,12 @@ export default {
 </script>
 
 <style scoped>
+.held {
+    margin-left: 6px;
+    font-size: 11px;
+    color: rgb(var(--v-theme-foreign));
+}
+
 .fact {
     border-bottom: 1px dashed rgb(var(--v-theme-border));
     padding: 2px 0;
