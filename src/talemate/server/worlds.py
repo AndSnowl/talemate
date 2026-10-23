@@ -331,7 +331,12 @@ from talemate.worldplay.links import (
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
-from talemate.worldplay.merge import MergePreview, accept_merge, preview_merge
+from talemate.worldplay.merge import (
+    MergePreview,
+    accept_merge,
+    preview_merge,
+    repoint_overrides,
+)
 from talemate.worldplay.repoint import move_fact, repoint_stub
 from talemate.worldplay.setup import (
     SceneSetup,
@@ -3131,7 +3136,9 @@ class WorldsPlugin(Plugin):
         (worked out again here, never taken from the client), at the
         world's `date_threshold` (ruling C31); a fact that has ended is in
         no pair (ruling C22), so one ended already is refused. A dropped fact that
-        starts at or after now is removed instead of ended, with a note. Answers `{keep_fact_id,
+        starts at or after now is removed instead of ended, with a note.
+        A removed fact's overrides and exceptions (`rejects_fact`) point at
+        the kept fact (`merge.repoint_overrides`). Answers `{keep_fact_id,
         drop_fact_id, mode, owner_id, notes}` (`owner_id` the dropped
         fact's entry), with `thing`, the payload of `thing_id` at `at`,
         when given. Prose is refreshed for the dropped fact's entry when
@@ -3167,6 +3174,9 @@ class WorldsPlugin(Plugin):
                 rev.end_fact(drop, now)
             else:
                 rev.remove_fact(drop)
+                # what overrode or rejected the removed fact points at the
+                # kept one now, as a merge's losers do
+                repoint_overrides(rev, world.view(), {drop}, {drop: keep}, {}, notes)
         reply: dict[str, Any] = {
             "keep_fact_id": keep,
             "drop_fact_id": drop,

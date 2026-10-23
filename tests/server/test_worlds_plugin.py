@@ -5017,6 +5017,46 @@ async def test_pick_date(plugin, monkeypatch):
     assert scheduled[-1] == s.tsardom
 
 
+async def test_pick_date_remove_repoints_overrides(plugin):
+    """Final review minor 5: "remove" takes the dropped fact out, so a
+    fact overriding it, or an exception rejecting it (`rejects_fact`),
+    points at the kept fact instead, in the same revision (merge's
+    re-pointing)."""
+
+    s = await _timeline_world(plugin)
+    world = s.world
+    with world.revision(Source.manual(note="leans")) as rev:
+        again = rev.add_fact(
+            s.tsardom,
+            "history",
+            "The Tsardom was founded by the first Tsar.",
+            valid_from=WorldDate.of(910),
+        )
+        waived = rev.add_fact(
+            s.peak,
+            "general",
+            "On the Peak the founding is told otherwise.",
+            overrides=[again],
+        )
+        departs = rev.add_fact(
+            s.vasha,
+            "ties",
+            "Doubts the founding.",
+            origin={"rejects_fact": again},
+        )
+    head = world.head_rev()
+    await _act(
+        plugin, "pick_date", keep_fact_id=s.founded, drop_fact_id=again, mode="remove"
+    )
+    assert not _errors(plugin)
+    assert world.head_rev() == head + 1
+    view = world.view()
+    assert view.fact(again) is None
+    assert view.fact(waived)[1].overrides == [s.founded]
+    assert view.fact(departs)[1].origin == {"rejects_fact": s.founded}
+    assert _last(plugin, "pick_date")["data"]["notes"] == []
+
+
 # the old acceptance world's texts (final review I1): the Conclave's 642
 # founding against the 947 rediscovery is a false pair at 0.4 (overlap
 # 0.43), the Codex's compiling in 217 against 312 a true one (0.63)

@@ -350,7 +350,7 @@ def accept_merge(
             if hit is not None and hit[1].origin is not None:
                 origin = {k: v for k, v in hit[1].origin.items() if k != "summary"}
                 rev.correct_fact(copies[fact_id], origin=origin or None)
-        _repoint_overrides(rev, world.view(), gone, replaced, copies, notes)
+        repoint_overrides(rev, world.view(), gone, replaced, copies, notes)
 
     result = plan.result()
     log.info(
@@ -388,7 +388,7 @@ def _replacement(
     return current
 
 
-def _repoint_overrides(
+def repoint_overrides(
     rev: Revision,
     view: WorldView,
     gone: set[str],
