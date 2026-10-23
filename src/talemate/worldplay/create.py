@@ -2782,7 +2782,7 @@ def file_chain(
         state = live.thing(thing_id) if isinstance(thing_id, str) else None
         name = live.name_of(state.id) if state is not None else None
         refused = (
-            _refile_refused(row, rows, own, adopted, name or "")
+            _refile_refused(live, row, rows, own, adopted, name or "")
             if state is not None
             else None
         )
@@ -2804,6 +2804,7 @@ def file_chain(
 
 
 def _refile_refused(
+    view: WorldView,
     row: dict[str, Any],
     rows: Sequence[NewName],
     own: dict[str, str] | None,
@@ -2813,7 +2814,9 @@ def _refile_refused(
     """Why the re-file row may not move its thing (a note), or `None`: its
     `to` must name an outer body among `rows` (`{"name", "drawer"}`) or
     the entry (`own`), and its thing must be one a row is marked the same
-    as, one the core adopts, or filed (`from`) where that body goes."""
+    as, one the core adopts, or filed (`from`) where that body goes: in
+    its sphere, in its drawer as `view`'s sphere places it (a drawer it
+    has since dropped counts as Unsorted)."""
 
     to = row.get("to")
     target = to.get("name") if isinstance(to, dict) and "sphere" not in to else None
@@ -2827,7 +2830,16 @@ def _refile_refused(
     home = outer.part_of if outer is not None else None
     if not isinstance(home, dict) or "sphere" not in home:
         return f"{name} isn't moved into {target}: it isn't offered to"
-    if row.get("from") != {"sphere": home["sphere"], "drawer": home.get("drawer")}:
+    held = row.get("from")
+    if not isinstance(held, dict) or held.get("sphere") != home["sphere"]:
+        return f"{name} isn't moved into {target}: it isn't filed where {target} goes"
+    # where `spheres.items` places it, as `bodies._refile_rows` drew it: a
+    # drawer the sphere no longer has is its Unsorted
+    have = {drawer.id for drawer in spheres.drawers(view, home["sphere"])}
+    placed = held.get("drawer")
+    if placed not in have:
+        placed = UNSORTED_DRAWER_ID
+    if placed != home.get("drawer"):
         return f"{name} isn't moved into {target}: it isn't filed where {target} goes"
     return None
 

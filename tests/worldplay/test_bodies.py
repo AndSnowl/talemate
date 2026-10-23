@@ -1023,3 +1023,65 @@ def test_part_marked_same_as_a_filed_entry_is_offered_to_move(world):
         "sphere": army.id,
         "drawer": UNSORTED_DRAWER_ID,
     }
+
+
+def test_refile_into_a_body_inside_it_refuses_a_cycle(world):
+    """A legitimate re-file row (offered by the preview, ticked) that
+    would put a sphere inside the body it holds reaches `file_in`'s cycle
+    guard: the whole accept is refused, nothing written."""
+
+    ids = _tsardom(world)
+    military = {"sphere": ids["tsardom"], "drawer": MILITARY}
+    with world.revision(Source.manual(note="legion")) as rev:
+        legion = rev.create_thing(
+            "sphere",
+            {"name": "Iron Legion", "template": "order", "part_of": military},
+        )
+        rev.create_thing(
+            "sphere",
+            {
+                "name": ARMY,
+                "template": "order",
+                "part_of": {"sphere": legion, "drawer": UNSORTED_DRAWER_ID},
+            },
+        )
+    preview = add_outer_body(world, _trooper(), "White Talon", _in_military(ids))
+    row = next(r for r in preview.refile if r["thing_id"] == legion)
+    assert row["from"] == military
+    row["ticked"] = True
+    head = world.head_rev()
+    with pytest.raises(ValueError, match="inside itself"):
+        accept_preview(world, preview)
+    assert world.head_rev() == head
+
+
+def test_refile_row_from_a_dropped_drawer_moves(world):
+    """A thing whose drawer the sphere has since dropped sits in its
+    Unsorted (`spheres.items`): an outer body filed in Unsorted offers it a
+    re-file row, and ticked, it moves, though its stored drawer id isn't
+    Unsorted's."""
+
+    ids = _tsardom(world)
+    with world.revision(Source.manual(note="banner")) as rev:
+        banner = rev.create_thing(
+            "lore",
+            {
+                "name": "Old Banner",
+                "part_of": {"sphere": ids["tsardom"], "drawer": "dead0000"},
+            },
+        )
+        rev.add_fact(banner, "general", "A banner from the old wars.")
+    outer = OuterBody(
+        name=ARMY,
+        template="order",
+        part_of={"sphere": ids["tsardom"], "drawer": UNSORTED_DRAWER_ID},
+    )
+    preview = add_outer_body(world, _trooper(), "White Talon", outer)
+    row = next(r for r in preview.refile if r["thing_id"] == banner)
+    row["ticked"] = True
+    notes: list[str] = []
+    accept_preview(world, preview, notes=notes)
+    view = world.view()
+    army = _named(view, ARMY)
+    assert view.thing(banner).fields["part_of"]["sphere"] == army.id
+    assert not [n for n in notes if "Old Banner" in n]
