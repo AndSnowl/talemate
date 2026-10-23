@@ -12,7 +12,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   open world is held on the websocket handler (`handler.world`), one per
   connection, and closed when the connection goes.
 - Things: `list_things {kind}` (stubs included, each with its `stub`
-  marker; ignored stubs left out), `get_thing {id, at}`. A thing's payload
+  marker; ignored stubs left out; a being with its `existence`, so the
+  scene pickers offer only real ones), `get_thing {id, at}`. A thing's payload
   holds its fields, the facts visible at `at` (each with the inherited
   facts it `overrides`), its cached prose per section (with whether it's
   stale, following its lineage), its whole change history (`timeline`)
@@ -134,7 +135,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   it may hold `elsewhere` (`[{entry, text, since?, held_by?}]`) and
   `move_in` (`["M1", ...]`, the broader entry's facts as labelled), each
   read through the real parsers (`create.holder_named`,
-  `parse_elsewhere`, `broader_entry` and `parse_move_in`).
+  `parse_elsewhere`, `broader_entry` and `parse_move_in`). The entry's
+  `same_as` is offered as the real preview's is (`create.same_offers`),
+  and the file's `verdict` (`{verdict, why}`) stands in for the model's
+  hint on the top candidate when both sides have facts.
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
   `set_field` each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
@@ -310,8 +314,10 @@ from talemate.worldplay.create import (
     preview_inherited,
     preview_thing,
     prose_reads,
+    same_offers,
     untick_moved_repeats,
 )
+from talemate.worldplay.decide import Verdict
 from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
     LinkSpan,
@@ -902,8 +908,9 @@ async def _fixed_preview(
     `[{entry, text, since?, held_by?}]` (`create.parse_elsewhere`, repeats
     flagged, a new entry's row offered what it may be the same as); and
     `move_in`, the model's labels (`["M1", ...]`) of the broader entry's
-    facts (`create.broader_entry`, `parse_move_in`, `move_in_rows`).
-    Async so it runs through the same background task and reply path as
+    facts (`create.broader_entry`, `parse_move_in`, `move_in_rows`); the
+    entry's `same_as` (`create.same_offers`), with the file's `verdict`
+    as the hint on the top candidate. Async so it runs through the same background task and reply path as
     the real one."""
 
     view = world.view()
@@ -973,6 +980,17 @@ async def _fixed_preview(
             picked = parse_move_in(json.dumps(wrapper), wrapper, labels)
             move_in = move_in_rows(view, broader_id, picked)
             untick_moved_repeats(view, facts, move_in, settings)
+    # same thing?: what the entry may already be, as the real preview
+    # offers it (never the stub filled, nor the matching stub); the file's
+    # `verdict` (`{verdict, why}`) stands in for the model's hint on the
+    # top candidate, given only when both sides have facts
+    matching = None if stub is not None else matching_stub(view, kind, name)
+    skip = [thing_id for thing_id in (payload.stub_id, matching) if thing_id]
+    same_as = same_offers(view, name, near_ids=[], exclude=skip)
+    verdict: dict[str, Verdict] | None = None
+    hint = fixed.get("verdict")
+    if isinstance(hint, dict) and same_as and same_as[0].has_facts and facts:
+        verdict = {same_as[0].thing_id: Verdict.model_validate(hint)}
     return CreatePreview(
         kind=kind,
         prompt=payload.prompt,
@@ -982,7 +1000,7 @@ async def _fixed_preview(
         prose=fixed["prose"],
         inherited=preview_inherited(view, kind, fields),
         stub_id=payload.stub_id,
-        matching_stub_id=None if stub is not None else matching_stub(view, kind, name),
+        matching_stub_id=matching,
         context=context,
         picks=payload.picks,
         treated_as_new=payload.new_names,
@@ -990,6 +1008,8 @@ async def _fixed_preview(
         ties=fixed.get("ties", []) if kind == "character" else [],
         elsewhere=elsewhere,
         move_in=move_in,
+        same_as=same_as,
+        verdict=verdict,
     )
 
 
@@ -2124,6 +2144,9 @@ class WorldsPlugin(Plugin):
             if payload.kind == "sphere":
                 template = state.fields.get("template")
                 entry["template"] = template if isinstance(template, str) else None
+            if state.kind == "being":
+                # only a real being is cast or played (the scene pickers)
+                entry["existence"] = spheres.existence(state)
             things.append(entry)
         reply: dict[str, Any] = {"kind": payload.kind, "things": things}
         if payload.kind == "sphere":

@@ -5567,3 +5567,62 @@ async def test_accept_sphere_schedules_prose_for_linked_entries(
     assert "Kept by smiths." in [f.text for f in s.world.view().thing(s.vigil).facts]
     assert scheduled == [s.vigil]
     assert synod not in scheduled
+
+
+async def test_fixed_preview_offers_same_and_verdict(plugin, tmp_path, monkeypatch):
+    """The browser tests' fixed preview offers what the entry may already
+    be, as the real preview does (`same_as`, never the matching stub), and
+    the file's `verdict` stands in for the model's hint on the top
+    candidate -- only when both sides have facts."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Ash"})
+    world = plugin.world
+    with world.revision(Source.manual(note="seed")) as rev:
+        ash = rev.create_thing("place", {"name": "Ashenmere"})
+        rev.add_fact(ash, "description", "A lake of grey water.")
+    hint = {"verdict": "same", "why": "Both are the lake's caves."}
+    _fixed_preview_file(
+        tmp_path,
+        monkeypatch,
+        name="The Ashenmere Caves",
+        facts=[{"category": "description", "text": "Caves under the lake."}],
+        prose={"description": "Caves."},
+        verdict=hint,
+    )
+    await _act(plugin, "preview_thing", kind="place", prompt="the caves")
+    await _drain(plugin)
+    preview = _last(plugin, "preview_thing")["data"]
+    assert [offer["thing_id"] for offer in preview["same_as"]] == [ash]
+    assert preview["same_as"][0]["kind"] == "place"
+    assert preview["verdict"] == {ash: {**hint, "confidence": None}}
+
+    # no facts on the preview's side: no hint
+    _fixed_preview_file(
+        tmp_path,
+        monkeypatch,
+        name="The Ashenmere Caves",
+        facts=[],
+        prose={"description": "Caves."},
+        verdict=hint,
+    )
+    await _act(plugin, "preview_thing", kind="place", prompt="the caves")
+    await _drain(plugin)
+    preview = _last(plugin, "preview_thing")["data"]
+    assert [offer["thing_id"] for offer in preview["same_as"]] == [ash]
+    assert preview["verdict"] is None
+
+
+async def test_list_things_beings_carry_existence(plugin):
+    """A being's listing carries its `existence` (undecided when unset),
+    so the scene pickers offer only real beings."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Gods"})
+    with plugin.world.revision(Source.manual(note="seed")) as rev:
+        rev.create_thing("being", {"name": "The River Spirit", "existence": "real"})
+        rev.create_thing("being", {"name": "The Eternal Light"})
+    await _act(plugin, "list_things", kind="being")
+    things = _last(plugin, "list_things")["data"]["things"]
+    assert {t["name"]: t["existence"] for t in things} == {
+        "The River Spirit": "real",
+        "The Eternal Light": "undecided",
+    }
