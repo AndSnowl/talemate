@@ -233,6 +233,35 @@ async def test_preview_held_by_written_on_accept(world, spheres_world):
     ]
 
 
+async def test_preview_prose_tells_held_facts_as_belief(world, spheres_world):
+    """Final review minor 6: a preview's prose is written from its held
+    facts as belief, as description prose is for a thing in the world
+    (ruling C3)."""
+
+    reply = json.dumps(
+        {
+            "name": "The Night of Feathers",
+            "facts": [
+                {
+                    "category": "general",
+                    "text": "Every owl lost its sight.",
+                    "held_by": "White Dawn",
+                },
+                {"category": "general", "text": "It fell in 994."},
+            ],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A night of blindness.")
+        await preview_thing(world, "lore", "a night of blindness", {}, client)
+    prose_prompt = str(client.prompt_history[1]["prompt"])
+    assert "The White Dawn holds that every owl lost its sight." in prose_prompt
+    assert "It fell in 994." in prose_prompt
+    assert "- Every owl lost its sight." not in prose_prompt
+
+
 def test_repoint_carries_held_by(world, spheres_world):
     """A stub merged into its entry hands over what it held: a fact held by
     the stub is held by the entry after, and so is a belief the stub held

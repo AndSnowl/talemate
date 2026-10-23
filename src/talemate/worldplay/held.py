@@ -135,7 +135,7 @@ _UNSET: object = object()
 def held_text(
     view: WorldView,
     fact: FactState,
-    owner: ThingState,
+    owner: ThingState | None,
     text: str | None = None,
     *,
     holder_id: object = _UNSET,
@@ -148,12 +148,13 @@ def held_text(
     "<Holder> holds: <Text>", its first letter capitalised (ruling C6).
     It's as it is when it isn't held, its holder has no name, or it
     already says who holds it (`attributes_itself`). A caller that has
-    worked out the holder (`spheres.held_by`) passes it as `holder_id`.
+    worked out the holder (`spheres.held_by`) passes it as `holder_id`;
+    one with no `owner` (a preview's fact, not written yet) must.
     """
 
     rendered = view.render(fact.text) if text is None else text
     if holder_id is _UNSET:
-        holder_id = spheres.held_by(view, fact, owner)
+        holder_id = spheres.held_by(view, fact, owner) if owner is not None else None
     if not isinstance(holder_id, str):
         return rendered
     holder = view.thing(holder_id)

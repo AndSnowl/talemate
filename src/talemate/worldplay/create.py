@@ -165,6 +165,7 @@ from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
 from talemate.worldplay.decide import Verdict, preview_label, same_thing
+from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
     FALLBACK_KIND,
     NewName,
@@ -3339,6 +3340,19 @@ async def preview_thing(
     )
 
 
+def preview_fact_text(view: WorldView, fact: PreviewFact) -> str:
+    """A preview's own fact as a prompt is told it: as belief when it's
+    held (`held.held_text`, ruling C3), else as it reads."""
+
+    rendered = view.render(fact.text)
+    if not fact.held_by:
+        return rendered
+    stand_in = FactState.model_construct(
+        fact_id="", category=fact.category, text=fact.text, origin=None
+    )
+    return held_text(view, stand_in, None, rendered, holder_id=fact.held_by)
+
+
 async def _preview_prose(
     view: WorldView,
     calendar: Calendar,
@@ -3380,15 +3394,19 @@ async def _preview_prose(
         [f"Heritage: {', '.join(heritage_names)}."] if heritage_names else []
     )
 
+    # a held fact as belief, as description prose reads one (ruling C3)
+    told = [preview_fact_text(view, f) for f in facts]
     # the preview's own identity, for every section's background -- the
     # same core fields `prose_gen.generate_section` reads off a `ThingState`
-    fact_pairs = [(f.category, f.text) for f in facts]
+    fact_pairs = [(f.category, text) for f, text in zip(facts, told)]
     background_fields = {**fields, "name": name}
 
     prose: dict[str, str] = {}
     for section in prose_gen.sections_for(kind):
         categories = prose_gen.section_categories(kind, section)
-        section_facts = [f.text for f in facts if f.category in categories]
+        section_facts = [
+            text for f, text in zip(facts, told) if f.category in categories
+        ]
         by_kind = prose_gen.inherited_categories(section) if kind == "character" else {}
         exclude_by_kind = (
             prose_gen.inherited_categories("description")
@@ -3584,11 +3602,7 @@ def _accept_new(
     start, end = prose_gen.stretch_containing(world, thing_id, None)
     cache = world.prose()
     moved_in = any(row.ticked and row.from_id != thing_id for row in preview.move_in)
-    rev = (
-        before
-        if moved_in or any(not fact.ticked for fact in preview.facts)
-        else None
-    )
+    rev = before if moved_in or any(not fact.ticked for fact in preview.facts) else None
     if moved_in and prose is not None and thing_id not in prose:
         prose.append(thing_id)
     for section in prose_gen.sections_for(preview.kind):
