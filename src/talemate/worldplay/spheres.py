@@ -209,6 +209,9 @@ class SpherePreview(CreatePreview):
     parent_items: list[dict[str, Any]] = Field(default_factory=list)
     drops: list[str] = Field(default_factory=list)
     rejects: list[str] = Field(default_factory=list)
+    # the reply's top object didn't parse: read from its complete parts
+    # (`_salvaged_core`, ruling C26), so the owner is told part was lost
+    salvaged: bool = False
 
 
 class FillPreview(BaseModel):
@@ -243,46 +246,68 @@ def _reply_object(reply: str, key: str) -> dict[str, Any] | None:
     return None
 
 
-_STRING_KEY = r'"%s"\s*:\s*"((?:[^"\\]|\\.)*)"'
+# the reply's own name: its first key, the prepared "{" there or not
+_NAME_AT_START = re.compile(r'^\s*\{?\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"')
+_SUMMARY = re.compile(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+
+def _json_string(raw: str) -> str:
+    try:
+        value = json.loads('"%s"' % raw)
+    except json.JSONDecodeError:
+        return raw
+    return value if isinstance(value, str) else raw
 
 
 def _salvaged_core(reply: str) -> dict[str, Any]:
-    """A core reply whose outline can't be read (ruling C26: the curation
-    flow probe's church came back with its items as a list of lists, so
-    the object holding "drawers" doesn't parse) as a core of what does:
-    no drawers (`_outline` gives the template's own), and the name,
-    summary, other names, timeline and items read from the reply's
-    complete objects and strings -- an item is an object with a "drawer"
-    and a "text", a timeline entry one with a "year" and a "text", another
-    name one with a "tag". An item naming a drawer the template lacks is
-    filed in Unsorted (`_drawer_for`). With nothing of it readable, the
-    preview fails: there's nothing to show."""
+    """A core reply whose top object doesn't parse (ruling C26: the
+    curation flow probe's church came back with its items as a list of
+    lists) as a core of its complete parts:
 
-    parts = json_objects(reply) + json_objects("{" + reply)
+    - `drawers`: the `{type, title}` objects (no `text`), the outline it
+      wrote; none, and `_outline` gives the template's own;
+    - `items`: the objects with a `drawer` and a `text`, each filed in its
+      drawer by title (`_drawer_for`; an unknown one in Unsorted);
+    - `timeline`: those with a `year` and a `text`; `aka`: those with a
+      `tag` and a `name`; `names`: those with a `name` and a `kind` (no
+      `drawer`, no `text`);
+    - `name`: the reply's first key, where the core writes it; `summary`:
+      its string.
+
+    With no item and no timeline entry readable, the preview fails:
+    there's nothing to show."""
+
     seen: set[str] = set()
     objects: list[dict[str, Any]] = []
-    for obj in parts:
+    for obj in json_objects(reply) + json_objects("{" + reply):
         key = json.dumps(obj, sort_keys=True)
         if key not in seen:
             seen.add(key)
             objects.append(obj)
     core: dict[str, Any] = {
-        "drawers": [],
+        "drawers": [
+            o for o in objects if "type" in o and "title" in o and "text" not in o
+        ],
         "items": [o for o in objects if "drawer" in o and "text" in o],
         "timeline": [o for o in objects if "year" in o and "text" in o],
         "aka": [o for o in objects if "tag" in o and "name" in o],
+        "names": [
+            o
+            for o in objects
+            if "name" in o and "kind" in o and "drawer" not in o and "text" not in o
+        ],
     }
-    for key in ("name", "summary"):
-        found = re.search(_STRING_KEY % key, reply)
-        if found is not None:
-            try:
-                core[key] = json.loads('"%s"' % found.group(1))
-            except json.JSONDecodeError:
-                core[key] = found.group(1)
-    if not (core["items"] or core["timeline"] or core.get("summary")):
+    if not (core["items"] or core["timeline"]):
         raise ValueError("the model's reply had no drawer outline in it")
+    found = _NAME_AT_START.search(reply)
+    if found is not None:
+        core["name"] = _json_string(found.group(1))
+    found = _SUMMARY.search(reply)
+    if found is not None:
+        core["summary"] = _json_string(found.group(1))
     log.info(
         "spheres.core_salvaged",
+        drawers=len(core["drawers"]),
         items=len(core["items"]),
         timeline=len(core["timeline"]),
     )
@@ -767,6 +792,7 @@ async def preview_sphere(
             )
         reply = extracted["response"]
     core = _reply_object(reply, "drawers")
+    salvaged = core is None
     if core is None:
         core = _salvaged_core(reply)
 
@@ -943,6 +969,7 @@ async def preview_sphere(
         promote_id=promote_id,
         part_of=part_of,
         same_as=same_as,
+        salvaged=salvaged,
     )
 
 

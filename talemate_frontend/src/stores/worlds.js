@@ -573,6 +573,28 @@ export function rowsTicked(rows, indices, ticked) {
     return (rows || []).map((row, index) => (picked.has(index) ? { ...row, ticked } : row));
 }
 
+// The move-in rows the owner set (`moveIn`, from MoveInSection) and the
+// preview's own facts to go with them (ruling C24's other half): an own
+// fact repeating a move the owner ticks (its `repeat_of.fact_id`) is
+// unticked, marked `untickedByMove`, so the claim isn't written twice;
+// unticking the move ticks it again. A fact the owner unticked themselves
+// is left as it is. `{move_in, facts}`.
+export function moveInEdit(preview, moveIn) {
+    const ticked = new Set((moveIn || []).filter((row) => row.ticked).map((row) => row.fact_id));
+    const facts = (preview?.facts || []).map((fact) => {
+        const repeats = fact.repeat_of?.fact_id;
+        if (fact.untickedByMove && !ticked.has(fact.untickedByMove)) {
+            const { untickedByMove, ...rest } = fact;
+            return { ...rest, ticked: true };
+        }
+        if (repeats && ticked.has(repeats) && fact.ticked !== false && !fact.untickedByMove) {
+            return { ...fact, ticked: false, untickedByMove: repeats };
+        }
+        return fact;
+    });
+    return { move_in: moveIn || [], facts };
+}
+
 // `rows` with row `index` changed (`changes` merged in).
 export function rowChanged(rows, index, changes) {
     return (rows || []).map((row, i) => (i === index ? { ...row, ...changes } : row));

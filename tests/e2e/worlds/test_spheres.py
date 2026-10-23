@@ -13,6 +13,8 @@ What the page sends is read back from a websocket spy.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from playwright.sync_api import expect
 
 from e2e.seed import seed_fm_world
@@ -27,6 +29,14 @@ from e2e.worlds.test_world_tab import (
 )
 
 # drawer ids (8-hex, as the `drawers` field holds them)
+# the curation flow probe's run 4 church core: its items a list of lists
+MALFORMED_CORE = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "worldplay"
+    / "curation-malformed-core-reply.txt"
+).read_text()
+
 DOCTRINES = "d0c71e5a"
 HIERARCHY = "4e1a2c3b"
 RITES = "717e5abc"
@@ -587,6 +597,44 @@ def test_ties_with_exceptions(app, page, fixed_preview):
     assert "Doubts the council" in tie.inner_text()
     sent = _sent(page, "accept_preview")[-1]["preview"]["ties"]
     assert [len(t["exceptions"]) for t in sent] == [1]
+    assert page.console_errors == []
+
+
+def test_salvaged_core_says_part_was_unreadable(app, page, fixed_sphere):
+    """Ruling C26: a core reply that doesn't parse whole (the curation flow
+    probe's, its items a list of lists) still previews, from its complete
+    parts, and the preview says part of the reply couldn't be read. A reply
+    that parses whole says nothing of the kind."""
+
+    name = _world_name("Salvage")
+    doctrine = {
+        "kind": "lore",
+        "name": "The Silent Dawn",
+        "facts": [{"category": "general", "text": "The state church."}],
+    }
+    seed_fm_world(app.root, name, present_year=1000, things=[doctrine])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    fixed_sphere({"sphere": MALFORMED_CORE})
+
+    page.get_by_test_id("kind-lore").click()
+    lore = _open_thing(page, "The Silent Dawn")
+    lore.get_by_test_id("make-sphere").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("sphere-template-picker").get_by_role(
+        "button", name="Religion"
+    ).click()
+    box.get_by_role("button", name="Create").click()
+    preview = page.get_by_test_id("sphere-preview")
+    preview.wait_for(state="visible", timeout=TIMEOUT_MS)
+    note = preview.get_by_test_id("sphere-preview-salvaged")
+    expect(note).to_be_visible()
+    assert "couldn't be read" in note.inner_text()
+    drawer = preview.get_by_test_id("preview-drawer").filter(
+        has_text="Rites and Ceremonies"
+    )
+    assert "The Dawn Vigil" in drawer.inner_text()
     assert page.console_errors == []
 
 

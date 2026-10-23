@@ -1238,8 +1238,9 @@ def _part_of_link(state: ThingState) -> tuple[str, str | None] | None:
 
 def candidate_line(view: WorldView, state: ThingState) -> str:
     """One entry of the "Entries near this one" list, as the curation probe
-    wrote it: "Name (kind; usually called X; part of Y, in its Z drawer;
-    drawers: ...; stub): its summary or first fact", the text cut at
+    wrote it, less the drawer an entry is filed in (ruling C29): "Name
+    (kind; usually called X; part of Y; drawers: ...; stub): its summary
+    or first fact", the text cut at
     `CANDIDATE_LINE_CHARS`. A sphere's kind reads "sphere: <template>"
     ("place, sphere: nation" for a place sphere), and lists the drawers a
     prompt fills."""
@@ -1262,13 +1263,9 @@ def candidate_line(view: WorldView, state: ThingState) -> str:
         bits.append(f"usually called {everyday}")
     link = _part_of_link(state)
     if link is not None:
-        title = next(
-            (d.title for d in spheres.drawers(view, link[0]) if d.id == link[1]), None
-        )
-        bits.append(
-            f"part of {view.name_of(link[0])}"
-            + (f", in its {title} drawer" if title else "")
-        )
+        # no drawer title (ruling C29: the curation flow probe's facts took
+        # it up, "the Techniques drawer of Runeweaving")
+        bits.append(f"part of {view.name_of(link[0])}")
     if is_sphere:
         titles = [
             d.title for d in spheres.drawers(view, state.id) if d.type in TYPE_HELP
@@ -3468,8 +3465,45 @@ def accept_preview(
     if same_target_id is not None:
         if into_stub is not None:
             raise ValueError("a preview goes into a stub or onto an entry, not both")
+        _skip_moved_repeats(world.view(), preview, world.curation(), notes)
         return _accept_same(world, preview, same_target_id, notes, prose)
+    _skip_moved_repeats(world.view(), preview, world.curation(), notes)
     return _accept_new(world, preview, into_stub, notes, prose)
+
+
+def _skip_moved_repeats(
+    view: WorldView,
+    preview: CreatePreview,
+    settings: CurationSettings,
+    notes: list[str] | None,
+) -> None:
+    """The accept's safety net (ruling C24): a ticked own fact that says
+    again what a ticked move brings in -- at the world's
+    `repeat_untick_threshold`, with at least `UNTICK_MIN_WORDS` content
+    words -- isn't written; the move brings the claim, and a note says
+    so. The preview unticks it when the owner ticks the move; this is for
+    a client that didn't. Only moves from an entry the preview offers them
+    from count (`move_in_sources`)."""
+
+    sources = move_in_sources(view, preview) or set()
+    moves = [row for row in preview.move_in if row.ticked and row.from_id in sources]
+    if not moves:
+        return
+    for fact in preview.facts:
+        if not fact.ticked:
+            continue
+        text = view.render(fact.text)
+        if len(content_words(text)) < UNTICK_MIN_WORDS:
+            continue
+        if (
+            max(overlap(text, row.text) for row in moves)
+            < settings.repeat_untick_threshold
+        ):
+            continue
+        fact.ticked = False
+        log.info("create.own_repeat_of_move_skipped", text=text[:60])
+        if notes is not None:
+            notes.append(f"Not written twice: {text!r} is moved in already")
 
 
 def _accept_new(

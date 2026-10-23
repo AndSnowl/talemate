@@ -34,6 +34,7 @@ import {
     previewSegments,
     rejectableItems,
     repointedNote,
+    moveInEdit,
     rowChanged,
     rowsTicked,
     shelvedRows,
@@ -2450,6 +2451,35 @@ check("re-pointing the open stub's page opens the target's", () => {
     // the stub's page isn't somewhere back goes
     store.goBack();
     assert.equal(store.selectedThingId, null);
+});
+
+check('ticking a move-in pick unticks the own facts repeating it, and back (ruling C24)', () => {
+    const preview = {
+        facts: [
+            { text: 'The law code, again.', ticked: true, repeat_of: { fact_id: 'm1' } },
+            { text: 'Fresh.', ticked: true, repeat_of: null },
+            // the owner unticked it themselves: it stays unticked
+            { text: 'Another copy.', ticked: false, repeat_of: { fact_id: 'm1' } },
+            { text: 'Already in the world.', ticked: false, repeat_of: { fact_id: 'x9' } },
+        ],
+        move_in: [
+            { fact_id: 'm1', text: 'The law code.', ticked: false, picked: true },
+            { fact_id: 'm2', text: 'The army.', ticked: false, picked: false },
+        ],
+    };
+    // the owner ticks the pick: its repeat is unticked
+    let out = moveInEdit(preview, rowsTicked(preview.move_in, [0], true));
+    assert.deepEqual(out.move_in.map((row) => row.ticked), [true, false]);
+    assert.deepEqual(out.facts.map((fact) => fact.ticked), [false, true, false, false]);
+    // another row ticked: the facts don't change again
+    out = moveInEdit({ ...preview, ...out }, rowsTicked(out.move_in, [1], true));
+    assert.deepEqual(out.facts.map((fact) => fact.ticked), [false, true, false, false]);
+    // the pick unticked: only the fact it unticked comes back
+    out = moveInEdit({ ...preview, ...out }, rowsTicked(out.move_in, [0], false));
+    assert.deepEqual(out.facts.map((fact) => fact.ticked), [true, true, false, false]);
+    assert.equal('untickedByMove' in out.facts[0], false);
+    // no facts, no trouble
+    assert.deepEqual(moveInEdit({ move_in: [] }, []), { move_in: [], facts: [] });
 });
 
 if (failures.length) {

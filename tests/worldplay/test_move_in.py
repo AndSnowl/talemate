@@ -545,6 +545,27 @@ async def test_move_in_copies_and_removes(world, tsardom):
     assert t.tsardom in prose
 
 
+async def test_accept_skips_an_own_fact_repeating_a_ticked_move(world, tsardom):
+    """The safety net behind the preview (ruling C24): an own fact still
+    ticked that says again what a ticked move brings in (the Zakonnik's
+    copy of the law code, ticked by a client that didn't untick it) isn't
+    written twice. The move brings the claim; a note says so."""
+
+    t = tsardom
+    preview, _prompt = await _zakonnik(world, t)
+    for row in preview.move_in:
+        row.ticked = row.picked
+    again = preview.facts[1]
+    assert again.text.startswith("The revised Zakonnik")
+    again.ticked = True
+    notes: list[str] = []
+    accept_preview(world, preview, notes=notes)
+    texts = [f.text for f in world.live_facts(t.zakonnik)]
+    assert not any(text.startswith("The revised Zakonnik") for text in texts)
+    _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
+    assert any("moved in" in note for note in notes)
+
+
 async def test_move_in_keeps_dates_origin_held_by(world, tsardom):
     t = tsardom
     preview, _prompt = await _zakonnik(world, t, ["M2"])

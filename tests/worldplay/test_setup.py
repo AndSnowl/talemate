@@ -1241,8 +1241,8 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
 async def test_starting_a_scene_writes_only_the_stubs_own_facts(world):
     """Ruling C25: a stub the scene fills is previewed and accepted with no
     owner to tick anything, so it writes only its own facts. Its elsewhere
-    items, the facts it would move in from its broader entry and any
-    re-file rows arrive unticked and are never written; no same-thing
+    items and the facts it would move in from its broader entry arrive
+    unticked and are never written; no same-thing
     verdict is asked (nobody sees it). Every other entry keeps exactly the
     facts it had (the curation flow probe: a scene start wrote 5 facts
     onto 4 entries and moved 2 of the Church's out)."""
@@ -1303,7 +1303,8 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world):
     [preview] = setup.stub_previews
     assert preview.elsewhere and not any(e.ticked for e in preview.elsewhere)
     assert preview.move_in and not any(m.ticked for m in preview.move_in)
-    assert not any(row.get("ticked") for row in preview.refile)
+    # (no re-file rows here: a stub preview names no outer body; the
+    # setup unticks them all the same, `setup._own_facts_only`)
     # no verdict call: the create and its prose only
     assert len(client.prompt_history) == 2
     assert preview.verdict is None

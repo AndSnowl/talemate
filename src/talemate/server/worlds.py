@@ -861,7 +861,8 @@ def _fixed_sphere_reply(key: str) -> str | None:
     `None` when the setting is unset, its file isn't there, or the file has
     no `key`. A `fill` list is wrapped as `{"new_items": [...]}`; a `fill`
     object is the whole reply, so it can carry `elsewhere` (each with its
-    `held_by`) and `names`."""
+    `held_by`) and `names`. A string is the reply's raw text, as it is (a
+    reply that doesn't parse whole, ruling C26)."""
 
     path = _fixed_file(FIXED_SPHERE_ENV)
     if path is None:
@@ -874,6 +875,8 @@ def _fixed_sphere_reply(key: str) -> str | None:
     # "names"}`) is the whole reply
     if key == "fill" and isinstance(reply, list):
         reply = {"new_items": reply}
+    if isinstance(reply, str):
+        return reply
     return json.dumps(reply)
 
 

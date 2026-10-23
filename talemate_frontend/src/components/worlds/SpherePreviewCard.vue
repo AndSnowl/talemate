@@ -6,6 +6,12 @@
             <v-chip size="x-small" label variant="outlined">{{ preview.agent ? 'acts in the world' : 'a body of knowledge' }}</v-chip>
         </div>
 
+        <!-- the model's reply didn't parse whole: read from its complete
+             parts (ruling C26), so some of it may be missing -->
+        <div v-if="preview.salvaged" class="salvaged text-caption mb-2" data-testid="sphere-preview-salvaged">
+            Part of the model's reply couldn't be read, so this preview was pieced together from what could. Some items may be missing: check it, or ask again.
+        </div>
+
         <!-- the world may have it already: a sphere's core isn't accepted
              onto an entry, that entry is made a sphere instead (ruling C9) -->
         <SameThingAsk
@@ -92,7 +98,7 @@
         <OuterBodyForm v-if="!branch" :row-name="preview.name" @submit="worlds.addOuterBody(type, preview.name, $event)" />
         <PreviewElsewhere :rows="preview.elsewhere || []" :type="type" :new-names="preview.new_names || []" @update="edit({ elsewhere: $event })" />
         <PreviewStubs :rows="preview.new_names || []" :type="type" @update="edit({ new_names: $event })" />
-        <MoveInSection :rows="preview.move_in || []" :refile="preview.refile || []" @update="edit({ move_in: $event })" @update-refile="edit({ refile: $event })" />
+        <MoveInSection :rows="preview.move_in || []" :refile="preview.refile || []" @update="edit(moveInEdit(preview, $event))" @update-refile="edit({ refile: $event })" />
 
         <div class="d-flex align-center flex-wrap ga-2 mt-3">
             <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :loading="!!worlds.pending.accept_sphere" :disabled="!name.trim() || !!worlds.pending.add_outer_body" @click="$emit('accept', name.trim())">Accept</v-btn>
@@ -113,7 +119,7 @@
 </template>
 
 <script>
-import { countsLine, previewCounts, previewSegments, rowChanged, useWorldsStore } from '@/stores/worlds.js';
+import { countsLine, moveInEdit, previewCounts, previewSegments, rowChanged, useWorldsStore } from '@/stores/worlds.js';
 import { formatDate } from './worldDates.js';
 import { UNSORTED, WRITTEN_DRAWER_TYPES } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
@@ -210,6 +216,7 @@ export default {
     },
     methods: {
         formatDate,
+        moveInEdit,
         previewSegments,
         edit(changes) {
             this.worlds.editPreview(this.type, changes);
@@ -243,6 +250,12 @@ export default {
 </script>
 
 <style scoped>
+.salvaged {
+    border-left: 3px solid rgb(var(--v-theme-warning));
+    padding: 4px 8px;
+    background: rgba(var(--v-theme-warning), 0.12);
+}
+
 .preview-name {
     max-width: 320px;
 }

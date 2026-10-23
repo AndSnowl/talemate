@@ -1,0 +1,718 @@
+{
+ "about": "Hand labels for run 5 of the curation flow probe (2026-10-23), judged after the run (unlike the 2026-10-22 placement labels, committed before any call). own_facts: each expanded entry's own preview facts, on_topic under the owner's either-side reading. elsewhere: either_side right, strict right (the target is the claim's primary home). move_in: the ticked rows (the defaults then), right when the fact is mainly about the new entry; harness marks lines the probe's harness wrote for the owner.",
+ "entries": {
+  "The Divine Right of the Tsar": {
+   "step": "doctrine",
+   "own_facts": [
+    {
+     "text": "The Divine Right of the Tsar is the doctrine of the Church of the Eternal Vigil that the Tsar of Moscavia rules by divine will, having been placed upon the throne by God's direct appointment.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The doctrine holds that the Tsar is not merely a political leader but a divinely anointed sovereign whose authority flows from the same source as the Great Changing itself — the will of God as revealed through the sacred night.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Tsar is considered the earthly representative of God's covenant with Moscavia, and his rule is understood to be inseparable from the sanctity of the owl-folk transformation.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "According to the doctrine, resistance to the Tsar's authority is resistance to God, and obedience to the Tsar is a sacred duty incumbent upon all owl-folk.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Patriarch of Moscavia is charged with formally recognizing the legitimacy of each new Tsar through a consecration ceremony performed at the Temple of the First Changing in Moskov.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The doctrine asserts that the Tsar's power is not granted by the people or by tradition alone but is sustained by ongoing divine favor, which can be withdrawn if the Tsar forsakes the faith.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Tsar is expected to govern in accordance with the teachings of the Church of the Eternal Vigil, and the Ecumenical Council reserves the right to counsel the Tsar on matters of faith and morality.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Divine Right Doctrine is taught in every temple and seminary of the Vigil as foundational to Moscavian identity, woven into the Nocturnal Vigil and the Moonrise Sermon alike.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "No secular law enacted by the Tsar may contradict Church doctrine, and any such law is considered void in the eyes of the faithful.",
+     "ticked": true,
+     "on_topic": false,
+     "note": "a law: the Tsardom's or the Church's"
+    },
+    {
+     "text": "The doctrine does not teach that the Tsar is infallible in all personal matters, only that his authority to rule is divinely ordained and must be respected by all subjects.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "It is customary for the Tsar to appear at major Church ceremonies — particularly at the Ring of Lanterns pilgrimage and before the Owlstone of Kholm — to symbolize the unity of temporal and spiritual power.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The doctrine has been invoked to justify everything from royal decrees to military campaigns, and its interpretation is occasionally debated between individual bishops and theologians, though such dissent is rare and closely watched.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    }
+   ],
+   "elsewhere": [
+    {
+     "target": "Church of the Eternal Vigil",
+     "text": "The Divine Right of the Tsar is considered one of the three pillars of Church doctrine, alongside the Sanctity of Night and the Blessing of the Changing.",
+     "either_side": true,
+     "strict": false,
+     "note": "the doctrine's own place in the Church: either side"
+    },
+    {
+     "target": "The Patriarch of Moscavia",
+     "text": "The Patriarch serves as the spiritual guarantor of the Divine Right Doctrine, and his blessing is essential for any Tsar's legitimacy in the eyes of the faithful.",
+     "either_side": true,
+     "strict": true,
+     "note": ""
+    },
+    {
+     "target": "Tsardom of Moscavia",
+     "text": "The Divine Right Doctrine is the foundational principle upon which the entire political order of Moscavia is built, legitimizing the Tsar's rule over all owl-folk.",
+     "either_side": true,
+     "strict": false,
+     "note": "mainly about the doctrine"
+    }
+   ],
+   "move_in": [
+    {
+     "from": "Church of the Eternal Vigil",
+     "text": "The state church of Moscavia, which teaches that the owl-folk transformation was divine will and that the night is sacred.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "Church of the Eternal Vigil",
+     "text": "Those beyond Moscavia's borders remain 'unfinished' — God has not yet called them.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "Church of the Eternal Vigil",
+     "text": "All sacraments are administered exclusively between dusk and dawn; no rite may be performed in daylight.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "Church of the Eternal Vigil",
+     "text": "The Great Changing transformed every human in Moscavia into owl-folk on a single spring night.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "Church of the Eternal Vigil",
+     "text": "Saint Alesander founded the Church of the Eternal Vigil in Moskov to interpret the divine purpose behind the transformation.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "Church of the Eternal Vigil",
+     "text": "The First Ecumenical Council formalized the Church's doctrine, declaring the night sacred and the owl-form a blessing upon the faithful.",
+     "right": false,
+     "harness": false
+    }
+   ]
+  },
+  "White Talon": {
+   "step": "regiment",
+   "own_facts": [
+    {
+     "text": "The White Talon is an elite infantry regiment of the Moscavian standing army, composed entirely of owl-folk transformed from the old human nobility of the Tsardom.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Recruits must trace their lineage to one of the twelve Great Houses that existed in the Tsardom prior to the Great Changing of 994, and must bear predominantly white plumage as proof of noble descent.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Every soldier of the White Talon is expected to have received formal training in the liberal arts before entering military service, including reading, calligraphy, and the study of Moscavian scripture.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The regiment's standard depicts a white owl's talon clutching a silver lantern against a field of deep indigo, symbolizing the Tsar's light held fast through the darkest night.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The White Talon serves as the Tsar's personal guard during ceremonial processions and state occasions, marching in formation at the vanguard of the royal retinue.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Soldiers of the White Talon wear armor crafted from pale leather and silver wire, light enough for rapid movement but stiffened with bone plates at the shoulders and shins.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The regiment is led by a Colonel-General appointed by the Tsar, who must be a direct descendant of the House of Volkov, the dynasty from which the current Tsar claims descent.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The White Talon's barracks are housed within the innermost ring of Moskov itself, adjacent to the Tsar's palace, in buildings oriented so that every chamber faces north to avoid the morning sun.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Regimental discipline is enforced through a code derived from the Church's teachings on vigilance and duty, and transgressions are judged not only by the Colonel-General but by a chaplain of the Church of the Eternal Vigil attached to the regiment.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Frosted Wing, a sister regiment of the standing army, draws its recruits from the commoner owl-folk and serves primarily as a cavalry force, while the White Talon remains an infantry unit devoted to close protection and urban defense.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "In the six years since its founding, the White Talon has seen combat only once — during the suppression of the Velikiye Revolt in the outer ring of Novosel, where its discipline and training allowed it to restore order without collapsing into the indiscriminate violence that marked the Frosted Wing's deployment in the same theater.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    }
+   ],
+   "elsewhere": [
+    {
+     "target": "Tsardom of Moscavia",
+     "text": "The Tsar's standing army includes elite regiments such as the White Talon, an infantry unit drawn from noble owl-folk lineages, and the Frosted Wing, a cavalry regiment recruited from the commoners.",
+     "either_side": true,
+     "strict": true,
+     "note": "the army, which didn't exist yet: the Tsardom"
+    }
+   ],
+   "move_in": [
+    {
+     "from": "Tsardom of Moscavia",
+     "text": "The Tsardom keeps a standing army of owl-folk, organized into regiments such as the White Talon and the Frosted Wing.",
+     "right": true,
+     "harness": true
+    }
+   ]
+  },
+  "Deepcarving": {
+   "step": "technique",
+   "own_facts": [
+    {
+     "text": "Deepcarving is a runeweaving technique in which runes are etched below the surface layer of a material, allowing for permanent changes to its elemental composition.",
+     "ticked": false,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Unlike surface-inscribed runes, which alter only the material's outward properties, deep-carved runes reach into the substrate and fundamentally restructure the element's spiritual matrix.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The technique requires the weaver to carve through the material's outer crust using a ritual chisel, reaching a depth where the material's latent elemental potential can be directly addressed.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Deepcarving is considered one of the most demanding techniques in runeweaving, requiring years of advanced study and precise handwork to execute without shattering the target material.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "A successful deepcarve permanently fuses the new elemental property into the material so that it cannot be removed without destroying the object entirely.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Weavers must use magnifying lenses and transmutated quartz chisels to achieve the microscopic precision required for deepcarving, as even a single misaligned stroke can render the rune inert or worse, destabilize the material.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Deepcarving is governed by the Law of Willing Stone, meaning the weaver must first understand the target material's true nature through sustained meditation before attempting the carve.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The technique was first developed in the centuries following Aldric of Dunmore's accidental fusion of iron and silver in 789, as scholars sought methods to reach deeper elemental layers.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Master weavers who have achieved deepcarving proficiency are rare; the Collegium of Aeltham tracks their numbers and considers them among the finest practitioners of the craft.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Deepcarving is taught only in the final years of apprenticeship, after the weaver has passed the Trial of True Stone, and is overseen by senior instructors approved by the Council of Elders.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Some scholars in the Frontier drawer of Runeweaving theorize that deepcarving principles could inform Living Transmutation Theory, though the Covenant of the Chisel strictly forbids any application to biological materials.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Ashenmothers' Ruins in Karrath display ancient deepcarved stones that still hold their elemental transformations after over two thousand years, serving as living proof of the technique's permanence.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    }
+   ],
+   "elsewhere": [
+    {
+     "target": "Runeweaving",
+     "text": "Deepcarving is classified under the Techniques drawer of Runeweaving, alongside the Binding Chant and other advanced methods of rune inscription.",
+     "either_side": true,
+     "strict": false,
+     "note": "mainly about Deepcarving; structure words from the candidate line"
+    },
+    {
+     "target": "Runeweaving",
+     "text": "The permanent, irreversible nature of deepcarving has made it a subject of ethical debate within the Collegium, as its effects cannot be undone.",
+     "either_side": false,
+     "strict": false,
+     "note": "about Deepcarving"
+    },
+    {
+     "target": "The Ashenmothers' Ruins, Karrath",
+     "text": "The ruins contain some of the oldest surviving examples of deepcarved stonework, attracting pilgrims and students who wish to study the technique's origins.",
+     "either_side": true,
+     "strict": true,
+     "note": ""
+    },
+    {
+     "target": "The Rune Gardens of Velspar",
+     "text": "Several display pieces in the Rune Gardens demonstrate deepcarving on different material substrates, including transmutated quartz and fused metals.",
+     "either_side": true,
+     "strict": true,
+     "note": ""
+    },
+    {
+     "target": "The Collegium of Aeltham",
+     "text": "Deepcarving certification is overseen by the Collegium and requires candidates to submit their work for evaluation by the Council of Elders before they may practice independently.",
+     "either_side": true,
+     "strict": true,
+     "note": "the Collegium's practice"
+    },
+    {
+     "target": "Living Transmutation Theory",
+     "text": "Some proponents of Living Transmutation Theory argue that deepcarving's ability to reach a material's elemental substrate suggests a theoretical path toward biological transmutation, though this remains firmly outside the bounds of accepted practice.",
+     "either_side": true,
+     "strict": true,
+     "note": ""
+    }
+   ],
+   "move_in": [
+    {
+     "from": "Runeweaving",
+     "text": "Apprenticeship requires five years of study before a weaver may sit for the Trial of True Stone.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "Runeweaving",
+     "text": "The Runeweavers' Collegium was founded in the free city of Aeltham to standardize training and prevent misuse.",
+     "right": false,
+     "harness": false
+    }
+   ]
+  },
+  "The Collegium of Aeltham": {
+   "step": "site",
+   "own_facts": [
+    {
+     "text": "The Collegium of Aeltham stands as the central seat of runeweaving education and governance, housed in a sprawling complex of stone halls and arched libraries in the heart of the city of Aeltham.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Its main hall, the Chamber of the First Chisel, features pillars carved with replicas of the Ashenmothers' original runes, a tribute to the discipline's ancient roots.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Collegium certifies all Deepcarving practitioners through a rigorous evaluation process overseen by the Council of Elders before granting independent practice.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Apprentices who wish to pursue Deepcarving must first complete five years of foundational study and pass the Trial of True Stone before being admitted to advanced instruction.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Senior instructors in Deepcarving are personally approved by the Council of Elders and hold the title of Master Carver, a rank conferred only after decades of demonstrated mastery.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Collegium maintains a registry of all certified Deepcarvers in the realm, tracking their numbers and locations as a matter of institutional record.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Workshops in the Collegium's eastern wing are equipped with magnifying lenses and transmutated quartz chisels, standard tools without which Deepcarving is considered impossible to perform safely.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Students spend years learning to meditate with their target stones before ever touching a chisel, as the Law of Willing Stone demands a weaver fully understand a material's nature before carving.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "In the year 945, the Collegium was founded under the patronage of the Synod of Iron to standardize runeweaving education and prevent the misuse of the craft.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Collegium's ethics code, the Covenant of the Chisel, binds all graduates to never use their craft against living beings or to create instruments of war, enforced by expulsion and the branding of offending tools.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The permanent and irreversible nature of Deepcarving has generated significant ethical debate within the Collegium's halls, as once-carved runes cannot be removed or undone.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Collegium also hosts the First Codex in its vaulted archive, where the foundational principles of runeweaving are preserved for study by new generations.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    }
+   ],
+   "elsewhere": [
+    {
+     "target": "Deepcarving",
+     "text": "Deepcarving is taught exclusively in the Collegium of Aeltham during the final years of apprenticeship, and only senior instructors approved by the Council of Elders may teach it.",
+     "either_side": true,
+     "strict": false,
+     "note": "where Deepcarving is taught: either side"
+    },
+    {
+     "target": "Runeweaving",
+     "text": "The Collegium of Aeltham serves as the governing body and primary educational institution for the discipline of runeweaving in its entirety.",
+     "either_side": true,
+     "strict": false,
+     "note": "mainly about the Collegium"
+    }
+   ],
+   "move_in": [
+    {
+     "from": "Runeweaving",
+     "text": "Deepcarving is classified under the Techniques drawer of Runeweaving, alongside the Binding Chant and other advanced methods of rune inscription.",
+     "right": false,
+     "harness": false
+    }
+   ]
+  },
+  "The First Codex": {
+   "step": "codex",
+   "own_facts": [
+    {
+     "text": "The First Codex is the oldest known written record of the art of runeweaving, containing the earliest documented principles and runic formulae of the discipline.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Its pages are inscribed on thin sheets of transmutated vellum—a material that was once ordinary animal hide, permanently altered through deepcarving into a surface resistant to decay, fire, and the passage of centuries.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Codex measures roughly nine inches by twelve inches, bound in a cover of deepcarved ironwood that has been transmuted to resemble black marble veined with silver, a testament to the craft it describes.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "It was compiled by the Ashenmothers of Karrath following their discovery that carved runes could transmute one natural material into another, making it the foundational text of runeweaving as a formal discipline.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "For centuries after its creation, the Codex was passed between runeweaving communities by hand, surviving wars, floods, and the fragmentation of knowledge during the Unraveling Years.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "When the Collegium of Aeltham was founded in 945 under the patronage of the Synod of Iron, the First Codex was entrusted to its care as the institution's most sacred relic.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The text within is written in a combination of Old Karrathi script and early runeweaving notation, requiring trained scholars to decipher fully.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "It contains not only the theoretical principles of runeweaving but also practical instructions for the first dozens of known runes, including the Ashenmothers' original formulae for transmuting wood to stone.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Codex explicitly articulates the Law of Willing Stone—the principle that a weaver must understand a material's nature before carving it—making it a philosophical as well as practical document.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "New students of the Collegium are traditionally brought before the Codex on their first day of study and sworn to uphold the principles it contains.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The Codex's vaulted archive within the Collegium is sealed by deepcarved locks that can only be opened by a senior member of the Council of Elders, ensuring controlled access.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    }
+   ],
+   "elsewhere": [
+    {
+     "target": "Runeweaving",
+     "text": "The First Codex is the foundational written record of the discipline, where the first runic formulae were systematically documented.",
+     "either_side": true,
+     "strict": false,
+     "note": "mainly about the Codex"
+    },
+    {
+     "target": "The Collegium of Aeltham",
+     "text": "The Collegium houses the First Codex in its vaulted archive, where it serves as the centerpiece of runeweaving education and governance.",
+     "either_side": true,
+     "strict": true,
+     "note": ""
+    }
+   ],
+   "move_in": [
+    {
+     "from": "Runeweaving",
+     "text": "The First Codex is the oldest book of the art, where its runes were first written down.",
+     "right": true,
+     "harness": true
+    },
+    {
+     "from": "Runeweaving",
+     "text": "The permanent, irreversible nature of deepcarving has made it a subject of ethical debate within the Collegium, as its effects cannot be undone.",
+     "right": false,
+     "harness": false
+    }
+   ]
+  },
+  "The Deep Inscription Chambers": {
+   "step": "inner place",
+   "own_facts": [
+    {
+     "text": "The Deep Inscription Chambers are the subterranean vaults beneath the Chamber of the First Chisel, reaching nearly forty feet below the Collegium's foundation stone.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The walls of the chambers are lined with veins of natural quartz that glow faintly when exposed to the Binding Chant, a property that led early weavers to call them 'the Veined Halls.'",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The chambers were excavated over a period of three years beginning in 945, under the direct supervision of the Synod of Iron, to house the oldest known rune inscriptions found during the Collegium's founding.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Access to the Deep Inscription Chambers is restricted to Master Carvers, members of the Council of Elders, and senior apprentices who have passed the Trial of True Stone.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The air in the chambers is cool and still, and students report that the silence deepens the further one descends, as though the stone itself absorbs sound.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Each chamber is dedicated to a different class of material — stone, metal, crystal, bone, and wood — and the runes carved within them serve as permanent reference works for the art of Deepcarving.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "No working tools may be brought into the chambers without the express permission of the Council of Elders, as the presence of chisels near the ancient inscriptions risks micro-fracturing that could alter or destroy runes over a century old.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The oldest inscription in the chambers dates to approximately 500 years before the Collegium's founding and was carved by a weaver whose name has been lost to time, preserved only as 'the First Hand.'",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "Candles are forbidden in the chambers; only the ambient glow of the quartz veins and transmutated lanterns placed at intervals are permitted, to prevent soot damage to the inscriptions.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The floors of the chambers are worn smooth by centuries of foot traffic, and in places the grooves are so deep that water collects in shallow pools after heavy rain.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "A spiral staircase of uncarved granite, deliberately left without a single rune, connects the Chamber of the First Chisel to the uppermost vault, marking the transition from the taught craft to the ancient one.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    },
+    {
+     "text": "The chambers are maintained by a rotating roster of Master Carvers who inspect each inscription quarterly for signs of degradation, a duty considered among the most solemn in the Collegium.",
+     "ticked": true,
+     "on_topic": true,
+     "note": ""
+    }
+   ],
+   "elsewhere": [
+    {
+     "target": "The Collegium of Aeltham",
+     "text": "Beneath the Chamber of the First Chisel, the Deep Inscription Chambers house the oldest rune inscriptions in the realm and serve as the Collegium's most sacred repository of ancient craft knowledge.",
+     "either_side": true,
+     "strict": false,
+     "note": "mainly about the Chambers"
+    },
+    {
+     "target": "Deepcarving",
+     "text": "The Deep Inscription Chambers display the full range of Deepcarving's possibilities, including inscriptions that permanently altered the elemental composition of their target materials over five centuries ago.",
+     "either_side": true,
+     "strict": false,
+     "note": "mainly about the Chambers"
+    },
+    {
+     "target": "The First Codex",
+     "text": "Several of the inscriptions in the Deep Inscription Chambers predate the First Codex and are believed to have informed its earliest principles.",
+     "either_side": true,
+     "strict": false,
+     "note": "either side; mainly the Chambers"
+    }
+   ],
+   "move_in": [
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "Its main hall, the Chamber of the First Chisel, features pillars carved with replicas of the Ashenmothers' original runes, a tribute to the discipline's ancient roots.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "The Collegium certifies all Deepcarving practitioners through a rigorous evaluation process overseen by the Council of Elders before granting independent practice.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "Apprentices who wish to pursue Deepcarving must first complete five years of foundational study and pass the Trial of True Stone before being admitted to advanced instruction.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "Senior instructors in Deepcarving are personally approved by the Council of Elders and hold the title of Master Carver, a rank conferred only after decades of demonstrated mastery.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "Students spend years learning to meditate with their target stones before ever touching a chisel, as the Law of Willing Stone demands a weaver fully understand a material's nature before carving.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "The Collegium's ethics code, the Covenant of the Chisel, binds all graduates to never use their craft against living beings or to create instruments of war, enforced by expulsion and the branding of offending tools.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "The permanent and irreversible nature of Deepcarving has generated significant ethical debate within the Collegium's halls, as once-carved runes cannot be removed or undone.",
+     "right": false,
+     "harness": false
+    },
+    {
+     "from": "The Collegium of Aeltham",
+     "text": "The Collegium also hosts the First Codex in its vaulted archive, where the foundational principles of runeweaving are preserved for study by new generations.",
+     "right": false,
+     "harness": false
+    }
+   ]
+  }
+ }
+}

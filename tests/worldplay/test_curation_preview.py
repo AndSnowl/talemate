@@ -444,9 +444,11 @@ async def test_candidates_come_from_nearness(world, eternal):
         "Moskov",
     }
     patriarch = next(line for line in lines if line.startswith("The Patriarch"))
+    # ruling C29: "part of Y" only, no drawer title (the curation flow
+    # probe's facts said "the Techniques drawer of Runeweaving")
     assert patriarch.startswith(
-        "The Patriarch of Moscavia (lore; part of Church of the Eternal Light, "
-        "in its Hierarchy drawer; stub): The supreme head of the Church"
+        "The Patriarch of Moscavia (lore; part of Church of the Eternal Light; "
+        "stub): The supreme head of the Church"
     )
 
     # and capped at the world's `entries`

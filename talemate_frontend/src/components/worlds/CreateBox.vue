@@ -285,7 +285,7 @@
 
             <PreviewElsewhere :rows="preview.elsewhere || []" type="create" :new-names="preview.new_names || []" @update="edit({ elsewhere: $event })" />
             <PreviewStubs :rows="preview.new_names || []" type="create" @update="edit({ new_names: $event })" />
-            <MoveInSection :rows="preview.move_in || []" :refile="preview.refile || []" @update="edit({ move_in: $event })" @update-refile="edit({ refile: $event })" />
+            <MoveInSection :rows="preview.move_in || []" :refile="preview.refile || []" @update="edit(moveInEdit(preview, $event))" @update-refile="edit({ refile: $event })" />
 
             <div class="d-flex align-center flex-wrap ga-2 mt-3">
                 <v-btn
@@ -310,6 +310,7 @@ import {
     countsLine,
     defaultOverrideIndex,
     heritageFromMatches,
+    moveInEdit,
     previewCounts,
     previewSegments,
     rowChanged,
@@ -726,6 +727,7 @@ export default {
     },
     methods: {
         formatDate,
+        moveInEdit,
         previewSegments,
         // the box goes on as a plain one: a preview made from the stub goes
         notFromStub() {

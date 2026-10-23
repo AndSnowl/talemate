@@ -38,29 +38,36 @@ def test_attributes_itself():
     assert attributes_itself("As the Dawn holds, owls are pure.", names)
     assert attributes_itself("Many say the white dawn believes in owls.", names)
     assert not attributes_itself("Owls are pure.", names)
-    # a name inside a longer word isn't the holder's (any subject that
-    # "teaches" attributes itself, ruling C27: see the next test)
-    assert not attributes_itself("Owls say the White Dawning holds the pass.", names)
+    # a name inside a longer word isn't the holder's
+    assert not attributes_itself("The White Dawning teaches nothing.", names)
     assert not attributes_itself("The White Dawn was founded in 900.", names)
 
 
 def test_attributes_itself_by_any_holder_like_subject():
-    """Ruling C27: a text whose opening clause already attributes it --
-    "holds that", "teaches", "believes", "maintains that", whoever the
-    subject is -- is left as it is (the curation flow probe's "Church ...
-    holds that the doctrine holds that ..."). Further on, or with a verb
-    that isn't attributing, it isn't."""
+    """Ruling C27: a text that opens by saying who holds it -- its opening
+    noun phrase directly followed by "holds that", "hold that", "teaches
+    that", "believes" or "maintains that", whoever the subject is -- is
+    left as it is (the curation flow probe's "Church ... holds that the
+    doctrine holds that ..."). Not with "who", "which" or "that" between
+    the subject and the verb, not further on, and not with a verb that
+    takes a plain object ("teaches runeweaving") rather than a claim."""
 
     names = ["Church of the Eternal Vigil"]
     for text in (
         "The doctrine holds that the Tsar is a divinely anointed sovereign.",
+        "The faithful hold that the night is sacred.",
         "The faithful believe the night is sacred.",
         "Every priest teaches that the night is sacred.",
         "The Codex maintains that owls were chosen.",
-        "Its scripture teaches obedience to the Tsar.",
+        "The old clergy taught that owls were chosen.",
     ):
         assert attributes_itself(text, names), text
     for text in (
+        "Heretics who teach otherwise are burned.",
+        "Those who believe in the Light are blessed.",
+        "Owls taught to read are rare.",
+        "The Collegium teaches runeweaving to apprentices.",
+        "Its scripture teaches obedience to the Tsar.",
         "The Tsar rules, and the doctrine holds that he is chosen.",
         "The fortress holds the pass.",
         "The Codex maintains a library of hymns.",

@@ -805,11 +805,13 @@ MALFORMED_CORE = (
 
 
 async def test_core_reply_that_doesnt_parse_falls_back(moscavia, world):
-    """Ruling C26: a core reply whose outline can't be read (no object
-    holding "drawers" parses) doesn't fail the preview. It takes the
-    template's own drawers; the name, summary, other names, timeline and
-    items are read from the complete objects that do parse; an item
-    naming a drawer the template lacks goes to Unsorted."""
+    """Ruling C26: a core reply whose top object doesn't parse (its items
+    written as a list of lists) doesn't fail the preview; it's read from
+    its complete parts and marked `salvaged`, so the owner is told part of
+    the reply was unreadable. The drawer outline it wrote (the `{type,
+    title}` objects) is kept, so every item lands in its drawer; the name
+    is the reply's own (the first key); the summary, other names, timeline
+    and the proper names it lists (`{name, kind}`) are kept too."""
 
     client = MockClient("test")
     async with MockClientContext():
@@ -818,33 +820,51 @@ async def test_core_reply_that_doesnt_parse_falls_back(moscavia, world):
             world, "religion", "The state church of Moscavia.", {}, client
         )
 
+    assert preview.salvaged is True
     assert preview.name == "Church of the Silent Dawn"
     assert preview.prose["description"].startswith(
         "The state church of the Tsardom of Moscavia"
     )
-    # the template's drawers the reply may fill, then the app's own
+    # the reply's outline, then the app's own drawers
     assert [(d["type"], d["title"]) for d in preview.drawers] == [
-        ("beliefs", "Doctrines"),
-        ("structure", "Hierarchy"),
+        ("beliefs", "Doctrines of the Dawn"),
         ("practices", "Rites and Ceremonies"),
-        ("places", "Holy Sites"),
+        ("places", "Holy Sites and Sanctums"),
+        ("knowledge", "Studies and Research"),
+        ("structure", "Hierarchy and Offices"),
         ("people", "People"),
         ("events", "Timeline"),
         ("branches", "Branches"),
     ]
     assert [f.since.to_datetime().year for f in preview.facts] == [687, 712, 745, 830]
+    assert len(preview.items) == 15
+    assert not [i for i in preview.items if i["drawer_id"] == UNSORTED_DRAWER_ID]
+    titles = {d["id"]: d["title"] for d in preview.drawers}
     by_name = {item["name"]: item for item in preview.items if item["name"]}
-    rites = next(
-        d["id"] for d in preview.drawers if d["title"] == "Rites and Ceremonies"
+    assert titles[by_name["The Dawn Vigil"]["drawer_id"]] == "Rites and Ceremonies"
+    assert titles[by_name["The Doctrine of Illumination"]["drawer_id"]] == (
+        "Doctrines of the Dawn"
     )
-    # "Rites and Ceremonies" is the template's own title: filed there
-    assert by_name["The Dawn Vigil"]["drawer_id"] == rites
-    # "Doctrines of the Dawn" is no drawer the template has: Unsorted
-    assert by_name["The Doctrine of Illumination"]["drawer_id"] == UNSORTED_DRAWER_ID
-    assert "The Grand Aerie of Velikostrad" in by_name
+    # a proper name its items use, from its "names" list
+    assert "Velikostrad" in [n.name for n in preview.new_names]
 
     thing_id = accept_sphere(world, preview)
     assert world.view().name_of(thing_id) == "Church of the Silent Dawn"
+
+
+async def test_core_reply_with_no_items_or_timeline_still_fails(moscavia, world):
+    """Only an outline readable (no item, no timeline entry): there's
+    nothing to show, and the preview fails as before."""
+
+    broken = (
+        '"name": "The Hollow Faith", "summary": "A faith.", "drawers": '
+        '[{"type": "beliefs", "title": "Doctrines"}], "items": [[ broken'
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(broken)
+        with pytest.raises(ValueError, match="no drawer outline"):
+            await preview_sphere(world, "religion", "A faith.", {}, client)
 
 
 async def test_character_stub_named_as_item_is_not_drawn_in(moscavia, world):

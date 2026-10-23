@@ -25,7 +25,10 @@ judge it"), in a fresh world (present year 1000).
    is the model's pick to move in from Ashenmere: it arrives unticked
    (ruling C24), the owner ticks it, and it moves (moved, not copied).
 7. **A merge:** the Conclave into Runeweavers' Conclave; the Codex's link
-   follows.
+   follows. Then **"Is this X?"**: the Ashenmere Hollows, written from a
+   prompt, has Ashenmere (with facts) as its top candidate, so the model's
+   verdict is asked and shown as a hint; the owner says yes and the
+   material goes onto Ashenmere.
 8. **Runeweaving's timeline** gathers the 947 rediscovery from Ashenmere,
    once, beside its own dated facts.
 9. **A scene** at the Cathedral of the Eternal Light, a holy site of the
@@ -369,6 +372,21 @@ GALLERIES_REPLY = json.dumps(
     }
 )
 GALLERIES_PROSE = "Deep chambers."
+
+# --- 7b. "Is this X?" with the model's verdict ---------------------------------
+
+HOLLOWS_FACT = "Bats roost in the Hollows by the thousand."
+HOLLOWS_REPLY = json.dumps(
+    {
+        "name": "The Ashenmere Hollows",
+        "facts": [{"category": "description", "text": HOLLOWS_FACT}],
+        "names": [],
+        "elsewhere": [],
+    }
+)
+HOLLOWS_PROSE = "Bat-filled caves."
+HOLLOWS_WHY = "Both are the pale caves under the Greymarch."
+VERDICT_REPLY = json.dumps({"verdict": "same", "why": HOLLOWS_WHY})
 
 # --- 9. the scene ---------------------------------------------------------------
 
@@ -767,6 +785,46 @@ async def test_curation_end_to_end(plugin, client, loadable):
     }
     assert links["The Conclave"] == conclave_id
 
+    # 7b. "Is this X?": the owner writes the Ashenmere Hollows from a
+    # prompt. Its top candidate, Ashenmere, has facts, and so does the
+    # preview: the model's verdict is asked once, after the preview's own
+    # calls, and shown as a hint -- the owner says yes, so the material
+    # goes onto Ashenmere and nothing new is made
+    before = len(client.prompt_history)
+    preview = await _send(
+        plugin,
+        "preview_thing",
+        HOLLOWS_REPLY,
+        HOLLOWS_PROSE,
+        VERDICT_REPLY,
+        kind="place",
+        prompt="The Ashenmere Hollows, pale caves under the Greymarch",
+        fields={},
+    )
+    assert [c["kind"] for c in client.prompt_history[before:]] == [
+        "creative_instruction_3072",
+        "analyze",
+        "analyze",
+    ]
+    verdict_call = client.prompt_history[-1]["prompt"]
+    assert verdict_call.uid == "world.same-thing"
+    assert "Ashenmere" in str(verdict_call)
+    assert preview["same_as"][0]["thing_id"] == ashenmere_id
+    assert preview["verdict"] == {
+        ashenmere_id: {"verdict": "same", "why": HOLLOWS_WHY, "confidence": None}
+    }
+    hollows = await _send(
+        plugin, "accept_preview", preview=preview, same_target_id=ashenmere_id
+    )
+    assert hollows["id"] == ashenmere_id
+    assert HOLLOWS_FACT in _facts(hollows)
+    assert "The Ashenmere Hollows" in [a["name"] for a in hollows["aka"]]
+    assert not [
+        t
+        for t in world.view().things()
+        if world.view().name_of(t.id) == "The Ashenmere Hollows"
+    ]
+
     # 8. Runeweaving's timeline gathers the 947 rediscovery, once, from
     # Ashenmere, beside its own dated facts
     runeweaving = await _thing(plugin, runeweaving_id)
@@ -830,13 +888,15 @@ async def test_curation_end_to_end(plugin, client, loadable):
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
         # species, the White Talon, the Divine Right, Ashenmere, the Codex,
+        # the Hollows (onto Ashenmere),
         # the Deep Galleries, and the Cathedral's stub preview at planning
-        "creative_instruction_3072": 7,
+        "creative_instruction_3072": 8,
         # the Tsardom's, the Church's and Runeweaving's cores; the plan
         "creative_instruction_2048": 4,
-        # each create's prose; no same-thing verdict for the Cathedral's
+        # each create's prose (8); no same-thing verdict for the Cathedral's
         # stub preview at planning, though the Church shares its name words
         # and both have facts (ruling C25: nobody would see it)
-        "analyze": 7,
+        # and the Hollows' same-thing verdict
+        "analyze": 9,
         "narrate_512": 1,
     }
