@@ -994,7 +994,7 @@ async def _fixed_preview(
     # top candidate, given only when both sides have facts
     matching = None if stub is not None else matching_stub(view, kind, name)
     skip = [thing_id for thing_id in (payload.stub_id, matching) if thing_id]
-    same_as = same_offers(view, name, near_ids=[], exclude=skip)
+    same_as = same_offers(view, name, near_ids=[], exclude=skip, kind=kind)
     verdict: dict[str, Verdict] | None = None
     hint = fixed.get("verdict")
     if isinstance(hint, dict) and same_as and same_as[0].has_facts and facts:

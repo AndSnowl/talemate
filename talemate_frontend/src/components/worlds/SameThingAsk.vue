@@ -14,6 +14,7 @@
     >
         <template #selection="{ item }">
             <span class="text-caption">{{ item.raw.value === NEW ? 'new' : `same as ${item.raw.name}` }}</span>
+            <span v-if="item.raw.note" class="text-caption text-muted ml-1" data-testid="stub-same-kind">{{ item.raw.note }}</span>
         </template>
         <template #item="{ props: itemProps, item }">
             <v-list-item v-bind="itemProps" :subtitle="item.raw.summary" data-testid="stub-same-option"></v-list-item>
@@ -69,7 +70,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { offerSummary, promotableOffer } from './worldKinds.js';
+import { offerSummary, otherKindNote, promotableOffer } from './worldKinds.js';
 
 // the row choice's value for "new"
 const NEW = '__new__';
@@ -84,7 +85,9 @@ const NEW = '__new__';
 // - `promote`: a sphere's core can't be accepted onto an entry (ruling
 //   C9): a lore entry, place or stub it may be is offered "Make X a
 //   sphere…" (`promote`, the offer); a sphere it may be is opened.
-// - `row`: a stub row's small "same as X?" choice, "new" by default.
+// - `row`: a stub row's small "same as X?" choice, "new" by default. A
+//   stub's kind is a guess, so it offers every kind; a choice of another
+//   kind than the row's (`kind`) shows "(a lore)" beside it (ruling C34).
 export default {
     name: 'SameThingAsk',
     props: {
@@ -95,6 +98,8 @@ export default {
         // the thing picked, or null for new
         chosen: { type: String, default: null },
         variant: { type: String, default: 'entry' },
+        // a row's own kind, for the note on a choice of another kind
+        kind: { type: String, default: null },
     },
     emits: ['choose', 'promote'],
     setup() {
@@ -108,6 +113,7 @@ export default {
                     title: `same as ${offer.name} (${offer.kind}${offer.stub ? ', stub' : ''})`,
                     value: offer.thing_id,
                     name: offer.name,
+                    note: otherKindNote(this.kind, offer),
                     summary: offerSummary(offer),
                 })),
             ];

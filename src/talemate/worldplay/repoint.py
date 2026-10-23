@@ -78,6 +78,7 @@ from talemate.world.kinds import (
     PART_OF_KINDS,
     UNSORTED_DRAWER_ID,
     get_kind,
+    kinds_can_be_one,
 )
 from talemate.world.refs import REF_PATTERN, ref
 from talemate.world.prose import UNRENDERED_FIELDS
@@ -1126,15 +1127,7 @@ def _job(world: World, stub_id: str, target_id: str, *, merge: bool = False) -> 
     target_name = view.name_of(target_id) or target_id
     if target.stub_ignored:
         raise ValueError(f"{target_name} is an ignored stub")
-    if (
-        merge
-        and stub.kind != target.kind
-        and {stub.kind, target.kind}
-        != {
-            "place",
-            "sphere",
-        }
-    ):
+    if merge and not kinds_can_be_one(stub.kind, target.kind):
         raise ValueError(
             f"{stub_name} is a {stub.kind} and {target_name} a {target.kind}:"
             " only entries of one kind merge (or a place and a sphere)"

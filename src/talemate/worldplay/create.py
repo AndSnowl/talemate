@@ -147,6 +147,7 @@ from talemate.world.kinds import (
     SPHERE_CATEGORIES,
     UNSORTED_DRAWER_ID,
     get_kind,
+    kinds_can_be_one,
     validate_field,
 )
 from talemate.world.nearness import near
@@ -1892,23 +1893,34 @@ def same_offers(
     near_ids: Sequence[str],
     exclude: Sequence[str] = (),
     index: NameIndex | None = None,
+    kind: str | None = None,
 ) -> list[SameOffer]:
     """The things `name` could be the same as (`same_candidates`, the
     `near_ids` lifted, none of `exclude`), at most `SAME_CANDIDATES`, each
     with its name, kind, candidate line, whether it has facts and whether
-    it's a stub."""
+    it's a stub. With `kind` (an entry's own question, ruling C34), only
+    things that can be one entry with a `kind` thing
+    (`kinds.kinds_can_be_one`, as a merge has it), filtered before the
+    cap; a stub row passes none, its kind being a guess."""
 
+    if index is None:
+        index = name_index(view)
     offers: list[SameOffer] = []
     for found in same_candidates(
         view,
         name,
         near_ids=near_ids,
-        limit=SAME_CANDIDATES,
+        # every match when filtering by kind: the cap is applied after
+        limit=SAME_CANDIDATES if kind is None else len(index.names),
         exclude=exclude,
         index=index,
     ):
+        if len(offers) >= SAME_CANDIDATES:
+            break
         state = view.thing(found.thing_id)
         if state is None:
+            continue
+        if kind is not None and not kinds_can_be_one(kind, state.kind):
             continue
         offers.append(
             SameOffer(
@@ -3277,7 +3289,9 @@ async def preview_thing(
     matching = None if stub is not None else matching_stub(view, kind, name)
     skip = [thing_id for thing_id in (stub_id, matching) if thing_id is not None]
     index = name_index(view)
-    same_as = same_offers(view, name, near_ids=near_ids, exclude=skip, index=index)
+    same_as = same_offers(
+        view, name, near_ids=near_ids, exclude=skip, index=index, kind=kind
+    )
     offer_same(
         view,
         [*stub_names, *(e.new for e in elsewhere if e.new is not None)],

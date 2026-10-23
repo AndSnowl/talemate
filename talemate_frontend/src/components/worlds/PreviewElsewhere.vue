@@ -9,6 +9,7 @@
                     v-if="group.new && group.new.same_as && group.new.same_as.length"
                     variant="row"
                     :name="group.name"
+                    :kind="group.new.kind"
                     :offers="group.new.same_as"
                     :chosen="group.new.same_target_id || null"
                     @choose="chooseSame(group, $event)"

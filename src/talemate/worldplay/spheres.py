@@ -906,7 +906,9 @@ async def preview_sphere(
 
     # same thing? (ruling C9): what the sphere, its new stubs and its new
     # named items may already be -- never itself or what's part of it --
-    # from one read of the world's names, with no verdict call
+    # from one read of the world's names, with no verdict call. Every
+    # kind: the core's own are promotion offers ("Make X a sphere..."),
+    # never an accept onto them, so ruling C34's kind filter isn't theirs
     matching = (
         None if target is not None else create.matching_stub(view, "sphere", name)
     )

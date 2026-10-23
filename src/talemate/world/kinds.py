@@ -298,6 +298,15 @@ SPHERE_CATEGORIES: tuple[str, ...] = ("timeline", "about", "statement")
 LEGACY_KINDS: tuple[str, ...] = ("culture",)
 
 
+def kinds_can_be_one(a: str, b: str) -> bool:
+    """Whether a thing of kind `a` and one of kind `b` can be one entry: the
+    same kind, or a place and a sphere either way (a place sphere is a
+    place). A merge folds only these (ruling C17), and an entry's
+    same-thing candidates are only these (ruling C34)."""
+
+    return a == b or {a, b} == {"place", "sphere"}
+
+
 def get_kind(name: str) -> KindSpec:
     """Look up a kind by name, raising `KeyError` for an unknown one."""
 

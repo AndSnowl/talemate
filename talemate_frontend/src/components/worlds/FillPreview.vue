@@ -22,6 +22,7 @@
                         v-if="row.item.same_as && row.item.same_as.length"
                         variant="row"
                         :name="row.item.name"
+                        :kind="row.item.kind"
                         :offers="row.item.same_as"
                         :chosen="row.item.same_target_id || null"
                         @choose="changeItem(row.index, { same_target_id: $event })"

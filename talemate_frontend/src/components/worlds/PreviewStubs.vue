@@ -9,6 +9,7 @@
                     v-if="row.same_as && row.same_as.length"
                     variant="row"
                     :name="row.name"
+                    :kind="row.kind"
                     :offers="row.same_as"
                     :chosen="row.same_target_id || null"
                     @choose="$emit('update', rowChanged(rows, index, { same_target_id: $event }))"

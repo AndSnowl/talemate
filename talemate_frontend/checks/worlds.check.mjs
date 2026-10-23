@@ -81,6 +81,7 @@ import {
     expandNote,
     overrideCategory,
     offerSummary,
+    otherKindNote,
     partOfDrawers,
     promotableOffer,
     sphereGroups,
@@ -732,6 +733,14 @@ check('a same-thing offer: a stub by its flag, never by its words; its summary w
     assert.equal(offerSummary(candle), 'part of Church, in its Rites drawer: a stub of wax.');
     assert.equal(offerSummary(shore), '');
     assert.equal(offerSummary({ name: 'X', kind: 'lore', line: 'Something else' }), 'Something else');
+});
+
+check('a stub row onto another kind says so (ruling C34)', () => {
+    assert.equal(otherKindNote('place', { kind: 'lore' }), '(a lore)');
+    assert.equal(otherKindNote('lore', { kind: 'item' }), '(an item)');
+    assert.equal(otherKindNote('place', { kind: 'place' }), '');
+    assert.equal(otherKindNote(null, { kind: 'lore' }), '');
+    assert.equal(otherKindNote('place', {}), '');
 });
 
 check('the Accept line counts what an accept writes', () => {

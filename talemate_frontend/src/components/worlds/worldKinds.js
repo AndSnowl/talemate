@@ -332,6 +332,17 @@ export function promotableOffer(offer) {
     return offer.kind === 'lore' || offer.kind === 'place' || !!offer.stub;
 }
 
+// A stub row's "same as" onto a thing of another kind (ruling C34: a
+// stub's kind is only a guess, so its row offers every kind): the small
+// "(a lore)" note beside its choice; '' for the same kind, or none known.
+export function otherKindNote(rowKind, offer) {
+    const kind = offer?.kind;
+    if (!rowKind || !kind || rowKind === kind) {
+        return '';
+    }
+    return `(${/^[aeiou]/i.test(kind) ? 'an' : 'a'} ${kind})`;
+}
+
 // A same-thing offer's candidate line ("Name (kind; part of Y, in its Z
 // drawer; stub): its summary") without its name and kind, which show
 // beside it: "part of Y, in its Z drawer: its summary", or just the
