@@ -18,7 +18,13 @@ from talemate.world.store import Source
 from talemate.worldplay import create, decide, prose_gen
 from talemate.worldplay.create import accept_preview, preview_thing
 from talemate.worldplay.decide import Verdict
-from talemate.worldplay.spheres import accept_sphere, preview_sphere
+from talemate.worldplay.spheres import (
+    accept_fill,
+    accept_sphere,
+    fill_drawer,
+    preview_branch,
+    preview_sphere,
+)
 
 from conftest import MockClient, MockClientContext, client_responses
 
@@ -480,3 +486,298 @@ async def test_at_most_five_candidates(world):
     assert len({o.line for o in preview.same_as}) == 5
     # the top candidate is a bare stub: no verdict
     assert preview.verdict is None and _analyze_calls(client) == []
+
+
+# --- fix round 1 -----------------------------------------------------------------
+
+FAITH, SITES, RITES = "fa170001", "5173e002", "a17e0002"
+
+
+def _faith(world, ids) -> str:
+    """The Ashen Faith, a religion sphere with a Sites and a Rites drawer,
+    and one statement in Rites."""
+
+    with world.revision(Source.manual(note="faith")) as rev:
+        faith = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Ashen Faith",
+                "template": "religion",
+                "drawers": [
+                    {"id": SITES, "type": "places", "title": "Holy Sites"},
+                    {"id": RITES, "type": "practices", "title": "Rites"},
+                ],
+            },
+        )
+        ids["fast"] = rev.add_fact(
+            faith, "statement", "The faithful fast at dusk.", origin={"drawer": RITES}
+        )
+    ids["faith"] = faith
+    return faith
+
+
+def _same_prompts(client):
+    return [p for p in client.prompt_history if p["prompt"].uid == "world.same-thing"]
+
+
+CORE_CONCLAVE = json.dumps(
+    {
+        "name": "The Ashenmere Conclave",
+        "summary": "Weavers who read the runes of the caves.",
+        "aka": [],
+        "timeline": [],
+        "drawers": [{"type": "places", "title": "Halls"}],
+        "items": [
+            {
+                "drawer": "Halls",
+                "name": "Ashenmere Deep Hall",
+                "text": "The Ashenmere Deep Hall looks out on the Greymarch Mountains.",
+                "kind": "place",
+            }
+        ],
+        "names": [{"name": "Greymarch Mountains", "kind": "place", "aka": []}],
+    }
+)
+
+
+async def test_sphere_core_offers_same_without_call(world):
+    ids = _make(world, stub=False)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(CORE_CONCLAVE)
+        preview = await preview_sphere(
+            world, "order", "The Ashenmere Conclave, weavers", {}, client
+        )
+
+    assert [o.thing_id for o in preview.same_as] == [ids["ashenmere"]]
+    assert preview.verdict is None
+    hall = next(i for i in preview.items if i["name"] == "Ashenmere Deep Hall")
+    assert [o["thing_id"] for o in hall["same_as"]] == [ids["ashenmere"]]
+    row = next(n for n in preview.new_names if n.name == "Greymarch Mountains")
+    assert [o.thing_id for o in row.same_as] == [ids["greymarch"]]
+    assert len(client.prompt_history) == 1 and _same_prompts(client) == []
+
+
+async def test_branch_row_same_links_existing(world):
+    ids = _make(world, stub=False)
+    faith = _faith(world, ids)
+    reply = json.dumps(
+        {
+            "name": "The Reformed Ash",
+            "summary": "A branch of the Ashen Faith.",
+            "aka": [],
+            "timeline": [],
+            "drawers": [],
+            "drops": [],
+            "items": [
+                {
+                    "drawer": "Rites",
+                    "text": "The reformed pray facing the Greymarch Mountains.",
+                }
+            ],
+            "names": [{"name": "Greymarch Mountains", "kind": "place", "aka": []}],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        preview = await preview_branch(world, faith, "the reformed", client)
+    assert _same_prompts(client) == []
+    row = next(n for n in preview.new_names if n.name == "Greymarch Mountains")
+    assert [o.thing_id for o in row.same_as] == [ids["greymarch"]]
+    row.same_target_id = ids["greymarch"]
+
+    branch = accept_sphere(world, preview)
+
+    view = world.view()
+    assert _named(view, "Greymarch Mountains") == []
+    statement = next(f for f in view.thing(branch).facts if "reformed pray" in f.text)
+    assert parse_refs(statement.text) == [ids["greymarch"]]
+
+
+async def test_fill_item_same_links_existing(world):
+    ids = _make(world, stub=False)
+    faith = _faith(world, ids)
+    text = "Pilgrims descend into the Ashenmere Caves to read the runes."
+    reply = json.dumps(
+        {
+            "new_items": [
+                {"name": "The Ashenmere Caves", "text": text, "kind": "place"}
+            ],
+            "names": [],
+            "elsewhere": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        filled = await fill_drawer(world, faith, SITES, client)
+    assert _same_prompts(client) == []
+    (item,) = filled.items
+    assert [o["thing_id"] for o in item["same_as"]] == [ids["ashenmere"]]
+    item["same_target_id"] = ids["ashenmere"]
+
+    accept_fill(world, faith, SITES, filled.items)
+
+    view = world.view()
+    assert _named(view, "The Ashenmere Caves") == []
+    ashenmere = view.thing(ids["ashenmere"])
+    assert ashenmere.fields["part_of"] == {"sphere": faith, "drawer": SITES}
+    assert text in _texts(view, ids["ashenmere"])
+    assert "The Ashenmere Caves" in [e["name"] for e in ashenmere.fields["aka"]]
+
+
+async def test_expanded_stub_onto_stub_target_folds(world):
+    ids = _make(world, stub=True, ashenmere_facts=False)
+    preview, _client = await _caves_preview(world, ids, verdict=None)
+    head = world.head_rev()
+
+    thing_id = accept_preview(world, preview, same_target_id=ids["ashenmere"])
+
+    assert thing_id == ids["caves"] and world.head_rev() == head + 1
+    view = world.view()
+    assert view.thing(ids["ashenmere"]) is None
+    caves = view.thing(ids["caves"])
+    assert not caves.is_stub and caves.kind == "place"
+    assert view.name_of(ids["caves"]) == "The Ashenmere Caves"
+    assert "Ashenmere" in [e["name"] for e in caves.fields["aka"]]
+    assert CAVES_FACTS[0] in _texts(view, ids["caves"])
+
+
+def _keth(world, ids, *, color="grey"):
+    with world.revision(Source.manual(note="keth")) as rev:
+        ids["keth"] = rev.create_thing(
+            "character",
+            {
+                "name": "Keth",
+                "color": color,
+                "ties": [
+                    {
+                        "sphere": ids["faith"],
+                        "role": "member",
+                        "since": None,
+                        "until": None,
+                    }
+                ],
+            },
+        )
+        rev.add_fact(ids["keth"], "background", "A weaver of Stonehold.")
+
+
+def _keth_preview(ids):
+    return create.CreatePreview(
+        kind="character",
+        prompt="Keth of Ashenmere",
+        fields={"born": WorldDate.of(970), "color": "red"},
+        name="Keth of Ashenmere",
+        facts=[create.PreviewFact(category="background", text="Reads old runes.")],
+        prose={},
+        aka=[{"name": "Old Keth", "tag": "common", "everyday": False}],
+        ties=[
+            create.PreviewTie(
+                sphere_id=ids["faith"], sphere="The Ashen Faith", role="member"
+            ),
+            create.PreviewTie(
+                sphere_id=ids["faith"],
+                sphere="The Ashen Faith",
+                role="priest",
+                exceptions=[
+                    create.PreviewException(
+                        text="Keth eats at dusk all the same.",
+                        item="The faithful fast at dusk.",
+                        fact_id=ids["fast"],
+                    )
+                ],
+            ),
+        ],
+    )
+
+
+async def test_accept_same_carries_entry_material(world):
+    ids = _make(world, stub=False)
+    _faith(world, ids)
+    _keth(world, ids)
+    notes: list[str] = []
+    prose: list[str] = []
+
+    accept_preview(
+        world, _keth_preview(ids), same_target_id=ids["keth"], notes=notes, prose=prose
+    )
+
+    view = world.view()
+    keth = view.thing(ids["keth"])
+    # the new tie, not the one it had already
+    assert [(t["sphere"], t["role"]) for t in keth.fields["ties"]] == [
+        (ids["faith"], "member"),
+        (ids["faith"], "priest"),
+    ]
+    exception = next(f for f in keth.facts if f.category == "ties")
+    assert exception.origin["tie"] == ids["faith"]
+    assert exception.origin["rejects_fact"] == ids["fast"]
+    # an empty field filled, a conflicting one kept and noted
+    assert keth.fields["born"] == WorldDate.of(970)
+    assert keth.fields["color"] == "grey"
+    assert any("color" in note for note in notes)
+    names = [e["name"] for e in keth.fields["aka"]]
+    assert "Keth of Ashenmere" in names and "Old Keth" in names
+    assert ids["keth"] in prose
+
+
+async def test_accept_same_redo(world):
+    ids = _make(world)
+    preview, _client = await _caves_preview(world, ids)
+    head = world.head_rev()
+    accept_preview(world, preview, same_target_id=ids["ashenmere"])
+    after = sorted(_texts(world.view(), ids["ashenmere"]))
+
+    undone = world.undo([head + 1])
+    assert world.view().thing(ids["caves"]) is not None
+    world.undo([undone.undo_rev])
+
+    view = world.view()
+    assert view.thing(ids["caves"]) is None
+    assert sorted(_texts(view, ids["ashenmere"])) == after
+
+
+async def test_accept_same_deleted_stub_says_so(world):
+    ids = _make(world, ashenmere_facts=False)
+    preview, _client = await _caves_preview(world, ids, verdict=None)
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(ids["caves"])
+    with pytest.raises(ValueError, match="the stub this preview expands is gone"):
+        accept_preview(world, preview, same_target_id=ids["ashenmere"])
+
+
+async def test_treated_as_new_names_get_no_candidates(world):
+    ids = _make(world, stub=False)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(CREATE_CAVES, *_prose_replies("place"), VERDICT_SAME)
+        preview = await preview_thing(
+            world,
+            "place",
+            "The Ashenmere Caves under the Greymarch Mountains",
+            {},
+            client,
+            new_names=["Greymarch Mountains"],
+        )
+    row = next(n for n in preview.new_names if n.name == "Greymarch Mountains")
+    assert row.same_as == []
+    assert ids["greymarch"]
+
+
+async def test_promotion_prefers_own_child(world):
+    world.set_present(WorldDate.of(1000))
+    with world.revision(Source.manual(note="two moskovs")) as rev:
+        elsewhere = rev.create_thing("place", {"name": "Moskov"})
+        rev.add_fact(elsewhere, "description", "A village far south.")
+        tsardom = rev.create_thing("place", {"name": "Tsardom of Moscavia"})
+        rev.add_fact(tsardom, "description", "A vast northern kingdom.")
+        moskov = rev.create_thing("place", {"name": "Moskov", "parent": tsardom})
+        rev.add_fact(moskov, "description", "The Tsar's city.")
+
+    preview = await preview_sphere(
+        world, "nation", "", {}, None, promote_id=tsardom, reply=CORE_TSARDOM
+    )
+    capital = next(item for item in preview.items if item["name"] == "Moskov")
+    assert capital["thing_id"] == moskov

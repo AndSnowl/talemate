@@ -187,6 +187,8 @@ async def test_preview_sphere_outline_and_items(moscavia, world):
         "text": "The nightly prayer service held at every Dawn chapel, marking "
         "the transition from darkness to light.",
         "kind": "lore",
+        # nothing in the world it could be (ruling C9)
+        "same_as": [],
     }
     assert by_name["The Feast of Purification"]["kind"] == "event"
     assert by_name["The Cathedral of White Wings"]["kind"] == "place"

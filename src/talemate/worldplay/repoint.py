@@ -589,6 +589,18 @@ class RepointPlan:
         return self._job.notes
 
     @property
+    def aka_added(self) -> list[str]:
+        """The names the target takes as other names."""
+
+        return list(self._added)
+
+    @property
+    def uses(self) -> int:
+        """How many field values that point at the stub are re-pointed."""
+
+        return len(self._uses)
+
+    @property
     def note(self) -> str:
         """The revision note a re-point of its own writes."""
 
@@ -687,7 +699,7 @@ def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
         stub=stub_id,
         target=target_id,
         links=result.links,
-        uses=len(plan._uses),
+        uses=plan.uses,
         facts_moved=result.facts_moved,
         aka_added=result.aka_added,
     )

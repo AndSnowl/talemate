@@ -99,7 +99,6 @@ from talemate.worldplay.links import (
     existing_id,
     is_new,
     link_text,
-    make_stubs,
     name_key,
     name_keys,
 )
@@ -172,6 +171,9 @@ class SpherePreview(CreatePreview):
       instead of making one; for such a place, `text_repeat_of` and
       `text_ticked` say whether its text repeats what the place says
       (then it isn't written);
+      a named item linking nothing yet carries `same_as` (dumped
+      `SameOffer`s, ruling C9), and the owner's `same_target_id` makes it
+      link that thing instead of a new stub;
     - `adopted`: `{"thing_id", "drawer_id"}`, the entries already part of
       the stub or promoted thing, and the drawer each is filed in.
 
@@ -352,6 +354,7 @@ def _settle_items(
     *,
     places_drawers: set[str] | None = None,
     home_id: str | None = None,
+    near_ids: Sequence[str] = (),
 ) -> list[dict[str, Any]]:
     """`items` matched against the world, each name and statement once:
 
@@ -365,7 +368,8 @@ def _settle_items(
       line naming the capital), a place item, or one in a places drawer, naming a
       place the world has that's in no sphere links it too (`thing_id`),
       unless it's `home_id` (the sphere's own thing) or a place the
-      sphere sits in;
+      sphere sits in; of several places of that name, the one whose
+      `parent` is `home_id` comes first, then the nearest (`near_ids`);
     - one naming any other thing in the world becomes a statement;
     - any other, or one named like a name the owner treats as new
       (`as_new`), makes a stub on accept."""
@@ -392,13 +396,16 @@ def _settle_items(
             continue
         thing_id = existing_id(view, item["name"], item["kind"])
         state = view.thing(thing_id) if thing_id is not None else None
-        if (
-            state is None
-            and places_drawers is not None
-            and _place_item(item, places_drawers)
-        ):
-            thing_id = existing_id(view, item["name"], "place")
-            state = view.thing(thing_id) if thing_id is not None else None
+        if places_drawers is not None and _place_item(item, places_drawers):
+            place = _named_place(view, item["name"], home_id, near_ids)
+            free_stub = (
+                state is not None
+                and state.is_stub
+                and state.kind in PART_OF_KINDS
+                and state.fields.get("part_of") is None
+            )
+            if place is not None and not free_stub:
+                state = place
         if state is None:
             settled.append(item)
         elif (
@@ -419,6 +426,34 @@ def _settle_items(
         else:
             settled.append(_as_statement(item))
     return settled
+
+
+def _named_place(
+    view: WorldView, name: str, home_id: str | None, near_ids: Sequence[str]
+) -> ThingState | None:
+    """The live place (not an ignored stub, not a sphere's `home_id`)
+    whose name or other name is `name`: one whose `parent` is `home_id`
+    first, then the nearest (`near_ids`), then the first made."""
+
+    key = name_key(name)
+    rank = {thing_id: i for i, thing_id in reversed(list(enumerate(near_ids)))}
+    found = [
+        state
+        for state in view.things("place")
+        if not state.stub_ignored
+        and state.id != home_id
+        and key in _named_keys(view, state)
+    ]
+    if not found:
+        return None
+    return min(
+        found,
+        key=lambda state: (
+            state.fields.get("parent") != home_id or home_id is None,
+            rank.get(state.id, len(rank)),
+            state.created,
+        ),
+    )
 
 
 def _place_item(item: dict[str, Any], places_drawers: set[str]) -> bool:
@@ -670,6 +705,23 @@ async def preview_sphere(
     own_keys = {name_key(name)} | (
         _named_keys(view, target) if target is not None else set()
     )
+    # the entries near it (`create.nearby_ids`): what it's part of, what
+    # mentions it, what the prompt names, then nearness from it
+    settings = world.curation()
+    first: list[str] = []
+    if target is not None:
+        link = create._part_of_link(target)
+        home = link[0] if link is not None else (part_of or {}).get("sphere")
+        first += [home] if home is not None else []
+        first += [m.owner_id for m in (gathered.mentioned if gathered else [])]
+    first += list(picks.values())
+    focus = [
+        *([target.id] if target is not None and not target.stub_ignored else []),
+        *picks.values(),
+    ]
+    near_ids = create.nearby_ids(
+        view, focus, first, settings, {*part_ids, *([target.id] if target else [])}
+    )
     adopt: dict[str, str] = {}
     items = _settle_items(
         view,
@@ -678,6 +730,7 @@ async def preview_sphere(
         parts,
         adopt,
         treated_as_new,
+        near_ids=near_ids,
         # a place's own territory (spec goal 4: the capital of a place
         # promoted); a religion's holy site is no part of it
         places_drawers=(
@@ -689,7 +742,6 @@ async def preview_sphere(
     )
     # a place the world has, linked: its text is written onto it unless
     # it repeats what the place says (`create.repeat_flags`)
-    settings = world.curation()
     for item in items:
         linked = view.thing(item["thing_id"]) if item.get("thing_id") else None
         if linked is not None and not linked.is_stub:
@@ -738,6 +790,30 @@ async def preview_sphere(
     )
     summary = _tidy(core.get("summary"))
 
+    # same thing? (ruling C9): what the sphere, its new stubs and its new
+    # named items may already be -- never itself or what's part of it --
+    # from one read of the world's names, with no verdict call
+    matching = (
+        None if target is not None else create.matching_stub(view, "sphere", name)
+    )
+    skip = [
+        *([target.id] if target is not None else []),
+        *part_ids,
+        *([matching] if matching is not None else []),
+    ]
+    index = create.name_index(view)
+    same_as = create.same_offers(
+        view, name, near_ids=near_ids, exclude=skip, index=index
+    )
+    create.offer_same(
+        view,
+        [*stub_names, *items],
+        near_ids=near_ids,
+        exclude=skip,
+        index=index,
+        as_new=treated_as_new,
+    )
+
     context = [(f"Part of it: {heading}", texts) for heading, texts in held]
     if stub_id is not None and target is not None:
         context = mention_context(view, target.id) + context
@@ -766,9 +842,7 @@ async def preview_sphere(
         aka=aka,
         new_names=stub_names,
         stub_id=stub_id,
-        matching_stub_id=(
-            None if target is not None else create.matching_stub(view, "sphere", name)
-        ),
+        matching_stub_id=matching,
         context=context,
         picks=picks,
         treated_as_new=treated_as_new,
@@ -779,6 +853,7 @@ async def preview_sphere(
         adopted=adopted,
         promote_id=promote_id,
         part_of=part_of,
+        same_as=same_as,
     )
 
 
@@ -829,6 +904,36 @@ def _without_article(name: str) -> str:
     return name
 
 
+def _same_items(
+    rev: Revision, world: World, items: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """`items`, each named one the owner marked as a thing the world has
+    (`same_target_id`) linking that thing as a `thing_id` does: it takes
+    the item's name as a common other name, and the item's text is
+    written onto it unless it repeats what it says (`create.repeat_flags`,
+    as `text_ticked`). One whose thing is gone (or ignored) makes a stub
+    after all."""
+
+    view = world.view()
+    settings = world.curation()
+    kept: list[dict[str, Any]] = []
+    for item in items:
+        target = item.get("same_target_id")
+        state = view.thing(target) if item.get("name") and target else None
+        if state is None or state.stub_ignored or item.get("thing_id"):
+            kept.append(item)
+            continue
+        linked = {**item, "thing_id": state.id}
+        if not state.is_stub:
+            ((repeat_of, ticked),) = create.repeat_flags(
+                view, [item["text"]], [state.id], settings
+            )
+            linked["text_repeat_of"], linked["text_ticked"] = repeat_of, ticked
+        create._common_name(rev, world.view(), state.id, item["name"])
+        kept.append(linked)
+    return kept
+
+
 def _write_items(
     rev: Revision,
     world: World,
@@ -840,14 +945,16 @@ def _write_items(
     as_new: Sequence[str] = (),
 ) -> set[str]:
     """Write `items` into the sphere, in `rev`: a named item is a stub of
-    its kind part of the sphere in its drawer (or, with a `thing_id`, that
-    stub put there), with its text as a fact; a nameless one is a
+    its kind part of the sphere in its drawer (or, with a `thing_id` or
+    an owner's `same_target_id` (`_same_items`), that thing put there,
+    unless it's filed elsewhere already), with its text as a fact; a nameless one is a
     `statement` fact of the sphere whose origin names its drawer, each in
     a drawer it may go in (`_filed`). `made`
     (written name -> id, from `make_stubs`) gains the item stubs, so every
     text links them; texts are linked once all are made. Returns the ids
     the written texts link to."""
 
+    items = _same_items(rev, world, items)
     # filed in drawers they may go in, whatever the preview said
     items = _filed(world.view(), items, spheres.drawers(world.view(), sphere_id))
     placed: list[tuple[str, dict[str, Any]]] = []
@@ -857,8 +964,11 @@ def _write_items(
         part_of = {"sphere": sphere_id, "drawer": item["drawer_id"]}
         thing_id = item.get("thing_id")
         if thing_id:
-            since = create.part_of_since(world, thing_id, strict=False)
-            rev.set_field(thing_id, "part_of", part_of, since)
+            # a thing filed elsewhere already stays where it is
+            held = world.view().thing(thing_id)
+            if held is not None and held.fields.get("part_of") is None:
+                since = create.part_of_since(world, thing_id, strict=False)
+                rev.set_field(thing_id, "part_of", part_of, since)
         else:
             kind = item["kind"] if item["kind"] in ITEM_KINDS else "lore"
             words = item["name"].split()
@@ -976,7 +1086,9 @@ def _write_sphere(
     new_names: list[NewName],
 ) -> str:
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
-        made = make_stubs(rev, view, new_names, fresh=preview.treated_as_new)
+        made = create._row_stubs(
+            rev, world, world.view(), new_names, preview.treated_as_new
+        )
         stubs = dict(made)
         thing_id = _write_core(rev, view, preview, target)
         if preview.part_of is not None:
@@ -1320,6 +1432,12 @@ async def fill_drawer(
     own_names = [name, *(item["name"] for item in items if item["name"])]
     listed = _listed_names(obj.get("names") if obj is not None else None, calendar)
     new = create._new_names(view, listed, [item["text"] for item in items], own_names)
+    # same thing? (ruling C9), never the sphere or what's part of it
+    skip = [sphere_id, *(part.id for part in _parts_of(view, sphere_id))]
+    index = create.name_index(view)
+    create.offer_same(
+        view, [*new, *items], near_ids=near_ids, exclude=skip, index=index
+    )
     for item in items:
         item["names"] = []
     for new_name in new:
@@ -1355,6 +1473,13 @@ async def fill_drawer(
         new_items=[item["name"] for item in parsed if item["name"]],
     )
     create.flag_elsewhere_repeats(view, elsewhere, settings)
+    create.offer_same(
+        view,
+        [e.new for e in elsewhere if e.new is not None],
+        near_ids=near_ids,
+        exclude=skip,
+        index=index,
+    )
     log.info(
         "spheres.fill",
         sphere_id=sphere_id,
@@ -1407,7 +1532,15 @@ def accept_fill(
     while True:
         try:
             with world.revision(Source.manual(note=_FILLED_NOTE)) as rev:
-                made = make_stubs(rev, view, [*new_names, *elsewhere_names])
+                written: list[str] = []
+                made = create._row_stubs(
+                    rev,
+                    world,
+                    world.view(),
+                    [*new_names, *elsewhere_names],
+                    (),
+                    notes=written,
+                )
                 stubs = dict(made)
                 linked = _write_items(rev, world, sphere_id, items, made)
                 linked |= create.write_elsewhere(rev, world.view(), view, others, made)
@@ -1417,6 +1550,8 @@ def accept_fill(
             break
         except create._UnlinkedNames as unlinked_names:
             new_names = _without_unlinked(new_names, unlinked_names)
+    if notes is not None:
+        notes.extend(written)
     log.info(
         "spheres.fill_accept",
         sphere_id=sphere_id,
@@ -1637,6 +1772,17 @@ async def preview_branch(
         list(picks),
     )
     summary = _tidy(core.get("summary"))
+    # same thing? (ruling C9): never the parent, with no verdict call
+    near_ids = create.nearby_ids(view, [parent_id], [], world.curation(), set())
+    index = create.name_index(view)
+    matching = create.matching_stub(view, "sphere", name)
+    skip = [parent_id, *([matching] if matching is not None else [])]
+    same_as = create.same_offers(
+        view, name, near_ids=near_ids, exclude=skip, index=index
+    )
+    create.offer_same(
+        view, [*stub_names, *items], near_ids=near_ids, exclude=skip, index=index
+    )
     log.info(
         "spheres.preview_branch",
         parent_id=parent_id,
@@ -1656,7 +1802,8 @@ async def preview_branch(
         prose={"description": summary} if summary else {},
         aka=aka,
         new_names=stub_names,
-        matching_stub_id=create.matching_stub(view, "sphere", name),
+        matching_stub_id=matching,
+        same_as=same_as,
         context=[
             (f'Named in this prompt: "{written}" means {label}', texts)
             for written, label, texts in named

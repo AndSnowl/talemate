@@ -1652,13 +1652,21 @@ class WorldsPlugin(Plugin):
         payload = AcceptPreviewPayload(**data)
         world = self._require_world()
         notes: list[str] = []
+        # the other things whose prose input the accept changed
+        prose: list[str] = []
         thing_id = accept_preview(
-            world, payload.preview, into_stub=payload.into_stub, notes=notes
+            world,
+            payload.preview,
+            into_stub=payload.into_stub,
+            notes=notes,
+            prose=prose,
         )
         self._reply(
             "accept_preview",
             {**self._thing_payload(world, thing_id, None), "notes": notes},
         )
+        for changed in prose:
+            self._schedule_prose(changed, None)
 
     # --- spheres ----------------------------------------------------------
 
