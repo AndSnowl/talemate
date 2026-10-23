@@ -364,7 +364,8 @@ def test_move_in_on_part_of_entry(app, page, fixed_preview):
     )
     preview = _preview_of(page, box)
 
-    # the broader entry's facts, its picks ticked and first, moved not copied
+    # the broader entry's facts, all unticked (ruling C24), its picks first
+    # and marked suggested, moved not copied
     move_in = preview.get_by_test_id("move-in")
     move_in.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert "from Moskov" in move_in.inner_text()
@@ -372,16 +373,21 @@ def test_move_in_on_part_of_entry(app, page, fixed_preview):
     rows = move_in.get_by_test_id("move-in-row")
     expect(rows).to_have_count(3)
     assert [row.get_by_role("checkbox").is_checked() for row in rows.all()] == [
-        True,
-        True,
         False,
+        False,
+        False,
+    ]
+    assert [row.get_by_test_id("move-in-suggested").count() for row in rows.all()] == [
+        1,
+        1,
+        0,
     ]
     assert "winter fair" in rows.nth(2).inner_text()
     counts = preview.get_by_test_id("accept-counts")
-    expect(counts).to_have_text("writes 1 fact here, moves 2 in")
+    expect(counts).to_have_text("writes 1 fact here")
 
-    # the owner keeps the spires where they are
-    rows.filter(has_text="spires").get_by_role("checkbox").uncheck()
+    # the owner moves the domes in and keeps the spires where they are
+    rows.filter(has_text="onion domes").get_by_role("checkbox").check()
     expect(counts).to_have_text("writes 1 fact here, moves 1 in")
     preview.get_by_role("button", name="Accept").click()
     thing = _opened(page, "The Architecture of Moskov")

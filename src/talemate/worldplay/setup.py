@@ -627,7 +627,9 @@ async def _stub_previews(
     world: World, setup: SceneSetup, client: Any
 ) -> list[CreatePreview]:
     """A preview filling out each stub `setup` uses (`stubs_to_fill`), made
-    from the stub's suggested prompt and what its mentions say. A stub
+    from the stub's suggested prompt and what its mentions say, with no
+    same-thing verdict and only its own facts ticked (`_own_facts_only`,
+    ruling C25). A stub
     whose preview fails is logged and left a stub; the plan goes on. With
     no `client` (the browser tests' fixed setup) no stub is previewed."""
 
@@ -650,6 +652,7 @@ async def _stub_previews(
                 {},
                 client,
                 stub_id=stub_id,
+                ask_same=False,
             )
         except Exception as exc:
             log.warning(
@@ -659,8 +662,24 @@ async def _stub_previews(
                 error=str(exc),
             )
             continue
-        previews.append(preview)
+        previews.append(_own_facts_only(preview))
     return previews
+
+
+def _own_facts_only(preview: CreatePreview) -> CreatePreview:
+    """A stub preview as scene planning accepts it, with no owner to tick
+    anything (ruling C25): only its own facts are written. Its elsewhere
+    items, the facts it would move in from its broader entry and any
+    re-file rows are unticked, so starting the scene adds, moves and
+    re-files nothing on another entry."""
+
+    for item in preview.elsewhere:
+        item.ticked = False
+    for row in preview.move_in:
+        row.ticked = False
+    for refile in preview.refile:
+        refile["ticked"] = False
+    return preview
 
 
 def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:

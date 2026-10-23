@@ -7,6 +7,15 @@ Date: 2026-10-23. Model: koboldcpp, Skyfall-31B-v4.2-i1-Q4_K_M, through Talemate
 - **Baseline:** the owner's 2026-10-22 acceptance world, opened from a temp copy of the snapshot and never written. Its per-entry on-topic counts are the placement probe's hand labels (`raw/2026-10-22-fact-placement-labels.json`).
 - **MockClient end-to-end test:** `tests/worldplay/test_curation_end_to_end.py`. It covers the whole flow through the router (see the end of this doc).
 
+## Fixed after the run
+
+Every score below is from **before** these fixes. They were made after the run, in Task 13's fix round 1, from the controller's rulings. None of them changes model-facing wording, so the session was not run again.
+
+- **C24: move-in picks arrive unticked.** The model's picks are marked `picked`, come first and show as "suggested"; the owner ticks them. An own fact that restates a pick is flagged as its repeat, but stays ticked unless the owner ticks the move. (Concern 1.)
+- **C25: scene planning's stub previews write only their own facts.** Their elsewhere, move-in and re-file rows are unticked, and no same-thing verdict is asked. A test checks that starting a scene leaves every other entry's facts as they were. (Concern 2.)
+- **C26: a core reply whose outline can't be read no longer fails the preview.** It falls back to the template's drawers, with its name, summary, timeline and items read from the parts that parse. Items in a drawer the template lacks go to Unsorted. Run 4's reply is the test fixture. (Concern 3.)
+- **C27: held text that already attributes itself is left as it is.** This covers an opening clause with "holds that", "teaches", "believes" or "maintains that", whoever the subject is. "The doctrine holds that…" no longer becomes "Church … holds that the doctrine holds that…". (Concern 6.)
+
 ## The runs
 
 Run 5 is the scored session. Runs 1 to 4 stopped or went off the owner's path because of the harness, not the app. Each fix is in the script, and each run is kept in the raw JSON.

@@ -73,13 +73,31 @@ def _bare_name(name: str) -> str:
     return " ".join(words)
 
 
+# what makes a text's opening clause attribute itself, whoever its subject
+# (ruling C27: "The doctrine holds that ..."): "holds" and "maintains" only
+# with "that" ("the fortress holds the pass", "the Codex maintains a
+# library" say nothing of belief)
+_SELF_ATTRIBUTING = re.compile(
+    r"(?<![\w'-])(?:holds that|held that|teach|teaches|taught|believe|"
+    r"believes|believed|maintain that|maintains that|maintained that)(?![\w'-])"
+)
+# where a text's opening clause ends
+_CLAUSE_END = re.compile(r"[,;:(\u2014\u2013]|\s-\s")
+
+
 def attributes_itself(text: str, names: list[str]) -> bool:
     """Whether `text` already says who holds it: one of `names` (the
     holder's, with or without a leading article, ignoring case) followed by
     "teaches", "holds", "believes" or another form of them, as a whole
-    word, anywhere in it."""
+    word, anywhere in it; or, whoever its subject, its opening clause (up
+    to the first comma, semicolon, colon, bracket or dash) says "holds
+    that", "teaches", "believes" or "maintains that", or another form of
+    them (ruling C27)."""
 
     folded = " ".join(text.casefold().split())
+    opening = _CLAUSE_END.split(folded, maxsplit=1)[0]
+    if _SELF_ATTRIBUTING.search(opening):
+        return True
     verbs = "|".join(_ATTRIBUTING_VERBS)
     for name in names:
         bare = _bare_name(name)

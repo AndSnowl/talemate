@@ -38,8 +38,51 @@ def test_attributes_itself():
     assert attributes_itself("As the Dawn holds, owls are pure.", names)
     assert attributes_itself("Many say the white dawn believes in owls.", names)
     assert not attributes_itself("Owls are pure.", names)
-    assert not attributes_itself("The White Dawning teaches nothing.", names)
+    # a name inside a longer word isn't the holder's (any subject that
+    # "teaches" attributes itself, ruling C27: see the next test)
+    assert not attributes_itself("Owls say the White Dawning holds the pass.", names)
     assert not attributes_itself("The White Dawn was founded in 900.", names)
+
+
+def test_attributes_itself_by_any_holder_like_subject():
+    """Ruling C27: a text whose opening clause already attributes it --
+    "holds that", "teaches", "believes", "maintains that", whoever the
+    subject is -- is left as it is (the curation flow probe's "Church ...
+    holds that the doctrine holds that ..."). Further on, or with a verb
+    that isn't attributing, it isn't."""
+
+    names = ["Church of the Eternal Vigil"]
+    for text in (
+        "The doctrine holds that the Tsar is a divinely anointed sovereign.",
+        "The faithful believe the night is sacred.",
+        "Every priest teaches that the night is sacred.",
+        "The Codex maintains that owls were chosen.",
+        "Its scripture teaches obedience to the Tsar.",
+    ):
+        assert attributes_itself(text, names), text
+    for text in (
+        "The Tsar rules, and the doctrine holds that he is chosen.",
+        "The fortress holds the pass.",
+        "The Codex maintains a library of hymns.",
+        "Owls are pure.",
+    ):
+        assert not attributes_itself(text, names), text
+
+
+def test_held_text_leaves_a_self_attributed_text(world, spheres_world):
+    """The doctrine's held fact the probe's scene showed doubled: it's told
+    as it is, never "... holds that the doctrine holds that ..."."""
+
+    s = spheres_world
+    text = "The doctrine holds that the Tsar is chosen by the dawn."
+    with world.revision(Source.manual()) as rev:
+        fact_id = rev.add_fact(
+            s.separation, "general", text, origin=with_held_by(None, s.dawn)
+        )
+    view = world.view()
+    owner = view.thing(s.separation)
+    fact = next(f for f in owner.facts if f.fact_id == fact_id)
+    assert held_text(view, fact, owner) == text
 
 
 def test_held_fact_renders_as_belief_in_scene(world, spheres_world):

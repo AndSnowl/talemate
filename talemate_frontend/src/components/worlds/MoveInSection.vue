@@ -13,6 +13,7 @@
                         @update:model-value="$emit('update', rowsTicked(rows, [index], $event))"
                     ></v-checkbox-btn>
                     <span :class="{ dropped: !rows[index].ticked }">{{ rows[index].text }}</span>
+                    <span v-if="rows[index].picked" class="suggested text-caption" data-testid="move-in-suggested">suggested</span>
                 </div>
                 <div class="note text-caption">Moved, not copied: the ticked ones leave {{ group.name }}'s page.</div>
             </div>
@@ -43,8 +44,10 @@ import { rowsTicked } from '@/stores/worlds.js';
 
 // "Move here from where they are now" (curation goal 2): the broader
 // entry's facts a new, more specific entry may take, grouped by where each
-// comes from. The model's picks come ticked and first (ruling C2); the
-// rest are offered unticked. A ticked one is moved, not copied. Below them,
+// comes from. Every row comes unticked (ruling C24: the model's picks were
+// right 2 times of 20 in the curation flow probe); its picks come first,
+// marked "suggested", for the owner to tick or not (ruling C2). A ticked
+// one is moved, not copied. Below them,
 // the re-file rows an outer body brings (bodies within bodies): entries
 // filed where the new body goes, each unticked until the owner ticks it.
 // Changes emit `update` (the move-in rows) and `update-refile` (the
@@ -105,6 +108,12 @@ export default {
 
 .dropped {
     color: rgb(var(--v-theme-muted));
+}
+
+.suggested {
+    color: rgb(var(--v-theme-muted));
+    font-style: italic;
+    white-space: nowrap;
 }
 
 .note {

@@ -6,6 +6,7 @@ The MockClient replies are raw Skyfall output from the spheres probe
 (docs/superpowers/probes/raw/2026-10-22-spheres.json), copied verbatim."""
 
 import json
+from pathlib import Path
 from typing import NamedTuple
 
 import pytest
@@ -791,6 +792,59 @@ async def test_core_guards(moscavia, world):
     assert [item.text for item in unsorted] == ["Amber is weighed in May."]
     (compact,) = _named(view, "Rafters' Compact")
     assert (compact.kind, compact.fields["template"]) == ("sphere", "order")
+
+
+# the curation flow probe's run 4: the church core's reply, its items
+# written as a list of lists, so the object holding "drawers" doesn't parse
+MALFORMED_CORE = (
+    Path(__file__).resolve().parent.parent
+    / "data"
+    / "worldplay"
+    / "curation-malformed-core-reply.txt"
+).read_text()
+
+
+async def test_core_reply_that_doesnt_parse_falls_back(moscavia, world):
+    """Ruling C26: a core reply whose outline can't be read (no object
+    holding "drawers" parses) doesn't fail the preview. It takes the
+    template's own drawers; the name, summary, other names, timeline and
+    items are read from the complete objects that do parse; an item
+    naming a drawer the template lacks goes to Unsorted."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(MALFORMED_CORE)
+        preview = await preview_sphere(
+            world, "religion", "The state church of Moscavia.", {}, client
+        )
+
+    assert preview.name == "Church of the Silent Dawn"
+    assert preview.prose["description"].startswith(
+        "The state church of the Tsardom of Moscavia"
+    )
+    # the template's drawers the reply may fill, then the app's own
+    assert [(d["type"], d["title"]) for d in preview.drawers] == [
+        ("beliefs", "Doctrines"),
+        ("structure", "Hierarchy"),
+        ("practices", "Rites and Ceremonies"),
+        ("places", "Holy Sites"),
+        ("people", "People"),
+        ("events", "Timeline"),
+        ("branches", "Branches"),
+    ]
+    assert [f.since.to_datetime().year for f in preview.facts] == [687, 712, 745, 830]
+    by_name = {item["name"]: item for item in preview.items if item["name"]}
+    rites = next(
+        d["id"] for d in preview.drawers if d["title"] == "Rites and Ceremonies"
+    )
+    # "Rites and Ceremonies" is the template's own title: filed there
+    assert by_name["The Dawn Vigil"]["drawer_id"] == rites
+    # "Doctrines of the Dawn" is no drawer the template has: Unsorted
+    assert by_name["The Doctrine of Illumination"]["drawer_id"] == UNSORTED_DRAWER_ID
+    assert "The Grand Aerie of Velikostrad" in by_name
+
+    thing_id = accept_sphere(world, preview)
+    assert world.view().name_of(thing_id) == "Church of the Silent Dawn"
 
 
 async def test_character_stub_named_as_item_is_not_drawn_in(moscavia, world):

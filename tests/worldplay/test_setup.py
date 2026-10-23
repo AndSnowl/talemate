@@ -1238,6 +1238,92 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
     assert [p.stub_id for p in setup.stub_previews] == [stubs["frost"], stubs["order"]]
 
 
+async def test_starting_a_scene_writes_only_the_stubs_own_facts(world):
+    """Ruling C25: a stub the scene fills is previewed and accepted with no
+    owner to tick anything, so it writes only its own facts. Its elsewhere
+    items, the facts it would move in from its broader entry and any
+    re-file rows arrive unticked and are never written; no same-thing
+    verdict is asked (nobody sees it). Every other entry keeps exactly the
+    facts it had (the curation flow probe: a scene start wrote 5 facts
+    onto 4 entries and moved 2 of the Church's out)."""
+
+    ids = _river_world(world)
+    with world.revision(Source.manual(note="weir")) as rev:
+        weir = rev.create_thing("place", fields={"name": "The Weir"})
+        rev.add_fact(weir, "description", "Snow lies deep in the hollow below.")
+        rev.add_fact(weir, "general", "Frosthollow's ice-fishers mend nets all winter.")
+        # a same-thing candidate for Frosthollow, with facts of its own
+        inn = rev.create_thing("place", fields={"name": "Frosthollow Inn"})
+        rev.add_fact(inn, "description", "A warm inn by the road.")
+        frost = rev.create_thing(
+            "place",
+            fields={"name": "Frosthollow", "stub": {"ignored": False}, "parent": weir},
+        )
+    before = {
+        thing.id: sorted(f.fact_id for f in thing.facts)
+        for thing in world.view().things()
+        if thing.id != frost
+    }
+    frost_reply = json.dumps(
+        {
+            "name": "Frosthollow",
+            "facts": [
+                {"category": "description", "text": "A snowbound village on the weir."}
+            ],
+            "names": [],
+            "elsewhere": [
+                {
+                    "entry": "The Drowned Stag",
+                    "text": "The Drowned Stag sells Frosthollow ice.",
+                },
+                {"entry": "The Weir", "text": "The Weir freezes solid each winter."},
+            ],
+            # M2: the Weir's ice-fishers line
+            "move_in": ["M2"],
+        }
+    )
+    reply = {
+        "player": "Maren Vos",
+        "place": {"name": "Frosthollow", "world": True},
+        "goal": "Buy ice.",
+        "intro": "Snow drifts against the door.",
+    }
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(frost_reply, "Frosthollow sits under snow.")
+        setup = await plan_scene(
+            world,
+            "Maren buys ice in Frosthollow",
+            {"Frosthollow": frost},
+            ids["vos"],
+            START,
+            client,
+            reply=reply,
+        )
+    [preview] = setup.stub_previews
+    assert preview.elsewhere and not any(e.ticked for e in preview.elsewhere)
+    assert preview.move_in and not any(m.ticked for m in preview.move_in)
+    assert not any(row.get("ticked") for row in preview.refile)
+    # no verdict call: the create and its prose only
+    assert len(client.prompt_history) == 2
+    assert preview.verdict is None
+
+    setup = SceneSetup.model_validate(json.loads(setup.model_dump_json()))
+    async with MockClientContext():
+        await start_scene(world, setup, MockClient("test"))
+
+    view = world.view()
+    after = {
+        thing.id: sorted(f.fact_id for f in thing.facts)
+        for thing in view.things()
+        if thing.id != frost
+    }
+    assert after == before
+    assert [view.render(f.text) for f in view.thing(frost).facts] == [
+        "A snowbound village on the weir."
+    ]
+
+
 # --- spheres ------------------------------------------------------------------
 
 VIGIL_REPLY = {

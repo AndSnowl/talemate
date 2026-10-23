@@ -22,7 +22,8 @@ judge it"), in a fresh world (present year 1000).
    the owner says yes, so no second entry is made) and "the Conclave"
    (offered as the same as Runeweavers' Conclave: left new).
 6. **The Deep Galleries**, a place inside Ashenmere: the fact about them
-   moves in from Ashenmere (moved, not copied).
+   is the model's pick to move in from Ashenmere: it arrives unticked
+   (ruling C24), the owner ticks it, and it moves (moved, not copied).
 7. **A merge:** the Conclave into Runeweavers' Conclave; the Codex's link
    follows.
 8. **Runeweaving's timeline** gathers the 947 rediscovery from Ashenmere,
@@ -737,8 +738,12 @@ async def test_curation_end_to_end(plugin, client, loadable):
     create_prompt = str(client.prompt_history[-2]["prompt"])
     assert "Ashenmere is the broader entry this place is part of" in create_prompt
     assert f"- M4: {GALLERIES_FACT}" in create_prompt
-    moving = [row for row in preview["move_in"] if row["ticked"]]
-    assert [row["text"] for row in moving] == [GALLERIES_FACT]
+    # the model's pick is first and unticked (ruling C24): the owner ticks it
+    assert not any(row["ticked"] for row in preview["move_in"])
+    picked = [row for row in preview["move_in"] if row["picked"]]
+    assert [row["text"] for row in picked] == [GALLERIES_FACT]
+    assert preview["move_in"][0] is picked[0]
+    picked[0]["ticked"] = True
     galleries = await _send(plugin, "accept_preview", preview=preview)
     assert GALLERIES_FACT in _facts(galleries)
     ashenmere = await _thing(plugin, ashenmere_id)
@@ -829,9 +834,9 @@ async def test_curation_end_to_end(plugin, client, loadable):
         "creative_instruction_3072": 7,
         # the Tsardom's, the Church's and Runeweaving's cores; the plan
         "creative_instruction_2048": 4,
-        # each create's prose (7), and the same-thing verdict the
-        # Cathedral's stub preview asks at planning (the Church shares its
-        # name words and both have facts)
-        "analyze": 8,
+        # each create's prose; no same-thing verdict for the Cathedral's
+        # stub preview at planning, though the Church shares its name words
+        # and both have facts (ruling C25: nobody would see it)
+        "analyze": 7,
         "narrate_512": 1,
     }

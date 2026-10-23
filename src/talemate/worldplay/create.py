@@ -103,7 +103,8 @@ the matching stub (offered as "fill the stub instead"), and so does each
 new stub it would make (`NewName.same_as`), from one read of the world's
 names. Only for the entry, and only when its top candidate and the
 preview both have facts, the model is asked (`decide.same_thing`) and its
-verdict is a hint, never a default. Accept with `same_target_id` puts the
+verdict is a hint, never a default (never asked for scene planning's
+stub previews, ruling C25). Accept with `same_target_id` puts the
 new material onto that entry instead (`accept_preview`); a stub row the
 owner marks as some thing (`NewName.same_target_id`) links its name there
 and makes no stub.
@@ -346,13 +347,17 @@ class MoveInFact(BaseModel):
     """A fact of the broader entry the new one is part of (`from_id`: the
     sphere it's filed in, a place's parent, the outer body the owner
     named), offered to move onto it (spec goal 2). Every one of its facts
-    is offered (ruling C2): the reply's picks ticked, the rest not. `text`
-    is the fact as it reads."""
+    is offered (ruling C2), unticked (ruling C24: in the curation flow
+    probe the picks were right 2 times of 20): the reply's picks are
+    `picked` and first, a hint the owner ticks or not. `text` is the fact
+    as it reads."""
 
     fact_id: str
     from_id: str
     text: str
     ticked: bool = False
+    # the model chose it to move in (a hint, never a tick: ruling C24)
+    picked: bool = False
 
 
 class PreviewInherited(BaseModel):
@@ -1648,9 +1653,9 @@ def parse_move_in(
 def move_in_rows(
     view: WorldView, broader_id: str, picked: Sequence[str] = ()
 ) -> list[MoveInFact]:
-    """Every one of the broader entry's facts as a move-in row (ruling
-    C2): the `picked` ones ticked and first, the rest unticked, each group
-    in the order they were written."""
+    """Every one of the broader entry's facts as a move-in row, unticked
+    (rulings C2, C24): the `picked` ones marked and first, then the rest,
+    each group in the order they were written."""
 
     state = view.thing(broader_id)
     if state is None:
@@ -1660,11 +1665,11 @@ def move_in_rows(
             fact_id=fact.fact_id,
             from_id=broader_id,
             text=view.render(fact.text),
-            ticked=fact.fact_id in picked,
+            picked=fact.fact_id in picked,
         )
         for fact in _broader_facts(state)
     ]
-    return sorted(rows, key=lambda row: not row.ticked)
+    return sorted(rows, key=lambda row: not row.picked)
 
 
 def untick_moved_repeats(
@@ -1673,13 +1678,15 @@ def untick_moved_repeats(
     move_in: Sequence[MoveInFact],
     settings: CurationSettings,
 ) -> None:
-    """A fact of the new entry's own that says again what a ticked move
-    says (the probe's Zakonnik wrote the law code it moved in again): it
-    starts unticked, a repeat of that move, at the world's
+    """A fact of the new entry's own that says again what a ticked or
+    picked move says (the probe's Zakonnik wrote the law code it moved in
+    again) is flagged a repeat of that move, at the world's
     `repeat_untick_threshold` with at least `UNTICK_MIN_WORDS` content
-    words. The move stays ticked."""
+    words. It starts unticked only when the move is ticked; a pick the
+    owner hasn't ticked (ruling C24) leaves it ticked, or the claim would
+    be lost from the new entry. The move stays as it is."""
 
-    moves = [row for row in move_in if row.ticked]
+    moves = [row for row in move_in if row.ticked or row.picked]
     if not moves:
         return
     for fact in facts:
@@ -1691,7 +1698,7 @@ def untick_moved_repeats(
         )
         if score < settings.repeat_untick_threshold:
             continue
-        fact.ticked = False
+        fact.ticked = fact.ticked and not row.ticked
         fact.repeat_of = {
             "fact_id": row.fact_id,
             "owner_id": row.from_id,
@@ -1708,9 +1715,10 @@ def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
     C13), the entry still sits in its home through the body: the rows
     from an entry the body sits in (its home sphere, as its row files it,
     or, for a body the world has, where that one sits) stay, the model's
-    picks ticked; they go only when the owner files the body somewhere
+    picks marked; they go only when the owner files the body somewhere
     else. A body the world has adds its own facts after them, every one
-    unticked, since the model never saw them; a new one has none.
+    unticked and never picked, since the model never saw them; a new one
+    has none.
 
     Otherwise the rows are kept while it's the same broader entry, else
     replaced by that entry's facts, unticked."""
@@ -2894,10 +2902,13 @@ async def preview_thing(
     stub_id: str | None = None,
     picks: dict[str, str] | None = None,
     new_names: Sequence[str] = (),
+    ask_same: bool = True,
 ) -> CreatePreview:
     """Create a `kind` thing from `prompt` -- facts, then prose -- without
-    writing anything to the world. `fields` are the owner's picks (`name`,
-    `born`, a place's `parent`, a race's `species`, ...), kept as given;
+    writing anything to the world. With `ask_same` false, no same-thing
+    verdict is asked (scene planning's stub previews, ruling C25: nobody
+    sees it). `fields` are the owner's picks (`name`, `born`, a place's
+    `parent`, a race's `species`, ...), kept as given;
     an `aka` among them is the preview's other names, and a `stub` marker
     is dropped.
 
@@ -2938,10 +2949,10 @@ async def preview_thing(
     (`broader_entry`: the sphere it's filed in, a place's parent) is shown
     that entry's facts, labelled M1... (`broader_lines`, at most
     `MOVE_IN_SHOWN`), and the reply's `"move_in"` picks become the
-    preview's `move_in`: every fact of the broader entry, the picks ticked
-    and first (ruling C2), and an own fact that writes a pick again
-    unticked (`untick_moved_repeats`). The broader entry isn't "Named in
-    this prompt" too.
+    preview's `move_in`: every fact of the broader entry, unticked, the
+    picks marked `picked` and first (rulings C2, C24), and an own fact that
+    writes a pick again flagged as its repeat (`untick_moved_repeats`).
+    The broader entry isn't "Named in this prompt" too.
 
     The reply's `aka` becomes the preview's other names and its `names`
     the `new_names` accept makes stubs for (`_new_names`). Without a
@@ -3223,8 +3234,9 @@ async def preview_thing(
             holder=lambda held: holder_named(view, held),
         )
         flag_elsewhere_repeats(view, elsewhere, settings)
-    # moving in: every fact of the broader entry, the reply's picks ticked
-    # (ruling C2); an own fact that writes a pick again starts unticked
+    # moving in: every fact of the broader entry, unticked, the reply's
+    # picks marked first (rulings C2, C24); an own fact that writes a pick
+    # again is flagged as its repeat
     move_in = (
         move_in_rows(
             view,
@@ -3259,7 +3271,7 @@ async def preview_thing(
     # the model's verdict on the top candidate, a hint (ruling C2): only
     # when both sides have facts, after the preview's own calls
     verdict: dict[str, Verdict] | None = None
-    if same_as and same_as[0].has_facts and facts:
+    if ask_same and same_as and same_as[0].has_facts and facts:
         link = _part_of_link(stub) if stub is not None else None
         home = link[0] if link is not None else (part_of or {}).get("sphere")
         found = await same_thing(
@@ -3280,7 +3292,7 @@ async def preview_thing(
         repeats=sum(1 for f in facts if f.repeat_of is not None),
         unticked=sum(1 for f in facts if not f.ticked),
         elsewhere=len(elsewhere),
-        move_in=sum(1 for row in move_in if row.ticked),
+        move_in=sum(1 for row in move_in if row.picked),
         new_names=len(stub_names),
         stub_id=stub_id,
         same_as=len(same_as),

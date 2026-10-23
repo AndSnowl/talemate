@@ -219,6 +219,19 @@ async def _zakonnik(world, t, labels=("M3",)):
     )
 
 
+def _tick_picks(preview):
+    """The owner ticks the model's picks (they arrive unticked, ruling
+    C24), and unticks each own fact flagged as repeating one of them."""
+
+    picked = {m.fact_id for m in preview.move_in if m.picked}
+    for row in preview.move_in:
+        row.ticked = row.ticked or row.picked
+    for fact in preview.facts:
+        if (fact.repeat_of or {}).get("fact_id") in picked:
+            fact.ticked = False
+    return preview
+
+
 def _block(prompt: str) -> list[str]:
     head = (
         "Tsardom of Moscavia is the broader entry this lore is part of. What "
@@ -249,9 +262,9 @@ def _fact(world, thing_id, text):
 async def test_move_in_offered_for_part_of_new_entry(world, tsardom):
     """A new entry filed in a sphere is shown the sphere's facts (not its
     summary), labelled M1..., with the probe's wording; the Tsardom isn't
-    "Named in this prompt" too. Every fact is offered, the model's pick
-    ticked and first, an unknown label dropped, the rest unticked in
-    order."""
+    "Named in this prompt" too. Every fact is offered unticked
+    (ruling C24): the model's pick marked `picked` and first, an unknown
+    label dropped, the rest in order."""
 
     t = tsardom
     preview, prompt = await _preview(
@@ -278,12 +291,13 @@ async def test_move_in_offered_for_part_of_new_entry(world, tsardom):
         "it is. An empty list is fine."
     ) in prompt
 
-    assert [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in] == [
+    assert [(m.fact_id, m.from_id, m.picked) for m in preview.move_in] == [
         (t.architecture, t.tsardom, True),
         (t.capital, t.tsardom, False),
         (t.transformation, t.tsardom, False),
         (t.law_code, t.tsardom, False),
     ]
+    assert not any(m.ticked for m in preview.move_in)
     assert preview.move_in[0].text == ARCHITECTURE
     assert preview.move_in[3].text == LAW_CODE.format("the Zakonnik")
 
@@ -301,19 +315,21 @@ async def test_no_move_in_block_without_a_broader_entry(world, tsardom):
     assert preview.move_in == []
 
 
-async def test_move_in_for_a_stub_in_a_sphere_unticks_its_repeat(world, tsardom):
-    """The Zakonnik stub, filed in the Tsardom, moves the law code in; its
-    reply wrote the code again as its second fact (the probe's duplicate):
-    that one starts unticked, a repeat of the moved fact, and the move
-    stays ticked."""
+async def test_move_in_for_a_stub_in_a_sphere_flags_its_repeat(world, tsardom):
+    """The Zakonnik stub, filed in the Tsardom, picks the law code to move
+    in; its reply wrote the code again as its second fact (the probe's
+    duplicate). The pick arrives unticked (ruling C24), so nothing moves
+    unless the owner ticks it. The copy restates the law code the Tsardom
+    still has, so it arrives unticked as already in the world, a repeat of
+    it: the claim isn't lost either way."""
 
     t = tsardom
     preview, _prompt = await _zakonnik(world, t)
-    assert [(m.fact_id, m.ticked) for m in preview.move_in] == [
-        (t.law_code, True),
-        (t.capital, False),
-        (t.transformation, False),
-        (t.architecture, False),
+    assert [(m.fact_id, m.picked, m.ticked) for m in preview.move_in] == [
+        (t.law_code, True, False),
+        (t.capital, False, False),
+        (t.transformation, False, False),
+        (t.architecture, False, False),
     ]
     again = preview.facts[1]
     assert again.text.startswith("The revised Zakonnik governs matters of roosting")
@@ -326,7 +342,8 @@ async def test_move_in_for_a_stub_in_a_sphere_unticks_its_repeat(world, tsardom)
 def test_untick_moved_repeats(world, tsardom):
     """The duplicate rule on its own: an own fact nearly the same as a
     ticked move is unticked (at the world's untick threshold, with enough
-    words); one like an unticked move, or a short one, isn't."""
+    words); one like an unticked move, or a short one, isn't; one like a
+    pick the owner hasn't ticked is flagged but stays ticked."""
 
     t = tsardom
     view = world.view()
@@ -350,6 +367,20 @@ def test_untick_moved_repeats(world, tsardom):
     assert facts[0].repeat_of["fact_id"] == t.capital
     assert facts[0].repeat_of["owner_name"] == "Tsardom of Moscavia"
     assert facts[1].repeat_of is None
+
+    # a pick the owner hasn't ticked (ruling C24): the copy is flagged as
+    # repeating it, and stays ticked
+    facts = [PreviewFact(category="general", text=ARCHITECTURE)]
+    picked = MoveInFact(
+        fact_id=t.architecture,
+        from_id=t.tsardom,
+        text=ARCHITECTURE,
+        ticked=False,
+        picked=True,
+    )
+    untick_moved_repeats(view, facts, [picked], CurationSettings())
+    assert facts[0].ticked is True
+    assert facts[0].repeat_of["fact_id"] == t.architecture
 
     # the world's threshold: every word of it is in the move, or it stays
     facts = [PreviewFact(category="general", text=CAPITAL.replace("Its", "The"))]
@@ -383,7 +414,7 @@ async def test_move_in_for_a_place_in_its_parent(world, tsardom):
         world, "place", "The Kremlin of Moskov.", {"parent": t.moskov}, reply
     )
     assert "Moskov is the broader entry this place is part of." in prompt
-    assert [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in] == [
+    assert [(m.fact_id, m.from_id, m.picked) for m in preview.move_in] == [
         (t.waiver, t.moskov, True),
         (t.cathedral, t.moskov, False),
     ]
@@ -407,7 +438,7 @@ async def test_move_in_shows_at_most_its_cap(world, tsardom):
     assert block[-1].startswith(f"- M{MOVE_IN_SHOWN}: The Tsardom keeps custom")
     assert len(preview.move_in) == MOVE_IN_SHOWN + 4
     # M30 is the 26th extra fact; M31 was never shown
-    assert [m.fact_id for m in preview.move_in if m.ticked] == [
+    assert [m.fact_id for m in preview.move_in if m.picked] == [
         extra[MOVE_IN_SHOWN - 5]
     ]
 
@@ -422,13 +453,13 @@ async def test_outer_body_changes_what_moves_in(world, tsardom):
     t = tsardom
     before = [(t.law_code, True), (t.capital, False)]
     before += [(t.transformation, False), (t.architecture, False)]
-    tsardom_rows = [(fact_id, t.tsardom, ticked) for fact_id, ticked in before]
+    tsardom_rows = [(fact_id, t.tsardom, picked) for fact_id, picked in before]
 
     preview, _prompt = await _zakonnik(world, t)
     add_outer_body(
         world, preview, "Zakonnik", OuterBody(name="The Codes", template="field")
     )
-    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    rows = [(m.fact_id, m.from_id, m.picked) for m in preview.move_in]
     assert rows == tsardom_rows
 
     # filed in the Church instead: no longer inside the Tsardom
@@ -453,7 +484,7 @@ async def test_outer_body_changes_what_moves_in(world, tsardom):
         OuterBody(name="Church of the Eternal Light", template="religion"),
         as_sphere=True,
     )
-    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    rows = [(m.fact_id, m.from_id, m.picked) for m in preview.move_in]
     assert rows == [*tsardom_rows, (t.light, t.church, False)]
 
     # a body the world has that sits in the Tsardom keeps its rows too
@@ -479,7 +510,7 @@ async def test_outer_body_changes_what_moves_in(world, tsardom):
         ),
         as_sphere=True,
     )
-    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    rows = [(m.fact_id, m.from_id, m.picked) for m in preview.move_in]
     assert rows == [*tsardom_rows, (ruling, courts, False)]
 
 
@@ -490,10 +521,11 @@ async def test_move_in_copies_and_removes(world, tsardom):
     """The ticked fact goes onto the new entry as a new fact, in the
     accept's one revision: its link to the entry itself becomes its words,
     and it's gone from the Tsardom. Unticked ones stay, and the duplicate
-    own fact isn't written."""
+    own fact the owner unticked isn't written."""
 
     t = tsardom
     preview, _prompt = await _zakonnik(world, t)
+    _tick_picks(preview)
     head = world.head_rev()
     prose: list[str] = []
     thing_id = accept_preview(world, preview, prose=prose)
@@ -516,7 +548,7 @@ async def test_move_in_copies_and_removes(world, tsardom):
 async def test_move_in_keeps_dates_origin_held_by(world, tsardom):
     t = tsardom
     preview, _prompt = await _zakonnik(world, t, ["M2"])
-    accept_preview(world, preview)
+    accept_preview(world, _tick_picks(preview))
     moved = _fact(world, t.zakonnik, TRANSFORMATION)
     assert moved.fact_id != t.transformation
     assert moved.valid_from == WorldDate.of(994)
@@ -531,15 +563,15 @@ async def test_move_in_repoints_overrides(world, tsardom):
 
     t = tsardom
     preview, _prompt = await _zakonnik(world, t)
-    accept_preview(world, preview)
+    accept_preview(world, _tick_picks(preview))
     moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
     waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
     assert waiver.overrides == [moved.fact_id]
 
 
 async def test_move_in_owner_unticks_and_ticks(world, tsardom):
-    """The owner's ticks win: an unticked pick stays, a ticked other row
-    moves. A row whose fact was removed since is left, with a note."""
+    """The owner's ticks win: a pick left unticked stays, a ticked other
+    row moves. A row whose fact was removed since is left, with a note."""
 
     t = tsardom
     preview, _prompt = await _zakonnik(world, t)
@@ -578,7 +610,7 @@ async def test_broader_prose_goes_stale(world, tsardom):
 
     assert stale() is False
     preview, _prompt = await _zakonnik(world, t)
-    accept_preview(world, preview)
+    accept_preview(world, _tick_picks(preview))
     assert stale() is True
 
 
@@ -586,7 +618,7 @@ async def test_undo_redo_move_in(world, tsardom):
     t = tsardom
     before = {thing: _live_ids(world, thing) for thing in (t.tsardom, t.moskov)}
     preview, _prompt = await _zakonnik(world, t)
-    accept_preview(world, preview)
+    accept_preview(world, _tick_picks(preview))
     rev = world.head_rev()
     moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik")).fact_id
 

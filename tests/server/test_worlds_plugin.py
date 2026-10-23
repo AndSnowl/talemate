@@ -5283,19 +5283,22 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
     assert {"same_as", "same_target_id", "part_of"} <= set(gate["new"])
     assert s.vigil in [offer["thing_id"] for offer in vigils["new"]["same_as"]]
 
+    # the pick first, marked, and unticked like the rest (ruling C24)
     rows = preview["move_in"]
-    assert rows[0]["from_id"] == s.dawn and rows[0]["ticked"]
+    assert rows[0]["from_id"] == s.dawn and rows[0]["picked"]
     assert rows[0]["from_name"] == "The White Dawn"
     assert rows[0]["text"] == "The state church."
-    assert not any(row["ticked"] for row in rows[1:])
+    assert not any(row["ticked"] for row in rows)
+    assert not any(row["picked"] for row in rows[1:])
     for key in ("same_as", "verdict", "refile", "new_names"):
         assert key in preview
 
     # the owner's edits: the Ashen Gate unticked, the Vigils are the Dawn
-    # Vigil, the plain fact held by Vasha
+    # Vigil, the plain fact held by Vasha, the pick ticked to move in
     gate["ticked"] = False
     vigils["new"]["same_target_id"] = s.vigil
     plain["held_by"] = s.vasha
+    rows[0]["ticked"] = True
     head = s.world.head_rev()
     await _act(plugin, "accept_preview", preview=preview)
     assert not _errors(plugin)
