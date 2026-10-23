@@ -167,6 +167,64 @@ CREATE_RULES = (
     "{%- endif %}"
 )
 
+# probe 1 v3, after v1's elsewhere items were 41% false moves in creates and
+# 19% in Fill, nearly all of them claims tying another entry to the one being
+# written ("X is taught at Y", "unlike X, it...")
+RELATION_RULE_CREATE = (
+    '- A claim that ties another entry to the {{ kind }} ("it is taught at X", '
+    '"unlike X, it...", "X uses it") is the {{ kind }}\'s own: it goes in '
+    '"facts". "elsewhere" is only for what another entry\'s page should say '
+    "even if the {{ kind }} didn't exist."
+)
+RELATION_RULE_FILL = (
+    "- \"elsewhere\" is only for what another entry's page should say even if "
+    "{{ name }}'s new items didn't exist: a claim about one of your new items, "
+    "or tying another entry to one, is no elsewhere claim."
+)
+
+
+def create_template_v3() -> str:
+    return _swap(
+        create_template(),
+        "\n" + HELD_BY_RULE.replace("{{ held_in }}", "a fact or an elsewhere claim"),
+        "\n" + RELATION_RULE_CREATE + "\n"
+        + HELD_BY_RULE.replace("{{ held_in }}", "a fact or an elsewhere claim"),
+    )
+
+
+def fill_template_v3() -> str:
+    return _swap(
+        fill_template(),
+        "\n" + HELD_BY_RULE.replace("{{ held_in }}", "an elsewhere claim"),
+        "\n" + RELATION_RULE_FILL + "\n"
+        + HELD_BY_RULE.replace("{{ held_in }}", "an elsewhere claim"),
+    )
+
+
+# probe 5 v2, after v1 filed both regiments straight into the Tsardom in
+# 4 of 4 runs: the body-within-a-body rule said outright, with examples
+# that aren't the case under test
+P5V2_RULE = (
+    "\n{%- if nearby %}\n"
+    "- A unit of a larger body: when the {{ kind }} is one of several units "
+    "of a larger body that is not the sphere itself (one chapter of an order "
+    "that serves a faith, one company of a guild that serves a city), its "
+    '"part_of" is that larger body, not the sphere. When the world has no '
+    'entry for that larger body, give it a fitting name, list it in "names" '
+    'as a "sphere" with its "template" and its own "part_of" (the sphere '
+    'and the drawer it belongs in), and set the {{ kind }}\'s "part_of" to it.\n'
+    "{%- endif %}"
+)
+
+
+def create_template_v2() -> str:
+    return _swap(
+        create_template(),
+        '\n{%- if spheres %}\n- "ties"',
+        P5V2_RULE + '\n{%- if spheres %}\n- "ties"',
+    )
+
+
 CORE_RULES = (
     "{%- if nearby %}\n"
     "- Keep the summary, timeline and items to the {{ template }} itself: a "
@@ -278,6 +336,37 @@ Each pair once. An empty list is fine when nothing contradicts. No commentary, n
 {{ set_prepared_response('{') }}
 """
 
+# v2, after v1 missed both date clashes (687/996, 217/312) and flagged
+# details as contradictions: the clashing claims are named, and the
+# bracketed years explained
+CONTRA2_TEMPLATE = """{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+Two entries of a fantasy world's records are being merged into one: {{ a_name }} and {{ b_name }}. Before their facts are combined, find the pairs that contradict each other.
+
+A pair contradicts only when an A fact and a B fact make claims about the same thing that cannot both be true: a different year for the same event, a different holder of the same office, a different place, colour, number or name for the same thing, or one saying a thing stands and the other that it is gone. Most pairs don't: two facts that say the same thing in other words, a fact that adds a detail the other leaves out, a fact that narrows the other ("mostly" against "some"), and facts about different things never contradict.
+
+A year in brackets is when the fact's event happened ("In 687") or since when the fact has been true ("Since 312").
+
+{{ a_name }}, labelled A1, A2...:
+{% for label, text in a_facts -%}
+- {{ label }}: {{ text }}
+{% endfor %}
+{{ b_name }}, labelled B1, B2...:
+{% for label, text in b_facts -%}
+- {{ label }}: {{ text }}
+{% endfor %}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"contradictions": [{"a": "<an A label>", "a_says": "the clashing claim, in a few words", "b": "<a B label>", "b_says": "the clashing claim, in a few words"}]}
+
+Each pair once. An empty list is fine when nothing contradicts. No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}
+"""
+
 SAME_TEMPLATE = """{#- Extractors:
   - response: AsIsExtractor()
 -#}
@@ -312,6 +401,7 @@ def write_templates(folder: Path) -> None:
     (folder / "sphere-core.jinja2").write_text(core_template())
     (folder / "sphere-fill.jinja2").write_text(fill_template())
     (folder / "cur-contra.jinja2").write_text(CONTRA_TEMPLATE)
+    (folder / "cur-contra2.jinja2").write_text(CONTRA2_TEMPLATE)
     (folder / "cur-same.jinja2").write_text(SAME_TEMPLATE)
 
 
@@ -779,8 +869,12 @@ def _plain(result: Any) -> Any:
     return result
 
 
-async def run_p1(client, folder, worlds, labels, results, save, runs, only_cases=None):
-    variants = labels["probe1"]["variants"]
+async def run_p1(
+    client, folder, worlds, labels, results, save, runs, only_cases=None, key_out="p1", only_variants=None
+):
+    variants = {
+        k: v for k, v in labels["probe1"]["variants"].items() if not only_variants or k in only_variants
+    }
     for key, spec in labels["probe1"]["cases"].items():
         if only_cases and key not in only_cases:
             continue
@@ -805,15 +899,16 @@ async def run_p1(client, folder, worlds, labels, results, save, runs, only_cases
                     save()
                     continue
                 seen_lists[tuple(lines)] = variant
-                results["p1_lists"].append(
-                    {"case": key, "variant": variant, "same_as": None, "candidates": info}
-                )
+                if key_out == "p1":
+                    results["p1_lists"].append(
+                        {"case": key, "variant": variant, "same_as": None, "candidates": info}
+                    )
                 _EXTRA.clear()
                 _EXTRA[setup["uid"]] = _hook({"nearby": lines, **setup["extra"]})
                 for n in range(runs):
                     if any(
                         r["case"] == key and r["variant"] == variant and r["n"] == n
-                        for r in results["p1"]
+                        for r in results[key_out]
                     ):
                         continue
                     out = await run_preview(client, folder, setup["call"])
@@ -825,7 +920,7 @@ async def run_p1(client, folder, worlds, labels, results, save, runs, only_cases
                     else:
                         parsed = parse_fill(view, reply)
                     out["result"] = _plain(out["result"])
-                    results["p1"].append(
+                    results[key_out].append(
                         {"case": key, "variant": variant, "n": n, "prompt_text": setup["prompt_text"], **parsed, **out}
                     )
                     save()
@@ -869,6 +964,10 @@ def create_cases(labels: dict) -> list[dict]:
             existing["probes"].append("p5")
         else:
             cases.append({"case": name, "probes": ["p5"], "world": "w5", "stub": spec["stub"]})
+    for name, spec in labels["probe5"]["positives"].items():
+        cases.append(
+            {"case": f"v2:{name}", "probes": ["p5v2"], "world": "w5", "stub": spec["stub"]}
+        )
     being = labels["probe4"]["cases"]["being:The Eternal Light"]
     cases.append({"case": "being:The Eternal Light", "probes": ["p4"], **being})
     return cases
@@ -976,7 +1075,7 @@ def contra_side(view: WorldView, spec: dict, letter: str) -> tuple[str, list, di
     return name, pairs, labels
 
 
-async def run_p3(client, folder, worlds, labels, results, save, runs):
+async def run_p3(client, folder, worlds, labels, results, save, runs, key_out="p3", uid="world.cur-contra"):
     world = worlds.open("head")
     try:
         view = world.view()
@@ -985,9 +1084,9 @@ async def run_p3(client, folder, worlds, labels, results, save, runs):
             b_name, b_facts, b_labels = contra_side(view, spec["b"], "B")
             variables = {"a_name": a_name, "b_name": b_name, "a_facts": a_facts, "b_facts": b_facts}
             for n in range(runs):
-                if any(r["case"] == key and r["n"] == n for r in results["p3"]):
+                if any(r["case"] == key and r["n"] == n for r in results[key_out]):
                     continue
-                out = await ask(client, folder, "world.cur-contra", variables)
+                out = await ask(client, folder, uid, variables)
                 obj = reply_object(out["reply"], "contradictions") or {}
                 pairs = [
                     {
@@ -996,11 +1095,13 @@ async def run_p3(client, folder, worlds, labels, results, save, runs):
                         "a_label": p.get("a"),
                         "b_label": p.get("b"),
                         "why": p.get("why"),
+                        "a_says": p.get("a_says"),
+                        "b_says": p.get("b_says"),
                     }
                     for p in obj.get("contradictions") or []
                     if isinstance(p, dict)
                 ]
-                results["p3"].append(
+                results[key_out].append(
                     {
                         "case": key,
                         "n": n,
@@ -1142,7 +1243,7 @@ async def main(out: Path, only: list[str], runs: int, p1_cases: list[str] | None
         if out.exists()
         else {"probe": "curation", "date": "2026-10-22", "calls": []}
     )
-    for key in ("p1", "p1_lists", "creates", "p3", "same"):
+    for key in ("p1", "p1v3", "p1_lists", "creates", "p3", "p3v2", "same"):
         results.setdefault(key, [])
 
     def save() -> None:
@@ -1156,7 +1257,7 @@ async def main(out: Path, only: list[str], runs: int, p1_cases: list[str] | None
         if "labels" in only:
             print("\n".join(problems) or "labels: ok")
         assert not problems, problems
-        if set(only) & {"p1", "p2", "p3", "p4", "p5", "same"}:
+        if set(only) & {"p1", "p1v3", "p2", "p3", "p3v2", "p4", "p5", "p5v2", "same"}:
             client = harness.RecordingClient(name="KoboldCpp")
             await client.status()
             CLIENT[0] = client
@@ -1171,16 +1272,42 @@ async def main(out: Path, only: list[str], runs: int, p1_cases: list[str] | None
                 "sphere-core": core_template(),
                 "sphere-fill": fill_template(),
                 "contra": CONTRA_TEMPLATE,
+                "contra2": CONTRA2_TEMPLATE,
                 "same": SAME_TEMPLATE,
             }
             started = time.monotonic()
             if "p3" in only:
                 await run_p3(client, folder, worlds, labels, results, save, runs)
+            if "p3v2" in only:
+                await run_p3(
+                    client, folder, worlds, labels, results, save, runs, "p3v2", "world.cur-contra2"
+                )
             if "same" in only:
                 await run_same(client, folder, worlds, labels, results, save, runs)
             which = [p for p in ("p2", "p4", "p5") if p in only]
             if which:
                 await run_creates(client, folder, worlds, labels, results, save, runs, which)
+            if "p5v2" in only:
+                folder2 = root_path / "templates-v2"
+                folder2.mkdir()
+                write_templates(folder2)
+                (folder2 / "create-thing.jinja2").write_text(create_template_v2())
+                results["templates"]["create-thing-p5v2"] = create_template_v2()
+                await run_creates(client, folder2, worlds, labels, results, save, runs, ["p5v2"])
+            if "p1v3" in only:
+                folder3 = root_path / "templates-v3"
+                folder3.mkdir()
+                write_templates(folder3)
+                (folder3 / "create-thing.jinja2").write_text(create_template_v3())
+                (folder3 / "sphere-fill.jinja2").write_text(fill_template_v3())
+                results["templates"]["create-thing-p1v3"] = create_template_v3()
+                results["templates"]["sphere-fill-p1v3"] = fill_template_v3()
+                await run_p1(
+                    client, folder3, worlds, labels, results, save, runs,
+                    ["create:The Divine Right of the Tsar", "create:The Illumination",
+                     "create:Deepcarving", "fill:Runeweaving/Sites"],
+                    "p1v3", ["r2"],
+                )
             if "p1" in only:
                 await run_p1(client, folder, worlds, labels, results, save, runs, p1_cases)
             results.setdefault("minutes", {})[" ".join(only)] = round(
