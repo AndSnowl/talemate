@@ -1221,6 +1221,7 @@ def _write_sphere(
             own={name_key(preview.name): thing_id},
             refile=preview.refile,
             notes=notes,
+            adopted=[row["thing_id"] for row in preview.adopted],
         )
         # the sphere itself inside an outer body (ruling C11)
         create.file_entry(rev, world, view, thing_id, preview.part_of, made, notes)

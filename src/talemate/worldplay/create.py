@@ -127,7 +127,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any, NamedTuple
 
 import structlog
@@ -1750,6 +1750,34 @@ def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
         preview.move_in = move_in_rows(view, broader)
 
 
+def move_in_sources(view: WorldView, preview: CreatePreview) -> set[str]:
+    """The entries a move-in may take facts from at `view`, worked out
+    again from the preview's own filing rather than taken from its rows:
+    the broader entry it has now (`broader_entry`) and, for an outer body
+    the owner named (ruling C13), the entries it still sits in -- the
+    sources `offer_move_in` keeps. None when it's no generic thing."""
+
+    if not _generic_branch(
+        preview.kind, _lineage_sources(preview.kind, preview.fields)
+    ):
+        return set()
+    copy = preview.model_copy(deep=True)
+    offer_move_in(view, copy)
+    stub = view.thing(preview.stub_id) if preview.stub_id is not None else None
+    broader = broader_entry(
+        view,
+        part_of=preview.part_of,
+        fields=preview.fields,
+        stub=stub,
+        new_names=preview.new_names,
+    )
+    sources = {broader} if broader is not None else set()
+    link = preview.part_of
+    if isinstance(link, dict) and isinstance(link.get("name"), str):
+        sources |= {row.from_id for row in copy.move_in}
+    return sources
+
+
 def prose_reads(kind: str, category: str) -> bool:
     """Whether some section of a `kind` thing's prose is written from its
     `category` facts (`prose_gen.unread_categories`)."""
@@ -1764,23 +1792,33 @@ def _write_move_in(
     rev: Any,
     world: World,
     before: WorldView,
-    move_in: Sequence[MoveInFact],
+    preview: CreatePreview,
     thing_id: str,
     notes: list[str],
 ) -> None:
     """Move each ticked row's fact onto `thing_id`, in `rev`
     (`repoint.copy_facts`, ruling R1): a new fact with its dates, origin
     and holder, the original removed, its overrides re-pointed; its links
-    to the entry itself become words. A fact gone from its entry since the
-    preview stays where it is, with a note."""
+    to the entry itself become words. A row from an entry the preview
+    offers no move-in from (`move_in_sources`, worked out again: a row is
+    never trusted to name its source), or whose fact is gone from its
+    entry since the preview, moves nothing, with a note."""
 
     # imported here: `worldplay.repoint` imports this module
     from talemate.worldplay.repoint import copy_facts
 
     live = world.view()
+    sources = move_in_sources(before, preview)
     fact_ids: list[str] = []
-    for row in move_in:
+    for row in preview.move_in:
         if not row.ticked or row.from_id == thing_id:
+            continue
+        if row.from_id not in sources:
+            name = before.name_of(row.from_id) or row.from_id
+            notes.append(
+                f"{name}'s fact \"{_clip(row.text, 60)}\" isn't offered to move "
+                "in here, so it doesn't move in"
+            )
             continue
         found = live.fact(row.fact_id)
         if found is None or found[0] != row.from_id:
@@ -2714,12 +2752,20 @@ def file_chain(
     own: dict[str, str] | None = None,
     refile: Sequence[dict[str, Any]] = (),
     notes: list[str] | None = None,
+    adopted: Collection[str] = (),
 ) -> None:
     """File the stubs of `rows` that carry a `part_of`, outer first, then
     move each ticked `refile` row's thing into its outer body (`file_in`),
     all in `rev`. A row a re-file row moves (`_refiled`) is left to it. A
     re-filed thing that's gone, or filed elsewhere since the preview (or
-    by this revision), stays as it is, with a note."""
+    by this revision), stays as it is, with a note.
+
+    A re-file row is never trusted to say what may move
+    (`_refile_refused`): it moves a thing only into an outer body `rows`
+    names (or the entry, `own`), and only one filed where that body goes
+    (the drawer `bodies.add_outer_body` drew its rows from), a thing a row
+    is marked the same as, or one a core adopts (`adopted`). Any other is
+    dropped, with a note."""
 
     for row in outer_first(rows):
         if row.part_of is None or _refiled(row, refile):
@@ -2734,6 +2780,16 @@ def file_chain(
         thing_id = row.get("thing_id")
         live = world.view()
         state = live.thing(thing_id) if isinstance(thing_id, str) else None
+        name = live.name_of(state.id) if state is not None else None
+        refused = (
+            _refile_refused(row, rows, own, adopted, name or "")
+            if state is not None
+            else None
+        )
+        if refused is not None:
+            if notes is not None:
+                notes.append(refused)
+            continue
         home = resolve_home(row.get("to"), made, own)
         if state is None or home is None:
             continue
@@ -2745,6 +2801,35 @@ def file_chain(
                 )
             continue
         file_in(rev, world, before, state.id, home, notes, refiling=True)
+
+
+def _refile_refused(
+    row: dict[str, Any],
+    rows: Sequence[NewName],
+    own: dict[str, str] | None,
+    adopted: Collection[str],
+    name: str,
+) -> str | None:
+    """Why the re-file row may not move its thing (a note), or `None`: its
+    `to` must name an outer body among `rows` (`{"name", "drawer"}`) or
+    the entry (`own`), and its thing must be one a row is marked the same
+    as, one the core adopts, or filed (`from`) where that body goes."""
+
+    to = row.get("to")
+    target = to.get("name") if isinstance(to, dict) and "sphere" not in to else None
+    key = name_key(target) if isinstance(target, str) else ""
+    outer = next((r for r in rows if name_key(r.name) == key), None) if key else None
+    if outer is None and not (key and key in (own or {})):
+        return f"{name} isn't moved: it names no outer body this preview makes"
+    thing_id = row.get("thing_id")
+    if thing_id in adopted or any(r.same_target_id == thing_id for r in rows):
+        return None
+    home = outer.part_of if outer is not None else None
+    if not isinstance(home, dict) or "sphere" not in home:
+        return f"{name} isn't moved into {target}: it isn't offered to"
+    if row.get("from") != {"sphere": home["sphere"], "drawer": home.get("drawer")}:
+        return f"{name} isn't moved into {target}: it isn't filed where {target} goes"
+    return None
 
 
 def file_entry(
@@ -3630,7 +3715,7 @@ def _write_preview(
                 rev.add_fact(thing_id, "ties", text, origin=origin)
         # the broader entry's ticked facts move in, after the entry's own
         # (whose overrides name them as they are)
-        _write_move_in(rev, world, view, preview.move_in, thing_id, notes)
+        _write_move_in(rev, world, view, preview, thing_id, notes)
         linked |= write_elsewhere(
             rev,
             linking,
@@ -4087,7 +4172,7 @@ def _write_same(
                     linked_text(exception.text), tie, exception
                 )
                 rev.add_fact(target_id, "ties", text, origin=origin)
-        _write_move_in(rev, world, view, preview.move_in, target_id, notes)
+        _write_move_in(rev, world, view, preview, target_id, notes)
         linked |= write_elsewhere(
             rev,
             linking,

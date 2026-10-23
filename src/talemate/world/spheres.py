@@ -215,6 +215,13 @@ def _drawers_of(chain: list[ThingState]) -> list[Drawer]:
     return found
 
 
+def sphere_chain(view: WorldView, sphere_id: str) -> list[ThingState]:
+    """The sphere, then the sphere it branches from, and so on (each
+    once; stopping at one that's missing or no sphere)."""
+
+    return _chain(view, sphere_id)
+
+
 def drawers(view: WorldView, sphere_id: str) -> list[Drawer]:
     """The sphere's own drawers, in their order, then, for a branch, each
     parent's drawers it doesn't already have (matched by id)."""

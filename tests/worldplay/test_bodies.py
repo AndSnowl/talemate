@@ -295,11 +295,12 @@ def test_refile_refuses_cycles(world):
             "ticked": True,
         }
     )
-    head = world.head_rev()
-    with pytest.raises(ValueError, match="inside itself"):
-        accept_preview(world, preview)
-    assert world.head_rev() == head
+    # a row the preview never offered (the Tsardom isn't filed where the
+    # army goes): dropped with a note before any cycle could be made
+    notes: list[str] = []
+    accept_preview(world, preview, notes=notes)
     assert world.view().thing(ids["tsardom"]).fields.get("part_of") is None
+    assert any("isn't moved" in note for note in notes)
 
 
 def test_outer_body_around_a_core_item(world):

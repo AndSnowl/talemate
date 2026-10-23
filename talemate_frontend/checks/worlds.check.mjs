@@ -563,7 +563,7 @@ check('a preview, then accept, opens the new thing', () => {
 
 // INTERIM until the curation preview UI (Task 12, ruling C8): remove
 // with `interimCurationGuard`
-check('interim curation guard: accepts send every fact and item ticked, nothing elsewhere', () => {
+check('interim curation guard: accepts send every fact and item ticked, nothing elsewhere, nothing moved in', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.previewThing('lore', 'a doctrine');
@@ -577,6 +577,7 @@ check('interim curation guard: accepts send every fact and item ticked, nothing 
             { category: 'general', text: 'Fresh.', ticked: true, repeat_of: null },
         ],
         elsewhere: [{ target_id: 't1', target_name: 'Tsardom', category: 'general', text: 'About it.', ticked: true }],
+        move_in: [{ fact_id: 'm1', from_id: 'tsardom', text: 'Its law code.', ticked: true }],
         prose: {},
     };
     store.handleMessage(reply('preview_thing', preview));
@@ -584,8 +585,11 @@ check('interim curation guard: accepts send every fact and item ticked, nothing 
     const sentPreview = sent.at(-1).preview;
     assert.deepEqual(sentPreview.elsewhere, []);
     assert.deepEqual(sentPreview.facts.map((fact) => fact.ticked), [true, true]);
+    // nothing moves in until the screen shows the rows (ruling C20)
+    assert.deepEqual(sentPreview.move_in.map((row) => row.ticked), [false]);
     // the store's own preview is left as it came
     assert.equal(store.preview.facts[0].ticked, false);
+    assert.equal(store.preview.move_in[0].ticked, true);
 
     store.openThing('dawn');
     store.fillDrawer('dawn', 'd1');

@@ -109,8 +109,17 @@ def has_subject(view: WorldView, raw: str, text: str) -> bool:
     return word in _SUBJECT_WORDS or _opens_with_a_name(view, raw, text.strip())
 
 
+# `held_text`'s "work out the holder" default (a holder may be `None`)
+_UNSET: object = object()
+
+
 def held_text(
-    view: WorldView, fact: FactState, owner: ThingState, text: str | None = None
+    view: WorldView,
+    fact: FactState,
+    owner: ThingState,
+    text: str | None = None,
+    *,
+    holder_id: object = _UNSET,
 ) -> str:
     """`fact` (of `owner`) as a scene is told it, `text` its rendering
     (`view.render(fact.text)` when not given). Held by someone
@@ -119,12 +128,17 @@ def held_text(
     but a name's leading "The" is), when it has a subject of its own (`has_subject`); otherwise
     "<Holder> holds: <Text>", its first letter capitalised (ruling C6).
     It's as it is when it isn't held, its holder has no name, or it
-    already says who holds it (`attributes_itself`)."""
+    already says who holds it (`attributes_itself`). A caller that has
+    worked out the holder (`spheres.held_by`) passes it as `holder_id`.
+    """
 
     rendered = view.render(fact.text) if text is None else text
-    holder_id = spheres.held_by(view, fact, owner)
-    holder = view.thing(holder_id) if holder_id is not None else None
-    name = view.name_of(holder_id) if holder_id is not None else None
+    if holder_id is _UNSET:
+        holder_id = spheres.held_by(view, fact, owner)
+    if not isinstance(holder_id, str):
+        return rendered
+    holder = view.thing(holder_id)
+    name = view.name_of(holder_id)
     if holder is None or not name:
         return rendered
     names = [name] + [

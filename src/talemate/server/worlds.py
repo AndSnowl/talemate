@@ -439,8 +439,17 @@ class RefileRow(pydantic.BaseModel):
 
     thing_id: str
     from_: dict[str, Any] | None = pydantic.Field(default=None, alias="from")
+    # always an outer body of the preview, by name: `{"name", "drawer"}`;
+    # a sphere the world has (`{"sphere"}`) is refused
     to: dict[str, str]
     ticked: bool = False
+
+    @pydantic.field_validator("to")
+    @classmethod
+    def _outer_body(cls, value: dict[str, str]) -> dict[str, str]:
+        if "sphere" in value or not value.get("name"):
+            raise ValueError("a re-file row moves a thing into an outer body, by name")
+        return value
 
 
 class ItemIn(pydantic.BaseModel):
@@ -902,7 +911,10 @@ async def _fixed_preview(
     fixed = json.loads(path.read_text(encoding="utf-8"))
     fields = {**payload.fields, **fixed.get("fields", {})}
     kind, name = payload.kind, fixed["name"]
-    holder = lambda held: holder_named(view, held)  # noqa: E731
+
+    def holder(held: str) -> str | None:
+        return holder_named(view, held)
+
     context: list[tuple[str, list[str]]] = []
     stub = view.thing(payload.stub_id) if payload.stub_id is not None else None
     if payload.stub_id is not None:
@@ -1115,11 +1127,13 @@ def _held_segments(
     if fact is None or owner is None:
         return [{"text": text, "ref": None, "stub": False}]
     plain = view.segments(fact.text)
-    held = held_text(view, fact, owner, text)
+    holder = spheres.held_by(view, fact, owner)
+    if holder is None:
+        return links._out(plain)
+    held = held_text(view, fact, owner, text, holder_id=holder)
     if held == text:
         return links._out(plain)
-    holder = spheres.held_by(view, fact, owner)
-    name = view.name_of(holder) if holder is not None else None
+    name = view.name_of(holder)
     fallback = [{"text": held, "ref": None, "stub": False}]
     if not name:
         return fallback
@@ -1277,6 +1291,7 @@ def _sphere_out(
     calendar: Calendar,
     state: ThingState,
     timeline: list[dict],
+    things: list[ThingState] | None = None,
 ) -> dict | None:
     """A sphere's own part of the thing payload (`None` for a thing that's
     no sphere): its template and agent flag; its drawers in order (a
@@ -1289,7 +1304,8 @@ def _sphere_out(
     lines of `world.timelines.entry_timeline`: its own dated facts and
     what it gathers), after its undated `timeline` facts and a branch's
     inherited undated ones (`spheres.timeline`, which has no date to place
-    them by)."""
+    them by). `things`, a snapshot of the view's things, saves scans.
+    """
 
     if not spheres.is_sphere(state):
         return None
@@ -1303,7 +1319,7 @@ def _sphere_out(
 
     own = _own_drawer_ids(state)
     shelves = spheres.drawers(view, sphere_id)
-    held = spheres.items(view, sphere_id)
+    held = spheres.items(view, sphere_id, things)
     if any(item.drawer_id == spheres.UNSORTED.id for item in held):
         shelves = [*shelves, spheres.UNSORTED]
     drawers = [
@@ -1326,7 +1342,11 @@ def _sphere_out(
     branches = sorted(
         (
             other
-            for other in view.things("sphere")
+            for other in (
+                view.things("sphere")
+                if things is None
+                else [t for t in things if t.kind == "sphere"]
+            )
             if other.fields.get("parent") == sphere_id and other.id != sphere_id
         ),
         key=lambda other: other.created,
@@ -1335,7 +1355,7 @@ def _sphere_out(
     # whose each undated timeline fact is: the sphere's, or a parent's
     owners = {
         fact.fact_id: other.id
-        for other in spheres._chain(view, sphere_id)
+        for other in spheres.sphere_chain(view, sphere_id)
         for fact in other.facts
     }
     return {
@@ -1608,6 +1628,8 @@ class WorldsPlugin(Plugin):
             for item in heritage.inherited(view, thing_id)
         ]
         settings = world.curation()
+        # a sphere reads every thing (its items, what it gathers): once
+        things = view.things() if spheres.is_sphere(state) else None
         entry_lines = [
             _line_out(view, links, calendar, line)
             for line in entry_timeline(
@@ -1615,6 +1637,7 @@ class WorldsPlugin(Plugin):
                 thing_id,
                 reach=settings.timeline_reach,
                 threshold=settings.repeat_threshold,
+                things=things,
             )
         ]
 
@@ -1677,7 +1700,7 @@ class WorldsPlugin(Plugin):
             "prose_segments": prose_segments,
             "mentions": [m.model_dump() for m in mentions(view, thing_id)],
             "named_stubs": links.named_stubs(state),
-            "sphere": _sphere_out(view, links, calendar, state, entry_lines),
+            "sphere": _sphere_out(view, links, calendar, state, entry_lines, things),
             "part_of": _part_of_out(view, state),
             "ties": _ties_out(view, links, calendar, state),
             # every change made to the thing (`World.timeline`)
@@ -3039,7 +3062,6 @@ class WorldsPlugin(Plugin):
         payload = SetHeldByPayload(**data)
         world = self._require_world()
         at = _date_in(payload.at)
-        self._require_fact_of(world, payload.thing_id, payload.fact_id)
         view = world.view()
         state = view.thing(payload.thing_id)
         found = view.fact(payload.fact_id)
@@ -3120,7 +3142,9 @@ class WorldsPlugin(Plugin):
         reply: dict[str, Any] = {
             "keep_fact_id": keep,
             "drop_fact_id": drop,
-            "mode": payload.mode,
+            # the mode applied: "none" for a fact that had ended already,
+            # "remove" for one that starts at or after now
+            "mode": mode,
             "owner_id": owner_id,
             "notes": notes,
         }

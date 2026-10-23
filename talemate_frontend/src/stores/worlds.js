@@ -376,8 +376,9 @@ const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'se
 // screens don't show the curation preview's ticks, repeats or "elsewhere"
 // facts yet, so an accept would write facts about other entries the owner
 // never saw, and skip rows the screen shows as kept. Until then every own
-// fact and Fill item goes out ticked and no elsewhere fact is sent. Task 12
-// removes this (and its check in checks/worlds.check.mjs).
+// fact and Fill item goes out ticked and no elsewhere fact is sent; no
+// fact moves in, so every move-in row goes out unticked (ruling C20). Task
+// 12 removes this (and its check in checks/worlds.check.mjs).
 export function interimCurationGuard(payload) {
     const ticked = (rows) => (Array.isArray(rows) ? rows.map((row) => ({ ...row, ticked: true })) : rows);
     const guarded = { ...payload, elsewhere: [] };
@@ -386,6 +387,9 @@ export function interimCurationGuard(payload) {
     }
     if ('items' in payload) {
         guarded.items = ticked(payload.items);
+    }
+    if (Array.isArray(payload.move_in)) {
+        guarded.move_in = payload.move_in.map((row) => ({ ...row, ticked: false }));
     }
     return guarded;
 }
