@@ -665,3 +665,144 @@ def test_named_place_sphere_context_once(world, spheres_world, monkeypatch):
     assert block.count("Tsardom of Moscavia") == 1
     assert block.count("Only owl-folk may hold land.") == 1
     assert "Cold forests and frozen rivers." not in block
+
+
+# --- nearness and timelines (curation spec, goals 6 and 10) ----------------------
+
+
+def _near_scene(world, place_id, pulled_in=(), characters=()):
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(310), goal="Find the envoy")
+    scenes.update(
+        scene_id,
+        state={
+            "place_thing_id": place_id,
+            "pulled_in": list(pulled_in),
+            "characters": [{"thing_id": c, "active": True} for c in characters],
+        },
+    )
+    return world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
+
+
+def test_scene_context_adds_near_lore_within_knobs(world):
+    """After today's rules (the place, what's named, who's here, the
+    spheres touched), the things nearest the place and the cast come in as
+    lore: each once, never a believed being, a held fact as belief, and no
+    more entries or facts per entry than the world's knobs allow."""
+
+    from talemate.world.curation import CurationSettings
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        place = rev.create_thing("place", fields={"name": "Veldhaer"})
+        treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
+        guild = rev.create_thing("lore", fields={"name": "Harbor Guild"})
+        lighthouse = rev.create_thing("lore", fields={"name": "Old Lighthouse"})
+        mother = rev.create_thing(
+            "being", fields={"name": "Sea Mother", "existence": "believed"}
+        )
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        rev.add_fact(place, "history", f"Bound by {ref(treaty)}.")
+        rev.add_fact(place, "general", f"The tides belong to {ref(mother)}.")
+        rev.add_fact(treaty, "general", "Signed after the flood of 301.")
+        rev.add_fact(guild, "general", f"Runs the docks of {ref(place)}.")
+        rev.add_fact(
+            guild,
+            "general",
+            "The guild was blessed by the tides.",
+            origin={"held_by": maren},
+        )
+        rev.add_fact(mother, "nature", "A goddess of the deep.")
+        rev.add_fact(maren, "background", f"Keeps {ref(lighthouse)}.")
+        rev.add_fact(lighthouse, "general", "Its lamp is never lit.")
+
+    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
+    assert "Harbor Guild\n- Runs the docks of Veldhaer.\n" in block
+    assert "- Maren holds that the guild was blessed by the tides.\n" in block
+    assert "Old Lighthouse\n- Its lamp is never lit.\n" in block
+    # what's shown already shows once: the named treaty, the place, Maren
+    assert block.count("Signed after the flood of 301.") == 1
+    assert block.count("The River Treaty\n") == 1
+    assert "\nVeldhaer\n" not in block and "\nMaren\n" not in block
+    # a believed being is only spoken of
+    assert "A goddess of the deep." not in block
+    # today's rules first: the named lore leads the near ones
+    assert block.index("The River Treaty\n") < block.index("Harbor Guild\n")
+
+    # three entries in all (the place, the named treaty and one more), and
+    # one fact each: the nearest, by name on a tie, and its first fact
+    world.set_curation(CurationSettings(entries=3, facts_per_entry=1))
+    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
+    assert "Harbor Guild\n- Runs the docks of Veldhaer.\n\n" in block
+    assert "blessed by the tides" not in block
+    assert "Old Lighthouse" not in block
+    assert "Signed after the flood of 301." in block
+
+    # no room left: today's rules alone, never cut
+    world.set_curation(CurationSettings(entries=1))
+    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
+    assert "Harbor Guild" not in block and "Old Lighthouse" not in block
+    assert "Signed after the flood of 301." in block
+
+
+def test_scene_context_unchanged_when_no_links(world):
+    """A world with no links between its entries gets today's block: an
+    unlinked entry never comes in by nearness."""
+
+    from talemate.world.curation import CurationSettings
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        place = rev.create_thing("place", fields={"name": "Veldhaer"})
+        rev.add_fact(place, "description", "A harbor town built on stilts.")
+        treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
+        rev.add_fact(treaty, "general", "Signed after the flood of 301.")
+        other = rev.create_thing("lore", fields={"name": "Far Mountains"})
+        rev.add_fact(other, "general", "Snow all year.")
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        rev.add_fact(maren, "background", "A ferrywoman.")
+
+    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
+    assert "Far Mountains" not in block
+    world.set_curation(CurationSettings(entries=0))
+    assert _near_scene(world, place, pulled_in=[treaty], characters=[maren]) == block
+    assert block == (
+        "[world]\n"
+        "Goal: Find the envoy\n"
+        "Place: Veldhaer\n"
+        "- A harbor town built on stilts.\n"
+        "\n"
+        "The River Treaty\n"
+        "- Signed after the flood of 301.\n"
+        "\n"
+        "[end of world]"
+    )
+
+
+def test_scene_sphere_timeline_gathers_its_parts(world, spheres_world):
+    """A touched sphere's key facts end with its gathered timeline: Dawn
+    Peak's raising, a holy site of the Dawn, is among the Dawn's latest
+    lines, in the probe's "In <year>: " wording, held as belief when it's
+    held; a part shown as the scene's place isn't told twice."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="later")) as rev:
+        rev.add_fact(
+            s.dawn_peak,
+            "general",
+            "The shrine on the peak was raised by the dawn's own light.",
+            valid_from=WorldDate.of(1015),
+            origin={"held_by": s.dawn},
+        )
+    block = _sphere_scene(world, place_thing_id=s.kremova, characters=_present(s.vasha))
+    assert (
+        "- In 994: Declared the Night of Feathers a purification.\n"
+        "- In 1015: The White Dawn holds that the shrine on the peak was raised "
+        "by the dawn's own light.\n"
+        "- In 1019: Issued the Doctrine of Separation.\n"
+    ) in block
+
+    block = _sphere_scene(
+        world, place_thing_id=s.dawn_peak, characters=_present(s.vasha)
+    )
+    assert block.count("shrine on the peak") == 1
+    assert "- In 1015:" not in block

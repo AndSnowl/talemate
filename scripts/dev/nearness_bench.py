@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 from talemate.world.dates import WorldDate
+from talemate.world import nearness
 from talemate.world.nearness import CurationSettings, near
 from talemate.world.refs import ref
 from talemate.world.store import Source, World
@@ -187,6 +188,8 @@ def time_near(
     timings: list[float] = []
     for _ in range(runs):
         start_id = rng.choice(ids)
+        # timed cold: a prompt's first call builds the graph
+        nearness._GRAPHS.clear()
         began = time.perf_counter()
         near(view, start_id, reach=knobs.reach, limit=knobs.entries)
         timings.append((time.perf_counter() - began) * 1000)
@@ -246,6 +249,7 @@ def main() -> None:
                     try:
                         view = reopened.view()
                         knobs = CurationSettings()
+                        nearness._GRAPHS.clear()
                         began = time.perf_counter()
                         near(view, ids[n], reach=knobs.reach, limit=knobs.entries)
                         firsts.append((time.perf_counter() - began) * 1000)

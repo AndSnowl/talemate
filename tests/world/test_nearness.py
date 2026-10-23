@@ -379,3 +379,65 @@ def test_siblings_capped_per_sphere(world):
     assert set(siblings) <= set(_ids(near(view, doctrine, reach=2, siblings=None)))
     # the sphere's own parts aren't siblings of it
     assert set(siblings) <= set(_ids(near(view, church, reach=1)))
+
+
+def _counting_graphs(monkeypatch):
+    """Count the graphs `near` builds (the cache emptied first)."""
+
+    from talemate.world import nearness
+
+    built = []
+    real = nearness._graph
+
+    def counted(view):
+        built.append((view.rev, view.at))
+        return real(view)
+
+    nearness._GRAPHS.clear()
+    monkeypatch.setattr(nearness, "_graph", counted)
+    return built
+
+
+def test_near_builds_one_graph_per_revision_and_date(world, monkeypatch):
+    """One prompt asks nearness of a scene's place and each of its cast:
+    the graph is built once per (world, revision, date), and a new
+    revision or another date builds its own."""
+
+    built = _counting_graphs(monkeypatch)
+    with world.revision(Source.manual()) as rev:
+        moskov = rev.create_thing("place", fields={"name": "Moskov"})
+        brenna = rev.create_thing("character", fields={"name": "Brenna"})
+        rev.add_fact(brenna, "background", f"Born in {ref(moskov)}.")
+
+    first = near(world.view(), moskov, reach=1)
+    assert _ids(near(world.view(), brenna, reach=1)) == [moskov]
+    assert _ids(near(world.view(), moskov, reach=1)) == _ids(first) == [brenna]
+    assert len(built) == 1
+
+    near(world.view(WorldDate.of(500)), moskov, reach=1)
+    assert len(built) == 2
+
+    with world.revision(Source.manual()) as rev:
+        vasha = rev.create_thing("character", fields={"name": "Vasha"})
+        rev.add_fact(vasha, "background", f"Lives in {ref(moskov)}.")
+        latest = rev.rev
+    assert set(_ids(near(world.view(), moskov, reach=1))) == {brenna, vasha}
+    assert len(built) == 3
+    # an older revision is still its own graph, and still as it was
+    assert _ids(near(world.view(rev=latest - 1), moskov, reach=1)) == [brenna]
+
+
+def test_near_never_caches_inside_an_open_revision(world, monkeypatch):
+    built = _counting_graphs(monkeypatch)
+    with world.revision(Source.manual()) as rev:
+        moskov = rev.create_thing("place", fields={"name": "Moskov"})
+    with world.revision(Source.manual()) as rev:
+        brenna = rev.create_thing("character", fields={"name": "Brenna"})
+        rev.add_fact(brenna, "background", f"Born in {ref(moskov)}.")
+        inside = world.view(rev=rev.rev)
+        assert _ids(near(inside, moskov, reach=1)) == [brenna]
+        assert _ids(near(inside, moskov, reach=1)) == [brenna]
+        assert len(built) == 2
+    # nothing from inside was kept: after it's written, it's built afresh
+    assert _ids(near(world.view(), moskov, reach=1)) == [brenna]
+    assert len(built) == 3

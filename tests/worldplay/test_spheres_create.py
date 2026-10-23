@@ -1759,3 +1759,41 @@ def test_written_types_are_the_ones_the_core_writes():
     from talemate.worldplay.spheres import TYPE_HELP
 
     assert tuple(TYPE_HELP) == WRITTEN_DRAWER_TYPES
+
+
+def test_timeline_lines_gather_and_hold(world, spheres_world):
+    """Fill's and a branch's timeline lines (`_timeline_lines`) are the
+    sphere's gathered timeline, "<year>: <text>", a held line as belief:
+    a dated fact of a holy site shows on the Dawn's; the line of a thing
+    the prompt lists in full doesn't show again, nor does the Dawn's own
+    dated statement (a drawer line)."""
+
+    from talemate.worldplay.spheres import _timeline_lines
+
+    s = spheres_world
+    with world.revision(Source.manual(note="later")) as rev:
+        rev.add_fact(
+            s.dawn_peak,
+            "general",
+            "The shrine was raised by the dawn's own light.",
+            valid_from=WorldDate.of(1015),
+            origin={"held_by": s.dawn},
+        )
+        rev.add_fact(
+            s.dawn,
+            "statement",
+            "The faithful fast at midwinter.",
+            valid_from=WorldDate.of(1016),
+            origin={"drawer": "d0000003"},
+        )
+    view = world.view()
+    assert _timeline_lines(world, view, s.dawn) == [
+        "994: Declared the Night of Feathers a purification.",
+        "1015: The White Dawn holds that the shrine was raised by the dawn's "
+        "own light.",
+        "1019: Issued the Doctrine of Separation.",
+    ]
+    assert _timeline_lines(world, view, s.dawn, {s.dawn_peak}) == [
+        "994: Declared the Night of Feathers a purification.",
+        "1019: Issued the Doctrine of Separation.",
+    ]

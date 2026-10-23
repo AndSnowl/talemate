@@ -24,10 +24,12 @@ import structlog
 import talemate.emit.async_signals as async_signals
 from talemate.agents.base import DynamicInstruction
 from talemate.prompts import Prompt
-from talemate.world import heritage, spheres
+from talemate.world import heritage, spheres, timelines
+from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS, SPHERE_CATEGORIES
 from talemate.world.names import everyday_name
+from talemate.world.nearness import near
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
 from talemate.world.view import FactState, ThingState, WorldView
@@ -39,6 +41,7 @@ from .characters import (
     held_text,
     mid_sentence_name,
 )
+from .held import timeline_text
 
 log = structlog.get_logger("talemate.worldplay.context")
 
@@ -250,6 +253,32 @@ def _facts(view: WorldView, state: ThingState, facts: list[FactState]) -> list[s
     return [held_text(view, fact, state) for fact in facts]
 
 
+def _latest(
+    world: World,
+    view: WorldView,
+    sphere_id: str,
+    things: list[ThingState],
+    shown: set[str],
+    settings: CurationSettings,
+) -> list[str]:
+    """The sphere's timeline lines for its key facts: its gathered
+    timeline (`timelines.prompt_timeline`, as far out as `timeline_reach`)
+    less the lines of the things `shown` in the block, each "In <year>:
+    <text>" (the spheres probe's (d) wording), a held one as belief."""
+
+    return [
+        spheres.dated_line(world.calendar, line.date, timeline_text(view, line))
+        for line in timelines.prompt_timeline(
+            view,
+            sphere_id,
+            shown,
+            reach=settings.timeline_reach,
+            threshold=settings.repeat_threshold,
+            things=things,
+        )
+    ]
+
+
 def _sphere_entries(
     world: World,
     view: WorldView,
@@ -257,12 +286,16 @@ def _sphere_entries(
     shown: set[str],
     things: list[ThingState],
     shown_elsewhere: set[str],
+    settings: CurationSettings,
+    place_thing_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """The spheres block, one entry per sphere in `sphere_ids`: its key
     facts (`spheres.key_facts`, with its summary, less the items
     `shown_elsewhere` in the block: as lore, or a nested sphere's own
-    block) and, for a nested sphere whose parent isn't `shown` in the
-    block already, the parent's summary alone."""
+    block, and ending with its gathered timeline less the lines of those
+    and of the scene's place: `_latest`) and, for a nested sphere whose
+    parent isn't `shown` in the block already, the parent's summary
+    alone."""
 
     entries: list[dict[str, Any]] = []
     for sphere_id in sphere_ids:
@@ -284,6 +317,14 @@ def _sphere_entries(
                 things,
                 shown_elsewhere,
                 _held_line(view),
+                _latest(
+                    world,
+                    view,
+                    sphere_id,
+                    things,
+                    shown_elsewhere | ({place_thing_id} if place_thing_id else set()),
+                    settings,
+                ),
             ),
         }
         parent_id = _sphere_parent(view, state)
@@ -294,6 +335,86 @@ def _sphere_entries(
     return entries
 
 
+def _may_be_lore(state: ThingState) -> bool:
+    """Whether the thing can be shown as lore: anything but a being that
+    isn't real (believed or undecided), which is only spoken of -- its
+    facts reach the scene through whatever refers to it."""
+
+    return state.kind != "being" or spheres.acts_in_world(state)
+
+
+def _lore_entry(
+    view: WorldView, state: ThingState, facts: list[FactState]
+) -> dict[str, Any]:
+    """A lore entry of the block: the thing's name, its everyday name and
+    `facts` as a scene is told them (`_facts`)."""
+
+    return {
+        "name": view.name_of(state.id) or "",
+        "everyday": everyday_name(state),
+        "facts": _facts(view, state, facts),
+    }
+
+
+def _filed_in(state: ThingState) -> str | None:
+    """The sphere the thing is filed in (its `part_of`), or `None`."""
+
+    part_of = state.fields.get("part_of")
+    sphere = part_of.get("sphere") if isinstance(part_of, dict) else None
+    return sphere if isinstance(sphere, str) else None
+
+
+def _near_lore(
+    view: WorldView,
+    seeds: list[str],
+    shown: set[str],
+    touched: list[str],
+    room: int,
+    settings: CurationSettings,
+) -> list[ThingState]:
+    """At most `room` things near the scene's place and cast (`seeds`), as
+    lore: from each seed's `near` list, at the world's `reach`, the best
+    first (score, then fewer steps, then the seeds' order and each list's
+    own). Never one `shown` already, a sphere (a sphere the scene touches
+    has its own block; one it doesn't isn't the scene's), a thing filed in
+    a sphere of `touched` (its block's key facts give it, as the spheres
+    probe's (d) block has them), a heritage (the cast lines carry it), a
+    being that isn't real (`_may_be_lore`), or a thing with no facts to
+    show."""
+
+    if room <= 0 or settings.facts_per_entry <= 0 or not seeds:
+        return []
+    best: dict[str, tuple[float, int, int]] = {}
+    order = 0
+    for seed in seeds:
+        for found in near(
+            view, seed, reach=settings.reach, limit=room + len(shown) + settings.entries
+        ):
+            order += 1
+            key = (-round(found.score, 9), found.steps, order)
+            if found.thing_id not in best or key < best[found.thing_id]:
+                best[found.thing_id] = key
+
+    kept: list[ThingState] = []
+    for thing_id in sorted(best, key=lambda thing_id: best[thing_id]):
+        if thing_id in shown:
+            continue
+        state = view.thing(thing_id)
+        if (
+            state is None
+            or spheres.is_sphere(state)
+            or _filed_in(state) in touched
+            or state.kind in HERITAGE_KINDS
+            or not _may_be_lore(state)
+            or not state.facts
+        ):
+            continue
+        kept.append(state)
+        if len(kept) == room:
+            break
+    return kept
+
+
 def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
     """The "World" instruction's content: the scene's goal, its current
     place, whatever lore has been pulled into it, and who is here by
@@ -301,13 +422,19 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     place is the world thing `record.state["place_thing_id"]` or, when the
     scene invented its place, the scene-local place thing
     `record.state["place_local_id"]` (its name and facts); the lore entries
-    are `record.state["pulled_in"]`.
+    are `record.state["pulled_in"]`, then (curation spec, goal 10) the
+    things nearest the scene's place and the characters here
+    (`_near_lore`), each with at most the world's `facts_per_entry` facts,
+    while the place, lore and sphere blocks number fewer than its
+    `entries`. Today's rules come first: what's near only fills the room
+    left, and never shows a thing a second time.
 
     The spheres the scene touches (`_touched_spheres`) follow the lore,
     one block each under one lead line (the spheres probe's (d)), with
-    their key facts; a pulled-in sphere shows there, not as lore, and a
-    pulled-in item of a sphere shows as lore, and a nested sphere in its
-    own block, not again in its parent's key facts.
+    their key facts, which end with the latest lines of each one's gathered
+    timeline (`_latest`); a pulled-in sphere shows there, not as lore, and
+    a pulled-in or near item of a sphere shows as lore, and a nested sphere
+    in its own block, not again in its parent's key facts.
     When the
     scene's place is itself a sphere, it shows once, as the place: its own
     place facts, then its key facts (summary from its `about` fact, since
@@ -323,6 +450,7 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     view = world.view(at)
     # one snapshot of the world's things for every sphere lookup below
     things = view.things()
+    settings = world.curation()
 
     lore = []
     # a sphere's item pulled in as lore shows once, there, in full: the
@@ -334,47 +462,66 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
             continue
         # a being that isn't real is only spoken of: its facts reach the
         # scene through whatever refers to it, never as lore of its own
-        if lore_state.kind == "being" and not spheres.acts_in_world(lore_state):
+        if not _may_be_lore(lore_state):
             continue
         as_lore.add(lore_thing_id)
+        lore.append(_lore_entry(view, lore_state, lore_state.facts))
+
+    place_thing_id = record.state.get("place_thing_id")
+    place_local_id = record.state.get("place_local_id")
+    place_state = view.thing(place_thing_id) if place_thing_id else None
+
+    touched = _touched_spheres(view, record, place_thing_id, things)
+    in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
+
+    # then what's near the place and the cast, as lore, within the knobs
+    present = [
+        entry["thing_id"]
+        for entry in _present(record)
+        if isinstance(entry.get("thing_id"), str)
+    ]
+    seeds = ([place_thing_id] if place_state is not None else []) + present
+    shown = {*seeds, *as_lore, *touched}
+    room = settings.entries - len(lore) - len(in_block) - (1 if place_state else 0)
+    for near_state in _near_lore(view, seeds, shown, touched, room, settings):
+        as_lore.add(near_state.id)
         lore.append(
-            {
-                "name": view.name_of(lore_thing_id) or "",
-                "everyday": everyday_name(lore_state),
-                "facts": _facts(view, lore_state, lore_state.facts),
-            }
+            _lore_entry(
+                view,
+                near_state,
+                sorted(near_state.facts, key=lambda fact: fact.created)[
+                    : settings.facts_per_entry
+                ],
+            )
         )
 
     place = None
-    place_thing_id = record.state.get("place_thing_id")
-    place_local_id = record.state.get("place_local_id")
-    if place_thing_id:
-        place_state = view.thing(place_thing_id)
-        if place_state is not None:
-            facts = _facts(view, place_state, place_state.facts)
-            if spheres.is_sphere(place_state):
-                facts = _facts(
-                    view,
-                    place_state,
-                    [
-                        fact
-                        for fact in place_state.facts
-                        if fact.category not in SPHERE_CATEGORIES
-                    ],
-                ) + spheres.key_facts(
-                    view,
-                    place_thing_id,
-                    None,
-                    world.calendar,
-                    things,
-                    as_lore,
-                    _held_line(view),
-                )
-            place = {
-                "name": view.name_of(place_thing_id) or "",
-                "everyday": everyday_name(place_state),
-                "facts": facts,
-            }
+    if place_state is not None and place_thing_id:
+        facts = _facts(view, place_state, place_state.facts)
+        if spheres.is_sphere(place_state):
+            facts = _facts(
+                view,
+                place_state,
+                [
+                    fact
+                    for fact in place_state.facts
+                    if fact.category not in SPHERE_CATEGORIES
+                ],
+            ) + spheres.key_facts(
+                view,
+                place_thing_id,
+                None,
+                world.calendar,
+                things,
+                as_lore,
+                _held_line(view),
+                _latest(world, view, place_thing_id, things, as_lore, settings),
+            )
+        place = {
+            "name": view.name_of(place_thing_id) or "",
+            "everyday": everyday_name(place_state),
+            "facts": facts,
+        }
     elif place_local_id:
         local = next(
             (
@@ -393,12 +540,17 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
-    touched = _touched_spheres(view, record, place_thing_id, things)
-    in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
     # a nested sphere with a block of its own is left out of its parent's
     # key facts too (ruling P20)
     sphere_entries = _sphere_entries(
-        world, view, in_block, set(touched), things, as_lore | set(in_block)
+        world,
+        view,
+        in_block,
+        set(touched),
+        things,
+        as_lore | set(in_block),
+        settings,
+        place_thing_id,
     )
 
     return str(

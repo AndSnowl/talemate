@@ -69,14 +69,14 @@ sphere that ended it gets a timeline fact linking it.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any
 
 import structlog
 from pydantic import BaseModel, Field
 
 from talemate.prompts import Prompt
-from talemate.world import spheres
+from talemate.world import spheres, timelines
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
@@ -92,6 +92,7 @@ from talemate.world.store import Revision, Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import create, prose_gen
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.held import timeline_text
 from talemate.worldplay.create import (
     PART_OF_KINDS,
     CreatePreview,
@@ -1408,18 +1409,28 @@ def _summary(world: World, view: WorldView, state: ThingState) -> str:
     return spheres.summary(view, state.id, create.cached_summary(world, state.id))
 
 
-def _timeline_lines(world: World, view: WorldView, sphere_id: str) -> list[str]:
-    """The sphere's timeline as prompts list it, "<year>: <text>" (an
-    undated fact without a year)."""
+def _timeline_lines(
+    world: World, view: WorldView, sphere_id: str, shown: Collection[str] = ()
+) -> list[str]:
+    """The sphere's timeline as prompts list it, "<year>: <text>", a held
+    line as belief (`held.timeline_text`): its gathered timeline
+    (`timelines.entry_timeline`, as far out as the world's
+    `timeline_reach`), less what the prompt already shows another way
+    (`timelines.prompt_timeline`): its own dated facts that aren't
+    `timeline` facts, and the lines of the things in `shown`."""
 
-    lines = []
-    for fact in spheres.timeline(view, sphere_id):
-        text = view.render(fact.text)
-        if fact.valid_from is not None:
-            year = fact.valid_from.to_datetime().year
-            text = f"{create._shown_year(world.calendar, year)}: {text}"
-        lines.append(text)
-    return lines
+    settings = world.curation()
+    return [
+        f"{create._shown_year(world.calendar, line.date.to_datetime().year)}: "
+        f"{timeline_text(view, line)}"
+        for line in timelines.prompt_timeline(
+            view,
+            sphere_id,
+            shown,
+            reach=settings.timeline_reach,
+            threshold=settings.repeat_threshold,
+        )
+    ]
 
 
 def _held_repeat(
@@ -1510,6 +1521,16 @@ async def fill_drawer(
         if d.type in TYPE_HELP
     ]
     members = {item.thing_id for item in held if item.thing_id}
+    # the things a drawer line lists with all their facts: their dated
+    # facts aren't given again among the timeline lines
+    listed_drawers = {
+        d.id for d in spheres.drawers(view, sphere_id) if d.type in TYPE_HELP
+    }
+    listed = {
+        item.thing_id
+        for item in held
+        if item.thing_id and item.drawer_id in listed_drawers
+    }
     mentions, about = _mention_vars(gather_mentions(view, sphere_id), members)
     template = state.fields.get("template")
     template = template if template in TEMPLATE_LABELS else "other"
@@ -1524,7 +1545,7 @@ async def fill_drawer(
         "drawer_type": drawer.type,
         "drawer_help": TYPE_HELP[drawer.type],
         "summary": _summary(world, view, state),
-        "timeline": _timeline_lines(world, view, sphere_id),
+        "timeline": _timeline_lines(world, view, sphere_id, listed),
         "drawers": lines,
         "existing": [line for *_, ls, target in lines if target for line in ls],
         "mentions": mentions,

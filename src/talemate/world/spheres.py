@@ -892,15 +892,21 @@ def _round_robin(sizes: list[int], budget: int) -> list[int]:
     return taken
 
 
-def _timeline_line(view: WorldView, fact: FactState, calendar: Calendar) -> str:
-    """A timeline fact as key facts give it: "In <year>: <text>", the year
-    as `calendar` labels it, or the text alone when it's undated."""
+def dated_line(calendar: Calendar, date: WorldDate | None, text: str) -> str:
+    """A timeline line as key facts give it: "In <year>: <text>", the year
+    as `calendar` labels it, or the text alone when it's undated (the
+    spheres probe's (d) wording)."""
 
-    text = view.render(fact.text)
-    if fact.valid_from is None:
+    if date is None:
         return text
-    year = WorldDate(instant=fact.valid_from.instant, precision=Precision.YEAR)
+    year = WorldDate(instant=date.instant, precision=Precision.YEAR)
     return f"In {calendar.format(year)}: {text}"
+
+
+def _timeline_line(view: WorldView, fact: FactState, calendar: Calendar) -> str:
+    """A timeline fact as key facts give it (`dated_line`)."""
+
+    return dated_line(calendar, fact.valid_from, view.render(fact.text))
 
 
 def key_facts(
@@ -911,6 +917,7 @@ def key_facts(
     things: list[ThingState] | None = None,
     skip: Collection[str] = (),
     fact_line: FactLine | None = None,
+    latest: Sequence[str] | None = None,
 ) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, as the caller found it,
@@ -922,7 +929,9 @@ def key_facts(
     `things`, a snapshot of the view's things, saves `items` a scan. A
     thing item in `skip` (shown elsewhere in full) is left out, and the
     next item takes its place. `fact_line`, when given, words each item's
-    fact (`_item_line`)."""
+    fact (`_item_line`). `latest`, when given, is the timeline lines to end
+    with, worded by the caller (its gathered timeline, `timelines`): the
+    last `_KEY_TIMELINE` of them are taken."""
 
     state = view.thing(sphere_id)
     if state is None:
@@ -931,10 +940,12 @@ def key_facts(
     head = [line for line in [summary or _summary_of(view, sphere_id)] if line]
 
     calendar = calendar or Calendar()
-    latest = [
-        _timeline_line(view, fact, calendar)
-        for fact in timeline(view, sphere_id)[-_KEY_TIMELINE:]
-    ]
+    lines = (
+        [_timeline_line(view, fact, calendar) for fact in timeline(view, sphere_id)]
+        if latest is None
+        else list(latest)
+    )
+    tail = lines[-_KEY_TIMELINE:] if lines else []
 
     types = ["beliefs", "practices"] + (["structure"] if _is_agent(state) else [])
     type_of = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
@@ -946,11 +957,11 @@ def key_facts(
         for type_ in types
     ]
     taken = _round_robin(
-        [len(group) for group in groups], KEY_FACTS_CAP - len(head) - len(latest)
+        [len(group) for group in groups], KEY_FACTS_CAP - len(head) - len(tail)
     )
     middle = [
         _item_line(item, view, fact_line)
         for group, count in zip(groups, taken)
         for item in group[:count]
     ]
-    return (head + middle + latest)[:KEY_FACTS_CAP]
+    return (head + middle + tail)[:KEY_FACTS_CAP]

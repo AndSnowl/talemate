@@ -7,7 +7,8 @@ or "<Holder> holds: <Text>" when the text has no subject of its own
 Low-level on purpose: it imports only `talemate.world`, so `prose_gen`
 and `characters` (which imports `prose_gen`) can both use it. The
 mid-sentence rule (`_mid_sentence`) is also the tie lines' ("..., but:
-<text>"), re-exported by `characters`.
+<text>"), re-exported by `characters`. A timeline line
+(`timelines.TimelineLine`) is worded the same way (`timeline_text`).
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import re
 
 from talemate.world import spheres
 from talemate.world.names import find_names
+from talemate.world.timelines import TimelineLine
 from talemate.world.view import FactState, ThingState, WorldView
 
 
@@ -148,3 +150,14 @@ def held_text(
         return rendered
     end = "" if body[-1] in "?!" else "."
     return f"{lead}{body}{end}"
+
+
+def timeline_text(view: WorldView, line: TimelineLine) -> str:
+    """A timeline line's text as a scene or prompt is told it: as belief
+    when its fact is held (`held_text`, of the line's owner); its plain
+    text when the owner is gone from the view."""
+
+    owner = view.thing(line.owner_id)
+    if owner is None:
+        return line.text
+    return held_text(view, line.fact, owner, line.text)
