@@ -1238,7 +1238,8 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
     assert [p.stub_id for p in setup.stub_previews] == [stubs["frost"], stubs["order"]]
 
 
-async def test_starting_a_scene_writes_only_the_stubs_own_facts(world):
+@pytest.mark.parametrize("forged", [False, True])
+async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
     """Ruling C25: a stub the scene fills is previewed and accepted with no
     owner to tick anything, so it writes only its own facts. Its elsewhere
     items and the facts it would move in from its broader entry arrive
@@ -1310,6 +1311,15 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world):
     assert preview.verdict is None
 
     setup = SceneSetup.model_validate(json.loads(setup.model_dump_json()))
+    if forged:
+        # final review minor 4: the start trusts no client's ticks -- a
+        # setup sent back with its rows ticked writes only its own facts
+        [sent] = setup.stub_previews
+        for item in sent.elsewhere:
+            item.ticked = True
+        for row in sent.move_in:
+            row.ticked = True
+        sent.refile.append({"thing_id": weir, "to": {"name": "X"}, "ticked": True})
     async with MockClientContext():
         await start_scene(world, setup, MockClient("test"))
 
@@ -1323,6 +1333,7 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world):
     assert [view.render(f.text) for f in view.thing(frost).facts] == [
         "A snowbound village on the weir."
     ]
+    assert view.thing(weir).fields.get("part_of") is None
 
 
 # --- spheres ------------------------------------------------------------------

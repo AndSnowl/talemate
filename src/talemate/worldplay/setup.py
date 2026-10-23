@@ -386,6 +386,8 @@ def _resolve(
     key = _norm(name)
     if not key or _is_new(key, new_names):
         return None
+    # a scan of every thing per name resolved: a scene names a handful, so
+    # it stays cheap at the owner's scale (final review: left as it is)
     things = {
         state.id: _norm(view.name_of(state.id) or "")
         for state in view.things()
@@ -683,7 +685,9 @@ def _own_facts_only(preview: CreatePreview) -> CreatePreview:
 
 
 def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
-    """Write each stub preview into its stub, keeping the id. A stub
+    """Write each stub preview into its stub, keeping the id, with only
+    its own facts (`_own_facts_only` again: the client's ticks are never
+    trusted). A stub
     deleted since planning refuses the start before anything is written;
     one already filled out (by hand, in the meantime) is left as it is."""
 
@@ -700,7 +704,9 @@ def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
             continue
         todo.append(preview)
     for preview in todo:
-        accept_preview(world, preview)
+        # the setup came back from the client: its ticks are untrusted, so
+        # only the stub's own facts are written again (ruling C25)
+        accept_preview(world, _own_facts_only(preview))
 
 
 # --- planning ------------------------------------------------------------------
