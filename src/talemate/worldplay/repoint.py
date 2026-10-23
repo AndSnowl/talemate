@@ -431,7 +431,8 @@ def copy_facts(
     lacks becomes `default_category`'s (`_moved_category`). Its holder
     stays its holder, and one its old owner held implicitly (a beliefs
     drawer's statement, `spheres.held_by`) is written into its origin, so
-    it stays a belief away from the drawer. Links to the target, and to
+    it stays a belief away from the drawer; a statement's drawer the target
+    has none of (by id) is dropped from its origin. Links to the target, and to
     `standing_for` (a stub being re-pointed onto it, whose holdings become
     the target's too), point at the target: as plain words, with
     `plain_self_links`. An override among the moved facts points at its
@@ -460,6 +461,13 @@ def copy_facts(
                 origin = spheres.with_held_by(origin, holder)
         if origin is not None and origin.get("held_by") in standing_for:
             origin["held_by"] = target_id
+        # a statement's drawer, when the target has none of that id
+        if (
+            origin is not None
+            and "drawer" in origin
+            and origin["drawer"] not in {d.id for d in spheres.drawers(view, target_id)}
+        ):
+            del origin["drawer"]
         copies[fact.fact_id] = rev.add_fact(
             target_id,
             _moved_category(target.kind, fact.category, fact.valid_from is not None),
@@ -833,8 +841,8 @@ def move_fact(
     the copy's id.
 
     Refused with `ValueError`, writing nothing: a fact that isn't live
-    (removed, or never was), a target that's gone or an ignored stub, and
-    the fact's own entry. A category the target's kind lacks becomes
+    (removed, or never was), a sphere's summary, a target that's gone or
+    an ignored stub, and the fact's own entry. A category the target's kind lacks becomes
     `default_category`'s, with a note in `notes`. `prose` gains each of
     the two entries whose prose is written from the fact's category (the
     old owner's, the copy's)."""
@@ -844,6 +852,8 @@ def move_fact(
     if found is None:
         raise ValueError(f"no such fact, or it was removed: {fact_id}")
     owner_id, fact = found
+    if spheres.is_summary_fact(fact):
+        raise ValueError("a sphere's summary stays its own: it can't be moved")
     target = view.thing(target_id)
     if target is None or target.stub_ignored:
         raise ValueError(f"no such entry to move it to: {target_id}")

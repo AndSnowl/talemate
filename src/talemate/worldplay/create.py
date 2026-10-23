@@ -1702,10 +1702,18 @@ def untick_moved_repeats(
 
 
 def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
-    """The preview's move-in rows, for the broader entry it has now (an
-    outer body the owner named, `bodies.add_outer_body`): kept while it's
-    the same entry; else that entry's facts, every one unticked, since
-    the model never saw them; none for a new outer body."""
+    """The preview's move-in rows, for the broader entry it has now.
+
+    For an outer body the owner named (`bodies.add_outer_body`, ruling
+    C13), the entry still sits in its home through the body: the rows
+    from an entry the body sits in (its home sphere, as its row files it,
+    or, for a body the world has, where that one sits) stay, the model's
+    picks ticked; they go only when the owner files the body somewhere
+    else. A body the world has adds its own facts after them, every one
+    unticked, since the model never saw them; a new one has none.
+
+    Otherwise the rows are kept while it's the same broader entry, else
+    replaced by that entry's facts, unticked."""
 
     if not _generic_branch(
         preview.kind, _lineage_sources(preview.kind, preview.fields)
@@ -1719,7 +1727,24 @@ def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
         stub=stub,
         new_names=preview.new_names,
     )
-    if broader is None:
+    link = preview.part_of
+    if isinstance(link, dict) and isinstance(link.get("name"), str):
+        key = name_key(link["name"])
+        row = next((r for r in preview.new_names if name_key(r.name) == key), None)
+        home = row.part_of.get("sphere") if row is not None and row.part_of else None
+
+        def still_in(from_id: str) -> bool:
+            if isinstance(home, str) and spheres.sits_in(view, home, from_id):
+                return True
+            return broader is not None and spheres.sits_in(view, broader, from_id)
+
+        kept = [
+            r for r in preview.move_in if r.from_id != broader and still_in(r.from_id)
+        ]
+        if broader is not None:
+            kept += move_in_rows(view, broader)
+        preview.move_in = kept
+    elif broader is None:
         preview.move_in = []
     elif not any(row.from_id == broader for row in preview.move_in):
         preview.move_in = move_in_rows(view, broader)

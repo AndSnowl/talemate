@@ -23,9 +23,10 @@ pre-filled as `outer_name` gives it ("<inner part>'s parent"), and
 - every entry the world has filed in the drawer the outer body goes into
   (the Frosted Wing in the Tsardom's Military) gets a re-file row, all
   unticked: no model judges which are its siblings, the owner ticks them;
-- the entry itself put into an outer body takes that body's facts as what
-  may move in (`create.offer_move_in`, spec goal 2): none for a new one,
-  every fact of one the world has, unticked.
+- the entry itself put into an outer body keeps what may move in from the
+  home it still sits in through the body (ruling C13), unless the owner
+  files the body elsewhere, and a body the world has adds its own facts,
+  unticked (`create.offer_move_in`, spec goal 2).
 
 Accept (`create.accept_preview`, `spheres.accept_sphere`,
 `spheres.accept_fill`) makes the chain outer first and files it in one

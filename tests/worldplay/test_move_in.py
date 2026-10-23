@@ -21,6 +21,7 @@ from typing import NamedTuple
 import pytest
 
 from talemate.world.dates import WorldDate
+from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.curation import CurationSettings
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
@@ -34,7 +35,7 @@ from talemate.worldplay.create import (
     preview_thing,
     untick_moved_repeats,
 )
-from talemate.worldplay.repoint import move_fact
+from talemate.worldplay.repoint import move_fact, repoint_stub
 from talemate.worldplay.spheres import SUMMARY_ORIGIN
 
 from conftest import MockClient, MockClientContext, client_responses
@@ -412,15 +413,35 @@ async def test_move_in_shows_at_most_its_cap(world, tsardom):
 
 
 async def test_outer_body_changes_what_moves_in(world, tsardom):
-    """The entry put into an outer body (ruling C11): a new outer has no
-    facts, so nothing moves in; one the world has offers its facts, all
-    unticked (the model never saw them)."""
+    """The entry put into an outer body (rulings C11, C13): it still sits
+    in its home, the Tsardom, through the body, so the model's picks from
+    the Tsardom stay, unless the owner files the body somewhere else. A
+    body the world has adds its own facts, unticked (the model never saw
+    them); a new one has none."""
 
     t = tsardom
+    before = [(t.law_code, True), (t.capital, False)]
+    before += [(t.transformation, False), (t.architecture, False)]
+    tsardom_rows = [(fact_id, t.tsardom, ticked) for fact_id, ticked in before]
+
     preview, _prompt = await _zakonnik(world, t)
-    assert preview.move_in
     add_outer_body(
         world, preview, "Zakonnik", OuterBody(name="The Codes", template="field")
+    )
+    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    assert rows == tsardom_rows
+
+    # filed in the Church instead: no longer inside the Tsardom
+    preview, _prompt = await _zakonnik(world, t)
+    add_outer_body(
+        world,
+        preview,
+        "Zakonnik",
+        OuterBody(
+            name="The Codes",
+            template="field",
+            part_of={"sphere": t.church, "drawer": UNSORTED_DRAWER_ID},
+        ),
     )
     assert preview.move_in == []
 
@@ -432,9 +453,34 @@ async def test_outer_body_changes_what_moves_in(world, tsardom):
         OuterBody(name="Church of the Eternal Light", template="religion"),
         as_sphere=True,
     )
-    assert [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in] == [
-        (t.light, t.church, False)
-    ]
+    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    assert rows == [*tsardom_rows, (t.light, t.church, False)]
+
+    # a body the world has that sits in the Tsardom keeps its rows too
+    with world.revision(Source.manual(note="courts")) as rev:
+        courts = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Courts",
+                "template": "order",
+                "part_of": {"sphere": t.tsardom, "drawer": UNSORTED_DRAWER_ID},
+            },
+        )
+        ruling = rev.add_fact(courts, "about", "The Courts sit in Moskov.")
+    preview, _prompt = await _zakonnik(world, t)
+    add_outer_body(
+        world,
+        preview,
+        "Zakonnik",
+        OuterBody(
+            name="The Courts",
+            template="order",
+            part_of={"sphere": t.church, "drawer": UNSORTED_DRAWER_ID},
+        ),
+        as_sphere=True,
+    )
+    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
+    assert rows == [*tsardom_rows, (ruling, courts, False)]
 
 
 # --- accept ----------------------------------------------------------------
@@ -598,7 +644,8 @@ def test_move_fact_single(world, tsardom):
     new_id = move_fact(world, t.light, t.tsardom, prose=prose)
     moved = next(f for f in world.live_facts(t.tsardom) if f.fact_id == new_id)
     assert moved.category == "statement"
-    assert moved.origin == {"drawer": DOCTRINES, "held_by": t.church}
+    # the Tsardom has no such drawer: the statement is in none there
+    assert moved.origin == {"held_by": t.church}
     assert moved.text == "The Light chose the Tsars of Moscavia to rule."
     # a statement is no input to either sphere's prose
     assert prose == []
@@ -637,7 +684,52 @@ def test_move_fact_refusals_write_nothing(world, tsardom):
         ("0" * 32, t.moskov, "no such fact"),
         (t.law_code, gone, "no such"),
         (t.law_code, t.tsardom, "already"),
+        (t.summary, t.moskov, "summary"),
     ):
         with pytest.raises(ValueError, match=why):
             move_fact(world, fact_id, target_id)
     assert world.head_rev() == head
+
+
+def test_move_fact_keeps_a_drawer_the_target_has(world, tsardom):
+    """A statement moved onto a sphere with a drawer of the same id stays
+    in it."""
+
+    t = tsardom
+    with world.revision(Source.manual(note="chapel")) as rev:
+        chapel = rev.create_thing(
+            "sphere",
+            {
+                "name": "The Chapel",
+                "template": "religion",
+                "drawers": [{"id": DOCTRINES, "type": "beliefs", "title": "Creed"}],
+            },
+        )
+    new_id = move_fact(world, t.light, chapel)
+    moved = next(f for f in world.live_facts(chapel) if f.fact_id == new_id)
+    assert moved.origin == {"drawer": DOCTRINES, "held_by": t.church}
+
+
+# --- repoint's fallback, shared with moving --------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "category"), [("place", "history"), ("sphere", "timeline")]
+)
+def test_repoint_dated_fact_lands_in_default_category(world, kind, category):
+    """A stub's dated fact in a category the target lacks goes where
+    `default_category` puts a dated fact: a place's history, a sphere's
+    timeline (not their plain general or about)."""
+
+    fields = {"name": "Target"} | ({"template": "nation"} if kind == "sphere" else {})
+    with world.revision(Source.manual(note="stub")) as rev:
+        target = rev.create_thing(kind, fields)
+        stub = rev.create_thing(
+            "event", {"name": "The Thaw", "stub": {"ignored": False}}
+        )
+        rev.add_fact(stub, "summary", "The ice broke.", valid_from=WorldDate.of(990))
+    repoint_stub(world, stub, target)
+    moved = [f for f in world.live_facts(target) if f.text == "The ice broke."]
+    assert [(f.category, f.valid_from) for f in moved] == [
+        (category, WorldDate.of(990))
+    ]
