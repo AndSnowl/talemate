@@ -1411,7 +1411,7 @@ def _sphere_out(
         ],
         "territory": [
             {"id": place_id, "name": view.name_of(place_id) or ""}
-            for place_id in spheres.territory(view, sphere_id)
+            for place_id in spheres.territory(view, sphere_id, things)
         ],
         "timeline": [
             *(

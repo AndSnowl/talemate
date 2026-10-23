@@ -495,6 +495,23 @@ def test_place_sphere_territory_includes_towns(world, spheres):
     assert territory(view, s.dawn) == [s.dawn_peak]
 
 
+def test_territory_reads_a_things_snapshot(world, spheres, monkeypatch):
+    """Final review minor 10: given the view's things, territory (and the
+    items it reads) scans the view no more, and holds the same."""
+
+    from talemate.world.view import WorldView
+
+    s = spheres
+    view = world.view()
+    things = view.things()
+    expected = {sphere: territory(view, sphere) for sphere in (s.tsardom, s.dawn)}
+    monkeypatch.setattr(
+        WorldView, "things", lambda *a, **k: pytest.fail("scanned the view again")
+    )
+    for sphere, held in expected.items():
+        assert territory(view, sphere, things) == held
+
+
 def test_territory_holds_places_under_a_holy_site(world, spheres):
     s = spheres
     with world.revision(Source.manual()) as rev:

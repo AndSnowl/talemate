@@ -1321,23 +1321,45 @@ def _nearby_lines(view: WorldView, ids: Sequence[str]) -> list[str]:
     ]
 
 
-def entry_named(view: WorldView, name: str, prefer: Sequence[str] = ()) -> str | None:
-    """The live thing whose name or other name is `name` (ignoring case and
-    a leading article), the `prefer`red ones (the entries listed as near)
-    first, then the first made; an ignored stub never; `None` for none."""
+def entry_names(view: WorldView, prefer: Sequence[str] = ()) -> dict[str, str]:
+    """`name key -> thing id` over every live thing's name and other names
+    (ignoring case and a leading article), read once for a reply's many
+    lookups (`entry_named`): the `prefer`red ones (the entries listed as
+    near) first, then the first made, each key kept for the first thing
+    holding it; an ignored stub never."""
 
-    key = name_key(name)
-    if not key:
-        return None
     others = sorted(view.things(), key=lambda thing: thing.created)
+    found: dict[str, str] = {}
     for state in [view.thing(thing_id) for thing_id in prefer] + others:
         if state is None or state.stub_ignored:
             continue
         names = [view.name_of(state.id) or ""]
         names += [entry["name"] for entry in _aka_entries(state.fields.get("aka"))]
-        if key in {name_key(other) for other in names}:
-            return state.id
-    return None
+        for other in names:
+            key = name_key(other)
+            if key:
+                found.setdefault(key, state.id)
+    return found
+
+
+def entry_named(
+    view: WorldView,
+    name: str,
+    prefer: Sequence[str] = (),
+    lookup: dict[str, str] | None = None,
+) -> str | None:
+    """The live thing whose name or other name is `name` (ignoring case and
+    a leading article), the `prefer`red ones (the entries listed as near)
+    first, then the first made; an ignored stub never; `None` for none.
+    `lookup` (`entry_names`, at this view and `prefer`) saves reading the
+    world's names again."""
+
+    key = name_key(name)
+    if not key:
+        return None
+    if lookup is None:
+        lookup = entry_names(view, prefer)
+    return lookup.get(key)
 
 
 def _opens_with(text: str, names: Sequence[str]) -> bool:
@@ -1422,6 +1444,8 @@ def parse_elsewhere(
     item_names = [name for name in new_items if name.strip()]
     item_keys = {name_key(name) for name in item_names}
     by_key = {name_key(n.name): n for n in listed}
+    # the world's names, read once for every item (final review minor 10)
+    lookup: dict[str, str] | None = None
     found: list[ElsewhereFact] = []
     seen: set[tuple[str, str]] = set()
     for item in raw if isinstance(raw, list) else []:
@@ -1439,7 +1463,9 @@ def parse_elsewhere(
         if item_names and _opens_with(text, item_names):
             log.debug("create.elsewhere_about_new_item", entry=entry)
             continue
-        target = entry_named(view, entry, prefer)
+        if lookup is None:
+            lookup = entry_names(view, prefer)
+        target = entry_named(view, entry, prefer, lookup)
         if target is not None and target in own_ids:
             continue
         new: NewName | None = None

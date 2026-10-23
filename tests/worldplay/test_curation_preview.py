@@ -772,3 +772,41 @@ async def test_unlinked_names_retry_keeps_elsewhere_stubs(world, eternal):
     own = view.thing(eternal.divine)
     assert any(tsar.id in parse_refs(f.text) for f in own.facts)
     assert len(tsar.facts) == 1
+
+
+def test_elsewhere_reads_the_worlds_names_once(world, eternal, monkeypatch):
+    """Final review minor 10: a reply's elsewhere items are matched to
+    entries from one read of the world's names, however many there are;
+    each still finds its entry, an other name too."""
+
+    from talemate.world.view import WorldView
+    from talemate.worldplay.create import parse_elsewhere
+
+    reads = []
+    real = WorldView.things
+
+    def counted(self, *args, **kwargs):
+        reads.append(1)
+        return real(self, *args, **kwargs)
+
+    view = world.view()
+    monkeypatch.setattr(WorldView, "things", counted)
+    found = parse_elsewhere(
+        [
+            {"entry": "Moskov", "text": "Moskov has bells."},
+            {"entry": "The Church", "text": "The Church rings them."},
+            {"entry": "Tsardom of Moscavia", "text": "The Tsardom pays for them."},
+        ],
+        view,
+        own_keys=set(),
+        own_ids=set(),
+        listed=[],
+        calendar=world.calendar,
+        now_year=1000,
+    )
+    assert len(reads) == 1
+    assert [item.target_id for item in found] == [
+        eternal.moskov,
+        eternal.church,
+        eternal.tsardom,
+    ]

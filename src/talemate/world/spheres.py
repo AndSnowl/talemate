@@ -616,15 +616,26 @@ def people(view: WorldView, sphere_id: str) -> list[Tie]:
     ]
 
 
-def territory(view: WorldView, sphere_id: str) -> list[str]:
+def territory(
+    view: WorldView, sphere_id: str, things: list[ThingState] | None = None
+) -> list[str]:
     """The ids of the places the sphere holds: for a place sphere, itself;
     the places in its places drawers (inherited ones too); and every place
-    under any of those, each once."""
+    under any of those, each once. Given `things` (a snapshot of the
+    view's things, as `items` takes it), it reads those instead of
+    scanning the view again."""
 
     state = view.thing(sphere_id)
     if state is None:
         return []
-    places = {place.id: place for place in view.things("place")}
+    places = {
+        place.id: place
+        for place in (
+            view.things("place")
+            if things is None
+            else [t for t in things if t.kind == "place"]
+        )
+    }
     children: dict[str, list[str]] = {}
     for place in sorted(places.values(), key=lambda thing: thing.created):
         parent = place.fields.get("parent")
@@ -635,7 +646,7 @@ def territory(view: WorldView, sphere_id: str) -> list[str]:
     types = {drawer.id: drawer.type for drawer in drawers(view, sphere_id)}
     roots += [
         item.thing_id
-        for item in items(view, sphere_id)
+        for item in items(view, sphere_id, things)
         if item.thing_id in places and types.get(item.drawer_id) == "places"
     ]
 
