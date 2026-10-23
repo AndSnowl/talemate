@@ -153,6 +153,7 @@ CREATE_KINDS: tuple[str, ...] = (
     "event",
     "item",
     "sphere",
+    "being",
 )
 
 # the kinds the reply's "names" may give a name (the prompt lists them);
@@ -168,6 +169,7 @@ NAME_KINDS: tuple[str, ...] = (
     "event",
     "item",
     "lore",
+    "being",
 )
 
 # the templates a sphere name guess may carry (the spheres probe's names
@@ -179,6 +181,9 @@ _KIND_GUESSES: dict[str, tuple[str, str | None]] = {
     "culture": ("sphere", "culture"),
     "order": ("sphere", "order"),
     "office": ("lore", None),
+    "god": ("being", None),
+    "spirit": ("being", None),
+    "deity": ("being", None),
 }
 
 # how many facts the prompt asks for, and the most a preview keeps
@@ -218,6 +223,7 @@ _NOT_CATEGORY_KEYS = {
     "role",
     "exceptions",
     "rejects",
+    "held_by",
 }
 
 # keys only an `aka` entry or a "names" entry has: an object with one is
@@ -252,6 +258,9 @@ class PreviewFact(BaseModel):
     since: WorldDate | None = None
     # the fact_ids of the inherited facts this one makes untrue
     overrides: list[str] = Field(default_factory=list)
+    # the thing that holds this fact as a belief (`spheres.held_by`), set
+    # by the owner or mapped from the reply's per-fact `held_by` name
+    held_by: str | None = None
 
 
 class PreviewInherited(BaseModel):
@@ -416,17 +425,20 @@ def json_objects(text: str) -> list[dict[str, Any]]:
     return found
 
 
-def _raw_facts(obj: dict[str, Any]) -> list[tuple[str, str, object, object]]:
-    """`(category, text, since, overrides)` from one fact object, in either
-    shape."""
+def _raw_facts(
+    obj: dict[str, Any],
+) -> list[tuple[str, str, object, object, object]]:
+    """`(category, text, since, overrides, held_by)` from one fact object,
+    in either shape."""
 
     since = obj.get("since")
     overrides = obj.get("overrides")
+    held = obj.get("held_by")
     text = obj.get("text")
     if isinstance(text, str):
-        return [(str(obj.get("category") or ""), text, since, overrides)]
+        return [(str(obj.get("category") or ""), text, since, overrides, held)]
     return [
-        (key, value, since, overrides)
+        (key, value, since, overrides, held)
         for key, value in obj.items()
         if key not in _NOT_CATEGORY_KEYS and isinstance(value, str)
     ]
@@ -540,12 +552,16 @@ def parse_create_reply(
     calendar: Calendar,
     now_year: int,
     labels: dict[str, str] | None = None,
+    holder: Callable[[str], str | None] | None = None,
 ) -> tuple[str | None, int | None, list[PreviewFact]]:
     """`(name, age, facts)` from a `world/create-thing` reply. `name` and
     `age` are `None` when the reply doesn't give them. At most `MAX_FACTS`
     facts are kept; empty and repeated ones are dropped. A fact's
     `"overrides"` labels are mapped through `labels` (label -> fact id) to
-    its `overrides`."""
+    its `overrides`, and its `"held_by"` name through `holder` (name ->
+    thing id, `None` for no known entry) to its `held_by`. The prompt
+    doesn't ask for `held_by` (the curation probe 4 fell back to tagging
+    by hand); a reply that gives one anyway is read."""
 
     categories = create_categories(kind)
     fallback = _FALLBACK_CATEGORY.get(kind, "general")
@@ -579,7 +595,7 @@ def parse_create_reply(
     facts: list[PreviewFact] = []
     seen: set[tuple[str, str]] = set()
     for obj in fact_objects:
-        for category, text, since, overrides in _raw_facts(obj):
+        for category, text, since, overrides, held in _raw_facts(obj):
             category = category.strip().lower()
             if category not in categories:
                 category = fallback
@@ -593,6 +609,11 @@ def parse_create_reply(
                     text=text,
                     since=_parse_since(since, calendar, now_year),
                     overrides=_mapped_labels(overrides, labels or {}),
+                    held_by=(
+                        holder(held.strip())
+                        if holder is not None and isinstance(held, str) and held.strip()
+                        else None
+                    ),
                 )
             )
     if len(facts) > MAX_FACTS:
@@ -1321,6 +1342,24 @@ def _sphere_named(view: WorldView, name: str, shown: list[str]) -> str | None:
     return None
 
 
+def holder_named(view: WorldView, name: str) -> str | None:
+    """The thing that can hold a belief -- a sphere, a character or a being
+    -- whose name or other name is `name` (ignoring case and a leading
+    article), the first made; `None` for none."""
+
+    key = name_key(name)
+    if not key:
+        return None
+    for state in sorted(view.things(), key=lambda thing: thing.created):
+        if not (spheres.is_sphere(state) or state.kind in ("character", "being")):
+            continue
+        names = [view.name_of(state.id) or ""]
+        names += [entry["name"] for entry in _aka_entries(state.fields.get("aka"))]
+        if key in {name_key(other) for other in names}:
+            return state.id
+    return None
+
+
 def _raw_ties(reply: str) -> object:
     """The reply's `"ties"` list: the wrapper's, or, when it was cut off,
     every complete tie of the last `"ties"` list."""
@@ -1810,7 +1849,14 @@ async def preview_thing(
             template, client, CREATE_PROMPT_KIND, vars=template_vars
         )
     reply = extracted["response"]
-    name, age, facts = parse_create_reply(reply, kind, calendar, now_year, labels)
+    name, age, facts = parse_create_reply(
+        reply,
+        kind,
+        calendar,
+        now_year,
+        labels,
+        holder=lambda held: holder_named(view, held),
+    )
     if not facts:
         raise ValueError("the model's reply had no facts in it")
     ties = (
@@ -2171,12 +2217,15 @@ def _write_preview(
                 as_new=preview.treated_as_new,
             )
             linked.update(parse_refs(text))
+            # a holder deleted since the preview holds nothing
+            held = fact.held_by is not None and view.thing(fact.held_by) is not None
             rev.add_fact(
                 thing_id,
                 fact.category,
                 text,
                 valid_from=fact.since,
                 overrides=fact.overrides,
+                origin=spheres.with_held_by(None, fact.held_by) if held else None,
             )
         for tie in preview.ties:
             for exception in _live_exceptions(view, tie):

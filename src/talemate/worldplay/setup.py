@@ -72,7 +72,7 @@ from talemate.world.kinds import HERITAGE_KINDS
 # `NameCandidate` and `NameMatch` are re-exported: they were scene setup's
 from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
-from talemate.world.spheres import is_sphere
+from talemate.world.spheres import acts_in_world, is_sphere
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
@@ -206,16 +206,24 @@ def _dedupe(ids: list[str]) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
+def _cast_kind(state: ThingState) -> str:
+    """The kind a thing is grouped and cast as: a real being is one of the
+    characters (`acts_in_world`)."""
+
+    return "character" if acts_in_world(state) else state.kind
+
+
 def _world_things(view: WorldView, thing_ids: list[str]) -> list[tuple[str, list]]:
     """`thing_ids` rendered at the view's date, grouped by kind, as
-    `(label, [{"name", "facts"}])` for the template."""
+    `(label, [{"name", "facts"}])` for the template; a real being among
+    the characters."""
 
     groups: dict[str, list[dict[str, Any]]] = {}
     for thing_id in thing_ids:
         state = view.thing(thing_id)
         if state is None:
             continue
-        groups.setdefault(state.kind, []).append(
+        groups.setdefault(_cast_kind(state), []).append(
             {
                 "name": view.name_of(thing_id) or "",
                 "facts": [view.render(fact.text) for fact in state.facts],
@@ -369,13 +377,16 @@ def _resolve(
     choices come first: a name treated as new (`new_names`, normalised) is
     invented, and a picked thing the owner's text, its name or its first
     name matches is that thing. Then a thing with that full name, or the
-    only thing of that kind with that first name. `None` means invented."""
+    only thing of that kind with that first name. `None` means invented.
+    A real being is one of the characters (`_cast_kind`)."""
 
     key = _norm(name)
     if not key or _is_new(key, new_names):
         return None
     things = {
-        state.id: _norm(view.name_of(state.id) or "") for state in view.things(kind)
+        state.id: _norm(view.name_of(state.id) or "")
+        for state in view.things()
+        if _cast_kind(state) == kind
     }
 
     for text, thing_id in picks.items():
@@ -396,6 +407,34 @@ def _resolve(
     return by_first[0] if len(by_first) == 1 else None
 
 
+def _unreal_being(
+    view: WorldView,
+    name: str,
+    picks: dict[str, str],
+    new_names: frozenset[str] = frozenset(),
+) -> bool:
+    """Whether `name` means a being that isn't real (believed, or
+    undecided): picked for it, or its full name. The owner's treating the
+    name as new wins."""
+
+    key = _norm(name)
+    if not key or _is_new(key, new_names):
+        return False
+    beings = [
+        state
+        for state in view.things("being")
+        if not acts_in_world(state)
+        and (
+            key == _norm(view.name_of(state.id) or "")
+            or any(
+                _norm(text) == key and thing_id == state.id
+                for text, thing_id in picks.items()
+            )
+        )
+    ]
+    return bool(beings)
+
+
 def _ref(
     view: WorldView,
     value: object,
@@ -403,12 +442,19 @@ def _ref(
     picks: dict[str, str],
     new_names: frozenset[str] = frozenset(),
 ) -> SetupRef | None:
+    """The setup entry the reply's `value` is: a world thing of `kind`, or
+    one invented. A character naming a being that isn't real is no entry
+    at all: it's never cast, nor invented in its place."""
+
     name, facts, heritage_name = _entry(value)
     if not name:
         return None
     thing_id = _resolve(view, name, kind, picks, new_names)
     if thing_id is not None:
         return SetupRef(thing_id=thing_id)
+    if kind == "character" and _unreal_being(view, name, picks, new_names):
+        log.info("setup.being_not_cast", name=name)
+        return None
     local = LocalThing(name=name, facts=facts)
     if kind == "character":
         local.heritage_id = _heritage_id(view, heritage_name)
@@ -477,7 +523,7 @@ def _setup_from_reply(
         _add_ref(cast, ref, unless=player)
     for thing_id in picks.values():
         state = view.thing(thing_id)
-        if state is not None and state.kind == "character":
+        if state is not None and acts_in_world(state):
             _add_ref(cast, SetupRef(thing_id=thing_id), unless=player)
 
     place = _ref(view, reply.get("place"), "place", picks, new_names)
@@ -667,6 +713,9 @@ async def plan_scene(
     for thing_id in chosen:
         if view.thing(thing_id) is None:
             raise KeyError(f"no such thing: {thing_id}")
+    player_state = view.thing(player) if player else None
+    if player_state is not None and not acts_in_world(player_state):
+        raise ValueError(f"{view.name_of(player_state.id)} can't be played")
 
     hits = (
         _index_hits(world, prompt, start, embedding_function) if reply is None else []
@@ -705,13 +754,14 @@ async def plan_scene(
     )
     # ruling P10: a place sphere named in the prompt is pulled in (the
     # scene touches it), unless it's the scene's own place; other places
-    # and characters never are
+    # and characters (real beings too) never are, nor a being that isn't
+    # real: its facts reach the scene through what refers to it
     own_place = setup.place.thing_id if setup.place is not None else None
     setup.pulled_in = [
         thing_id
         for thing_id in _dedupe([*shown, *_stubs_named(view, setup)])
         if (state := view.thing(thing_id)) is not None
-        and state.kind != "character"
+        and state.kind not in ("character", "being")
         and (state.kind != "place" or (is_sphere(state) and thing_id != own_place))
     ]
     setup.stub_previews = await _stub_previews(world, setup, client)
@@ -874,7 +924,8 @@ def _carried(
     """`(player, characters, place, extras)` carried over from `record`:
     the player, the characters still active, the place and the extras. A
     world thing that's since been deleted is dropped, the same way
-    `pulled_in` is filtered against `view`."""
+    `pulled_in` is filtered against `view`, as is a being that's no longer
+    real (`acts_in_world`)."""
 
     local = {thing["local_id"]: thing for thing in local_things}
 
@@ -908,7 +959,8 @@ def _carried(
     for entry in record.state.get("characters") or []:
         thing_id = entry.get("thing_id")
         if thing_id:
-            if view.thing(thing_id) is None:
+            carried = view.thing(thing_id)
+            if carried is None or not acts_in_world(carried):
                 continue
             ref = SetupRef(thing_id=thing_id)
             is_player = thing_id == record.player_thing_id

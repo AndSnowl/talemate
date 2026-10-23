@@ -3204,6 +3204,45 @@ async def test_set_ties(plugin, client):
     assert s.world.head_rev() == head
 
 
+async def test_set_ties_on_beings(plugin, client):
+    """A real being holds ties as a character does; a believed or
+    undecided one can't be tied, and a real one that becomes believed
+    keeps its ties hidden (curation Task 4, ruling Q2)."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        spirit = rev.create_thing(
+            "being", fields={"name": "The River Spirit", "existence": "real"}
+        )
+        light = rev.create_thing("being", fields={"name": "The Eternal Light"})
+
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=spirit,
+        ties=[{"sphere_id": s.dawn, "role": "patron"}],
+    )
+    assert not _errors(plugin)
+    assert [t["role"] for t in _last(plugin, "set_ties")["data"]["ties"]] == ["patron"]
+
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=light,
+        ties=[{"sphere_id": s.dawn, "role": "god"}],
+    )
+    assert len(_errors(plugin)) == before + 1
+    assert s.world.head_rev() == head
+
+    with s.world.revision(Source.manual()) as rev:
+        rev.set_field(spirit, "existence", "believed", None)
+    thing = await _get_thing(plugin, spirit)
+    assert thing["ties"] == []
+    assert s.world.view().thing(spirit).fields["ties"][0]["role"] == "patron"
+
+
 async def test_add_exception(plugin, client):
     s = await _open_sphere_world(plugin)
     async with MockClientContext():

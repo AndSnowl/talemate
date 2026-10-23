@@ -311,7 +311,8 @@ def _fact_changes(
 ) -> tuple[dict[str, dict], int, list]:
     """`(changes, links, own facts)`: each other fact's changes (`text`, its
     links to the stub pointed at the target; `origin`, a tie to the stub
-    filed under the target), the fact links moved, and the stub's own
+    filed under the target, a belief the stub held held by the target),
+    the fact links moved, and the stub's own
     facts (`FactState`s), which `_move_facts` copies to the target."""
 
     view, stub_id, target_id = job.view, job.stub.id, job.target.id
@@ -324,13 +325,19 @@ def _fact_changes(
         text, moved = rewrite(fact.text or "", owner, True)
         links += moved
         changes[fact.fact_id] = {"text": text}
-    for character in view.things("character"):
-        for fact in job.world.live_facts(character.id):
-            if (fact.origin or {}).get("tie") == stub_id:
-                changes.setdefault(fact.fact_id, {})["origin"] = {
-                    **(fact.origin or {}),
-                    "tie": target_id,
-                }
+    # a character's exception filed under a tie to the stub, and any fact
+    # the stub holds as a belief, go over to the target
+    own_ids = {fact.fact_id for fact in job.world.live_facts(stub_id)}
+    for fact in job.world.live_facts():
+        origin = fact.origin or {}
+        keys = [key for key in ("tie", "held_by") if origin.get(key) == stub_id]
+        if fact.fact_id in own_ids:
+            continue
+        if keys:
+            changes.setdefault(fact.fact_id, {})["origin"] = {
+                **origin,
+                **{key: target_id for key in keys},
+            }
     return changes, links, job.world.live_facts(stub_id)
 
 
@@ -359,7 +366,12 @@ def _move_facts(job: _Job, rev: Revision, own: list, changes: dict[str, dict]) -
             text,
             valid_from=fact.valid_from,
             valid_until=fact.valid_until,
-            origin=fact.origin,
+            # a belief the stub held of itself is the target's now
+            origin=(
+                {**fact.origin, "held_by": target_id}
+                if fact.origin and fact.origin.get("held_by") == stub_id
+                else fact.origin
+            ),
             overrides=[o for o in fact.overrides if o not in own_ids] or None,
         )
     if recategorised:

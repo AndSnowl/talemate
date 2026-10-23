@@ -119,6 +119,8 @@ DAWN_SUMMARY = (
     "Night of Feathers was a purification."
 )
 PURITY = "Snowy owl-folk are the purest of the folk."
+# as a scene is told it: a Doctrines statement is held by the White Dawn
+HELD_PURITY = "The White Dawn holds that snowy owl-folk are the purest of the folk."
 SEPARATION = "The faithful may not marry humans."
 VIGIL = "The faithful watch the first light in silence on high galleries."
 SPIRE = "A white tower in Kremova where pilgrims climb at midwinter."
@@ -590,7 +592,7 @@ async def test_spheres_end_to_end(plugin, client, loadable):
     for line in (
         DAWN_SUMMARY,
         COUNCIL_TEXT,
-        PURITY,
+        HELD_PURITY,
         SEPARATION,
         VIGIL,
         "In 994: Declared the Night of Feathers a purification.",
@@ -620,7 +622,7 @@ async def test_spheres_end_to_end(plugin, client, loadable):
         assert [call["kind"] for call in calls] == ["narrate_512"]
         turn_prompt = str(calls[0]["prompt"])
         assert turn_prompt.count(DAWN_SUMMARY) == 1
-        assert turn_prompt.count(PURITY) == 1
+        assert turn_prompt.count(HELD_PURITY) == 1
     finally:
         close_world_scene(scene)
 

@@ -23,6 +23,14 @@ P22).
 A sphere's summary (ruling P21) is its `about` fact whose origin marks it
 `summary`; its description prose is written from it first (`summary`).
 
+A fact can be held by a sphere or a character: a belief, not world truth
+(`held_by`). Its origin names the holder (`with_held_by`); a statement in
+a beliefs drawer of a religion or culture is held by its sphere unmarked.
+
+A `being` whose `existence` is `real` acts in the world like a character
+(`acts_in_world`): its ties count. Once it isn't, its ties are kept but
+hidden, as a tie to a deleted sphere is (ruling P12).
+
 Every read goes through the given `WorldView`, so a dated part-of ending
 or tie follows the view's `(at, rev)`.
 """
@@ -37,7 +45,9 @@ from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .heritage import overriders
 from .kinds import (
+    DEFAULT_EXISTENCE,
     ENTRY_DRAWER_TYPES,
+    EXISTENCE_VALUES,
     TEMPLATE_AGENT,
     UNSORTED_DRAWER_ID,
     WRITTEN_DRAWER_TYPES,
@@ -238,6 +248,48 @@ def _statement_drawer(fact: FactState) -> str:
     return drawer if isinstance(drawer, str) else UNSORTED.id
 
 
+# the templates whose beliefs-drawer statements are held by their sphere
+# unmarked: a nation's beliefs drawer is its Laws (true as laws), and a
+# field's theories stay plain claims
+HELD_TEMPLATES: tuple[str, ...] = ("religion", "culture")
+
+
+def with_held_by(
+    origin: dict[str, object] | None, holder_id: str | None
+) -> dict[str, object]:
+    """`origin` with its holder set to `holder_id`, its other keys (a
+    statement's drawer, an exception's tie) kept. `None` clears it: stored
+    as an explicit `"held_by": None`, so a beliefs-drawer statement can
+    read plain too."""
+
+    return {**(origin or {}), "held_by": holder_id}
+
+
+def held_by(view: WorldView, fact: FactState, owner: ThingState) -> str | None:
+    """The thing that holds `fact` (of `owner`) as a belief, or `None` for
+    world truth: its origin's `held_by`, when that's a live thing (a
+    deleted holder holds nothing, until undone); otherwise, unless the
+    origin clears it, a `statement` of a religion or culture sphere in one
+    of its beliefs drawers is held by that sphere. An entry filed in a
+    beliefs drawer (a doctrine) inherits nothing: its facts are marked one
+    by one."""
+
+    origin = fact.origin or {}
+    if "held_by" in origin:
+        holder = origin["held_by"]
+        if isinstance(holder, str) and view.thing(holder) is not None:
+            return holder
+        return None
+    if (
+        fact.category != "statement"
+        or not is_sphere(owner)
+        or owner.fields.get("template") not in HELD_TEMPLATES
+    ):
+        return None
+    types = {d.id: d.type for d in _drawers_of(_chain(view, owner.id))}
+    return owner.id if types.get(_statement_drawer(fact)) == "beliefs" else None
+
+
 def is_summary_fact(fact: FactState) -> bool:
     """Whether the fact is a sphere's summary: an `about` fact whose origin
     marks it so (ruling P21)."""
@@ -433,9 +485,27 @@ def _date(value: object) -> WorldDate | None:
         return None
 
 
+def existence(state: ThingState) -> str:
+    """A being's `existence`: real, believed or undecided (also for one
+    unset, or set to something else)."""
+
+    value = state.fields.get("existence")
+    return value if value in EXISTENCE_VALUES else DEFAULT_EXISTENCE
+
+
+def acts_in_world(state: ThingState) -> bool:
+    """Whether the thing acts in the world as a character does -- can be
+    cast in a scene and hold ties: a character, or a being whose
+    `existence` is real."""
+
+    return state.kind == "character" or (
+        state.kind == "being" and existence(state) == "real"
+    )
+
+
 def _ties(state: ThingState) -> list[Tie]:
     value = state.fields.get("ties")
-    if state.kind != "character" or not isinstance(value, list):
+    if not acts_in_world(state) or not isinstance(value, list):
         return []
     found: list[Tie] = []
     for raw in value:
@@ -468,9 +538,10 @@ def _tie_live(tie: Tie, at: WorldDate | None) -> bool:
 
 
 def ties_of(view: WorldView, character_id: str, *, live: bool = False) -> list[Tie]:
-    """The character's ties, in its `ties` field's order; with `live`, only
-    those that hold at `view.at`. A tie to a sphere that's since been
-    deleted is still given."""
+    """The character's (or real being's) ties, in its `ties` field's order;
+    with `live`, only those that hold at `view.at`. A tie to a sphere
+    that's since been deleted is still given. A being that isn't real has
+    none: its stored ties are kept, hidden."""
 
     state = view.thing(character_id)
     if state is None:
@@ -483,9 +554,13 @@ def ties_of(view: WorldView, character_id: str, *, live: bool = False) -> list[T
 
 def people(view: WorldView, sphere_id: str) -> list[Tie]:
     """The ties pointing at the sphere that hold at `view.at`, in the order
-    the characters were made. A branch's people are its own, not its parent's."""
+    the characters (and real beings) were made. A branch's people are its
+    own, not its parent's."""
 
-    characters = sorted(view.things("character"), key=lambda thing: thing.created)
+    characters = sorted(
+        [*view.things("character"), *view.things("being")],
+        key=lambda thing: thing.created,
+    )
     return [
         tie
         for character in characters
@@ -723,10 +798,44 @@ def item_line(name: str, text: str) -> str:
     return f"{name}: {text}"
 
 
-def _item_line(item: Item) -> str:
+# how a caller words one fact of a key-facts item: `(fact, its owner, the
+# fact rendered) -> line text` (the scene context's held-by wording)
+FactLine = Callable[[FactState, ThingState, str], str]
+
+
+def _item_fact(view: WorldView, item: Item) -> tuple[FactState, ThingState] | None:
+    """The fact an item shows, with its owner: a statement's own fact, a
+    thing item's `item_fact`."""
+
+    owner = view.thing(item.thing_id or item.source_id)
+    if owner is None:
+        return None
     if item.thing_id is None:
-        return item.text
-    return item_line(item.name, item.text)
+        fact = next((f for f in owner.facts if f.fact_id == item.fact_id), None)
+    else:
+        fact = item_fact(owner)
+    return (fact, owner) if fact is not None else None
+
+
+def _item_line(
+    item: Item, view: WorldView | None = None, fact_line: FactLine | None = None
+) -> str:
+    """An item as one key-facts line: a statement's text, a thing item as
+    `item_line` gives it; with `fact_line`, the fact's text is worded by
+    it first (a thing item whose text opened with its name then stays
+    the text alone)."""
+
+    text = item.text
+    found = (
+        _item_fact(view, item) if view is not None and fact_line is not None else None
+    )
+    if fact_line is not None and found is not None:
+        text = fact_line(*found, item.text)
+    if item.thing_id is None:
+        return text
+    if text != item.text and _opens_with(item.text, item.name):
+        return text
+    return item_line(item.name, text)
 
 
 def _round_robin(sizes: list[int], budget: int) -> list[int]:
@@ -761,6 +870,7 @@ def key_facts(
     calendar: Calendar | None = None,
     things: list[ThingState] | None = None,
     skip: Collection[str] = (),
+    fact_line: FactLine | None = None,
 ) -> list[str]:
     """What a scene touching the sphere is told about it, rendered, at most
     `KEY_FACTS_CAP` lines: the summary (`summary`, as the caller found it,
@@ -771,7 +881,8 @@ def key_facts(
     "In <year>: <text>" by `calendar` (the default one when not given).
     `things`, a snapshot of the view's things, saves `items` a scan. A
     thing item in `skip` (shown elsewhere in full) is left out, and the
-    next item takes its place."""
+    next item takes its place. `fact_line`, when given, words each item's
+    fact (`_item_line`)."""
 
     state = view.thing(sphere_id)
     if state is None:
@@ -798,7 +909,7 @@ def key_facts(
         [len(group) for group in groups], KEY_FACTS_CAP - len(head) - len(latest)
     )
     middle = [
-        _item_line(item)
+        _item_line(item, view, fact_line)
         for group, count in zip(groups, taken)
         for item in group[:count]
     ]

@@ -938,12 +938,13 @@ def _part_of_out(view: WorldView, state: ThingState) -> dict | None:
 def _ties_out(
     view: WorldView, links: _Links, calendar: Calendar, state: ThingState
 ) -> list[dict]:
-    """A character's ties, in its `ties` field's order, ended ones too,
-    each with its exceptions (`spheres.exceptions`, in writing order). A
-    tie to a sphere that's since been deleted is left out, as on the
-    character sheet."""
+    """A character's (or real being's) ties, in its `ties` field's order,
+    ended ones too, each with its exceptions (`spheres.exceptions`, in
+    writing order). A tie to a sphere that's since been deleted is left
+    out, as on the character sheet, and so are a being's while it isn't
+    real (kept, hidden)."""
 
-    if state.kind != "character":
+    if not spheres.acts_in_world(state):
         return []
     found = []
     for tie in spheres.ties_of(view, state.id):
@@ -1825,17 +1826,22 @@ class WorldsPlugin(Plugin):
         self._edited("set_part_of", payload.thing_id, _date_in(payload.at), prose=False)
 
     async def handle_set_ties(self, data: dict):
-        """Replace a character's ties. Each names a sphere in the world, and
-        its `since` can't be after its `until`. The stored ties the payload
-        hides (to a sphere deleted since) are kept, after the rest, so
-        undoing the delete brings them back (ruling P12). Ties are on the
-        character sheet, not in its prose: none is scheduled."""
+        """Replace a character's (or real being's) ties. Each names a
+        sphere in the world, and its `since` can't be after its `until`.
+        The stored ties the payload hides (to a sphere deleted since) are
+        kept, after the rest, so undoing the delete brings them back
+        (ruling P12). A being that isn't real (believed, undecided) can't
+        be tied: its ties stay as they were, hidden, until it's real. Ties
+        are on the character sheet, not in its prose: none is scheduled."""
 
         payload = SetTiesPayload(**data)
         world = self._require_world()
         view = world.view()
         state = view.thing(payload.character_id)
-        if state is None or state.kind != "character":
+        if state is not None and state.kind == "being":
+            if not spheres.acts_in_world(state):
+                raise ValueError("only a real being can be tied to a sphere")
+        elif state is None or state.kind != "character":
             raise ValueError(f"not a character: {payload.character_id}")
         ties = []
         for tie in payload.ties:

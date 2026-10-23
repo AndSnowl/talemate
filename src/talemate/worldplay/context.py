@@ -30,12 +30,13 @@ from talemate.world.kinds import HERITAGE_KINDS, SPHERE_CATEGORIES
 from talemate.world.names import everyday_name
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
-from talemate.world.view import ThingState, WorldView
+from talemate.world.view import FactState, ThingState, WorldView
 
 from .characters import (
     WORLD_DERIVED_FIELDS,
     _cached_section,
     character_from_world,
+    held_text,
     mid_sentence_name,
 )
 
@@ -232,6 +233,23 @@ def _sphere_parent(view: WorldView, state: ThingState) -> str | None:
     return None
 
 
+def _held_line(view: WorldView) -> spheres.FactLine:
+    """Key facts' wording of an item's fact: as belief when it's held
+    (`held_text`)."""
+
+    def line(fact: FactState, owner: ThingState, text: str) -> str:
+        return held_text(view, fact, owner, text)
+
+    return line
+
+
+def _facts(view: WorldView, state: ThingState, facts: list[FactState]) -> list[str]:
+    """`facts` (of `state`) as a scene is told them: rendered, a held one
+    as belief (`held_text`)."""
+
+    return [held_text(view, fact, state) for fact in facts]
+
+
 def _sphere_entries(
     world: World,
     view: WorldView,
@@ -265,6 +283,7 @@ def _sphere_entries(
                 world.calendar,
                 things,
                 shown_elsewhere,
+                _held_line(view),
             ),
         }
         parent_id = _sphere_parent(view, state)
@@ -313,12 +332,16 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
         lore_state = view.thing(lore_thing_id)
         if lore_state is None or spheres.is_sphere(lore_state):
             continue
+        # a being that isn't real is only spoken of: its facts reach the
+        # scene through whatever refers to it, never as lore of its own
+        if lore_state.kind == "being" and not spheres.acts_in_world(lore_state):
+            continue
         as_lore.add(lore_thing_id)
         lore.append(
             {
                 "name": view.name_of(lore_thing_id) or "",
                 "everyday": everyday_name(lore_state),
-                "facts": [view.render(fact.text) for fact in lore_state.facts],
+                "facts": _facts(view, lore_state, lore_state.facts),
             }
         )
 
@@ -328,14 +351,24 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
     if place_thing_id:
         place_state = view.thing(place_thing_id)
         if place_state is not None:
-            facts = [view.render(fact.text) for fact in place_state.facts]
+            facts = _facts(view, place_state, place_state.facts)
             if spheres.is_sphere(place_state):
-                facts = [
-                    view.render(fact.text)
-                    for fact in place_state.facts
-                    if fact.category not in SPHERE_CATEGORIES
-                ] + spheres.key_facts(
-                    view, place_thing_id, None, world.calendar, things, as_lore
+                facts = _facts(
+                    view,
+                    place_state,
+                    [
+                        fact
+                        for fact in place_state.facts
+                        if fact.category not in SPHERE_CATEGORIES
+                    ],
+                ) + spheres.key_facts(
+                    view,
+                    place_thing_id,
+                    None,
+                    world.calendar,
+                    things,
+                    as_lore,
+                    _held_line(view),
                 )
             place = {
                 "name": view.name_of(place_thing_id) or "",

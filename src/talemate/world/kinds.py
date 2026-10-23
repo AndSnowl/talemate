@@ -14,6 +14,11 @@ Every kind also has three fields of its own:
   `None` value ends the membership. The drawer may be `UNSORTED_DRAWER_ID`
   instead: the thing is part of the sphere, in no drawer yet (a child
   expanded before its sphere has drawers).
+
+A `being` (a god, a spirit, a legendary creature) has an `existence`:
+`real` (it acts in the world like a character: it can be cast in scenes
+and hold ties), `believed` (only ever spoken of) or `undecided` (treated
+as believed until the owner decides), `DEFAULT_EXISTENCE` when unset.
 """
 
 import re
@@ -50,6 +55,10 @@ _SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (
 )
 
 AKA_TAGS: tuple[str, ...] = ("proper", "common")
+
+# a being's `existence` values, and what an unset one reads as
+EXISTENCE_VALUES: tuple[str, ...] = ("real", "believed", "undecided")
+DEFAULT_EXISTENCE = "undecided"
 
 # a sphere's (or sphere-shaped place's) template, and whether it acts as an
 # agent (has its own stance and can act) under that template
@@ -252,6 +261,18 @@ KINDS: dict[str, KindSpec] = {
         fields=_fields(("name", "text")),
         categories=["general"],
     ),
+    # a god, a spirit, a legendary creature; `ties` count only while its
+    # `existence` is real (`spheres.acts_in_world`)
+    "being": KindSpec(
+        name="being",
+        fields=_fields(
+            ("name", "text"),
+            ("existence", "text"),
+            ("born", "date"),
+            ("ties", "json"),
+        ),
+        categories=["nature", "deeds", "worship", "general"],
+    ),
 }
 
 
@@ -293,6 +314,8 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
             raise ValueError(f"{field!r} must be a string")
         if field == "template" and value not in SPHERE_TEMPLATES:
             raise ValueError(f"{field!r} must be one of {SPHERE_TEMPLATES}")
+        if field == "existence" and value not in EXISTENCE_VALUES:
+            raise ValueError(f"{field!r} must be one of {EXISTENCE_VALUES}")
     elif spec.type == "date":
         if isinstance(value, WorldDate):
             return

@@ -32,7 +32,7 @@ from talemate.world.prose import CachedProse, stretches
 from talemate.world.refs import REF_PATTERN
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
-from talemate.world.view import ThingState, WorldView
+from talemate.world.view import FactState, ThingState, WorldView
 from talemate.worldplay.prose_gen import inherited_categories, lineage_ids
 
 log = structlog.get_logger("talemate.worldplay.characters")
@@ -205,12 +205,15 @@ def _change_lines(
     cached_facts = (
         _facts_at_rev(world, thing_id, entry.rev) if entry is not None else {}
     )
+    # each fact as it is now, for its held-by (`held_text`)
+    live = {fact.fact_id: fact for fact in world.live_facts(thing_id)}
 
     def dated_by_at(date: WorldDate | None) -> bool:
         return date is None or date.instant <= at_instant
 
     calendar = world.calendar
     view = world.view(at)
+    owner = view.thing(thing_id)
     keyed: list[tuple[int, str]] = []
     for fact_id, (start, end) in _facts_at_rev(
         world, thing_id, world.head_rev()
@@ -242,7 +245,10 @@ def _change_lines(
         )
         end_news = ended and _not_yet_known(entry, end_date, end_rev)
 
-        text = prefix + view.render(start.text or "")
+        text = view.render(start.text or "")
+        if owner is not None and fact_id in live:
+            text = held_text(view, live[fact_id], owner, text)
+        text = prefix + text
         if start_news and start.date is not None and end_date is not None and ended:
             line = (
                 f"From {calendar.format(start.date)} until "
@@ -391,6 +397,79 @@ def _mid_sentence(view: WorldView, raw: str, text: str) -> str:
     if not text or _opens_with_a_name(view, raw, text):
         return text
     return text[0].lower() + text[1:]
+
+
+# the verbs a text that says who holds it uses after the holder's name
+# ("the Church teaches that ..."): it's then left as it is
+_ATTRIBUTING_VERBS = (
+    "teach",
+    "teaches",
+    "taught",
+    "hold",
+    "holds",
+    "held",
+    "believe",
+    "believes",
+    "believed",
+)
+_ARTICLES = ("the", "a", "an")
+
+
+def _bare_name(name: str) -> str:
+    """`name` casefolded, its spaces collapsed, less a leading article."""
+
+    words = name.casefold().split()
+    if len(words) > 1 and words[0] in _ARTICLES:
+        words = words[1:]
+    return " ".join(words)
+
+
+def attributes_itself(text: str, names: list[str]) -> bool:
+    """Whether `text` already says who holds it: one of `names` (the
+    holder's, with or without a leading article, ignoring case) followed by
+    "teaches", "holds", "believes" or another form of them, as a whole
+    word, anywhere in it."""
+
+    folded = " ".join(text.casefold().split())
+    verbs = "|".join(_ATTRIBUTING_VERBS)
+    for name in names:
+        bare = _bare_name(name)
+        if not bare:
+            continue
+        pattern = r"(?<![\w'-])%s\s+(?:%s)(?![\w'-])" % (re.escape(bare), verbs)
+        if re.search(pattern, folded):
+            return True
+    return False
+
+
+def held_text(
+    view: WorldView, fact: FactState, owner: ThingState, text: str | None = None
+) -> str:
+    """`fact` (of `owner`) as a scene is told it, `text` its rendering
+    (`view.render(fact.text)` when not given): held by someone
+    (`spheres.held_by`), it's "<Holder> holds that <text>", the text
+    lowered as `_mid_sentence` lowers it (not when it opens with a name);
+    as it is when it isn't held, its holder has no name, or it already
+    says who holds it (`attributes_itself`)."""
+
+    rendered = view.render(fact.text) if text is None else text
+    holder_id = spheres.held_by(view, fact, owner)
+    holder = view.thing(holder_id) if holder_id is not None else None
+    name = view.name_of(holder_id) if holder_id is not None else None
+    if holder is None or not name:
+        return rendered
+    names = [name] + [
+        entry["name"]
+        for entry in holder.fields.get("aka") or []
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+    ]
+    if attributes_itself(rendered, names):
+        return rendered
+    body = _mid_sentence(view, fact.text, rendered)
+    if not body:
+        return rendered
+    end = "" if body[-1] in "?!" else "."
+    return f"{name[0].upper()}{name[1:]} holds that {body}{end}"
 
 
 def mid_sentence_name(name: str) -> str:
