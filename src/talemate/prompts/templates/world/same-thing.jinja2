@@ -1,0 +1,31 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+
+Whether a new entry is one the world already has (`worldplay.decide.same_thing`).
+Wording verbatim from docs/superpowers/probes/2026-10-22-curation.md, "Same-thing
+verdict (a separate small call)"; it changes only with new probe evidence.
+-#}
+<|SECTION:TASK|>
+A new entry is about to be added to a fantasy world's records, and the world may already hold it under another name. Decide how the new entry A relates to B, an entry already in the world.
+
+A, the new entry: {{ a_label }}
+{% for text in a_facts -%}
+- {{ text }}
+{% endfor %}
+B, already in the world: {{ b_label }}
+{% for text in b_facts -%}
+- {{ text }}
+{% endfor %}
+The answers:
+- "same": A and B are one and the same thing: A's facts belong on B, and A's name becomes another name of B.
+- "part": one is a part of the other (a hall inside a city, a chapter of a guild).
+- "different": two distinct things, even if closely tied (a saint and the shrine named after her, a river and the town on its banks, a battle and the field it was fought on).
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"verdict": "different", "why": "One short sentence."}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

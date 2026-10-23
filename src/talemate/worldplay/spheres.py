@@ -168,7 +168,10 @@ class SpherePreview(CreatePreview):
       them;
     - `items`: `{"drawer_id", "name", "text", "kind"}`; a named one becomes
       a stub part of the sphere, a nameless one (`name` "") a statement.
-      One with a `thing_id` links that stub instead of making one;
+      One with a `thing_id` links that stub, or a place the world has,
+      instead of making one; for such a place, `text_repeat_of` and
+      `text_ticked` say whether its text repeats what the place says
+      (then it isn't written);
     - `adopted`: `{"thing_id", "drawer_id"}`, the entries already part of
       the stub or promoted thing, and the drawer each is filed in.
 
@@ -346,6 +349,9 @@ def _settle_items(
     parts: list[ThingState],
     adopt: dict[str, str],
     as_new: Sequence[str] = (),
+    *,
+    places_drawers: set[str] | None = None,
+    home_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """`items` matched against the world, each name and statement once:
 
@@ -355,6 +361,11 @@ def _settle_items(
       item wins);
     - one naming a stub of a `PART_OF_KINDS` kind that's in no sphere links
       it (`thing_id`): a nested sphere stub too, never a character;
+    - with `places_drawers` (a place sphere's core, spec goal 4: a Sites
+      line naming the capital), a place item, or one in a places drawer, naming a
+      place the world has that's in no sphere links it too (`thing_id`),
+      unless it's `home_id` (the sphere's own thing) or a place the
+      sphere sits in;
     - one naming any other thing in the world becomes a statement;
     - any other, or one named like a name the owner treats as new
       (`as_new`), makes a stub on accept."""
@@ -381,6 +392,13 @@ def _settle_items(
             continue
         thing_id = existing_id(view, item["name"], item["kind"])
         state = view.thing(thing_id) if thing_id is not None else None
+        if (
+            state is None
+            and places_drawers is not None
+            and _place_item(item, places_drawers)
+        ):
+            thing_id = existing_id(view, item["name"], "place")
+            state = view.thing(thing_id) if thing_id is not None else None
         if state is None:
             settled.append(item)
         elif (
@@ -389,9 +407,24 @@ def _settle_items(
             and state.fields.get("part_of") is None
         ):
             settled.append({**item, "thing_id": state.id})
+        elif (
+            places_drawers is not None
+            and state.kind == "place"
+            and _place_item(item, places_drawers)
+            and state.fields.get("part_of") is None
+            and state.id != home_id
+            and not (home_id is not None and spheres.sits_in(view, home_id, state.id))
+        ):
+            settled.append({**item, "kind": "place", "thing_id": state.id})
         else:
             settled.append(_as_statement(item))
     return settled
+
+
+def _place_item(item: dict[str, Any], places_drawers: set[str]) -> bool:
+    """Whether an item is a place: by its kind, or the drawer it's in."""
+
+    return item.get("kind") == "place" or item.get("drawer_id") in places_drawers
 
 
 def _months(calendar: Calendar) -> set[str]:
@@ -645,7 +678,25 @@ async def preview_sphere(
         parts,
         adopt,
         treated_as_new,
+        # a place's own territory (spec goal 4: the capital of a place
+        # promoted); a religion's holy site is no part of it
+        places_drawers=(
+            {d["id"] for d in drawers if d["type"] == "places"}
+            if kind == "place"
+            else None
+        ),
+        home_id=target.id if target is not None else None,
     )
+    # a place the world has, linked: its text is written onto it unless
+    # it repeats what the place says (`create.repeat_flags`)
+    settings = world.curation()
+    for item in items:
+        linked = view.thing(item["thing_id"]) if item.get("thing_id") else None
+        if linked is not None and not linked.is_stub:
+            ((repeat_of, ticked),) = create.repeat_flags(
+                view, [item["text"]], [linked.id], settings
+            )
+            item["text_repeat_of"], item["text_ticked"] = repeat_of, ticked
     shelves = _shelves(drawers)
     items = _filed(view, items, shelves)
     # an entry the reply relists is filed in its drawer; one it doesn't is
@@ -838,6 +889,9 @@ def _write_items(
         return written
 
     for thing_id, item in placed:
+        if not item.get("text_ticked", True):
+            # a place the world has, whose text only repeats what it says
+            continue
         state = linking.thing(thing_id)
         category = _ITEM_CATEGORY.get(state.kind if state else "", "general")
         rev.add_fact(thing_id, category, linked_text(item["text"], thing_id))

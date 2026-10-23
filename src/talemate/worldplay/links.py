@@ -25,6 +25,11 @@ reference at another thing, keeping its words.
 world (or the same call) already has that name: one name invented twice
 is one stub with two mentions. `existing_id` is the same reuse rule on its
 own, and `clean_aka` the tidying a list of other names gets.
+
+A new name may carry `same_as`, the things the world already has it could
+be (`SameOffer`, curation's "same as X?"), and the owner's answer,
+`same_target_id`: the name is then that thing's, and no stub is made for
+it (`create.accept_preview`).
 """
 
 from __future__ import annotations
@@ -40,6 +45,7 @@ from pydantic import BaseModel
 from talemate.world.kinds import AKA_TAGS, HERITAGE_KINDS, KINDS
 from talemate.world.names import ARTICLES, find_names
 from talemate.world.refs import REF_PATTERN, ref
+from talemate.world.sameness import SameCandidate
 from talemate.world.store import Revision
 from talemate.world.view import WorldView
 
@@ -48,6 +54,7 @@ log = structlog.get_logger("talemate.worldplay.links")
 __all__ = [
     "LinkSpan",
     "NewName",
+    "SameOffer",
     "clean_aka",
     "existing_id",
     "is_new",
@@ -63,6 +70,19 @@ __all__ = [
 FALLBACK_KIND = "lore"
 
 
+class SameOffer(SameCandidate):
+    """A thing a new name could be the same as (`world.sameness`), as the
+    preview shows it: its name and kind, its line in the "Entries near this
+    one" list (`create.candidate_line`: kind, other name, sphere, stub, its
+    summary or first fact), so two of one name can be told apart, and
+    whether it has facts of its own (only then is a verdict asked)."""
+
+    name: str
+    kind: str
+    line: str
+    has_facts: bool
+
+
 class NewName(BaseModel):
     """A proper name a generation used that may not exist yet: its name in
     full, its kind, and any other names (`aka` entries) for it. `written`
@@ -76,6 +96,10 @@ class NewName(BaseModel):
     aka: list[dict] = []
     written: list[str] = []
     template: str | None = None
+    # the things it could be the same as, best first; and the owner's
+    # answer: None (the default) is "new", a stub on accept
+    same_as: list[SameOffer] = []
+    same_target_id: str | None = None
 
 
 def _norm(text: str) -> str:

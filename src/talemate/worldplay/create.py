@@ -95,6 +95,19 @@ drawer line. An elsewhere item repeating its target is shown the same
 way. Accept writes the ticked own facts, and each ticked elsewhere fact
 onto its target (a stub for a new name), in the same revision.
 
+Same thing? (spec goal 4, the curation probe's same-thing verdict, ruling
+C2). The preview offers the things the world has that the entry could be
+(`same_as`, by `world.sameness.same_candidates`: shared name words, nearby
+ones first, at most `SAME_CANDIDATES`), never the stub being filled nor
+the matching stub (offered as "fill the stub instead"), and so does each
+new stub it would make (`NewName.same_as`), from one read of the world's
+names. Only for the entry, and only when its top candidate and the
+preview both have facts, the model is asked (`decide.same_thing`) and its
+verdict is a hint, never a default. Accept with `same_target_id` puts the
+new material onto that entry instead (`accept_preview`); a stub row the
+owner marks as some thing (`NewName.same_target_id`) links its name there
+and makes no stub.
+
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -130,6 +143,7 @@ from talemate.world.kinds import (
 from talemate.world.nearness import near
 from talemate.world.refs import parse_refs, ref
 from talemate.world.repeats import content_words, find_repeats
+from talemate.world.sameness import NameIndex, name_index, same_candidates
 from talemate.world.names import (
     ARTICLES,
     everyday_name,
@@ -141,9 +155,11 @@ from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
+from talemate.worldplay.decide import Verdict, preview_label, same_thing
 from talemate.worldplay.links import (
     FALLBACK_KIND,
     NewName,
+    SameOffer,
     clean_aka,
     existing_id,
     is_new,
@@ -388,6 +404,14 @@ class CreatePreview(BaseModel):
     ties: list[PreviewTie] = Field(default_factory=list)
     # facts about other entries, grouped by entry
     elsewhere: list[ElsewhereFact] = Field(default_factory=list)
+    # the entries the world has that this one could be ("Is this X?"),
+    # best first, at most `SAME_CANDIDATES`; accept's `same_target_id` is
+    # the owner's answer
+    same_as: list[SameOffer] = Field(default_factory=list)
+    # the model's verdict on the top candidate (its id -> `Verdict`), a
+    # hint beside the question, never a default; None when not asked (the
+    # top candidate or the preview has no facts) or the reply gave none
+    verdict: dict[str, Verdict] | None = None
 
 
 # --- the calendar ------------------------------------------------------------
@@ -1484,6 +1508,46 @@ def flag_elsewhere_repeats(
             item.repeat_of, item.ticked = repeat_of, ticked
 
 
+# the most same-thing candidates a preview shows (the spec's cap)
+SAME_CANDIDATES = 5
+
+
+def same_offers(
+    view: WorldView,
+    name: str,
+    *,
+    near_ids: Sequence[str],
+    exclude: Sequence[str] = (),
+    index: NameIndex | None = None,
+) -> list[SameOffer]:
+    """The things `name` could be the same as (`same_candidates`, the
+    `near_ids` lifted, none of `exclude`), at most `SAME_CANDIDATES`, each
+    with its name, kind, candidate line and whether it has facts."""
+
+    offers: list[SameOffer] = []
+    for found in same_candidates(
+        view,
+        name,
+        near_ids=near_ids,
+        limit=SAME_CANDIDATES,
+        exclude=exclude,
+        index=index,
+    ):
+        state = view.thing(found.thing_id)
+        if state is None:
+            continue
+        offers.append(
+            SameOffer(
+                **found.model_dump(),
+                name=view.name_of(state.id) or "",
+                kind=state.kind,
+                line=candidate_line(view, state),
+                has_facts=bool(state.facts),
+            )
+        )
+    return offers
+
+
 def live_elsewhere(
     view: WorldView,
     items: Sequence[ElsewhereFact],
@@ -2465,9 +2529,37 @@ async def preview_thing(
         )
         flag_elsewhere_repeats(view, elsewhere, settings)
 
+    # same thing?: what the entry and each stub it would make may already
+    # be, from one read of the world's names; never the stub being filled,
+    # nor the matching stub ("fill the stub instead" offers that one)
+    matching = None if stub is not None else matching_stub(view, kind, name)
+    skip = [thing_id for thing_id in (stub_id, matching) if thing_id is not None]
+    index = name_index(view)
+    same_as = same_offers(view, name, near_ids=near_ids, exclude=skip, index=index)
+    for new in [*stub_names, *(e.new for e in elsewhere if e.new is not None)]:
+        new.same_as = same_offers(
+            view, new.name, near_ids=near_ids, exclude=skip, index=index
+        )
+
     prose = await _preview_prose(
         view, calendar, kind, name, facts, fields, rows, sources, client
     )
+
+    # the model's verdict on the top candidate, a hint (ruling C2): only
+    # when both sides have facts, after the preview's own calls
+    verdict: dict[str, Verdict] | None = None
+    if same_as and same_as[0].has_facts and facts:
+        link = _part_of_link(stub) if stub is not None else None
+        home = link[0] if link is not None else (part_of or {}).get("sphere")
+        found = await same_thing(
+            world,
+            preview_label(name, kind, None, view.name_of(home) if home else None),
+            [fact.text for fact in facts],
+            same_as[0].thing_id,
+            client,
+        )
+        if found is not None:
+            verdict = {same_as[0].thing_id: found}
 
     log.info(
         "create.preview",
@@ -2479,6 +2571,8 @@ async def preview_thing(
         elsewhere=len(elsewhere),
         new_names=len(stub_names),
         stub_id=stub_id,
+        same_as=len(same_as),
+        verdict=verdict is not None,
     )
     return CreatePreview(
         kind=kind,
@@ -2491,13 +2585,15 @@ async def preview_thing(
         aka=aka,
         new_names=stub_names,
         stub_id=stub_id,
-        matching_stub_id=None if stub is not None else matching_stub(view, kind, name),
+        matching_stub_id=matching,
         context=context,
         picks=picks,
         treated_as_new=treated_as_new,
         part_of=part_of,
         ties=ties,
         elsewhere=elsewhere,
+        same_as=same_as,
+        verdict=verdict,
     )
 
 
@@ -2594,6 +2690,7 @@ def accept_preview(
     preview: CreatePreview,
     *,
     into_stub: str | None = None,
+    same_target_id: str | None = None,
     notes: list[str] | None = None,
 ) -> str:
     """Write `preview` in one revision, then cache its prose for the
@@ -2626,8 +2723,17 @@ def accept_preview(
       keeps its old one as a common other name. A deleted stub, a full
       entry, or an `into_stub` other than the preview's own `stub_id`, is
       refused with `ValueError` before anything is written.
-    - Otherwise a new thing is created."""
+    - Otherwise a new thing is created.
+    - A new name the owner marked as a thing the world has
+      (`NewName.same_target_id`) makes no stub: the facts link it to that
+      thing, which takes it as a common other name (`_row_stubs`).
+    - With `same_target_id` ("Is this X?" -- yes) nothing new is made for
+      the entry: its material goes onto X (`_accept_same`)."""
 
+    if same_target_id is not None:
+        if into_stub is not None:
+            raise ValueError("a preview goes into a stub or onto an entry, not both")
+        return _accept_same(world, preview, same_target_id, notes)
     if into_stub is not None and preview.stub_id not in (None, into_stub):
         raise ValueError(
             f"the preview expands the stub {preview.stub_id}, not {into_stub}"
@@ -2650,7 +2756,7 @@ def accept_preview(
     while True:
         try:
             thing_id, made = _write_preview(
-                world, view, preview, stub, new_names, elsewhere
+                world, view, preview, stub, new_names, elsewhere, notes
             )
             break
         except _UnlinkedNames as unlinked:
@@ -2730,21 +2836,24 @@ def _write_preview(
     stub: Any,
     new_names: list[NewName],
     elsewhere: Sequence[ElsewhereFact] = (),
+    notes: list[str] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """`accept_preview`'s one revision, making stubs for `new_names` and
-    the new names of `elsewhere`, whose facts it writes onto their
-    targets.
+    the new names of `elsewhere` (`_row_stubs`), whose facts it writes
+    onto their targets.
     Returns the thing's id and `make_stubs`' mapping. A stub made here that
     no fact ends up linking to (the name was written in a way linking
     doesn't take, as "al-Qadir" in lowercase) would be an orphan:
     `_UnlinkedNames` rolls the revision back, naming them."""
 
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
-        made = make_stubs(
+        made = _row_stubs(
             rev,
+            world,
             view,
             [*new_names, *(e.new for e in elsewhere if e.new is not None)],
-            fresh=preview.treated_as_new,
+            preview.treated_as_new,
+            notes=notes,
         )
         if stub is None:
             fields: dict[str, Any] = {**preview.fields, "name": preview.name}
@@ -2862,3 +2971,259 @@ def _write_preview(
                 ]
             )
     return thing_id, made
+
+
+# --- same thing: onto an entry the world has ---------------------------------
+
+_SAME_NOTE = "added to an entry from prompt"
+
+
+def _common_name(rev: Any, view: WorldView, thing_id: str, name: str) -> bool:
+    """Give `thing_id` `name` as a common other name, in `rev` (`view` is
+    the revision's own), unless it has that name already or another thing
+    does. Whether it was added."""
+
+    state = view.thing(thing_id)
+    name = " ".join(name.split())
+    key = name_key(name)
+    if state is None or not key:
+        return False
+    aka = [e for e in state.fields.get("aka") or [] if isinstance(e, dict)]
+    held = {name_key(view.name_of(thing_id) or "")}
+    held |= {name_key(e["name"]) for e in aka if isinstance(e.get("name"), str)}
+    if key in held or key in name_keys(view, skip=thing_id):
+        return False
+    rev.set_field(
+        thing_id,
+        "aka",
+        [*aka, {"name": name, "tag": "common", "everyday": False}],
+        None,
+    )
+    return True
+
+
+def _row_stubs(
+    rev: Any,
+    world: World,
+    view: WorldView,
+    rows: list[NewName],
+    fresh: Sequence[str],
+    *,
+    redirect: dict[str, str] | None = None,
+    notes: list[str] | None = None,
+) -> dict[str, str]:
+    """`make_stubs` for the new names the owner left new, and for each one
+    marked as a thing the world has (`same_target_id`, through `redirect`
+    when that thing is going away in this revision), its name and written
+    forms mapped to that thing, which takes the name as a common other
+    name: the facts link it there, and no stub is made. A row whose thing
+    was deleted (or ignored) since is a stub after all, with a note."""
+
+    same: dict[str, str] = {}
+    for row in rows:
+        target = row.same_target_id
+        if target is None:
+            continue
+        target = (redirect or {}).get(target, target)
+        state = view.thing(target)
+        if state is None or state.stub_ignored:
+            log.info("create.same_row_gone", name=row.name, target=target)
+            if notes is not None:
+                notes.append(
+                    f"The entry {row.name} was marked the same as is gone, "
+                    f"so {row.name} is a new stub"
+                )
+            continue
+        same.setdefault(name_key(row.name), target)
+    made = make_stubs(
+        rev, view, [r for r in rows if name_key(r.name) not in same], fresh=fresh
+    )
+    for row in rows:
+        target = same.get(name_key(row.name))
+        if target is None:
+            continue
+        for form in (row.name, *row.written):
+            made.setdefault(" ".join(form.split()), target)
+        _common_name(rev, world.view(), target, row.name)
+    return made
+
+
+def _accept_same(
+    world: World,
+    preview: CreatePreview,
+    target_id: str,
+    notes: list[str] | None,
+) -> str:
+    """Accept `preview` as the thing `target_id` (spec goal 4), in one
+    revision, and return the target's id. Nothing new is made for the
+    entry:
+
+    - its ticked facts are added to the target, linked as the target's
+      own (its names stay plain), in their category, or
+      `default_category`'s when the target's kind has none such; an
+      override is kept only of a fact the target inherits;
+    - its ticked elsewhere facts go onto their targets, and its new names
+      become stubs (or link where the owner said), as any accept's;
+    - the preview's name becomes a common other name of the target,
+      unless it (or another thing) has it already;
+    - a stub the preview expanded is re-pointed onto the target
+      (`repoint.plan_repoint`) in the same revision, so nothing is left
+      behind; a re-point the stub can't take is refused (`ValueError`)
+      before anything is written.
+
+    The preview's own fields, other names, ties and filing aren't written
+    (they were the new entry's), nor its prose cached (it describes the
+    preview, not the target); a note says what's left out. A target that
+    is a stub, when no stub is being expanded, is filled instead
+    (`into_stub`). A missing or ignored target, or the stub itself, is a
+    `ValueError`."""
+
+    # imported here: `worldplay.repoint` imports this module
+    from talemate.worldplay.repoint import plan_repoint
+
+    view = world.view()
+    target = view.thing(target_id)
+    if target is None or target.stub_ignored:
+        raise ValueError(f"no such entry to add to: {target_id}")
+    if target_id == preview.stub_id:
+        raise ValueError("the preview fills that stub: accept it without a target")
+    stub = _live_stub(view, preview.stub_id) if preview.stub_id is not None else None
+    if stub is None and target.is_stub:
+        return accept_preview(world, preview, into_stub=target_id, notes=notes)
+    plan = plan_repoint(world, stub.id, target_id) if stub is not None else None
+    elsewhere = live_elsewhere(
+        view, preview.elsewhere, {stub.id} if stub is not None else set(), notes
+    )
+    left_out = [
+        what
+        for what, there in (
+            ("its ties", preview.ties),
+            ("its fields", preview.fields),
+            ("its sphere", preview.part_of),
+        )
+        if there
+    ]
+
+    new_names = list(preview.new_names)
+    while True:
+        try:
+            made = _write_same(world, view, preview, target, plan, new_names, elsewhere)
+            break
+        except _UnlinkedNames as unlinked:
+            # written again without them, in a fresh revision: the first
+            # was rolled back whole
+            log.debug("create.unlinked_names", names=unlinked.names)
+            kept = [n for n in new_names if n.name not in unlinked.names]
+            if len(kept) == len(new_names):
+                raise RuntimeError(f"unlinked stubs with no name: {unlinked}")
+            new_names = kept
+    target_name = view.name_of(target_id) or target_id
+    if notes is not None:
+        if plan is not None:
+            notes.extend(dict.fromkeys(plan.notes))
+        if left_out:
+            notes.append(
+                f"Added to {target_name}: {', '.join(left_out)} weren't written"
+            )
+    log.info(
+        "create.accept_same",
+        kind=preview.kind,
+        target=target_id,
+        repointed=stub.id if stub is not None else None,
+        stubs=len(set(made.values())),
+        elsewhere=len(elsewhere),
+    )
+    return target_id
+
+
+def _write_same(
+    world: World,
+    view: WorldView,
+    preview: CreatePreview,
+    target: ThingState,
+    plan: Any,
+    new_names: list[NewName],
+    elsewhere: Sequence[ElsewhereFact],
+) -> dict[str, str]:
+    """`_accept_same`'s one revision: the re-point first (the stub's links,
+    names and facts go to the target), then the preview's name, the stubs,
+    the facts and the elsewhere facts. Returns the stubs' mapping;
+    `_UnlinkedNames` as `_write_preview`'s."""
+
+    target_id = target.id
+    stub_id = plan.stub_id if plan is not None else None
+    # a pick of the stub means the target now
+    picks = {
+        written: target_id if thing_id == stub_id else thing_id
+        for written, thing_id in preview.picks.items()
+    }
+    redirect = {stub_id: target_id} if stub_id is not None else {}
+    inherited = {
+        fact.fact_id
+        for fact, layer in heritage.effective_facts(view, target_id)
+        if layer.thing_id != target_id
+    }
+    with world.revision(Source.manual(note=_SAME_NOTE)) as rev:
+        if plan is not None:
+            plan.write(rev)
+        _common_name(rev, world.view(), target_id, preview.name)
+        made = _row_stubs(
+            rev,
+            world,
+            view,
+            [*new_names, *(e.new for e in elsewhere if e.new is not None)],
+            preview.treated_as_new,
+            redirect=redirect,
+        )
+        linking = world.view()
+        state = linking.thing(target_id)
+        assert state is not None
+        categories = get_kind(state.kind).categories
+        linked: set[str] = set()
+        for fact in preview.facts:
+            if not fact.ticked:
+                continue
+            text = link_text(
+                linking,
+                fact.text,
+                picks=picks,
+                new_names=made,
+                owner=target_id,
+                as_new=preview.treated_as_new,
+            )
+            linked.update(parse_refs(text))
+            category = fact.category
+            if category not in categories:
+                category = default_category(state.kind, fact.since is not None)
+            held = fact.held_by is not None and linking.thing(fact.held_by) is not None
+            rev.add_fact(
+                target_id,
+                category,
+                text,
+                valid_from=fact.since,
+                overrides=[o for o in fact.overrides if o in inherited] or None,
+                origin=spheres.with_held_by(None, fact.held_by) if held else None,
+            )
+        linked |= write_elsewhere(
+            rev,
+            linking,
+            view,
+            elsewhere,
+            made,
+            picks=picks,
+            as_new=preview.treated_as_new,
+        )
+        orphans = {
+            thing_id
+            for thing_id in made.values()
+            if view.thing(thing_id) is None and thing_id not in linked
+        }
+        if orphans:
+            raise _UnlinkedNames(
+                [
+                    n.name
+                    for n in new_names
+                    if made.get(" ".join(n.name.split())) in orphans
+                ]
+            )
+    return made

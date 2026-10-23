@@ -2533,8 +2533,15 @@ async def test_preview_names_treated_as_new(plugin, client):
                 }
             )
             await _drain(plugin)
-            # the facts, then the one prose section they have facts for
-            assert len(client.prompt_history) == 2
+            # the facts, then the one prose section they have facts for (the
+            # second time, the first Ilse is a same-thing candidate with
+            # facts: its verdict is asked after them)
+            asked = [
+                p
+                for p in client.prompt_history
+                if p["prompt"].uid != "world.same-thing"
+            ]
+            assert len(asked) == 2 and client.prompt_history[:2] == asked
             preview = _last(plugin, "preview_thing")["data"]
             prompt = str(client.prompt_history[0]["prompt"])
         await plugin.handle(

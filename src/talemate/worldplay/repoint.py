@@ -31,6 +31,11 @@ filing or tie when the target isn't a sphere, a parent or filing that
 would put a thing inside itself, a mix's parents or shares that would name
 the target twice, and a use by the target itself. Prose is refreshed only
 where its input changed (`RepointResult.prose`).
+
+`plan_repoint` reads and decides it all without writing, and its
+`RepointPlan.write` writes it into a revision, so another writer can
+re-point a stub in its own revision (`create.accept_preview` with a same
+target, for the stub it expanded).
 """
 
 from __future__ import annotations
@@ -58,7 +63,7 @@ from talemate.worldplay.references import thing_references
 
 log = structlog.get_logger("talemate.worldplay.repoint")
 
-__all__ = ["RepointResult", "repoint_stub"]
+__all__ = ["RepointPlan", "RepointResult", "plan_repoint", "repoint_stub"]
 
 # the kinds a field may point at, where that isn't the stub's own kind
 FIELD_TARGET_KINDS: dict[str, tuple[str, ...]] = {
@@ -543,11 +548,109 @@ def _job(world: World, stub_id: str, target_id: str) -> _Job:
     )
 
 
-def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
-    """Point everything that names the stub `stub_id` at `target_id`, and
-    remove the stub, in one revision (see the module docstring). Raises
-    `KeyError` for a missing thing and `ValueError` for what's refused,
-    writing nothing."""
+class RepointPlan:
+    """A re-point read and decided (`plan_repoint`), not yet written:
+    `write` writes it into a revision, which may be another writer's own
+    (an accept that is "the same thing" re-points the stub it expanded in
+    its revision), and `result` reports it once written."""
+
+    def __init__(
+        self,
+        job: _Job,
+        uses: list[_FieldUse],
+        changes: dict[str, dict],
+        links: int,
+        own: list,
+        filing: tuple[dict, object] | None,
+        carried: dict[str, object],
+        aka: list[dict],
+        added: list[str],
+    ) -> None:
+        self._job = job
+        self._uses = uses
+        self._changes = changes
+        self._links = links
+        self._own = own
+        self._filing = filing
+        self._carried = carried
+        self._aka = aka
+        self._added = added
+
+    @property
+    def stub_id(self) -> str:
+        return self._job.stub.id
+
+    @property
+    def target_id(self) -> str:
+        return self._job.target.id
+
+    @property
+    def notes(self) -> list[str]:
+        return self._job.notes
+
+    @property
+    def note(self) -> str:
+        """The revision note a re-point of its own writes."""
+
+        return f"re-pointed {self._job.stub_name} to {self._job.target_name}"
+
+    def write(self, rev: Revision) -> None:
+        """Every change, in `rev`; the stub is removed last. Written again
+        into a fresh revision (the first rolled back), it writes the
+        same."""
+
+        job, target_id = self._job, self.target_id
+        changes = {fact_id: dict(change) for fact_id, change in self._changes.items()}
+        for use in self._uses:
+            rev.set_field(use.thing_id, use.field, use.value, use.date)
+        _move_facts(job, rev, self._own, changes)
+        for fact_id, change in changes.items():
+            rev.correct_fact(fact_id, **change)
+        if self._added:
+            rev.set_field(target_id, "aka", self._aka, None)
+        if self._filing is not None:
+            rev.set_field(target_id, "part_of", self._filing[0], self._filing[1])
+        for field, value in self._carried.items():
+            rev.set_field(target_id, field, value, None)
+        rev.remove_thing(self.stub_id)
+
+    def result(self) -> RepointResult:
+        """What was re-pointed, once `write`n. Prose is refreshed only
+        where its input changed: the target's facts and rendered fields,
+        and the rendered fields that pointed at the stub."""
+
+        target_id = self.target_id
+        prose = list(
+            dict.fromkeys(
+                [
+                    *(
+                        [target_id]
+                        if self._own or set(self._carried) - set(UNRENDERED_FIELDS)
+                        else []
+                    ),
+                    *(
+                        use.thing_id
+                        for use in self._uses
+                        if use.field not in UNRENDERED_FIELDS
+                    ),
+                ]
+            )
+        )
+        return RepointResult(
+            stub_name=self._job.stub_name,
+            target_name=self._job.target_name,
+            links=self._links,
+            aka_added=self._added,
+            facts_moved=len(self._own),
+            notes=list(dict.fromkeys(self._job.notes)),
+            prose=prose,
+        )
+
+
+def plan_repoint(world: World, stub_id: str, target_id: str) -> RepointPlan:
+    """Read and decide a re-point of the stub `stub_id` onto `target_id`
+    (see the module docstring), writing nothing. Raises `KeyError` for a
+    missing thing and `ValueError` for what's refused."""
 
     job = _job(world, stub_id, target_id)
     blocked = [
@@ -566,47 +669,26 @@ def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
     filing = _own_filing(job)
     carried = _carried_fields(job)
     aka, added = _names(job, shown_texts)
+    return RepointPlan(job, uses, changes, links, own, filing, carried, aka, added)
 
-    with world.revision(
-        Source.manual(note=f"re-pointed {job.stub_name} to {job.target_name}")
-    ) as rev:
-        for use in uses:
-            rev.set_field(use.thing_id, use.field, use.value, use.date)
-        _move_facts(job, rev, own, changes)
-        for fact_id, change in changes.items():
-            rev.correct_fact(fact_id, **change)
-        if added:
-            rev.set_field(target_id, "aka", aka, None)
-        if filing is not None:
-            rev.set_field(target_id, "part_of", filing[0], filing[1])
-        for field, value in carried.items():
-            rev.set_field(target_id, field, value, None)
-        rev.remove_thing(stub_id)
 
-    # prose reads facts and rendered fields: only those changed
-    prose = list(
-        dict.fromkeys(
-            [
-                *([target_id] if own or set(carried) - set(UNRENDERED_FIELDS) else []),
-                *(use.thing_id for use in uses if use.field not in UNRENDERED_FIELDS),
-            ]
-        )
-    )
+def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
+    """Point everything that names the stub `stub_id` at `target_id`, and
+    remove the stub, in one revision (see the module docstring). Raises
+    `KeyError` for a missing thing and `ValueError` for what's refused,
+    writing nothing."""
+
+    plan = plan_repoint(world, stub_id, target_id)
+    with world.revision(Source.manual(note=plan.note)) as rev:
+        plan.write(rev)
+    result = plan.result()
     log.info(
         "worlds.stub_repointed",
         stub=stub_id,
         target=target_id,
-        links=links,
-        uses=len(uses),
-        facts_moved=len(own),
-        aka_added=added,
+        links=result.links,
+        uses=len(plan._uses),
+        facts_moved=result.facts_moved,
+        aka_added=result.aka_added,
     )
-    return RepointResult(
-        stub_name=job.stub_name,
-        target_name=job.target_name,
-        links=links,
-        aka_added=added,
-        facts_moved=len(own),
-        notes=job.notes,
-        prose=prose,
-    )
+    return result
