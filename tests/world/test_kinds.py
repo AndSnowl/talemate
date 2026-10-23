@@ -248,8 +248,9 @@ def test_drawer_type_constants():
         "item": entries,
         "event": entries,
         "sphere": entries,
+        "being": ("beliefs", "practices", "structure"),
     }
-    assert PART_OF_KINDS == ("lore", "place", "item", "event", "sphere")
+    assert PART_OF_KINDS == ("lore", "place", "item", "event", "sphere", "being")
     assert set(WRITTEN_DRAWER_TYPES) < set(DRAWER_TYPES)
 
 

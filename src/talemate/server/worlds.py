@@ -1889,7 +1889,10 @@ class WorldsPlugin(Plugin):
         at = _date_in(payload.at)
         view = world.view()
         state = view.thing(payload.character_id)
-        if state is None or state.kind != "character":
+        if state is not None and state.kind == "being":
+            if not spheres.acts_in_world(state):
+                raise ValueError("only a real being can have exceptions to a tie")
+        elif state is None or not spheres.acts_in_world(state):
             raise ValueError(f"not a character: {payload.character_id}")
         self._require_sphere(world, payload.sphere_id)
         if all(

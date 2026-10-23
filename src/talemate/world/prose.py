@@ -19,6 +19,7 @@ way, imports this module -- lazily, inside `World.prose()` -- the same way
 `store.py` avoids importing `index.py` at the top level).
 """
 
+import json
 import sqlite3
 from collections.abc import Callable, Collection, Sequence
 from typing import Protocol
@@ -50,14 +51,27 @@ UNRENDERED_FIELDS: tuple[str, ...] = (
     "part_of",
     "ties",
     "agent",
+    # a being's existence changes who it acts as, not what it is
+    "existence",
 )
 _UNRENDERED_FIELDS = UNRENDERED_FIELDS
 
 # a fact version as prose reads it: category, text with its links' shown
-# words, dates with their precisions, and what it overrides
+# words, dates with their precisions, what it overrides, and who holds it
+# (its origin's `held_by`, which words it "<Holder> holds that ...")
 _FactKey = tuple[
-    str, str, int | None, str | None, int | None, str | None, tuple[str, ...]
+    str, str, int | None, str | None, int | None, str | None, tuple[str, ...], str
 ]
+
+
+def _held_key(origin_json: str | None) -> str:
+    """The fact's held-by as its prose key reads it: unset, cleared
+    (`null`), or the holder's id."""
+
+    origin = json.loads(origin_json) if origin_json else None
+    if not isinstance(origin, dict) or "held_by" not in origin:
+        return "unset"
+    return json.dumps(origin["held_by"])
 
 
 def _shown_text(text: str) -> str:
@@ -373,6 +387,7 @@ class ProseCache:
                     row["valid_until"],
                     row["until_precision"],
                     tuple(sorted(o["fact_id"] for o in overrides)),
+                    _held_key(row["origin_json"]),
                 )
             )
         return sorted(keys, key=repr)

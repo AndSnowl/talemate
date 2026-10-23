@@ -3243,6 +3243,69 @@ async def test_set_ties_on_beings(plugin, client):
     assert s.world.view().thing(spirit).fields["ties"][0]["role"] == "patron"
 
 
+async def test_beings_filed_and_given_exceptions(plugin, client):
+    """A being can be filed in a beliefs, practices or structure drawer (a
+    god in its faith's Doctrines), not in a places drawer. A real being
+    can be given an exception to its tie; a believed one can't (ruling
+    C4)."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        spirit = rev.create_thing(
+            "being",
+            fields={
+                "name": "The River Spirit",
+                "existence": "real",
+                "ties": [
+                    {"sphere": s.dawn, "role": "patron", "since": None, "until": None}
+                ],
+            },
+        )
+        light = rev.create_thing(
+            "being", fields={"name": "The Eternal Light", "existence": "believed"}
+        )
+
+    await _act(
+        plugin, "set_part_of", thing_id=light, sphere_id=s.dawn, drawer_id=DOCTRINES
+    )
+    assert not _errors(plugin)
+    assert _last(plugin, "set_part_of")["data"]["part_of"]["drawer_title"] == (
+        "Doctrines"
+    )
+    before = len(_errors(plugin))
+    await _act(plugin, "set_part_of", thing_id=light, sphere_id=s.dawn, drawer_id=SITES)
+    assert len(_errors(plugin)) == before + 1
+
+    errors = len(_errors(plugin))
+    async with MockClientContext():
+        await _act(
+            plugin,
+            "add_exception",
+            character_id=spirit,
+            sphere_id=s.dawn,
+            text="Never answers a priest",
+            rejects=None,
+        )
+        await _drain(plugin)
+    assert len(_errors(plugin)) == errors
+    exceptions = _last(plugin, "add_exception")["data"]["ties"][0]["exceptions"]
+    assert len(exceptions) == 1
+
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "add_exception",
+        character_id=light,
+        sphere_id=s.dawn,
+        text="Shines on heretics too",
+        rejects=None,
+    )
+    assert len(_errors(plugin)) == before + 1
+    assert "only a real being" in _last(plugin, "operation_done")["error"]["message"]
+    assert s.world.head_rev() == head
+
+
 async def test_add_exception(plugin, client):
     s = await _open_sphere_world(plugin)
     async with MockClientContext():

@@ -2023,6 +2023,16 @@ async def _preview_prose(
     return prose
 
 
+def _can_be_tied(preview: CreatePreview) -> bool:
+    """Whether the previewed thing can hold ties: a character, or a being
+    whose `existence` is real (`spheres.acts_in_world`)."""
+
+    state = ThingState(
+        id="0" * 32, kind=preview.kind, fields=dict(preview.fields), facts=[]
+    )
+    return spheres.acts_in_world(state)
+
+
 def accept_preview(
     world: World, preview: CreatePreview, *, into_stub: str | None = None
 ) -> str:
@@ -2036,8 +2046,8 @@ def accept_preview(
       as new never links to (or is made a stub by reusing) the world's
       thing of that name. A listed name no fact ends up linking to makes
       no stub: there'd be nothing to find it by.
-    - A character's `ties` are written (after any the owner's fields
-      give), and each of their exceptions becomes a `ties` fact
+    - A character's (or real being's) `ties` are written (after any the
+      owner's fields give; any other kind's are refused with `ValueError`), and each of their exceptions becomes a `ties` fact
       (`exception_fact`); a blank exception, or one whose rejected item
       the sphere no longer holds, is dropped quietly (`_live_exceptions`).
       A tie to a thing that's no sphere (deleted since) is refused with
@@ -2059,6 +2069,8 @@ def accept_preview(
     target = preview.stub_id or into_stub
     view = world.view()
     stub = _live_stub(view, target) if target is not None else None
+    if preview.ties and not _can_be_tied(preview):
+        raise ValueError(f"a {preview.kind} that isn't real can't be tied")
     for tie in preview.ties:
         sphere = view.thing(tie.sphere_id)
         if sphere is None or not spheres.is_sphere(sphere):

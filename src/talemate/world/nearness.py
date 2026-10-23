@@ -58,7 +58,16 @@ WEIGHTS: dict[str, float] = {
 
 # the thing-valued fields read as heritage links
 _HERITAGE_FIELDS = ("heritage", "species", "parents")
-_LINK_FIELDS = ("name", "stub", "part_of", "parent", "ties", *_HERITAGE_FIELDS)
+# `existence` isn't a link: it's read first, so a real being's ties count
+_LINK_FIELDS = (
+    "name",
+    "stub",
+    "existence",
+    "part_of",
+    "parent",
+    "ties",
+    *_HERITAGE_FIELDS,
+)
 
 
 class Near(BaseModel):
@@ -70,12 +79,12 @@ class Near(BaseModel):
 Graph = dict[str, dict[str, float]]
 
 
-def _state(thing_id: str, kind: str, field: str, value: object) -> ThingState:
-    """A bare state holding one field, for the `spheres` readers of
+def _state(thing_id: str, kind: str, fields: dict[str, object]) -> ThingState:
+    """A bare state holding `fields`, for the `spheres` readers of
     `part_of` and `ties` (built without validation: it's only read)."""
 
     return ThingState.model_construct(
-        id=thing_id, kind=kind, fields={field: value}, facts=[], created=0
+        id=thing_id, kind=kind, fields=fields, facts=[], created=0
     )
 
 
@@ -175,18 +184,21 @@ def _graph(view: WorldView) -> tuple[Graph, dict[str, str]]:
     names: dict[str, str] = {}
 
     values = list(_field_values(view, live))
+    existence: dict[str, object] = {}
     for thing_id, field, value in values:
         if field == "stub" and isinstance(value, dict) and value.get("ignored") is True:
             live.pop(thing_id, None)
+        elif field == "existence":
+            existence[thing_id] = value
 
     for thing_id, field, value in values:
-        if thing_id not in live or field == "stub":
+        if thing_id not in live or field in ("stub", "existence"):
             continue
         if field == "name":
             if isinstance(value, str) and value.strip():
                 names[thing_id] = value.casefold()
         elif field == "part_of":
-            state = _state(thing_id, live[thing_id], field, value)
+            state = _state(thing_id, live[thing_id], {field: value})
             link = _part_of(state)
             if link is not None:
                 _link(graph, thing_id, link[0], WEIGHTS["part_of"], live)
@@ -194,7 +206,10 @@ def _graph(view: WorldView) -> tuple[Graph, dict[str, str]]:
             if isinstance(value, str):
                 _link(graph, thing_id, value, WEIGHTS["parent"], live)
         elif field == "ties":
-            state = _state(thing_id, live[thing_id], field, value)
+            fields = {field: value}
+            if thing_id in existence:
+                fields["existence"] = existence[thing_id]
+            state = _state(thing_id, live[thing_id], fields)
             for tie in _ties(state):
                 if _tie_live(tie, view.at):
                     _link(graph, thing_id, tie.sphere_id, WEIGHTS["tie"], live)

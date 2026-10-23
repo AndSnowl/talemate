@@ -27,12 +27,17 @@ from talemate.util import replace_smart_quotes
 from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.dates import Precision, WorldDate
-from talemate.world.names import find_names
 from talemate.world.prose import CachedProse, stretches
 from talemate.world.refs import REF_PATTERN
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
-from talemate.world.view import FactState, ThingState, WorldView
+from talemate.world.view import ThingState, WorldView
+from talemate.worldplay.held import (  # noqa: F401 -- re-exported
+    _mid_sentence,
+    _opens_with_a_name,
+    attributes_itself,
+    held_text,
+)
 from talemate.worldplay.prose_gen import inherited_categories, lineage_ids
 
 log = structlog.get_logger("talemate.worldplay.characters")
@@ -370,106 +375,6 @@ def exception_text(text: str) -> str:
     it with: that link is for the world's pages, not for reading."""
 
     return _DEPARTS_SUFFIX.sub("", text).strip()
-
-
-def _opens_with_a_name(view: WorldView, raw: str, text: str) -> bool:
-    """Whether `text` (rendered from `raw`) opens with a name: a
-    reference, "I" ("I'll"), a word in capitals, or (checked last, the
-    costly one) a world name `find_names` matches at its very start,
-    linked or not, other than a mere suggestion."""
-
-    if raw.lstrip().startswith("[["):
-        return True
-    word = text.split(" ", 1)[0].split("'", 1)[0].strip(",;:")
-    if word == "I" or (len(word) > 1 and word.isupper()):
-        return True
-    return any(
-        match.start == 0 and not match.suggested for match in find_names(view, text)
-    )
-
-
-def _mid_sentence(view: WorldView, raw: str, text: str) -> str:
-    """`text` (rendered from `raw`) to follow "but: ": its closing period
-    dropped and its first letter lowercased, unless it opens with a name
-    (`_opens_with_a_name`)."""
-
-    text = text.strip().rstrip(".").rstrip()
-    if not text or _opens_with_a_name(view, raw, text):
-        return text
-    return text[0].lower() + text[1:]
-
-
-# the verbs a text that says who holds it uses after the holder's name
-# ("the Church teaches that ..."): it's then left as it is
-_ATTRIBUTING_VERBS = (
-    "teach",
-    "teaches",
-    "taught",
-    "hold",
-    "holds",
-    "held",
-    "believe",
-    "believes",
-    "believed",
-)
-_ARTICLES = ("the", "a", "an")
-
-
-def _bare_name(name: str) -> str:
-    """`name` casefolded, its spaces collapsed, less a leading article."""
-
-    words = name.casefold().split()
-    if len(words) > 1 and words[0] in _ARTICLES:
-        words = words[1:]
-    return " ".join(words)
-
-
-def attributes_itself(text: str, names: list[str]) -> bool:
-    """Whether `text` already says who holds it: one of `names` (the
-    holder's, with or without a leading article, ignoring case) followed by
-    "teaches", "holds", "believes" or another form of them, as a whole
-    word, anywhere in it."""
-
-    folded = " ".join(text.casefold().split())
-    verbs = "|".join(_ATTRIBUTING_VERBS)
-    for name in names:
-        bare = _bare_name(name)
-        if not bare:
-            continue
-        pattern = r"(?<![\w'-])%s\s+(?:%s)(?![\w'-])" % (re.escape(bare), verbs)
-        if re.search(pattern, folded):
-            return True
-    return False
-
-
-def held_text(
-    view: WorldView, fact: FactState, owner: ThingState, text: str | None = None
-) -> str:
-    """`fact` (of `owner`) as a scene is told it, `text` its rendering
-    (`view.render(fact.text)` when not given): held by someone
-    (`spheres.held_by`), it's "<Holder> holds that <text>", the text
-    lowered as `_mid_sentence` lowers it (not when it opens with a name);
-    as it is when it isn't held, its holder has no name, or it already
-    says who holds it (`attributes_itself`)."""
-
-    rendered = view.render(fact.text) if text is None else text
-    holder_id = spheres.held_by(view, fact, owner)
-    holder = view.thing(holder_id) if holder_id is not None else None
-    name = view.name_of(holder_id) if holder_id is not None else None
-    if holder is None or not name:
-        return rendered
-    names = [name] + [
-        entry["name"]
-        for entry in holder.fields.get("aka") or []
-        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-    ]
-    if attributes_itself(rendered, names):
-        return rendered
-    body = _mid_sentence(view, fact.text, rendered)
-    if not body:
-        return rendered
-    end = "" if body[-1] in "?!" else "."
-    return f"{name[0].upper()}{name[1:]} holds that {body}{end}"
 
 
 def mid_sentence_name(name: str) -> str:

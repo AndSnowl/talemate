@@ -118,6 +118,9 @@ ENTRY_DRAWER_TYPES: dict[str, tuple[str, ...]] = {
     "item": _ENTRY_TYPES,
     "event": _ENTRY_TYPES,
     "sphere": _ENTRY_TYPES,
+    # a god in its faith's Doctrines, a spirit in a culture's customs, a
+    # guardian in an order's ranks
+    "being": ("beliefs", "practices", "structure"),
 }
 
 # the kinds that can be part of a sphere, in a drawer
@@ -271,7 +274,8 @@ KINDS: dict[str, KindSpec] = {
             ("born", "date"),
             ("ties", "json"),
         ),
-        categories=["nature", "deeds", "worship", "general"],
+        # `ties`: a real being's exceptions to its ties, as a character's
+        categories=["nature", "deeds", "worship", "ties", "general"],
     ),
 }
 

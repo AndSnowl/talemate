@@ -58,6 +58,7 @@ from talemate.world.prose import stretches
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.held import held_text
 
 log = structlog.get_logger("talemate.worldplay.prose_gen")
 
@@ -123,8 +124,9 @@ def sections_for(kind: str) -> tuple[str, ...]:
 # the sphere categories no description is written from (ruling P18): a
 # sphere's summary (ruling P1) stays its own, never a retelling of its
 # drawers' statements or its timeline, and a place sphere is described
-# from its place facts
-_NOT_DESCRIBED: tuple[str, ...] = ("statement", "timeline")
+# from its place facts; nor a real being's exceptions to its ties, which
+# are on its sheet, as a character's are
+_NOT_DESCRIBED: tuple[str, ...] = ("statement", "timeline", "ties")
 
 
 def section_categories(kind: str, section: str) -> tuple[str, ...]:
@@ -206,9 +208,18 @@ def _section_facts(
     # a sphere's summary fact leads its description (ruling P21): the
     # other about facts add to it, never replace it
     found.sort(key=lambda pair: not spheres.is_summary_fact(pair[0]))
+    owners: dict[str, ThingState | None] = {}
     for fact, layer in found:
-        # rendered: a linked fact reads as written, never as `[[thing:...]]`
-        text = view.render(fact.text)
+        # rendered: a linked fact reads as written, never as `[[thing:...]]`;
+        # a held one as belief ("<Holder> holds that ...", `held_text`)
+        if layer.thing_id not in owners:
+            owners[layer.thing_id] = view.thing(layer.thing_id)
+        owner = owners[layer.thing_id]
+        text = (
+            held_text(view, fact, owner)
+            if owner is not None
+            else view.render(fact.text)
+        )
         if layer.depth == 0:
             if fact.category in own_categories:
                 facts.append(text)

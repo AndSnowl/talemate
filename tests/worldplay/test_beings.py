@@ -13,11 +13,20 @@ from talemate.world.kinds import (
     validate_field,
 )
 from talemate.world.spheres import acts_in_world, existence, people, ties_of
+from talemate.world.kinds import ENTRY_DRAWER_TYPES
 from talemate.world.store import Source
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.context import world_context_block
-from talemate.worldplay.create import CREATE_KINDS, NAME_KINDS, name_guess
-from talemate.worldplay.setup import SetupRef, plan_scene
+from talemate.worldplay.create import (
+    CREATE_KINDS,
+    NAME_KINDS,
+    CreatePreview,
+    PreviewFact,
+    PreviewTie,
+    accept_preview,
+    name_guess,
+)
+from talemate.worldplay.setup import SceneSetup, SetupRef, plan_scene, start_scene
 
 START = WorldDate.of(1020)
 
@@ -38,7 +47,12 @@ def beings(world):
         )
         maren = rev.create_thing("character", fields={"name": "Maren"})
         light = rev.create_thing(
-            "being", fields={"name": "The Eternal Light", "existence": "believed"}
+            "being",
+            fields={
+                "name": "The Eternal Light",
+                "existence": "believed",
+                "aka": [{"name": "the Light", "tag": "common", "everyday": True}],
+            },
         )
         rev.add_fact(light, "worship", "Prayed to at dawn.")
         spirit = rev.create_thing(
@@ -66,7 +80,7 @@ def test_being_existence_values(world, beings):
     or a deity guessed in a reply is a being."""
 
     kind = get_kind("being")
-    assert kind.categories == ["nature", "deeds", "worship", "general"]
+    assert kind.categories == ["nature", "deeds", "worship", "ties", "general"]
     assert [f.name for f in kind.fields][:3] == ["name", "existence", "born"]
     assert EXISTENCE_VALUES == ("real", "believed", "undecided")
     assert DEFAULT_EXISTENCE == "undecided"
@@ -83,6 +97,8 @@ def test_being_existence_values(world, beings):
     assert existence(view.thing(beings["light"])) == "believed"
     assert existence(view.thing(beings["spirit"])) == "real"
 
+    # filed as a doctrine, a custom or a rank, never as a place
+    assert ENTRY_DRAWER_TYPES["being"] == ("beliefs", "practices", "structure")
     assert "being" in CREATE_KINDS
     assert "being" in NAME_KINDS
     for guess in ("god", "spirit", "deity", "being", "God"):
@@ -213,3 +229,88 @@ async def test_real_being_castable(world, beings):
     character = character_from_world(world, beings["spirit"], START, is_player=False)
     assert character.name == "The River Spirit"
     assert character.base_attributes["ties"] == "Protector of the Church"
+
+
+async def test_unreal_being_matched_by_other_name(world, beings):
+    """A believed being the model names by one of its other names ("the
+    Light"), or without its article, is still never cast nor invented."""
+
+    setup = await plan_scene(
+        world,
+        "Maren prays",
+        {},
+        None,
+        START,
+        None,
+        reply={
+            "player": "Maren",
+            "characters": [{"name": "Light"}, {"name": "Eternal Light"}],
+            "intro": "Dawn.",
+        },
+    )
+    assert setup.characters == []
+    assert setup.invented == []
+
+
+async def test_start_scene_drops_what_cant_be_cast(world, beings):
+    """A setup edited by the client may name a believed being: it's left
+    out of the scene's characters. Played, it's refused before anything is
+    written."""
+
+    setup = SceneSetup(
+        player=SetupRef(thing_id=beings["maren"]),
+        characters=[
+            SetupRef(thing_id=beings["light"]),
+            SetupRef(thing_id=beings["wolf"]),
+            SetupRef(thing_id=beings["spirit"]),
+        ],
+        start=START,
+        intro="Dawn.",
+    )
+    scene_id = await start_scene(world, setup, None)
+    record = world.scenes().get(scene_id)
+    assert [e["thing_id"] for e in record.state["characters"]] == [
+        beings["maren"],
+        beings["spirit"],
+    ]
+
+    scenes = len(world.scenes().list())
+    with pytest.raises(ValueError):
+        await start_scene(
+            world,
+            setup.model_copy(update={"player": SetupRef(thing_id=beings["light"])}),
+            None,
+        )
+    assert len(world.scenes().list()) == scenes
+
+
+def _being_preview(church, existence):
+    fields = {"existence": existence} if existence else {}
+    return CreatePreview(
+        kind="being",
+        prompt="a river spirit",
+        fields=fields,
+        name="The Ford Spirit",
+        facts=[PreviewFact(category="nature", text="A spirit of the ford.")],
+        prose={"description": "A spirit."},
+        ties=[PreviewTie(sphere_id=church, sphere="The Church", role="patron")],
+    )
+
+
+def test_accept_refuses_ties_unless_real(world, beings):
+    """Accept writes a real being's ties; a believed or undecided being's
+    (or any other kind's) are refused before anything is written."""
+
+    head = world.head_rev()
+    for setting in ("believed", None):
+        with pytest.raises(ValueError):
+            accept_preview(world, _being_preview(beings["church"], setting))
+    lore = _being_preview(beings["church"], None).model_copy(
+        update={"kind": "lore", "facts": [PreviewFact(category="general", text="x")]}
+    )
+    with pytest.raises(ValueError):
+        accept_preview(world, lore)
+    assert world.head_rev() == head
+
+    thing_id = accept_preview(world, _being_preview(beings["church"], "real"))
+    assert [t.role for t in ties_of(world.view(), thing_id)] == ["patron"]

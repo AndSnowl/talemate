@@ -280,3 +280,28 @@ def test_unnamed_things_sort_last(world):
 def test_unreadable_curation_falls_back_to_defaults(world, stored):
     world._set_meta("curation", stored)
     assert world.curation() == CurationSettings()
+
+
+def test_real_being_tie_is_near(world):
+    """A real being's tie links it to its sphere; a believed being's tie
+    is kept but hidden, so it links nothing. A later existence change
+    follows the view's date."""
+
+    with world.revision(Source.manual()) as rev:
+        order = _sphere(rev, "White Talon")
+        spirit = rev.create_thing(
+            "being",
+            fields={"name": "Spirit", "existence": "real", "ties": [_tie(order)]},
+        )
+        light = rev.create_thing(
+            "being",
+            fields={"name": "Light", "existence": "believed", "ties": [_tie(order)]},
+        )
+        rev.set_field(light, "existence", "real", WorldDate.of(1100))
+
+    view = world.view(WorldDate.of(1050))
+    assert spirit in _ids(near(view, order, reach=1))
+    assert order in _ids(near(view, spirit, reach=1))
+    assert light not in _ids(near(view, order, reach=1))
+    assert near(view, light, reach=1) == []
+    assert light in _ids(near(world.view(WorldDate.of(1200)), order, reach=1))

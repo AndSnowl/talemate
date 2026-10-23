@@ -131,7 +131,7 @@ def _names(view: WorldView) -> dict[str, list[Words]]:
             if isinstance(value, str) and value.strip():
                 main[thing_id] = value
         elif field == "aka":
-            state = _state(thing_id, live[thing_id], field, value)
+            state = _state(thing_id, live[thing_id], {field: value})
             others[thing_id] = [
                 other
                 for entry in _aka_entries(state)

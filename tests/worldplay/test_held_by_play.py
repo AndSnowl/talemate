@@ -216,3 +216,93 @@ def test_repoint_carries_held_by(world, spheres_world):
     assert fact.origin == {"held_by": s.dawn, "drawer": "d0000001"}
     moved = next(f for f in view.thing(s.dawn).facts if f.text == "It sees all.")
     assert moved.origin == {"held_by": s.dawn}
+
+
+async def test_held_fact_reaches_prose_prompt(world, spheres_world):
+    """A held background fact reaches the description prompt as belief
+    (ruling C3); a correction that only sets or clears held-by makes the
+    cached prose stale, as a text edit would."""
+
+    from talemate.worldplay import prose_gen
+
+    s = spheres_world
+    with world.revision(Source.manual()) as rev:
+        oren = rev.create_thing("character", fields={"name": "Brother Oren"})
+        miracle = rev.add_fact(
+            oren,
+            "background",
+            "His touch healed a blind child.",
+            origin=with_held_by(None, s.dawn),
+        )
+        rev.add_fact(oren, "appearance", "A grey-feathered owl.")
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("Brother Oren is a grey owl.")
+        await prose_gen.generate_section(world, oren, "description", None, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "The White Dawn holds that his touch healed a blind child." in prompt
+    assert "A grey-feathered owl." in prompt
+
+    cache = world.prose()
+
+    def stale() -> bool:
+        return cache.stale(
+            oren,
+            "description",
+            None,
+            prose_gen.staleness_also(world, oren, "description", None),
+        )
+
+    assert not stale()
+    fact = next(f for f in world.view().thing(oren).facts if f.fact_id == miracle)
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(miracle, origin=with_held_by(fact.origin, None))
+    assert stale()
+
+
+def test_setup_prompt_shows_held_facts_as_belief(world, spheres_world):
+    """The scene-setup prompt's world things carry a held fact as belief."""
+
+    from talemate.worldplay.setup import _world_things
+
+    s = spheres_world
+    with world.revision(Source.manual()) as rev:
+        lore = rev.create_thing("lore", fields={"name": "The Vigil"})
+        rev.add_fact(
+            lore, "general", "Owls see in the dark.", origin={"held_by": s.dawn}
+        )
+    groups = dict(_world_things(world.view(), [lore]))
+    assert groups["Lore"][0]["facts"] == [
+        "The White Dawn holds that owls see in the dark."
+    ]
+
+
+def test_held_by_a_character_or_a_being(world, spheres_world):
+    """A character or a being can hold a fact too; a fact that already
+    says the character believes it is left as it is."""
+
+    s = spheres_world
+    with world.revision(Source.manual()) as rev:
+        light = rev.create_thing(
+            "being", fields={"name": "The Eternal Light", "existence": "believed"}
+        )
+        lore = rev.create_thing("lore", fields={"name": "The Watch"})
+        by_vasha = rev.add_fact(
+            lore, "general", "The vigil is pointless.", origin={"held_by": s.vasha}
+        )
+        self_said = rev.add_fact(
+            lore,
+            "general",
+            "Vasha believes the vigil is pointless.",
+            origin={"held_by": s.vasha},
+        )
+        by_light = rev.add_fact(
+            lore, "general", "The vigil pleases it.", origin={"held_by": light}
+        )
+    view = world.view()
+    owner = view.thing(lore)
+    texts = {f.fact_id: held_text(view, f, owner) for f in owner.facts}
+    assert texts[by_vasha] == "Vasha holds that the vigil is pointless."
+    assert texts[self_said] == "Vasha believes the vigil is pointless."
+    assert texts[by_light] == "The Eternal Light holds that the vigil pleases it."

@@ -77,6 +77,7 @@ from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.held import held_text
 from talemate.worldplay.context import LOCAL_PLACE_KIND
 from talemate.worldplay.create import (
     CREATE_KINDS,
@@ -86,6 +87,7 @@ from talemate.worldplay.create import (
     json_objects,
     preview_thing,
 )
+from talemate.worldplay.links import name_key
 from talemate.worldplay.mentions import suggested_prompt
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
@@ -226,7 +228,8 @@ def _world_things(view: WorldView, thing_ids: list[str]) -> list[tuple[str, list
         groups.setdefault(_cast_kind(state), []).append(
             {
                 "name": view.name_of(thing_id) or "",
-                "facts": [view.render(fact.text) for fact in state.facts],
+                # a held fact as belief ("<Holder> holds that ...")
+                "facts": [held_text(view, fact, state) for fact in state.facts],
             }
         )
     order = list(_KIND_LABELS)
@@ -414,25 +417,25 @@ def _unreal_being(
     new_names: frozenset[str] = frozenset(),
 ) -> bool:
     """Whether `name` means a being that isn't real (believed, or
-    undecided): picked for it, or its full name. The owner's treating the
-    name as new wins."""
+    undecided): picked for it, or its name or one of its other names
+    (ignoring case and a leading article, `name_key`). The owner's
+    treating the name as new wins."""
 
-    key = _norm(name)
-    if not key or _is_new(key, new_names):
+    if not _norm(name) or _is_new(_norm(name), new_names):
         return False
-    beings = [
-        state
-        for state in view.things("being")
-        if not acts_in_world(state)
-        and (
-            key == _norm(view.name_of(state.id) or "")
-            or any(
-                _norm(text) == key and thing_id == state.id
-                for text, thing_id in picks.items()
-            )
-        )
-    ]
-    return bool(beings)
+    key = name_key(name)
+    picked = {thing_id for text, thing_id in picks.items() if name_key(text) == key}
+    for state in view.things("being"):
+        if acts_in_world(state):
+            continue
+        names = [view.name_of(state.id) or ""] + [
+            entry["name"]
+            for entry in state.fields.get("aka") or []
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        ]
+        if state.id in picked or key in {name_key(other) for other in names}:
+            return True
+    return False
 
 
 def _ref(
@@ -810,10 +813,22 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     are written to the world first, each into its stub
     (`_accept_stub_previews`), so the scene uses the full entries."""
 
+    if setup.player.thing_id is not None:
+        played = world.view(setup.start).thing(setup.player.thing_id)
+        if played is None or not acts_in_world(played):
+            raise ValueError(f"{setup.player.thing_id} can't be played")
     _accept_stub_previews(world, setup.stub_previews)
 
+    view = world.view(setup.start)
     refs: list[SetupRef] = []
     for ref in [setup.player, *setup.characters]:
+        if ref.thing_id is not None:
+            # a setup edited by the client may name a being that isn't real
+            # (or a thing deleted since): it's never cast
+            cast = view.thing(ref.thing_id)
+            if cast is None or not acts_in_world(cast):
+                log.info("setup.not_cast", thing_id=ref.thing_id)
+                continue
         if not any(_same(ref, other) for other in refs):
             refs.append(ref)
 
