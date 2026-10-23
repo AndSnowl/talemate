@@ -31,7 +31,12 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.prompts import Prompt
-from talemate.world.repeats import content_words, disagreeing_dates, fact_texts
+from talemate.world.repeats import (
+    content_words,
+    disagreeing_dates,
+    fact_texts,
+    word_share,
+)
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay.ai import world_ai_call
@@ -207,10 +212,6 @@ class Pair(BaseModel):
     years: tuple[int, int] | None = None
 
 
-def _share(new: set[str], old: set[str]) -> float:
-    return len(new & old) / len(new) if new else 0.0
-
-
 def contradiction_pairs(view: WorldView, from_id: str, into_id: str) -> list[Pair]:
     """The pairs of facts, one of `from_id` and one of `into_id`, that may
     disagree (see the module docstring): code only, no model. Every fact
@@ -227,7 +228,7 @@ def contradiction_pairs(view: WorldView, from_id: str, into_id: str) -> list[Pai
     pairs: dict[tuple[str, str], Pair] = {}
     for _a_owner, a, a_text in a_facts:
         for _b_owner, b, b_text in b_facts:
-            score = max(_share(words[a], words[b]), _share(words[b], words[a]))
+            score = max(word_share(words[a], words[b]), word_share(words[b], words[a]))
             if score >= PAIR_OVERLAP:
                 pairs[(a, b)] = Pair(
                     key=f"{a}:{b}", a=a, b=b, a_text=a_text, b_text=b_text, score=score
@@ -249,7 +250,7 @@ def contradiction_pairs(view: WorldView, from_id: str, into_id: str) -> list[Pai
             b=b,
             a_text=texts[a],
             b_text=texts[b],
-            score=max(_share(words[a], words[b]), _share(words[b], words[a])),
+            score=max(word_share(words[a], words[b]), word_share(words[b], words[a])),
         )
         pairs[(a, b)] = pair.model_copy(update={"years": years})
     ordered = sorted(pairs.values(), key=lambda pair: (pair.years is None, -pair.score))

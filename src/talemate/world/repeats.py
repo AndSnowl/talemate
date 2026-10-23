@@ -45,6 +45,7 @@ __all__ = [
     "fact_texts",
     "find_repeats",
     "overlap",
+    "word_share",
 ]
 
 # the probe's stop list, as it is
@@ -79,7 +80,10 @@ def content_words(text: str) -> set[str]:
     }
 
 
-def _share(new: set[str], old: set[str]) -> float:
+def word_share(new: set[str], old: set[str]) -> float:
+    """The share of the content words `new` that `old` holds, 0 to 1 (0
+    when `new` is empty): `overlap` on words already found."""
+
     return len(new & old) / len(new) if new else 0.0
 
 
@@ -87,7 +91,7 @@ def overlap(a: str, b: str) -> float:
     """The share of `a`'s content words that `b` holds, 0 to 1 (the probe's
     `containment`); 0 when `a` has none."""
 
-    return _share(content_words(a), content_words(b))
+    return word_share(content_words(a), content_words(b))
 
 
 class Repeat(BaseModel):
@@ -130,7 +134,7 @@ def find_repeats(
         words = content_words(view.render(text))
         best: Repeat | None = None
         for owner_id, fact_id, rendered, old in facts:
-            score = _share(words, old)
+            score = word_share(words, old)
             if score >= threshold and (best is None or score > best.score):
                 best = Repeat(
                     index=index,
@@ -243,7 +247,7 @@ def disagreeing_dates(
             year_a, year_b = dated[a][0], dated[b][0]
             if year_a == year_b:
                 continue
-            score = max(_share(words[a], words[b]), _share(words[b], words[a]))
+            score = max(word_share(words[a], words[b]), word_share(words[b], words[a]))
             if score >= threshold:
                 # built unchecked (ruling C19): a timeline of templated
                 # lines can make thousands of pairs
