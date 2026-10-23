@@ -4982,15 +4982,21 @@ async def test_pick_date(plugin, monkeypatch):
         line for line in reply["thing"]["entry_timeline"] if line["fact_id"] == s.met
     )
     assert line["until"] is not None
+    # ruling C22: an ended fact disagrees with nothing, on either side
+    assert line["disagrees_with"] == []
+    assert all(
+        s.met not in other["disagrees_with"]
+        for other in reply["thing"]["entry_timeline"]
+    )
 
-    # ended already: nothing written, and the reply says so
+    # ended already: no longer a pair, so refused, writing nothing
     head = world.head_rev()
     await _act(
         plugin, "pick_date", keep_fact_id=s.synod, drop_fact_id=s.met, mode="end"
     )
-    reply = _last(plugin, "pick_date")["data"]
-    assert reply["mode"] == "none" and reply["notes"]
+    assert len(_errors(plugin)) == errors + 1
     assert world.head_rev() == head
+    errors += 1
 
     # a fact on the Tsardom restating its founding, ten years out: removed
     with world.revision(Source.manual(note="again")) as rev:
@@ -5626,3 +5632,32 @@ async def test_list_things_beings_carry_existence(plugin):
         "The River Spirit": "real",
         "The Eternal Light": "undecided",
     }
+
+
+async def test_same_offers_say_whether_a_stub(plugin, tmp_path, monkeypatch):
+    """Each same-thing offer says whether it's a stub (`SameOffer.stub`),
+    so the screen offers a stub "Make it a sphere…" without reading its
+    line -- a full entry whose summary says "stub" is no stub."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Sh"})
+    with plugin.world.revision(Source.manual(note="seed")) as rev:
+        lake = rev.create_thing("place", {"name": "Ashenmere"})
+        rev.add_fact(lake, "description", "A stub of land juts into the lake.")
+        shore = rev.create_thing(
+            "place", {"name": "Ashenmere Shore", "stub": {"ignored": False}}
+        )
+    _fixed_preview_file(
+        tmp_path,
+        monkeypatch,
+        name="The Ashenmere Caves",
+        facts=[{"category": "description", "text": "Caves under the lake."}],
+        prose={"description": "Caves."},
+    )
+    await _act(plugin, "preview_thing", kind="place", prompt="the caves")
+    await _drain(plugin)
+    offers = _last(plugin, "preview_thing")["data"]["same_as"]
+    assert {offer["thing_id"]: offer["stub"] for offer in offers} == {
+        lake: False,
+        shore: True,
+    }
+    assert "stub" in next(o["line"] for o in offers if o["thing_id"] == lake)

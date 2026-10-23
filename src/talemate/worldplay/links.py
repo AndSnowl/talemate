@@ -74,13 +74,15 @@ class SameOffer(SameCandidate):
     """A thing a new name could be the same as (`world.sameness`), as the
     preview shows it: its name and kind, its line in the "Entries near this
     one" list (`create.candidate_line`: kind, other name, sphere, stub, its
-    summary or first fact), so two of one name can be told apart, and
-    whether it has facts of its own (only then is a verdict asked)."""
+    summary or first fact), so two of one name can be told apart, whether
+    it has facts of its own (only then is a verdict asked), and whether
+    it's a stub."""
 
     name: str
     kind: str
     line: str
     has_facts: bool
+    stub: bool = False
 
 
 class NewName(BaseModel):

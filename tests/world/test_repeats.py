@@ -320,3 +320,18 @@ def test_disagreeing_dates_skips_removed_facts(world):
     assert disagreeing_dates(view, [compiled_217, compiled_312], 0.4) == []
     old = world.view(rev=view.rev - 1)
     assert len(disagreeing_dates(old, [compiled_217, compiled_312], 0.4)) == 1
+
+
+def test_disagreeing_dates_skips_ended_facts(world):
+    """Ruling C22: a fact that has ended at the view is in no pair (as
+    `entry_timeline` reads `until`), so a pick that ends one settles it;
+    as of a date before it ended, the pair is back."""
+
+    compiled_217, compiled_312, _, _ = _codex(world)
+    with world.revision(Source.manual()) as rev:
+        rev.end_fact(compiled_312, WorldDate.of(1000))
+    assert disagreeing_dates(world.view(), [compiled_217, compiled_312], 0.4) == []
+    before = world.view(at=WorldDate.of(900))
+    assert disagreeing_dates(before, [compiled_217, compiled_312], 0.4) == [
+        Disagreement(a=compiled_217, b=compiled_312, years=(217, 312))
+    ]

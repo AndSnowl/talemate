@@ -157,7 +157,7 @@ def _live_facts(
     view: WorldView, column: Literal["thing_id", "fact_id"], ids: Sequence[str]
 ) -> list[sqlite3.Row]:
     """The fact rows (`thing_id`, `fact_id`, `text`, `valid_from`,
-    `from_precision`) not removed at the view's revision, of a live owner,
+    `from_precision`, `valid_until`) not removed at the view's revision, of a live owner,
     whose `column` (`thing_id` or `fact_id`) is one of `ids`, whatever
     their story dates; ordered by start date (undated first), then id."""
 
@@ -166,7 +166,8 @@ def _live_facts(
     things_filter, params = view._live_things_filter("t.")
     return view._conn.execute(
         f"""
-        SELECT f.thing_id, f.fact_id, f.text, f.valid_from, f.from_precision
+        SELECT f.thing_id, f.fact_id, f.text, f.valid_from, f.from_precision,
+               f.valid_until
         FROM facts f
         JOIN things t ON t.id = f.thing_id AND {things_filter}
         WHERE f.{column} IN (SELECT value FROM json_each(?))
@@ -194,11 +195,16 @@ def _dated_facts(
 ) -> dict[str, tuple[int, str]]:
     """`fact id -> (start year, text as it reads)` for each of `fact_ids`
     not removed at the view's revision, with a live owner and a start
-    date. The story date isn't checked: the caller picked these facts (a
-    timeline's lines, an ended one included)."""
+    date, that hasn't ended at the view (ruling C22: `valid_until` on or
+    before its date, as `timelines.entry_timeline` reads `until`; with no
+    date, any end). Its start isn't checked: the caller picked these facts
+    (a timeline's lines)."""
 
+    at = view._at_instant()
     found: dict[str, tuple[int, str]] = {}
     for row in _live_facts(view, "fact_id", fact_ids):
+        if row["valid_until"] is not None and row["valid_until"] <= at:
+            continue
         start = _decode_date(row["valid_from"], row["from_precision"])
         if start is not None:
             found[row["fact_id"]] = (start.to_datetime().year, row["text"])
@@ -210,9 +216,10 @@ def disagreeing_dates(
 ) -> list[Disagreement]:
     """The pairs among `fact_ids` that say much the same (either one's
     `overlap` with the other at least `threshold`) with different start
-    years (`valid_from`), in the order given. A fact with no start date, or
-    not live at the view's revision, is never in a pair; an id given twice
-    counts once."""
+    years (`valid_from`), in the order given. A fact with no start date,
+    not live at the view's revision, or ended at the view (ruling C22: a
+    pick that ends one settles the pair) is never in a pair; an id given
+    twice counts once."""
 
     dated = _dated_facts(view, fact_ids)
     ordered = [fact_id for fact_id in dict.fromkeys(fact_ids) if fact_id in dated]

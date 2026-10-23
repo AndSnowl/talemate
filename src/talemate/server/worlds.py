@@ -53,7 +53,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   drop_fact_id, mode: "end"|"remove", thing_id?, at?}` settles a
   timeline disagreement: refused unless the two disagree now
   (`repeats.disagreeing_dates`, worked out again, never the client's
-  word); "end" ends the dropped fact at the world's now, "remove" removes
+  word; an ended fact disagrees with nothing, ruling C22); "end" ends the dropped fact at the world's now, "remove" removes
   it, in one revision; answers `{keep_fact_id, drop_fact_id, mode,
   owner_id, notes, thing?}` and refreshes the dropped fact's entry's
   prose as an edit would. `get_curation` and `set_curation {settings}`
@@ -3120,9 +3120,9 @@ class WorldsPlugin(Plugin):
         now ("end") or remove it ("remove"), in one revision. Refused,
         writing nothing, unless the two are a disagreeing pair now
         (worked out again here, never taken from the client), at the
-        world's repeat threshold. A dropped fact that has ended already is
-        left as it is, and one that starts at or after now is removed
-        instead of ended, each with a note. Answers `{keep_fact_id,
+        world's repeat threshold; a fact that has ended is in no pair
+        (ruling C22), so one ended already is refused. A dropped fact that
+        starts at or after now is removed instead of ended, with a note. Answers `{keep_fact_id,
         drop_fact_id, mode, owner_id, notes}` (`owner_id` the dropped
         fact's entry), with `thing`, the payload of `thing_id` at `at`,
         when given. Prose is refreshed for the dropped fact's entry when
@@ -3144,10 +3144,7 @@ class WorldsPlugin(Plugin):
         notes: list[str] = []
         now = current_date(world)
         mode = payload.mode
-        if mode == "end" and fact.valid_until is not None:
-            if fact.valid_until.instant <= now.instant:
-                notes.append("That fact has ended already, so it's left as it is")
-                mode = "none"
+        # an ended fact is in no pair (ruling C22), so it's refused above
         if mode == "end" and (
             fact.valid_from is not None and fact.valid_from.instant >= now.instant
         ):
@@ -3156,17 +3153,15 @@ class WorldsPlugin(Plugin):
                 "instead of ended"
             )
             mode = "remove"
-        if mode != "none":
-            with world.revision(Source.manual(note="picked a date")) as rev:
-                if mode == "end":
-                    rev.end_fact(drop, now)
-                else:
-                    rev.remove_fact(drop)
+        with world.revision(Source.manual(note="picked a date")) as rev:
+            if mode == "end":
+                rev.end_fact(drop, now)
+            else:
+                rev.remove_fact(drop)
         reply: dict[str, Any] = {
             "keep_fact_id": keep,
             "drop_fact_id": drop,
-            # the mode applied: "none" for a fact that had ended already,
-            # "remove" for one that starts at or after now
+            # the mode applied: "remove" for one that starts at or after now
             "mode": mode,
             "owner_id": owner_id,
             "notes": notes,
@@ -3178,8 +3173,7 @@ class WorldsPlugin(Plugin):
         self._reply("pick_date", reply)
         owner = world.view().thing(owner_id)
         if (
-            mode != "none"
-            and owner is not None
+            owner is not None
             and not owner.is_stub
             and prose_reads(owner.kind, fact.category)
         ):

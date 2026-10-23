@@ -1864,7 +1864,8 @@ def same_offers(
 ) -> list[SameOffer]:
     """The things `name` could be the same as (`same_candidates`, the
     `near_ids` lifted, none of `exclude`), at most `SAME_CANDIDATES`, each
-    with its name, kind, candidate line and whether it has facts."""
+    with its name, kind, candidate line, whether it has facts and whether
+    it's a stub."""
 
     offers: list[SameOffer] = []
     for found in same_candidates(
@@ -1885,6 +1886,7 @@ def same_offers(
                 kind=state.kind,
                 line=candidate_line(view, state),
                 has_facts=bool(state.facts),
+                stub=state.is_stub,
             )
         )
     return offers
