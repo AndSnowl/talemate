@@ -85,13 +85,13 @@ def _prose_replies(kind: str) -> list[str]:
 
 
 def _make(
-    world, *, stub: bool = True, ashenmere_facts: bool = True, bare_kind="place"
+    world, *, stub: bool = True, ashenmere_facts: bool = True, bare_kind="lore"
 ) -> dict:
     """Stonehold, whose fact mentions the Ashenmere Caves (a place stub,
     with `stub`); Ashenmere, a place with facts (or, without
     `ashenmere_facts`, a bare stub of `bare_kind`); the Greymarch, a place.
-    A bare stub of another kind is no candidate for the place (ruling
-    C34), but accept still takes it as the owner's target."""
+    A stub's kind is a guess, so a bare stub of another kind is still a
+    candidate for the place (ruling C35)."""
 
     world.set_present(WorldDate.of(1000))
     ids: dict = {}
@@ -483,23 +483,29 @@ async def test_at_most_five_candidates(world):
         preview = await preview_thing(world, "place", "Greyholm, a town", {}, client)
 
     assert len(preview.same_as) == 5
-    # the other "Greyholm", a lore stub, is no candidate for a place (ruling
-    # C34: same kind only), and the kind is filtered before the cap
-    assert tale not in [o.thing_id for o in preview.same_as]
-    assert all(o.kind == "place" for o in preview.same_as)
+    # the other "Greyholm", a lore stub, comes first, told apart by its
+    # kind: a stub's kind is a guess, so it's offered (ruling C35)
+    top = preview.same_as[0]
+    assert (top.thing_id, top.kind, top.reason) == (tale, "lore", "aka")
+    assert all(o.kind == "place" for o in preview.same_as[1:])
     assert len({o.line for o in preview.same_as}) == 5
+    # the top candidate is a bare stub: no verdict
+    assert preview.verdict is None and _analyze_calls(client) == []
 
 
 def test_entry_candidates_keep_to_its_kind(world):
     """Ruling C34, as merge's C17: an entry's same-thing candidates are of
-    its kind, or a place and a sphere either way; a stub row keeps every
-    kind (a stub's kind is a guess)."""
+    its kind, or a place and a sphere either way -- but a stub of any kind
+    (ruling C35: a stub's kind is a guess). A stub row keeps every kind."""
 
     with world.revision(Source.manual(note="greyholm")) as rev:
         fen = rev.create_thing("place", {"name": "Greyholm Fen"})
         synod = rev.create_thing("sphere", {"name": "Greyholm Synod"})
         tale = rev.create_thing("lore", {"name": "Greyholm Tale"})
         reeve = rev.create_thing("character", {"name": "Greyholm Reeve"})
+        saga = rev.create_thing(
+            "lore", {"name": "Greyholm Saga", "stub": {"ignored": False}}
+        )
     view = world.view()
 
     def offered(kind):
@@ -508,15 +514,33 @@ def test_entry_candidates_keep_to_its_kind(world):
             for o in create.same_offers(view, "Greyholm", near_ids=[], kind=kind)
         }
 
-    assert offered(None) == {fen, synod, tale, reeve}
-    assert offered("place") == {fen, synod}
-    assert offered("sphere") == {fen, synod}
-    assert offered("lore") == {tale}
-    assert offered("character") == {reeve}
+    assert offered(None) == {fen, synod, tale, reeve, saga}
+    assert offered("place") == {fen, synod, saga}
+    assert offered("sphere") == {fen, synod, saga}
+    assert offered("lore") == {tale, saga}
+    assert offered("character") == {reeve, saga}
 
     row = create.NewName(name="Greyholm", kind="place")
     create.offer_same(view, [row], near_ids=[])
-    assert {o.thing_id for o in row.same_as} == {fen, synod, tale, reeve}
+    assert {o.thing_id for o in row.same_as} == {fen, synod, tale, reeve, saga}
+
+
+async def test_place_preview_offers_a_same_named_lore_stub(world):
+    """Ruling C35 (the re-review's case): writing the place "Ashenmere"
+    while a lore stub "Ashenmere" exists offers that stub, so the owner
+    can fill it rather than leave a duplicate and a dangling stub; saying
+    yes fills it, its id kept, as a place."""
+
+    ids = _make(world, stub=False, ashenmere_facts=False)
+    assert world.view().thing(ids["ashenmere"]).kind == "lore"
+    preview, _client = await _caves_preview(world, ids, verdict=None)
+    [offer] = preview.same_as
+    assert (offer.thing_id, offer.kind, offer.stub) == (ids["ashenmere"], "lore", True)
+
+    thing_id = accept_preview(world, preview, same_target_id=ids["ashenmere"])
+    assert thing_id == ids["ashenmere"]
+    state = world.view().thing(thing_id)
+    assert state.kind == "place" and not state.is_stub
 
 
 # --- fix round 1 -----------------------------------------------------------------
@@ -659,7 +683,7 @@ async def test_fill_item_same_links_existing(world):
 
 
 async def test_expanded_stub_onto_stub_target_folds(world):
-    ids = _make(world, stub=True, ashenmere_facts=False, bare_kind="lore")
+    ids = _make(world, stub=True, ashenmere_facts=False)
     preview, _client = await _caves_preview(world, ids, verdict=None)
     head = world.head_rev()
 
@@ -940,7 +964,7 @@ async def test_fold_recategorises_for_the_preview_kind(world):
 
 
 async def test_fold_undo(world):
-    ids = _make(world, stub=True, ashenmere_facts=False, bare_kind="lore")
+    ids = _make(world, stub=True, ashenmere_facts=False)
     preview, _client = await _caves_preview(world, ids, verdict=None)
     head = world.head_rev()
     accept_preview(world, preview, same_target_id=ids["ashenmere"])

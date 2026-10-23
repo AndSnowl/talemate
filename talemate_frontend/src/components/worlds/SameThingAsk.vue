@@ -37,6 +37,7 @@
             <span class="candidate-name">{{ offer.name }}</span>
             <v-chip size="x-small" label variant="tonal" color="muted">{{ offer.kind }}</v-chip>
             <v-chip v-if="offer.stub" size="x-small" label variant="outlined" color="foreign">stub</v-chip>
+            <span v-if="kindNote(offer)" class="text-caption text-muted" data-testid="same-kind-note">{{ kindNote(offer) }}</span>
             <span class="text-caption text-muted flex-grow-1">{{ summary(offer) }}</span>
             <span v-if="hint(offer)" class="hint text-caption" data-testid="same-hint" :title="'A hint, not a default'">
                 <v-icon size="x-small" icon="mdi-robot-outline"></v-icon>
@@ -98,7 +99,7 @@ export default {
         // the thing picked, or null for new
         chosen: { type: String, default: null },
         variant: { type: String, default: 'entry' },
-        // a row's own kind, for the note on a choice of another kind
+        // the entry's or row's own kind, for the note on another kind
         kind: { type: String, default: null },
     },
     emits: ['choose', 'promote'],
@@ -126,6 +127,10 @@ export default {
         // its candidate line without its name and kind (shown beside it)
         summary(offer) {
             return offerSummary(offer);
+        },
+        // an entry's stub candidate of another kind (ruling C35): "(a lore)"
+        kindNote(offer) {
+            return otherKindNote(this.kind, offer);
         },
         hint(offer) {
             return this.verdict?.[offer.thing_id] || null;

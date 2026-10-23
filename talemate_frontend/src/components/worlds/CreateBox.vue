@@ -200,6 +200,7 @@
             <SameThingAsk
                 v-if="preview.same_as && preview.same_as.length"
                 :name="preview.name"
+                :kind="preview.kind"
                 :offers="preview.same_as"
                 :verdict="preview.verdict"
                 :chosen="sameTarget"

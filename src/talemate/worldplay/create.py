@@ -1926,8 +1926,9 @@ def same_offers(
     with its name, kind, candidate line, whether it has facts and whether
     it's a stub. With `kind` (an entry's own question, ruling C34), only
     things that can be one entry with a `kind` thing
-    (`kinds.kinds_can_be_one`, as a merge has it), filtered before the
-    cap; a stub row passes none, its kind being a guess."""
+    (`kinds.kinds_can_be_one`, as a merge has it), and stubs of any kind
+    (ruling C35: a stub's kind is a guess), filtered before the cap; a
+    stub row passes none, its kind being a guess."""
 
     if index is None:
         index = name_index(view)
@@ -1946,7 +1947,13 @@ def same_offers(
         state = view.thing(found.thing_id)
         if state is None:
             continue
-        if kind is not None and not kinds_can_be_one(kind, state.kind):
+        # a stub's kind is only a guess (ruling C35): offered whatever it
+        # is, so the owner can fill it rather than leave a duplicate
+        if (
+            kind is not None
+            and not state.is_stub
+            and not kinds_can_be_one(kind, state.kind)
+        ):
             continue
         offers.append(
             SameOffer(
