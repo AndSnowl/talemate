@@ -635,6 +635,55 @@ async def test_broader_prose_goes_stale(world, tsardom):
     assert stale() is True
 
 
+async def test_moved_in_fact_leaves_the_new_entrys_prose_stale(world, tsardom):
+    """Final review I2: the preview's prose was written from its own facts
+    only, so with a fact moved in (every own fact still ticked) it's cached
+    as of before the accept -- it reads stale -- and the new entry goes in
+    `prose` to be written again."""
+
+    t = tsardom
+    preview, _prompt = await _zakonnik(world, t)
+    for row in preview.move_in:
+        row.ticked = row.fact_id == t.architecture
+    for fact in preview.facts:
+        fact.ticked = True
+    assert preview.prose
+    prose: list[str] = []
+    thing_id = accept_preview(world, preview, prose=prose)
+    _fact(world, thing_id, ARCHITECTURE)
+    assert thing_id in prose
+    cache = world.prose()
+    for section in preview.prose:
+        assert cache.stale(
+            thing_id,
+            section,
+            None,
+            prose_gen.staleness_also(world, thing_id, section, None),
+            prose_gen.unread_categories("lore", section),
+        )
+
+
+async def test_no_move_in_keeps_the_new_entrys_prose_current(world, tsardom):
+    t = tsardom
+    preview, _prompt = await _zakonnik(world, t)
+    for row in preview.move_in:
+        row.ticked = False
+    for fact in preview.facts:
+        fact.ticked = True
+    prose: list[str] = []
+    thing_id = accept_preview(world, preview, prose=prose)
+    assert thing_id not in prose
+    cache = world.prose()
+    for section in preview.prose:
+        assert not cache.stale(
+            thing_id,
+            section,
+            None,
+            prose_gen.staleness_also(world, thing_id, section, None),
+            prose_gen.unread_categories("lore", section),
+        )
+
+
 async def test_undo_redo_move_in(world, tsardom):
     t = tsardom
     before = {thing: _live_ids(world, thing) for thing in (t.tsardom, t.moskov)}

@@ -3449,7 +3449,9 @@ def accept_preview(
       and holder, the original removed, its overrides re-pointed, its
       links to the entry made words. One gone from its entry since the
       preview stays, with a note. The broader entry goes in `prose` when
-      its prose reads what it lost; the entry's own is the preview's.
+      its prose reads what it lost; the entry's own is the preview's,
+      written without the moved facts, so it's cached reading stale and
+      the entry goes in `prose` too.
     - With `same_target_id` ("Is this X?" -- yes) nothing new is made for
       the entry: its material goes onto X (`_accept_same`)."""
 
@@ -3556,11 +3558,20 @@ def _accept_new(
 
     # the prose was written from every fact, which is how the thing reads
     # at the open, "now" end of its timeline -- unless the owner left a
-    # fact unticked: then it describes one never written, and is cached as
-    # of before the accept, so it reads stale and is written again
+    # fact unticked (it describes one never written) or ticked a fact to
+    # move in (it never read that one): then it's cached as of before the
+    # accept, so it reads stale, and the thing goes in `prose` to be
+    # written again (final review I2)
     start, end = prose_gen.stretch_containing(world, thing_id, None)
     cache = world.prose()
-    rev = before if any(not fact.ticked for fact in preview.facts) else None
+    moved_in = any(row.ticked and row.from_id != thing_id for row in preview.move_in)
+    rev = (
+        before
+        if moved_in or any(not fact.ticked for fact in preview.facts)
+        else None
+    )
+    if moved_in and prose is not None and thing_id not in prose:
+        prose.append(thing_id)
     for section in prose_gen.sections_for(preview.kind):
         if section in preview.prose:
             cache.put(thing_id, section, start, end, preview.prose[section], rev=rev)
