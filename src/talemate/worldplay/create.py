@@ -108,6 +108,14 @@ new material onto that entry instead (`accept_preview`); a stub row the
 owner marks as some thing (`NewName.same_target_id`) links its name there
 and makes no stub.
 
+Bodies within bodies (spec goal 9, ruling C10): a new name can carry a
+`part_of`, a sphere the world has or another new thing of the same accept
+by name (the outer body the owner named, `worldplay.bodies`), and the
+preview's `refile` rows move entries the world has into it. Accept makes
+the chain outer first (`outer_first`) and files it, with the ticked
+re-file rows, in its one revision (`file_chain`); an outer body is kept
+although no text links it.
+
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -366,6 +374,9 @@ class PreviewTie(BaseModel):
     role: str
     since: WorldDate | None = None
     exceptions: list[PreviewException] = Field(default_factory=list)
+    # the part of the sphere the tie is within (a thing filed in it), or
+    # None for the sphere as a whole
+    within: str | None = None
 
 
 class CreatePreview(BaseModel):
@@ -412,6 +423,11 @@ class CreatePreview(BaseModel):
     # hint beside the question, never a default; None when not asked (the
     # top candidate or the preview has no facts) or the reply gave none
     verdict: dict[str, Verdict] | None = None
+    # entries the world has filed where an outer body the owner named goes,
+    # offered to move into it (`bodies.add_outer_body`): `{"thing_id",
+    # "from": part_of, "to": {"name", "drawer"}, "ticked"}`, all unticked
+    # until the owner ticks them
+    refile: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -2242,6 +2258,191 @@ def child_part_of(
     return None
 
 
+# --- bodies within bodies ------------------------------------------------------
+
+
+def _tidy_name(name: str) -> str:
+    return " ".join(name.split())
+
+
+def home_name(part_of: object) -> str | None:
+    """The new thing a `NewName.part_of` (or an item's, or a re-file row's
+    `to`) names, as a `name_key`, or None for a sphere the world has."""
+
+    if isinstance(part_of, dict) and isinstance(part_of.get("name"), str):
+        return name_key(part_of["name"]) or None
+    return None
+
+
+def outer_first(rows: Sequence[NewName]) -> list[NewName]:
+    """`rows` with each one another row is part of (by name) before it, so
+    a chain is made outer first: the army, then the White Talon in it."""
+
+    by_key = {name_key(row.name): row for row in rows}
+    ordered: list[NewName] = []
+    done: set[str] = set()
+
+    def visit(row: NewName, path: set[str]) -> None:
+        key = name_key(row.name)
+        if key in done or key in path:
+            return
+        path.add(key)
+        outer = home_name(row.part_of)
+        if outer is not None and outer in by_key:
+            visit(by_key[outer], path)
+        done.add(key)
+        ordered.append(row)
+
+    for row in rows:
+        visit(row, set())
+    return ordered
+
+
+def held_outers(
+    rows: Sequence[NewName],
+    items: Sequence[dict[str, Any]] = (),
+    refile: Sequence[dict[str, Any]] = (),
+) -> set[str]:
+    """The `name_key`s of the new names something this accept writes is
+    filed in: a row's, an item's or a ticked re-file row's home. Such a
+    stub is kept although no text links it (it holds its parts)."""
+
+    held = {home_name(row.part_of) for row in rows}
+    held |= {home_name(item.get("part_of")) for item in items}
+    held |= {home_name(row.get("to")) for row in refile if row.get("ticked")}
+    return {key for key in held if key is not None}
+
+
+def _made_id(made: dict[str, str], name: str) -> str | None:
+    """The id `make_stubs` (or `_row_stubs`) mapped `name` to, by its
+    written form or its `name_key`."""
+
+    found = made.get(_tidy_name(name))
+    if found is not None:
+        return found
+    key = name_key(name)
+    return next((i for form, i in made.items() if name_key(form) == key), None)
+
+
+def resolve_home(
+    part_of: object, made: dict[str, str], own: dict[str, str] | None = None
+) -> tuple[str, str] | None:
+    """`(sphere id, drawer id)` for a `part_of` naming a sphere the world has
+    or a new thing of this accept: `own` (name key -> id, the sphere or
+    entry being written), else `made`. None when it names nothing made."""
+
+    if not isinstance(part_of, dict):
+        return None
+    drawer = part_of.get("drawer")
+    drawer = drawer if isinstance(drawer, str) else UNSORTED_DRAWER_ID
+    sphere = part_of.get("sphere")
+    if isinstance(sphere, str):
+        return sphere, drawer
+    name = part_of.get("name")
+    if not isinstance(name, str):
+        return None
+    found = (own or {}).get(name_key(name)) or _made_id(made, name)
+    return (found, drawer) if found is not None else None
+
+
+def file_in(
+    rev: Any,
+    world: World,
+    before: WorldView,
+    thing_id: str,
+    home: tuple[str, str],
+    notes: list[str] | None = None,
+    *,
+    refiling: bool = False,
+) -> bool:
+    """File `thing_id` in `home` (a sphere and drawer), in `rev`, dated as
+    `set_part_of` dates a filing (`part_of_since`). The drawer is kept when
+    the sphere has it and the thing goes in it (`spheres.entry_drawer`),
+    else it's guessed: a new stub sphere has no drawers yet, so its parts
+    sit in Unsorted until it's expanded. A thing that `before` (the world
+    before the accept) has filed already stays where it is, unless
+    `refiling`; one the sphere sits in is refused (`ValueError`, so the
+    whole accept is); a kind no drawer holds, or a home that isn't a
+    sphere, is left unfiled with a note. Whether it was filed."""
+
+    live = world.view()
+    state = live.thing(thing_id)
+    sphere = live.thing(home[0])
+    if state is None:
+        return False
+    name = live.name_of(thing_id) or thing_id
+    where = live.name_of(home[0]) or home[0]
+    why: str | None = None
+    if sphere is None or not spheres.is_sphere(sphere):
+        why = f"{name} isn't filed in {where}: it isn't a sphere"
+    elif state.kind not in PART_OF_KINDS:
+        why = f"{name} isn't filed in {where}: a {state.kind} never is"
+    else:
+        held = before.thing(thing_id)
+        current = held.fields.get("part_of") if held is not None else None
+        if current is not None and not refiling:
+            if isinstance(current, dict) and current.get("sphere") == home[0]:
+                return False
+            why = f"{name} stays where it's filed, not in {where}"
+    if why is not None:
+        if notes is not None:
+            notes.append(why)
+        return False
+    if spheres.sits_in(live, home[0], thing_id):
+        raise ValueError(f"{name} can't be part of {where}: it would be inside itself")
+    drawer = spheres.entry_drawer(
+        spheres.drawers(live, home[0]), state.kind, home[1], name
+    )
+    rev.set_field(
+        thing_id,
+        "part_of",
+        {"sphere": home[0], "drawer": drawer},
+        part_of_since(world, thing_id, strict=False),
+    )
+    return True
+
+
+def file_chain(
+    rev: Any,
+    world: World,
+    before: WorldView,
+    rows: Sequence[NewName],
+    made: dict[str, str],
+    *,
+    own: dict[str, str] | None = None,
+    refile: Sequence[dict[str, Any]] = (),
+    notes: list[str] | None = None,
+) -> None:
+    """File the stubs of `rows` that carry a `part_of`, outer first, then
+    move each ticked `refile` row's thing into its outer body (`file_in`),
+    all in `rev`. A re-filed thing that's gone, or was filed elsewhere
+    since the preview, stays as it is, with a note."""
+
+    for row in outer_first(rows):
+        if row.part_of is None:
+            continue
+        thing_id = _made_id(made, row.name)
+        home = resolve_home(row.part_of, made, own)
+        if thing_id is not None and home is not None:
+            file_in(rev, world, before, thing_id, home, notes)
+    for row in refile:
+        if not row.get("ticked"):
+            continue
+        thing_id = row.get("thing_id")
+        state = before.thing(thing_id) if isinstance(thing_id, str) else None
+        home = resolve_home(row.get("to"), made, own)
+        if state is None or home is None:
+            continue
+        if state.fields.get("part_of") != row.get("from"):
+            if notes is not None:
+                notes.append(
+                    f"{before.name_of(state.id) or state.id} was filed "
+                    "elsewhere since, so it stays where it is"
+                )
+            continue
+        file_in(rev, world, before, state.id, home, notes, refiling=True)
+
+
 def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
     """A live stub of `kind` whose name or other name is `name` (ignoring
     case and a leading article), if any."""
@@ -2931,11 +3132,14 @@ def _write_preview(
             if stub is not None and stub.kind != preview.kind:
                 rev.change_stub_kind(stub.id, preview.kind)
             fold.write(rev)
+        rows = outer_first(
+            [*new_names, *(e.new for e in elsewhere if e.new is not None)]
+        )
         made = _row_stubs(
             rev,
             world,
             world.view(),
-            [*new_names, *(e.new for e in elsewhere if e.new is not None)],
+            rows,
             preview.treated_as_new,
             redirect=redirect,
             notes=notes,
@@ -2973,6 +3177,18 @@ def _write_preview(
                 preview.part_of,
                 part_of_since(world, thing_id, strict=False),
             )
+        # bodies within bodies: the new stubs' chain, outer first, and the
+        # entries the owner ticked to move into an outer body
+        file_chain(
+            rev,
+            world,
+            view,
+            rows,
+            made,
+            own={name_key(preview.name): thing_id},
+            refile=preview.refile,
+            notes=notes,
+        )
         if preview.ties:
             held = preview.fields.get("ties")
             rev.set_field(
@@ -2980,19 +3196,7 @@ def _write_preview(
                 "ties",
                 [
                     *(held if isinstance(held, list) else []),
-                    *(
-                        {
-                            "sphere": tie.sphere_id,
-                            "role": tie.role,
-                            "since": (
-                                tie.since.model_dump(mode="json")
-                                if tie.since is not None
-                                else None
-                            ),
-                            "until": None,
-                        }
-                        for tie in preview.ties
-                    ),
+                    *(_tie_value(tie, world.view()) for tie in preview.ties),
                 ],
                 None,
             )
@@ -3047,6 +3251,14 @@ def _write_preview(
             as_new=preview.treated_as_new,
         )
 
+        # an outer body holds its parts: kept with no text linking it
+        outers = held_outers(rows, refile=preview.refile)
+        linked |= {
+            stub_id
+            for row in rows
+            if name_key(row.name) in outers
+            and (stub_id := _made_id(made, row.name)) is not None
+        }
         orphans = {
             stub_id
             for stub_id in made.values()
@@ -3237,13 +3449,21 @@ def _accept_same(
     return target_id
 
 
-def _tie_value(tie: PreviewTie) -> dict[str, Any]:
-    return {
+def _tie_value(tie: PreviewTie, view: WorldView | None = None) -> dict[str, Any]:
+    """The tie as the `ties` field stores it; its `within` only when it
+    has one that's (with `view`) a live part of the sphere."""
+
+    value: dict[str, Any] = {
         "sphere": tie.sphere_id,
         "role": tie.role,
         "since": tie.since.model_dump(mode="json") if tie.since is not None else None,
         "until": None,
     }
+    if tie.within is not None and (
+        view is None or spheres.within_sphere(view, tie.within, tie.sphere_id)
+    ):
+        value["within"] = tie.within
+    return value
 
 
 def _stored(value: object, type_: str) -> object:
@@ -3344,7 +3564,7 @@ def _merge_entry(
         for t in (held_ties if isinstance(held_ties, list) else [])
         if isinstance(t, dict)
     ]
-    wanted += [_tie_value(tie) for tie in preview.ties]
+    wanted += [_tie_value(tie, view) for tie in preview.ties]
     if not wanted:
         return []
     if not spheres.acts_in_world(state):
@@ -3407,13 +3627,26 @@ def _write_same(
             plan.write(rev)
         _common_name(rev, world.view(), target_id, preview.name)
         ties = _merge_entry(rev, world, preview, target_id, notes, redirect)
+        rows = outer_first(
+            [*new_names, *(e.new for e in elsewhere if e.new is not None)]
+        )
         made = _row_stubs(
             rev,
             world,
             world.view(),
-            [*new_names, *(e.new for e in elsewhere if e.new is not None)],
+            rows,
             preview.treated_as_new,
             redirect=redirect,
+            notes=notes,
+        )
+        file_chain(
+            rev,
+            world,
+            view,
+            rows,
+            made,
+            own={name_key(preview.name): target_id},
+            refile=preview.refile,
             notes=notes,
         )
         linking = world.view()
@@ -3465,6 +3698,13 @@ def _write_same(
             picks=picks,
             as_new=preview.treated_as_new,
         )
+        outers = held_outers(rows, refile=preview.refile)
+        linked |= {
+            stub_id
+            for row in rows
+            if name_key(row.name) in outers
+            and (stub_id := _made_id(made, row.name)) is not None
+        }
         orphans = {
             thing_id
             for thing_id in made.values()

@@ -2832,6 +2832,8 @@ async def test_payload_sphere_part_of_ties(plugin):
             "role": "practitioner",
             "since": sphere["people"][0]["since"],
             "until": None,
+            "within": None,
+            "within_name": None,
         }
     ]
     assert sphere["people"][0]["since"]["label"] == "1010"
@@ -3249,6 +3251,164 @@ async def test_set_ties_on_beings(plugin, client):
     thing = await _get_thing(plugin, spirit)
     assert thing["ties"] == []
     assert s.world.view().thing(spirit).fields["ties"][0]["role"] == "patron"
+
+
+async def test_set_ties_within(plugin, client):
+    """A tie can be within a part of its sphere (curation Task 7): a live
+    thing filed in it. A tie sent without `within` keeps the part its
+    sphere's tie had."""
+
+    s = await _open_sphere_world(plugin)
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[{"sphere_id": s.dawn, "role": "keeper", "within": s.vigil}],
+    )
+    assert not _errors(plugin)
+    (tie,) = _last(plugin, "set_ties")["data"]["ties"]
+    assert (tie["within"], tie["within_name"]) == (s.vigil, "Dawn Vigil")
+    dawn = await _get_thing(plugin, s.dawn)
+    keeper = [p for p in dawn["sphere"]["people"] if p["name"] == "Maren"]
+    assert keeper[0]["within_name"] == "Dawn Vigil"
+
+    # left out: kept; sent as null: the sphere as a whole
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[{"sphere_id": s.dawn, "role": "elder keeper"}],
+    )
+    assert _last(plugin, "set_ties")["data"]["ties"][0]["within"] == s.vigil
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[{"sphere_id": s.dawn, "role": "keeper", "within": None}],
+    )
+    assert _last(plugin, "set_ties")["data"]["ties"][0]["within"] is None
+    assert "within" not in s.world.view().thing(s.maren).fields["ties"][0]
+
+    head = s.world.head_rev()
+    # the Tsardom isn't part of the Dawn; Maren is no part of anything
+    for within in (s.tsardom, s.maren, "f" * 32):
+        before = len(_errors(plugin))
+        await _act(
+            plugin,
+            "set_ties",
+            character_id=s.maren,
+            ties=[{"sphere_id": s.dawn, "role": "keeper", "within": within}],
+        )
+        assert len(_errors(plugin)) == before + 1, within
+    assert s.world.head_rev() == head
+
+
+async def test_add_outer_body(plugin, client):
+    """`add_outer_body` puts the owner's outer body around a part of a
+    preview, with no model call and nothing written; a Fill accept takes
+    its new names and re-file rows (curation Task 7, ruling C10)."""
+
+    s = await _open_sphere_world(plugin)
+    head = s.world.head_rev()
+    preview = CreatePreview(
+        kind="character",
+        prompt="A keeper of the Vigil Watch.",
+        name="Olya",
+        facts=[PreviewFact(category="background", text="Olya keeps the Vigil Watch.")],
+        prose={},
+        new_names=[{"name": "Vigil Watch", "kind": "lore"}],
+    )
+    await _act(
+        plugin,
+        "add_outer_body",
+        preview_type="create",
+        preview=preview.model_dump(mode="json"),
+        row_name="Vigil Watch",
+        outer={
+            "name": "Order of the Dawn",
+            "template": "order",
+            "part_of": {"sphere": s.dawn, "drawer": RITES},
+        },
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "add_outer_body")["data"]
+    assert reply["preview_type"] == "create"
+    rows = {n["name"]: n for n in reply["preview"]["new_names"]}
+    assert rows["Vigil Watch"]["part_of"] == {
+        "name": "Order of the Dawn",
+        "drawer": "unsorted",
+    }
+    assert rows["Order of the Dawn"]["kind"] == "sphere"
+    assert [(r["thing_id"], r["ticked"]) for r in reply["preview"]["refile"]] == [
+        (s.vigil, False)
+    ]
+    assert s.world.head_rev() == head
+    assert client.prompt_history == []
+
+    # ticked and accepted: the Vigil moves into the order
+    accepted = CreatePreview.model_validate(reply["preview"])
+    accepted.refile[0]["ticked"] = True
+    await _act(plugin, "accept_preview", preview=accepted.model_dump(mode="json"))
+    assert not _errors(plugin)
+    view = s.world.view()
+    order = next(
+        t for t in view.things("sphere") if t.fields["name"] == "Order of the Dawn"
+    )
+    assert order.fields["part_of"] == {"sphere": s.dawn, "drawer": RITES}
+    assert view.thing(s.vigil).fields["part_of"]["sphere"] == order.id
+
+    # Fill: the item goes inside a new body in the drawer it was for
+    fill = {
+        "sphere_id": s.dawn,
+        "drawer_id": DOCTRINES,
+        "items": [
+            {
+                "drawer_id": DOCTRINES,
+                "name": "Dawn Catechism",
+                "text": "The first teachings.",
+                "kind": "lore",
+                "names": [],
+                "ticked": True,
+            }
+        ],
+    }
+    await _act(
+        plugin,
+        "add_outer_body",
+        preview_type="fill",
+        preview=fill,
+        row_name="Dawn Catechism",
+        outer={"name": "Dawn Teachings", "template": "field"},
+    )
+    filled = _last(plugin, "add_outer_body")["data"]["preview"]
+    assert filled["items"][0]["part_of"]["name"] == "Dawn Teachings"
+    await _act(
+        plugin,
+        "accept_fill",
+        sphere_id=s.dawn,
+        drawer_id=DOCTRINES,
+        items=filled["items"],
+        elsewhere=filled["elsewhere"],
+        new_names=filled["new_names"],
+        refile=filled["refile"],
+    )
+    assert not _errors(plugin)
+    view = s.world.view()
+    teachings = next(
+        t for t in view.things("sphere") if t.fields["name"] == "Dawn Teachings"
+    )
+    assert teachings.fields["part_of"] == {"sphere": s.dawn, "drawer": DOCTRINES}
+
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "add_outer_body",
+        preview_type="scene",
+        preview={},
+        row_name="x",
+        outer={"name": "y", "template": "order"},
+    )
+    assert len(_errors(plugin)) == before + 1
 
 
 async def test_beings_filed_and_given_exceptions(plugin, client):

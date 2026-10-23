@@ -55,6 +55,12 @@ Connections maps inherited facts' labels:
   branch rejects it with an `about` fact overriding it (`rejects`).
 Its drawers are the parent's, plus any of a title the parent lacks.
 
+**Bodies within bodies** (`worldplay.bodies`): a named item of the core
+or Fill can be put inside an outer body the owner names; the body is a new
+name filed where the item was, the item goes inside it, and accept files
+the chain and the ticked re-file rows (`create.file_chain`) in its one
+revision.
+
 **Ending an item** (`end_item`, the owner's "End this..."): its part-of
 link or statement ends at a date, it notes when and by what, and the
 sphere that ended it gets a timeline fact linking it.
@@ -210,6 +216,14 @@ class FillPreview(BaseModel):
 
     items: list[dict[str, Any]] = Field(default_factory=list)
     elsewhere: list[ElsewhereFact] = Field(default_factory=list)
+    # the sphere and drawer filled
+    sphere_id: str | None = None
+    drawer_id: str | None = None
+    # the outer bodies the owner named (`bodies.add_outer_body`), stubs on
+    # accept, and the entries offered to move into them, as
+    # `CreatePreview` has them
+    new_names: list[NewName] = Field(default_factory=list)
+    refile: list[dict[str, Any]] = Field(default_factory=list)
 
 
 # --- reading replies -----------------------------------------------------------
@@ -1027,10 +1041,22 @@ def _write_items(
     for item in items:
         if not item.get("name"):
             continue
-        part_of = {"sphere": sphere_id, "drawer": item["drawer_id"]}
+        home_id, drawer_id = sphere_id, item["drawer_id"]
+        # an item the owner put inside an outer body this accept makes
+        # (`bodies.add_outer_body`) is filed in it, not in the sphere
+        outer = create.resolve_home(item.get("part_of"), made)
+        if outer is not None:
+            home_id = outer[0]
+            drawer_id = spheres.entry_drawer(
+                spheres.drawers(world.view(), home_id),
+                _item_kind(world.view(), item),
+                outer[1],
+                item["name"],
+            )
+        part_of = {"sphere": home_id, "drawer": drawer_id}
         thing_id = item.get("thing_id")
         if thing_id:
-            why = _unfileable(world.view(), sphere_id, thing_id)
+            why = _unfileable(world.view(), home_id, thing_id)
             if why is None:
                 since = create.part_of_since(world, thing_id, strict=False)
                 rev.set_field(thing_id, "part_of", part_of, since)
@@ -1156,6 +1182,7 @@ def _write_sphere(
     new_names: list[NewName],
     notes: list[str],
 ) -> str:
+    new_names = create.outer_first(new_names)
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
         made = create._row_stubs(
             rev, world, world.view(), new_names, preview.treated_as_new, notes=notes
@@ -1169,23 +1196,48 @@ def _write_sphere(
                 preview.part_of,
                 create.part_of_since(world, thing_id, strict=False),
             )
+        moving = {row.get("thing_id") for row in preview.refile if row.get("ticked")}
         for adopted in preview.adopted:
+            if adopted["thing_id"] in moving:
+                # into an outer body instead (`create.file_chain`)
+                continue
             rev.set_field(
                 adopted["thing_id"],
                 "part_of",
                 {"sphere": thing_id, "drawer": adopted["drawer_id"]},
                 create.part_of_since(world, adopted["thing_id"], strict=False),
             )
+        kept = [item for item in preview.items if item.get("ticked", True)]
+        # bodies within bodies: the outer bodies (outer first) in the
+        # sphere or where the owner put them, and the entries ticked to
+        # move into one
+        create.file_chain(
+            rev,
+            world,
+            view,
+            new_names,
+            made,
+            own={name_key(preview.name): thing_id},
+            refile=preview.refile,
+            notes=notes,
+        )
         linked = _write_items(
             rev,
             world,
             thing_id,
-            [item for item in preview.items if item.get("ticked", True)],
+            kept,
             made,
             picks=preview.picks,
             as_new=preview.treated_as_new,
             notes=notes,
         )
+        outers = create.held_outers(new_names, kept, preview.refile)
+        linked |= {
+            stub_id
+            for row in new_names
+            if name_key(row.name) in outers
+            and (stub_id := made.get(" ".join(row.name.split()))) is not None
+        }
         linking = world.view()
         summary = preview.prose.get("description", "").strip()
         if summary:
@@ -1568,7 +1620,9 @@ async def fill_drawer(
         flagged=sum(1 for item in items if item["repeat_of"] is not None),
         elsewhere=len(elsewhere),
     )
-    return FillPreview(items=items, elsewhere=elsewhere)
+    return FillPreview(
+        items=items, elsewhere=elsewhere, sphere_id=sphere_id, drawer_id=drawer_id
+    )
 
 
 def accept_fill(
@@ -1578,6 +1632,8 @@ def accept_fill(
     items: list[dict[str, Any]],
     elsewhere: Sequence[ElsewhereFact] = (),
     *,
+    new_names: Sequence[NewName] = (),
+    refile: Sequence[dict[str, Any]] = (),
     notes: list[str] | None = None,
 ) -> None:
     """Write Fill's ticked `items` (as `fill_drawer` gave them, less any the
@@ -1588,7 +1644,10 @@ def accept_fill(
     kept items carry become stubs, unless nothing links them. The ticked
     `elsewhere` facts go onto their targets in the same revision, as
     `create.accept_preview` writes them; one whose target was deleted is
-    dropped with a note in `notes`."""
+    dropped with a note in `notes`. `new_names` and `refile` are
+    `FillPreview`'s: the outer bodies the owner named are made first, filed
+    where they go, with the items and ticked entries put inside them
+    (`create.file_chain`), in the same revision."""
 
     view = world.view()
     _sphere_state(view, sphere_id)
@@ -1600,34 +1659,41 @@ def accept_fill(
     ]
     others = create.live_elsewhere(view, elsewhere, {sphere_id}, notes)
     elsewhere_names = [e.new for e in others if e.new is not None]
-    new_names: list[NewName] = []
+    item_names: list[NewName] = list(new_names)
     for item in items:
         for raw in item.get("names") or []:
             new_name = NewName.model_validate(raw)
-            if all(name_key(n.name) != name_key(new_name.name) for n in new_names):
-                new_names.append(new_name)
+            if all(name_key(n.name) != name_key(new_name.name) for n in item_names):
+                item_names.append(new_name)
+    rows = create.outer_first(item_names)
 
     while True:
         try:
             with world.revision(Source.manual(note=_FILLED_NOTE)) as rev:
                 written: list[str] = []
+                chain = create.outer_first([*rows, *elsewhere_names])
                 made = create._row_stubs(
-                    rev,
-                    world,
-                    world.view(),
-                    [*new_names, *elsewhere_names],
-                    (),
-                    notes=written,
+                    rev, world, world.view(), chain, (), notes=written
                 )
                 stubs = dict(made)
+                create.file_chain(
+                    rev, world, view, chain, made, refile=refile, notes=written
+                )
                 linked = _write_items(rev, world, sphere_id, items, made, notes=written)
                 linked |= create.write_elsewhere(rev, world.view(), view, others, made)
-                unlinked = _orphans(view, stubs, new_names, linked)
+                outers = create.held_outers(chain, items, refile)
+                linked |= {
+                    stub_id
+                    for row in chain
+                    if name_key(row.name) in outers
+                    and (stub_id := made.get(" ".join(row.name.split()))) is not None
+                }
+                unlinked = _orphans(view, stubs, rows, linked)
                 if unlinked:
                     raise create._UnlinkedNames([n.name for n in unlinked])
             break
         except create._UnlinkedNames as unlinked_names:
-            new_names = _without_unlinked(new_names, unlinked_names)
+            rows = _without_unlinked(rows, unlinked_names)
     if notes is not None:
         notes.extend(dict.fromkeys(written))
     log.info(

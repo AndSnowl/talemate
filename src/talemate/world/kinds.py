@@ -15,6 +15,13 @@ Every kind also has three fields of its own:
   instead: the thing is part of the sphere, in no drawer yet (a child
   expanded before its sphere has drawers).
 
+A character's (or real being's) `ties` are a list of `{"sphere": <32-hex>,
+"role": str, "since": date|null, "until": date|null}`, each with an
+optional `"within"`: the thing id of the part of that sphere it belongs
+in (the White Talon of the Tsar's Army), never the sphere itself. Whether
+it's live and part of the sphere is read through a view
+(`spheres.within_sphere`).
+
 A `being` (a god, a spirit, a legendary creature) has an `existence`:
 `real` (it acts in the world like a character: it can be cast in scenes
 and hold ties), `believed` (only ever spoken of) or `undecided` (treated
@@ -494,15 +501,24 @@ def _validate_ties(field: str, value: object) -> None:
     for tie in value:
         if (
             not isinstance(tie, dict)
-            or set(tie) != {"sphere", "role", "since", "until"}
+            or set(tie) - {"within"} != {"sphere", "role", "since", "until"}
             or not isinstance(tie.get("sphere"), str)
             or not _THING_ID_RE.match(tie["sphere"])
             or not isinstance(tie.get("role"), str)
+            or not (
+                tie.get("within") is None
+                or (
+                    isinstance(tie["within"], str)
+                    and _THING_ID_RE.match(tie["within"])
+                    and tie["within"] != tie["sphere"]
+                )
+            )
         ):
             raise ValueError(
                 f"{field!r} entries must be "
                 '{"sphere": <32-hex>, "role": str, "since": WorldDate|null, '
-                '"until": WorldDate|null}'
+                '"until": WorldDate|null}, and may have "within": <32-hex>|null '
+                "(an item of that sphere, not the sphere itself)"
             )
         _validate_world_date_or_null(field, "since", tie.get("since"))
         _validate_world_date_or_null(field, "until", tie.get("until"))

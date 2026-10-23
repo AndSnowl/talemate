@@ -89,7 +89,12 @@ class NewName(BaseModel):
     holds the other ways the text writes it that aren't other names: the
     name without its article ("Night of Feathers" for "The Night of
     Feathers"), or the part of it the text uses ("Vladislav I" for "Tsar
-    Vladislav I"). A `sphere` guess carries its `template` guess, if any."""
+    Vladislav I"). A `sphere` guess carries its `template` guess, if any.
+
+    `part_of` is where its stub is filed on accept (bodies within bodies):
+    `{"sphere": <id>, "drawer": <id>}`, a sphere the world has, or
+    `{"name": <name>, "drawer": <id>}`, a thing the same accept makes (an
+    outer body, or the sphere being made); None files it nowhere."""
 
     name: str
     kind: str
@@ -100,6 +105,7 @@ class NewName(BaseModel):
     # answer: None (the default) is "new", a stub on accept
     same_as: list[SameOffer] = []
     same_target_id: str | None = None
+    part_of: dict[str, str] | None = None
 
 
 def _norm(text: str) -> str:

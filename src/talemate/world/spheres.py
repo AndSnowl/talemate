@@ -18,7 +18,8 @@ sits in.
 People come from character ties (a character's `ties` field), not from a
 list on the sphere, so a branch's members aren't its parent's. Exceptions
 are the character's `ties` facts filed under the tie (origin `tie`, ruling
-P22).
+P22). A tie can be `within` one part of its sphere: a thing filed in it,
+directly or through other parts (`within_sphere`).
 
 A sphere's summary (ruling P21) is its `about` fact whose origin marks it
 `summary`; its description prose is written from it first (`summary`).
@@ -139,6 +140,8 @@ class Tie(BaseModel):
     role: str
     since: WorldDate | None
     until: WorldDate | None
+    # the part of the sphere the tie is within (`within_sphere`), or None
+    within: str | None = None
 
 
 def is_sphere(state: ThingState) -> bool:
@@ -503,7 +506,34 @@ def acts_in_world(state: ThingState) -> bool:
     )
 
 
-def _ties(state: ThingState) -> list[Tie]:
+def within_sphere(view: WorldView, thing_id: str, sphere_id: str) -> bool:
+    """Whether `thing_id` is a live thing inside the sphere: filed in it,
+    or in a thing filed in it, and so on up its `part_of` links (the White
+    Talon in the Tsar's Army), each thing once. A sphere is never within
+    itself."""
+
+    seen: set[str] = set()
+    current: str | None = thing_id
+    while current is not None and current not in seen:
+        seen.add(current)
+        state = view.thing(current)
+        if state is None:
+            return False
+        link = _part_of(state)
+        if link is None:
+            return False
+        if link[0] == sphere_id:
+            return current != sphere_id and view.thing(sphere_id) is not None
+        current = link[0]
+    return False
+
+
+def _ties(state: ThingState, view: WorldView | None = None) -> list[Tie]:
+    """The thing's ties, each `within` kept, given a `view`, only while
+    that part is live and inside the tie's sphere (`within_sphere`): one
+    deleted, or moved out, reads as a tie to the sphere as a whole.
+    Without one, `within` is left out."""
+
     value = state.fields.get("ties")
     if not acts_in_world(state) or not isinstance(value, list):
         return []
@@ -514,6 +544,13 @@ def _ties(state: ThingState) -> list[Tie]:
         sphere, role = raw.get("sphere"), raw.get("role")
         if not isinstance(sphere, str) or not isinstance(role, str):
             continue
+        within = raw.get("within")
+        if not (
+            view is not None
+            and isinstance(within, str)
+            and within_sphere(view, within, sphere)
+        ):
+            within = None
         found.append(
             Tie(
                 character_id=state.id,
@@ -521,6 +558,7 @@ def _ties(state: ThingState) -> list[Tie]:
                 role=role,
                 since=_date(raw.get("since")),
                 until=_date(raw.get("until")),
+                within=within,
             )
         )
     return found
@@ -538,7 +576,8 @@ def _tie_live(tie: Tie, at: WorldDate | None) -> bool:
 
 
 def ties_of(view: WorldView, character_id: str, *, live: bool = False) -> list[Tie]:
-    """The character's (or real being's) ties, in its `ties` field's order;
+    """The character's (or real being's) ties, in its `ties` field's order,
+    each with the part of its sphere it's `within`, if any;
     with `live`, only those that hold at `view.at`. A tie to a sphere
     that's since been deleted is still given. A being that isn't real has
     none: its stored ties are kept, hidden."""
@@ -546,7 +585,7 @@ def ties_of(view: WorldView, character_id: str, *, live: bool = False) -> list[T
     state = view.thing(character_id)
     if state is None:
         return []
-    found = _ties(state)
+    found = _ties(state, view)
     if live:
         found = [tie for tie in found if _tie_live(tie, view.at)]
     return found
@@ -554,7 +593,8 @@ def ties_of(view: WorldView, character_id: str, *, live: bool = False) -> list[T
 
 def people(view: WorldView, sphere_id: str) -> list[Tie]:
     """The ties pointing at the sphere that hold at `view.at`, in the order
-    the characters (and real beings) were made. A branch's people are its
+    the characters (and real beings) were made, each with the part of the
+    sphere it's `within`, if any. A branch's people are its
     own, not its parent's."""
 
     characters = sorted(
@@ -564,7 +604,7 @@ def people(view: WorldView, sphere_id: str) -> list[Tie]:
     return [
         tie
         for character in characters
-        for tie in _ties(character)
+        for tie in _ties(character, view)
         if tie.sphere_id == sphere_id and _tie_live(tie, view.at)
     ]
 

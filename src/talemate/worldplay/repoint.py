@@ -7,8 +7,8 @@ revision, so one undo restores it all:
 - every fact link to it, keeping its words (a link in the target's own
   facts becomes those words, plain: a thing never links to itself);
 - every field that points at it (`thing`, `things`, `shares`), every
-  thing filed in it (`part_of`) and every tie to it (`ties`), at each
-  story date the field holds it, and the exceptions filed under such a
+  thing filed in it (`part_of`) and every tie to it or `within` it
+  (`ties`), at each story date the field holds it, and the exceptions filed under such a
   tie (their origin `tie`);
 - the stub's own facts, copied to the target as new facts with their
   dates and origin (a category the target's kind lacks becomes its
@@ -132,6 +132,23 @@ def _drawer_for(view: WorldView, sphere_id: str, drawer_id: str, kind: str) -> s
     return drawer_id
 
 
+def _repointed_tie(tie: object, stub_id: str, target_id: str) -> object:
+    """A stored tie with the stub, as its sphere or the part it's
+    `within`, made the target. A tie whose part would become its sphere
+    is within no part."""
+
+    if not isinstance(tie, dict):
+        return tie
+    moved = dict(tie)
+    if moved.get("sphere") == stub_id:
+        moved["sphere"] = target_id
+    if moved.get("within") == stub_id:
+        moved["within"] = target_id
+    if "within" in moved and moved["within"] == moved.get("sphere"):
+        moved["within"] = None
+    return moved
+
+
 def _field_uses(
     world: World,
     view: WorldView,
@@ -172,15 +189,22 @@ def _field_uses(
                     ),
                 }
             elif field == "ties":
-                if not isinstance(value, list) or not any(
+                if not isinstance(value, list):
+                    continue
+                to_stub = any(
                     isinstance(tie, dict) and tie.get("sphere") == stub.id
                     for tie in value
-                ):
+                )
+                within_stub = any(
+                    isinstance(tie, dict) and tie.get("within") == stub.id
+                    for tie in value
+                )
+                if not (to_stub or within_stub):
                     continue
-                if not is_sphere:
+                if to_stub and not is_sphere:
                     blocked.append(f"{label} needs a sphere")
                     continue
-                tied = any(
+                tied = to_stub and any(
                     isinstance(tie, dict) and tie.get("sphere") == target.id
                     for tie in value
                 )
@@ -190,9 +214,7 @@ def _field_uses(
                         f" {view.name_of(target.id)} is kept"
                     )
                 new = [
-                    {**tie, "sphere": target.id}
-                    if isinstance(tie, dict) and tie.get("sphere") == stub.id
-                    else tie
+                    _repointed_tie(tie, stub.id, target.id)
                     for tie in value
                     if not (
                         tied and isinstance(tie, dict) and tie.get("sphere") == stub.id

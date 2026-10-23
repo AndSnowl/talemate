@@ -104,13 +104,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
 - Spheres (`talemate.world.spheres`): the thing payload has `sphere`
   (`null`, or `{template, agent, drawers: [{id, type, title, inherited,
   items: [{thing_id, fact_id, name, segments, inherited, stub}]}], people:
-  [{character_id, name, role, since, until}], territory: [{id, name}],
+  [{character_id, name, role, since, until, within, within_name}],
+  territory: [{id, name}],
   timeline: [{fact_id, date, segments}], branches: [{id, name}], parent:
   {id, name} | null}`; an item in no drawer the sphere has is in a last
   `unsorted` drawer), `part_of` (`null`, or `{sphere_id, sphere_name,
   drawer_id, drawer_title}`, Unsorted's title for a drawer that's gone)
   and, for a character, `ties` (`[{sphere_id, sphere_name, role, since,
-  until, exceptions: [{fact_id, segments}]}]`). `list_things {kind:
+  until, within, within_name, exceptions: [{fact_id, segments}]}]`). `list_things {kind:
   "sphere"}` lists place spheres too, each with its `template`, and adds
   `groups: [{template, things}]`. `preview_sphere {template, prompt,
   fields, stub_id, picks, new_names, promote_id}` and `preview_branch
@@ -120,12 +121,19 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `fill_drawer {sphere_id, drawer_id}` answers `{sphere_id, drawer_id,
   items, elsewhere}` (or `fill_failed`) and `accept_fill {sphere_id,
   drawer_id, items, elsewhere}` writes the ticked ones, answering with the
-  sphere and `notes` (an elsewhere fact whose target was deleted). `add_statement {sphere_id, drawer_id, text, picks,
+  sphere and `notes` (an elsewhere fact whose target was deleted).
+  `add_outer_body {preview_type: "create" | "sphere" | "fill", preview,
+  row_name, outer: {name, template, part_of}}` puts the outer body the
+  owner named around a part of a preview (`worldplay.bodies`), with no
+  model call, and answers `{preview_type, preview}`; the preview's
+  `refile` rows are accepted with it (Fill's `accept_fill` takes
+  `new_names` and `refile`). `add_statement {sphere_id, drawer_id, text, picks,
   new_names, spans, at}` writes a statement by hand into a drawer that
   holds items (own or inherited; not Unsorted), linked like `add_fact`,
   and answers with the sphere. `set_drawers {sphere_id, drawers}`, `set_part_of
   {thing_id, sphere_id|null, drawer_id}`, `set_ties {character_id, ties:
-  [{sphere_id, role, since, until}]}`, `add_exception {character_id,
+  [{sphere_id, role, since, until, within}]}` (`within`, a part of the
+  sphere the tie is in, kept when left out), `add_exception {character_id,
   sphere_id, text, rejects: {thing_id}|{fact_id}|null}` and `end_item
   {sphere_id, thing_id|fact_id, at, by}` answer with the thing edited (the
   sphere, for `end_item`). Prose is refreshed only when rendered text
@@ -201,6 +209,7 @@ from talemate.world.timeline import TimelineEntry
 from talemate.world.view import FactState, Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay import spheres as sphereplay
+from talemate.worldplay.bodies import OuterBody, add_outer_body
 from talemate.worldplay.characters import age_in_years
 from talemate.worldplay.create import (
     CREATE_KINDS,
@@ -467,6 +476,20 @@ class AcceptFillPayload(FillDrawerPayload):
     items: list[dict[str, Any]]
     # `fill_drawer`'s facts about other entries, as the owner left them
     elsewhere: list[ElsewhereFact] = pydantic.Field(default_factory=list)
+    # the outer bodies the owner named and the re-file rows
+    # (`add_outer_body`), as it left them
+    new_names: list[NewName] = pydantic.Field(default_factory=list)
+    refile: list[dict[str, Any]] = pydantic.Field(default_factory=list)
+
+
+class AddOuterBodyPayload(pydantic.BaseModel):
+    # which preview it is: `preview_thing`'s ("create"), `preview_sphere`'s
+    # or `preview_branch`'s ("sphere"), or Fill's ("fill": `{sphere_id,
+    # drawer_id, items, elsewhere, new_names, refile}`)
+    preview_type: str
+    preview: dict[str, Any]
+    row_name: str
+    outer: OuterBody
 
 
 class DrawerIn(pydantic.BaseModel):
@@ -508,6 +531,9 @@ class TieIn(pydantic.BaseModel):
     role: str = ""
     since: dict | None = None
     until: dict | None = None
+    # the part of the sphere it's within (a thing filed in it); left out,
+    # a tie to the same sphere keeps the part it had
+    within: str | None = None
 
 
 class SetTiesPayload(pydantic.BaseModel):
@@ -888,6 +914,8 @@ def _sphere_out(
                 "role": tie.role,
                 "since": _date_out(calendar, tie.since),
                 "until": _date_out(calendar, tie.until),
+                "within": tie.within,
+                "within_name": view.name_of(tie.within) if tie.within else None,
             }
             for tie in spheres.people(view, sphere_id)
         ],
@@ -971,6 +999,8 @@ def _ties_out(
                 "role": tie.role,
                 "since": _date_out(calendar, tie.since),
                 "until": _date_out(calendar, tie.until),
+                "within": tie.within,
+                "within_name": view.name_of(tie.within) if tie.within else None,
                 "exceptions": [
                     {"fact_id": fact.fact_id, "segments": links.segments(fact.text)}
                     for fact in exceptions
@@ -1766,6 +1796,8 @@ class WorldsPlugin(Plugin):
             payload.drawer_id,
             payload.items,
             payload.elsewhere,
+            new_names=payload.new_names,
+            refile=payload.refile,
             notes=notes,
         )
         self._reply(
@@ -1773,6 +1805,33 @@ class WorldsPlugin(Plugin):
             {
                 **self._thing_payload(world, payload.sphere_id, None),
                 "notes": notes,
+            },
+        )
+
+    async def handle_add_outer_body(self, data: dict):
+        """Put the outer body the owner named around a part of a preview
+        (`bodies.add_outer_body`): no model call, nothing written. Answers
+        `add_outer_body {preview_type, preview}`, the preview with the part
+        filed in the body, the body a new name and the entries filed where
+        it goes as unticked `refile` rows."""
+
+        payload = AddOuterBodyPayload(**data)
+        world = self._require_world()
+        preview: CreatePreview | sphereplay.FillPreview
+        if payload.preview_type == "create":
+            preview = CreatePreview.model_validate(payload.preview)
+        elif payload.preview_type == "sphere":
+            preview = sphereplay.SpherePreview.model_validate(payload.preview)
+        elif payload.preview_type == "fill":
+            preview = sphereplay.FillPreview.model_validate(payload.preview)
+        else:
+            raise ValueError(f"no such preview type: {payload.preview_type!r}")
+        preview = add_outer_body(world, preview, payload.row_name, payload.outer)
+        self._reply(
+            "add_outer_body",
+            {
+                "preview_type": payload.preview_type,
+                "preview": preview.model_dump(mode="json"),
             },
         )
 
@@ -1880,6 +1939,13 @@ class WorldsPlugin(Plugin):
                 raise ValueError("only a real being can be tied to a sphere")
         elif state is None or state.kind != "character":
             raise ValueError(f"not a character: {payload.character_id}")
+        stored = state.fields.get("ties")
+        # the part each sphere's stored tie is within, kept for a tie sent
+        # without `within` (a client that doesn't know it)
+        had: dict[str, str] = {}
+        for raw in stored if isinstance(stored, list) else []:
+            if isinstance(raw, dict) and isinstance(raw.get("within"), str):
+                had.setdefault(str(raw.get("sphere")), raw["within"])
         ties = []
         for tie in payload.ties:
             self._require_sphere(world, tie.sphere_id)
@@ -1890,15 +1956,25 @@ class WorldsPlugin(Plugin):
                 and since.instant > until.instant
             ):
                 raise ValueError("a tie can't end before it starts")
-            ties.append(
-                {
-                    "sphere": tie.sphere_id,
-                    "role": tie.role.strip(),
-                    "since": since.model_dump(mode="json") if since else None,
-                    "until": until.model_dump(mode="json") if until else None,
-                }
-            )
-        stored = state.fields.get("ties")
+            value: dict[str, Any] = {
+                "sphere": tie.sphere_id,
+                "role": tie.role.strip(),
+                "since": since.model_dump(mode="json") if since else None,
+                "until": until.model_dump(mode="json") if until else None,
+            }
+            if "within" in tie.model_fields_set:
+                within = tie.within
+                if within is not None and not spheres.within_sphere(
+                    view, within, tie.sphere_id
+                ):
+                    raise ValueError(
+                        f"a tie can only be within a part of its sphere: {within}"
+                    )
+            else:
+                within = had.get(tie.sphere_id)
+            if within is not None:
+                value["within"] = within
+            ties.append(value)
         for raw in stored if isinstance(stored, list) else []:
             sphere_id = raw.get("sphere") if isinstance(raw, dict) else None
             sphere = view.thing(sphere_id) if isinstance(sphere_id, str) else None

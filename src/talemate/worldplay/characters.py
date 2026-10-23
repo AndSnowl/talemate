@@ -387,7 +387,10 @@ def mid_sentence_name(name: str) -> str:
 def tie_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
     """One line per tie of the character's that holds at `view.at`, e.g.
     "Practitioner of the White Dawn (since 1010), but: doesn't believe
-    snowy owl-folk are superior": the role capitalised, "(since <year>)"
+    snowy owl-folk are superior": the role capitalised "of" the sphere, or,
+    for a tie within a part of it, "in" the sphere and ", within <part>"
+    ("Trooper in the Tsar's Army, within the White Talon (since 1012)");
+    "(since <year>)"
     when the tie has a since, and its exceptions (`spheres.exceptions`, in
     the order they were written) joined with "; ". A tie stores its
     sphere's id, not its name, so a tie to a sphere that's since been
@@ -400,7 +403,15 @@ def tie_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
         if view.thing(tie.sphere_id) is None or not name:
             continue
         role = tie.role.strip() or "member"
-        line = f"{role[0].upper()}{role[1:]} of {mid_sentence_name(name)}"
+        role = f"{role[0].upper()}{role[1:]}"
+        within = view.name_of(tie.within) if tie.within is not None else None
+        if within:
+            line = (
+                f"{role} in {mid_sentence_name(name)}, "
+                f"within {mid_sentence_name(within)}"
+            )
+        else:
+            line = f"{role} of {mid_sentence_name(name)}"
         if tie.since is not None:
             year = WorldDate(instant=tie.since.instant, precision=Precision.YEAR)
             line += f" (since {calendar.format(year)})"
