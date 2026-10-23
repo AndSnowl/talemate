@@ -780,8 +780,15 @@ def test_curation_settings(app, page):
     expect(reach).to_have_value("1", timeout=TIMEOUT_MS)
     reach.fill("2")
     settings.get_by_label("Repeat threshold").fill("0.5")
+    date = settings.get_by_label("Date disagreement at")
+    expect(date).to_have_value("0.5")
+    date.fill("0.6")
     settings.get_by_role("button", name="Save").click()
     sent = _wait_sent(page, "set_curation")
-    assert sent["settings"] == {"reach": 2, "repeat_threshold": 0.5}
+    assert sent["settings"] == {
+        "reach": 2,
+        "repeat_threshold": 0.5,
+        "date_threshold": 0.6,
+    }
     expect(settings.get_by_test_id("curation-saved")).to_be_visible()
     assert page.console_errors == []

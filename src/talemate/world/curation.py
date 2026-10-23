@@ -21,5 +21,11 @@ class CurationSettings(BaseModel):
     # probe's runs: at 0.4 the detector unticked 56 of 176 good facts, at
     # 0.7 it unticks 7, nearly all copies of a line already written)
     repeat_untick_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    # word overlap at which two dated facts with different years read as
+    # disagreeing on a timeline (and for pick_date); the merge's
+    # contradiction pairs keep repeat_threshold (ruling C14). At 0.4 the
+    # old acceptance world flagged 18 pairs, about 13 false; at 0.5, 7,
+    # every true one kept (ruling C31)
+    date_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     # how far out a timeline gathers lines from
     timeline_reach: int = Field(default=2, ge=0, le=3)

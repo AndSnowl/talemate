@@ -279,7 +279,7 @@ def _latest(
         sphere_id,
         shown,
         reach=settings.timeline_reach,
-        threshold=settings.repeat_threshold,
+        threshold=settings.date_threshold,
         things=things,
     )
     head = 1 if (summary or spheres.summary(view, sphere_id)) else 0

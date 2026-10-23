@@ -41,6 +41,7 @@ const KNOBS = [
     { key: 'facts_per_entry', label: 'Facts per entry', min: 0, max: null, step: 1, integer: true, help: 'The most facts of each it brings.' },
     { key: 'repeat_threshold', label: 'Repeat threshold', min: 0, max: 1, step: 0.05, integer: false, help: 'Word overlap at which a new fact shows as one the world already holds.' },
     { key: 'repeat_untick_threshold', label: 'Untick repeats at', min: 0, max: 1, step: 0.05, integer: false, help: 'Word overlap at which a repeat arrives unticked; below it, it stays ticked.' },
+    { key: 'date_threshold', label: 'Date disagreement at', min: 0, max: 1, step: 0.05, integer: false, help: 'Word overlap at which two dated facts with different years show as disagreeing on a timeline.' },
     { key: 'timeline_reach', label: 'Timeline reach (steps)', min: 0, max: 3, step: 1, integer: true, help: 'How far out a timeline gathers dated facts from its parts.' },
 ];
 

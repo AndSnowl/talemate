@@ -227,7 +227,8 @@ def test_curation_settings_round_trip(world, tmp_path):
         defaults.repeat_threshold,
         defaults.timeline_reach,
         defaults.repeat_untick_threshold,
-    ) == (1, 12, 6, 0.4, 2, 0.7)
+        defaults.date_threshold,
+    ) == (1, 12, 6, 0.4, 2, 0.7, 0.5)
 
     tuned = CurationSettings(
         reach=3,
@@ -236,6 +237,7 @@ def test_curation_settings_round_trip(world, tmp_path):
         repeat_threshold=0.5,
         timeline_reach=1,
         repeat_untick_threshold=0.8,
+        date_threshold=0.6,
     )
     world.set_curation(tuned)
     assert world.curation() == tuned

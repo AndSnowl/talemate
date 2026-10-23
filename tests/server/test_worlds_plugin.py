@@ -5017,6 +5017,81 @@ async def test_pick_date(plugin, monkeypatch):
     assert scheduled[-1] == s.tsardom
 
 
+# the old acceptance world's texts (final review I1): the Conclave's 642
+# founding against the 947 rediscovery is a false pair at 0.4 (overlap
+# 0.43), the Codex's compiling in 217 against 312 a true one (0.63)
+CONCLAVE_642 = (
+    "The Runeweavers' Conclave is founded in Stonehold to regulate and teach "
+    "the art."
+)
+REDISCOVERY_947 = (
+    "In the year 947, a party of Runeweavers from the Conclave in Stonehold "
+    "rediscovered the Ashenmere rune dialect after following a trail of "
+    "fragments preserved in marginal notes of surviving texts."
+)
+CODEX_217 = (
+    "The First Codex of Aelberth is compiled, standardizing 24 foundational runes."
+)
+CODEX_312 = (
+    "The First Codex of Aelberth is the foundational compendium of "
+    "Runeweaving, compiled to standardize the art and codify its governing "
+    "principles."
+)
+
+
+async def test_timeline_disagreements_use_date_threshold(plugin):
+    """Ruling C31: a timeline's disagreements, and `pick_date`, are worked
+    out at the world's `date_threshold` (default 0.5), not the repeat
+    threshold: the Conclave's 642 founding isn't flagged against the 947
+    rediscovery, the Codex's 217 compiling still is against 312. Lowered
+    to 0.4, the Conclave pair is back."""
+
+    s = await _open_sphere_world(plugin)
+    world = s.world
+    with world.revision(Source.manual(note="runes")) as rev:
+        founded = rev.add_fact(
+            s.tsardom, "history", CONCLAVE_642, valid_from=WorldDate.of(642)
+        )
+        found = rev.add_fact(
+            s.tsardom, "history", REDISCOVERY_947, valid_from=WorldDate.of(947)
+        )
+        c217 = rev.add_fact(
+            s.tsardom, "history", CODEX_217, valid_from=WorldDate.of(217)
+        )
+        c312 = rev.add_fact(
+            s.tsardom, "history", CODEX_312, valid_from=WorldDate.of(312)
+        )
+    assert world.curation().date_threshold == 0.5
+    assert world.curation().repeat_threshold == 0.4
+
+    lines = {
+        line["fact_id"]: line["disagrees_with"]
+        for line in (await _get_thing(plugin, s.tsardom))["entry_timeline"]
+    }
+    assert lines[founded] == [] and lines[found] == []
+    assert lines[c217] == [c312] and lines[c312] == [c217]
+
+    head = world.head_rev()
+    errors = len(_errors(plugin))
+    await _act(
+        plugin, "pick_date", keep_fact_id=found, drop_fact_id=founded, mode="end"
+    )
+    assert len(_errors(plugin)) == errors + 1
+    assert world.head_rev() == head
+
+    await _act(plugin, "set_curation", settings={"date_threshold": 0.4})
+    lines = {
+        line["fact_id"]: line["disagrees_with"]
+        for line in (await _get_thing(plugin, s.tsardom))["entry_timeline"]
+    }
+    assert lines[founded] == [found]
+    await _act(
+        plugin, "pick_date", keep_fact_id=found, drop_fact_id=founded, mode="end"
+    )
+    assert len(_errors(plugin)) == errors + 1
+    assert world.head_rev() == head + 1
+
+
 async def test_get_and_set_curation(plugin):
     """`get_curation` answers the world's curation knobs; `set_curation`
     changes the ones given, validated by `CurationSettings`, and answers
@@ -5031,6 +5106,7 @@ async def test_get_and_set_curation(plugin):
         "facts_per_entry": 6,
         "repeat_threshold": 0.4,
         "repeat_untick_threshold": 0.7,
+        "date_threshold": 0.5,
         "timeline_reach": 2,
     }
     assert got["defaults"] == got["settings"]
@@ -5045,7 +5121,16 @@ async def test_get_and_set_curation(plugin):
     )
     assert s.world.curation().reach == 2
 
-    for bad in ({"reach": 4}, {"repeat_threshold": 1.5}, {"nearness": 1}):
+    await _act(plugin, "set_curation", settings={"date_threshold": 0.6})
+    assert not _errors(plugin)
+    assert s.world.curation().date_threshold == 0.6
+
+    for bad in (
+        {"reach": 4},
+        {"repeat_threshold": 1.5},
+        {"date_threshold": -0.1},
+        {"nearness": 1},
+    ):
         before = len(_errors(plugin))
         await _act(plugin, "set_curation", settings=bad)
         assert len(_errors(plugin)) == before + 1

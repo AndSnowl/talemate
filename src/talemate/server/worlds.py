@@ -39,7 +39,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   holder of a religion's or culture's beliefs statement included), or
   `null`. Every kind's payload has `entry_timeline`
   (`world.timelines.entry_timeline` at the world's `timeline_reach`,
-  disagreements worked out): `[{fact_id, owner_id, owner_name, date,
+  disagreements worked out at its `date_threshold`, ruling C31): `[{fact_id, owner_id, owner_name, date,
   until, segments, here, disagrees_with}]` in date order -- its own
   dated facts and, for a sphere, the lines it gathers (`here` false,
   `owner_*` whose they are); `until` is set once the fact has ended (the
@@ -1659,7 +1659,7 @@ class WorldsPlugin(Plugin):
                 view,
                 thing_id,
                 reach=settings.timeline_reach,
-                threshold=settings.repeat_threshold,
+                threshold=settings.date_threshold,
                 things=things,
             )
         ]
@@ -3123,8 +3123,8 @@ class WorldsPlugin(Plugin):
         now ("end") or remove it ("remove"), in one revision. Refused,
         writing nothing, unless the two are a disagreeing pair now
         (worked out again here, never taken from the client), at the
-        world's repeat threshold; a fact that has ended is in no pair
-        (ruling C22), so one ended already is refused. A dropped fact that
+        world's `date_threshold` (ruling C31); a fact that has ended is in
+        no pair (ruling C22), so one ended already is refused. A dropped fact that
         starts at or after now is removed instead of ended, with a note. Answers `{keep_fact_id,
         drop_fact_id, mode, owner_id, notes}` (`owner_id` the dropped
         fact's entry), with `thing`, the payload of `thing_id` at `at`,
@@ -3140,7 +3140,7 @@ class WorldsPlugin(Plugin):
         found = view.fact(drop)
         if view.fact(keep) is None or found is None:
             raise KeyError("no such fact")
-        threshold = world.curation().repeat_threshold
+        threshold = world.curation().date_threshold
         if not disagreeing_dates(view, [keep, drop], threshold):
             raise ValueError("those two facts don't disagree on the year")
         owner_id, fact = found

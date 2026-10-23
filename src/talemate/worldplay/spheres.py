@@ -1513,7 +1513,7 @@ def _timeline_lines(
             sphere_id,
             shown,
             reach=settings.timeline_reach,
-            threshold=settings.repeat_threshold,
+            threshold=settings.date_threshold,
         )
     ]
 
