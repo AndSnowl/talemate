@@ -408,7 +408,8 @@ class CreatePreview(BaseModel):
     # the world's thing of that name, and a stub of their own if listed
     treated_as_new: list[str] = Field(default_factory=list)
     # the sphere drawer an expanded stub joins (`child_part_of`), as the
-    # `part_of` field holds it, or None
+    # `part_of` field holds it, or None; or `{"name", "drawer"}`, the
+    # outer body the owner put the entry itself in (`bodies`, ruling C11)
     part_of: dict[str, str] | None = None
     # a character's proposed ties to spheres in its context, with their
     # exceptions
@@ -2298,17 +2299,31 @@ def outer_first(rows: Sequence[NewName]) -> list[NewName]:
     return ordered
 
 
+def _refiled(row: NewName, refile: Sequence[dict[str, Any]]) -> bool:
+    """Whether the row is a thing the world has (the owner marked it the
+    same as one) that a re-file row moves, ticked or not: that row, not
+    the new name's `part_of`, says whether it goes in."""
+
+    return row.same_target_id is not None and any(
+        r.get("thing_id") == row.same_target_id for r in refile
+    )
+
+
 def held_outers(
     rows: Sequence[NewName],
     items: Sequence[dict[str, Any]] = (),
     refile: Sequence[dict[str, Any]] = (),
+    homes: Sequence[object] = (),
 ) -> set[str]:
     """The `name_key`s of the new names something this accept writes is
-    filed in: a row's, an item's or a ticked re-file row's home. Such a
-    stub is kept although no text links it (it holds its parts)."""
+    filed in: a row's (unless a re-file row moves it, `_refiled`), an
+    item's, a ticked re-file row's, or one of `homes` (the entry's own
+    `part_of`). Such a stub is kept although no text links it (it holds
+    its parts)."""
 
-    held = {home_name(row.part_of) for row in rows}
+    held = {home_name(row.part_of) for row in rows if not _refiled(row, refile)}
     held |= {home_name(item.get("part_of")) for item in items}
+    held |= {home_name(home) for home in homes}
     held |= {home_name(row.get("to")) for row in refile if row.get("ticked")}
     return {key for key in held if key is not None}
 
@@ -2415,11 +2430,12 @@ def file_chain(
 ) -> None:
     """File the stubs of `rows` that carry a `part_of`, outer first, then
     move each ticked `refile` row's thing into its outer body (`file_in`),
-    all in `rev`. A re-filed thing that's gone, or was filed elsewhere
-    since the preview, stays as it is, with a note."""
+    all in `rev`. A row a re-file row moves (`_refiled`) is left to it. A
+    re-filed thing that's gone, or filed elsewhere since the preview (or
+    by this revision), stays as it is, with a note."""
 
     for row in outer_first(rows):
-        if row.part_of is None:
+        if row.part_of is None or _refiled(row, refile):
             continue
         thing_id = _made_id(made, row.name)
         home = resolve_home(row.part_of, made, own)
@@ -2429,18 +2445,42 @@ def file_chain(
         if not row.get("ticked"):
             continue
         thing_id = row.get("thing_id")
-        state = before.thing(thing_id) if isinstance(thing_id, str) else None
+        live = world.view()
+        state = live.thing(thing_id) if isinstance(thing_id, str) else None
         home = resolve_home(row.get("to"), made, own)
         if state is None or home is None:
             continue
         if state.fields.get("part_of") != row.get("from"):
             if notes is not None:
                 notes.append(
-                    f"{before.name_of(state.id) or state.id} was filed "
+                    f"{live.name_of(state.id) or state.id} was filed "
                     "elsewhere since, so it stays where it is"
                 )
             continue
         file_in(rev, world, before, state.id, home, notes, refiling=True)
+
+
+def file_entry(
+    rev: Any,
+    world: World,
+    before: WorldView,
+    thing_id: str,
+    part_of: dict[str, str] | None,
+    made: dict[str, str],
+    notes: list[str] | None = None,
+    *,
+    refiling: bool = True,
+) -> None:
+    """File the entry a preview writes in the outer body its `part_of`
+    names (`{"name", "drawer"}`, ruling C11), in `rev`: moved out of where
+    its stub was filed (`refiling`), else only when it's filed nowhere. A
+    `part_of` naming a sphere the world has is written by the caller."""
+
+    if part_of is None or "name" not in part_of:
+        return
+    home = resolve_home(part_of, made)
+    if home is not None:
+        file_in(rev, world, before, thing_id, home, notes, refiling=refiling)
 
 
 def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
@@ -3170,7 +3210,7 @@ def _write_preview(
                 for other in fold.aka_added:
                     _common_name(rev, world.view(), thing_id, other)
             rev.remove_field_value(thing_id, "stub", None)
-        if preview.part_of is not None:
+        if preview.part_of is not None and "sphere" in preview.part_of:
             rev.set_field(
                 thing_id,
                 "part_of",
@@ -3189,6 +3229,9 @@ def _write_preview(
             refile=preview.refile,
             notes=notes,
         )
+        # the entry itself inside an outer body (ruling C11), taken out of
+        # where its stub was filed
+        file_entry(rev, world, view, thing_id, preview.part_of, made, notes)
         if preview.ties:
             held = preview.fields.get("ties")
             rev.set_field(
@@ -3252,7 +3295,7 @@ def _write_preview(
         )
 
         # an outer body holds its parts: kept with no text linking it
-        outers = held_outers(rows, refile=preview.refile)
+        outers = held_outers(rows, refile=preview.refile, homes=[preview.part_of])
         linked |= {
             stub_id
             for row in rows
@@ -3649,6 +3692,10 @@ def _write_same(
             refile=preview.refile,
             notes=notes,
         )
+        # the entry inside an outer body: the target, unless it's filed
+        file_entry(
+            rev, world, view, target_id, preview.part_of, made, notes, refiling=False
+        )
         linking = world.view()
         state = linking.thing(target_id)
         assert state is not None
@@ -3698,7 +3745,7 @@ def _write_same(
             picks=picks,
             as_new=preview.treated_as_new,
         )
-        outers = held_outers(rows, refile=preview.refile)
+        outers = held_outers(rows, refile=preview.refile, homes=[preview.part_of])
         linked |= {
             stub_id
             for row in rows

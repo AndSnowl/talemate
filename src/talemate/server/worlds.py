@@ -118,12 +118,13 @@ through `signal_operation_failed` (an `operation_done` envelope with
   {parent_id, prompt}` run in the background like `preview_thing`
   (answering with `{preview}` data, or `preview_sphere_failed` /
   `preview_branch_failed`); `accept_sphere {preview}` writes either.
-  `fill_drawer {sphere_id, drawer_id}` answers `{sphere_id, drawer_id,
-  items, elsewhere}` (or `fill_failed`) and `accept_fill {sphere_id,
-  drawer_id, items, elsewhere}` writes the ticked ones, answering with the
+  `fill_drawer {sphere_id, drawer_id}` answers the `FillPreview`,
+  `{sphere_id, drawer_id, items, elsewhere, new_names, refile}` (or
+  `fill_failed`) and `accept_fill {sphere_id,
+  drawer_id, items, elsewhere, new_names, refile}` writes the ticked ones, answering with the
   sphere and `notes` (an elsewhere fact whose target was deleted).
   `add_outer_body {preview_type: "create" | "sphere" | "fill", preview,
-  row_name, outer: {name, template, part_of}}` puts the outer body the
+  row_name, outer: {name, template, part_of}, as_sphere}` puts the outer body the
   owner named around a part of a preview (`worldplay.bodies`), with no
   model call, and answers `{preview_type, preview}`; the preview's
   `refile` rows are accepted with it (Fill's `accept_fill` takes
@@ -490,6 +491,8 @@ class AddOuterBodyPayload(pydantic.BaseModel):
     preview: dict[str, Any]
     row_name: str
     outer: OuterBody
+    # a new name the preview lists of another kind may become the body
+    as_sphere: bool = False
 
 
 class DrawerIn(pydantic.BaseModel):
@@ -1008,6 +1011,23 @@ def _ties_out(
             }
         )
     return found
+
+
+def _kept_within(held: list[dict], value: dict[str, Any], position: int) -> str | None:
+    """The part a stored tie was `within`, for the same tie sent without
+    one: the stored tie of the same sphere, role and since, else the one
+    at the same place in the list when it's to the same sphere."""
+
+    key = (value["sphere"], value["role"], value["since"])
+    match = next(
+        (t for t in held if (t.get("sphere"), t.get("role"), t.get("since")) == key),
+        None,
+    )
+    if match is None and position < len(held):
+        if held[position].get("sphere") == value["sphere"]:
+            match = held[position]
+    within = match.get("within") if match is not None else None
+    return within if isinstance(within, str) else None
 
 
 def _new_drawer_ids(drawers: list[DrawerIn]) -> list[dict[str, str]]:
@@ -1749,8 +1769,8 @@ class WorldsPlugin(Plugin):
 
     async def handle_fill_drawer(self, data: dict):
         """New items for one drawer, in the background: answers
-        `fill_drawer {sphere_id, drawer_id, items}` or `fill_failed`;
-        writes nothing."""
+        `fill_drawer` (the `FillPreview`: `{sphere_id, drawer_id, items,
+        elsewhere, new_names, refile}`) or `fill_failed`; writes nothing."""
 
         payload = FillDrawerPayload(**data)
         world = self._require_world()
@@ -1768,12 +1788,8 @@ class WorldsPlugin(Plugin):
                 "fill_drawer",
                 "fill_failed",
                 "Error filling a sphere drawer",
-                success_data=lambda filled: {
-                    "sphere_id": payload.sphere_id,
-                    "drawer_id": payload.drawer_id,
-                    "items": filled.items,
-                    "elsewhere": [e.model_dump(mode="json") for e in filled.elsewhere],
-                },
+                # the whole Fill preview, sent back as it is on accept
+                success_data=lambda filled: filled.model_dump(mode="json"),
                 failure_data={
                     "sphere_id": payload.sphere_id,
                     "drawer_id": payload.drawer_id,
@@ -1826,7 +1842,13 @@ class WorldsPlugin(Plugin):
             preview = sphereplay.FillPreview.model_validate(payload.preview)
         else:
             raise ValueError(f"no such preview type: {payload.preview_type!r}")
-        preview = add_outer_body(world, preview, payload.row_name, payload.outer)
+        preview = add_outer_body(
+            world,
+            preview,
+            payload.row_name,
+            payload.outer,
+            as_sphere=payload.as_sphere,
+        )
         self._reply(
             "add_outer_body",
             {
@@ -1940,14 +1962,13 @@ class WorldsPlugin(Plugin):
         elif state is None or state.kind != "character":
             raise ValueError(f"not a character: {payload.character_id}")
         stored = state.fields.get("ties")
-        # the part each sphere's stored tie is within, kept for a tie sent
-        # without `within` (a client that doesn't know it)
-        had: dict[str, str] = {}
-        for raw in stored if isinstance(stored, list) else []:
-            if isinstance(raw, dict) and isinstance(raw.get("within"), str):
-                had.setdefault(str(raw.get("sphere")), raw["within"])
+        held = (
+            [t for t in stored if isinstance(t, dict)]
+            if isinstance(stored, list)
+            else []
+        )
         ties = []
-        for tie in payload.ties:
+        for position, tie in enumerate(payload.ties):
             self._require_sphere(world, tie.sphere_id)
             since, until = _date_in(tie.since), _date_in(tie.until)
             if (
@@ -1971,7 +1992,8 @@ class WorldsPlugin(Plugin):
                         f"a tie can only be within a part of its sphere: {within}"
                     )
             else:
-                within = had.get(tie.sphere_id)
+                # a client that doesn't send it keeps the stored tie's
+                within = _kept_within(held, value, position)
             if within is not None:
                 value["within"] = within
             ties.append(value)

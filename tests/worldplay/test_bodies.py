@@ -662,3 +662,363 @@ def test_repoint_carries_within(world):
 
     (tie,) = spheres.ties_of(world.view(), ids["ivan"])
     assert tie.within == ids["talon"]
+
+
+# --- fix round 1 -------------------------------------------------------------
+
+
+def _talon_stub(world, ids):
+    """The White Talon, a lore stub filed in the Tsardom's Military."""
+
+    with world.revision(Source.manual(note="talon")) as rev:
+        ids["talon"] = rev.create_thing(
+            "lore",
+            {
+                "name": "White Talon",
+                "stub": {"ignored": False},
+                "part_of": {"sphere": ids["tsardom"], "drawer": MILITARY},
+            },
+        )
+    return ids["talon"]
+
+
+def _part_of(world, thing_id, at=None):
+    state = world.view(at).thing(thing_id)
+    return state.fields.get("part_of") if state is not None else None
+
+
+def test_core_outer_in_a_world_sphere_offers_refile_rows(world):
+    """A new sphere's core whose item goes inside a body filed in the
+    Tsardom's Military: that drawer's entries are offered."""
+
+    ids = _tsardom(world)
+    preview = SpherePreview(
+        kind="sphere",
+        prompt="An order of riders.",
+        name="Order of the Talon",
+        facts=[],
+        prose={},
+        template="order",
+        agent=False,
+        drawers=[_drawer(MILITARY, "structure", "Ranks")],
+        items=[
+            {
+                "drawer_id": MILITARY,
+                "name": "White Talon",
+                "text": "A regiment of winged riders.",
+                "kind": "lore",
+            }
+        ],
+    )
+    preview = add_outer_body(world, preview, "White Talon", _in_military(ids))
+    assert [r["thing_id"] for r in preview.refile] == [ids["frosted"], ids["guard"]]
+
+
+def test_expanding_a_stub_puts_it_inside_an_outer_body(world):
+    """Ruling C11, the owner's case: expanding the White Talon stub and
+    saying it belongs to an army. The army goes where the stub was filed,
+    the Talon inside it, and the drawer's other entries are offered."""
+
+    ids = _tsardom(world)
+    talon = _talon_stub(world, ids)
+    preview = CreatePreview(
+        kind="lore",
+        prompt="The White Talon, a regiment.",
+        name="White Talon",
+        facts=[PreviewFact(category="general", text="A regiment of winged riders.")],
+        prose={},
+        stub_id=talon,
+    )
+    preview = add_outer_body(
+        world, preview, "White Talon", OuterBody(name=ARMY, template="order")
+    )
+    assert preview.part_of == {"name": ARMY, "drawer": UNSORTED_DRAWER_ID}
+    assert _row(preview, ARMY).part_of == {
+        "sphere": ids["tsardom"],
+        "drawer": MILITARY,
+    }
+    # the Talon itself isn't offered
+    assert [r["thing_id"] for r in preview.refile] == [ids["frosted"], ids["guard"]]
+    for row in preview.refile:
+        row["ticked"] = row["thing_id"] == ids["frosted"]
+    head = world.head_rev()
+
+    assert accept_preview(world, preview) == talon
+
+    assert world.head_rev() == head + 1
+    army = _named(world.view(), ARMY)
+    assert army.fields["part_of"] == {"sphere": ids["tsardom"], "drawer": MILITARY}
+    assert _part_of(world, talon) == {"sphere": army.id, "drawer": UNSORTED_DRAWER_ID}
+    assert _part_of(world, ids["frosted"])["sphere"] == army.id
+    assert not world.view().thing(talon).is_stub
+
+    # one undo reverses it all
+    world.undo([head + 1])
+    view = world.view()
+    assert view.thing(army.id) is None
+    assert view.thing(talon).is_stub
+    assert _part_of(world, talon) == {"sphere": ids["tsardom"], "drawer": MILITARY}
+    assert _part_of(world, ids["frosted"]) == {
+        "sphere": ids["tsardom"],
+        "drawer": MILITARY,
+    }
+
+
+def test_expanding_a_stub_sphere_inside_an_outer_body(world):
+    ids = _tsardom(world)
+    talon = _talon_stub(world, ids)
+    preview = SpherePreview(
+        kind="sphere",
+        prompt="The White Talon, a regiment.",
+        name="White Talon",
+        facts=[],
+        prose={},
+        template="order",
+        agent=False,
+        drawers=[_drawer("d4d4d4d4", "structure", "Squadrons")],
+        stub_id=talon,
+    )
+    preview = add_outer_body(
+        world, preview, "White Talon", OuterBody(name=ARMY, template="order")
+    )
+    assert _row(preview, ARMY).part_of == {
+        "sphere": ids["tsardom"],
+        "drawer": MILITARY,
+    }
+    assert [r["thing_id"] for r in preview.refile] == [ids["frosted"], ids["guard"]]
+
+    assert accept_sphere(world, preview) == talon
+
+    view = world.view()
+    army = _named(view, ARMY)
+    assert view.thing(talon).kind == "sphere"
+    assert _part_of(world, talon) == {"sphere": army.id, "drawer": UNSORTED_DRAWER_ID}
+    assert army.fields["part_of"] == {"sphere": ids["tsardom"], "drawer": MILITARY}
+
+
+def test_same_thing_accept_refiles(world):
+    """Accepting onto an existing entry ("Is this X?" -- yes) makes the
+    chain and moves the ticked entries too."""
+
+    ids = _tsardom(world)
+    with world.revision(Source.manual()) as rev:
+        regiment = rev.create_thing("lore", {"name": "Talon Regiment"})
+        rev.add_fact(regiment, "general", "Riders of the north.")
+    preview = CreatePreview(
+        kind="lore",
+        prompt="The Talon Regiment.",
+        name="Talon Regiment",
+        facts=[PreviewFact(category="general", text="It trains with the White Talon.")],
+        prose={},
+        new_names=[NewName(name="White Talon", kind="lore")],
+    )
+    preview = add_outer_body(world, preview, "White Talon", _in_military(ids))
+    for row in preview.refile:
+        row["ticked"] = row["thing_id"] == ids["frosted"]
+
+    accept_preview(world, preview, same_target_id=regiment)
+
+    view = world.view()
+    army = _named(view, ARMY)
+    assert _part_of(world, ids["frosted"]) == {
+        "sphere": army.id,
+        "drawer": UNSORTED_DRAWER_ID,
+    }
+    assert _named(view, "White Talon").fields["part_of"]["sphere"] == army.id
+
+
+def test_merge_keeps_within(world):
+    ids = _army(world)
+    with world.revision(Source.manual()) as rev:
+        pyotr = rev.create_thing("character", {"name": "Pyotr"})
+        rev.add_fact(pyotr, "background", "A rider of the north.")
+    preview = CreatePreview(
+        kind="character",
+        prompt="Pyotr, a rider.",
+        name="Pyotr",
+        facts=[PreviewFact(category="background", text="Pyotr rides at dawn.")],
+        prose={},
+        ties=[
+            PreviewTie(
+                sphere_id=ids["army"], sphere=ARMY, role="rider", within=ids["talon"]
+            )
+        ],
+    )
+    accept_preview(world, preview, same_target_id=pyotr)
+    (tie,) = world.view().thing(pyotr).fields["ties"]
+    assert tie["within"] == ids["talon"]
+
+
+def test_ticked_adopted_entry_is_not_adopted_too(world):
+    """Expanding a stub into a sphere: an entry it adopts, ticked to move
+    into the outer body, is filed there once, not also in its drawer."""
+
+    world.set_present(WorldDate.of(1020))
+    ranks = "e5e5e5e5"
+    with world.revision(Source.manual()) as rev:
+        host = rev.create_thing(
+            "lore", {"name": "Tsar's Host", "stub": {"ignored": False}}
+        )
+        banner = rev.create_thing(
+            "lore",
+            {
+                "name": "Banner Guard",
+                "part_of": {"sphere": host, "drawer": UNSORTED_DRAWER_ID},
+            },
+        )
+        rev.add_fact(banner, "general", "Carries the banners.")
+    preview = SpherePreview(
+        kind="sphere",
+        prompt="The Tsar's Host.",
+        name="Tsar's Host",
+        facts=[],
+        prose={},
+        template="order",
+        agent=False,
+        drawers=[_drawer(ranks, "structure", "Ranks")],
+        items=[
+            {
+                "drawer_id": ranks,
+                "name": "White Talon",
+                "text": "A regiment of winged riders.",
+                "kind": "lore",
+            }
+        ],
+        adopted=[{"thing_id": banner, "drawer_id": ranks}],
+        stub_id=host,
+    )
+    preview = add_outer_body(
+        world,
+        preview,
+        "White Talon",
+        OuterBody(name="First Division", template="order"),
+    )
+    assert [r["thing_id"] for r in preview.refile] == [banner]
+    preview.refile[0]["ticked"] = True
+    head = world.head_rev()
+
+    accept_sphere(world, preview)
+
+    division = _named(world.view(), "First Division")
+    assert division.fields["part_of"] == {"sphere": host, "drawer": ranks}
+    assert _part_of(world, banner) == {
+        "sphere": division.id,
+        "drawer": UNSORTED_DRAWER_ID,
+    }
+    # written once in the accept
+    moves = [
+        entry
+        for entry in world.timeline(banner)
+        if entry.change == "field"
+        and entry.field == "part_of"
+        and entry.source_rev == head + 1
+    ]
+    assert len(moves) == 1
+
+
+def test_chain_accept_with_refile_undo_and_redo(world):
+    ids = _tsardom(world)
+    preview = add_outer_body(world, _trooper(), "White Talon", _in_military(ids))
+    for row in preview.refile:
+        row["ticked"] = row["thing_id"] == ids["frosted"]
+    head = world.head_rev()
+    accept_preview(world, preview)
+    army = _named(world.view(), ARMY)
+
+    undone = world.undo([head + 1])
+    assert world.view().thing(army.id) is None
+    assert _part_of(world, ids["frosted"])["sphere"] == ids["tsardom"]
+    assert not [
+        s for s in world.view().things() if world.view().name_of(s.id) == "White Talon"
+    ]
+
+    world.undo([undone.undo_rev])
+    view = world.view()
+    assert view.thing(army.id).fields["part_of"] == {
+        "sphere": ids["tsardom"],
+        "drawer": MILITARY,
+    }
+    assert _part_of(world, ids["frosted"]) == {
+        "sphere": army.id,
+        "drawer": UNSORTED_DRAWER_ID,
+    }
+    assert _named(view, "White Talon").fields["part_of"]["sphere"] == army.id
+
+
+def test_add_outer_body_refuses_cycles_and_kinds(world):
+    ids = _army(world)
+    # through the preview's names: the army can't go inside the Talon
+    preview = add_outer_body(world, _trooper(), "White Talon", _in_military(ids))
+    with pytest.raises(ValueError, match="inside"):
+        add_outer_body(
+            world, preview, ARMY, OuterBody(name="White Talon", template="order")
+        )
+    # through the world: the White Talon sits inside the army
+    preview = _trooper()
+    preview.new_names.append(NewName(name=ARMY, kind="sphere"))
+    with pytest.raises(ValueError, match="inside"):
+        add_outer_body(
+            world, preview, ARMY, OuterBody(name="The White Talon", template="order")
+        )
+    # named as the entry being made
+    with pytest.raises(ValueError):
+        add_outer_body(
+            world,
+            _trooper(),
+            "White Talon",
+            OuterBody(name="Ivan Petrov", template="order"),
+        )
+
+
+def test_add_outer_body_upgrades_another_kind_only_when_asked(world):
+    ids = _tsardom(world)
+    preview = _trooper()
+    preview.new_names.append(NewName(name="Northern Host", kind="lore"))
+    with pytest.raises(ValueError, match="lore"):
+        add_outer_body(
+            world,
+            preview,
+            "White Talon",
+            OuterBody(name="Northern Host", template="order"),
+        )
+    preview = add_outer_body(
+        world,
+        preview,
+        "White Talon",
+        OuterBody(name="Northern Host", template="order"),
+        as_sphere=True,
+    )
+    host = _row(preview, "Northern Host")
+    assert (host.kind, host.template) == ("sphere", "order")
+    assert ids
+
+
+def test_part_marked_same_as_a_filed_entry_is_offered_to_move(world):
+    """A new name the owner marked as the Zakonnik, filed in the Laws: it
+    isn't left where it is with an empty body around nothing; it's an
+    unticked re-file row, and the body is made only once it's ticked."""
+
+    ids = _tsardom(world)
+    preview = _trooper()
+    preview.new_names[0].same_target_id = ids["zakonnik"]
+    preview = add_outer_body(world, preview, "White Talon", _in_military(ids))
+    rows = {r["thing_id"]: r for r in preview.refile}
+    assert rows[ids["zakonnik"]]["from"] == {"sphere": ids["tsardom"], "drawer": LAWS}
+    assert rows[ids["zakonnik"]]["ticked"] is False
+
+    # unticked: no empty body
+    accept_preview(world, preview.model_copy(deep=True))
+    view = world.view()
+    assert not [s for s in view.things() if view.name_of(s.id) == ARMY]
+    assert _part_of(world, ids["zakonnik"])["drawer"] == LAWS
+
+    ticked = preview.model_copy(deep=True)
+    for row in ticked.refile:
+        row["ticked"] = row["thing_id"] == ids["zakonnik"]
+    ticked.name = "Ivan Volkov"
+    accept_preview(world, ticked)
+    army = _named(world.view(), ARMY)
+    assert _part_of(world, ids["zakonnik"]) == {
+        "sphere": army.id,
+        "drawer": UNSORTED_DRAWER_ID,
+    }

@@ -1189,7 +1189,7 @@ def _write_sphere(
         )
         stubs = dict(made)
         thing_id = _write_core(rev, view, preview, target)
-        if preview.part_of is not None:
+        if preview.part_of is not None and "sphere" in preview.part_of:
             rev.set_field(
                 thing_id,
                 "part_of",
@@ -1221,6 +1221,8 @@ def _write_sphere(
             refile=preview.refile,
             notes=notes,
         )
+        # the sphere itself inside an outer body (ruling C11)
+        create.file_entry(rev, world, view, thing_id, preview.part_of, made, notes)
         linked = _write_items(
             rev,
             world,
@@ -1231,12 +1233,14 @@ def _write_sphere(
             as_new=preview.treated_as_new,
             notes=notes,
         )
-        outers = create.held_outers(new_names, kept, preview.refile)
+        outers = create.held_outers(
+            new_names, kept, preview.refile, homes=[preview.part_of]
+        )
         linked |= {
             stub_id
             for row in new_names
             if name_key(row.name) in outers
-            and (stub_id := made.get(" ".join(row.name.split()))) is not None
+            and (stub_id := create._made_id(made, row.name)) is not None
         }
         linking = world.view()
         summary = preview.prose.get("description", "").strip()
@@ -1686,7 +1690,7 @@ def accept_fill(
                     stub_id
                     for row in chain
                     if name_key(row.name) in outers
-                    and (stub_id := made.get(" ".join(row.name.split()))) is not None
+                    and (stub_id := create._made_id(made, row.name)) is not None
                 }
                 unlinked = _orphans(view, stubs, rows, linked)
                 if unlinked:

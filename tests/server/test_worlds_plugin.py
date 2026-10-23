@@ -3011,15 +3011,11 @@ async def test_fill_drawer_then_accept(plugin, client):
         assert [i["text"] for i in filled["items"]] == [
             "Smiths sing to the anvil when the bells ring."
         ]
+        # the whole Fill preview, to send back as it is (curation Task 7)
+        assert (filled["new_names"], filled["refile"]) == ([], [])
         assert s.world.head_rev() == head
 
-        await _act(
-            plugin,
-            "accept_fill",
-            sphere_id=s.dawn,
-            drawer_id=RITES,
-            items=filled["items"],
-        )
+        await _act(plugin, "accept_fill", **filled)
         assert not _errors(plugin)
         dawn = _last(plugin, "accept_fill")["data"]
         rites = next(d for d in dawn["sphere"]["drawers"] if d["id"] == RITES)
@@ -3288,6 +3284,43 @@ async def test_set_ties_within(plugin, client):
     )
     assert _last(plugin, "set_ties")["data"]["ties"][0]["within"] is None
     assert "within" not in s.world.view().thing(s.maren).fields["ties"][0]
+
+    # each tie keeps its own part: two ties to one sphere
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[
+            {"sphere_id": s.dawn, "role": "keeper", "within": s.vigil},
+            {"sphere_id": s.dawn, "role": "pilgrim", "within": s.peak},
+        ],
+    )
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[
+            {"sphere_id": s.dawn, "role": "pilgrim"},
+            {"sphere_id": s.dawn, "role": "keeper"},
+        ],
+    )
+    assert [
+        (t["role"], t["within"]) for t in _last(plugin, "set_ties")["data"]["ties"]
+    ] == [("pilgrim", s.peak), ("keeper", s.vigil)]
+    # a renamed role keeps the part at its place in the list
+    await _act(
+        plugin,
+        "set_ties",
+        character_id=s.maren,
+        ties=[
+            {"sphere_id": s.dawn, "role": "elder pilgrim"},
+            {"sphere_id": s.dawn, "role": "keeper"},
+        ],
+    )
+    assert [t["within"] for t in _last(plugin, "set_ties")["data"]["ties"]] == [
+        s.peak,
+        s.vigil,
+    ]
 
     head = s.world.head_rev()
     # the Tsardom isn't part of the Dawn; Maren is no part of anything
