@@ -407,6 +407,88 @@ def test_move_in_on_part_of_entry(app, page, fixed_preview):
     assert page.console_errors == []
 
 
+RAISED = "The Tsar raised a standing army of owl-folk regiments."
+
+
+def test_sphere_stub_expansion_moves_in(app, page, fixed_sphere):
+    """Ruling C32: a sphere stub filed in the Tsardom's Military, expanded,
+    is offered the Tsardom's facts to move in, unticked and never
+    suggested; the one the owner ticks moves onto the new sphere."""
+
+    name = _world_name("Host")
+    tsardom = {
+        **TSARDOM,
+        "facts": [
+            *TSARDOM["facts"],
+            {"category": "timeline", "text": RAISED, "since": 996},
+        ],
+    }
+    army = {
+        "kind": "sphere",
+        "name": "The Tsar's Army",
+        "stub": "live",
+        "fields": {"template": "order"},
+        "part_of": {"sphere": "Tsardom of Moscavia", "drawer": MILITARY},
+    }
+    world = seed_fm_world(app.root, name, present_year=1026, things=[tsardom, army])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-sphere").click()
+    page.get_by_test_id("stub-item").filter(has_text="The Tsar's Army").click()
+    stub_page = _opened(page, "The Tsar's Army")
+    stub_page.get_by_test_id("stub-panel").get_by_role("button", name="Expand").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("from-stub").wait_for(state="visible", timeout=TIMEOUT_MS)
+    fixed_sphere(
+        {
+            "sphere": {
+                "name": "The Tsar's Army",
+                "summary": "The Tsardom's standing host.",
+                "aka": [],
+                "timeline": [],
+                "drawers": [{"type": "structure", "title": "Regiments"}],
+                "items": [
+                    {"drawer": "Regiments", "text": "Every regiment flies white."}
+                ],
+                "names": [],
+            }
+        }
+    )
+    box.get_by_role("button", name="Create").click()
+    preview = page.get_by_test_id("sphere-preview")
+    preview.wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    move_in = preview.get_by_test_id("move-in")
+    move_in.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "from Tsardom of Moscavia" in move_in.inner_text()
+    rows = move_in.get_by_test_id("move-in-row")
+    expect(rows).to_have_count(2)
+    assert not any(row.get_by_role("checkbox").is_checked() for row in rows.all())
+    expect(move_in.get_by_test_id("move-in-suggested")).to_have_count(0)
+    rows.filter(has_text="standing army").get_by_role("checkbox").check()
+    expect(preview.get_by_test_id("accept-counts")).to_contain_text("moves 1 in")
+    preview.get_by_role("button", name="Accept").click()
+    sphere = _opened(page, "The Tsar's Army")
+    sent = _sent(page, "accept_sphere")[-1]["preview"]["move_in"]
+    tsardom_id = world.things["Tsardom of Moscavia"]
+    assert sorted((row["from_id"], row["ticked"]) for row in sent) == [
+        (tsardom_id, False),
+        (tsardom_id, True),
+    ]
+    sphere.get_by_text(RAISED).first.wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    # gone from the Tsardom: its Timeline still gathers it, from the army
+    page.get_by_test_id("kind-sphere").click()
+    tsardom_page = _open_exactly(page, "Tsardom of Moscavia")
+    tsardom_page.get_by_text("A cold realm of the north.").first.wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    line = tsardom_page.get_by_test_id("entry-timeline").get_by_test_id("timeline-row")
+    expect(line.filter(has_text=RAISED)).to_contain_text("from The Tsar's Army")
+    assert page.console_errors == []
+
+
 CAVES = {
     "kind": "place",
     "name": "The Ashenmere Caves",
