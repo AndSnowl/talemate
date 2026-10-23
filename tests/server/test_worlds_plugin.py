@@ -3757,8 +3757,11 @@ async def test_fixed_fill_answers_without_a_model(plugin, tmp_path, monkeypatch)
     await _act(plugin, "fill_drawer", sphere_id=s.dawn, drawer_id=RITES)
     await _drain(plugin)
     items = _last(plugin, "fill_drawer")["data"]["items"]
-    # the real parsing: the repeat of the Dawn Vigil is dropped
-    assert [i["name"] for i in items] == ["The Ember Rite"]
+    # the real parsing: the repeat of the Dawn Vigil comes last, unticked
+    assert [(i["name"], i["ticked"]) for i in items] == [
+        ("The Ember Rite", True),
+        ("Dawn Vigil", False),
+    ]
     assert items[0]["drawer_id"] == RITES
     assert items[0]["kind"] == "lore"
 

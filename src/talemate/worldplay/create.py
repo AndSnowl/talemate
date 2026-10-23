@@ -129,7 +129,7 @@ from talemate.world.kinds import (
 )
 from talemate.world.nearness import near
 from talemate.world.refs import parse_refs, ref
-from talemate.world.repeats import find_repeats
+from talemate.world.repeats import content_words, find_repeats
 from talemate.world.names import (
     ARTICLES,
     everyday_name,
@@ -1429,6 +1429,12 @@ def parse_elsewhere(
     return _grouped(found)
 
 
+# the fewest content words (`repeats.content_words`) a repeat needs to
+# arrive unticked: a short fact ("Pines.") is wholly held by many a
+# longer one, so it's only flagged
+UNTICK_MIN_WORDS = 3
+
+
 def repeat_flags(
     view: WorldView,
     texts: Sequence[str],
@@ -1439,7 +1445,8 @@ def repeat_flags(
     holds most of its words at the world's `repeat_threshold` or above
     (`repeats.find_repeats`), as `{fact_id, owner_id, owner_name, text,
     score}`, or `None`; and whether it starts ticked -- unticked only when
-    the overlap reaches `repeat_untick_threshold`."""
+    the overlap reaches `repeat_untick_threshold` and the text has at least
+    `UNTICK_MIN_WORDS` content words."""
 
     flags: list[tuple[dict | None, bool]] = [(None, True)] * len(texts)
     owners = list(dict.fromkeys(owner_ids))
@@ -1454,7 +1461,8 @@ def repeat_flags(
                 "text": found.text,
                 "score": found.score,
             },
-            found.score < settings.repeat_untick_threshold,
+            found.score < settings.repeat_untick_threshold
+            or len(content_words(texts[found.index])) < UNTICK_MIN_WORDS,
         )
     return flags
 
@@ -2265,16 +2273,22 @@ async def preview_thing(
     # and the named things
     settings = world.curation()
     first: list[str] = []
+    focus: list[str] = []
     if stub is not None:
-        home = _part_of_link(stub)
+        link = _part_of_link(stub)
+        home = link[0] if link is not None else (part_of or {}).get("sphere")
         if home is not None:
-            first.append(home[0])
-        elif part_of is not None:
-            first.append(part_of["sphere"])
+            first.append(home)
         if gathered is not None:
             first += [m.owner_id for m in gathered.mentioned]
+        # an ignored stub is in no link (nearness skips it): its sphere
+        # stands in for it
+        if not stub.stub_ignored:
+            focus.append(stub.id)
+        elif home is not None:
+            focus.append(home)
     first += list(picks.values())
-    focus = [*([stub.id] if stub is not None else []), *picks.values()]
+    focus += list(picks.values())
     near_ids = nearby_ids(
         view, focus, first, settings, {stub.id} if stub is not None else set()
     )
@@ -2631,6 +2645,7 @@ def accept_preview(
     elsewhere = live_elsewhere(
         view, preview.elsewhere, {target} if target is not None else set(), notes
     )
+    before = world.head_rev()
     new_names = list(preview.new_names)
     while True:
         try:
@@ -2648,12 +2663,15 @@ def accept_preview(
             new_names = kept
 
     # the prose was written from every fact, which is how the thing reads
-    # at the open, "now" end of its timeline
+    # at the open, "now" end of its timeline -- unless the owner left a
+    # fact unticked: then it describes one never written, and is cached as
+    # of before the accept, so it reads stale and is written again
     start, end = prose_gen.stretch_containing(world, thing_id, None)
     cache = world.prose()
+    rev = before if any(not fact.ticked for fact in preview.facts) else None
     for section in prose_gen.sections_for(preview.kind):
         if section in preview.prose:
-            cache.put(thing_id, section, start, end, preview.prose[section])
+            cache.put(thing_id, section, start, end, preview.prose[section], rev=rev)
     log.info(
         "create.accept",
         kind=preview.kind,

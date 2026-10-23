@@ -372,6 +372,24 @@ const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'se
 
 // sphere edits: each answers with the thing it changed, which may not be
 // the open page
+// INTERIM until the curation preview UI (Task 12, ruling C8): these
+// screens don't show the curation preview's ticks, repeats or "elsewhere"
+// facts yet, so an accept would write facts about other entries the owner
+// never saw, and skip rows the screen shows as kept. Until then every own
+// fact and Fill item goes out ticked and no elsewhere fact is sent. Task 12
+// removes this (and its check in checks/worlds.check.mjs).
+export function interimCurationGuard(payload) {
+    const ticked = (rows) => (Array.isArray(rows) ? rows.map((row) => ({ ...row, ticked: true })) : rows);
+    const guarded = { ...payload, elsewhere: [] };
+    if ('facts' in payload) {
+        guarded.facts = ticked(payload.facts);
+    }
+    if ('items' in payload) {
+        guarded.items = ticked(payload.items);
+    }
+    return guarded;
+}
+
 const SPHERE_EDITS = ['set_drawers', 'set_part_of', 'set_ties', 'add_exception', 'end_item', 'accept_fill', 'add_statement'];
 
 // what a sphere page shows in its drawers, Timeline and summary rather
@@ -1077,7 +1095,11 @@ export const useWorldsStore = defineStore('worlds', {
                 return;
             }
             this.pending = { ...this.pending, accept_fill: true };
-            this.request('accept_fill', { sphere_id: fill.sphereId, drawer_id: fill.drawerId, items });
+            this.request('accept_fill', {
+                sphere_id: fill.sphereId,
+                drawer_id: fill.drawerId,
+                ...interimCurationGuard({ items }),
+            });
         },
 
         // a statement written by hand into one of a sphere's drawers;
@@ -1205,7 +1227,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.accepted = null;
             this.pending = { ...this.pending, accept_preview: true };
             this.request('accept_preview', {
-                preview: { ...this.preview, ...changes },
+                preview: interimCurationGuard({ ...this.preview, ...changes }),
                 ...(intoStub ? { into_stub: intoStub } : {}),
             });
         },

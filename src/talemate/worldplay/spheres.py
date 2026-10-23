@@ -39,8 +39,8 @@ The probe's guards on what the model writes:
 - an item already part of the sphere is adopted, not made again; one
   naming a free stub links that stub into the drawer; one naming any other
   thing in the world is kept as a statement that links it, never a stub;
-- Fill drops an item that repeats one the sphere holds, by name or by
-  (nearly) the same words;
+- Fill flags an item that repeats one the sphere holds, by name or by
+  (nearly) the same words: it comes unticked, never dropped silently;
 - month names never become names, and `create.name_guess` maps the names'
   kinds and templates (council and guild templates are orders).
 
@@ -1029,6 +1029,7 @@ def accept_sphere(world: World, preview: SpherePreview) -> str:
         if target is None:
             raise ValueError(f"the thing was deleted: {preview.promote_id}")
 
+    before = world.head_rev()
     new_names = list(preview.new_names)
     while True:
         try:
@@ -1043,8 +1044,19 @@ def accept_sphere(world: World, preview: SpherePreview) -> str:
         # the summary was written from everything, as the sphere reads at
         # the open, "now" end of its timeline
         start, end = prose_gen.stretch_containing(world, thing_id, None)
+        # as `create.accept_preview` has it: a summary written from a fact
+        # or item the owner left unticked is cached as of before the
+        # accept, so it reads stale
+        unticked = any(not fact.ticked for fact in preview.facts) or any(
+            not item.get("ticked", True) for item in preview.items
+        )
         world.prose().put(
-            thing_id, "description", start, end, preview.prose["description"]
+            thing_id,
+            "description",
+            start,
+            end,
+            preview.prose["description"],
+            rev=before if unticked else None,
         )
     log.info(
         "spheres.accept",
@@ -1111,22 +1123,39 @@ def _timeline_lines(world: World, view: WorldView, sphere_id: str) -> list[str]:
     return lines
 
 
-def _repeats(item: dict[str, Any], held: list[spheres.Item]) -> bool:
-    """Whether a Fill item says what an item the sphere holds says: the
-    same name, ignoring case and a leading article, or (nearly) the same
-    topic words."""
+def _held_repeat(
+    view: WorldView, sphere_id: str, item: dict[str, Any], held: list[spheres.Item]
+) -> dict[str, Any] | None:
+    """The sphere's item a Fill item says again, as `repeat_of` shows it
+    (`{fact_id, owner_id, owner_name, text, score}`), or `None`: one of
+    the same name, ignoring case and a leading article (score 1), or one
+    of (nearly) the same topic words (`_REPEAT_OVERLAP` of the two texts'
+    words in common)."""
 
-    if item["name"] and name_key(item["name"]) in {
-        name_key(other.name) for other in held if other.thing_id
-    }:
-        return True
+    def found(other: spheres.Item, score: float) -> dict[str, Any]:
+        owner = other.thing_id or sphere_id
+        return {
+            "fact_id": other.fact_id,
+            "owner_id": owner,
+            "owner_name": view.name_of(owner) or "",
+            "text": spheres.item_line(other.name, other.text)
+            if other.name
+            else other.text,
+            "score": score,
+        }
+
+    if item["name"]:
+        key = name_key(item["name"])
+        for other in held:
+            if other.thing_id and name_key(other.name) == key:
+                return found(other, 1.0)
     words = create._content_words(item["text"], set())
     for other in held:
         theirs = create._content_words(other.text, set())
         union = words | theirs
-        if union and len(words & theirs) / len(union) >= _REPEAT_OVERLAP:
-            return True
-    return False
+        if union and (score := len(words & theirs) / len(union)) >= _REPEAT_OVERLAP:
+            return found(other, score)
+    return None
 
 
 def _written_by(text: str, new: NewName) -> bool:
@@ -1153,8 +1182,8 @@ async def fill_drawer(
     The prompt has the sphere's summary, timeline and writable drawers
     with what they hold, its mentions (but those from entries part of
     it), and the entries near it (`create.nearby_ids`, at the world's
-    curation settings). An item repeating one the sphere holds is dropped;
-    the rest are matched against the world as the core's are, and one
+    curation settings). An item repeating one the sphere holds comes
+    last, unticked, with that item as its `repeat_of`; the rest are matched against the world as the core's are, and one
     repeating what the sphere or an entry near it says is flagged
     (`repeat_of`; unticked at the untick threshold). The reply's
     elsewhere items are read as create reads them (`create.parse_elsewhere`),
@@ -1224,7 +1253,12 @@ async def fill_drawer(
         ]
 
     parsed = [item for raw_item in raw if (item := _item(raw_item, drawer.id))]
-    fresh = [item for item in parsed if not _repeats(item, held)]
+    # an item the sphere holds already isn't dropped silently (goal 3): it
+    # comes last, unticked, with the item it repeats
+    held_repeats = [
+        (item, _held_repeat(view, sphere_id, item, held)) for item in parsed
+    ]
+    fresh = [item for item, repeat_of in held_repeats if repeat_of is None]
     own_keys = _named_keys(view, state)
     items = _settle_items(view, fresh, own_keys, _parts_of(view, sphere_id), {})
     items = _filed(view, items, spheres.drawers(view, sphere_id))
@@ -1244,6 +1278,12 @@ async def fill_drawer(
     )
     for item, (repeat_of, ticked) in zip(items, flags):
         item["repeat_of"], item["ticked"] = repeat_of, ticked
+    repeats = [
+        {**item, "names": [], "repeat_of": repeat_of, "ticked": False}
+        for item, repeat_of in held_repeats
+        if repeat_of is not None
+    ]
+    items += _filed(view, repeats, spheres.drawers(view, sphere_id))
     if obj is not None:
         raw_elsewhere = obj.get("elsewhere")
     else:
@@ -1266,8 +1306,8 @@ async def fill_drawer(
         sphere_id=sphere_id,
         drawer=drawer.title,
         got=len(parsed),
-        repeats=len(parsed) - len(fresh),
-        kept=len(items),
+        repeats=len(repeats),
+        kept=len(items) - len(repeats),
         flagged=sum(1 for item in items if item["repeat_of"] is not None),
         elsewhere=len(elsewhere),
     )

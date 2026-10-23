@@ -614,3 +614,157 @@ async def test_fill_drops_elsewhere_about_its_new_items(world, runes):
     dialect = filled.elsewhere[0]
     assert dialect.target_id is None
     assert dialect.new is not None and dialect.new.name == "Ashenmere rune dialect"
+
+
+# --- fix round 1 ---------------------------------------------------------------
+
+
+async def test_unticked_fact_leaves_the_prose_stale(world, eternal):
+    """Prose written from every fact describes one never written when a
+    fact is left unticked: it's cached as of before the accept, so the
+    section reads stale and is written again from what's there."""
+
+    preview, _client = await _divine_preview(world, eternal)
+    assert any(not fact.ticked for fact in preview.facts)
+    preview.prose = {section: "Old prose." for section in preview.prose} or {
+        "description": "Old prose."
+    }
+    thing_id = accept_preview(world, preview)
+    cache = world.prose()
+    for section in preview.prose:
+        assert cache.stale(thing_id, section, None) is True
+
+    # every fact ticked: the prose is current
+    with world.revision(Source.manual(note="again")) as rev:
+        stub = rev.create_thing(
+            "lore",
+            {
+                "name": "The Divine Right of the Tsarina",
+                "stub": {"ignored": False},
+                "part_of": {"sphere": eternal.church, "drawer": DOCTRINES},
+            },
+        )
+    preview, _client = await _divine_preview(world, eternal._replace(divine=stub))
+    for fact in preview.facts:
+        fact.ticked = True
+    preview.prose = {"description": "Prose."}
+    thing_id = accept_preview(world, preview)
+    assert world.prose().stale(thing_id, "description", None) is False
+
+
+async def test_unticked_core_item_leaves_the_summary_stale(world, eternal):
+    from talemate.worldplay.spheres import accept_sphere, preview_sphere
+
+    core = json.dumps(
+        {
+            "name": "The Iron Order",
+            "summary": "An order of smiths.",
+            "aka": [],
+            "timeline": [{"year": 990, "text": "The order is founded."}],
+            "drawers": [{"type": "practices", "title": "Rites"}],
+            "items": [
+                {"drawer": "Rites", "name": "", "text": "Smiths sing at the forge."},
+                {"drawer": "Rites", "name": "", "text": "Bells are rung at dawn."},
+            ],
+            "names": [],
+        }
+    )
+    preview = await preview_sphere(
+        world, "order", "an order of smiths", {}, None, reply=core
+    )
+    preview.items[0]["ticked"] = False
+    sphere_id = accept_sphere(world, preview)
+    view = world.view()
+    texts = [view.render(f.text) for f in view.thing(sphere_id).facts]
+    assert "Smiths sing at the forge." not in texts
+    assert world.prose().stale(sphere_id, "description", None) is True
+
+
+async def test_fill_flags_repeats_of_the_drawers_items(world, eternal):
+    """Goal 3: nothing is dropped silently. A Fill item repeating one the
+    sphere holds arrives unticked, pointing at the item it repeats."""
+
+    with world.revision(Source.manual(note="deacons")) as rev:
+        deacons = rev.add_fact(
+            eternal.church,
+            "statement",
+            "Deacons assist parish priests in liturgical duties and tend to the "
+            "material needs of church properties.",
+            origin={"drawer": HIERARCHY},
+        )
+    filled, _client = await _fill(world, eternal.church, HIERARCHY, FILL_HIERARCHY)
+    diaconate = next(i for i in filled.items if i["name"] == "The Diaconate")
+    assert diaconate["ticked"] is False
+    assert diaconate["repeat_of"]["fact_id"] == deacons
+    assert diaconate["repeat_of"]["owner_id"] == eternal.church
+    assert diaconate["repeat_of"]["score"] >= 0.75
+
+    accept_fill(world, eternal.church, HIERARCHY, filled.items)
+    names = {item.name for item in spheres.items(world.view(), eternal.church)}
+    assert "The Diaconate" not in names
+
+
+async def test_ignored_stub_gets_candidates_from_its_sphere(world, eternal):
+    with world.revision(Source.manual(note="ignore")) as rev:
+        rev.set_field(eternal.divine, "stub", {"ignored": True}, None)
+    _preview, client = await _divine_preview(world, eternal)
+    prompt = str(client.prompt_history[0]["prompt"])
+    block = prompt.split("Entries near this one in the world:", 1)[1]
+    block = block.split("The world's calendar", 1)[0]
+    names = [line[2:].split(" (", 1)[0] for line in block.strip().splitlines()]
+    assert names[0] == "Church of the Eternal Light"
+    # what's near the sphere: its parts
+    assert "The Patriarch of Moscavia" in names
+    assert "The Divine Right of the Tsar" not in names
+
+
+def test_short_repeat_is_flagged_but_stays_ticked(world, eternal):
+    from talemate.worldplay.create import repeat_flags
+
+    with world.revision(Source.manual(note="pines")) as rev:
+        rev.add_fact(eternal.guild, "general", "Pine forests and frozen rivers.")
+    settings = CurationSettings()
+    flags = repeat_flags(
+        world.view(),
+        ["Pine forests.", "Pine forests and frozen rivers."],
+        [eternal.guild],
+        settings,
+    )
+    (short, short_ticked), (long, long_ticked) = flags
+    # two content words: shown with its match, but left ticked
+    assert short is not None and short["score"] == 1.0 and short_ticked is True
+    assert long is not None and long_ticked is False
+
+
+async def test_unlinked_names_retry_keeps_elsewhere_stubs(world, eternal):
+    """The `_UnlinkedNames` retry with elsewhere facts: a name no text
+    uses is dropped and the write made again; a new name only an
+    elsewhere fact uses is kept, and an elsewhere target the facts also
+    name is one stub, linked from the facts."""
+
+    from talemate.worldplay.links import NewName
+
+    preview, _client = await _divine_preview(world, eternal)
+    preview.new_names = [
+        *preview.new_names,
+        NewName(name="Ghost Hall", kind="place"),
+        NewName(name="Volga Shrine", kind="place"),
+    ]
+    tsardom_item = next(e for e in preview.elsewhere if e.target_id == eternal.tsardom)
+    tsardom_item.text += " Its oldest altar is the Volga Shrine."
+    head = world.head_rev()
+
+    accept_preview(world, preview)
+
+    view = world.view()
+    # one revision written, after the rolled-back try
+    assert world.head_rev() == head + 1
+    assert not _named(view, "Ghost Hall")
+    [shrine] = _named(view, "Volga Shrine")
+    tsardom = view.thing(eternal.tsardom)
+    linked = next(f for f in tsardom.facts if view.render(f.text) == tsardom_item.text)
+    assert shrine.id in parse_refs(linked.text)
+    [tsar] = _named(view, "Tsar")
+    own = view.thing(eternal.divine)
+    assert any(tsar.id in parse_refs(f.text) for f in own.facts)
+    assert len(tsar.facts) == 1

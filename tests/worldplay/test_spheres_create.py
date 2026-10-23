@@ -617,13 +617,16 @@ async def test_fill_drawer_no_write_until_accept(moscavia, world, full_dawn):
     prompt = str(client.prompt_history[0]["prompt"])
     assert '"new_items"' in prompt
     assert "Rites and Ceremonies (practices), the drawer to fill" in prompt
-    # the repeats are dropped: the Dawn Vigil by name, "The Feathering" by
-    # its text (the feather offering, nearly word for word)
-    assert [item["name"] for item in items] == [
-        "The Pale Spire Pilgrimage",
-        "The First Frost Rite",
-        "The Separation Covenant",
+    # the repeats come last, unticked: the Dawn Vigil by name, "The
+    # Feathering" by its text (the feather offering, nearly word for word)
+    assert [(item["name"], item["ticked"]) for item in items] == [
+        ("The Pale Spire Pilgrimage", True),
+        ("The First Frost Rite", True),
+        ("The Separation Covenant", True),
+        ("The Feathering", False),
+        ("The Dawn Vigil", False),
     ]
+    assert items[4]["repeat_of"]["score"] == 1.0
     assert {item["drawer_id"] for item in items} == {rites}
     # a stray kind ("event" is fine; "rite" would be lore)
     assert items[0]["kind"] == "event"

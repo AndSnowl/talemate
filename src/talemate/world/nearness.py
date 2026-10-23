@@ -309,7 +309,9 @@ def near(
     ranked = sorted(
         found.items(),
         key=lambda item: (
-            -item[1][0],
+            # rounded: two paths of the same links multiplied in another
+            # order can differ in the last bits
+            -round(item[1][0], 9),
             item[1][1],
             -links.references.get((thing_id, item[0]), 0),
             item[0] not in links.names,

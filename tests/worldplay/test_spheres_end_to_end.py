@@ -479,13 +479,13 @@ async def test_spheres_end_to_end(plugin, client, loadable):
     stubs = await _stubs(plugin)
     assert not [name for name in stubs if "Council" in name]
 
-    # 4. Fill Doctrines: the repeat is dropped; a statement and a new
-    # named item are kept, and written on accept
+    # 4. Fill Doctrines: the repeat comes unticked (and isn't written); a
+    # statement and a new named item are kept, and written on accept
     doctrines_id = _drawer(dawn, "Doctrines")["id"]
     filled = await _send(
         plugin, "fill_drawer", FILL_REPLY, sphere_id=dawn_id, drawer_id=doctrines_id
     )
-    assert [(i["name"], i["text"]) for i in filled["items"]] == [
+    assert [(i["name"], i["text"]) for i in filled["items"] if i["ticked"]] == [
         ("", FEATHER),
         ("The Silent Hour", "No word is spoken from dusk until the first star."),
     ]

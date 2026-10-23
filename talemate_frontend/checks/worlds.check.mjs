@@ -561,6 +561,44 @@ check('a preview, then accept, opens the new thing', () => {
     listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
+// INTERIM until the curation preview UI (Task 12, ruling C8): remove
+// with `interimCurationGuard`
+check('interim curation guard: accepts send every fact and item ticked, nothing elsewhere', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('lore', 'a doctrine');
+    const preview = {
+        kind: 'lore',
+        prompt: 'a doctrine',
+        fields: {},
+        name: 'The Divine Right',
+        facts: [
+            { category: 'general', text: 'A copy.', ticked: false, repeat_of: { fact_id: 'f1' } },
+            { category: 'general', text: 'Fresh.', ticked: true, repeat_of: null },
+        ],
+        elsewhere: [{ target_id: 't1', target_name: 'Tsardom', category: 'general', text: 'About it.', ticked: true }],
+        prose: {},
+    };
+    store.handleMessage(reply('preview_thing', preview));
+    store.acceptPreview();
+    const sentPreview = sent.at(-1).preview;
+    assert.deepEqual(sentPreview.elsewhere, []);
+    assert.deepEqual(sentPreview.facts.map((fact) => fact.ticked), [true, true]);
+    // the store's own preview is left as it came
+    assert.equal(store.preview.facts[0].ticked, false);
+
+    store.openThing('dawn');
+    store.fillDrawer('dawn', 'd1');
+    const items = [
+        { drawer_id: 'd1', name: '', text: 'A copy.', kind: '', names: [], ticked: false },
+        { drawer_id: 'd1', name: 'Vigil', text: 'A prayer.', kind: 'lore', names: [], ticked: true },
+    ];
+    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items, elsewhere: [{ text: 'x' }] }));
+    store.acceptFill(items);
+    assert.deepEqual(sent.at(-1).elsewhere, []);
+    assert.deepEqual(sent.at(-1).items.map((item) => item.ticked), [true, true]);
+});
+
 check('a failed preview shows its message', () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
@@ -1619,7 +1657,14 @@ check('Fill keeps its items for the drawer asked about, then writes those kept',
     store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items }));
     assert.deepEqual(store.fill.items, items);
     store.acceptFill(items);
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'accept_fill', sphere_id: 'dawn', drawer_id: 'd1', items });
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds',
+        action: 'accept_fill',
+        sphere_id: 'dawn',
+        drawer_id: 'd1',
+        items: items.map((item) => ({ ...item, ticked: true })),
+        elsewhere: [],
+    });
     sent.length = 0;
     store.handleMessage(reply('accept_fill', { id: 'dawn', kind: 'sphere', name: 'The White Dawn', sphere: {} }));
     assert.equal(store.fill, null);
