@@ -113,11 +113,12 @@ def test_near_respects_reach_and_limit(world):
     view = world.view()
     assert _ids(near(view, a, reach=1)) == [b, y, z]
     two = near(view, a, reach=2)
-    # equal scores, so name order: C (two steps) sits between B and Yew
-    assert _ids(two) == [b, c, y, z]
-    assert two[1].steps == 2
+    # equal scores, so fewer steps first: C (two steps) comes after Yew
+    # and Zed, then name order
+    assert _ids(two) == [b, y, z, c]
+    assert two[3].steps == 2
     three = near(view, a, reach=3)
-    assert _ids(three) == [b, c, d, y, z]
+    assert _ids(three) == [b, y, z, c, d]
     assert d not in _ids(two)
     # a path's score is the product of its links' weights
     four = near(view, a, reach=4)
@@ -127,7 +128,7 @@ def test_near_respects_reach_and_limit(world):
     )
     assert four[-1].steps == 4
 
-    assert _ids(near(view, a, reach=3, limit=2)) == [b, c]
+    assert _ids(near(view, a, reach=3, limit=2)) == [b, y]
     assert near(view, a, limit=0) == []
 
 
@@ -225,10 +226,16 @@ def test_curation_settings_round_trip(world, tmp_path):
         defaults.facts_per_entry,
         defaults.repeat_threshold,
         defaults.timeline_reach,
-    ) == (2, 12, 6, 0.4, 2)
+        defaults.repeat_untick_threshold,
+    ) == (1, 12, 6, 0.4, 2, 0.7)
 
     tuned = CurationSettings(
-        reach=3, entries=20, facts_per_entry=4, repeat_threshold=0.5, timeline_reach=1
+        reach=3,
+        entries=20,
+        facts_per_entry=4,
+        repeat_threshold=0.5,
+        timeline_reach=1,
+        repeat_untick_threshold=0.8,
     )
     world.set_curation(tuned)
     assert world.curation() == tuned
@@ -305,3 +312,70 @@ def test_real_being_tie_is_near(world):
     assert light not in _ids(near(view, order, reach=1))
     assert near(view, light, reach=1) == []
     assert light in _ids(near(world.view(WorldDate.of(1200)), order, reach=1))
+
+
+def test_ties_break_by_steps_then_references_then_name(world):
+    """The curation probe's ranking fix: a direct reference (0.6, one step)
+    ties a three-step path of 1.0 x 1.0 x 0.6 on score, and wins it on
+    steps; among things tied on score and steps, more references between
+    the two win over the name."""
+
+    with world.revision(Source.manual()) as rev:
+        # three steps, 1.0 x 1.0 x 0.6: A - Aa (parent) - Ab (parent) - Alpha
+        aa = rev.create_thing("place", fields={"name": "Aa"})
+        a = rev.create_thing("place", fields={"name": "A", "parent": aa})
+        ab = rev.create_thing("place", fields={"name": "Ab", "parent": aa})
+        alpha = rev.create_thing("lore", fields={"name": "Alpha"})
+        rev.add_fact(ab, "general", f"Near {ref(alpha)}.")
+        # one step at 0.6 each: Zulu named once, Yankee twice
+        zulu = rev.create_thing("lore", fields={"name": "Zulu"})
+        yankee = rev.create_thing("lore", fields={"name": "Yankee"})
+        rev.add_fact(a, "general", f"Of {ref(zulu)} and {ref(yankee)}.")
+        rev.add_fact(a, "general", f"Again {ref(yankee)}.")
+
+    view = world.view()
+    found = near(view, a, reach=3)
+    order = _ids(found)
+    scores = {n.thing_id: n for n in found}
+    assert scores[alpha].score == pytest.approx(scores[zulu].score)
+    assert scores[alpha].steps == 3
+    # Yankee (two references) before Zulu (one), both before Alpha (three
+    # steps) though "Alpha" sorts first by name
+    assert order.index(yankee) < order.index(zulu) < order.index(alpha)
+
+
+def test_siblings_capped_per_sphere(world):
+    """Things filed in the same sphere as the one asked about, reached only
+    through it, are kept at most `SIBLINGS` (3) per sphere: a fourth gives
+    way to the entries the thing's own facts name. A sibling the thing
+    links to itself isn't capped."""
+
+    from talemate.world.nearness import SIBLINGS
+
+    with world.revision(Source.manual()) as rev:
+        church = _sphere(rev, "Church")
+        doctrine = rev.create_thing(
+            "lore", fields={"name": "Doctrine", "part_of": _part_of(church)}
+        )
+        siblings = [
+            rev.create_thing(
+                "lore", fields={"name": f"Rite {n}", "part_of": _part_of(church)}
+            )
+            for n in "ABCDE"
+        ]
+        named = rev.create_thing("place", fields={"name": "Zakonnik"})
+        rev.add_fact(doctrine, "general", f"Read in {ref(named)}.")
+        rev.add_fact(doctrine, "general", f"Sung at {ref(siblings[4])}.")
+
+    view = world.view()
+    found = _ids(near(view, doctrine, reach=2))
+    assert SIBLINGS == 3
+    assert found[0] == church
+    # the three first siblings by name, the one it names itself, and the
+    # entry its facts name
+    assert set(found) == {church, *siblings[:3], siblings[4], named}
+    assert siblings[3] not in found
+    # uncapped, all five are there
+    assert set(siblings) <= set(_ids(near(view, doctrine, reach=2, siblings=None)))
+    # the sphere's own parts aren't siblings of it
+    assert set(siblings) <= set(_ids(near(view, church, reach=1)))

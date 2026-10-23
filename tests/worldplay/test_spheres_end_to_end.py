@@ -630,9 +630,10 @@ async def test_spheres_end_to_end(plugin, client, loadable):
     # adoption, ties or the World block
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
-        # species, Tsardom, council, Vasha, the scene's plan and the Pale
-        # Spire's stub preview; the White Dawn's core
-        "creative_instruction_2048": 7,
+        # species, Tsardom, council, Vasha and the Pale Spire's stub preview
+        "creative_instruction_3072": 5,
+        # the scene's plan; the White Dawn's core
+        "creative_instruction_2048": 2,
         # the creates' prose (two sections for Vasha) and the Pale Spire's;
         # none for the White Dawn, whose summary is its core's
         "analyze": 6,

@@ -610,7 +610,7 @@ async def test_fill_drawer_no_write_until_accept(moscavia, world, full_dawn):
     client = MockClient("test")
     async with MockClientContext():
         _queue(FILL_RITES_REPEATS)
-        items = await fill_drawer(world, moscavia.dawn, rites, client)
+        items = (await fill_drawer(world, moscavia.dawn, rites, client)).items
 
     assert _snapshot(world) == before
     assert client.prompt_history[0]["kind"] == "creative_instruction_1024"
@@ -643,7 +643,7 @@ async def test_fill_new_items_statements_and_months(moscavia, world, full_dawn):
     client = MockClient("test")
     async with MockClientContext():
         _queue(FILL_RITES_NEW_ITEMS)
-        items = await fill_drawer(world, moscavia.dawn, rites, client)
+        items = (await fill_drawer(world, moscavia.dawn, rites, client)).items
 
     assert [item["name"] for item in items] == [
         "The Feathering",

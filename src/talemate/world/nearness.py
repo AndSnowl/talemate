@@ -21,6 +21,18 @@ A step is one link, followed either way:
 Each link has a weight (`WEIGHTS`); a path scores the product of its
 links' weights and a thing keeps its best path within `reach` steps.
 
+The ranking follows the curation probe's fix
+(docs/superpowers/probes/2026-10-22-curation.md, "The ranking"): many
+things tie on score (a three-step path of 1.0 x 1.0 x 0.6 ties a direct
+reference), so ties are broken by fewer steps, then by more direct
+references between the two (fact references either way), and only then by
+name. And a thing filed in the same sphere as the one asked about -- a
+sibling, reached only through that shared `part_of` parent, with no link
+of its own to it -- scores 1.0 x 1.0 and would crowd out everything its
+facts name, so at most `SIBLINGS` of them per sphere are kept (the rest
+are dropped, not moved down). The probe measured these two at 24 missed
+targets down to 15.
+
 Everything is read as the view sees it: only things live at its revision,
 field values in force at its date (`WorldView._fetch_fields`' rule), facts
 true at its date and ties that hold then. A removed thing is never near,
@@ -42,7 +54,7 @@ from .curation import CurationSettings
 from .spheres import _part_of, _tie_live, _ties
 from .view import ThingState, WorldView
 
-__all__ = ["WEIGHTS", "CurationSettings", "Near", "near"]
+__all__ = ["SIBLINGS", "WEIGHTS", "CurationSettings", "Near", "near"]
 
 # the starting weights from the plan, kept: a thing's own structure
 # (part of, parent) is as near as it gets, a tie nearly so; a mention is
@@ -55,6 +67,10 @@ WEIGHTS: dict[str, float] = {
     "reference": 0.6,
     "heritage": 0.5,
 }
+
+# the most siblings (things in the same sphere, reached only through it)
+# `near` keeps per sphere
+SIBLINGS = 3
 
 # the thing-valued fields read as heritage links
 _HERITAGE_FIELDS = ("heritage", "species", "parents")
@@ -77,6 +93,16 @@ class Near(BaseModel):
 
 
 Graph = dict[str, dict[str, float]]
+
+
+class _Links(BaseModel):
+    """What `near` reads besides the graph: each live thing's name
+    (casefolded, for ordering), how many references join each pair of
+    things (both orders), and the sphere each thing is part of."""
+
+    names: dict[str, str]
+    references: dict[tuple[str, str], int]
+    part_of: dict[str, str]
 
 
 def _state(thing_id: str, kind: str, fields: dict[str, object]) -> ThingState:
@@ -175,13 +201,14 @@ def _references(view: WorldView) -> Iterable[tuple[str, str]]:
         yield owner, target
 
 
-def _graph(view: WorldView) -> tuple[Graph, dict[str, str]]:
-    """Every link at the view, and each live thing's name (casefolded, for
-    ordering)."""
+def _graph(view: WorldView) -> tuple[Graph, _Links]:
+    """Every link at the view, and the `_Links` `near` orders by."""
 
     live = _live_things(view)
     graph: Graph = {}
     names: dict[str, str] = {}
+    part_of: dict[str, str] = {}
+    references: dict[tuple[str, str], int] = {}
 
     values = list(_field_values(view, live))
     existence: dict[str, object] = {}
@@ -202,6 +229,8 @@ def _graph(view: WorldView) -> tuple[Graph, dict[str, str]]:
             link = _part_of(state)
             if link is not None:
                 _link(graph, thing_id, link[0], WEIGHTS["part_of"], live)
+                if link[0] in live and link[0] != thing_id:
+                    part_of[thing_id] = link[0]
         elif field == "parent":
             if isinstance(value, str):
                 _link(graph, thing_id, value, WEIGHTS["parent"], live)
@@ -221,8 +250,11 @@ def _graph(view: WorldView) -> tuple[Graph, dict[str, str]]:
 
     for owner, target in _references(view):
         _link(graph, owner, target, WEIGHTS["reference"], live)
+        if owner != target and owner in live and target in live:
+            for pair in ((owner, target), (target, owner)):
+                references[pair] = references.get(pair, 0) + 1
 
-    return graph, names
+    return graph, _Links(names=names, references=references, part_of=part_of)
 
 
 def _walk(graph: Graph, start: str, reach: int) -> dict[str, tuple[float, int]]:
@@ -252,16 +284,25 @@ def _walk(graph: Graph, start: str, reach: int) -> dict[str, tuple[float, int]]:
 
 
 def near(
-    view: WorldView, thing_id: str, *, reach: int = 2, limit: int = 20
+    view: WorldView,
+    thing_id: str,
+    *,
+    reach: int = 2,
+    limit: int = 20,
+    siblings: int | None = SIBLINGS,
 ) -> list[Near]:
-    """The live things near `thing_id` at the view, best first (score
-    descending, then name, unnamed things last, then id), at most `limit`
-    of them, never `thing_id` itself. A thing that isn't live at the view,
-    or is an ignored stub, has nothing near it."""
+    """The live things near `thing_id` at the view, best first, at most
+    `limit` of them, never `thing_id` itself. Best first is: score
+    descending, then fewer steps, then more references joining the two
+    (fact references either way), then name (unnamed things last), then
+    id. At most `siblings` things per sphere that are part of the same
+    sphere as `thing_id` and have no link of their own to it are kept
+    (`None`: no cap). A thing that isn't live at the view, or is an
+    ignored stub, has nothing near it."""
 
     if limit <= 0 or reach <= 0:
         return []
-    graph, names = _graph(view)
+    graph, links = _graph(view)
     if thing_id not in graph:
         return []
     found = _walk(graph, thing_id, reach)
@@ -269,12 +310,29 @@ def near(
         found.items(),
         key=lambda item: (
             -item[1][0],
-            item[0] not in names,
-            names.get(item[0], ""),
+            item[1][1],
+            -links.references.get((thing_id, item[0]), 0),
+            item[0] not in links.names,
+            links.names.get(item[0], ""),
             item[0],
         ),
     )
-    return [
-        Near(thing_id=other, score=score, steps=steps)
-        for other, (score, steps) in ranked[:limit]
-    ]
+    home = links.part_of.get(thing_id)
+    direct = graph[thing_id]
+    kept: list[Near] = []
+    per_sphere: dict[str, int] = {}
+    for other, (score, steps) in ranked:
+        sphere = links.part_of.get(other)
+        if (
+            siblings is not None
+            and home is not None
+            and sphere == home
+            and other not in direct
+        ):
+            if per_sphere.get(sphere, 0) >= siblings:
+                continue
+            per_sphere[sphere] = per_sphere.get(sphere, 0) + 1
+        kept.append(Near(thing_id=other, score=score, steps=steps))
+        if len(kept) == limit:
+            break
+    return kept

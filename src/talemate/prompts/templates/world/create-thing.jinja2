@@ -33,6 +33,15 @@ The "names" rule names faiths, orders, councils, cultures and fields as
 "(a) The core"): the Task 10 session found the old "a group, order or
 faction is lore" made a place's state church a lore stub
 (docs/superpowers/probes/2026-10-22-spheres-flow.md).
+
+The generic branch with `nearby` (a list of candidate lines, "Name (kind;
+usually called X; part of Y, in its Z drawer; drawers: ...; stub): its
+summary or first fact") gets the "Entries near this one" block, the
+"elsewhere" list in its example object and the elsewhere rules, verbatim
+from docs/superpowers/probes/2026-10-22-curation.md, "Wording, if the
+owner goes ahead" (create-thing, v3: with the relation-claim rule). The
+probe's held-by rule isn't here (probe 4 fell back to tagging by hand),
+though the example carries "held_by": null as probed.
 -#}
 <|SECTION:TASK|>
 {% if kind == "species" -%}
@@ -133,6 +142,13 @@ Spheres in the world (faiths, nations, orders, cultures, fields of knowledge) th
 {% endfor -%}
 {% endfor %}
 {%- endif %}
+{%- if nearby %}
+
+Entries near this one in the world:
+{% for line in nearby -%}
+- {{ line }}
+{% endfor %}
+{%- endif %}
 
 The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
 <|CLOSE_SECTION|>
@@ -167,7 +183,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}; "YEAR" in the example stands for that number. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- else -%}
-{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"}, {"category": "{{ categories[-1] }}", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if spheres %}, "ties": [{"sphere": "...", "role": "practitioner", "since": "YEAR", "exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]{% endif %}}
+{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"{% if nearby %}, "held_by": null{% endif %}}, {"category": "{{ categories[-1] }}", "text": "Another claim."{% if nearby %}, "held_by": null{% endif %}}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if nearby %}, "elsewhere": [{"entry": "<an entry's name>", "text": "A claim mainly about that entry, in a full sentence.", "held_by": null}]{% endif %}{% if spheres %}, "ties": [{"sphere": "...", "role": "practitioner", "since": "YEAR", "exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]{% endif %}}
 
 - "name": the {{ kind }}'s name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 {% if kind == "character" -%}
@@ -179,6 +195,11 @@ Reply with only one JSON object, shaped exactly like this example:
 {%- endif %}
 - "aka": other names for this {{ kind }} itself, if it has any, each {"name", "tag", "everyday"}. "tag" is "proper" for another formal name, or "common" for what people in the world actually call it day to day (a short form, a nickname). Set "everyday" true on the one common name people use most, false on the rest. "name" stays the most formal name. An empty list is fine.
 - "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, sphere, event, item, lore; "aka" any other names your facts use for the same thing. A faith or church, an order, academy, guild or council, a culture, or a field of knowledge or magic is "sphere", with a "template": religion, order, culture or field, only these (a country or realm is a place; a rank or office is lore; so is any other group or faction, and a law, code, script or language). Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+{%- if nearby %}
+- Keep "facts" to claims mainly about the {{ kind }} itself: a claim mainly about another entry goes in "elsewhere".
+- "elsewhere": after the names, what you would add about other entries, each {"entry", "text", "held_by"}: "entry" the entry's name as the list of entries near this one writes it, or a new name you also list in "names"; "text" one claim in a full sentence. Never the {{ kind }} itself. An empty list is fine.
+- A claim that ties another entry to the {{ kind }} ("it is taught at X", "unlike X, it...", "X uses it") is the {{ kind }}'s own: it goes in "facts". "elsewhere" is only for what another entry's page should say even if the {{ kind }} didn't exist.
+{%- endif %}
 {%- if spheres %}
 - "ties": after the names, the spheres above this character belongs to, each {"sphere", "role", "since", "exceptions"}: "sphere" its name as written above; "role" a word or two for how they belong (practitioner, priest, elder, scholar, member); "since" the year they joined, as a bare number no later than {{ now_year }}, or left out. Only the spheres above: never invent one here. An empty list is fine.
 - "exceptions": only where this character departs from the sphere, each {"text", "rejects"}: "text" one sentence on what they reject or do differently, and "rejects" the label of the item it departs from, such as "S3". The character already holds everything else the sphere holds, so never restate it, in an exception or in the facts. Most ties have no exception or one.

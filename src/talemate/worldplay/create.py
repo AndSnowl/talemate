@@ -78,6 +78,23 @@ item at the end of its text, or, for a statement item, the sphere, with
 `origin = {"rejects_fact": <fact id>}` (`world.spheres.exceptions` reads
 both).
 
+Curation (docs/superpowers/probes/2026-10-22-curation.md, probe 1, and
+the owner's rulings on it). The generic branch's prompt lists the entries
+near the thing (`nearby_ids`, `candidate_line`): today's context first --
+the sphere it's part of, what mentions it, what the prompt names -- then
+`nearness.near` from the stub or the named things, at the world's
+`reach` and `entries`. The reply's `"elsewhere"` list, facts mainly about
+those entries (or a new name), becomes the preview's `elsewhere`
+(`parse_elsewhere`), ticked, grouped by entry, each with
+`default_category`. Repeats are flagged by code (`repeat_flags`): an own
+fact whose words a near entry's fact already holds (the world's
+`repeat_threshold`) is shown with that match, and arrives unticked only
+at `repeat_untick_threshold` or above -- at 0.4 the probe's detector
+unticked a third of the good facts, which mostly restate the stub's own
+drawer line. An elsewhere item repeating its target is shown the same
+way. Accept writes the ticked own facts, and each ticked elsewhere fact
+onto its target (a stub for a new name), in the same revision.
+
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -98,6 +115,7 @@ from pydantic import BaseModel, Field
 from talemate.prompts import Prompt
 from talemate.world import heritage, spheres
 from talemate.world.calendar import Calendar, Era
+from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
     AKA_TAGS,
@@ -109,7 +127,9 @@ from talemate.world.kinds import (
     get_kind,
     validate_field,
 )
+from talemate.world.nearness import near
 from talemate.world.refs import parse_refs, ref
+from talemate.world.repeats import find_repeats
 from talemate.world.names import (
     ARTICLES,
     everyday_name,
@@ -190,10 +210,14 @@ _KIND_GUESSES: dict[str, tuple[str, str | None]] = {
 MIN_FACTS = 8
 MAX_FACTS = 12
 
-# the creative-instruction preset, with room for 12 facts and the wrapper
-# (the plain "create" kind caps out at 1024 tokens, which the probe's
-# longer lists ran past)
-CREATE_PROMPT_KIND = "creative_instruction_2048"
+# the creative-instruction preset, with room for 12 facts, the wrapper and
+# the elsewhere list (the plain "create" kind caps out at 1024 tokens,
+# which the create probe's longer lists ran past; with the elsewhere list
+# the curation probe's replies reached the 2048 cap, Skyfall
+# pretty-printing the JSON)
+CREATE_PROMPT_KIND = "creative_instruction_3072"
+# a mix has no elsewhere list: the size the heritage probe ran at
+MIX_PROMPT_KIND = "creative_instruction_2048"
 
 # where a fact with a category the kind doesn't have goes
 _FALLBACK_CATEGORY = {"character": "background"}
@@ -224,6 +248,7 @@ _NOT_CATEGORY_KEYS = {
     "exceptions",
     "rejects",
     "held_by",
+    "entry",
 }
 
 # keys only an `aka` entry or a "names" entry has: an object with one is
@@ -231,6 +256,8 @@ _NOT_CATEGORY_KEYS = {
 _NAME_ENTRY_KEYS = {"tag", "everyday", "kind"}
 # keys only a tie or an exception has, likewise
 _TIE_KEYS = {"sphere", "rejects", "exceptions"}
+# the key only an elsewhere item has, likewise
+_ELSEWHERE_KEYS = {"entry"}
 
 # words that say nothing about a fact's topic, left out of the overlap a
 # top-level "no_longer_true" label is attached by
@@ -244,6 +271,7 @@ _NAME_RE = re.compile(r'"name"\s*:\s*"((?:[^"\\]|\\.)*)"')
 _AKA_LIST_RE = re.compile(r'"aka"\s*:\s*\[')
 _NAMES_LIST_RE = re.compile(r'"names"\s*:\s*\[')
 _TIES_LIST_RE = re.compile(r'"ties"\s*:\s*\[')
+_ELSEWHERE_LIST_RE = re.compile(r'"elsewhere"\s*:\s*\[')
 # the format example's placeholder, copied as is
 _PLACEHOLDER = "..."
 _AGE_RE = re.compile(r'"age"\s*:\s*"?(\d{1,4})')
@@ -261,6 +289,33 @@ class PreviewFact(BaseModel):
     # the thing that holds this fact as a belief (`spheres.held_by`), set
     # by the owner or mapped from the reply's per-fact `held_by` name
     held_by: str | None = None
+    # the fact the world already holds that this one repeats (`Repeat`
+    # as `repeat_flags` shows it: `fact_id`, `owner_id`, `owner_name`,
+    # `text`, `score`), or None
+    repeat_of: dict | None = None
+    # whether accept writes it: a repeat at the untick threshold starts
+    # unticked
+    ticked: bool = True
+
+
+class ElsewhereFact(BaseModel):
+    """A fact a reply wrote about another entry (its `"elsewhere"` list),
+    offered as an addition to it: an existing thing (`target_id`), or a
+    new name (`new`, a stub accept makes). `category` is
+    `default_category`'s until the owner picks another; `held_by` the
+    thing that holds it as a belief. A repeat of what the target says
+    already carries `repeat_of`, as `PreviewFact` does."""
+
+    target_id: str | None = None
+    # the entry's name, as the world has it, or the new name
+    target_name: str
+    new: NewName | None = None
+    category: str
+    text: str
+    since: WorldDate | None = None
+    held_by: str | None = None
+    ticked: bool = True
+    repeat_of: dict | None = None
 
 
 class PreviewInherited(BaseModel):
@@ -331,6 +386,8 @@ class CreatePreview(BaseModel):
     # a character's proposed ties to spheres in its context, with their
     # exceptions
     ties: list[PreviewTie] = Field(default_factory=list)
+    # facts about other entries, grouped by entry
+    elsewhere: list[ElsewhereFact] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -576,10 +633,10 @@ def parse_create_reply(
             if isinstance(obj.get("age"), (int, str)) and str(obj["age"]).isdigit():
                 age = int(obj["age"])
             fact_objects.extend(f for f in obj["facts"] if isinstance(f, dict))
-        elif not (_NAME_ENTRY_KEYS | _TIE_KEYS) & obj.keys():
-            # an `aka`, "names" or "ties" entry a broken wrapper left on its
-            # own (the connections probe read one as a fact "common") isn't
-            # one
+        elif not (_NAME_ENTRY_KEYS | _TIE_KEYS | _ELSEWHERE_KEYS) & obj.keys():
+            # an `aka`, "names", "ties" or "elsewhere" entry a broken
+            # wrapper left on its own (the connections probe read one as a
+            # fact "common") isn't one
             fact_objects.append(obj)
 
     # a truncated reply never closes its wrapper object; its name and age
@@ -1069,6 +1126,446 @@ def _attach_top_level(
         )
         if fact_id not in best.overrides:
             best.overrides.append(fact_id)
+
+
+# --- curation: what's near, elsewhere, repeats --------------------------------
+
+
+# a candidate line's text is cut at this many characters (the probe's)
+CANDIDATE_LINE_CHARS = 130
+
+# the format example's elsewhere placeholders, copied as is
+_ELSEWHERE_PLACEHOLDER = "A claim mainly about that entry, in a full sentence."
+
+# a target kind's plain category and dated one, where they differ from the
+# kind's fallback; never one heritage passes down section by section, nor
+# a sphere's `statement`, which its members hold (spec, "Categories")
+_DEFAULT_CATEGORIES: dict[str, tuple[str, str]] = {
+    "sphere": ("about", "timeline"),
+    "place": ("general", "history"),
+}
+
+
+def default_category(kind: str, dated: bool) -> str:
+    """The category an elsewhere fact goes in on a `kind` target until the
+    owner picks another: a sphere's `about`, or `timeline` when dated (a
+    drawer statement is the owner's to file); a place's `general`, or
+    `history` when dated; any other kind's `general` -- a character's
+    `background`, since it has no `general`."""
+
+    if kind in _DEFAULT_CATEGORIES:
+        plain, when = _DEFAULT_CATEGORIES[kind]
+        return when if dated else plain
+    return _FALLBACK_CATEGORY.get(kind, "general")
+
+
+def _clip(text: str, limit: int = CANDIDATE_LINE_CHARS) -> str:
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rsplit(" ", 1)[0] + "\u2026"
+
+
+def _part_of_link(state: ThingState) -> tuple[str, str | None] | None:
+    link = state.fields.get("part_of")
+    if isinstance(link, dict) and isinstance(link.get("sphere"), str):
+        drawer = link.get("drawer")
+        return link["sphere"], drawer if isinstance(drawer, str) else None
+    return None
+
+
+def candidate_line(view: WorldView, state: ThingState) -> str:
+    """One entry of the "Entries near this one" list, as the curation probe
+    wrote it: "Name (kind; usually called X; part of Y, in its Z drawer;
+    drawers: ...; stub): its summary or first fact", the text cut at
+    `CANDIDATE_LINE_CHARS`. A sphere's kind reads "sphere: <template>"
+    ("place, sphere: nation" for a place sphere), and lists the drawers a
+    prompt fills."""
+
+    # imported here: `worldplay.spheres` imports this module
+    from talemate.worldplay.spheres import TYPE_HELP
+
+    is_sphere = spheres.is_sphere(state)
+    template = state.fields.get("template")
+    if is_sphere:
+        bits = [
+            f"sphere: {template}"
+            if state.kind == "sphere"
+            else f"{state.kind}, sphere: {template}"
+        ]
+    else:
+        bits = [state.kind]
+    everyday = everyday_name(state)
+    if everyday:
+        bits.append(f"usually called {everyday}")
+    link = _part_of_link(state)
+    if link is not None:
+        title = next(
+            (d.title for d in spheres.drawers(view, link[0]) if d.id == link[1]), None
+        )
+        bits.append(
+            f"part of {view.name_of(link[0])}"
+            + (f", in its {title} drawer" if title else "")
+        )
+    if is_sphere:
+        titles = [
+            d.title for d in spheres.drawers(view, state.id) if d.type in TYPE_HELP
+        ]
+        if titles:
+            bits.append("drawers: " + ", ".join(titles))
+    if state.is_stub:
+        bits.append("stub")
+    fact = spheres.summary_fact(state) if is_sphere else None
+    if fact is None and state.facts:
+        fact = min(state.facts, key=lambda f: f.created)
+    line = (
+        _clip(view.render(fact.text)) if fact is not None else "(nothing written yet)"
+    )
+    return f"{view.name_of(state.id)} ({'; '.join(bits)}): {line}"
+
+
+def nearby_ids(
+    view: WorldView,
+    focus: Sequence[str],
+    first: Sequence[str],
+    settings: CurationSettings,
+    exclude: set[str],
+) -> list[str]:
+    """The entries a prompt lists as near, at most `settings.entries`:
+    today's context (`first`: the sphere a stub is part of, what mentions
+    it, what the prompt names) first, then `nearness.near` of each `focus`
+    thing at `settings.reach` (a thing near two keeps its better rank),
+    never one in `exclude`, a removed thing or an ignored stub."""
+
+    best: dict[str, tuple[float, int, int]] = {}
+    room = settings.entries + len(first) + len(exclude)
+    for thing_id in dict.fromkeys(focus):
+        hits = near(view, thing_id, reach=settings.reach, limit=room)
+        for position, hit in enumerate(hits):
+            key = (-hit.score, hit.steps, position)
+            if hit.thing_id not in best or key < best[hit.thing_id]:
+                best[hit.thing_id] = key
+    ranked = sorted(best, key=lambda thing_id: best[thing_id])
+    order: list[str] = []
+    for thing_id in [*first, *ranked]:
+        if thing_id in order or thing_id in exclude:
+            continue
+        state = view.thing(thing_id)
+        if state is None or state.stub_ignored:
+            continue
+        order.append(thing_id)
+    return order[: settings.entries]
+
+
+def _nearby_lines(view: WorldView, ids: Sequence[str]) -> list[str]:
+    return [
+        candidate_line(view, state)
+        for thing_id in ids
+        if (state := view.thing(thing_id)) is not None
+    ]
+
+
+def entry_named(view: WorldView, name: str, prefer: Sequence[str] = ()) -> str | None:
+    """The live thing whose name or other name is `name` (ignoring case and
+    a leading article), the `prefer`red ones (the entries listed as near)
+    first, then the first made; an ignored stub never; `None` for none."""
+
+    key = name_key(name)
+    if not key:
+        return None
+    others = sorted(view.things(), key=lambda thing: thing.created)
+    for state in [view.thing(thing_id) for thing_id in prefer] + others:
+        if state is None or state.stub_ignored:
+            continue
+        names = [view.name_of(state.id) or ""]
+        names += [entry["name"] for entry in _aka_entries(state.fields.get("aka"))]
+        if key in {name_key(other) for other in names}:
+            return state.id
+    return None
+
+
+def _opens_with(text: str, names: Sequence[str]) -> bool:
+    """Whether `text` opens with one of `names` (ignoring case, with or
+    without a leading article) as whole words."""
+
+    for name in names:
+        words = name.split()
+        if len(words) > 1 and words[0].casefold() in ARTICLES:
+            words = words[1:]
+        if not words:
+            continue
+        pattern = (
+            r"^\s*(?:(?:the|a|an)\s+)?"
+            + r"\s+".join(map(re.escape, words))
+            + r"(?![\w-])"
+        )
+        if re.match(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
+def _tidy(value: object) -> str:
+    return " ".join(value.split()) if isinstance(value, str) else ""
+
+
+def raw_elsewhere(reply: str, wrapper: dict[str, Any] | None) -> object:
+    """The reply's `"elsewhere"` list: the wrapper's, or, when it was cut
+    off, every complete item of the last `"elsewhere"` list."""
+
+    if wrapper is not None:
+        return wrapper.get("elsewhere")
+    last = None
+    for last in _ELSEWHERE_LIST_RE.finditer(reply):
+        pass
+    return _list_at(reply, last)
+
+
+def _grouped(items: list[ElsewhereFact]) -> list[ElsewhereFact]:
+    """`items` grouped by the entry they're for, each group where its entry
+    first comes, in reply order within it."""
+
+    def key(item: ElsewhereFact) -> str:
+        if item.target_id is not None:
+            return item.target_id
+        return "new:" + name_key(item.target_name)
+
+    groups: dict[str, list[ElsewhereFact]] = {}
+    for item in items:
+        groups.setdefault(key(item), []).append(item)
+    return [item for group in groups.values() for item in group]
+
+
+def parse_elsewhere(
+    raw: object,
+    view: WorldView,
+    *,
+    own_keys: set[str],
+    own_ids: set[str],
+    listed: Sequence[NewName],
+    calendar: Calendar,
+    now_year: int,
+    prefer: Sequence[str] = (),
+    holder: Callable[[str], str | None] | None = None,
+    new_items: Sequence[str] = (),
+) -> list[ElsewhereFact]:
+    """The reply's elsewhere items, `{"entry", "text", "held_by"}`, as
+    additions to other entries, grouped by entry (`_grouped`):
+
+    - `entry` is matched by name or other name (`entry_named`, the listed
+      entries first); an unmatched one is a new stub, its kind (and
+      template) as the reply's `"names"` lists it, else lore;
+    - one about the thing itself (`own_keys`, its names; `own_ids`) is
+      dropped, as is a copy of the format example's placeholder, an empty
+      one, and a repeat of an item already kept;
+    - with `new_items` (Fill's new items' names, ruling C1's filter), one
+      naming a new item, or whose text opens with one's name, is about that
+      item and dropped (the probe: 10 of 11 false moves, no right item);
+    - `since` is read as a fact's, `held_by` through `holder`, and the
+      category is `default_category`'s for the target's kind."""
+
+    item_names = [name for name in new_items if name.strip()]
+    item_keys = {name_key(name) for name in item_names}
+    by_key = {name_key(n.name): n for n in listed}
+    found: list[ElsewhereFact] = []
+    seen: set[tuple[str, str]] = set()
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        entry, text = _tidy(item.get("entry")), _tidy(item.get("text"))
+        if not entry.strip(" .") or not text or entry.startswith("<"):
+            continue
+        if text == _ELSEWHERE_PLACEHOLDER:
+            continue
+        key = name_key(entry)
+        if key in own_keys or key in item_keys:
+            log.debug("create.elsewhere_own", entry=entry)
+            continue
+        if item_names and _opens_with(text, item_names):
+            log.debug("create.elsewhere_about_new_item", entry=entry)
+            continue
+        target = entry_named(view, entry, prefer)
+        if target is not None and target in own_ids:
+            continue
+        new: NewName | None = None
+        if target is not None:
+            state = view.thing(target)
+            kind = state.kind if state is not None else FALLBACK_KIND
+            name = view.name_of(target) or entry
+        else:
+            guess = by_key.get(key)
+            kind = (
+                guess.kind
+                if guess is not None and guess.kind in NAME_KINDS
+                else FALLBACK_KIND
+            )
+            new = NewName(
+                name=entry,
+                kind=kind,
+                aka=guess.aka if guess is not None else [],
+                template=guess.template if guess is not None else None,
+            )
+            name = entry
+        slot = (target or "new:" + key, text)
+        if slot in seen:
+            continue
+        seen.add(slot)
+        since = _parse_since(item.get("since"), calendar, now_year)
+        held = item.get("held_by")
+        found.append(
+            ElsewhereFact(
+                target_id=target,
+                target_name=name,
+                new=new,
+                category=default_category(kind, since is not None),
+                text=text,
+                since=since,
+                held_by=(
+                    holder(held.strip())
+                    if holder is not None and isinstance(held, str) and held.strip()
+                    else None
+                ),
+            )
+        )
+    return _grouped(found)
+
+
+def repeat_flags(
+    view: WorldView,
+    texts: Sequence[str],
+    owner_ids: Sequence[str],
+    settings: CurationSettings,
+) -> list[tuple[dict | None, bool]]:
+    """For each text, `(repeat_of, ticked)`: the fact of `owner_ids` that
+    holds most of its words at the world's `repeat_threshold` or above
+    (`repeats.find_repeats`), as `{fact_id, owner_id, owner_name, text,
+    score}`, or `None`; and whether it starts ticked -- unticked only when
+    the overlap reaches `repeat_untick_threshold`."""
+
+    flags: list[tuple[dict | None, bool]] = [(None, True)] * len(texts)
+    owners = list(dict.fromkeys(owner_ids))
+    if not texts or not owners:
+        return flags
+    for found in find_repeats(view, list(texts), owners, settings.repeat_threshold):
+        flags[found.index] = (
+            {
+                "fact_id": found.fact_id,
+                "owner_id": found.owner_id,
+                "owner_name": view.name_of(found.owner_id) or "",
+                "text": found.text,
+                "score": found.score,
+            },
+            found.score < settings.repeat_untick_threshold,
+        )
+    return flags
+
+
+def flag_elsewhere_repeats(
+    view: WorldView, items: list[ElsewhereFact], settings: CurationSettings
+) -> None:
+    """Mark each elsewhere item that repeats what its target already says
+    (`repeat_flags`, against the target alone): shown with its match, and
+    unticked at the untick threshold."""
+
+    by_target: dict[str, list[ElsewhereFact]] = {}
+    for item in items:
+        if item.target_id is not None:
+            by_target.setdefault(item.target_id, []).append(item)
+    for target_id, group in by_target.items():
+        flags = repeat_flags(view, [i.text for i in group], [target_id], settings)
+        for item, (repeat_of, ticked) in zip(group, flags):
+            item.repeat_of, item.ticked = repeat_of, ticked
+
+
+def live_elsewhere(
+    view: WorldView,
+    items: Sequence[ElsewhereFact],
+    skip: set[str],
+    notes: list[str] | None,
+) -> list[ElsewhereFact]:
+    """The ticked elsewhere items accept writes: one whose target was
+    deleted since the preview is dropped with a note in `notes`, and one
+    for a thing in `skip` (the entry being written) is dropped."""
+
+    kept: list[ElsewhereFact] = []
+    for item in items:
+        if not item.ticked or not item.text.strip():
+            continue
+        if item.target_id is not None:
+            if item.target_id in skip:
+                continue
+            if view.thing(item.target_id) is None:
+                log.info("create.elsewhere_target_gone", target=item.target_id)
+                if notes is not None:
+                    notes.append(
+                        f"{item.target_name} was deleted, so this wasn't added "
+                        f"to it: {item.text}"
+                    )
+                continue
+        elif item.new is None:
+            continue
+        kept.append(item)
+    return kept
+
+
+def write_elsewhere(
+    rev: Any,
+    linking: WorldView,
+    view: WorldView,
+    items: Sequence[ElsewhereFact],
+    made: dict[str, str],
+    *,
+    picks: dict[str, str] | None = None,
+    as_new: Sequence[str] = (),
+) -> set[str]:
+    """Write each of `items` (from `live_elsewhere`) onto its target in
+    `rev`: an existing thing, or the stub `make_stubs` made for its new
+    name (in `made`). The text is linked as any fact's, the category kept
+    unless the target's kind has no such category (then
+    `default_category`'s), with its `since` and its holder (unless the
+    holder was deleted). Returns the ids its texts link and the stubs it
+    wrote to, so those aren't orphans."""
+
+    linked: set[str] = set()
+    for item in items:
+        if item.target_id is not None:
+            target: str | None = item.target_id
+        else:
+            assert item.new is not None
+            target = made.get(" ".join(item.new.name.split()))
+        state = linking.thing(target) if target is not None else None
+        if target is None or state is None:
+            log.debug("create.elsewhere_no_target", entry=item.target_name)
+            continue
+        category = item.category
+        if category not in get_kind(state.kind).categories:
+            category = default_category(state.kind, item.since is not None)
+        text = link_text(
+            linking,
+            item.text,
+            picks=picks,
+            new_names=made,
+            owner=target,
+            as_new=as_new,
+        )
+        linked.update(parse_refs(text))
+        linked.add(target)
+        held = item.held_by is not None and view.thing(item.held_by) is not None
+        rev.add_fact(
+            target,
+            category,
+            text,
+            valid_from=item.since,
+            origin=spheres.with_held_by(None, item.held_by) if held else None,
+        )
+    return linked
+
+
+def _generic_branch(kind: str, sources: Sequence[str]) -> bool:
+    """Whether `world/create-thing` writes a `kind` thing in its generic
+    branch, the one the curation probe tested the elsewhere list in: not a
+    species, race or mix, nor a character of a heritage."""
+
+    return kind not in HERITAGE_KINDS and not (kind == "character" and sources)
 
 
 # --- preview and accept ------------------------------------------------------
@@ -1763,6 +2260,25 @@ async def preview_thing(
         stub_id,
     )
     part_of = child_part_of(view, stub, prompt, picks) if stub is not None else None
+    # the entries near it: today's context first (the sphere it's part of,
+    # what mentions it, what the prompt names), then nearness from the stub
+    # and the named things
+    settings = world.curation()
+    first: list[str] = []
+    if stub is not None:
+        home = _part_of_link(stub)
+        if home is not None:
+            first.append(home[0])
+        elif part_of is not None:
+            first.append(part_of["sphere"])
+        if gathered is not None:
+            first += [m.owner_id for m in gathered.mentioned]
+    first += list(picks.values())
+    focus = [*([stub.id] if stub is not None else []), *picks.values()]
+    near_ids = nearby_ids(
+        view, focus, first, settings, {stub.id} if stub is not None else set()
+    )
+    nearby = _nearby_lines(view, near_ids) if _generic_branch(kind, sources) else []
     groups = _labelled_facts(view, sources)
     rows = [row for group in groups for row in group]
     labels = {row.label: row.fact_id for row in rows}
@@ -1792,6 +2308,7 @@ async def preview_thing(
         "about": [],
         "named": named,
         "spheres": sphere_block,
+        "nearby": nearby,
     }
     context: list[tuple[str, list[str]]] = []
     if stub is not None and gathered is not None:
@@ -1844,9 +2361,10 @@ async def preview_thing(
         ]
 
     template = "world.create-mix" if kind == "mix" else "world.create-thing"
+    prompt_kind = MIX_PROMPT_KIND if kind == "mix" else CREATE_PROMPT_KIND
     with world_ai_call():
         _response, extracted = await Prompt.request(
-            template, client, CREATE_PROMPT_KIND, vars=template_vars
+            template, client, prompt_kind, vars=template_vars
         )
     reply = extracted["response"]
     name, age, facts = parse_create_reply(
@@ -1913,6 +2431,26 @@ async def preview_thing(
         # an age older than the calendar itself is clamped to year 1
         fields["born"] = WorldDate.of(max(1, now_year - age))
 
+    # repeats: what the entries near it (and a stub itself) already say
+    owners = [*([stub.id] if stub is not None else []), *near_ids]
+    flags = repeat_flags(view, [f.text for f in facts], owners, settings)
+    for fact, (repeat_of, ticked) in zip(facts, flags):
+        fact.repeat_of, fact.ticked = repeat_of, ticked
+    elsewhere: list[ElsewhereFact] = []
+    if nearby:
+        elsewhere = parse_elsewhere(
+            raw_elsewhere(reply, _reply_wrapper(reply)),
+            view,
+            own_keys={name_key(n) for n in own_names if n.strip()},
+            own_ids={stub.id} if stub is not None else set(),
+            listed=listed,
+            calendar=calendar,
+            now_year=now_year,
+            prefer=near_ids,
+            holder=lambda held: holder_named(view, held),
+        )
+        flag_elsewhere_repeats(view, elsewhere, settings)
+
     prose = await _preview_prose(
         view, calendar, kind, name, facts, fields, rows, sources, client
     )
@@ -1922,6 +2460,9 @@ async def preview_thing(
         kind=kind,
         name=name,
         facts=len(facts),
+        repeats=sum(1 for f in facts if f.repeat_of is not None),
+        unticked=sum(1 for f in facts if not f.ticked),
+        elsewhere=len(elsewhere),
         new_names=len(stub_names),
         stub_id=stub_id,
     )
@@ -1942,6 +2483,7 @@ async def preview_thing(
         treated_as_new=treated_as_new,
         part_of=part_of,
         ties=ties,
+        elsewhere=elsewhere,
     )
 
 
@@ -2034,10 +2576,20 @@ def _can_be_tied(preview: CreatePreview) -> bool:
 
 
 def accept_preview(
-    world: World, preview: CreatePreview, *, into_stub: str | None = None
+    world: World,
+    preview: CreatePreview,
+    *,
+    into_stub: str | None = None,
+    notes: list[str] | None = None,
 ) -> str:
     """Write `preview` in one revision, then cache its prose for the
     current stretch. Returns the thing id.
+
+    - Only its ticked facts are written (a repeat starts unticked at the
+      untick threshold), and each ticked elsewhere fact goes onto its
+      target, in the same revision: an existing entry, or a stub made for
+      its new name (`write_elsewhere`). One whose target was deleted since
+      the preview is dropped, with a note added to `notes` (`live_elsewhere`).
 
     - The preview's `new_names` become stubs (`links.make_stubs`, which
       reuses a name the world has by then), and every fact's text is
@@ -2076,10 +2628,15 @@ def accept_preview(
         if sphere is None or not spheres.is_sphere(sphere):
             raise ValueError(f"a tie to no sphere: {tie.sphere_id}")
 
+    elsewhere = live_elsewhere(
+        view, preview.elsewhere, {target} if target is not None else set(), notes
+    )
     new_names = list(preview.new_names)
     while True:
         try:
-            thing_id, made = _write_preview(world, view, preview, stub, new_names)
+            thing_id, made = _write_preview(
+                world, view, preview, stub, new_names, elsewhere
+            )
             break
         except _UnlinkedNames as unlinked:
             # written again without them, in a fresh revision: the first
@@ -2103,6 +2660,7 @@ def accept_preview(
         thing_id=thing_id,
         stubs=len(set(made.values())),
         filled_stub=stub is not None,
+        elsewhere=len(elsewhere),
     )
     return thing_id
 
@@ -2153,15 +2711,23 @@ def _write_preview(
     preview: CreatePreview,
     stub: Any,
     new_names: list[NewName],
+    elsewhere: Sequence[ElsewhereFact] = (),
 ) -> tuple[str, dict[str, str]]:
-    """`accept_preview`'s one revision, making stubs for `new_names`.
+    """`accept_preview`'s one revision, making stubs for `new_names` and
+    the new names of `elsewhere`, whose facts it writes onto their
+    targets.
     Returns the thing's id and `make_stubs`' mapping. A stub made here that
     no fact ends up linking to (the name was written in a way linking
     doesn't take, as "al-Qadir" in lowercase) would be an orphan:
     `_UnlinkedNames` rolls the revision back, naming them."""
 
     with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
-        made = make_stubs(rev, view, new_names, fresh=preview.treated_as_new)
+        made = make_stubs(
+            rev,
+            view,
+            [*new_names, *(e.new for e in elsewhere if e.new is not None)],
+            fresh=preview.treated_as_new,
+        )
         if stub is None:
             fields: dict[str, Any] = {**preview.fields, "name": preview.name}
             if preview.aka:
@@ -2220,6 +2786,8 @@ def _write_preview(
         linking = world.view()
         linked: set[str] = set()
         for fact in preview.facts:
+            if not fact.ticked:
+                continue
             text = link_text(
                 linking,
                 fact.text,
@@ -2252,6 +2820,15 @@ def _write_preview(
                 linked.update(parse_refs(text))
                 text, origin = exception_fact(text, tie, exception)
                 rev.add_fact(thing_id, "ties", text, origin=origin)
+        linked |= write_elsewhere(
+            rev,
+            linking,
+            view,
+            elsewhere,
+            made,
+            picks=preview.picks,
+            as_new=preview.treated_as_new,
+        )
 
         orphans = {
             stub_id

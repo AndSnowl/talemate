@@ -329,7 +329,8 @@ async def test_slice_end_to_end(world, loadable):
     # only at creation, scene setup and continuing
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
-        "creative_instruction_2048": 2,  # create Maren; plan the continue
+        "creative_instruction_3072": 1,  # create Maren
+        "creative_instruction_2048": 1,  # plan the continue
         # Maren's prose: at creation, at 313 for scene A, at 315 for B
         "analyze": 6,
         "conversation": 4,  # the turns

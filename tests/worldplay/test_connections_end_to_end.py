@@ -492,9 +492,11 @@ async def test_connections_end_to_end(plugin, client, loadable):
     # nothing for lookups, linking or making stubs
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
-        # species, Tsardom, Vasha, the town; the scene's plan; Aldric's and
-        # Kalmara's stub previews
-        "creative_instruction_2048": 7,
+        # species, Tsardom, Vasha, the town; Aldric's and Kalmara's stub
+        # previews
+        "creative_instruction_3072": 6,
+        # the scene's plan
+        "creative_instruction_2048": 1,
         # one section each, two for Vasha (her species' instincts give her
         # a personality); none at start, the previews' prose is current
         "analyze": 7,

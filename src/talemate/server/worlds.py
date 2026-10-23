@@ -65,7 +65,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   stub, `picks` maps a name written in the prompt to the thing the owner
   matched it to, and `new_names` are written names the owner treats as new.
   `accept_preview {preview, into_stub}` writes it (into the stub
-  `into_stub`, if given) and answers with the thing. For the browser
+  `into_stub`, if given) and answers with the thing and `notes` (an
+  elsewhere fact whose target was deleted since the preview). For the browser
   tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
   facts, prose, fields?, ties?}`) that previews are answered from instead
   of the model (listing what the request's fields inherit, and for a
@@ -115,8 +116,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
   (answering with `{preview}` data, or `preview_sphere_failed` /
   `preview_branch_failed`); `accept_sphere {preview}` writes either.
   `fill_drawer {sphere_id, drawer_id}` answers `{sphere_id, drawer_id,
-  items}` (or `fill_failed`) and `accept_fill {sphere_id, drawer_id,
-  items}` writes them. `add_statement {sphere_id, drawer_id, text, picks,
+  items, elsewhere}` (or `fill_failed`) and `accept_fill {sphere_id,
+  drawer_id, items, elsewhere}` writes the ticked ones, answering with the
+  sphere and `notes` (an elsewhere fact whose target was deleted). `add_statement {sphere_id, drawer_id, text, picks,
   new_names, spans, at}` writes a statement by hand into a drawer that
   holds items (own or inherited; not Unsorted), linked like `add_fact`,
   and answers with the sphere. `set_drawers {sphere_id, drawers}`, `set_part_of
@@ -202,6 +204,7 @@ from talemate.worldplay.create import (
     CREATE_KINDS,
     PART_OF_KINDS,
     CreatePreview,
+    ElsewhereFact,
     PreviewException,
     PreviewTie,
     accept_preview,
@@ -458,6 +461,8 @@ class FillDrawerPayload(pydantic.BaseModel):
 class AcceptFillPayload(FillDrawerPayload):
     # `fill_drawer`'s items, less any the owner dropped
     items: list[dict[str, Any]]
+    # `fill_drawer`'s facts about other entries, as the owner left them
+    elsewhere: list[ElsewhereFact] = pydantic.Field(default_factory=list)
 
 
 class DrawerIn(pydantic.BaseModel):
@@ -1646,8 +1651,14 @@ class WorldsPlugin(Plugin):
     async def handle_accept_preview(self, data: dict):
         payload = AcceptPreviewPayload(**data)
         world = self._require_world()
-        thing_id = accept_preview(world, payload.preview, into_stub=payload.into_stub)
-        self._reply("accept_preview", self._thing_payload(world, thing_id, None))
+        notes: list[str] = []
+        thing_id = accept_preview(
+            world, payload.preview, into_stub=payload.into_stub, notes=notes
+        )
+        self._reply(
+            "accept_preview",
+            {**self._thing_payload(world, thing_id, None), "notes": notes},
+        )
 
     # --- spheres ----------------------------------------------------------
 
@@ -1714,10 +1725,11 @@ class WorldsPlugin(Plugin):
                 "fill_drawer",
                 "fill_failed",
                 "Error filling a sphere drawer",
-                success_data=lambda items: {
+                success_data=lambda filled: {
                     "sphere_id": payload.sphere_id,
                     "drawer_id": payload.drawer_id,
-                    "items": items,
+                    "items": filled.items,
+                    "elsewhere": [e.model_dump(mode="json") for e in filled.elsewhere],
                 },
                 failure_data={
                     "sphere_id": payload.sphere_id,
@@ -1734,10 +1746,22 @@ class WorldsPlugin(Plugin):
 
         payload = AcceptFillPayload(**data)
         world = self._require_world()
+        notes: list[str] = []
         sphereplay.accept_fill(
-            world, payload.sphere_id, payload.drawer_id, payload.items
+            world,
+            payload.sphere_id,
+            payload.drawer_id,
+            payload.items,
+            payload.elsewhere,
+            notes=notes,
         )
-        self._edited("accept_fill", payload.sphere_id, None, prose=False)
+        self._reply(
+            "accept_fill",
+            {
+                **self._thing_payload(world, payload.sphere_id, None),
+                "notes": notes,
+            },
+        )
 
     def _require_sphere(self, world: World, sphere_id: str) -> ThingState:
         state = world.view().thing(sphere_id)

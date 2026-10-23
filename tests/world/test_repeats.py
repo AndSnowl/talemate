@@ -151,8 +151,14 @@ def test_find_repeats_picks_best_owner(world):
         view, texts, [ids["ashenmere"], ids["law"], ids["tsardom"]], 0.4
     )
     assert found[0] == Repeat(
-        index=0, fact_id=ids["rediscovery"], owner_id=ids["ashenmere"], score=1.0
+        index=0,
+        fact_id=ids["rediscovery"],
+        owner_id=ids["ashenmere"],
+        score=1.0,
+        text=found[0].text,
     )
+    # the fact it repeats, as it reads
+    assert found[0].text == CAVES_947
     # the debate line holds 6 of its 11 words in the Law's fact, fewer in
     # Ashenmere's glyph fact (0.32); the White Talon's is no repeat
     assert len(found) == 2

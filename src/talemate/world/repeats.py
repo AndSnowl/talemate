@@ -91,12 +91,13 @@ def overlap(a: str, b: str) -> float:
 
 class Repeat(BaseModel):
     """A new text that says again what a live fact says: the text's index,
-    the fact, its owner and the overlap."""
+    the fact, its owner, the overlap, and the fact's text as it reads."""
 
     index: int
     fact_id: str
     owner_id: str
     score: float
+    text: str = ""
 
 
 def find_repeats(
@@ -111,26 +112,31 @@ def find_repeats(
     then id), wins. An owner that isn't live at the view has no facts."""
 
     rows = _live_facts(view, "thing_id", owner_ids)
-    by_owner: dict[str, list[tuple[str, set[str]]]] = {}
+    by_owner: dict[str, list[tuple[str, str, set[str]]]] = {}
     for row in rows:
+        rendered = view.render(row["text"])
         by_owner.setdefault(row["thing_id"], []).append(
-            (row["fact_id"], content_words(view.render(row["text"])))
+            (row["fact_id"], rendered, content_words(rendered))
         )
     facts = [
-        (owner_id, fact_id, words)
+        (owner_id, fact_id, rendered, words)
         for owner_id in dict.fromkeys(owner_ids)
-        for fact_id, words in by_owner.get(owner_id, [])
+        for fact_id, rendered, words in by_owner.get(owner_id, [])
     ]
 
     found: list[Repeat] = []
     for index, text in enumerate(texts):
         words = content_words(view.render(text))
         best: Repeat | None = None
-        for owner_id, fact_id, old in facts:
+        for owner_id, fact_id, rendered, old in facts:
             score = _share(words, old)
             if score >= threshold and (best is None or score > best.score):
                 best = Repeat(
-                    index=index, fact_id=fact_id, owner_id=owner_id, score=score
+                    index=index,
+                    fact_id=fact_id,
+                    owner_id=owner_id,
+                    score=score,
+                    text=rendered,
                 )
         if best is not None:
             found.append(best)

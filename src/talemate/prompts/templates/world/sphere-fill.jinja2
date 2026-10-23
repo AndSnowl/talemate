@@ -13,6 +13,11 @@ drawers, `target` marking the one to fill (by id, not title),
 `existing` the lines of the drawer to fill, `timeline` its timeline lines
 ("<year>: <text>"). The Connections blocks are as in sphere-core, without
 the entries already part of the sphere.
+
+With `nearby` (candidate lines, as create-thing's), the "Entries near this
+one" block, the "elsewhere" list and its rules, verbatim from
+docs/superpowers/probes/2026-10-22-curation.md, "Wording, if the owner
+goes ahead" (sphere-fill, v3).
 -#}
 <|SECTION:TASK|>
 You add items to one drawer of {{ name }}, a {{ label }} in a fantasy world. The owner asked to fill its "{{ drawer_title }}" drawer ({{ drawer_type }}: {{ drawer_help }}).
@@ -49,6 +54,13 @@ About those (they already exist in the world; let the {{ label }} reflect them):
 {%- endfor %}
 {%- endif %}
 {%- endif %}
+{%- if nearby %}
+
+Entries near this one in the world:
+{% for line in nearby -%}
+- {{ line }}
+{% endfor %}
+{%- endif %}
 {%- if existing %}
 
 Already in {{ drawer_title }} (never write these again, under their own name or another):
@@ -63,11 +75,16 @@ The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %}
 <|CLOSE_SECTION|>
 <|SECTION:FORMAT|>
 Reply with only one JSON object, shaped exactly like this example:
-{"new_items": [{"name": "...", "text": "One short sentence.", "kind": "lore"}, {"text": "A plain statement, in one short sentence."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"new_items": [{"name": "...", "text": "One short sentence.", "kind": "lore"}, {"text": "A plain statement, in one short sentence."}], "names": [{"name": "...", "kind": "place", "aka": []}]{% if nearby %}, "elsewhere": [{"entry": "<an entry's name>", "text": "A claim mainly about that entry, in a full sentence.", "held_by": null}]{% endif %}}
 
 - Each item is {"name", "text", "kind"}. When the item is a thing of its own that could get its own entry (a rite, an office, a council, a doctrine, a text, a site), "name" is its proper name, such as "the Dawn Vigil", and "kind" is lore, place (a site), item (an object) or event. For a plain statement ("Priests may not marry."), give only "text". "text" is one short sentence, under 20 words.
 - "names": after the rest, every proper name your items use, other than {{ name }}'s own and the new items' own names: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as you wrote it; "kind" one of character, place, species, race, sphere, event, item, lore; "aka" any other names you used for the same thing. A faith or church, an order, academy, guild or council, a culture, or a field of knowledge or magic is "sphere", with a "template": religion, order, culture or field, only these (a country or realm is a place; a rank or office is lore). Proper names only: never a description such as "the postmaster" or "a war", nor a title on its own such as "the Tsar", nor a people's adjective such as "Moscavian" on its own. An empty list is fine.
 - "new_items": only what {{ drawer_title }} doesn't hold yet: the items listed under it above are already there, so never write them again.
+{%- if nearby %}
+- Keep "new_items" to what belongs in {{ drawer_title }}: a claim mainly about another entry goes in "elsewhere".
+- "elsewhere": after the names, what you would add about other entries, each {"entry", "text", "held_by"}: "entry" the entry's name as the list of entries near this one writes it, or a new name you also list in "names"; "text" one claim in a full sentence. Never {{ name }} itself. An empty list is fine.
+- "elsewhere" is only for what another entry's page should say even if {{ name }}'s new items didn't exist: a claim about one of your new items, or tying another entry to one, is no elsewhere claim.
+{%- endif %}
 
 No commentary, no markdown fences, just the JSON object.
 <|CLOSE_SECTION|>

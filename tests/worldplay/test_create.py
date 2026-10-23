@@ -2057,11 +2057,14 @@ async def test_character_preview_proposes_ties_to_existing_spheres(at_1020, dawn
         ],
     )
 
-    assert DAWN_BLOCK + "\nThe world's calendar:" in prompt
+    # then the entries near it (curation), before the calendar
+    assert DAWN_BLOCK + "\nEntries near this one in the world:\n" in prompt
     assert "Named in this prompt" not in prompt
     # the example object and the rules, verbatim
     assert (
-        '"names": [{"name": "...", "kind": "place", "aka": []}], "ties": '
+        '"names": [{"name": "...", "kind": "place", "aka": []}], "elsewhere": '
+        '[{"entry": "<an entry\'s name>", "text": "A claim mainly about that '
+        'entry, in a full sentence.", "held_by": null}], "ties": '
         '[{"sphere": "...", "role": "practitioner", "since": "YEAR", '
         '"exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]}' in prompt
     )

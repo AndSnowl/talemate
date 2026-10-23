@@ -13,7 +13,12 @@ A sphere (`world.spheres`) is made the way the spheres probe settled
    a thing's prose.
 2. **Fill** (`fill_drawer`, `world/sphere-fill`): new items for one drawer,
    under the reply key `new_items`, with a plain statement as `{"text"}`.
-   Nothing is written until `accept_fill`.
+   Nothing is written until `accept_fill`. Fill also gets the curation
+   probe's elsewhere list (`FillPreview.elsewhere`), as create does, with
+   ruling C1's filter: an item about one of the reply's new items is
+   dropped. Its items are checked for repeats of what the entries near
+   the sphere say. The core gets no elsewhere list (ruling C1: in the
+   probe its elsewhere items were copies of their targets' facts).
 
 The core can make a new sphere, expand a stub (its kind becomes `sphere`,
 or it stays a place), or promote a thing: a lore entry or a stub becomes a
@@ -62,7 +67,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import structlog
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from talemate.prompts import Prompt
 from talemate.world import spheres
@@ -84,6 +89,7 @@ from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.create import (
     PART_OF_KINDS,
     CreatePreview,
+    ElsewhereFact,
     PreviewFact,
     json_objects,
 )
@@ -189,6 +195,16 @@ class SpherePreview(CreatePreview):
     parent_items: list[dict[str, Any]] = Field(default_factory=list)
     drops: list[str] = Field(default_factory=list)
     rejects: list[str] = Field(default_factory=list)
+
+
+class FillPreview(BaseModel):
+    """What Fill proposes for a drawer, before it's written: `items`, as
+    `SpherePreview.items` holds them, each with its `names`, its
+    `repeat_of` (`create.repeat_flags`) and whether it's `ticked`; and
+    `elsewhere`, the facts about other entries, grouped by entry."""
+
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    elsewhere: list[ElsewhereFact] = Field(default_factory=list)
 
 
 # --- reading replies -----------------------------------------------------------
@@ -927,7 +943,7 @@ def _write_sphere(
             rev,
             world,
             thing_id,
-            preview.items,
+            [item for item in preview.items if item.get("ticked", True)],
             made,
             picks=preview.picks,
             as_new=preview.treated_as_new,
@@ -948,6 +964,8 @@ def _write_sphere(
             linked.update(parse_refs(text))
             rev.add_fact(thing_id, "about", text, origin=SUMMARY_ORIGIN)
         for fact in preview.facts:
+            if not fact.ticked:
+                continue
             text = link_text(
                 linking,
                 fact.text,
@@ -1125,16 +1143,22 @@ async def fill_drawer(
     client: Any,
     *,
     reply: str | None = None,
-) -> list[dict[str, Any]]:
+) -> FillPreview:
     """New items for one drawer of a sphere (`world/sphere-fill`), as
-    `SpherePreview.items` holds them, without writing anything. Each item
-    also carries `names`: the new names (`NewName` dumps) its text is the
-    first to use, which `accept_fill` makes stubs for.
+    `SpherePreview.items` holds them, and facts about other entries,
+    without writing anything (`FillPreview`). Each item also carries
+    `names`: the new names (`NewName` dumps) its text is the first to use,
+    which `accept_fill` makes stubs for.
 
     The prompt has the sphere's summary, timeline and writable drawers
-    with what they hold, and its mentions (but those from entries part of
-    it). An item repeating one the sphere holds is dropped; the rest are
-    matched against the world as the core's are. A given `reply` stands in
+    with what they hold, its mentions (but those from entries part of
+    it), and the entries near it (`create.nearby_ids`, at the world's
+    curation settings). An item repeating one the sphere holds is dropped;
+    the rest are matched against the world as the core's are, and one
+    repeating what the sphere or an entry near it says is flagged
+    (`repeat_of`; unticked at the untick threshold). The reply's
+    elsewhere items are read as create reads them (`create.parse_elsewhere`),
+    less those about the reply's own new items. A given `reply` stands in
     for the model's, as in `preview_sphere`."""
 
     view = world.view()
@@ -1162,6 +1186,8 @@ async def fill_drawer(
     template = state.fields.get("template")
     template = template if template in TEMPLATE_LABELS else "other"
     name = view.name_of(sphere_id) or ""
+    settings = world.curation()
+    near_ids = create.nearby_ids(view, [sphere_id], [], settings, {sphere_id})
 
     template_vars: dict[str, Any] = {
         "name": name,
@@ -1175,6 +1201,7 @@ async def fill_drawer(
         "existing": [line for *_, ls, target in lines if target for line in ls],
         "mentions": mentions,
         "about": about,
+        "nearby": create._nearby_lines(view, near_ids),
         **_calendar_vars(world),
     }
     if reply is None:
@@ -1192,7 +1219,8 @@ async def fill_drawer(
         raw = [
             o
             for o in json_objects(reply)
-            if isinstance(o.get("text"), str) and not {"tag", "everyday"} & o.keys()
+            if isinstance(o.get("text"), str)
+            and not {"tag", "everyday", "entry"} & o.keys()
         ]
 
     parsed = [item for raw_item in raw if (item := _item(raw_item, drawer.id))]
@@ -1210,6 +1238,29 @@ async def fill_drawer(
         first = next((i for i in items if _written_by(i["text"], new_name)), None)
         if first is not None:
             first["names"].append(new_name.model_dump())
+
+    flags = create.repeat_flags(
+        view, [item["text"] for item in items], [sphere_id, *near_ids], settings
+    )
+    for item, (repeat_of, ticked) in zip(items, flags):
+        item["repeat_of"], item["ticked"] = repeat_of, ticked
+    if obj is not None:
+        raw_elsewhere = obj.get("elsewhere")
+    else:
+        raw_elsewhere = create.raw_elsewhere(reply, None)
+    elsewhere = create.parse_elsewhere(
+        raw_elsewhere,
+        view,
+        own_keys=own_keys,
+        own_ids={sphere_id},
+        listed=listed,
+        calendar=calendar,
+        now_year=create.current_date(world).to_datetime().year,
+        prefer=near_ids,
+        holder=lambda held: create.holder_named(view, held),
+        new_items=[item["name"] for item in parsed if item["name"]],
+    )
+    create.flag_elsewhere_repeats(view, elsewhere, settings)
     log.info(
         "spheres.fill",
         sphere_id=sphere_id,
@@ -1217,26 +1268,41 @@ async def fill_drawer(
         got=len(parsed),
         repeats=len(parsed) - len(fresh),
         kept=len(items),
+        flagged=sum(1 for item in items if item["repeat_of"] is not None),
+        elsewhere=len(elsewhere),
     )
-    return items
+    return FillPreview(items=items, elsewhere=elsewhere)
 
 
 def accept_fill(
-    world: World, sphere_id: str, drawer_id: str, items: list[dict[str, Any]]
+    world: World,
+    sphere_id: str,
+    drawer_id: str,
+    items: list[dict[str, Any]],
+    elsewhere: Sequence[ElsewhereFact] = (),
+    *,
+    notes: list[str] | None = None,
 ) -> None:
-    """Write Fill's `items` (as `fill_drawer` gave them, less any the owner
-    dropped) into the sphere in one revision, as `accept_sphere` writes
-    the core's: named items become stubs part of it, nameless ones its
-    statements, in `drawer_id` unless an item names its own drawer. The
-    new names the kept items carry become stubs, unless nothing links
-    them."""
+    """Write Fill's ticked `items` (as `fill_drawer` gave them, less any the
+    owner dropped; an item with `ticked` false, a repeat, isn't written)
+    into the sphere in one revision, as `accept_sphere` writes the core's:
+    named items become stubs part of it, nameless ones its statements, in
+    `drawer_id` unless an item names its own drawer. The new names the
+    kept items carry become stubs, unless nothing links them. The ticked
+    `elsewhere` facts go onto their targets in the same revision, as
+    `create.accept_preview` writes them; one whose target was deleted is
+    dropped with a note in `notes`."""
 
     view = world.view()
     _sphere_state(view, sphere_id)
     _fill_drawer_of(view, sphere_id, drawer_id)
     items = [
-        {**item, "drawer_id": item.get("drawer_id") or drawer_id} for item in items
+        {**item, "drawer_id": item.get("drawer_id") or drawer_id}
+        for item in items
+        if item.get("ticked", True)
     ]
+    others = create.live_elsewhere(view, elsewhere, {sphere_id}, notes)
+    elsewhere_names = [e.new for e in others if e.new is not None]
     new_names: list[NewName] = []
     for item in items:
         for raw in item.get("names") or []:
@@ -1247,16 +1313,22 @@ def accept_fill(
     while True:
         try:
             with world.revision(Source.manual(note=_FILLED_NOTE)) as rev:
-                made = make_stubs(rev, view, new_names)
+                made = make_stubs(rev, view, [*new_names, *elsewhere_names])
                 stubs = dict(made)
                 linked = _write_items(rev, world, sphere_id, items, made)
+                linked |= create.write_elsewhere(rev, world.view(), view, others, made)
                 unlinked = _orphans(view, stubs, new_names, linked)
                 if unlinked:
                     raise create._UnlinkedNames([n.name for n in unlinked])
             break
         except create._UnlinkedNames as unlinked_names:
             new_names = _without_unlinked(new_names, unlinked_names)
-    log.info("spheres.fill_accept", sphere_id=sphere_id, items=len(items))
+    log.info(
+        "spheres.fill_accept",
+        sphere_id=sphere_id,
+        items=len(items),
+        elsewhere=len(others),
+    )
 
 
 # --- branches ----------------------------------------------------------------
