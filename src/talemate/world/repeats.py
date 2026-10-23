@@ -42,6 +42,7 @@ __all__ = [
     "Repeat",
     "content_words",
     "disagreeing_dates",
+    "fact_texts",
     "find_repeats",
     "overlap",
 ]
@@ -174,6 +175,18 @@ def _live_facts(
         """,
         (*params, json.dumps(list(ids)), view.rev, view.rev),
     ).fetchall()
+
+
+def fact_texts(view: WorldView, owner_ids: Sequence[str]) -> list[tuple[str, str, str]]:
+    """`(owner id, fact id, text as it reads)` for every fact of `owner_ids`
+    not removed at the view's revision, of a live owner, whatever its story
+    dates (as `find_repeats` reads them); ordered by start date (undated
+    first), then id."""
+
+    return [
+        (row["thing_id"], row["fact_id"], view.render(row["text"]))
+        for row in _live_facts(view, "thing_id", owner_ids)
+    ]
 
 
 def _dated_facts(

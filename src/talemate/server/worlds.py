@@ -59,6 +59,16 @@ through `signal_operation_failed` (an `operation_done` envelope with
   copy's id and the target's payload). Refused, writing nothing: a removed
   fact, a deleted target, the fact's own entry. Prose is refreshed for
   each side whose prose reads the fact's category.
+  `preview_merge {from_id, into_id}` (`talemate.worldplay.merge`) answers
+  `preview_merge {preview}`, writing nothing and asking no model: both
+  names, both sides' facts (repeats unticked), the pairs that may disagree
+  and what moves. `accept_merge {preview, main_name, keep, lose}` folds
+  `from_id` into `into_id` in one revision (`keep`: each pair's key ->
+  "a", "b" or "both"; `lose`: "remove" or "end") and answers `{from_id,
+  into, main_name, links, aka_added, facts_moved, notes}`. Refused as
+  Re-point is, and for a thing into itself, a sphere with parts or ties
+  into a non-sphere, an entry into a stub, and a stale preview. Prose is
+  refreshed for the into-side and each rendered field rewritten.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
   `add_fact`. `list_heritage` answers `{things: [{id, kind, name,
@@ -187,7 +197,7 @@ import os
 import uuid
 from collections.abc import Coroutine
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pydantic
 import structlog
@@ -246,6 +256,7 @@ from talemate.worldplay.links import (
 from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
+from talemate.worldplay.merge import MergePreview, accept_merge, preview_merge
 from talemate.worldplay.repoint import move_fact, repoint_stub
 from talemate.worldplay.setup import (
     SceneSetup,
@@ -421,6 +432,18 @@ class RepointStubPayload(pydantic.BaseModel):
 class MoveFactPayload(pydantic.BaseModel):
     fact_id: str
     target_id: str
+
+
+class PreviewMergePayload(pydantic.BaseModel):
+    from_id: str
+    into_id: str
+
+
+class AcceptMergePayload(pydantic.BaseModel):
+    preview: MergePreview
+    main_name: str
+    keep: dict[str, Literal["a", "b", "both"]] = {}
+    lose: Literal["remove", "end"] = "remove"
 
 
 class ChangeStubKindPayload(pydantic.BaseModel):
@@ -2346,6 +2369,44 @@ class WorldsPlugin(Plugin):
             },
         )
         for thing_id in prose:
+            self._schedule_prose(thing_id, None)
+
+    async def handle_preview_merge(self, data: dict):
+        """What merging one entry into another would do
+        (`worldplay.merge.preview_merge`): no model call, nothing written."""
+
+        payload = PreviewMergePayload(**data)
+        world = self._require_world()
+        preview = preview_merge(world, payload.from_id, payload.into_id)
+        self._reply("preview_merge", {"preview": preview.model_dump(mode="json")})
+
+    async def handle_accept_merge(self, data: dict):
+        """Merge one entry into another as the owner picked, in one
+        revision (`worldplay.merge.accept_merge`). Prose is refreshed for
+        the into-side and each thing whose rendered fields changed."""
+
+        payload = AcceptMergePayload(**data)
+        world = self._require_world()
+        done = accept_merge(
+            world,
+            payload.preview,
+            main_name=payload.main_name,
+            keep=payload.keep,
+            lose=payload.lose,
+        )
+        self._reply(
+            "accept_merge",
+            {
+                "from_id": payload.preview.from_id,
+                "into": self._thing_payload(world, payload.preview.into_id, None),
+                "main_name": done.target_name,
+                "links": done.links,
+                "aka_added": done.aka_added,
+                "facts_moved": done.facts_moved,
+                "notes": done.notes,
+            },
+        )
+        for thing_id in done.prose:
             self._schedule_prose(thing_id, None)
 
     # --- edits ------------------------------------------------------------

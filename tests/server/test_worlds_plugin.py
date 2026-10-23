@@ -4636,3 +4636,46 @@ async def test_move_fact_moves_one_fact(plugin, monkeypatch):
     await _act(plugin, "move_fact", fact_id=reply["fact_id"], target_id=s.moscavy)
     assert "already" in _last(plugin, "operation_done")["error"]["message"]
     assert world.head_rev() == head
+
+
+async def test_preview_and_accept_merge(plugin, monkeypatch):
+    """`preview_merge` writes nothing and answers the preview;
+    `accept_merge` folds The Harbour into Moscavy in one revision as the
+    owner picked, answers with Moscavy's payload and refreshes its prose.
+    A refusal writes nothing."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    head = world.head_rev()
+    await _act(plugin, "preview_merge", from_id=s.harbour, into_id=s.moscavy)
+    assert not _errors(plugin)
+    assert world.head_rev() == head
+    preview = _last(plugin, "preview_merge")["data"]["preview"]
+    assert preview["names"] == ["Moscavy", "The Harbour"]
+    assert {f["fact_id"] for f in preview["facts"] if f["side"] == "from"} >= {
+        s.ships,
+        s.sailed,
+    }
+
+    await _act(
+        plugin,
+        "accept_merge",
+        preview=preview,
+        main_name="The Harbour",
+        keep={},
+        lose="end",
+    )
+    assert not _errors(plugin)
+    assert world.head_rev() == head + 1
+    reply = _last(plugin, "accept_merge")["data"]
+    assert reply["from_id"] == s.harbour
+    assert reply["into"]["id"] == s.moscavy
+    assert reply["main_name"] == "The Harbour"
+    view = world.view()
+    assert view.thing(s.harbour) is None
+    assert view.name_of(s.moscavy) == "The Harbour"
+    assert s.prose[0] == s.moscavy
+
+    await _act(plugin, "preview_merge", from_id=s.maren, into_id=s.maren)
+    assert "itself" in _last(plugin, "operation_done")["error"]["message"]
+    assert world.head_rev() == head + 1

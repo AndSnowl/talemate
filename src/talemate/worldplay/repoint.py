@@ -37,6 +37,21 @@ where its input changed (`RepointResult.prose`).
 `RepointPlan.write` writes it into a revision, so another writer can
 re-point a stub in its own revision (`create.accept_preview` with a same
 target, for the stub it expanded).
+
+The same mover folds any thing into any thing (`plan_merge`, for
+`worldplay.merge`): the same refusals, and a thing merged into itself; a
+sphere with parts filed in it or people tied to it can't fold into a thing
+that isn't a sphere, and a full entry doesn't fold into a stub (re-point
+the stub instead). It differs from a re-point in what the owner picks:
+- only the facts named move (`fact_ids`, the owner's ticks); the rest go
+  with the thing;
+- the main name (`main_name`, either side's): the other becomes a common
+  other name, and both sides' other names carry over (each keeping its
+  tag), one of the into-side's that is now the main name dropped;
+- a character's or real being's ties are combined, one per sphere and
+  role, the into-side's kept; a tie re-pointed `within` the into-side to a
+  sphere it won't be inside after the merge is within no part (noted);
+- the into-side's prose is always refreshed.
 """
 
 from __future__ import annotations
@@ -74,6 +89,7 @@ __all__ = [
     "RepointResult",
     "copy_facts",
     "move_fact",
+    "plan_merge",
     "plan_repoint",
     "repoint_stub",
 ]
@@ -344,6 +360,16 @@ class _Job(BaseModel):
     stub_name: str
     target_name: str
     notes: list[str] = []
+    # a merge (`plan_merge`): any thing, not a stub, into any thing
+    merge: bool = False
+    # a merge's facts to move (the owner's ticks); `None`, all of them
+    fact_ids: list[str] | None = None
+    # a merge's main name, either side's; `None`, the target's own
+    main_name: str | None = None
+
+    @property
+    def verb(self) -> str:
+        return "merged into" if self.merge else "re-pointed to"
 
 
 def _fact_changes(
@@ -378,7 +404,11 @@ def _fact_changes(
                 **origin,
                 **{key: target_id for key in keys},
             }
-    return changes, links, job.world.live_facts(stub_id)
+    own = job.world.live_facts(stub_id)
+    if job.fact_ids is not None:
+        wanted = set(job.fact_ids)
+        own = [fact for fact in own if fact.fact_id in wanted]
+    return changes, links, own
 
 
 def _relinked(
@@ -567,6 +597,9 @@ def _carried_fields(job: _Job) -> dict[str, object]:
     for field, value in job.stub.fields.items():
         if field in _OWN_HANDLED or value is None:
             continue
+        if job.merge and field == "ties":
+            # combined, one per sphere and role (`_merged_ties`)
+            continue
         held = target.fields.get(field)
         if held == value:
             continue
@@ -615,22 +648,173 @@ def _names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[str]]:
     return aka, added
 
 
-def _job(world: World, stub_id: str, target_id: str) -> _Job:
+def _merge_names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[str]]:
+    """A merge's `(aka, added)`: the target's other names, less one that is
+    now the main name, then the side's name that isn't the main name, the
+    stub's other names (each keeping its tag) and the links' shown texts,
+    added unless the main name, the list or another thing has that name
+    already. None is everyday but the target's own."""
+
+    view, target = job.view, job.target
+    main = job.main_name or job.target_name
+    main_key = name_key(main)
+    aka = [
+        entry
+        for entry in target.fields.get("aka") or []
+        if not (
+            isinstance(entry, dict)
+            and isinstance(entry.get("name"), str)
+            and name_key(entry["name"]) == main_key
+        )
+    ]
+    held = {main_key} | {
+        name_key(entry["name"])
+        for entry in aka
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+    }
+    taken = _other_name_keys(view, {job.stub.id, target.id})
+    other = job.stub_name if main_key != name_key(job.stub_name) else job.target_name
+    wanted: list[tuple[str, str]] = [(other, "common")]
+    for entry in job.stub.fields.get("aka") or []:
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str):
+            tag = entry.get("tag")
+            wanted.append((entry["name"], tag if isinstance(tag, str) else "common"))
+    wanted += [(text, "common") for text in shown_texts]
+    added: list[str] = []
+    for name, tag in wanted:
+        name = " ".join(name.split())
+        key = name_key(name)
+        if not key or key in held or key in taken:
+            continue
+        held.add(key)
+        added.append(name)
+        aka.append({"name": name, "tag": tag, "everyday": False})
+    return aka, added
+
+
+def _tie_key(tie: object) -> tuple[object, object]:
+    return (tie.get("sphere"), tie.get("role")) if isinstance(tie, dict) else ("", "")
+
+
+def _merged_ties(job: _Job) -> list[dict] | None:
+    """The target's ties with the stub's added, one per sphere and role
+    (the target's kept), when the stub has ties; `None` when there's
+    nothing to write. A tie to the target itself, or onto a target that
+    can't be tied, is noted instead."""
+
+    own = [t for t in job.stub.fields.get("ties") or [] if isinstance(t, dict)]
+    if not own or not spheres.acts_in_world(job.stub):
+        return None
+    if not spheres.acts_in_world(job.target):
+        job.notes.append(
+            f"{job.stub_name}'s ties aren't carried over:"
+            f" {job.target_name} can't be tied"
+        )
+        return None
+    ties = [t for t in job.target.fields.get("ties") or [] if isinstance(t, dict)]
+    have = {_tie_key(tie) for tie in ties}
+    added = False
+    for tie in own:
+        if tie.get("sphere") == job.target.id:
+            job.notes.append(
+                f"{job.stub_name}'s tie to {job.target_name} isn't carried over"
+            )
+            continue
+        if _tie_key(tie) in have:
+            continue
+        have.add(_tie_key(tie))
+        ties.append(tie)
+        added = True
+    return ties if added else None
+
+
+def _holders(world: World, view: WorldView, sphere_id: str) -> list[str]:
+    """The names of the things filed in the sphere, or tied to it, at any
+    story date."""
+
+    found: list[str] = []
+    for state in view.things():
+        for entry in world.timeline(state.id):
+            value = entry.value
+            if entry.change != "field":
+                continue
+            if (
+                entry.field == "part_of"
+                and isinstance(value, dict)
+                and value.get("sphere") == sphere_id
+            ) or (
+                entry.field == "ties"
+                and isinstance(value, list)
+                and any(
+                    isinstance(tie, dict) and tie.get("sphere") == sphere_id
+                    for tie in value
+                )
+            ):
+                found.append(view.name_of(state.id) or state.id)
+                break
+    return found
+
+
+def _within_checked(job: _Job, uses: list[_FieldUse], filing: object) -> None:
+    """A merge's ties re-pointed `within` the target: within no part when
+    the target won't be inside that tie's sphere (filed there already, or
+    taking the stub's `filing` there), with a note."""
+
+    view, target_id = job.view, job.target.id
+    for use in uses:
+        if use.field != "ties" or not isinstance(use.value, list):
+            continue
+        fixed: list[object] = []
+        for tie in use.value:
+            if isinstance(tie, dict) and tie.get("within") == target_id:
+                sphere = str(tie.get("sphere"))
+                inside = spheres.within_sphere(view, target_id, sphere) or (
+                    filing is not None
+                    and spheres.within_sphere(view, job.stub.id, sphere)
+                )
+                if not inside:
+                    tie = {**tie, "within": None}
+                    job.notes.append(
+                        f"{view.name_of(use.thing_id)}'s tie to"
+                        f" {view.name_of(sphere)} is within no part:"
+                        f" {job.target_name} isn't inside it"
+                    )
+            fixed.append(tie)
+        use.value = fixed
+
+
+def _job(world: World, stub_id: str, target_id: str, *, merge: bool = False) -> _Job:
     view = world.view()
     stub = view.thing(stub_id)
     if stub is None:
         raise KeyError(f"no such thing: {stub_id}")
     stub_name = view.name_of(stub_id) or stub_id
-    if not stub.is_stub:
+    if not merge and not stub.is_stub:
         raise ValueError(f"not a stub: {stub_name}")
     if target_id == stub_id:
-        raise ValueError("a stub can't be re-pointed onto itself")
+        raise ValueError(
+            "a thing can't be merged into itself"
+            if merge
+            else "a stub can't be re-pointed onto itself"
+        )
     target = view.thing(target_id)
     if target is None:
         raise KeyError(f"no such thing: {target_id}")
     target_name = view.name_of(target_id) or target_id
     if target.stub_ignored:
         raise ValueError(f"{target_name} is an ignored stub")
+    if merge and target.is_stub and not stub.is_stub:
+        raise ValueError(
+            f"{target_name} is a stub: re-point it onto {stub_name} instead"
+        )
+    if merge and spheres.is_sphere(stub) and not spheres.is_sphere(target):
+        held = _holders(world, view, stub_id)
+        if held:
+            raise ValueError(
+                f"{stub_name} has parts or ties ({', '.join(held)}), and"
+                f" {target_name} isn't a sphere: merge {target_name} into"
+                f" {stub_name} instead, or re-file and untie them first"
+            )
     return _Job(
         world=world,
         view=view,
@@ -639,6 +823,7 @@ def _job(world: World, stub_id: str, target_id: str) -> _Job:
         stub_name=stub_name,
         target_name=target_name,
         notes=[],
+        merge=merge,
     )
 
 
@@ -659,6 +844,7 @@ class RepointPlan:
         carried: dict[str, object],
         aka: list[dict],
         added: list[str],
+        ties: list[dict] | None = None,
     ) -> None:
         self._job = job
         self._uses = uses
@@ -669,6 +855,9 @@ class RepointPlan:
         self._carried = carried
         self._aka = aka
         self._added = added
+        self._ties = ties
+        # old fact id -> its copy's, once written
+        self.copies: dict[str, str] = {}
 
     @property
     def stub_id(self) -> str:
@@ -695,10 +884,30 @@ class RepointPlan:
         return len(self._uses)
 
     @property
-    def note(self) -> str:
-        """The revision note a re-point of its own writes."""
+    def links(self) -> int:
+        """How many fact links to the stub are pointed at the target."""
 
-        return f"re-pointed {self._job.stub_name} to {self._job.target_name}"
+        return self._links
+
+    @property
+    def use_counts(self) -> dict[str, int]:
+        """The field values re-pointed, by what they are: `filings`
+        (`part_of`), `ties` and the other `fields`."""
+
+        counts = {"fields": 0, "filings": 0, "ties": 0}
+        for use in self._uses:
+            key = {"part_of": "filings", "ties": "ties"}.get(use.field, "fields")
+            counts[key] += 1
+        return counts
+
+    @property
+    def note(self) -> str:
+        """The revision note a re-point (or merge) of its own writes."""
+
+        job = self._job
+        if job.merge:
+            return f"merged {job.stub_name} into {job.target_name}"
+        return f"re-pointed {job.stub_name} to {job.target_name}"
 
     def write(self, rev: Revision) -> None:
         """Every change, in `rev`; the stub is removed last. Written again
@@ -721,7 +930,7 @@ class RepointPlan:
             )
         # the stub's own facts, copied to the target (the stub's links in
         # them its words), then everyone else's changes
-        copy_facts(
+        self.copies = copy_facts(
             rev,
             job.world.view(),
             [fact.fact_id for fact in self._own],
@@ -731,8 +940,22 @@ class RepointPlan:
         )
         for fact_id, change in changes.items():
             rev.correct_fact(fact_id, **change)
-        if self._added:
+        if self._added or (
+            job.merge and self._aka != (job.target.fields.get("aka") or [])
+        ):
             rev.set_field(target_id, "aka", self._aka, None)
+        if job.merge and job.main_name not in (None, job.target_name):
+            # a correction of the name it holds now, at that value's date
+            rev.set_field(
+                target_id,
+                "name",
+                job.main_name,
+                job.view.field_since(target_id, "name"),
+            )
+        if self._ties is not None:
+            rev.set_field(
+                target_id, "ties", self._ties, job.view.field_since(target_id, "ties")
+            )
         if self._filing is not None:
             rev.set_field(target_id, "part_of", self._filing[0], self._filing[1])
         for field, value in self._carried.items():
@@ -750,7 +973,9 @@ class RepointPlan:
                 [
                     *(
                         [target_id]
-                        if self._own or set(self._carried) - set(UNRENDERED_FIELDS)
+                        if self._job.merge
+                        or self._own
+                        or set(self._carried) - set(UNRENDERED_FIELDS)
                         else []
                     ),
                     *(
@@ -763,7 +988,7 @@ class RepointPlan:
         )
         return RepointResult(
             stub_name=self._job.stub_name,
-            target_name=self._job.target_name,
+            target_name=self._job.main_name or self._job.target_name,
             links=self._links,
             aka_added=self._added,
             facts_moved=len(self._own),
@@ -785,14 +1010,19 @@ def plan_repoint(
     job = _job(world, stub_id, target_id)
     if as_kind is not None and as_kind != job.target.kind:
         job.target = job.target.model_copy(update={"kind": as_kind})
+    return _plan(job)
+
+
+def _plan(job: _Job) -> RepointPlan:
+    world = job.world
     blocked = [
         f"the scene {scene['name']}"
-        for scene in thing_references(world, stub_id)["scenes"]
+        for scene in thing_references(world, job.stub.id)["scenes"]
     ]
     uses = _field_uses(world, job.view, job.stub, job.target, blocked, job.notes)
     if blocked:
         raise ValueError(
-            f"{job.stub_name} can't be re-pointed to {job.target_name}:"
+            f"{job.stub_name} can't be {job.verb} {job.target_name}:"
             f" {'; '.join(dict.fromkeys(blocked))}"
         )
 
@@ -800,8 +1030,43 @@ def plan_repoint(
     changes, links, own = _fact_changes(job, shown_texts)
     filing = _own_filing(job)
     carried = _carried_fields(job)
-    aka, added = _names(job, shown_texts)
-    return RepointPlan(job, uses, changes, links, own, filing, carried, aka, added)
+    if not job.merge:
+        aka, added = _names(job, shown_texts)
+        return RepointPlan(job, uses, changes, links, own, filing, carried, aka, added)
+    _within_checked(job, uses, filing)
+    aka, added = _merge_names(job, shown_texts)
+    ties = _merged_ties(job)
+    return RepointPlan(
+        job, uses, changes, links, own, filing, carried, aka, added, ties
+    )
+
+
+def plan_merge(
+    world: World,
+    from_id: str,
+    into_id: str,
+    *,
+    fact_ids: Sequence[str] | None = None,
+    main_name: str | None = None,
+) -> RepointPlan:
+    """Read and decide a merge of the thing `from_id` into `into_id` (any
+    two things; see the module docstring), writing nothing: the facts
+    `fact_ids` of `from_id` move (`None`, all of them), and `into_id`
+    takes `main_name` (either side's name; `None`, its own). Raises
+    `KeyError` for a missing thing and `ValueError` for what's refused."""
+
+    job = _job(world, from_id, into_id, merge=True)
+    if main_name is not None:
+        names = {name_key(name): name for name in (job.stub_name, job.target_name)}
+        if name_key(main_name) not in names:
+            raise ValueError(
+                f"the main name is {job.target_name} or {job.stub_name},"
+                f" not {' '.join(main_name.split())}"
+            )
+        main_name = names[name_key(main_name)]
+    job.main_name = main_name
+    job.fact_ids = list(fact_ids) if fact_ids is not None else None
+    return _plan(job)
 
 
 def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
