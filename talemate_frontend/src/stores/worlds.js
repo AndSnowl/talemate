@@ -599,6 +599,8 @@ function worldState() {
         // name…", once asked for (`fetchNames`)
         namesOf: {},
         namesWanted: [],
+        // the last names asked for that failed (the thing is gone)
+        namesFailed: null,
         // "Make a stub and expand now": the stub's `{kind, name}`, until
         // its `make_stub_from_text` reply opens its create box
         stubExpandAfter: null,
@@ -638,6 +640,9 @@ function worldState() {
         // a stub to expand once the owner agrees to drop the unaccepted
         // preview: `{id, kind, name}`
         expandAsk: null,
+        // another box's Create, waiting for the owner to agree to drop the
+        // open draft: `{kind, prompt, fields, stubId, links}`
+        createAsk: null,
         // the last `stub_suggestion` reply: `{id, prompt, context}`
         stubSuggestion: null,
         // thing id -> the other names to add to it once it's fetched
@@ -980,13 +985,22 @@ export const useWorldsStore = defineStore('worlds', {
         // name}`), each thing taught its name once the draft is accepted.
         // A draft of the same kind (and stub) open already gets a new
         // version (its `draft_key` sent back: Regenerate, Edit prompt).
-        previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [] } = {}) {
+        previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [] } = {}, { discard = false } = {}) {
             const draft = this.draft;
-            const key = draft && draft.edited.kind === kind && (draft.edited.stub_id || null) === (stubId || null) ? draft.key : null;
+            // the same box's request (its kind and stub; the draft's own
+            // kind may have been changed since)
+            const before = this.previewRequest;
+            const same = !!draft && !!before && before.kind === kind && (before.stubId || null) === (stubId || null);
+            const key = same ? draft.key : null;
             if (draft && !key) {
-                // another entry's draft: the old one is dropped
+                // another entry's draft: the owner is asked before it goes
+                if (!discard) {
+                    this.createAsk = { kind, prompt, fields, stubId, links: { picks, newNames, repicks } };
+                    return;
+                }
                 this.discardPreview();
             }
+            this.createAsk = null;
             this.previewRequest = { kind, prompt, fields, stubId, picks, newNames, repicks };
             this.previewError = null;
             this.previewPending = true;
@@ -1165,6 +1179,7 @@ export const useWorldsStore = defineStore('worlds', {
         // thing `id`'s names (`namesOf[id]`: its name, then its other
         // names), fetched for "use the name…"
         fetchNames(id) {
+            this.namesFailed = null;
             if (!this.namesWanted.includes(id)) {
                 this.namesWanted = [...this.namesWanted, id];
             }
@@ -1209,9 +1224,19 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
-        // the owner keeps the preview: the stub isn't expanded
+        // the owner keeps the draft: the stub isn't expanded, nothing else
+        // is created
         keepPreview() {
             this.expandAsk = null;
+            this.createAsk = null;
+        },
+
+        // the owner agreed to drop the draft: create what was asked
+        confirmCreate() {
+            const ask = this.createAsk;
+            if (ask) {
+                this.previewThing(ask.kind, ask.prompt, ask.fields, ask.stubId, ask.links, { discard: true });
+            }
         },
 
         stopExpanding() {
@@ -2104,6 +2129,9 @@ export const useWorldsStore = defineStore('worlds', {
                             this.draft = { ...this.draft, accepting: false, adding: null, selecting: null };
                         }
                         this.stubExpandAfter = null;
+                        if (this.namesWanted.length) {
+                            this.namesFailed = this.namesWanted.at(-1);
+                        }
                         this.namesWanted = [];
                         // the page back opened is gone: back goes on
                         const failed = this.backOpening;

@@ -22,6 +22,7 @@
             <span class="text-caption text-muted" data-testid="group-count">{{ group.rows.length }}</span>
             <v-spacer></v-spacer>
             <v-btn
+                v-if="!readonly"
                 variant="outlined"
                 size="x-small"
                 :loading="!!synopsisState?.pending"
@@ -30,7 +31,7 @@
                 @click="askSynopsis"
             >✎ Synopsis</v-btn>
             <!-- the untagged group's "+ Add" is the page's own -->
-            <v-btn v-if="group.tag" variant="outlined" size="x-small" data-testid="group-add-button" @click="adding = !adding">+ Add</v-btn>
+            <v-btn v-if="group.tag && !readonly" variant="outlined" size="x-small" data-testid="group-add-button" @click="adding = !adding">+ Add</v-btn>
         </div>
         <div v-if="!folded" class="group-body">
             <v-text-field
@@ -56,7 +57,7 @@
                 :key="row.id"
                 class="connected-row"
                 :class="{ ended: !!row.until }"
-                draggable="true"
+:draggable="readonly ? 'false' : 'true'"
                 data-testid="connected-row"
                 @dragstart="dragStart($event, row)"
             >
@@ -67,7 +68,7 @@
                 <span v-if="row.role" class="role">{{ row.role }}</span>
                 <span v-if="dates(row)" class="when" data-testid="connected-dates">{{ dates(row) }}</span>
                 <!-- the keyboard's way to another group: drag's twin -->
-                <v-menu v-if="others.length" location="bottom end">
+                <v-menu v-if="others.length && !readonly" location="bottom end">
                     <template #activator="{ props }">
                         <button
                             v-bind="props"
@@ -118,7 +119,9 @@ const DRAG_TYPE = 'application/x-fantasymate-row';
 // A row dragged onto another group takes that group's tag (`set_tag`),
 // so it moves there on every page it's filed in; its "▾" menu does the
 // same from the keyboard. A believed (or undecided) being is marked
-// "believed" (ruling F24). The page keys each group by page and tag, so
+// "believed" (ruling F24). On a draft (`readonly`) the group only shows
+// (no synopsis, "+ Add", drag or move: each writes or asks before the
+// draft is accepted). The page keys each group by page and tag, so
 // its fold, filter and "show all" never carry over to another page.
 export default {
     name: 'ConnectedGroup',
@@ -130,6 +133,8 @@ export default {
         group: { type: Object, required: true },
         // the page's other groups (`{tag, heading}`), a row's "move to"
         others: { type: Array, default: () => [] },
+        // a draft's page: shown as it is, nothing asked or moved
+        readonly: { type: Boolean, default: false },
     },
     setup() {
         return { worlds: useWorldsStore() };
@@ -175,7 +180,7 @@ export default {
         },
         // only a Connected row may be dropped here
         dragOverRow(event) {
-            if (event.dataTransfer?.types?.includes(DRAG_TYPE)) {
+            if (!this.readonly && event.dataTransfer?.types?.includes(DRAG_TYPE)) {
                 event.preventDefault();
                 this.dragOver = true;
             }
@@ -188,7 +193,7 @@ export default {
         drop(event) {
             this.dragOver = false;
             const raw = event.dataTransfer?.getData(DRAG_TYPE);
-            if (!raw) {
+            if (!raw || this.readonly) {
                 return;
             }
             event.preventDefault();

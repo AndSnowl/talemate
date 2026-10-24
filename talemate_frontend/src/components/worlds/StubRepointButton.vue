@@ -51,7 +51,8 @@ import ReferenceMenu from './ReferenceMenu.vue';
 // entry the stub's names and removes the stub. "use the name…" is the hard
 // re-point (spec "Fixed along the way"): after the search, the owner picks
 // one of that entry's names (its name and other names, `fetchNames`), and
-// every link's words become it (`use_name`).
+// every link's words become it (`use_name`); if its names can't be had
+// (the entry is gone), the choice closes.
 export default {
     name: 'StubRepointButton',
     components: { ReferenceMenu },
@@ -76,6 +77,13 @@ export default {
         'worlds.pending.repoint_stub'(pending) {
             if (!pending) {
                 this.sent = false;
+            }
+        },
+        // the entry's names couldn't be had (it's gone): nothing to pick
+        'worlds.namesFailed'(id) {
+            if (id && id === this.chosen?.id) {
+                this.naming = false;
+                this.chosen = null;
             }
         },
     },

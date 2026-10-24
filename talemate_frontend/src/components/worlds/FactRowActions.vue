@@ -27,10 +27,9 @@
                 <v-list-item
                     prepend-icon="mdi-timer-off-outline"
                     title="End this"
-                    :subtitle="draft ? 'not on a draft' : undefined"
                     role="menuitem"
                     data-testid="fact-end"
-                    :disabled="draft || !!fact.valid_until"
+                    :disabled="!!fact.valid_until"
                     @click="emitClose('end')"
                 ></v-list-item>
                 <v-list-item prepend-icon="mdi-delete-outline" title="Remove" role="menuitem" data-testid="fact-remove" @click="emitClose('remove')"></v-list-item>
@@ -129,12 +128,12 @@ import { escapeCloses } from './worldKinds.js';
 //   spell-check hint.
 // On a draft (`draft`) nothing is written: Move, Copy and Held by are
 // emitted (`move`, `copy` with the entry picked, `held` with the holder
-// or null) for the draft to change, and End this is off (a draft's fact
-// has no end yet). Esc closes it (once a picker's list is shut).
+// or null) for the draft to change. Esc closes it (once a picker's list is
+// shut).
 export default {
     name: 'FactRowActions',
     props: {
-        // the fact row (`{fact_id, held_by, valid_until}`, or a draft's)
+        // the fact row (`{fact_id, held_by: {id, name}, valid_until}`)
         fact: { type: Object, required: true },
         draft: { type: Boolean, default: false },
         // ids never offered (the page's own entry)
@@ -160,7 +159,7 @@ export default {
             return this.worlds.referenceTargets.filter((target) => !target.stub && !this.excluded.includes(target.id));
         },
         heldBy() {
-            return this.draft ? this.fact.held_by : this.fact.held_by?.id;
+            return this.fact.held_by?.id || null;
         },
         moveNote() {
             return this.draft

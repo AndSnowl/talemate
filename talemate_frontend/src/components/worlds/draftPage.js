@@ -47,7 +47,8 @@ export function previewSegments(text, newNames = []) {
     for (const found of newNames) {
         const spellings = [found.name, ...(found.written || []), ...(found.aka || []).map((entry) => entry.name)];
         for (const spelling of spellings.filter(Boolean)) {
-            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, 'gu');
+            const flags = found.anyCase ? 'giu' : 'gu';
+            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, flags);
             for (const match of text.matchAll(pattern)) {
                 spans.push({ start: match.index, end: match.index + match[0].length, kind: found.kind });
             }
@@ -74,9 +75,14 @@ export function previewSegments(text, newNames = []) {
 
 // `segments` (a draft fact's, linked by the server) with the draft's new
 // names marked `fresh` in their plain runs; a name a new name has (its
-// same-as answered) is left plain, since it links an entry then.
-export function freshSegments(segments, newNames = []) {
-    const fresh = (newNames || []).filter((row) => !row.same_target_id);
+// same-as answered) is left plain, since it links an entry then. A name
+// the owner selected (`selected`, the draft's `selected_names`, ruling
+// F26) is found in any case, as accept will link it.
+export function freshSegments(segments, newNames = [], selected = []) {
+    const owned = new Set((selected || []).map(nameKey));
+    const fresh = (newNames || [])
+        .filter((row) => !row.same_target_id)
+        .map((row) => (owned.has(nameKey(row.name)) ? { ...row, anyCase: true } : row));
     return (segments || []).flatMap((segment) => (segment.ref || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
 }
 
@@ -101,7 +107,7 @@ function changes(base, edited) {
 const ROW_KEYS = {
     facts: null,
     elsewhere: null,
-    filings: (row) => row.target_id,
+    filings: (row) => filingKey(row),
     new_names: (row) => nameKey(row.name),
     file_into: (row) => row.thing_id,
     move_here: (row) => `${row.fact_id}|${row.repeat ? 'repeat' : 'near'}`,
@@ -195,7 +201,7 @@ export function draftFactRows(page, edited) {
             edited: rewritten,
             // what a selection names: the server's fact, as the server has it
             serverIndex: rewritten ? null : index,
-            segments: freshSegments(rewritten ? [{ text: fact.text, ref: null, stub: false }] : server.segments, newNames),
+            segments: freshSegments(rewritten ? [{ text: fact.text, ref: null, stub: false }] : server.segments, newNames, edited?.selected_names),
         }];
     });
 }
@@ -309,29 +315,57 @@ export function retarget(edited, index, target) {
     };
 }
 
-// an "In" row's tick or role
-export function changeFiling(edited, targetId, change) {
-    return { filings: (edited.filings || []).map((row) => (row.target_id === targetId ? { ...row, ...change } : row)) };
+// An "In" row's key: its target's id, or `new:<name>` for one on a name
+// the world hasn't (`new_name`, a stub accept makes).
+export function filingKey(row) {
+    return row.target_id || `new:${nameKey(row.new_name?.name || row.target_name)}`;
 }
 
-// "+ in… 🔎" on a draft: the owner's own filing, ticked (one already there
-// is ticked instead)
-export function addFiling(edited, target) {
+// an "In" row's tick, role or since
+export function changeFiling(edited, key, change) {
+    return { filings: (edited.filings || []).map((row) => (filingKey(row) === key ? { ...row, ...change } : row)) };
+}
+
+// "+ in… 🔎" on a draft: the owner's own filing, ticked, in an entry the
+// world has (`{id, name}`) or, like the page's, a new stub of a typed name
+// (`{newName, kind, tag}`); one already there is ticked (and given the
+// role) instead
+export function addFiling(edited, target, { role = null, since = null } = {}) {
     const filings = edited.filings || [];
-    if (filings.some((row) => row.target_id === target.id)) {
-        return changeFiling(edited, target.id, { ticked: true });
+    const row = target.newName
+        ? {
+            target_id: null,
+            new_name: { name: target.newName, kind: target.kind || 'lore', tag: target.tag || null },
+            target_name: target.newName,
+        }
+        : { target_id: target.id, target_name: target.name };
+    const key = filingKey(row);
+    if (filings.some((found) => filingKey(found) === key)) {
+        return changeFiling(edited, key, { ticked: true, ...(role ? { role } : {}), ...(since ? { since } : {}) });
     }
-    const row = {
-        target_id: target.id,
-        target_name: target.name,
-        role: null,
-        since: null,
-        within: null,
-        exceptions: [],
-        ticked: true,
-        local: true,
+    return {
+        filings: [...filings, { ...row, role, since, within: null, exceptions: [], ticked: true, local: true }],
     };
-    return { filings: [...filings, row] };
+}
+
+// a draft "In" row removed: the owner's own goes, the AI's is unticked
+export function removeFiling(edited, key) {
+    const filings = edited.filings || [];
+    return {
+        filings: filings
+            .filter((row) => !(row.local && filingKey(row) === key))
+            .map((row) => (filingKey(row) === key ? { ...row, ticked: false } : row)),
+    };
+}
+
+// The draft's kind changed (I3): its own facts' categories become ones
+// the new kind has (`categoryFor`). The "For other pages" rows keep
+// theirs: those are the target's kind's.
+export function changeKind(edited, kind) {
+    return {
+        kind,
+        facts: (edited.facts || []).map((fact) => ({ ...fact, category: categoryFor(kind, fact.category) })),
+    };
 }
 
 // a "File into this" row's tick

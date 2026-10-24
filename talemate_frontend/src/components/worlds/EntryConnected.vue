@@ -4,9 +4,9 @@
             <span class="text-overline text-muted">Connected</span>
             <span class="text-caption text-muted" data-testid="connected-count">· {{ countLine }}</span>
             <v-spacer></v-spacer>
-            <v-btn variant="outlined" size="x-small" data-testid="connected-add" @click="adding = !adding">+ Add</v-btn>
+            <v-btn v-if="!readonly" variant="outlined" size="x-small" data-testid="connected-add" @click="adding = !adding">+ Add</v-btn>
         </div>
-        <GroupAddForm v-if="adding || drafting" :thing-id="thing.id" :tag="null" @close="adding = false" />
+        <GroupAddForm v-if="!readonly && (adding || drafting)" :thing-id="thing.id" :tag="null" @close="adding = false" />
         <div v-if="!groups.length" class="empty text-body-2">Nothing is filed in {{ thing.name }} yet.</div>
         <div class="groups">
             <ConnectedGroup
@@ -15,6 +15,7 @@
                 :thing-id="thing.id"
                 :group="group"
                 :others="othersOf(group)"
+                :readonly="readonly"
             />
         </div>
     </div>
@@ -38,6 +39,9 @@ export default {
     components: { ConnectedGroup, GroupAddForm },
     props: {
         thing: { type: Object, required: true },
+        // a stub's draft: what's filed in the stub, shown as it is (no "+ Add":
+        // a group's new entries are written at once, never into a draft)
+        readonly: { type: Boolean, default: false },
     },
     setup() {
         return { worlds: useWorldsStore() };

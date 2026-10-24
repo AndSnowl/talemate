@@ -1,9 +1,33 @@
 <template>
-    <div class="thing-page" data-testid="thing-page">
+    <div class="thing-page" :data-testid="draft ? 'draft-page' : 'thing-page'">
+        <!-- a draft: its bar, and what it could be instead -->
+        <template v-if="draft && thing">
+            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" @accept="acceptDraft()" />
+            <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
+                <div class="d-flex align-center flex-wrap ga-2">
+                    <span>There is a stub named “{{ matchingStub.name }}” already.</span>
+                    <v-spacer></v-spacer>
+                    <v-btn color="accent" variant="flat" size="small" :loading="worlds.draft.accepting" :disabled="!edited.name.trim()" @click="acceptDraft(matchingStub.id)">Fill the stub “{{ matchingStub.name }}” instead</v-btn>
+                </div>
+            </v-alert>
+            <v-alert v-if="worlds.previewError" type="error" variant="tonal" density="compact" class="mb-2">{{ worlds.previewError }}</v-alert>
+        </template>
+
         <div class="d-flex align-center flex-wrap ga-2 mb-2">
-            <v-btn variant="text" size="small" prepend-icon="mdi-arrow-left" data-testid="thing-back" @click="worlds.goBack()">Back</v-btn>
+            <v-btn v-if="!draft" variant="text" size="small" prepend-icon="mdi-arrow-left" data-testid="thing-back" @click="worlds.goBack()">Back</v-btn>
             <template v-if="thing">
-                <div v-if="rename" class="d-flex align-center ga-2" data-testid="rename-field">
+                <v-text-field
+                    v-if="draft"
+                    :model-value="edited.name"
+                    label="Name"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="draft-name"
+                    data-testid="draft-name"
+                    @update:model-value="edit({ name: $event })"
+                ></v-text-field>
+                <div v-else-if="rename" class="d-flex align-center ga-2" data-testid="rename-field">
                     <v-text-field
                         v-model="rename.text"
                         label="Name"
@@ -23,59 +47,75 @@
                     <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
                 </template>
-                <v-chip size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
-                <TagChip :thing-id="thing.id" :tag="thing.tag" />
+                <!-- a draft's kind can change (its facts' categories follow) -->
+                <v-select
+                    v-if="draft"
+                    :model-value="edited.kind"
+                    :items="kindItems"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="draft-kind"
+                    data-testid="draft-kind"
+                    aria-label="Kind"
+                    @update:model-value="setDraftKind"
+                ></v-select>
+                <v-chip v-else size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
+                <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
+                <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
                 <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
                 <v-spacer></v-spacer>
 
-                <v-menu v-model="asOfMenu" :close-on-content-click="false" location="bottom end">
-                    <template #activator="{ props }">
-                        <v-btn v-bind="props" variant="outlined" size="small" append-icon="mdi-menu-down" data-testid="as-of-button" @click="openAsOf">
-                            viewing:&nbsp;<span class="world-date">{{ viewingLabel }}</span>
-                        </v-btn>
-                    </template>
-                    <v-card class="pa-3" min-width="260" data-testid="as-of-picker">
-                        <div class="text-caption text-muted mb-2">View this {{ info?.singular || 'thing' }} as of a date</div>
-                        <div class="d-flex ga-2">
-                            <v-text-field v-model.number="asOfYear" label="Year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details></v-text-field>
-                            <v-select v-model="asOfMonth" label="Month" :items="monthOptions" item-title="title" item-value="value" clearable density="compact" variant="outlined" hide-details></v-select>
-                        </div>
-                        <div class="d-flex ga-2 mt-3">
-                            <v-btn color="accent" variant="flat" size="small" :disabled="!validYear(asOfYear)" @click="applyAsOf">View</v-btn>
-                            <v-btn variant="text" size="small" @click="viewAt(null)">Latest</v-btn>
-                        </div>
-                    </v-card>
-                </v-menu>
+                <template v-if="!draft">
+                    <v-menu v-model="asOfMenu" :close-on-content-click="false" location="bottom end">
+                        <template #activator="{ props }">
+                            <v-btn v-bind="props" variant="outlined" size="small" append-icon="mdi-menu-down" data-testid="as-of-button" @click="openAsOf">
+                                viewing:&nbsp;<span class="world-date">{{ viewingLabel }}</span>
+                            </v-btn>
+                        </template>
+                        <v-card class="pa-3" min-width="260" data-testid="as-of-picker">
+                            <div class="text-caption text-muted mb-2">View this {{ info?.singular || 'thing' }} as of a date</div>
+                            <div class="d-flex ga-2">
+                                <v-text-field v-model.number="asOfYear" label="Year" type="number" min="1" max="9999" density="compact" variant="outlined" hide-details></v-text-field>
+                                <v-select v-model="asOfMonth" label="Month" :items="monthOptions" item-title="title" item-value="value" clearable density="compact" variant="outlined" hide-details></v-select>
+                            </div>
+                            <div class="d-flex ga-2 mt-3">
+                                <v-btn color="accent" variant="flat" size="small" :disabled="!validYear(asOfYear)" @click="applyAsOf">View</v-btn>
+                                <v-btn variant="text" size="small" @click="viewAt(null)">Latest</v-btn>
+                            </div>
+                        </v-card>
+                    </v-menu>
 
-                <v-btn
-                    v-if="!thing.stub"
-                    variant="outlined"
-                    size="small"
-                    prepend-icon="mdi-refresh"
-                    :loading="worlds.proseRegenerating === thing.id && !worlds.proseRegeneratingSection"
-                    :disabled="worlds.proseRegenerating === thing.id"
-                    @click="worlds.regenerateProse()"
-                >Regenerate prose</v-btn>
+                    <v-btn
+                        v-if="!thing.stub"
+                        variant="outlined"
+                        size="small"
+                        prepend-icon="mdi-refresh"
+                        :loading="worlds.proseRegenerating === thing.id && !worlds.proseRegeneratingSection"
+                        :disabled="worlds.proseRegenerating === thing.id"
+                        @click="worlds.regenerateProse()"
+                    >Regenerate prose</v-btn>
 
-                <v-btn
-                    v-if="!thing.stub"
-                    variant="outlined"
-                    size="small"
-                    prepend-icon="mdi-call-merge"
-                    data-testid="merge-into"
-                    @click="merging = true"
-                >Merge into…</v-btn>
+                    <v-btn
+                        v-if="!thing.stub"
+                        variant="outlined"
+                        size="small"
+                        prepend-icon="mdi-call-merge"
+                        data-testid="merge-into"
+                        @click="merging = true"
+                    >Merge into…</v-btn>
 
-                <v-btn
-                    variant="outlined"
-                    size="small"
-                    color="danger"
-                    prepend-icon="mdi-delete"
-                    data-testid="delete-thing"
-                    :loading="!!worlds.pending.thing_references"
-                    @click="worlds.requestDelete()"
-                >Delete</v-btn>
+                    <v-btn
+                        variant="outlined"
+                        size="small"
+                        color="danger"
+                        prepend-icon="mdi-delete"
+                        data-testid="delete-thing"
+                        :loading="!!worlds.pending.thing_references"
+                        @click="worlds.requestDelete()"
+                    >Delete</v-btn>
+                </template>
             </template>
         </div>
 
@@ -84,72 +124,83 @@
         </div>
 
         <template v-else>
-            <v-alert
-                v-if="worlds.stubRepointed && worlds.stubRepointed.target.id === thing.id"
-                type="success"
-                variant="tonal"
-                density="compact"
-                class="mb-3"
-                closable
-                data-testid="stub-repointed"
-                @click:close="worlds.clearStubRepointed()"
-            >
-                {{ repointedNote(worlds.stubRepointed) }}
-            </v-alert>
-            <div v-if="thing.stub" class="stub-panel pa-3 mb-4" data-testid="stub-panel">
-                <div class="text-subtitle-2 mb-1">A stub</div>
-                <StubCard :stub="stubOfPage" on-page />
-            </div>
-
-            <div class="timeline-strip d-flex flex-wrap align-center ga-1 mb-4" data-testid="timeline-strip">
-                <v-chip
-                    v-for="(point, index) in timelinePoints"
-                    :key="index"
-                    size="small"
-                    :variant="point.reached ? 'tonal' : 'outlined'"
-                    :color="point.scene ? 'scene' : (point.reached ? 'date' : 'muted')"
-                    :prepend-icon="point.scene ? 'mdi-movie-open' : undefined"
-                    @click="viewAt(point.date)"
+            <template v-if="!draft">
+                <v-alert
+                    v-if="worlds.stubRepointed && worlds.stubRepointed.target.id === thing.id"
+                    type="success"
+                    variant="tonal"
+                    density="compact"
+                    class="mb-3"
+                    closable
+                    data-testid="stub-repointed"
+                    @click:close="worlds.clearStubRepointed()"
                 >
-                    <span class="point-date">{{ point.dateLabel }}</span>
-                    <span class="point-text">{{ point.text }}</span>
-                </v-chip>
-                <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
-            </div>
+                    {{ repointedNote(worlds.stubRepointed) }}
+                </v-alert>
+                <div v-if="thing.stub" class="stub-panel pa-3 mb-4" data-testid="stub-panel">
+                    <div class="text-subtitle-2 mb-1">A stub</div>
+                    <StubCard :stub="stubOfPage" on-page />
+                </div>
 
-            <EntryIn :thing="thing" />
+                <div class="timeline-strip d-flex flex-wrap align-center ga-1 mb-4" data-testid="timeline-strip">
+                    <v-chip
+                        v-for="(point, index) in timelinePoints"
+                        :key="index"
+                        size="small"
+                        :variant="point.reached ? 'tonal' : 'outlined'"
+                        :color="point.scene ? 'scene' : (point.reached ? 'date' : 'muted')"
+                        :prepend-icon="point.scene ? 'mdi-movie-open' : undefined"
+                        @click="viewAt(point.date)"
+                    >
+                        <span class="point-date">{{ point.dateLabel }}</span>
+                        <span class="point-text">{{ point.text }}</span>
+                    </v-chip>
+                    <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
+                </div>
+            </template>
+
+            <!-- 1. In -->
+            <EntryIn
+                :thing="thing"
+                :draft="draft"
+                @add="(target, filing) => edit(addFiling(edited, target, draftFiling(filing)))"
+                @change="(key, change) => edit(changeFiling(edited, key, draftFiling(change)))"
+                @remove="edit(removeFiling(edited, $event))"
+            />
+
+            <!-- 2. Same thing? (a draft with candidates) -->
+            <SameThingAsk
+                v-if="draft && !edited.stub_id && edited.same_as && edited.same_as.length"
+                class="mt-2"
+                :name="edited.name"
+                :kind="edited.kind"
+                :offers="edited.same_as"
+                :verdict="edited.verdict"
+                :chosen="edited._same || null"
+                :exclude="ownIds"
+                @choose="edit({ _same: $event })"
+            />
 
             <!-- the entry's summary fact heads the page -->
             <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
-                <div class="fact fact-host d-flex align-center ga-2" data-testid="fact-row">
-                    <span class="flex-grow-1 summary-text">
-                        <LinkedText
-                            class="fact-text"
-                            :segments="summaryFact.segments"
-                            :text="summaryFact.rendered"
-                            repoint
-                            selectable
-                            :exclude="[thing.id]"
-                            @repoint="repointLink(summaryFact, $event)"
-                            @select="selected(summaryFact, $event)"
-                        />
-                        <span v-if="summaryFact.held_by" class="held" data-testid="held-by-tag">held by {{ summaryFact.held_by.name }}</span>
-                    </span>
-                    <span class="fact-date">{{ spanLabel(worlds.calendar, summaryFact.valid_from, summaryFact.valid_until) }}</span>
-                    <FactRowActions
-                        :fact="summaryFact"
-                        @edit="startEdit(summaryFact)"
-                        @dates="startEdit(summaryFact)"
-                        @end="startEnd(summaryFact)"
-                        @remove="worlds.removeFact(summaryFact.fact_id)"
-                    />
-                    <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(summaryFact)"></v-btn>
-                </div>
-                <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
-                    <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
-                </div>
+                <FactRow
+                    :fact="factView(summaryFact)"
+                    :exclude="[thing.id]"
+                    text-class="summary-text"
+                    @repoint="repointLink(summaryFact, $event)"
+                    @select="selected(summaryFact, $event)"
+                    @edit="startEdit(summaryFact)"
+                    @dates="startEdit(summaryFact, 'dates')"
+                    @end="startEnd(summaryFact)"
+                    @remove="worlds.removeFact(summaryFact.fact_id)"
+                >
+                    <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
+                        <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
+                    </div>
+                </FactRow>
             </div>
 
+            <!-- 3. Facts, beside the prose -->
             <v-row class="mt-1">
                 <v-col cols="12" md="6">
                     <div v-for="field in shownFields" :key="field.name" class="field d-flex align-center flex-wrap ga-2" :data-testid="'field-' + field.name">
@@ -164,86 +215,148 @@
                         <v-chip v-if="field.pastLifespan" size="x-small" label variant="tonal" color="warning" prepend-icon="mdi-alert" data-testid="past-lifespan">past lifespan</v-chip>
                         <span v-if="field.note" class="text-caption text-muted">{{ field.note }}</span>
                     </div>
-                    <div v-if="thing.kind === 'being'" class="field d-flex align-center flex-wrap ga-2" data-testid="being-existence">
-                        <span class="field-label">Exists</span>
-                        <v-btn-toggle
-                            :model-value="existence"
-                            density="compact"
-                            variant="outlined"
-                            divided
-                            mandatory
-                            color="accent"
-                            :disabled="!!worlds.pending.set_field"
-                            @update:model-value="setExistence"
-                        >
-                            <v-btn v-for="value in existenceValues" :key="value" :value="value" size="small">{{ value }}</v-btn>
-                        </v-btn-toggle>
-                        <span class="text-caption text-muted">{{ existenceNote }}</span>
-                    </div>
-                    <ThingNumbers v-if="isHeritage" />
-                    <ThingAka />
+                    <template v-if="!draft">
+                        <div v-if="thing.kind === 'being'" class="field d-flex align-center flex-wrap ga-2" data-testid="being-existence">
+                            <span class="field-label">Exists</span>
+                            <v-btn-toggle
+                                :model-value="existence"
+                                density="compact"
+                                variant="outlined"
+                                divided
+                                mandatory
+                                color="accent"
+                                :disabled="!!worlds.pending.set_field"
+                                @update:model-value="setExistence"
+                            >
+                                <v-btn v-for="value in existenceValues" :key="value" :value="value" size="small">{{ value }}</v-btn>
+                            </v-btn-toggle>
+                            <span class="text-caption text-muted">{{ existenceNote }}</span>
+                        </div>
+                        <ThingNumbers v-if="isHeritage" />
+                        <ThingAka />
+                    </template>
 
                     <div class="d-flex align-center mt-4 mb-1">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
+                        <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
-                        <EntryAddFacts v-if="!thing.stub" :thing="thing" />
-                        <v-btn v-if="!form || form.factId" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
+                        <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" :on-draft="draft" />
+                        <v-btn v-if="!draft && (!form || form.factId)" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
                     </div>
 
-                    <div v-if="form && !form.factId" class="mb-2">
+                    <div v-if="form && !form.factId && !form.draft" class="mb-2">
                         <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" />
                     </div>
 
-                    <div v-if="!shownFacts.length" class="text-body-2 text-muted">No facts true at this date.</div>
-                    <template v-for="fact in shownFacts" :key="fact.fact_id">
-                        <div class="fact fact-host d-flex align-center ga-2" data-testid="fact-row">
-                            <span class="flex-grow-1">
-                                <LinkedText
-                                    class="fact-text"
-                                    :segments="fact.segments"
-                                    :text="fact.rendered"
-                                    repoint
-                                    selectable
-                                    :exclude="[thing.id]"
-                                    @repoint="repointLink(fact, $event)"
-                                    @select="selected(fact, $event)"
-                                />
-                                <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
-                                <span v-if="fact.held_by" class="held" data-testid="held-by-tag">held by {{ fact.held_by.name }}</span>
-                            </span>
-                            <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
-                            <span class="fact-date">{{ spanLabel(worlds.calendar, fact.valid_from, fact.valid_until) }}</span>
-                            <FactRowActions
-                                :fact="fact"
-                                @edit="startEdit(fact)"
-                                @dates="startEdit(fact)"
-                                @end="startEnd(fact)"
-                                @remove="worlds.removeFact(fact.fact_id)"
+                    <template v-if="draft">
+                        <div v-if="worlds.draft.adding" class="d-flex align-center ga-2 text-caption text-muted mb-1" data-testid="draft-adding">
+                            <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
+                            Drafting more facts…
+                        </div>
+                        <!-- a stub's facts so far, written already -->
+                        <div v-for="fact in thing.facts" :key="fact.fact_id" class="stub-fact text-muted" data-testid="draft-stub-fact">
+                            <LinkedText :segments="fact.segments" :text="fact.rendered" />
+                            <span class="text-caption"> · on the stub already</span>
+                        </div>
+                        <div v-if="!draftRows.length" class="text-body-2 text-muted">No facts in this draft.</div>
+                        <FactRow
+                            v-for="row in draftRows"
+                            :key="'d' + row.index"
+                            :fact="row.view"
+                            draft
+                            :exclude="ownIds"
+                            @tick="edit(tickFact(edited, row.index, $event))"
+                            @select="selectedDraft(row, $event)"
+                            @edit="startDraftForm(row, 'edit')"
+                            @dates="startDraftForm(row, 'dates')"
+                            @end="startDraftForm(row, 'end')"
+                            @remove="edit(removeFact(edited, row.index))"
+                            @move="edit(moveFactTo(edited, row.index, $event))"
+                            @copy="edit(copyFactTo(edited, row.index, $event))"
+                            @held="edit(holdFact(edited, row.index, $event))"
+                        >
+                            <PreviewRepeats
+                                v-if="row.fact.repeat_of"
+                                :repeat="row.fact.repeat_of"
+                                :ticked="row.fact.ticked !== false"
+                                :moving="!!row.fact.moveRepeat"
+                                @settle="edit(settleRepeat(edited, row.index, $event))"
                             />
-                            <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(fact)"></v-btn>
-                            <v-btn v-if="!fact.valid_until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End fact" @click="startEnd(fact)"></v-btn>
-                        </div>
-                        <div v-if="form && form.factId === fact.fact_id" class="my-2">
-                            <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(fact)" />
-                        </div>
+                            <div v-if="form && form.draft && form.index === row.index" class="my-2">
+                                <ThingFactForm :form="form" :categories="categories" :removable="false" @save="saveForm" @cancel="form = null" />
+                            </div>
+                        </FactRow>
+
+                        <!-- what it inherits, each ticked as kept: unticking one
+                             the model missed marks it replaced by one of its own -->
+                        <template v-if="edited.inherited && edited.inherited.length">
+                            <div class="text-caption text-muted text-uppercase mt-3">Inherited (untick to replace)</div>
+                            <div v-for="row in edited.inherited" :key="row.fact_id" class="fact inherited d-flex align-center ga-2" data-testid="preview-inherited">
+                                <v-checkbox-btn
+                                    :model-value="overriderOf(row) < 0"
+                                    aria-label="Kept"
+                                    density="compact"
+                                    class="flex-grow-0"
+                                    :disabled="!edited.facts.length"
+                                    @update:model-value="setKept(row, $event)"
+                                ></v-checkbox-btn>
+                                <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
+                                <v-select
+                                    v-if="overriderOf(row) >= 0"
+                                    :model-value="overriderOf(row)"
+                                    :items="ownFactItems"
+                                    label="Replaced by"
+                                    density="compact"
+                                    variant="outlined"
+                                    hide-details
+                                    class="override-by"
+                                    data-testid="override-by"
+                                    @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
+                                ></v-select>
+                                <v-chip size="x-small" label variant="tonal" color="muted">{{ row.source }}</v-chip>
+                            </div>
+                        </template>
                     </template>
 
-                    <ThingInherited
-                        v-if="showInherited"
-                        :inherited="thing.inherited"
-                        :form="form"
-                        :categories="categories"
-                        :busy="editing"
-                        @override="startOverride"
-                        @save="saveForm"
-                        @cancel="form = null"
-                    />
-                    <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
-                    <NamedStubs :stubs="thing.named_stubs || []" />
+                    <template v-else>
+                        <div v-if="!shownFacts.length" class="text-body-2 text-muted">No facts true at this date.</div>
+                        <FactRow
+                            v-for="fact in shownFacts"
+                            :key="fact.fact_id"
+                            :fact="factView(fact)"
+                            :exclude="[thing.id]"
+                            @repoint="repointLink(fact, $event)"
+                            @select="selected(fact, $event)"
+                            @edit="startEdit(fact)"
+                            @dates="startEdit(fact, 'dates')"
+                            @end="startEnd(fact)"
+                            @remove="worlds.removeFact(fact.fact_id)"
+                        >
+                            <template #notes>
+                                <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
+                            </template>
+                            <div v-if="form && form.factId === fact.fact_id" class="my-2">
+                                <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(fact)" />
+                            </div>
+                        </FactRow>
+
+                        <ThingInherited
+                            v-if="showInherited"
+                            :inherited="thing.inherited"
+                            :form="form"
+                            :categories="categories"
+                            :busy="editing"
+                            @override="startOverride"
+                            @save="saveForm"
+                            @cancel="form = null"
+                        />
+                        <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
+                        <NamedStubs :stubs="thing.named_stubs || []" />
+                    </template>
                 </v-col>
 
                 <v-col cols="12" md="6">
-                    <div v-if="thing.stub" data-testid="stub-mentions-list">
+                    <div v-if="thing.stub && !draft" data-testid="stub-mentions-list">
                         <div class="text-overline text-muted">Mentioned in</div>
                         <div v-if="!thing.mentions.length" class="text-body-2 text-muted">Nothing mentions it now.</div>
                         <div v-for="mention in thing.mentions" :key="mention.fact_id" class="fact" data-testid="stub-mention">
@@ -252,13 +365,13 @@
                             {{ mention.text }}
                         </div>
                     </div>
-                    <div v-for="(prose, section) in proseShown" :key="section" class="mb-3">
+                    <div v-for="(prose, section) in proseShown" :key="section" class="mb-3" :data-testid="draft ? 'draft-prose' : null">
                         <div class="d-flex align-center ga-2">
                             <span class="text-overline text-muted">{{ section }} (generated)</span>
                             <v-chip v-if="prose.stale" size="x-small" label variant="tonal" color="warning">out of date</v-chip>
                             <v-spacer></v-spacer>
                             <v-btn
-                                v-if="proseSectionCount > 1"
+                                v-if="!draft && proseSectionCount > 1"
                                 variant="text"
                                 size="x-small"
                                 prepend-icon="mdi-refresh"
@@ -275,24 +388,63 @@
                         </div>
                     </div>
 
-                    <ThingReferencedIn v-if="isHeritage" :references="thing.referenced_in" @view-at="viewAt" />
-                    <template v-else>
-                        <div class="text-overline text-muted">Appears in</div>
-                        <div v-if="!thing.appears_in.length" class="text-body-2 text-muted">No scenes yet.</div>
-                        <div v-else class="d-flex flex-wrap ga-2">
-                            <v-chip v-for="scene in thing.appears_in" :key="scene.id" size="small" variant="tonal" color="scene" prepend-icon="mdi-movie-open" @click="viewAt(scene.start)">
-                                {{ scene.name }}&nbsp;<span class="text-muted">· {{ formatDate(worlds.calendar, scene.start) }}</span>
-                            </v-chip>
-                        </div>
+                    <template v-if="!draft">
+                        <ThingReferencedIn v-if="isHeritage" :references="thing.referenced_in" @view-at="viewAt" />
+                        <template v-else>
+                            <div class="text-overline text-muted">Appears in</div>
+                            <div v-if="!thing.appears_in.length" class="text-body-2 text-muted">No scenes yet.</div>
+                            <div v-else class="d-flex flex-wrap ga-2">
+                                <v-chip v-for="scene in thing.appears_in" :key="scene.id" size="small" variant="tonal" color="scene" prepend-icon="mdi-movie-open" @click="viewAt(scene.start)">
+                                    {{ scene.name }}&nbsp;<span class="text-muted">· {{ formatDate(worlds.calendar, scene.start) }}</span>
+                                </v-chip>
+                            </div>
+                        </template>
                     </template>
                 </v-col>
             </v-row>
 
-            <EntryConnected :thing="thing" class="mt-4" />
-            <EntryMentionedIn :thing="thing" />
+            <template v-if="draft">
+                <!-- 4. For other pages -->
+                <PreviewElsewhere
+                    :rows="edited.elsewhere || []"
+                    type="create"
+                    :new-names="edited.new_names || []"
+                    :also-here="ownTexts"
+                    :exclude="ownIds"
+                    @update="edit({ elsewhere: $event })"
+                    @retarget="(index, target) => edit(retarget(edited, index, target))"
+                    @also="edit(alsoHere(edited, $event))"
+                />
+                <!-- 5. Could move here -->
+                <MoveHere :draft="edited" @tick="tickMove" />
+                <!-- 6. New names -->
+                <PreviewStubs :rows="edited.new_names || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
+                <!-- 7. File into this -->
+                <div v-if="(edited.file_into || []).length" class="mt-3" data-testid="draft-file-into">
+                    <div class="heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>
+                    <div v-for="row in edited.file_into" :key="row.thing_id" class="d-flex align-center ga-2" data-testid="file-into-row">
+                        <v-checkbox-btn
+                            :model-value="!!row.ticked"
+                            density="compact"
+                            class="flex-grow-0"
+                            :aria-label="'File ' + row.name + ' into this'"
+                            @update:model-value="edit(tickFileInto(edited, row.thing_id, $event))"
+                        ></v-checkbox-btn>
+                        <span class="file-into-name" :class="{ dropped: !row.ticked }">{{ row.name }}</span>
+                        <span v-if="row.role" class="role">{{ row.role }}</span>
+                    </div>
+                </div>
+            </template>
+
+            <!-- what's filed in it and what names it: a stub's draft shows
+                 the stub's, as they are -->
+            <template v-if="!draft || thing.id">
+                <EntryConnected :thing="thing" :readonly="draft" class="mt-4" />
+                <EntryMentionedIn :thing="thing" />
+            </template>
             <EntryTimeline :lines="thing.entry_timeline || []" class="mt-4">
                 <template #actions>
-                    <EntryAddFacts v-if="!thing.stub" :thing="thing" event />
+                    <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" event :on-draft="draft" />
                 </template>
             </EntryTimeline>
         </template>
@@ -301,32 +453,61 @@
             v-model="selecting"
             :target="selection?.target"
             :words="selection?.words || ''"
-            :exclude="thing ? [thing.id] : []"
+            :draft="draft"
+            :blocked="selection?.blocked || ''"
+            :exclude="thing && thing.id ? [thing.id] : []"
             @stub="makeStub(false, $event)"
             @expand="makeStub(true, $event)"
             @link="linkWords"
         />
-        <ThingDeleteDialog />
-        <MergeDialog v-if="thing" v-model="merging" :thing="thing" />
+        <template v-if="!draft">
+            <ThingDeleteDialog />
+            <MergeDialog v-if="thing" v-model="merging" :thing="thing" />
+        </template>
     </div>
 </template>
 
 <script>
-import { listedFacts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
+import { countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
-import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
+import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, STUB_KINDS, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
-import { NEW_THING, factEditState, factLinkPayload, refOccurrence, repicks } from './nameHighlights.js';
+import { NEW_THING, factEditState, factLinkPayload, linkPayload, refOccurrence, repicks } from './nameHighlights.js';
+import {
+    addFiling,
+    alsoHere,
+    changeFiling,
+    changeKind,
+    changeNewName,
+    copyFactTo,
+    draftFactRows,
+    editFact,
+    holdFact,
+    moveFactTo,
+    removeFact,
+    removeFiling,
+    retarget,
+    settleRepeat,
+    tickFact,
+    tickFileInto,
+    tickMoveHere,
+} from './draftPage.js';
+import DraftBar from './DraftBar.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
 import EntryConnected from './EntryConnected.vue';
 import EntryIn from './EntryIn.vue';
 import EntryMentionedIn from './EntryMentionedIn.vue';
 import EntryTimeline from './EntryTimeline.vue';
-import FactRowActions from './FactRowActions.vue';
+import FactRow from './FactRow.vue';
 import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
 import MergeDialog from './MergeDialog.vue';
+import MoveHere from './MoveHere.vue';
 import NamedStubs from './NamedStubs.vue';
+import PreviewElsewhere from './PreviewElsewhere.vue';
+import PreviewRepeats from './PreviewRepeats.vue';
+import PreviewStubs from './PreviewStubs.vue';
+import SameThingAsk from './SameThingAsk.vue';
 import SelectionMenu from './SelectionMenu.vue';
 import StubCard from './StubCard.vue';
 import TagChip from './TagChip.vue';
@@ -407,31 +588,54 @@ function cut(text, length = 28) {
 // folded) and its Timeline ("Events ▾", "+ Add event…").
 //
 // Curation: every page has a Timeline (`EntryTimeline`, its
-// `entry_timeline`); each own fact row has its menu on "⋯" or a
+// `entry_timeline`); each fact is a `FactRow`: its menu on "⋯" or a
 // right-click (`FactRowActions`: Move to…, Copy to…, Held by…, Edit,
-// Change dates, End this, Remove), a held one tagged "held by X", and
-// right-clicking words selected in it opens the selection menu
-// (`SelectionMenu`: Make a stub, Make a stub and expand now, Link to an
-// entry…; `make_stub_from_text`, `link_text`, the words' UTF-16 offsets
-// in its rendered text). "Merge into…" opens the merge dialog
-// (`MergeDialog`). The draft page (a new or expanded entry, before it's
-// accepted) is this page's draft mode, `DraftPage`, which the create box
-// shows in its place. A
+// Change dates (a dates-only form), End this, Remove), a held one tagged
+// "held by X", and right-clicking words selected in it opens the
+// selection menu (`SelectionMenu`: Make a stub, Make a stub and expand
+// now, Link to an entry…; `make_stub_from_text`, `link_text`, the words'
+// UTF-16 offsets in its rendered text). "Merge into…" opens the merge
+// dialog (`MergeDialog`). A
+
 // being has its existence picked here (real, believed or undecided); only
 // a real one is a person, with "within" and "but…" on its "In" rows.
+//
+// The draft mode (`draft`; spec "The draft page", ruling F25: one page
+// for drafts and entries): a new or expanded entry, before it's accepted,
+// is this page with `thing` the draft's page (`worlds.draft.page`, the
+// owner's name, kind, tag and "In" rows over it), shown by the create box
+// in its place. The same header (the name and kind editable, the tag chip
+// local), the same "In" (`EntryIn` in its draft mode), fact rows
+// (`FactRow`), fact form (`ThingFactForm`), menus, Connected and
+// Mentioned in (read-only: a stub's draft shows the stub's) and
+// Timeline; every change goes to the draft (`worlds.editDraft` and
+// draftPage.js), nothing is written before Accept. It adds the draft bar
+// (`DraftBar`) and, in the spec's order around the shared sections,
+// "Same thing?" after In, the repeats' "Move that one here" on its facts
+// (`PreviewRepeats`) and what it inherits, then For other pages
+// (`PreviewElsewhere`), Could move here (`MoveHere`), New names
+// (`PreviewStubs`) and File into this. What the page alone has (the as-of
+// date, the timeline strip, other names, numbers, prose regeneration,
+// merge and delete) is left out.
 export default {
     name: 'ThingPage',
     components: {
+        DraftBar,
         EntryAddFacts,
         EntryConnected,
         EntryIn,
         EntryMentionedIn,
         EntryTimeline,
-        FactRowActions,
+        FactRow,
         HeritageSections,
         LinkedText,
         MergeDialog,
+        MoveHere,
         NamedStubs,
+        PreviewElsewhere,
+        PreviewRepeats,
+        PreviewStubs,
+        SameThingAsk,
         SelectionMenu,
         StubCard,
         ThingAka,
@@ -441,6 +645,12 @@ export default {
         ThingNumbers,
         ThingReferencedIn,
         TagChip,
+    },
+    props: {
+        // the draft mode: the open draft (`worlds.draft`) as the page it
+        // will be; `stay` (a nested mix box) accepts without opening it
+        draft: { type: Boolean, default: false },
+        stay: { type: Boolean, default: false },
     },
     setup() {
         return { worlds: useWorldsStore() };
@@ -469,7 +679,99 @@ export default {
     },
     computed: {
         thing() {
-            return this.worlds.thing;
+            return this.draft ? this.draftThing : this.worlds.thing;
+        },
+        // the draft's preview as the owner left it
+        edited() {
+            return this.worlds.draft?.edited || null;
+        },
+        // the draft as the page it will be: the server's page of it
+        // (a stub's draft starts from the stub's own page), with the
+        // owner's name, kind, tag and "In" rows, and its prose
+        draftThing() {
+            const draft = this.worlds.draft;
+            if (!draft) {
+                return null;
+            }
+            const page = draft.page;
+            const edited = draft.edited;
+            const kept = (page.in || []).filter((row) => !row.draft);
+            const keptIds = new Set(kept.map((row) => row.target_id));
+            const own = (edited.filings || [])
+                .filter((row) => !row.target_id || !keptIds.has(row.target_id))
+                .map((row) => ({
+                    ...row,
+                    until: null,
+                    within_id: row.within || null,
+                    within_name: row.within ? this.thingName(row.within) : null,
+                    exceptions: [],
+                    draft: true,
+                }));
+            return {
+                ...page,
+                name: edited.name,
+                kind: edited.kind,
+                tag: edited.tag,
+                hint: edited.hint,
+                aka: edited.aka || [],
+                in: [...kept, ...own],
+                facts: (page.facts || []).filter((fact) => !fact.draft),
+                inherited: [],
+                prose: Object.fromEntries(Object.entries(edited.prose || {}).map(([section, text]) => [section, { text, stale: false }])),
+            };
+        },
+        kindItems() {
+            const kinds = STUB_KINDS.includes(this.edited?.kind) ? STUB_KINDS : [...STUB_KINDS, this.edited?.kind].filter(Boolean);
+            return kinds.map((kind) => ({ title: kindInfo(kind)?.singular || kind, value: kind }));
+        },
+        // the stub a draft expands: never a target of its own
+        ownIds() {
+            return this.edited?.stub_id ? [this.edited.stub_id] : [];
+        },
+        // a draft's own facts (`draftFactRows`), each with the row
+        // FactRow shows
+        draftRows() {
+            if (!this.draft || !this.worlds.draft) {
+                return [];
+            }
+            return draftFactRows(this.worlds.draft.page, this.edited).map((row) => ({
+                ...row,
+                view: {
+                    text: row.fact.text,
+                    segments: row.segments,
+                    category: row.fact.category,
+                    valid_from: row.fact.since || null,
+                    valid_until: row.fact.until || null,
+                    held_by: row.fact.held_by ? { id: row.fact.held_by, name: row.fact.held_by_name } : null,
+                    ticked: row.fact.ticked,
+                    local: row.local,
+                },
+            }));
+        },
+        ownTexts() {
+            return this.draftRows.map((row) => row.fact.text);
+        },
+        tickedCount() {
+            return this.draftRows.filter((row) => row.fact.ticked !== false).length;
+        },
+        ownFactItems() {
+            return (this.edited?.facts || []).flatMap((fact, index) => (fact.removed ? [] : [{ title: fact.text, value: index }]));
+        },
+        // the stub of this kind the draft is named like (not one it expands)
+        matchingStub() {
+            const id = this.edited?.matching_stub_id;
+            if (!id || this.edited.stub_id) {
+                return null;
+            }
+            return { id, name: this.worlds.stubInfo(id)?.name || this.edited.name };
+        },
+        countsText() {
+            const same = this.edited?._same;
+            const onto = same
+                ? (this.edited.same_as || []).find((offer) => offer.thing_id === same)?.name
+                    || this.worlds.referenceTargets.find((target) => target.id === same)?.name
+                : null;
+            return this.edited ? countsLine(previewCounts(this.edited), onto) : '';
         },
         existence() {
             return existenceOf(this.thing);
@@ -489,7 +791,7 @@ export default {
         // a kind that inherits, with something to inherit (a character
         // without heritage has none)
         showInherited() {
-            return INHERITING_KINDS.includes(this.thing?.kind) && !!this.thing.inherited?.length;
+            return !this.draft && INHERITING_KINDS.includes(this.thing?.kind) && !!this.thing.inherited?.length;
         },
         // the date the page shows: its own, or the world's "now" for latest
         viewingDate() {
@@ -507,7 +809,7 @@ export default {
         },
         // a stub has nothing written yet to make prose from
         proseShown() {
-            return this.thing?.stub ? {} : this.thing?.prose || {};
+            return this.thing?.stub && !this.draft ? {} : this.thing?.prose || {};
         },
         // the facts listed (`listedFacts`): the summary heads the page, and
         // a person's "but…" exceptions show under its "In" rows
@@ -515,7 +817,7 @@ export default {
             return listedFacts(this.thing);
         },
         summaryFact() {
-            return (this.thing?.facts || []).find((fact) => fact.summary) || null;
+            return this.draft ? null : (this.thing?.facts || []).find((fact) => fact.summary) || null;
         },
         // the other name it's usually called by, if one is
         everydayName() {
@@ -532,7 +834,7 @@ export default {
             };
         },
         editing() {
-            return EDIT_ACTIONS.some((action) => this.worlds.pending[action]);
+            return !this.draft && EDIT_ACTIONS.some((action) => this.worlds.pending[action]);
         },
         shownFields() {
             const calendar = this.worlds.calendar;
@@ -606,7 +908,17 @@ export default {
         },
     },
     watch: {
+        // another version of the draft: its forms and menus close
+        'worlds.draft.version'() {
+            if (this.draft) {
+                this.form = null;
+                this.selecting = false;
+            }
+        },
         thing(thing, before) {
+            if (this.draft) {
+                return;
+            }
             // another thing, or the reply to the form's own edit
             if (this.afterSave && this.form?.sent && thing?.id === before?.id) {
                 this.afterSaved(thing);
@@ -638,6 +950,103 @@ export default {
     },
     methods: {
         repointedNote,
+        addFiling,
+        alsoHere,
+        changeFiling,
+        changeNewName,
+        copyFactTo,
+        holdFact,
+        moveFactTo,
+        removeFact,
+        removeFiling,
+        retarget,
+        settleRepeat,
+        tickFact,
+        tickFileInto,
+        // --- the draft mode: every change is the draft's own -------------
+        edit(changes) {
+            this.worlds.editDraft(changes);
+        },
+        setDraftKind(kind) {
+            if (kind && kind !== this.edited.kind) {
+                this.edit(changeKind(this.edited, kind));
+            }
+        },
+        // an "In" row's change as the draft keeps it (dates without labels)
+        draftFiling(change) {
+            const out = { ...change };
+            if ('since' in out) {
+                out.since = dateIn(out.since);
+            }
+            return out;
+        },
+        acceptDraft(intoStub = null) {
+            this.worlds.acceptPreview(
+                { name: this.edited.name.trim() },
+                { open: !this.stay, intoStub, sameTargetId: intoStub ? null : this.edited._same || null },
+            );
+        },
+        tickMove(factId, ticked) {
+            const rows = tickMoveHere(this.edited, factId, ticked).move_here;
+            this.edit(moveInEdit(this.edited, rows));
+        },
+        // the own fact replacing the inherited `row`, or -1
+        overriderOf(row) {
+            return this.edited.facts.findIndex((fact) => !fact.removed && (fact.overrides || []).includes(row.fact_id));
+        },
+        // ticked: inherited as it is; unticked: replaced by an own fact
+        setKept(row, kept) {
+            this.worlds.setPreviewOverride(row.fact_id, kept ? null : defaultOverrideIndex(this.edited, row));
+        },
+        // the draft's fact form: the page's (`ThingFactForm`), its words
+        // plain (a draft's are linked by name on accept)
+        startDraftForm(row, mode) {
+            const fact = row.fact;
+            this.form = {
+                mode,
+                draft: true,
+                index: row.index,
+                category: fact.category,
+                text: fact.text,
+                fromYear: yearOf(fact.since),
+                untilYear: yearOf(fact.until) ?? (mode === 'end' ? yearOf(this.worlds.currentWorld?.now) : null),
+                picks: {},
+                refs: {},
+                links: [],
+                stubs: [],
+            };
+        },
+        saveDraftForm() {
+            const form = this.form;
+            const year = (value) => (this.validYear(value) ? dateOf(value) : null);
+            const change = {};
+            if (form.mode === 'edit') {
+                const text = form.text.trim();
+                if (!text) {
+                    return;
+                }
+                change.text = text;
+                change.category = form.category;
+                // the names the owner picked in it link by name on accept
+                const links = linkPayload(this.worlds.matchesFor(form.text, null), form.picks || {}, form.refs || {}, text);
+                if (Object.keys(links.picks).length) {
+                    this.edit({ picks: { ...(this.edited.picks || {}), ...links.picks } });
+                }
+                if (links.newNames.length) {
+                    this.edit({ treated_as_new: [...new Set([...(this.edited.treated_as_new || []), ...links.newNames])] });
+                }
+            }
+            if (form.mode !== 'end') {
+                change.since = year(form.fromYear);
+            }
+            change.until = year(form.untilYear);
+            this.edit(editFact(this.edited, form.index, change));
+            this.form = null;
+        },
+        // the page's fact as FactRow shows it
+        factView(fact) {
+            return { ...fact, text: fact.rendered };
+        },
         setExistence(value) {
             if (value && value !== this.existence) {
                 this.worlds.setField('existence', value);
@@ -729,10 +1138,11 @@ export default {
         startAdd() {
             this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
         },
-        startEdit(fact) {
+        // `mode` 'dates': "Change dates", the dates alone
+        startEdit(fact, mode = 'edit') {
             const { text, links } = this.editState(fact);
             this.form = {
-                mode: 'edit',
+                mode,
                 factId: fact.fact_id,
                 category: fact.category,
                 text,
@@ -764,6 +1174,10 @@ export default {
             this.form = { mode: 'end', factId: fact.fact_id, untilYear: yearOf(this.viewingDate) };
         },
         saveForm() {
+            if (this.form?.draft) {
+                this.saveDraftForm();
+                return;
+            }
             const form = this.form;
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
             const matches = form.mode === 'end' ? [] : this.worlds.matchesFor(form.text, this.worlds.thingAt);
@@ -862,8 +1276,27 @@ export default {
             this.selection = { factId: fact.fact_id, start, end, words, target: [x, y] };
             this.selecting = true;
         },
+        // words selected in a drafted fact: the server's copy is what a
+        // selection names, so a fact written or rewritten here has none
+        selectedDraft(row, { start, end, words, x, y }) {
+            this.selection = {
+                index: row.serverIndex,
+                start,
+                end,
+                words,
+                target: [x, y],
+                blocked: row.serverIndex === null ? 'This fact was written or changed here: its words can be linked once it\'s accepted.' : '',
+            };
+            this.selecting = true;
+        },
         makeStub(expand, { kind, tag }) {
             const found = this.selection;
+            if (found && this.draft) {
+                if (found.index !== null) {
+                    this.worlds.draftSelection('make_stub_from_text', found.index, found.start, found.end, { kind, ...(tag ? { tag } : {}) });
+                }
+                return;
+            }
             if (found) {
                 const words = found.words.trim().split(/\s+/).join(' ');
                 this.worlds.makeStubFromText(found.factId, found.start, found.end, kind, tag, { expand, words });
@@ -871,6 +1304,12 @@ export default {
         },
         linkWords(target) {
             const found = this.selection;
+            if (found && this.draft) {
+                if (found.index !== null) {
+                    this.worlds.draftSelection('link_text', found.index, found.start, found.end, { target_id: target.id });
+                }
+                return;
+            }
             if (found) {
                 this.worlds.linkText(found.factId, found.start, found.end, target.id);
             }
@@ -884,6 +1323,55 @@ export default {
 </script>
 
 <style scoped>
+.draft-name {
+    max-width: 340px;
+}
+
+.draft-kind {
+    flex: none;
+    width: 150px;
+}
+
+.stub-fact {
+    border-bottom: 1px dashed rgb(var(--v-theme-border));
+    padding: 2px 0;
+}
+
+.heading {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgb(var(--v-theme-muted));
+}
+
+.dropped {
+    color: rgb(var(--v-theme-muted));
+}
+
+.inherited {
+    color: rgb(var(--v-theme-muted));
+}
+
+.replaced {
+    text-decoration: line-through;
+    color: rgb(var(--v-theme-muted));
+}
+
+.override-by {
+    flex: none;
+    width: 220px;
+}
+
+.file-into-name {
+    font-weight: 600;
+    color: rgb(var(--v-theme-link));
+}
+
+.role {
+    font-style: italic;
+    color: rgb(var(--v-theme-muted));
+}
+
 .thing-name {
     font-family: 'Alegreya', serif;
     color: rgb(var(--v-theme-accent));

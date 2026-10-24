@@ -2,7 +2,7 @@
     <v-card variant="flat" class="create-box pa-3 mb-4" :class="{ drafting: showingDraft }" data-testid="create-box">
         <!-- the draft is the page the entry will be: it stands in for the
              form until it's accepted, discarded or its prompt edited -->
-        <DraftPage v-if="showingDraft" :stay="stay" />
+        <ThingPage v-if="showingDraft" draft :stay="stay" />
         <div v-show="!showingDraft">
         <div class="d-flex align-center ga-2 mb-1">
             <span class="text-subtitle-2">New {{ info.singular }}</span>
@@ -169,7 +169,8 @@ function yearDate(year) {
 // The "describe it, then create" box for one kind: a prompt plus the
 // optional core-field pickers (born for characters, the heritage picker for
 // characters and mixes). Create opens the draft: the page the entry will
-// be (`DraftPage`, standing in for the form), with its bar to regenerate,
+// be (the entry page's draft mode, `ThingPage draft`, standing in for the
+// form), with its bar to regenerate,
 // edit the prompt (back here, the draft kept: the next Create is its next
 // version), discard or accept it. Nothing is written before Accept.
 //
@@ -199,9 +200,9 @@ function yearDate(year) {
 export default {
     name: 'CreateBox',
     components: {
-        // async: the draft page shows a species' races and mixes, whose
-        // boxes are this one
-        DraftPage: defineAsyncComponent(() => import('./DraftPage.vue')),
+        // the entry page, in its draft mode; async, since a species' page
+        // holds this box (its "+ New race" and "+ New mix")
+        ThingPage: defineAsyncComponent(() => import('./ThingPage.vue')),
         HeritagePicker,
         NameHighlightInput,
     },

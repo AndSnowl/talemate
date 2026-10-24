@@ -233,23 +233,33 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     )
     draft = _draft(page, "lore", "The Tsar's winged army.")
 
-    # "In": the model's suggestions, which come unticked (ruling F7)
+    # "In" (the page's own, in its draft mode): the model's suggestions,
+    # which come unticked (ruling F7)
     filed = draft.get_by_test_id("draft-in")
     rows = filed.get_by_test_id("draft-in-row")
     expect(rows).to_have_count(2)
     tsardom = rows.filter(has_text="Tsardom of Moscavia")
-    expect(tsardom.get_by_label("Role")).to_have_value("the realm's army")
+    expect(tsardom.get_by_test_id("in-role-text")).to_have_text("the realm's army")
     for row in rows.all():
         assert not row.get_by_role("checkbox").is_checked()
     tsardom.get_by_role("checkbox").check()
 
-    # the owner's own "+ in…" comes ticked, with the role given
-    filed.get_by_test_id("draft-in-add").click()
-    _search_and_pick(page, "night", "The Night Court")
+    # the owner's own "+ in…" comes ticked, with the role given, as on a page
+    filed.get_by_test_id("in-add").click()
+    form = filed.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("Night Court")
+    page.get_by_role("option", name="The Night Court").click()
+    form.get_by_label("Role (optional)").fill("answers")
+    form.get_by_role("button", name="File it").click()
     court = rows.filter(has_text="The Night Court")
     court.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert court.get_by_role("checkbox").is_checked()
-    court.get_by_label("Role").fill("answers to")
+    # and its role edited as a page's is
+    court.get_by_test_id("in-edit").click()
+    edit = filed.get_by_test_id("in-edit-form")
+    edit.get_by_label("Role").fill("answers to")
+    edit.get_by_role("button", name="Save").click()
+    expect(court.get_by_test_id("in-role-text")).to_have_text("answers to")
 
     # "File into this": unticked too
     into = draft.get_by_test_id("draft-file-into")
@@ -665,4 +675,178 @@ def test_hard_repoint(app, page):
         expect(_fact(owl, text).get_by_test_id("linked-ref")).to_have_text(
             ["the capital"]
         )
+    assert page.console_errors == []
+
+
+GENERAL = "It flies at night."
+
+
+def test_draft_in_new_name_and_kind(app, page, fixed_preview):
+    """ "+ in…" on a draft makes a stub of a typed name, as on a page; the
+    draft's kind can be changed, its facts' categories following."""
+
+    _seeded(app, page, "Kinds")
+    fixed_preview(_host(GENERAL))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    filed = draft.get_by_test_id("draft-in")
+    filed.get_by_test_id("in-add").click()
+    form = filed.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("The Owl Legion")
+    page.get_by_role("option", name="Make a stub “The Owl Legion”").click()
+    form.get_by_test_id("in-new-tag").locator("input").fill("Army")
+    form.get_by_role("button", name="File it").click()
+    legion = filed.get_by_test_id("draft-in-row").filter(has_text="The Owl Legion")
+    legion.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert legion.get_by_role("checkbox").is_checked()
+    assert "new stub" in legion.inner_text()
+
+    # a character, not lore: "general" becomes a character's category
+    fact = _draft_fact(draft, GENERAL)
+    expect(fact.locator(".v-chip")).to_have_text("general")
+    draft.get_by_test_id("draft-kind").locator(".v-field").click()
+    page.get_by_role("option", name="character", exact=True).click()
+    expect(fact.locator(".v-chip")).to_have_text("appearance")
+
+    draft.get_by_role("button", name="Accept").click()
+    host = _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]
+    assert accepted["kind"] == "character"
+    assert [f["category"] for f in accepted["facts"]] == ["appearance"]
+    (row,) = [r for r in accepted["filings"] if r.get("new_name")]
+    assert row["new_name"] == {"name": "The Owl Legion", "kind": "lore", "tag": "army"}
+    assert row["ticked"] is True
+    expect(host.get_by_test_id("thing-kind")).to_have_text("character")
+    expect(host.get_by_test_id("entry-in").get_by_test_id("in-row")).to_contain_text(
+        ["The Owl Legion"]
+    )
+    page.get_by_test_id("stub-item").filter(has_text="The Owl Legion").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert page.console_errors == []
+
+
+ROW = {"kind": "place", "name": "Wattle Row", "stub": "live"}
+WATTLERS = {
+    "kind": "lore",
+    "name": "The Wattlers' Guild",
+    "fields": {"tag": "guild"},
+    "filings": [{"target": "Wattle Row", "role": "meets in"}],
+    "facts": [{"category": "general", "text": "The wattlemakers' guild."}],
+}
+NAMER = {
+    "kind": "place",
+    "name": "Old Market",
+    "facts": [{"category": "general", "text": "Next to [[@Wattle Row|Wattle Row]]."}],
+}
+
+
+def test_stub_draft_shows_connected_and_mentioned(app, page, fixed_preview):
+    """A stub's draft is its page: what's filed in it (Connected) and what
+    names it (Mentioned in) show, read-only, before anything is written."""
+
+    name = _world_name("Wattle")
+    seed_fm_world(app.root, name, present_year=1020, things=[ROW, WATTLERS, NAMER])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("stub-item").filter(has_text="Wattle Row").click()
+    stub = _opened(page, "Wattle Row")
+    stub.get_by_test_id("stub-panel").get_by_role("button", name="Expand").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("from-stub").wait_for(state="visible", timeout=TIMEOUT_MS)
+    fixed_preview(
+        {
+            "name": "Wattle Row",
+            "facts": [{"category": "description", "text": "A street of wattlemakers."}],
+            "prose": {"description": "A street."},
+        }
+    )
+    box.get_by_role("button", name="Create").click()
+    draft = page.get_by_test_id("draft-page")
+    connected = draft.get_by_test_id("entry-connected")
+    expect(connected.get_by_test_id("connected-row")).to_contain_text(
+        ["The Wattlers' Guild"]
+    )
+    expect(connected.get_by_test_id("connected-add")).to_have_count(0)
+    expect(connected.get_by_test_id("group-synopsis-button")).to_have_count(0)
+    expect(connected.get_by_test_id("group-add-button")).to_have_count(0)
+    expect(connected.get_by_test_id("connected-move")).to_have_count(0)
+    mentioned = draft.get_by_test_id("entry-mentioned")
+    mentioned.get_by_test_id("mentioned-toggle").click()
+    expect(mentioned.get_by_test_id("mentioned-row")).to_contain_text(["Old Market"])
+    assert page.console_errors == []
+
+
+def test_draft_fact_end_and_dates(app, page, fixed_preview):
+    """ "End this" and "Change dates" on a draft fact (its since and until,
+    written on accept); on a page, Change dates opens a dates-only form."""
+
+    _seeded(app, page, "Dates")
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
+    _fact(vel, BELLS).get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-dates").click()
+    form = vel.get_by_test_id("fact-form")
+    form.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(form.get_by_label("Fact", exact=True)).to_have_count(0)
+    form.get_by_label("From year").fill("990")
+    form.get_by_role("button", name="Save").click()
+    sent = _wait_sent(page, "correct_fact")
+    assert set(sent) >= {"valid_from"} and "text" not in sent
+    expect(_fact(vel, BELLS)).to_contain_text("990")
+
+    fixed_preview(_host(GENERAL))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    fact = _draft_fact(draft, GENERAL)
+    fact.get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-dates").click()
+    form = draft.get_by_test_id("fact-form")
+    form.get_by_label("From year").fill("990")
+    form.get_by_role("button", name="Save").click()
+    fact.get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-end").click()
+    form = draft.get_by_test_id("fact-form")
+    form.get_by_label("Until year").fill("1010")
+    form.get_by_role("button", name="End").click()
+    expect(fact).to_contain_text("990")
+    expect(fact).to_contain_text("1010")
+    draft.get_by_role("button", name="Accept").click()
+    _opened(page, "The Frostwing Host")
+    (written,) = _sent(page, "accept_preview")[-1]["preview"]["facts"]
+    assert written["since"]["instant"] < written["until"]["instant"]
+    assert page.console_errors == []
+
+
+def test_create_another_kind_asks_first(app, page, fixed_preview):
+    """Creating in another kind's box while a draft is open asks before
+    discarding it."""
+
+    _seeded(app, page, "Ask")
+    fixed_preview(_host(GENERAL))
+    _draft(page, "lore", "The Tsar's winged army.")
+    page.get_by_test_id("kind-place").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_label("Describe it").fill("A ford on the Khorol.")
+    box.get_by_role("button", name="Create").click()
+    ask = page.get_by_test_id("discard-ask")
+    ask.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "The Frostwing Host" in ask.inner_text()
+    ask.get_by_role("button", name="Keep the draft").click()
+    ask.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    assert _sent(page, "discard_preview") == []
+    page.get_by_test_id("kind-lore").click()
+    page.get_by_test_id("draft-page").wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    page.get_by_test_id("kind-place").click()
+    box.get_by_label("Describe it").fill("A ford on the Khorol.")
+    box.get_by_role("button", name="Create").click()
+    page.get_by_test_id("discard-ask").get_by_role(
+        "button", name="Discard and create"
+    ).click()
+    assert _wait_sent(page, "discard_preview")["draft_key"] == "new:lore:frostwing host"
+    _wait_sent(page, "preview_thing")
+    page.get_by_test_id("draft-page").get_by_test_id("draft-bar").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    assert _sent(page, "preview_thing")[-1]["kind"] == "place"
     assert page.console_errors == []

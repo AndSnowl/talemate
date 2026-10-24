@@ -90,8 +90,11 @@ import {
     alsoHere,
     categoryFor,
     changeFiling,
+    changeKind,
     changeNewName,
     copyFactTo,
+    filingKey,
+    removeFiling,
     draftFactRows,
     freshSegments,
     holdFact,
@@ -2516,9 +2519,10 @@ check("versions: the owner's edits kept per version for the session, restored wi
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_preview', draft_key: 'new:lore:frostwing host' });
     assert.equal(store.draft, null);
     assert.equal(store.draftEdits['new:lore:frostwing host'], undefined);
-    // another kind's draft drops this one
+    // another kind's draft drops this one, once the owner agrees
     const other = hostDraft();
     other.store.previewThing('place', 'a town');
+    other.store.confirmCreate();
     assert.equal(other.sent.at(-2).action, 'discard_preview');
     assert.equal('draft_key' in other.sent.at(-1), false);
 });
@@ -2601,6 +2605,76 @@ check('Copy to… keeps the fact; the hard re-point sends the name; names fetche
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'repoint_stub', stub_id: 's1', target_id: 'ts', use_name: 'the realm' });
     store.repointStub('s1', 'ts');
     assert.equal('use_name' in sent.at(-1), false);
+});
+
+// --- Task 10 fix round 1 -------------------------------------------------------
+
+check('a draft\'s "+ in…" can make a stub of a typed name; removing an In row', () => {
+    const out = addFiling(HOST, { newName: 'The Owl Legion', kind: 'lore', tag: 'army' }, { role: 'a wing of' });
+    const row = out.filings.at(-1);
+    assert.deepEqual(row, {
+        target_id: null, new_name: { name: 'The Owl Legion', kind: 'lore', tag: 'army' }, target_name: 'The Owl Legion',
+        role: 'a wing of', since: null, within: null, exceptions: [], ticked: true, local: true,
+    });
+    assert.equal(filingKey(row), 'new:owl legion');
+    assert.equal(filingKey(HOST.filings[0]), 'ts');
+    // the owner's own goes; the AI's is unticked
+    let edited = { ...HOST, ...out };
+    edited = { ...edited, ...removeFiling(edited, 'new:owl legion') };
+    assert.deepEqual(edited.filings.map((f) => f.target_id), ['ts']);
+    edited = { ...edited, ...removeFiling(edited, 'ts') };
+    assert.deepEqual(edited.filings.map((f) => f.ticked), [false]);
+    // rebased by its key
+    const rebased = rebaseDraft(HOST, { ...HOST, ...out }, HOST);
+    assert.equal(rebased.filings.at(-1).target_name, 'The Owl Legion');
+});
+
+check("a draft's kind changed: its facts' categories follow, other pages' don't", () => {
+    const out = changeKind(HOST, 'character');
+    assert.equal(out.kind, 'character');
+    assert.deepEqual(out.facts.map((f) => f.category), ['appearance', 'appearance']);
+    assert.equal('elsewhere' in out, false);
+});
+
+check("the owner's selections are highlighted in any case (ruling F26)", () => {
+    const names = [{ name: 'bells', kind: 'item' }];
+    const plain = [{ text: 'The Bells ring; bells sound.', ref: null, stub: false }];
+    assert.deepEqual(freshSegments(plain, names).filter((seg) => seg.fresh).map((seg) => seg.text), ['bells']);
+    assert.deepEqual(freshSegments(plain, names, ['bells']).filter((seg) => seg.fresh).map((seg) => seg.text), ['Bells', 'bells']);
+});
+
+check('creating in another box while a draft is open asks first', () => {
+    const { store, sent } = hostDraft();
+    sent.length = 0;
+    store.previewThing('place', 'a ford');
+    assert.deepEqual(sent, []);
+    assert.equal(store.createAsk.kind, 'place');
+    assert.equal(store.previewPending, false);
+    store.keepPreview();
+    assert.equal(store.createAsk, null);
+    assert.equal(store.draft.key, 'new:lore:frostwing host');
+    store.previewThing('place', 'a ford');
+    store.confirmCreate();
+    assert.deepEqual(sent.map((m) => m.action), ['discard_preview', 'preview_thing']);
+    assert.equal(sent.at(-1).kind, 'place');
+    assert.equal('draft_key' in sent.at(-1), false);
+    assert.equal(store.createAsk, null);
+    // a draft whose kind the owner changed regenerates as the same draft
+    const other = hostDraft();
+    other.store.editDraft(changeKind(other.store.preview, 'character'));
+    other.store.regeneratePreview();
+    assert.equal(other.sent.at(-1).draft_key, 'new:lore:frostwing host');
+    assert.equal(other.store.createAsk, null);
+});
+
+check('names asked for and failed stop waiting', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.fetchNames('gone');
+    assert.deepEqual(store.namesWanted, ['gone']);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no such thing' } });
+    assert.deepEqual(store.namesWanted, []);
+    assert.equal(store.namesFailed, 'gone');
 });
 
 if (failures.length) {
