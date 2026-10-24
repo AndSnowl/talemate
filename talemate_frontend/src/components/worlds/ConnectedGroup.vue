@@ -57,7 +57,7 @@
                 :key="row.id"
                 class="connected-row"
                 :class="{ ended: !!row.until }"
-:draggable="readonly ? 'false' : 'true'"
+                :draggable="readonly ? 'false' : 'true'"
                 data-testid="connected-row"
                 @dragstart="dragStart($event, row)"
             >

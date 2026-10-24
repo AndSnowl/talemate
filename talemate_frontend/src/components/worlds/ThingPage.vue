@@ -270,7 +270,7 @@
                             @edit="startDraftForm(row, 'edit')"
                             @dates="startDraftForm(row, 'dates')"
                             @end="startDraftForm(row, 'end')"
-                            @remove="edit(removeFact(edited, row.index))"
+                            @remove="edit(removeDraftFact(edited, row.index))"
                             @move="edit(moveFactTo(edited, row.index, $event))"
                             @copy="edit(copyFactTo(edited, row.index, $event))"
                             @held="edit(holdFact(edited, row.index, $event))"
@@ -484,7 +484,7 @@ import {
     editFact,
     holdFact,
     moveFactTo,
-    removeFact,
+    removeFact as removeDraftFact,
     removeFiling,
     retarget,
     settleRepeat,
@@ -957,7 +957,7 @@ export default {
         copyFactTo,
         holdFact,
         moveFactTo,
-        removeFact,
+        removeDraftFact,
         removeFiling,
         retarget,
         settleRepeat,

@@ -608,6 +608,16 @@ def test_fact_move_and_copy(app, page, fixed_preview):
     )
     assert _sent(page, "move_fact")[-1]["target_id"] == world.things["The Night Court"]
     assert len(_sent(page, "move_fact")) == 1
+
+    # Remove on a draft fact: gone from the draft, nothing sent
+    _draft_fact(draft, "It flies at night.").get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-remove").click()
+    expect(_draft_fact(draft, "It flies at night.")).to_have_count(0)
+    expect(draft.get_by_test_id("fact-form")).to_have_count(0)
+    expect(draft.get_by_test_id("accept-counts")).to_have_text(
+        "writes 0 facts here, 1 elsewhere"
+    )
+    assert _sent(page, "remove_fact") == []
     assert page.console_errors == []
 
 

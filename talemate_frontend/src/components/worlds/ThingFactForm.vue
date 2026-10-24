@@ -29,7 +29,7 @@
                 label="Fact"
                 :rows="1"
                 dense
-:offer-stubs="!form.draft"
+                :offer-stubs="!form.draft"
                 :at="worlds.thingAt"
                 :exclude="exclude"
                 class="mb-2"

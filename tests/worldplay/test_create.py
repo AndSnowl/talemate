@@ -2930,3 +2930,70 @@ async def test_accept_drops_fields_a_changed_kind_lacks(at_1020):
     assert state.kind == "place"
     assert "born" not in state.fields
     assert any("born" in note for note in notes)
+
+
+async def test_new_name_in_both_new_names_and_in_makes_one_stub(at_1020):
+    """A name the facts invent (`new_names`) and the owner's "+ in..." on
+    the same name make one stub: the facts link it, and the entry is
+    filed in it."""
+
+    from talemate.worldplay.create import PreviewFiling
+
+    world = at_1020
+    preview = CreatePreview(
+        kind="lore",
+        prompt="a host",
+        name="The Frostwing Host",
+        facts=[PreviewFact(category="general", text="It serves The Owl Legion.")],
+        prose={},
+        new_names=[NewName(name="The Owl Legion", kind="lore")],
+        filings=[
+            PreviewFiling(
+                new_name=NewName(name="The Owl Legion", kind="lore"),
+                target_name="The Owl Legion",
+                ticked=True,
+            )
+        ],
+    )
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    legions = [t for t in view.things() if view.name_of(t.id) == "The Owl Legion"]
+    assert len(legions) == 1
+    legion = legions[0].id
+    assert [f.target for f in filings_of(view, thing_id)] == [legion]
+    assert view.thing(thing_id).facts[0].text == (
+        f"It serves {ref(legion, 'The Owl Legion')}."
+    )
+
+
+async def test_in_new_name_the_world_has_files_in_that_entry(at_1020):
+    """A "+ in..." new name the world already has (here an entry, not a
+    stub) is filed in that entry: no stub of the name is made."""
+
+    from talemate.worldplay.create import PreviewFiling
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        court = rev.create_thing("lore", {"name": "The Night Court"})
+    preview = CreatePreview(
+        kind="lore",
+        prompt="a host",
+        name="The Frostwing Host",
+        facts=[PreviewFact(category="general", text="It flies at night.")],
+        prose={},
+        filings=[
+            PreviewFiling(
+                new_name=NewName(name="the Night Court", kind="place"),
+                target_name="the Night Court",
+                role="answers to",
+                ticked=True,
+            )
+        ],
+    )
+    thing_id = accept_preview(world, preview)
+    view = world.view(None)
+    assert [(f.target, f.role) for f in filings_of(view, thing_id)] == [
+        (court, "answers to")
+    ]
+    assert not [t for t in view.things() if t.is_stub]
+    assert view.thing(court).kind == "lore"
