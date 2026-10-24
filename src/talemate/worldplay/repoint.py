@@ -1158,9 +1158,7 @@ class RepointPlan:
         if self._added or (
             job.merge and self._aka != (job.target.fields.get("aka") or [])
         ):
-            rev.set_field(
-                target_id, "aka", self._aka, job.view.field_since(target_id, "aka")
-            )
+            self._write_aka(rev)
         if job.merge and job.main_name not in (None, job.target_name):
             # a correction of the name it holds now, at that value's date
             rev.set_field(
@@ -1182,6 +1180,31 @@ class RepointPlan:
             return True
         value = use.value if isinstance(use.value, list) else []
         return not check_filings(self._job.world.view(), use.thing_id, value)
+
+    def _write_aka(self, rev: Revision) -> None:
+        """The target's other names, in `rev`: the value showing now (at
+        its date) becomes `_aka`, and every other dated value takes the
+        names added too, so a scene set at any date knows them -- as
+        filings are rewritten at every value."""
+
+        job, target_id = self._job, self.target_id
+        latest = job.view.field_since(target_id, "aka")
+        added = [
+            entry
+            for entry in self._aka
+            if isinstance(entry, dict) and entry.get("name") in self._added
+        ]
+        for entry in job.world.timeline(target_id):
+            if entry.change != "field" or entry.field != "aka":
+                continue
+            if getattr(entry.date, "instant", None) == getattr(latest, "instant", None):
+                continue
+            value = [e for e in entry.value or [] if isinstance(e, dict)]
+            held = {name_key(str(e.get("name", ""))) for e in value}
+            extra = [e for e in added if name_key(str(e["name"])) not in held]
+            if extra:
+                rev.set_field(target_id, "aka", [*value, *extra], entry.date)
+        rev.set_field(target_id, "aka", self._aka, latest)
 
     def _write_use(self, rev: Revision, use: _FieldUse) -> None:
         if use.clear:

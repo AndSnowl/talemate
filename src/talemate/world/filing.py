@@ -31,7 +31,7 @@ a blank role kept as `None`.
 An event's `place` and an item's `owner` are filings too (`FIELD_ROLES`):
 an event "took place in" its place, an item is "owned by" its owner.
 Whatever would write those fields writes the filing instead, and readers
-read the filing (`field_filing`).
+read the filing.
 """
 
 from collections.abc import Sequence
@@ -51,7 +51,6 @@ __all__ = [
     "Group",
     "check_filings",
     "connected",
-    "field_filing",
     "filed_in",
     "filed_index",
     "filing_live",
@@ -159,18 +158,6 @@ def filings_of(view: WorldView, thing_id: str, *, live: bool = True) -> list[Fil
     if state is None:
         return []
     return _live(view, state) if live else _stored_filings(state)
-
-
-def field_filing(view: WorldView, thing_id: str, field: str) -> Filing | None:
-    """The thing's live filing that stands for its `field` (`FIELD_ROLES`:
-    an event's place, an item's owner), the first with that role; `None`
-    for none, or for a field no filing stands for."""
-
-    state = view.thing(thing_id)
-    role = FIELD_ROLES.get((state.kind, field)) if state is not None else None
-    if state is None or role is None:
-        return None
-    return next((f for f in _live(view, state) if f.role == role), None)
 
 
 def sits_in(view: WorldView, start_id: str, thing_id: str) -> bool:

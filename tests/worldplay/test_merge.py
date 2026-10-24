@@ -852,6 +852,7 @@ def test_merge_retired_value_note_says_what_shows(world, mere):
         "filings fall back to its earlier filings, Northreach" in note
         for note in done.notes
     )
+    assert not any("cleared" in note for note in done.notes)
 
 
 def test_merge_refuses_conflicting_choices_for_one_fact(world, mere):

@@ -2162,8 +2162,9 @@ def end_item(
                 or link.get("sphere") != sphere_id
             ):
                 raise ValueError(f"not part of the sphere: {item.thing_id}")
-            # the drawers still read `part_of` (until Task 7); the filing
-            # is what the world reads: from `at`, it's filed there no more
+            # ruling F14: this part_of write is the one exception, kept
+            # for the drawers until Task 7 removes them; the world reads
+            # the filing, ended below
             rev.set_field(state.id, "part_of", None, at)
             then = filings_of(world.view(at=at), state.id, live=False)
             kept = [f for f in then if f.target != sphere_id]

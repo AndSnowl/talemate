@@ -704,10 +704,7 @@ def test_home_exceptions_follow_a_fold(world):
 def test_event_place_and_item_owner_are_filings(world, moscavia):
     """An event's `place` and an item's `owner` are filings, "took place
     in" and "owned by" (filing spec, "Other fields"): sent in a preview's
-    fields they're filed, never written as the field, and a reader finds
-    them as filings (`filing.field_filing`)."""
-
-    from talemate.world.filing import field_filing
+    fields they're filed, never written as the field."""
 
     event = accept_preview(
         world,
@@ -737,6 +734,6 @@ def test_event_place_and_item_owner_are_filings(world, moscavia):
     assert [(f.target, f.role) for f in filings_of(view, event)] == [
         (moscavia.khorol, "took place in")
     ]
-    assert field_filing(view, event, "place").target == moscavia.khorol
-    assert field_filing(view, item, "owner").role == "owned by"
-    assert field_filing(view, item, "place") is None
+    assert [(f.target, f.role) for f in filings_of(view, item)] == [
+        (moscavia.khorol, "owned by")
+    ]

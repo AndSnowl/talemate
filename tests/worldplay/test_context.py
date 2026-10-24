@@ -552,6 +552,21 @@ def test_scene_touched_by_filings(world, scribe_world):
         place_thing_id=s.academy,
     )
     assert "Ilya (character)" in block
+    # ended by the scene's date, the filing touches nothing
+    with world.revision(Source.manual(note="ended")) as rev:
+        rev.set_field(
+            s.ilya,
+            "filings",
+            [_in_record(s.academy, "gatekeeper", until=WorldDate.of(990))],
+            None,
+        )
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Get past the gatekeeper.",
+        place_thing_id=s.academy,
+    )
+    assert "Ilya" not in block
     block = _scene(
         world,
         WorldDate.of(1000),

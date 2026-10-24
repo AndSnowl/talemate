@@ -311,3 +311,26 @@ def test_repoint_refuses_a_filing_loop(world):
     with pytest.raises(ValueError, match="The City's filings would put it inside"):
         repoint_stub(world, stub, realm)
     assert world.head_rev() == head
+
+
+def test_repoint_adds_names_at_every_dated_value(world):
+    """The new names go onto every value of the target's other names, so a
+    scene set before the latest one knows them too: [Old] undated and
+    [New] from 1010 both gain "Kingdom"."""
+
+    with world.revision(Source.manual(note="realm")) as rev:
+        realm = rev.create_thing("place", {"name": "The Realm", "aka": [_aka("Old")]})
+        rev.set_field(realm, "aka", [_aka("New")], WorldDate.of(1010))
+        stub = rev.create_thing(
+            "place", {"name": "Kingdom", "stub": {"ignored": False}}
+        )
+        maren = rev.create_thing("character", {"name": "Maren"})
+        rev.add_fact(maren, "background", f"Born in {ref(stub)}.")
+    repoint_stub(world, stub, realm)
+
+    def names(year):
+        state = world.view(WorldDate.of(year)).thing(realm)
+        return [a["name"] for a in state.fields["aka"]]
+
+    assert names(1000) == ["Old", "Kingdom"]
+    assert names(1020) == ["New", "Kingdom"]
