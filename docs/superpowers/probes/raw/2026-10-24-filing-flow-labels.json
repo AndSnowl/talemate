@@ -49,7 +49,8 @@
   "frostedwing": ["lore", "The Frosted Wing, a regiment of eared owl-folk archers on the glacier edge of the Tsardom of Moscavia"],
   "wattles": ["lore", "Wattles, a custom of Velikoye's owl-folk"],
   "vasha": ["character", "Vasha, a young courier who carries sealed letters for the Order of the Talon-Scribe"],
-  "koroleva_extra": " Chief Scribe of the Order of the Talon-Scribe. She still carves the old pre-Blinding runes in secret.",
+  "koroleva_extra": " Chief Scribe of the Order of the Talon-Scribe. In secret she still carves runes the Order no longer approves.",
+  "koroleva_extra_note": "Amended before any model call: the Task 11 test's 'pre-Blinding' names lore of the acceptance world that this fresh world doesn't have.",
   "scene": "Vasha brings a sealed letter to the Chief Scribe at The Academy of the Chiseled Moon"
  },
  "hints": {"tsardom": "nation", "runic": "field", "order": "order"},
@@ -147,7 +148,7 @@
   "rule": "Pairs from world.sameness.same_candidates over the final world, checked by hand: a pair is a duplicate when both name the same one thing."
  },
  "exceptions": {
-  "koroleva": {"expected": "one exception, on the Order's 'In' row, saying she still carves the old (pre-Blinding) runes in secret, whose 'rejects' label is an Order item about which runes may be carved, taught or approved (judged). An exception whose rejects label resolves to no item is not sensible."},
+  "koroleva": {"expected": "one exception, on the Order's 'In' row, saying she still carves, in secret, runes the Order no longer approves, whose 'rejects' label is an Order item about which runes may be carved, taught or approved (judged). An exception whose rejects label resolves to no item is not sensible."},
   "vasha": {"expected": "no exception (his prompt names no departure). Any exception the model writes is judged: sensible when its text departs from the very item its 'rejects' label names."},
   "rule": "An exception is sensible when its text is a real departure from (contradicts, or does differently from) the item its rejects label names, and isn't restated as an own fact."
  },
