@@ -489,15 +489,24 @@ def test_new_names_never_link_inside_a_hyphenated_word(world):
 
 
 def test_link_text_lowercase_picks_link_as_written(world):
-    """Words the owner selected on a draft (ruling F16) are a pick or a new
-    name written as they were, often without a capital ("the north pass"):
-    they link wherever the text writes them. A capitalised pick still never
+    """Words the owner selected on a draft (ruling F16, `lowercase`: F26)
+    are a pick or a new name written as they were, often without a capital
+    ("the north pass"): they link wherever the text writes them; any other
+    pick still needs a capital. A capitalised pick still never
     links the same words written lowercase ("Hope" is not "I hope")."""
 
     _owls, tsardom, _hope = _moscavia_world(world)
     view = world.view(None)
     text = "Riders guard the north pass; the North Pass is cold. I hope so."
+    # a pick alone needs a capital
     out = link_text(view, text, picks={"the north pass": tsardom})
+    assert out == (
+        f"Riders guard the north pass; "
+        f"{ref(tsardom, 'the North Pass')} is cold. I hope so."
+    )
+    out = link_text(
+        view, text, picks={"the north pass": tsardom}, lowercase=["the north pass"]
+    )
     assert out == (
         f"Riders guard {ref(tsardom, 'the north pass')}; "
         f"{ref(tsardom, 'the North Pass')} is cold. I hope so."

@@ -6065,6 +6065,54 @@ async def test_draft_selection_of_lowercase_words(plugin, client):
     assert s.world.view().thing(bells).kind == "item"
 
 
+async def test_selected_names_are_the_servers_own(plugin, client):
+    """Ruling F26: only words the owner selected on the draft (recorded on
+    the server's copy) link without a capital; a client claiming others
+    (`selected_names` it sent itself) gets them dropped, so a lowercase
+    new name the model listed still makes no stub."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It rings the bells."),
+        prompt="a host",
+    )
+    preview = {
+        **draft["preview"],
+        "new_names": [{"name": "bells", "kind": "item"}],
+        "selected_names": ["bells"],
+    }
+    await _act(plugin, "accept_preview", preview=preview, draft_key=draft["draft_key"])
+    host = _last(plugin, "accept_preview")["data"]
+    assert [f["rendered"] for f in host["facts"]] == ["It rings the bells."]
+    assert all(seg["ref"] is None for seg in host["facts"][0]["segments"])
+    view = s.world.view()
+    assert not [t for t in view.things() if view.name_of(t.id) == "bells"]
+
+
+async def test_stub_draft_of_another_kind_changes_the_stub(plugin, client):
+    """A stub's draft whose kind the owner changed fills the stub as that
+    kind (as `change_stub_kind` would), keeping its id."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Wattle Row", "Wattlemakers work here."),
+        kind="place",
+        prompt="the street",
+        stub_id=s.wattle,
+    )
+    preview = {**draft["preview"], "kind": "lore"}
+    preview["facts"] = [{**f, "category": "general"} for f in preview["facts"]]
+    await _act(plugin, "accept_preview", preview=preview, draft_key=draft["draft_key"])
+    row = _last(plugin, "accept_preview")["data"]
+    assert (row["id"], row["kind"]) == (s.wattle, "lore")
+    assert s.world.view().thing(s.wattle).kind == "lore"
+    assert not s.world.view().thing(s.wattle).is_stub
+
+
 async def test_selection_on_a_draft_names_and_links_by_name(plugin, client):
     """Ruling F16: on a draft fact (by its `index`), "Make a stub" adds a
     new name with its kind and tag, and "Link to..." a pick, both keyed by

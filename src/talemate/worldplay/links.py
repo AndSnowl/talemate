@@ -174,9 +174,8 @@ def _explicit_spans(
     """Every whole-word occurrence of a picked or new name (normalised key
     to thing id) in `text`, a hyphenated word counting as one. A name
     written with a capital matches only text written with one, so a stub
-    "Hope" never links "I hope"; one the owner picked written with no
-    capital at all (`lowercase`, normalised keys: words selected on a
-    draft, "the north pass") matches as it was written."""
+    "Hope" never links "I hope"; one the owner selected on a draft
+    (`lowercase`, normalised keys: "the north pass") matches as written."""
 
     spans: list[_Span] = []
     for key, thing_id in chosen.items():
@@ -288,6 +287,7 @@ def link_text(
     owner: str | None = None,
     as_new: Collection[str] = (),
     spans: Collection[LinkSpan] = (),
+    lowercase: Collection[str] = (),
 ) -> str:
     """`text` with every name in it linked to its thing, keeping the words
     written as the reference's shown text (a trailing `'s` stays outside
@@ -305,6 +305,10 @@ def link_text(
     - a name the owner treats as new (`as_new`, by `is_new`) never links
       to the thing the world already has by that name: only a pick or a
       new name for it links it.
+    - a pick or new name links only where the text writes it with a
+      capital, unless it's one the owner selected on a draft
+      (`lowercase`, the draft's `selected_names`, ruling F26): those link
+      as written.
 
     - `spans` (code-point offsets into `text`) come first: each links its
       words to its `ref`, or keeps them plain when it has none, and
@@ -326,6 +330,7 @@ def link_text(
                     new_names=new_names,
                     owner=owner,
                     as_new=as_new,
+                    lowercase=lowercase,
                 )
             )
             words = text[start:stop]
@@ -339,6 +344,7 @@ def link_text(
                 new_names=new_names,
                 owner=owner,
                 as_new=as_new,
+                lowercase=lowercase,
             )
         )
         return "".join(out)
@@ -346,14 +352,8 @@ def link_text(
     chosen = {_norm(name): thing_id for name, thing_id in (new_names or {}).items()}
     chosen.update({_norm(name): thing_id for name, thing_id in (picks or {}).items()})
     chosen.pop("", None)
-    # a name chosen as written with no capital at all (words the owner
-    # selected on a draft, "the north pass") links those words as written;
-    # one with a capital inside ("al-Qadir", a model's name) still needs it
-    lowercase = {
-        _norm(name)
-        for name in [*(new_names or {}), *(picks or {})]
-        if name.strip() and name == name.lower()
-    }
+    # the owner's own selections link as written, capital or not
+    allowed = {_norm(name) for name in lowercase}
     if owner is not None:
         chosen = {
             key: thing_id for key, thing_id in chosen.items() if thing_id != owner
@@ -364,12 +364,12 @@ def link_text(
     for existing in REF_PATTERN.finditer(text):
         out.append(
             _link_plain(
-                view, text[end : existing.start()], chosen, owner, as_new, lowercase
+                view, text[end : existing.start()], chosen, owner, as_new, allowed
             )
         )
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen, owner, as_new, lowercase))
+    out.append(_link_plain(view, text[end:], chosen, owner, as_new, allowed))
     return "".join(out)
 
 

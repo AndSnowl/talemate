@@ -135,7 +135,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from talemate.prompts import Prompt
 from talemate.world import entries, heritage
@@ -314,6 +314,8 @@ class PreviewFact(BaseModel):
     category: str
     text: str
     since: WorldDate | None = None
+    # its end, when the owner ended it on the draft ("End this")
+    until: WorldDate | None = None
     # the fact_ids of the inherited facts this one makes untrue
     overrides: list[str] = Field(default_factory=list)
     # the thing that holds this fact as a belief (`entries.held_by`), set
@@ -379,7 +381,11 @@ class PreviewFiling(BaseModel):
     unticked (ruling F7: "In" missed the bar); the owner's own picks (a
     place's parent, a filing the create box sent) arrive ticked."""
 
-    target_id: str
+    # the entry it's filed in: one the world has, or (`new_name`, the
+    # owner's "+ in..." on a name the world hasn't) a stub accept makes
+    # first, with that kind and tag, in the same revision
+    target_id: str | None = None
+    new_name: NewName | None = None
     # the entry's name, for the owner
     target_name: str
     role: str | None = None
@@ -388,6 +394,12 @@ class PreviewFiling(BaseModel):
     within: str | None = None
     exceptions: list[PreviewException] = Field(default_factory=list)
     ticked: bool = False
+
+    @model_validator(mode="after")
+    def _one_target(self) -> "PreviewFiling":
+        if (self.target_id is None) == (self.new_name is None):
+            raise ValueError("an In row is a target_id or a new_name")
+        return self
 
 
 class FileIntoRow(BaseModel):
@@ -474,6 +486,10 @@ class CreatePreview(BaseModel):
     move_here: list[MoveHereFact] = Field(default_factory=list)
     # the draft's earlier generations, kept by the router (Task 6)
     versions: list[CreatePreview] = Field(default_factory=list)
+    # words the owner selected on the draft and made a stub of or linked
+    # (ruling F26): only these link where they're written without a
+    # capital; the router keeps only those its own copy of the draft holds
+    selected_names: list[str] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -1687,6 +1703,7 @@ def write_elsewhere(
     *,
     picks: dict[str, str] | None = None,
     as_new: Sequence[str] = (),
+    lowercase: Sequence[str] = (),
 ) -> set[str]:
     """Write each of `items` (from `live_elsewhere`) onto its target in
     `rev`: an existing thing, or the stub `make_stubs` made for its new
@@ -1717,6 +1734,7 @@ def write_elsewhere(
             new_names=made,
             owner=target,
             as_new=as_new,
+            lowercase=lowercase,
         )
         linked.update(parse_refs(text))
         linked.add(target)
@@ -3585,7 +3603,10 @@ def _write_preview(
             notes=notes,
         )
         if stub is None:
-            fields: dict[str, Any] = {**preview.fields, "name": preview.name}
+            fields: dict[str, Any] = {
+                **_kind_fields(preview.kind, preview.fields, notes),
+                "name": preview.name,
+            }
             if preview.aka:
                 fields["aka"] = preview.aka
             if preview.tag:
@@ -3636,6 +3657,7 @@ def _write_preview(
                 new_names=made,
                 owner=thing_id,
                 as_new=preview.treated_as_new,
+                lowercase=preview.selected_names,
             )
             linked.update(parse_refs(written))
             return written
@@ -3679,6 +3701,7 @@ def _write_preview(
                 fact.category,
                 linked_text(fact.text),
                 valid_from=fact.since,
+                valid_until=fact.until,
                 overrides=fact.overrides,
                 origin=origin,
             )
@@ -3706,6 +3729,7 @@ def _write_preview(
             made,
             picks=picks,
             as_new=preview.treated_as_new,
+            lowercase=preview.selected_names,
         )
         orphans = {
             stub_id
@@ -3721,6 +3745,20 @@ def _write_preview(
                 ]
             )
     return thing_id, made, notes, moved
+
+
+def _kind_fields(kind: str, fields: dict[str, Any], notes: list[str]) -> dict[str, Any]:
+    """`fields` without those `kind` lacks (a draft whose kind the owner
+    changed: a character's `born` on a place), each left out with a note."""
+
+    known = {spec.name for spec in get_kind(kind).fields}
+    kept = {}
+    for field, value in fields.items():
+        if field in known:
+            kept[field] = value
+        else:
+            notes.append(f"a {kind} has no {field}: it was left out")
+    return kept
 
 
 def _write_entry_filings(
@@ -3748,10 +3786,16 @@ def _write_entry_filings(
     for row in preview.filings:
         if not row.ticked:
             continue
-        target = redirect.get(row.target_id, row.target_id)
+        if row.new_name is not None:
+            # "+ in..." a name the world hasn't: its stub first (or the
+            # entry the world has by that name by now)
+            name = " ".join(row.new_name.name.split())
+            target = make_stubs(rev, world.view(), [row.new_name])[name]
+        else:
+            target = redirect.get(row.target_id or "", row.target_id or "")
         if target == thing_id:
             continue
-        if before.thing(target) is None:
+        if row.new_name is None and before.thing(target) is None:
             notes.append(f"{row.target_name} is gone, so it isn't filed there")
             continue
         exception_ids: list[str] = []
@@ -3845,7 +3889,7 @@ def move_here_sources(view: WorldView, preview: CreatePreview) -> set[str]:
     first: list[str] = []
     if stub is not None:
         first += _homes(view, stub.id)
-    first += [row.target_id for row in preview.filings if row.ticked]
+    first += [row.target_id for row in preview.filings if row.ticked and row.target_id]
     first += list(preview.picks.values())
     seeds = [*([stub.id] if stub is not None else []), *first]
     exclude = {stub.id} if stub is not None else set()
@@ -4252,6 +4296,7 @@ def _write_same(
                 new_names=made,
                 owner=target_id,
                 as_new=preview.treated_as_new,
+                lowercase=preview.selected_names,
             )
             linked.update(parse_refs(written))
             return written
@@ -4297,6 +4342,7 @@ def _write_same(
             made,
             picks=picks,
             as_new=preview.treated_as_new,
+            lowercase=preview.selected_names,
         )
         orphans = {
             thing_id

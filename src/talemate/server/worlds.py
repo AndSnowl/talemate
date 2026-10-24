@@ -76,8 +76,12 @@ through `signal_operation_failed` (an `operation_done` envelope with
   cycle, a `within` that sits in its target, exceptions departing from
   what the target holds; "Could move here" recomputed; a "Move that one
   here" row, `move_here` with `repeat`, kept only when a version of the
-  draft this session holds says one of its facts repeats that fact), and
-  answers `notes`. It schedules prose for each entry the world has whose prose
+  draft this session holds says one of its facts repeats that fact; the
+  `selected_names` kept only as the server's copy recorded them), and
+  answers `notes`. An "In" row may name a `new_name` instead of a
+  `target_id` (the owner's "+ in..." on a name the world hasn't): accept
+  makes that stub and files the entry in it, in the one revision. A
+  fact's `until` (the owner's "End this") is written as its end. It schedules prose for each entry the world has whose prose
   reads what it took (an elsewhere fact, a fact moved off it).
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
@@ -208,7 +212,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
   of that name), filed as `filing` says, and links them, in one
   revision, answering with the fact's entry plus `stub_id`;
   `link_text {fact_id, start, end, target_id, at}` links them to an
-  entry. A selection that cuts through or takes in a link is refused.
+  entry. A selection that cuts through or takes in a link is refused. On
+  a draft, the words are recorded in its `selected_names` (ruling F26):
+  only those link where they're written without a capital.
 - Prompt additions: `add_facts {thing_id, prompt}` and `add_event
   {thing_id, prompt, year}` (`worldplay.facts`) run in the background and
   answer `{thing_id, draft, facts}` (or `add_facts_failed` /
@@ -2414,6 +2420,7 @@ class WorldsPlugin(Plugin):
                     picks=preview.picks,
                     owner=owner,
                     as_new=preview.treated_as_new,
+                    lowercase=preview.selected_names,
                 )
             )
 
@@ -2445,7 +2452,8 @@ class WorldsPlugin(Plugin):
         drafted_in = [
             {
                 "target_id": row.target_id,
-                "target_name": view.name_of(row.target_id) or row.target_name,
+                "target_name": (view.name_of(row.target_id) if row.target_id else None)
+                or row.target_name,
                 "role": row.role,
                 "since": _date_out(calendar, row.since),
                 "until": None,
@@ -2459,7 +2467,7 @@ class WorldsPlugin(Plugin):
                 "ticked": row.ticked,
             }
             for row in preview.filings
-            if row.target_id not in filed
+            if row.target_id is None or row.target_id not in filed
         ]
         lines = [
             {
@@ -2565,11 +2573,26 @@ class WorldsPlugin(Plugin):
             kept.append(row)
         preview.move_here = kept
 
+    def _check_selected_names(self, preview: CreatePreview, key: str | None) -> None:
+        """Keep only the `selected_names` (ruling F26: words that link
+        without a capital) a version of the draft this session holds
+        recorded from the owner's own selections, never the client's word."""
+
+        held = {
+            name_key(name)
+            for version in (self._drafts.get(key or "") or [])
+            for name in version.selected_names
+        }
+        preview.selected_names = [
+            name for name in preview.selected_names if name_key(name) in held
+        ]
+
     async def handle_accept_preview(self, data: dict):
         payload = AcceptPreviewPayload(**data)
         world = self._require_world()
         notes: list[str] = []
         self._check_repeat_moves(payload.preview, payload.draft_key, notes)
+        self._check_selected_names(payload.preview, payload.draft_key)
         # the other things whose prose input the accept changed
         prose: list[str] = []
         thing_id = accept_preview(
@@ -3276,6 +3299,14 @@ class WorldsPlugin(Plugin):
             w for w in preview.treated_as_new if name_key(w) != key
         ]
 
+    @staticmethod
+    def _selected_name(preview: CreatePreview, words: str) -> None:
+        """Record words the owner selected on the draft (ruling F26): they
+        link as written, capital or not."""
+
+        if not any(name_key(n) == name_key(words) for n in preview.selected_names):
+            preview.selected_names.append(words)
+
     async def handle_make_stub_from_text(self, data: dict):
         """Make a stub of selected words of a fact ("Make a stub"): a stub
         of `kind` with `tag`, named the words (or the entry the world has
@@ -3306,6 +3337,7 @@ class WorldsPlugin(Plugin):
             if payload.filing is not None:
                 self._require_entry(world.view(), payload.filing.target_id)
             self._unnamed(preview, words)
+            self._selected_name(preview, words)
             preview.new_names.append(
                 NewName(
                     name=words,
@@ -3388,6 +3420,7 @@ class WorldsPlugin(Plugin):
             if payload.target_id == preview.stub_id:
                 raise ValueError("a fact can't link its own entry")
             self._unnamed(preview, words)
+            self._selected_name(preview, words)
             preview.picks[words] = payload.target_id
             self._reply("link_text", self._draft_out(world, key))
             return

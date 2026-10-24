@@ -2803,3 +2803,130 @@ async def test_a_summary_repeating_an_own_fact_is_written_once(world):
         ("Scribes of the rune census.", None),
         ("They meet at dusk.", {"summary": True}),
     ]
+
+
+# --- Task 10 fix round 1: drafts --------------------------------------------
+
+
+async def test_accept_files_into_a_new_name(at_1020):
+    """An "In" row on a new name ("+ in..." on a draft, typing a name the
+    world hasn't): accept makes that stub, with its kind and tag, then
+    files the entry in it, in the one revision."""
+
+    from talemate.worldplay.create import PreviewFiling
+
+    world = at_1020
+    head = world.head_rev()
+    preview = CreatePreview(
+        kind="lore",
+        prompt="a host",
+        name="The Frostwing Host",
+        facts=[PreviewFact(category="general", text="It flies at night.")],
+        prose={},
+        filings=[
+            PreviewFiling(
+                new_name=NewName(name="The Owl Legion", kind="lore", tag="army"),
+                target_name="The Owl Legion",
+                role="a wing of",
+                ticked=True,
+            ),
+            PreviewFiling(
+                new_name=NewName(name="Unticked Order", kind="lore"),
+                target_name="Unticked Order",
+            ),
+        ],
+    )
+    thing_id = accept_preview(world, preview)
+    assert world.head_rev() == head + 1
+    view = world.view(None)
+    (legion,) = [t for t in view.things() if view.name_of(t.id) == "The Owl Legion"]
+    assert legion.is_stub
+    assert legion.kind == "lore"
+    assert legion.fields.get("tag") == "army"
+    assert [(f.target, f.role) for f in filings_of(view, thing_id)] == [
+        (legion.id, "a wing of")
+    ]
+    assert not [t for t in view.things() if view.name_of(t.id) == "Unticked Order"]
+
+
+async def test_accept_writes_a_draft_facts_end(at_1020):
+    """A draft fact the owner ended ("End this") is written ended."""
+
+    world = at_1020
+    preview = CreatePreview(
+        kind="lore",
+        prompt="a host",
+        name="The Frostwing Host",
+        facts=[
+            PreviewFact(
+                category="general",
+                text="It guarded the pass.",
+                since=WorldDate.of(990),
+                until=WorldDate.of(1010),
+            )
+        ],
+        prose={},
+    )
+    thing_id = accept_preview(world, preview)
+    (fact,) = [
+        f
+        for f in world.view(WorldDate.of(1000)).thing(thing_id).facts
+        if "pass" in f.text
+    ]
+    assert fact.valid_until == WorldDate.of(1010)
+    assert not [
+        f
+        for f in world.view(WorldDate.of(1015)).thing(thing_id).facts
+        if "pass" in f.text
+    ]
+
+
+async def test_lowercase_names_link_only_when_the_owner_selected_them(at_1020):
+    """Ruling F26: a model-listed new name written in lowercase still makes
+    no stub (no capital, no link); the same words the owner selected on
+    the draft (`selected_names`) become a stub and link as written."""
+
+    world = at_1020
+
+    def preview(selected):
+        return CreatePreview(
+            kind="lore",
+            prompt="a host",
+            name=f"Host {len(selected)}",
+            facts=[PreviewFact(category="general", text="It rings the bells.")],
+            prose={},
+            new_names=[NewName(name="bells", kind="item")],
+            selected_names=selected,
+        )
+
+    plain = accept_preview(world, preview([]))
+    view = world.view(None)
+    assert not [t for t in view.things() if view.name_of(t.id) == "bells"]
+    assert view.thing(plain).facts[0].text == "It rings the bells."
+
+    picked = accept_preview(world, preview(["bells"]))
+    view = world.view(None)
+    (bells,) = [t for t in view.things() if view.name_of(t.id) == "bells"]
+    assert view.thing(picked).facts[0].text == f"It rings the {ref(bells.id, 'bells')}."
+
+
+async def test_accept_drops_fields_a_changed_kind_lacks(at_1020):
+    """A draft whose kind the owner changed (a character's draft made a
+    place) is written as that kind, the fields it lacks (`born`) left
+    out with a note."""
+
+    world = at_1020
+    notes: list[str] = []
+    preview = CreatePreview(
+        kind="place",
+        prompt="a ferry crossing",
+        name="Oskar's Crossing",
+        fields={"born": WorldDate.of(990)},
+        facts=[PreviewFact(category="general", text="A ferry crossing.")],
+        prose={},
+    )
+    thing_id = accept_preview(world, preview, notes=notes)
+    state = world.view(None).thing(thing_id)
+    assert state.kind == "place"
+    assert "born" not in state.fields
+    assert any("born" in note for note in notes)
