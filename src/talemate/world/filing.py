@@ -379,8 +379,7 @@ def mentioned_in(
     `include_ended` as Connected has it), in the order they were made."""
 
     filed = {
-        state.id
-        for state, _ in filed_in(view, thing_id, include_ended=include_ended)
+        state.id for state, _ in filed_in(view, thing_id, include_ended=include_ended)
     }
     owners: dict[str, int] = {}
     for owner_id, _ in view.referencing(thing_id):
