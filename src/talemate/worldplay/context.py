@@ -40,6 +40,7 @@ from talemate.world.view import FactState, ThingState, WorldView
 from .characters import (
     WORLD_DERIVED_FIELDS,
     character_from_world,
+    filing_lines,
     held_text,
 )
 from .held import timeline_text
@@ -423,18 +424,26 @@ def _touched_entry(
     things: list[ThingState],
 ) -> dict[str, Any] | None:
     """One touched entry of the block, `{"name", "kind", "tag", "everyday",
-    "lines"}` (probe 5's shape): its summary (`_summary_fact`), up to
-    `TOUCHED_FACTS` of its own undated facts, the most-linked first, then
-    its latest timeline lines (`_latest_lines`), at most `TOUCHED_LINES`
-    in all (the own facts give way to the timeline), each held fact worded
-    as held; a fact `shown` already in the block isn't told again. `None`
-    for an entry with nothing to say."""
+    "lines"}` (probe 5's shape): its summary (`_summary_fact`), a person's
+    filing lines as its sheet has them (`filing_lines`: "Chief Scribe of
+    the Order, but: ..."), up to `TOUCHED_FACTS` of its own undated
+    facts, the most-linked first, then its latest timeline lines
+    (`_latest_lines`), at most `TOUCHED_LINES` in all (the own facts give
+    way to the timeline), each held fact worded as held; a fact `shown`
+    already in the block isn't told again. A person's exceptions to its
+    filings (`ties` facts) are told only in its filing lines, never as
+    facts with their "Departs from <link>" sentence (Filing Task 11).
+    `None` for an entry with nothing to say."""
 
     state = view.thing(thing_id)
     if state is None:
         return None
+    person = entries.acts_in_world(state)
+    filed = filing_lines(view, world.calendar, thing_id) if person else []
     head = _summary_fact(state)
-    if head is not None and head.fact_id in shown:
+    if head is not None and (
+        head.fact_id in shown or (person and head.category == "ties")
+    ):
         head = None
     own = sorted(
         (
@@ -444,15 +453,17 @@ def _touched_entry(
             and fact.fact_id not in shown
             and (head is None or fact.fact_id != head.fact_id)
             and not entries.is_summary_fact(fact)
+            and not (person and fact.category == "ties")
         ),
         key=lambda fact: (-len(set(fact.refs)), fact.created),
     )[:TOUCHED_FACTS]
     for fact in [*([head] if head else []), *own]:
         shown.add(fact.fact_id)
     timeline = _latest_lines(world, view, thing_id, elsewhere, shown, settings, things)
-    room = TOUCHED_LINES - len(timeline) - (1 if head else 0)
+    room = TOUCHED_LINES - len(timeline) - (1 if head else 0) - len(filed)
     lines = [
         *_facts(view, state, [head] if head else []),
+        *filed,
         *_facts(view, state, own[: max(room, 0)]),
         *timeline,
     ][:TOUCHED_LINES]

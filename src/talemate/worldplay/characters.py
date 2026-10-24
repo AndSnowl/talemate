@@ -400,6 +400,17 @@ def filing_exceptions(
     )
 
 
+def lined_filings(view: WorldView, thing_id: str) -> list[Filing]:
+    """The character's filings that `filing_lines` gives a line: with a
+    role, into an entry with a name at the view's date."""
+
+    return [
+        filing
+        for filing in filings_of(view, thing_id)
+        if (filing.role or "").strip() and view.name_of(filing.target)
+    ]
+
+
 def filing_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
     """One line per filing of the character's with a role that holds at
     `view.at`, in the Spheres tie-line format, e.g. "Practitioner of the
@@ -418,11 +429,9 @@ def filing_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str
     if state is None:
         return []
     lines: list[str] = []
-    for filing in filings_of(view, thing_id):
+    for filing in lined_filings(view, thing_id):
         role = (filing.role or "").strip()
-        name = view.name_of(filing.target)
-        if not role or not name:
-            continue
+        name = view.name_of(filing.target) or ""
         within = view.name_of(filing.within) if filing.within is not None else None
         words = role.casefold().split()
         plain = words[0] != "of" and words[-1] not in ROLE_PREPOSITIONS

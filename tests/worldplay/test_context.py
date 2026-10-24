@@ -715,6 +715,42 @@ def test_scene_place_and_touched_entries_show_once(world, scribe_world):
     assert block.count("A northern realm of owl-folk.") == 1
 
 
+def test_touched_person_tells_its_filing_lines(world, scribe_world):
+    """A person the scene touches (the Chief Scribe, by the role rule) is
+    told with its filing lines, as its sheet has them ("Chief Scribe of
+    Talon-Scribe Order, but: she still carves the old runes"), right
+    after its summary; the exception facts a line tells aren't told again
+    as facts, and never with their "Departs from <link>" sentence, which
+    is for the world's pages (Filing Task 11, parked Task 4 item M7)."""
+
+    from talemate.world.refs import ref
+
+    s = scribe_world
+    with world.revision(Source.manual(note="a but")) as rev:
+        but = rev.add_fact(
+            s.anastasiya,
+            "ties",
+            "She still carves the old runes. Departs from a teaching of "
+            + ref(s.order, "Talon-Scribe Order"),
+            origin={"tie": s.order},
+        )
+        rev.set_field(
+            s.anastasiya,
+            "filings",
+            [_in_record(s.order, "Chief Scribe", exceptions=[but])],
+            None,
+        )
+    block = _scribe_scene(world, s)
+    assert (
+        "Anastasiya Koroleva (character)\n"
+        "- A tawny-brown owl-folk with burnt-orange eyes.\n"
+        "- Chief Scribe of Talon-Scribe Order, but: she still carves the "
+        "old runes\n"
+    ) in block
+    assert "Departs from" not in block
+    assert block.count("still carves the old runes") == 1
+
+
 def test_untouched_entry_not_in_context(world):
     """An entry nothing touches never shows: one unlinked from the place,
     the cast and the setup, one merely mentioned by the place's facts, and
