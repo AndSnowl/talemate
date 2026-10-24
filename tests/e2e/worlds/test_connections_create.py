@@ -70,7 +70,7 @@ def _place_box(page):
 
 def _create_and_wait(page, box):
     box.get_by_role("button", name="Create").click()
-    preview = page.get_by_test_id("create-preview")
+    preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
     return preview
 

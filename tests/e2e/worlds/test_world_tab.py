@@ -175,13 +175,14 @@ def test_create_box_preview_accept(app, page, fixed_preview):
     box.get_by_label("Describe it").fill("A grizzled ferryman who owes the Wardens.")
     box.get_by_role("button", name="Create").click()
 
-    preview = page.get_by_test_id("create-preview")
+    # the draft page stands in for the box until it's accepted
+    preview = page.get_by_test_id("draft-page")
     preview.get_by_text("Oskar Dell is a weathered ferryman.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
     assert preview.get_by_text("Never forgets a debt.").is_visible()
 
-    # switching kinds and back remounts the box; the preview keeps its name
+    # switching kinds and back remounts the box; the draft keeps its name
     page.get_by_test_id("kind-place").click()
     preview.wait_for(state="hidden", timeout=TIMEOUT_MS)
     page.get_by_test_id("kind-character").click()

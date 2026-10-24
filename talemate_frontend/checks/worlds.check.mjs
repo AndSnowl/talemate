@@ -34,7 +34,6 @@ import {
     moveInEdit,
     rowChanged,
     rowsTicked,
-    shelvedRows,
     samePage,
     sameParents,
     useWorldsStore,
@@ -85,6 +84,28 @@ import {
     timelineShown,
 } from '../src/components/worlds/entryPage.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
+import {
+    acceptable,
+    addFiling,
+    alsoHere,
+    categoryFor,
+    changeFiling,
+    changeNewName,
+    copyFactTo,
+    draftFactRows,
+    freshSegments,
+    holdFact,
+    moveFactTo,
+    namedSegments,
+    rebaseDraft,
+    removeFact,
+    retarget,
+    settleRepeat,
+    tickFact,
+    tickFileInto,
+    tickMoveHere,
+    versionRows,
+} from '../src/components/worlds/draftPage.js';
 
 let passed = 0;
 const failures = [];
@@ -499,6 +520,20 @@ function freshStore() {
 const reply = (action, data, extra = {}) => ({ type: 'worlds', action, data, ...extra });
 const WORLD = { id: 'w1', name: 'Vael', path: '/worlds/w1', calendar: {}, present: dateOf(1000), now: dateOf(1000) };
 
+// A draft as `preview_thing` answers it: the page of `preview` (its own
+// facts as drafted rows) plus the preview, its key and versions.
+function draftOf(preview, { key = null, version = 1, count = null } = {}) {
+    const facts = (preview.facts || []).map((fact, index) => ({
+        fact_id: null, draft: true, index, category: fact.category, text: fact.text, rendered: fact.text,
+        segments: [{ text: fact.text, ref: null, stub: false }], ticked: fact.ticked !== false, repeat_of: fact.repeat_of || null,
+    }));
+    const versions = Array.from({ length: count || version }, (_, i) => ({ version: i + 1, name: preview.name, prompt: preview.prompt || '' }));
+    return {
+        id: preview.stub_id || null, draft: true, kind: preview.kind, name: preview.name, facts, in: [], entry_timeline: [],
+        preview, draft_key: key || (preview.stub_id ? `stub:${preview.stub_id}` : `new:${preview.kind}:${nameKey(preview.name || '')}`), version, versions,
+    };
+}
+
 // every kind's listing, as opening a world, an accept or a started scene asks
 const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being'];
 const STUBS_REQUEST = { type: 'worlds', action: 'list_stubs', include_ignored: true };
@@ -561,12 +596,15 @@ check('a preview, then accept, opens the new thing', () => {
         type: 'worlds', action: 'preview_thing', kind: 'character', prompt: 'a ferryman', fields: { born: dateOf(270) },
     });
     const preview = { kind: 'character', prompt: 'a ferryman', fields: {}, name: 'Oskar', facts: [], prose: {} };
-    store.handleMessage(reply('preview_thing', preview));
+    store.handleMessage(reply('preview_thing', draftOf(preview)));
     assert.equal(store.previewPending, false);
     assert.equal(store.preview.name, 'Oskar');
 
     store.acceptPreview({ name: 'Oskar Dell' });
     assert.equal(sent.at(-1).preview.name, 'Oskar Dell');
+    // the draft goes with it, and stays until the server answers
+    assert.equal(sent.at(-1).draft_key, 'new:character:oskar');
+    assert.equal(store.draft.accepting, true);
     store.handleMessage(reply('accept_preview', { id: 't1', kind: 'character', name: 'Oskar Dell' }));
     assert.equal(store.preview, null);
     assert.equal(store.selectedThingId, 't1');
@@ -575,7 +613,7 @@ check('a preview, then accept, opens the new thing', () => {
     listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
 });
 
-check("accepts send the preview as the owner left it: ticks, elsewhere facts and move-in rows", () => {
+check("accepts send the draft as the owner left it: ticks, elsewhere facts and Could move here rows", () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.previewThing('lore', 'a doctrine');
@@ -592,17 +630,13 @@ check("accepts send the preview as the owner left it: ticks, elsewhere facts and
             { target_id: 't1', target_name: 'Tsardom', category: 'about', text: 'About it.', ticked: true },
             { target_id: null, target_name: 'White Talon', new: { name: 'White Talon', kind: 'lore', same_as: [{ thing_id: 'wt' }], same_target_id: null }, category: 'general', text: 'Trains.', ticked: true },
         ],
-        move_in: [
+        move_here: [
             { fact_id: 'm1', from_id: 'tsardom', text: 'Its law code.', ticked: true },
             { fact_id: 'm2', from_id: 'tsardom', text: 'Its army.', ticked: false },
         ],
         prose: {},
     };
-    store.handleMessage(reply('preview_thing', preview));
-    // the repeat that came unticked shows under "Already in the world",
-    // wherever the owner ticks it
-    assert.deepEqual(store.previewShelved, [0]);
-    assert.deepEqual(shelvedRows([{ repeat_of: {}, ticked: true }, { repeat_of: null, ticked: false }, { repeat_of: {}, ticked: false }]), [2]);
+    store.handleMessage(reply('preview_thing', draftOf(preview)));
     // the owner's edits: the repeat ticked in, the Tsardom row unticked,
     // the stub row is the White Talon the world has
     store.editPreview('create', { facts: rowsTicked(store.preview.facts, [0], true) });
@@ -617,8 +651,12 @@ check("accepts send the preview as the owner left it: ticks, elsewhere facts and
     assert.deepEqual(out.facts.map((fact) => fact.ticked), [true, true]);
     assert.deepEqual(out.elsewhere.map((row) => row.ticked), [false, true]);
     assert.equal(out.elsewhere[1].new.same_target_id, 'wt');
-    assert.deepEqual(out.move_in.map((row) => row.ticked), [true, false]);
-    // no same target, no key
+    assert.deepEqual(out.move_here.map((row) => row.ticked), [true, false]);
+    // a refusal keeps the draft as the owner left it; then no same target,
+    // no key
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no' } });
+    assert.equal(store.draft.accepting, false);
+    assert.equal(store.preview.name, 'The Divine Right');
     store.acceptPreview();
     assert.equal('same_target_id' in sent.at(-1), false);
     // the reply's notes are kept to show
@@ -664,7 +702,7 @@ check('the Accept line counts what an accept writes', () => {
             { ticked: false, new: { name: 'Frosted Wing', same_target_id: null } },
         ],
         new_names: [{ name: "The Tsar's Army" }, { name: 'Synod', same_target_id: 's1' }],
-        move_in: [{ ticked: true }, { ticked: false }],
+        move_here: [{ ticked: true }, { ticked: false }],
     };
     const counts = previewCounts(preview);
     assert.deepEqual(counts, { facts: 2, elsewhere: 4, stubs: 2, movedIn: 1 });
@@ -1267,7 +1305,7 @@ check('a mix drafted for a character is accepted without opening its page', () =
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.previewThing('mix', '', { parents: ['low', 'orc'] });
-    store.handleMessage(reply('preview_thing', { kind: 'mix', prompt: '', fields: {}, name: 'Half-orc', facts: [], prose: {} }));
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'mix', prompt: '', fields: {}, name: 'Half-orc', facts: [], prose: {} })));
     store.acceptPreview({ name: 'Half-orc' }, { open: false });
     store.handleMessage(reply('accept_preview', { id: 'm1', kind: 'mix', name: 'Half-orc' }));
     assert.deepEqual(store.accepted, { id: 'm1', kind: 'mix', name: 'Half-orc' });
@@ -1276,7 +1314,7 @@ check('a mix drafted for a character is accepted without opening its page', () =
     listedEverything(sent.slice(-(ALL_KINDS.length + 1)));
     // the next accept opens its page again
     store.previewThing('character', 'a smith', { heritage: 'm1' });
-    store.handleMessage(reply('preview_thing', { kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', facts: [], prose: {} }));
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'character', prompt: 'a smith', fields: {}, name: 'Gorra', facts: [], prose: {} })));
     store.acceptPreview({ name: 'Gorra' });
     store.handleMessage(reply('accept_preview', { id: 'c1', kind: 'character', name: 'Gorra' }));
     assert.equal(store.selectedThingId, 'c1');
@@ -1306,7 +1344,7 @@ check('marking an inherited fact overridden moves it to one own fact', () => {
         ],
         inherited: [{ fact_id: 'f1', source: 'Lowlander', source_id: 'low', category: 'physical', text: 'Short.' }],
     };
-    store.handleMessage(reply('preview_thing', preview));
+    store.handleMessage(reply('preview_thing', draftOf(preview)));
     // a physical fact is overridden by the first appearance fact
     assert.equal(defaultOverrideIndex(store.preview, preview.inherited[0]), 1);
     assert.equal(defaultOverrideIndex({ ...preview, facts: [] }, preview.inherited[0]), -1);
@@ -1548,10 +1586,12 @@ check('expanding a stub previews with its id, and accepting ends it', () => {
     assert.deepEqual(sent.at(-1), {
         type: 'worlds', action: 'preview_thing', kind: 'place', prompt: 'Tsardom of Moscavia', fields: {}, stub_id: 's1',
     });
-    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' }));
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' })));
     store.regeneratePreview();
     assert.equal(sent.at(-1).stub_id, 's1');
-    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' }));
+    // a new version of the same draft
+    assert.equal(sent.at(-1).draft_key, 'stub:s1');
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'place', name: 'Tsardom of Moscavia', facts: [], prose: {}, stub_id: 's1' })));
     store.acceptPreview();
     store.handleMessage(reply('accept_preview', { id: 's1', kind: 'place', name: 'Tsardom of Moscavia' }));
     assert.equal(store.expanding, null);
@@ -1565,7 +1605,7 @@ check('expanding a stub over an unaccepted preview asks first', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.previewThing('place', 'a town');
-    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {} }));
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'place', name: 'Kalmara', facts: [], prose: {} })));
     sent.length = 0;
 
     // the preview is kept, and the owner is asked
@@ -1633,7 +1673,7 @@ check('expanding a stub asks for its suggestion; previews carry the names', () =
     });
     store.regeneratePreview();
     assert.deepEqual(sent.at(-1).picks, { Moscavia: 's1' });
-    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {}, matching_stub_id: 'k1' }));
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'place', name: 'Kalmara', facts: [], prose: {}, matching_stub_id: 'k1' })));
 
     // accepting into a stub; once accepted, the re-pick fetches the stub
     // to teach it the name
@@ -1886,7 +1926,8 @@ check('an accepted preview opens its page as a visit', () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.showSection('lore');
-    store.preview = { kind: 'lore', name: 'Hope', facts: [] };
+    store.previewThing('lore', 'hope');
+    store.handleMessage(reply('preview_thing', draftOf({ kind: 'lore', name: 'Hope', facts: [], prose: {} })));
     store.acceptPreview();
     store.handleMessage(reply('accept_preview', { id: 'hope', kind: 'lore', name: 'Hope' }));
     assert.equal(store.selectedThingId, 'hope');
@@ -1945,7 +1986,7 @@ check("re-pointing the open stub's page opens the target's", () => {
     assert.equal(store.selectedThingId, null);
 });
 
-check('ticking a move-in pick unticks the own facts repeating it, and back (ruling C24)', () => {
+check('ticking a "Could move here" row unticks the own facts repeating it, and back (ruling C24)', () => {
     const preview = {
         facts: [
             { text: 'The law code, again.', ticked: true, repeat_of: { fact_id: 'm1' } },
@@ -1954,24 +1995,24 @@ check('ticking a move-in pick unticks the own facts repeating it, and back (ruli
             { text: 'Another copy.', ticked: false, repeat_of: { fact_id: 'm1' } },
             { text: 'Already in the world.', ticked: false, repeat_of: { fact_id: 'x9' } },
         ],
-        move_in: [
+        move_here: [
             { fact_id: 'm1', text: 'The law code.', ticked: false, picked: true },
             { fact_id: 'm2', text: 'The army.', ticked: false, picked: false },
         ],
     };
     // the owner ticks the pick: its repeat is unticked
-    let out = moveInEdit(preview, rowsTicked(preview.move_in, [0], true));
-    assert.deepEqual(out.move_in.map((row) => row.ticked), [true, false]);
+    let out = moveInEdit(preview, rowsTicked(preview.move_here, [0], true));
+    assert.deepEqual(out.move_here.map((row) => row.ticked), [true, false]);
     assert.deepEqual(out.facts.map((fact) => fact.ticked), [false, true, false, false]);
     // another row ticked: the facts don't change again
-    out = moveInEdit({ ...preview, ...out }, rowsTicked(out.move_in, [1], true));
+    out = moveInEdit({ ...preview, ...out }, rowsTicked(out.move_here, [1], true));
     assert.deepEqual(out.facts.map((fact) => fact.ticked), [false, true, false, false]);
     // the pick unticked: only the fact it unticked comes back
-    out = moveInEdit({ ...preview, ...out }, rowsTicked(out.move_in, [0], false));
+    out = moveInEdit({ ...preview, ...out }, rowsTicked(out.move_here, [0], false));
     assert.deepEqual(out.facts.map((fact) => fact.ticked), [true, true, false, false]);
     assert.equal('untickedByMove' in out.facts[0], false);
     // no facts, no trouble
-    assert.deepEqual(moveInEdit({ move_in: [] }, []), { move_in: [], facts: [] });
+    assert.deepEqual(moveInEdit({ move_here: [] }, []), { move_here: [], facts: [] });
 });
 
 // --- the entry page (Filing, Task 9) -----------------------------------------
@@ -2304,6 +2345,262 @@ check("a page's synopsis: the server's wins; the session's goes on a refetch", (
     store.handleMessage(reply('group_synopsis', { thing_id: 'k', tag: 'custom', synopsis: 'K.' }));
     store.handleMessage(reply('get_thing', { id: 'v', kind: 'place', name: 'Velikoye', connected: [] }));
     assert.equal(store.synopses['k|custom'].text, 'K.');
+});
+
+// --- the draft page (Filing, Task 10) ------------------------------------------
+
+const HOST = {
+    kind: 'lore', prompt: 'a host', fields: {}, name: 'The Frostwing Host', prose: {}, aka: [],
+    facts: [
+        { category: 'general', text: 'It flies at night.', ticked: true },
+        { category: 'general', text: 'The Khorol freezes.', ticked: false, repeat_of: { fact_id: 'f9', owner_id: 'vel', owner_name: 'Velikoye', text: 'The Khorol freezes solid.' } },
+    ],
+    filings: [{ target_id: 'ts', target_name: 'Tsardom', role: "the realm's army", ticked: false, exceptions: [] }],
+    file_into: [{ thing_id: 'wt', name: 'White Talon', ticked: false }],
+    move_here: [{ fact_id: 'm1', from_id: 'vel', from_name: 'Velikoye', text: 'The Host drills here.', ticked: false }],
+    new_names: [{ name: 'Pale Wing', kind: 'lore', tag: null }],
+    elsewhere: [{ target_id: 'vel', target_name: 'Velikoye', new: null, category: 'description', text: 'Velikoye closes its bridges.', ticked: true }],
+    picks: {},
+};
+
+function hostDraft() {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.previewThing('lore', 'a host');
+    store.handleMessage(reply('preview_thing', draftOf(HOST)));
+    return { store, sent };
+}
+
+check("the owner's draft edits are rebased onto the server's next copy", () => {
+    const base = HOST;
+    let edited = { ...base, name: 'The Frostwing Riders' };
+    edited = { ...edited, ...tickFact(edited, 0, false) };
+    edited = { ...edited, ...changeFiling(edited, 'ts', { ticked: true }) };
+    edited = { ...edited, ...addFiling(edited, { id: 'nc', name: 'The Night Court' }) };
+    edited = { ...edited, ...alsoHere(edited, base.elsewhere[0]) };
+    edited = { ...edited, ...changeNewName(edited, 'Pale Wing', { kind: 'place' }) };
+    // the server's copy since: a fact appended, a new name said anew
+    const next = {
+        ...base,
+        facts: [...base.facts, { category: 'general', text: 'It drills at dawn.', ticked: true }],
+        new_names: [{ name: 'Pale Wing', kind: 'item', tag: 'banner' }, { name: 'Frost Field', kind: 'place' }],
+    };
+    const out = rebaseDraft(base, edited, next);
+    assert.equal(out.name, 'The Frostwing Riders');
+    // the server's facts in place, the owner's ticks on them, its own after
+    assert.deepEqual(out.facts.map((f) => [f.text, f.ticked, !!f.local]), [
+        ['It flies at night.', false, false],
+        ['The Khorol freezes.', false, false],
+        ['It drills at dawn.', true, false],
+        ['Velikoye closes its bridges.', true, true],
+    ]);
+    assert.deepEqual(out.filings.map((f) => [f.target_id, f.ticked]), [['ts', true], ['nc', true]]);
+    // the owner's change kept on a row the server still has, unless the
+    // server has just said it anew (`fresh`)
+    assert.deepEqual(out.new_names.map((n) => [n.name, n.kind]), [['Pale Wing', 'place'], ['Frost Field', 'place']]);
+    const fresh = rebaseDraft(base, edited, next, { fresh: ['pale wing'] });
+    assert.deepEqual(fresh.new_names[0], { name: 'Pale Wing', kind: 'item', tag: 'banner' });
+    // nothing to rebase from: the server's copy as it is
+    assert.equal(rebaseDraft(null, null, next), next);
+});
+
+check("a draft fact removed or moved keeps its place, so the server's indices hold", () => {
+    let edited = { ...HOST };
+    edited = { ...edited, ...moveFactTo(edited, 0, { id: 'nc', name: 'The Night Court', kind: 'lore' }) };
+    assert.deepEqual(edited.facts.map((f) => [f.ticked, !!f.removed]), [[false, true], [false, false]]);
+    assert.deepEqual(edited.elsewhere.at(-1), {
+        target_id: 'nc', target_name: 'The Night Court', new: null, category: 'general', text: 'It flies at night.',
+        since: null, held_by: null, held_by_name: null, ticked: true, repeat_of: null, local: true,
+    });
+    // a copy keeps it here; a place's categories are the place's
+    const copied = copyFactTo(HOST, 0, { id: 'vel', name: 'Velikoye', kind: 'place' });
+    assert.equal(copied.elsewhere.at(-1).category, 'general');
+    assert.equal(categoryFor('place', 'general'), 'general');
+    assert.equal(categoryFor('place', 'nature'), 'general');
+    assert.equal(categoryFor('character', 'nature'), 'appearance');
+    assert.equal(categoryFor('lore', 'general'), 'general');
+    // the page's rows: the removed one left out, each with the server's index
+    const page = draftOf(HOST);
+    const rows = draftFactRows(page, edited);
+    assert.deepEqual(rows.map((r) => [r.index, r.serverIndex, r.edited]), [[1, 1, false]]);
+    // removed and held
+    assert.equal(removeFact(HOST, 1).facts[1].removed, true);
+    assert.deepEqual(holdFact(HOST, 0, { id: 'ch', name: 'Church' }).facts[0].held_by_name, 'Church');
+    assert.equal(holdFact(HOST, 0, null).facts[0].held_by, null);
+});
+
+check('a draft fact rewritten here, or added, has no server index: its words show plain, new names fresh', () => {
+    const page = draftOf(HOST);
+    let edited = { ...HOST, facts: HOST.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies with the Pale Wing.' } : f)) };
+    edited = { ...edited, ...alsoHere(edited, edited.elsewhere[0]) };
+    const rows = draftFactRows(page, edited);
+    assert.deepEqual(rows.map((r) => [r.serverIndex, r.edited, r.local]), [[null, true, false], [1, false, false], [null, true, true]]);
+    assert.deepEqual(rows[0].segments.map((seg) => [seg.text, !!seg.fresh]), [['It flies with the ', false], ['Pale Wing', true], ['.', false]]);
+    // a linked run stays linked; a name answered "same as" isn't fresh
+    assert.deepEqual(freshSegments([{ text: 'Pale Wing', ref: 'x', stub: false }], HOST.new_names), [{ text: 'Pale Wing', ref: 'x', stub: false }]);
+    assert.equal(freshSegments([{ text: 'Pale Wing', ref: null, stub: false }], [{ name: 'Pale Wing', same_target_id: 'pw' }])[0].fresh, undefined);
+});
+
+check('a repeat: Move that one here, Keep both or Drop this', () => {
+    let edited = { ...HOST, ...settleRepeat(HOST, 1, 'move') };
+    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat], [false, true]);
+    assert.deepEqual(edited.move_here.at(-1), {
+        fact_id: 'f9', from_id: 'vel', from_name: 'Velikoye', text: 'The Khorol freezes solid.', ticked: true, repeat: true, local: true,
+    });
+    assert.equal(previewCounts(edited).movedIn, 1);
+    edited = { ...edited, ...settleRepeat(edited, 1, 'keep') };
+    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat], [true, false]);
+    assert.equal(edited.move_here.filter((row) => row.repeat).length, 0);
+    edited = { ...edited, ...settleRepeat(edited, 1, 'drop') };
+    assert.equal(edited.facts[1].ticked, false);
+    // a Could move here tick leaves a repeat row alone
+    const moving = { ...HOST, ...settleRepeat(HOST, 1, 'move') };
+    assert.deepEqual(tickMoveHere(moving, 'f9', false).move_here.map((r) => r.ticked), [false, true]);
+    assert.deepEqual(tickMoveHere(moving, 'm1', true).move_here.map((r) => r.ticked), [true, true]);
+});
+
+check('For other pages: a row retargeted, "+ also here"; In, File into this and new names', () => {
+    const out = retarget(HOST, 0, { id: 'nc', name: 'The Night Court', kind: 'lore' });
+    assert.deepEqual(out.elsewhere[0], {
+        target_id: 'nc', target_name: 'The Night Court', new: null, category: 'general', text: 'Velikoye closes its bridges.', ticked: true, repeat_of: null,
+    });
+    const also = alsoHere(HOST, HOST.elsewhere[0]);
+    assert.deepEqual(also.facts.at(-1), {
+        category: 'general', text: 'Velikoye closes its bridges.', since: null, overrides: [], held_by: null, held_by_name: null, ticked: true, repeat_of: null, local: true,
+    });
+    // "+ in…" a filing already there ticks it
+    assert.deepEqual(addFiling(HOST, { id: 'ts', name: 'Tsardom' }).filings.map((f) => f.ticked), [true]);
+    assert.deepEqual(tickFileInto(HOST, 'wt', true).file_into[0].ticked, true);
+    assert.equal(changeNewName(HOST, 'the Pale Wing', { tag: 'banner' }).new_names[0].tag, 'banner');
+    // the draft's own names highlighted in a Could move here row
+    const segments = namedSegments('The Host drills by the Frostwing Host.', { name: 'The Frostwing Host', aka: [{ name: 'the Host' }], kind: 'lore' });
+    assert.deepEqual(segments.filter((seg) => seg.fresh).map((seg) => seg.text), ['The Host', 'the Frostwing Host']);
+    assert.deepEqual(namedSegments('Nothing here.', { name: 'Host' }), [{ text: 'Nothing here.', ref: null, stub: false }]);
+    // what's accepted leaves the page's own keys out
+    assert.deepEqual(acceptable({ name: 'x', _same: 'a' }), { name: 'x' });
+    assert.deepEqual(versionRows([{ version: 1, name: 'A', prompt: 'p' }, { version: 2, name: 'B', prompt: 'q' }], 1).map((r) => [r.label, r.current]), [['v2 · B', false], ['v1 · A', true]]);
+});
+
+check("versions: the owner's edits kept per version for the session, restored with it", () => {
+    const { store, sent } = hostDraft();
+    assert.equal(store.draft.key, 'new:lore:frostwing host');
+    store.editDraft(tickFact(store.preview, 0, false));
+    // Regenerate: the draft's key goes back, a second version comes
+    store.regeneratePreview();
+    assert.equal(sent.at(-1).draft_key, 'new:lore:frostwing host');
+    store.handleMessage(reply('preview_thing', draftOf({ ...HOST, facts: [{ category: 'general', text: 'It hunts.' }] }, { version: 2 })));
+    assert.deepEqual(store.preview.facts.map((f) => f.text), ['It hunts.']);
+    // version 1 again: the server's copy, the owner's untick on it
+    store.useVersion(1);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'use_version', draft_key: 'new:lore:frostwing host', version: 1 });
+    store.handleMessage(reply('use_version', draftOf(HOST, { version: 1, count: 2 })));
+    assert.equal(store.draft.version, 1);
+    assert.equal(store.preview.facts[0].ticked, false);
+    // a reply nobody asked for is dropped
+    store.handleMessage(reply('preview_thing', draftOf(HOST, { version: 3, count: 3 })));
+    assert.equal(store.draft.version, 1);
+    assert.deepEqual(Object.keys(store.draftEdits['new:lore:frostwing host']), ['1', '2']);
+    // the oldest version dropped (five kept): the edits kept move down
+    store.draft = { ...store.draft, versions: [1, 2, 3, 4, 5].map((n) => ({ version: n })), version: 5 };
+    store.regeneratePreview();
+    store.handleMessage(reply('preview_thing', draftOf(HOST, { version: 5, count: 5 })));
+    assert.deepEqual(Object.keys(store.draftEdits['new:lore:frostwing host']), ['1', '4']);
+    // Edit prompt: back to the box, the draft kept; Discard: every version goes
+    store.editPrompt();
+    assert.equal(store.draftShown, false);
+    store.previewThing('lore', 'a host, again');
+    assert.equal(sent.at(-1).draft_key, 'new:lore:frostwing host');
+    store.handleMessage(reply('preview_thing', draftOf(HOST, { version: 5, count: 5 })));
+    assert.equal(store.draftShown, true);
+    store.discardPreview();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_preview', draft_key: 'new:lore:frostwing host' });
+    assert.equal(store.draft, null);
+    assert.equal(store.draftEdits['new:lore:frostwing host'], undefined);
+    // another kind's draft drops this one
+    const other = hostDraft();
+    other.store.previewThing('place', 'a town');
+    assert.equal(other.sent.at(-2).action, 'discard_preview');
+    assert.equal('draft_key' in other.sent.at(-1), false);
+});
+
+check("a draft's additions: one at a time, rebased; a stale one is said", () => {
+    const { store, sent } = hostDraft();
+    store.editDraft(tickFact(store.preview, 0, false));
+    store.addDraftFacts('its drills');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_facts', draft_key: 'new:lore:frostwing host', prompt: 'its drills' });
+    assert.equal(store.draft.adding, 'add_facts');
+    // a second waits for the first
+    sent.length = 0;
+    store.addDraftFacts('more', 990);
+    assert.deepEqual(sent, []);
+    // another draft's reply is dropped; this one's is rebased
+    store.handleMessage(reply('add_facts', draftOf(HOST, { key: 'new:lore:other' })));
+    assert.equal(store.draft.adding, 'add_facts');
+    const added = { ...HOST, facts: [...HOST.facts, { category: 'general', text: 'It drills.', ticked: true }] };
+    store.handleMessage(reply('add_facts', draftOf(added)));
+    assert.equal(store.draft.adding, null);
+    assert.deepEqual(store.preview.facts.map((f) => f.ticked), [false, false, true]);
+    // an event, refused as stale (another version current meanwhile)
+    store.addDraftFacts('its raising', 990);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', draft_key: 'new:lore:frostwing host', prompt: 'its raising', year: 990 });
+    store.handleMessage({ type: 'worlds', action: 'add_event_failed', message: 'ask again', data: { draft_key: 'new:lore:frostwing host', stale: true } });
+    assert.equal(store.draft.adding, null);
+    assert.equal(store.draft.addError, 'ask again');
+    // the entry page's own fact draft is left alone by a draft's reply
+    assert.equal(store.factDraft, null);
+});
+
+check('selected words: on a draft a stub or a link by its index; on a page by the fact', () => {
+    const { store, sent } = hostDraft();
+    store.draftSelection('make_stub_from_text', 0, 9, 18, { kind: 'lore', tag: 'banner' });
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'make_stub_from_text', draft_key: 'new:lore:frostwing host', index: 0, start: 9, end: 18, kind: 'lore', tag: 'banner',
+    });
+    assert.equal(store.draft.selecting, 'make_stub_from_text');
+    store.editDraft(changeNewName(store.preview, 'Pale Wing', { kind: 'place' }));
+    const named = { ...HOST, new_names: [{ name: 'Pale Wing', kind: 'lore', tag: 'banner' }] };
+    store.handleMessage(reply('make_stub_from_text', { ...draftOf(named), stub_id: null, new_name: 'Pale Wing' }));
+    assert.equal(store.draft.selecting, null);
+    // the words said anew: the server's row as it is
+    assert.deepEqual(store.preview.new_names, [{ name: 'Pale Wing', kind: 'lore', tag: 'banner' }]);
+    store.draftSelection('link_text', 0, 0, 2, { target_id: 'vel' });
+    store.handleMessage(reply('link_text', draftOf({ ...named, picks: { It: 'vel' } })));
+    assert.deepEqual(store.preview.picks, { It: 'vel' });
+
+    // on an accepted page: the fact's id, then the page; "expand now"
+    // opens the new stub's box
+    const page = freshStore();
+    page.store.handleMessage(reply('open_world', WORLD));
+    page.store.openThing('vel');
+    page.store.makeStubFromText('f1', 7, 17, 'place', 'gate', { expand: true, words: 'Ashen Gate' });
+    assert.deepEqual(page.sent.at(-1), {
+        type: 'worlds', action: 'make_stub_from_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 7, end: 17, kind: 'place', tag: 'gate',
+    });
+    page.store.handleMessage(reply('make_stub_from_text', { id: 'vel', kind: 'place', name: 'Velikoye', stub_id: 'g1' }));
+    assert.deepEqual(page.store.expanding, { id: 'g1', kind: 'place', name: 'Ashen Gate' });
+    page.store.openThing('vel');
+    page.store.linkText('f1', 29, 39, 'ts');
+    assert.deepEqual(page.sent.at(-1), { type: 'worlds', action: 'link_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 29, end: 39, target_id: 'ts' });
+    page.store.handleMessage(reply('link_text', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [] }));
+    assert.equal(page.store.thing.name, 'Velikoye');
+});
+
+check('Copy to… keeps the fact; the hard re-point sends the name; names fetched for it', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('vel');
+    store.copyFact('f1', 'ts');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'copy_fact', fact_id: 'f1', target_id: 'ts' });
+    store.handleMessage(reply('copy_fact', { fact_id: 'f2', target: { id: 'ts', name: 'Tsardom' }, notes: [] }));
+    assert.deepEqual(store.notes, { action: 'copy_fact', notes: ['Copied to Tsardom'] });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_thing', id: 'vel', at: null });
+    store.fetchNames('ts');
+    store.handleMessage(reply('get_thing', { id: 'ts', name: 'Tsardom', aka: [{ name: 'the realm' }] }));
+    assert.deepEqual(store.namesOf.ts, ['Tsardom', 'the realm']);
+    store.repointStub('s1', 'ts', 'the realm');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'repoint_stub', stub_id: 's1', target_id: 'ts', use_name: 'the realm' });
+    store.repointStub('s1', 'ts');
+    assert.equal('use_name' in sent.at(-1), false);
 });
 
 if (failures.length) {

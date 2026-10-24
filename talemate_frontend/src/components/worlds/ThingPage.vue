@@ -121,13 +121,28 @@
 
             <!-- the entry's summary fact heads the page -->
             <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
-                <div class="fact d-flex align-center ga-2" data-testid="fact-row">
+                <div class="fact fact-host d-flex align-center ga-2" data-testid="fact-row">
                     <span class="flex-grow-1 summary-text">
-                        <LinkedText :segments="summaryFact.segments" :text="summaryFact.rendered" repoint :exclude="[thing.id]" @repoint="repointLink(summaryFact, $event)" />
+                        <LinkedText
+                            class="fact-text"
+                            :segments="summaryFact.segments"
+                            :text="summaryFact.rendered"
+                            repoint
+                            selectable
+                            :exclude="[thing.id]"
+                            @repoint="repointLink(summaryFact, $event)"
+                            @select="selected(summaryFact, $event)"
+                        />
                         <span v-if="summaryFact.held_by" class="held" data-testid="held-by-tag">held by {{ summaryFact.held_by.name }}</span>
                     </span>
                     <span class="fact-date">{{ spanLabel(worlds.calendar, summaryFact.valid_from, summaryFact.valid_until) }}</span>
-                    <FactRowActions :fact="summaryFact" />
+                    <FactRowActions
+                        :fact="summaryFact"
+                        @edit="startEdit(summaryFact)"
+                        @dates="startEdit(summaryFact)"
+                        @end="startEnd(summaryFact)"
+                        @remove="worlds.removeFact(summaryFact.fact_id)"
+                    />
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(summaryFact)"></v-btn>
                 </div>
                 <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
@@ -181,15 +196,30 @@
 
                     <div v-if="!shownFacts.length" class="text-body-2 text-muted">No facts true at this date.</div>
                     <template v-for="fact in shownFacts" :key="fact.fact_id">
-                        <div class="fact d-flex align-center ga-2" data-testid="fact-row">
+                        <div class="fact fact-host d-flex align-center ga-2" data-testid="fact-row">
                             <span class="flex-grow-1">
-                                <LinkedText :segments="fact.segments" :text="fact.rendered" repoint :exclude="[thing.id]" @repoint="repointLink(fact, $event)" />
+                                <LinkedText
+                                    class="fact-text"
+                                    :segments="fact.segments"
+                                    :text="fact.rendered"
+                                    repoint
+                                    selectable
+                                    :exclude="[thing.id]"
+                                    @repoint="repointLink(fact, $event)"
+                                    @select="selected(fact, $event)"
+                                />
                                 <span v-for="note in overrideNotes(fact)" :key="note" class="override-note">(overrides {{ note }})</span>
                                 <span v-if="fact.held_by" class="held" data-testid="held-by-tag">held by {{ fact.held_by.name }}</span>
                             </span>
                             <v-chip size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
                             <span class="fact-date">{{ spanLabel(worlds.calendar, fact.valid_from, fact.valid_until) }}</span>
-                            <FactRowActions :fact="fact" />
+                            <FactRowActions
+                                :fact="fact"
+                                @edit="startEdit(fact)"
+                                @dates="startEdit(fact)"
+                                @end="startEnd(fact)"
+                                @remove="worlds.removeFact(fact.fact_id)"
+                            />
                             <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(fact)"></v-btn>
                             <v-btn v-if="!fact.valid_until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End fact" @click="startEnd(fact)"></v-btn>
                         </div>
@@ -267,6 +297,15 @@
             </EntryTimeline>
         </template>
 
+        <SelectionMenu
+            v-model="selecting"
+            :target="selection?.target"
+            :words="selection?.words || ''"
+            :exclude="thing ? [thing.id] : []"
+            @stub="makeStub(false, $event)"
+            @expand="makeStub(true, $event)"
+            @link="linkWords"
+        />
         <ThingDeleteDialog />
         <MergeDialog v-if="thing" v-model="merging" :thing="thing" />
     </div>
@@ -288,6 +327,7 @@ import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
 import MergeDialog from './MergeDialog.vue';
 import NamedStubs from './NamedStubs.vue';
+import SelectionMenu from './SelectionMenu.vue';
 import StubCard from './StubCard.vue';
 import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
@@ -367,9 +407,16 @@ function cut(text, length = 28) {
 // folded) and its Timeline ("Events ▾", "+ Add event…").
 //
 // Curation: every page has a Timeline (`EntryTimeline`, its
-// `entry_timeline`); each own fact
-// row has "Move to…" and "Held by…" (`FactRowActions`), a held one tagged
-// "held by X"; "Merge into…" opens the merge dialog (`MergeDialog`). A
+// `entry_timeline`); each own fact row has its menu on "⋯" or a
+// right-click (`FactRowActions`: Move to…, Copy to…, Held by…, Edit,
+// Change dates, End this, Remove), a held one tagged "held by X", and
+// right-clicking words selected in it opens the selection menu
+// (`SelectionMenu`: Make a stub, Make a stub and expand now, Link to an
+// entry…; `make_stub_from_text`, `link_text`, the words' UTF-16 offsets
+// in its rendered text). "Merge into…" opens the merge dialog
+// (`MergeDialog`). The draft page (a new or expanded entry, before it's
+// accepted) is this page's draft mode, `DraftPage`, which the create box
+// shows in its place. A
 // being has its existence picked here (real, believed or undecided); only
 // a real one is a person, with "within" and "but…" on its "In" rows.
 export default {
@@ -385,6 +432,7 @@ export default {
         LinkedText,
         MergeDialog,
         NamedStubs,
+        SelectionMenu,
         StubCard,
         ThingAka,
         ThingDeleteDialog,
@@ -412,6 +460,10 @@ export default {
             rename: null,
             // the merge dialog is open
             merging: false,
+            // selected words of a fact (`{factId, start, end, words,
+            // target}`) and whether their menu is open
+            selection: null,
+            selecting: false,
             existenceValues: EXISTENCE,
         };
     },
@@ -803,6 +855,24 @@ export default {
             const occurrence = refOccurrence(fact.text, fact.segments, index);
             if (occurrence !== null && to !== fact.segments[index].ref) {
                 this.worlds.repointRef(fact.fact_id, occurrence, to);
+            }
+        },
+        // words selected in the fact `fact` (`LinkedText`'s `select`)
+        selected(fact, { start, end, words, x, y }) {
+            this.selection = { factId: fact.fact_id, start, end, words, target: [x, y] };
+            this.selecting = true;
+        },
+        makeStub(expand, { kind, tag }) {
+            const found = this.selection;
+            if (found) {
+                const words = found.words.trim().split(/\s+/).join(' ');
+                this.worlds.makeStubFromText(found.factId, found.start, found.end, kind, tag, { expand, words });
+            }
+        },
+        linkWords(target) {
+            const found = this.selection;
+            if (found) {
+                this.worlds.linkText(found.factId, found.start, found.end, target.id);
             }
         },
         removeFact(fact) {

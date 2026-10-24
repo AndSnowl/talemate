@@ -1,16 +1,15 @@
-"""Curation on the world screens: the create preview's sections (its own
-facts with held-by tags, "Already in the world", "Belongs on other
-entries", the same-thing question, "Move here from where they are now")
-and the counts its Accept line gives; the merge dialog; the Timeline every
-page has, with where each line is from and disagreeing dates to pick
-between; a fact row's "Move to…" and "Held by…"; a being's existence; and
-the world's curation settings.
+"""Curation on the world screens: the draft page's sections (its own facts
+with held-by tags and a repeat's match, "For other pages", the same-thing
+question) and the counts its Accept line gives; the merge dialog; the
+Timeline every page has, with where each line is from and disagreeing
+dates to pick between; a fact menu's "Move to…" and "Held by…"; a being's
+existence; and the world's curation settings.
 
 The worlds are seeded through `talemate.world` (`seed.seed_fm_world`), the
 facts' references written as `[[@Name|shown]]`. No model is asked
-anything: previews come from the fixed preview file, read through the real
-parsers (held-by names, elsewhere facts, move-in picks); a merge asks no
-model. What the page sends is read back from a websocket spy.
+anything: drafts come from the fixed preview file, read through the real
+parsers (held-by names, elsewhere facts); a merge asks no model. What the
+page sends is read back from a websocket spy.
 """
 
 from __future__ import annotations
@@ -90,7 +89,7 @@ def _create(page, kind: str, prompt: str):
 
 def _preview_of(page, box):
     box.get_by_role("button", name="Create").click()
-    preview = page.get_by_test_id("create-preview")
+    preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
     return preview
 
@@ -156,20 +155,17 @@ def test_preview_sections_and_accept_counts(app, page, fixed_preview):
     preview = _preview_of(page, box)
 
     # its facts, the held one tagged
-    own = preview.get_by_test_id("preview-fact")
-    expect(own).to_have_count(2)
+    own = preview.get_by_test_id("draft-fact")
+    expect(own).to_have_count(3)
     steward = own.filter(has_text=STEWARD)
     assert "held by Church of the Eternal Light" in steward.inner_text()
     assert steward.get_by_role("checkbox").is_checked()
 
-    # already in the world: unticked, so collapsed, saying where it is
-    repeats = preview.get_by_test_id("preview-repeats")
-    assert "Already in the world" in repeats.text_content()
-    expect(repeats.get_by_test_id("repeat-row")).to_have_count(0)
-    repeats.get_by_role("button", name="Already in the world").click()
-    founded = repeats.get_by_test_id("repeat-row").filter(has_text="founded")
-    founded.wait_for(state="visible", timeout=TIMEOUT_MS)
-    assert "≈ on Church of the Eternal Light" in founded.inner_text()
+    # already in the world: unticked, saying where it is (shown among the
+    # facts with its match, no longer in a collapsed section of its own)
+    founded = own.filter(has_text="founded")
+    match = founded.get_by_test_id("fact-match")
+    assert "≈ already on Church of the Eternal Light" in match.inner_text()
     assert not founded.get_by_role("checkbox").is_checked()
 
     # belongs on other entries, grouped, each ticked; the new stub says so
@@ -190,9 +186,9 @@ def test_preview_sections_and_accept_counts(app, page, fixed_preview):
     moskov_row = groups.filter(has_text="Moskov").get_by_test_id("elsewhere-row")
     _pick(page, moskov_row.get_by_test_id("elsewhere-category"), "description")
 
-    # untick a group at once, and tick the repeat back in
+    # untick a group at once, and keep the repeat after all
     groups.filter(has_text="Moskov").get_by_role("button", name="Untick all").click()
-    founded.get_by_role("checkbox").check()
+    founded.get_by_role("button", name="Keep both").click()
     expect(counts).to_have_text("writes 3 facts here, 3 elsewhere, 1 new stub")
 
     preview.get_by_role("button", name="Accept").click()
@@ -262,8 +258,8 @@ def test_same_thing_fill_existing(app, page, fixed_preview):
     )
     preview = _preview_of(page, box)
 
-    # one question at the top: the candidate's kind and summary, the AI's
-    # verdict only as a hint, and nothing picked for the owner
+    # one question, a search left empty for new: the candidate's kind and
+    # summary under it, the AI's verdict only as a hint, nothing picked
     same = preview.get_by_test_id("same-thing")
     same.wait_for(state="visible", timeout=TIMEOUT_MS)
     candidate = same.get_by_test_id("same-candidate").filter(has_text="Ashenmere")
@@ -271,6 +267,8 @@ def test_same_thing_fill_existing(app, page, fixed_preview):
     assert "A lake of grey water" in candidate.inner_text()
     hint = candidate.get_by_test_id("same-hint")
     assert "same" in hint.inner_text() and "lake's caves" in hint.inner_text()
+    expect(same.get_by_test_id("same-search").locator("input")).to_have_value("")
+    assert "Leave it empty if it's new" in same.inner_text()
     counts = preview.get_by_test_id("accept-counts")
     expect(counts).to_contain_text("writes 2 facts here")
 
@@ -292,7 +290,7 @@ def test_same_thing_fill_existing(app, page, fixed_preview):
     expect(counts).not_to_contain_text("new stub")
 
     # yes: the material goes onto Ashenmere, nothing new is made
-    candidate.get_by_role("button", name="Yes, fill it").click()
+    candidate.get_by_role("button", name="Same as this").click()
     expect(counts).to_contain_text("writes 2 facts onto Ashenmere")
     preview.get_by_role("button", name="Accept").click()
     thing = _opened(page, "Ashenmere")
@@ -502,9 +500,10 @@ def test_move_fact_and_held_by(app, page):
     page.keyboard.press("Escape")
     expect(thing.get_by_test_id("fact-form")).to_have_count(0)
 
-    # held by the Church: tagged on the row
+    # held by the Church (the fact menu's "Held by…"): tagged on the row
     steward = _fact(thing, STEWARD)
-    steward.get_by_test_id("fact-held-by").click()
+    steward.get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-held-by").click()
     menu = page.get_by_test_id("fact-held-menu")
     _pick(page, menu.get_by_test_id("held-by-picker"), "Church of the Eternal Light")
     menu.get_by_role("button", name="Save").click()
@@ -514,7 +513,8 @@ def test_move_fact_and_held_by(app, page):
     expect(tag).to_have_text("held by Church of the Eternal Light")
 
     # and cleared again: world truth
-    _fact(thing, STEWARD).get_by_test_id("fact-held-by").click()
+    _fact(thing, STEWARD).get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-held-by").click()
     menu = page.get_by_test_id("fact-held-menu")
     menu.get_by_role("button", name="Clear").click()
     page.wait_for_function(
@@ -524,7 +524,8 @@ def test_move_fact_and_held_by(app, page):
     expect(_fact(thing, STEWARD).get_by_test_id("held-by-tag")).to_have_count(0)
 
     # an off-topic fact moves to the entry it's about
-    _fact(thing, ON_MOSKOV).get_by_test_id("fact-move").click()
+    _fact(thing, ON_MOSKOV).get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-move").click()
     menu = page.get_by_test_id("fact-move-menu")
     _pick(page, menu.get_by_test_id("move-target"), "Moskov")
     menu.get_by_role("button", name="Move").click()

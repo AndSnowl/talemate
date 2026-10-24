@@ -1,5 +1,9 @@
 <template>
-    <v-card variant="flat" class="create-box pa-3 mb-4" data-testid="create-box">
+    <v-card variant="flat" class="create-box pa-3 mb-4" :class="{ drafting: showingDraft }" data-testid="create-box">
+        <!-- the draft is the page the entry will be: it stands in for the
+             form until it's accepted, discarded or its prompt edited -->
+        <DraftPage v-if="showingDraft" :stay="stay" />
+        <div v-show="!showingDraft">
         <div class="d-flex align-center ga-2 mb-1">
             <span class="text-subtitle-2">New {{ info.singular }}</span>
             <span v-if="fromStub" class="text-caption text-muted" data-testid="from-stub">from stub “{{ fromStub.name }}”</span>
@@ -126,162 +130,24 @@
             {{ previewError }}
         </v-alert>
 
-        <v-card v-if="preview" variant="tonal" class="preview mt-3 pa-3" data-testid="create-preview">
-            <div class="d-flex align-center ga-2 mb-2">
-                <v-text-field
-                    v-model="previewName"
-                    label="Name"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    class="preview-name"
-                ></v-text-field>
-                <span v-if="preview.fields.born" class="text-caption text-muted">
-                    born <span class="world-date">{{ formatDate(worlds.calendar, preview.fields.born) }}</span>
-                </span>
-            </div>
-
-            <!-- named like a stub of this kind: the owner may fill that
-                 stub rather than make a second one -->
-            <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
-                <div class="d-flex align-center flex-wrap ga-2">
-                    <span>There is a stub named “{{ matchingStub.name }}” already.</span>
-                    <v-spacer></v-spacer>
-                    <v-btn
-                        color="accent"
-                        variant="flat"
-                        size="small"
-                        :loading="!!worlds.pending.accept_preview"
-                        :disabled="!previewName.trim()"
-                        @click="accept(matchingStub.id)"
-                    >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
-                </div>
-            </v-alert>
-
-            <!-- "Is this X?": one question for the entry, at the top -->
-            <SameThingAsk
-                v-if="preview.same_as && preview.same_as.length"
-                :name="preview.name"
-                :kind="preview.kind"
-                :offers="preview.same_as"
-                :verdict="preview.verdict"
-                :chosen="sameTarget"
-                @choose="sameTarget = $event"
-            />
-
-            <div v-for="(text, section) in preview.prose" :key="section" class="mb-2">
-                <div class="text-caption text-muted text-uppercase">{{ section }}</div>
-                <div class="prose">{{ text }}</div>
-            </div>
-
-            <div class="text-caption text-muted text-uppercase mt-2">Its facts</div>
-            <div v-for="row in ownFacts" :key="row.index" class="fact" data-testid="preview-fact">
-                <div class="d-flex align-center ga-2">
-                    <v-checkbox-btn
-                        :model-value="row.fact.ticked !== false"
-                        density="compact"
-                        class="flex-grow-0"
-                        :aria-label="'Write ' + row.fact.text"
-                        @update:model-value="tickFact(row.index, $event)"
-                    ></v-checkbox-btn>
-                    <span class="flex-grow-1" :class="{ dropped: row.fact.ticked === false }">
-                        <LinkedText :segments="previewSegments(row.fact.text, preview.new_names)" :text="row.fact.text" />
-                        <span v-if="row.fact.held_by" class="held" data-testid="held-by-tag">held by {{ row.fact.held_by_name || 'another entry' }}<v-btn
-                            icon="mdi-close"
-                            variant="text"
-                            size="x-small"
-                            density="compact"
-                            :aria-label="'Not held: ' + row.fact.text"
-                            @click="clearHeld(row.index)"
-                        ></v-btn></span>
-                    </span>
-                    <v-chip size="x-small" label variant="tonal" color="muted">{{ row.fact.category }}</v-chip>
-                    <span class="fact-date">{{ row.fact.since ? formatDate(worlds.calendar, row.fact.since) + ' →' : 'always' }}</span>
-                </div>
-                <div v-if="row.fact.repeat_of" class="match text-caption" data-testid="fact-match">≈ on {{ row.fact.repeat_of.owner_name || 'an entry' }}: {{ row.fact.repeat_of.text }}</div>
-            </div>
-            <PreviewRepeats :key="'repeats-' + previewKey" :rows="repeatRows" @tick="tickFact" />
-
-            <!-- what it inherits, each ticked as kept: unticking one the
-                 model missed marks it replaced by one of the preview's own -->
-            <template v-if="preview.inherited && preview.inherited.length">
-                <div class="text-caption text-muted text-uppercase mt-3">Inherited (untick to replace)</div>
-                <div
-                    v-for="row in preview.inherited"
-                    :key="row.fact_id"
-                    class="fact inherited d-flex align-center ga-2"
-                    data-testid="preview-inherited"
-                >
-                    <v-checkbox-btn
-                        :model-value="overriderOf(row) < 0"
-                        aria-label="Kept"
-                        density="compact"
-                        class="flex-grow-0"
-                        :disabled="!preview.facts.length"
-                        @update:model-value="setKept(row, $event)"
-                    ></v-checkbox-btn>
-                    <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
-                    <v-select
-                        v-if="overriderOf(row) >= 0"
-                        :model-value="overriderOf(row)"
-                        :items="ownFactItems"
-                        label="Replaced by"
-                        density="compact"
-                        variant="outlined"
-                        hide-details
-                        class="override-by"
-                        data-testid="override-by"
-                        @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
-                    ></v-select>
-                    <v-chip size="x-small" label variant="tonal" color="muted">{{ row.source }}</v-chip>
-                </div>
-            </template>
-
-            <PreviewElsewhere :rows="preview.elsewhere || []" type="create" :new-names="preview.new_names || []" @update="edit({ elsewhere: $event })" />
-            <PreviewStubs :rows="preview.new_names || []" type="create" @update="edit({ new_names: $event })" />
-            <MoveInSection :rows="preview.move_in || []" @update="edit(moveInEdit(preview, $event))" />
-
-            <div class="d-flex align-center flex-wrap ga-2 mt-3">
-                <v-btn
-                    color="accent"
-                    variant="flat"
-                    size="small"
-                    prepend-icon="mdi-check"
-                    :loading="!!worlds.pending.accept_preview"
-                    :disabled="!previewName.trim()"
-                    @click="accept()"
-                >Accept</v-btn>
-                <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" :disabled="!!worlds.pending.accept_preview" @click="worlds.regeneratePreview()">Regenerate</v-btn>
-                <v-btn variant="outlined" size="small" prepend-icon="mdi-pencil" :disabled="!!worlds.pending.accept_preview" @click="worlds.discardPreview()">Edit</v-btn>
-                <span class="text-caption text-muted" data-testid="accept-counts">{{ countsText }}</span>
-            </div>
-        </v-card>
+        <!-- a draft kept while its prompt is edited: Create makes its next
+             version; or back to it as it is -->
+        <div v-if="draft && !showingDraft" class="d-flex align-center ga-2 mt-2 text-caption text-muted" data-testid="draft-waiting">
+            <span>Editing the prompt of the draft “{{ draft.edited.name }}”: Create makes version {{ draft.versions.length + 1 }}.</span>
+            <v-btn variant="text" size="x-small" @click="worlds.showDraft()">Back to the draft</v-btn>
+        </div>
+        </div>
     </v-card>
 </template>
 
 <script>
-import {
-    countsLine,
-    defaultOverrideIndex,
-    heritageFromMatches,
-    moveInEdit,
-    previewCounts,
-    previewSegments,
-    rowChanged,
-    sameParents,
-    useWorldsStore,
-} from '@/stores/worlds.js';
-import { dateOf, formatDate } from './worldDates.js';
+import { defineAsyncComponent } from 'vue';
+import { heritageFromMatches, sameParents, useWorldsStore } from '@/stores/worlds.js';
+import { dateOf } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import { NEW_THING, linkPayload, pickedId, repicks } from './nameHighlights.js';
 import HeritagePicker from './HeritagePicker.vue';
-import LinkedText from './LinkedText.vue';
-import MoveInSection from './MoveInSection.vue';
 import NameHighlightInput from './NameHighlightInput.vue';
-import PreviewElsewhere from './PreviewElsewhere.vue';
-import PreviewRepeats from './PreviewRepeats.vue';
-import PreviewStubs from './PreviewStubs.vue';
-import SameThingAsk from './SameThingAsk.vue';
 
 const PLACEHOLDERS = {
     character: 'A grizzled ferryman who owes the Wardens more than money…',
@@ -302,17 +168,16 @@ function yearDate(year) {
 
 // The "describe it, then create" box for one kind: a prompt plus the
 // optional core-field pickers (born for characters, the heritage picker for
-// characters and mixes). Create shows the
-// backend's preview, which can be accepted, regenerated, or dropped to edit
-// the prompt and try again.
+// characters and mixes). Create opens the draft: the page the entry will
+// be (`DraftPage`, standing in for the form), with its bar to regenerate,
+// edit the prompt (back here, the draft kept: the next Create is its next
+// version), discard or accept it. Nothing is written before Accept.
 //
 // The prompt is a `NameHighlightInput`: its names highlight as you type,
 // each open to a re-pick or "treat as new", and right-click adds a
-// reference. The preview is asked for with those picks; a re-pick teaches
-// its thing the name as written once the preview is accepted. "Context the
-// AI gets" shows the stub's mentions and the names the prompt names. A
-// preview of a new thing named like a stub of its kind offers to fill that
-// stub instead (`into_stub`).
+// reference. The draft is asked for with those picks; a re-pick teaches
+// its thing the name as written once the draft is accepted. "Context the
+// AI gets" shows the stub's mentions and the names the prompt names.
 //
 // Heritage: a character's picker is pre-filled from the heritage its
 // prompt names, until the owner picks one. Two parents always go through a
@@ -326,23 +191,19 @@ function yearDate(year) {
 // Expanding a stub (`worlds.expanding`, of this box's kind) starts the box
 // from it: the prompt starts as the stub's name, then as the suggestion
 // made from its mentions (`stub_suggestion`) unless the owner has typed
-// meanwhile, and the preview carries the stub's id, so accepting fills the
+// meanwhile, and the draft carries the stub's id, so accepting fills the
 // stub in place. An event's picks
-// are its years and place, an item's its owner.
-//
-// Task 10 replaces the preview below with the draft page; until then the
-// create flow stays as it was (ruling F15).
+// are its years and place, an item's its owner. A nested box (`stay`, the
+// mix drafted for a character) shows its draft in place too, and accepting
+// it doesn't open its page.
 export default {
     name: 'CreateBox',
     components: {
+        // async: the draft page shows a species' races and mixes, whose
+        // boxes are this one
+        DraftPage: defineAsyncComponent(() => import('./DraftPage.vue')),
         HeritagePicker,
-        LinkedText,
-        MoveInSection,
         NameHighlightInput,
-        PreviewElsewhere,
-        PreviewRepeats,
-        PreviewStubs,
-        SameThingAsk,
     },
     props: {
         kind: { type: String, required: true },
@@ -365,7 +226,6 @@ export default {
             picks: {},
             refs: {},
             bornYear: null,
-            previewName: '',
             parents: [...(this.preset.parents || [])],
             // the owner picked a heritage: the prompt no longer pre-fills it
             pickTouched: false,
@@ -379,10 +239,6 @@ export default {
             eventYears: { when: null, until: null },
             // an event's place, or an item's owner
             linkedId: null,
-            // "Is this X?": the entry picked (null: it's new)
-            sameTarget: null,
-            // bumped for each new preview, so its sections start afresh
-            previewKey: 0,
         };
     },
     computed: {
@@ -407,14 +263,18 @@ export default {
         mine() {
             return this.worlds.previewRequest?.kind === this.kind;
         },
-        preview() {
-            return this.mine ? this.worlds.preview : null;
+        // the box's draft (its kind's), and whether it stands in for the form
+        draft() {
+            return this.mine ? this.worlds.draft : null;
+        },
+        showingDraft() {
+            return !!this.draft && this.worlds.draftShown;
         },
         previewError() {
             return this.worlds.previewError;
         },
         busy() {
-            return (this.mine && this.worlds.previewPending) || !!this.worlds.pending.accept_preview || this.lookingUp;
+            return (this.mine && this.worlds.previewPending) || !!this.draft?.accepting || this.lookingUp;
         },
         lookingUp() {
             return !!this.awaitingMix && !!this.worlds.mixLookup;
@@ -452,7 +312,7 @@ export default {
         // `[heading, facts]` groups: the preview's own once there is one,
         // else the stub's mention context
         contextGroups() {
-            const preview = this.preview;
+            const preview = this.draft?.edited;
             if (preview) {
                 return preview.context || [];
             }
@@ -472,38 +332,10 @@ export default {
             }
             return [...named.values()];
         },
-        // the stub of this kind the preview is named like (not one it expands)
-        matchingStub() {
-            const id = this.preview?.matching_stub_id;
-            if (!id || this.preview.stub_id) {
-                return null;
-            }
-            return { id, name: this.worlds.stubInfo(id)?.name || this.preview.name };
-        },
         // the draft's notice: why it's there, and that the character waits
         mixDraftNotice() {
             const names = this.parents.map((id) => this.heritageName(id) || 'this parent');
             return `${names.join(' and ')} have no mix yet. Every character of two parents shares one mix, so draft it here first; once you accept it, this character carries on with it as heritage.`;
-        },
-        // its own facts, `{index, fact}`: not one that came unticked as a
-        // repeat of what the world holds (those show under "Already in the
-        // world")
-        ownFacts() {
-            const shelved = this.worlds.previewShelved;
-            return (this.preview?.facts || []).map((fact, index) => ({ index, fact })).filter((row) => !shelved.includes(row.index));
-        },
-        repeatRows() {
-            return this.worlds.previewShelved
-                .map((index) => ({ index, fact: this.preview.facts[index] }))
-                .filter((row) => row.fact)
-                .map(({ index, fact }) => ({ index, text: fact.text, ticked: fact.ticked, repeat_of: fact.repeat_of }));
-        },
-        countsText() {
-            const onto = this.sameTarget ? this.preview.same_as.find((offer) => offer.thing_id === this.sameTarget)?.name : null;
-            return countsLine(previewCounts(this.preview), onto);
-        },
-        ownFactItems() {
-            return (this.preview?.facts || []).map((fact, index) => ({ title: fact.text, value: index }));
         },
         validYears() {
             const valid = (year) => year === null || year === '' || (Number.isInteger(year) && year >= 1 && year <= 9999);
@@ -526,24 +358,7 @@ export default {
                 this.prompt = found.prompt;
             }
         },
-        // immediate: the box is keyed by kind, so it remounts (switching
-        // kinds and back) with a preview already there
-        // (not the whole preview: a tick replaces it, and keeps the name
-        // the owner typed)
-        'preview.name': {
-            handler(name) {
-                this.previewName = name || '';
-            },
-            immediate: true,
-        },
-        // a new preview asked for: its question and sections start afresh
-        'worlds.previewPending'(now) {
-            if (now) {
-                this.sameTarget = null;
-                this.previewKey += 1;
-            }
-        },
-        // the request is gone once its preview is accepted (or the world
+        // the request is gone once its draft is accepted (or the world
         // changes): start the box afresh
         'worlds.previewRequest'(request, before) {
             if (!request && before?.kind === this.kind) {
@@ -586,6 +401,12 @@ export default {
                 this.mixDraft = true;
             }
         },
+        // a nested box's draft is being accepted: its `accepted` is ours
+        'worlds.draft.accepting'(now) {
+            if (now && this.mine) {
+                this.accepting = this.stay;
+            }
+        },
         'worlds.accepted'(accepted) {
             if (accepted && this.accepting) {
                 this.accepting = false;
@@ -594,10 +415,7 @@ export default {
         },
     },
     methods: {
-        formatDate,
-        moveInEdit,
-        previewSegments,
-        // the box goes on as a plain one: a preview made from the stub goes
+        // the box goes on as a plain one: a draft made from the stub goes
         notFromStub() {
             if (this.mine) {
                 this.dropPreview();
@@ -662,23 +480,6 @@ export default {
                 repicks: repicks(this.matches, this.picks).filter((repick) => repick.id !== stubId),
             });
         },
-        // `intoStub`: fill that stub instead of making a new thing
-        accept(intoStub = null) {
-            this.accepting = this.stay;
-            this.worlds.acceptPreview(
-                { name: this.previewName.trim() },
-                { open: !this.stay, intoStub, sameTargetId: intoStub ? null : this.sameTarget },
-            );
-        },
-        edit(changes) {
-            this.worlds.editPreview('create', changes);
-        },
-        tickFact(index, ticked) {
-            this.edit({ facts: rowChanged(this.preview.facts, index, { ticked }) });
-        },
-        clearHeld(index) {
-            this.edit({ facts: rowChanged(this.preview.facts, index, { held_by: null, held_by_name: null }) });
-        },
         cancel() {
             if (this.mine) {
                 this.dropPreview();
@@ -694,14 +495,6 @@ export default {
             this.parents = [mix.id];
             this.pickTouched = true;
         },
-        // the own fact replacing the inherited `row`, or -1
-        overriderOf(row) {
-            return this.preview.facts.findIndex((fact) => (fact.overrides || []).includes(row.fact_id));
-        },
-        // ticked: inherited as it is; unticked: replaced by an own fact
-        setKept(row, kept) {
-            this.worlds.setPreviewOverride(row.fact_id, kept ? null : defaultOverrideIndex(this.preview, row));
-        },
     },
 };
 </script>
@@ -709,6 +502,11 @@ export default {
 <style scoped>
 .create-box {
     background: rgb(var(--v-theme-raised));
+}
+
+.create-box.drafting {
+    background: transparent;
+    padding: 0 !important;
 }
 
 .picker {
@@ -719,35 +517,6 @@ export default {
     max-width: 260px;
 }
 
-.override-by {
-    flex: none;
-    width: 220px;
-}
-
-.replaced {
-    text-decoration: line-through;
-    color: rgb(var(--v-theme-muted));
-}
-
-.inherited {
-    color: rgb(var(--v-theme-muted));
-}
-
-.dropped {
-    color: rgb(var(--v-theme-muted));
-}
-
-.held {
-    margin-left: 6px;
-    font-size: 11px;
-    color: rgb(var(--v-theme-foreign));
-}
-
-.match {
-    margin-left: 34px;
-    color: rgb(var(--v-theme-muted));
-}
-
 .mix-draft {
     border-left: 2px solid rgb(var(--v-theme-accent));
     padding-left: 10px;
@@ -756,38 +525,6 @@ export default {
 .mix-link {
     color: rgb(var(--v-theme-accent));
 }
-
-.preview-name {
-    max-width: 320px;
-}
-
-.prose {
-    line-height: 1.5;
-    white-space: pre-wrap;
-}
-
-.fact {
-    border-bottom: 1px dashed rgb(var(--v-theme-border));
-    padding: 4px 0;
-}
-
-.fact .v-chip {
-    flex: none;
-}
-
-.fact-date {
-    flex: none;
-    font-family: monospace;
-    font-size: 11px;
-    color: rgb(var(--v-theme-muted));
-    min-width: 70px;
-    text-align: right;
-}
-
-.world-date {
-    color: rgb(var(--v-theme-date));
-}
-
 
 .ai-context :deep(.v-expansion-panel) {
     background: transparent;

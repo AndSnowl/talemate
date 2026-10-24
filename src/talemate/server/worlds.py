@@ -2534,10 +2534,36 @@ class WorldsPlugin(Plugin):
             "entry_timeline": timeline,
         }
 
+    def _check_repeat_moves(
+        self, preview: CreatePreview, key: str | None, notes: list[str]
+    ) -> None:
+        """Keep only the "Move that one here" rows (`move_here` with
+        `repeat`) that a version of the draft this session holds says one
+        of its facts repeats, checked against the server's copy rather
+        than the client's word; any other is dropped, with a note."""
+
+        held = {
+            (fact.repeat_of.get("fact_id"), fact.repeat_of.get("owner_id"))
+            for version in (self._drafts.get(key or "") or [])
+            for fact in version.facts
+            if fact.repeat_of
+        }
+        kept = []
+        for row in preview.move_here:
+            if row.repeat and (row.fact_id, row.from_id) not in held:
+                notes.append(
+                    f'"{row.text[:60]}" isn\'t a fact this draft repeats, so it'
+                    " doesn't move here"
+                )
+                continue
+            kept.append(row)
+        preview.move_here = kept
+
     async def handle_accept_preview(self, data: dict):
         payload = AcceptPreviewPayload(**data)
         world = self._require_world()
         notes: list[str] = []
+        self._check_repeat_moves(payload.preview, payload.draft_key, notes)
         # the other things whose prose input the accept changed
         prose: list[str] = []
         thing_id = accept_preview(
@@ -3053,12 +3079,25 @@ class WorldsPlugin(Plugin):
             )
 
             def on_done(task: asyncio.Task) -> None:
-                if (
-                    key not in self._drafts
-                    and not task.cancelled()
-                    and task.exception() is None
-                ):
+                done = not task.cancelled() and task.exception() is None
+                if done and key not in self._drafts:
                     log.info("worlds.facts_dropped", draft_key=key)
+                    return
+                if done and self._current_preview(key) is not preview:
+                    # a Regenerate, `use_version` or Discard-and-redraft
+                    # made another version current meanwhile: the facts
+                    # were drafted for one the owner left, so they join
+                    # none, and the owner is told to ask again
+                    log.info("worlds.facts_stale", draft_key=key)
+                    self.websocket_handler.queue_put(
+                        {
+                            "type": self.router,
+                            "action": f"{action}_failed",
+                            "message": "The draft changed to another version"
+                            " before the facts came: ask again.",
+                            "data": {"draft_key": key, "stale": True},
+                        }
+                    )
                     return
                 answer(task)
 

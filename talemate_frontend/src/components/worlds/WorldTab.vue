@@ -100,7 +100,7 @@
             <CurationSettings v-else-if="kind === settingsTab.kind" />
             <template v-else-if="info">
                 <CreateBox :kind="kind" :key="kind" />
-                <div class="empty-hint pa-4 text-body-2">
+                <div v-if="!(worlds.draft && worlds.draftShown)" class="empty-hint pa-4 text-body-2">
                     <template v-if="entriesOf(kind).length">Pick one of the {{ info.label.toLowerCase() }} on the left, or describe a new one above.</template>
                     <template v-else>No {{ info.label.toLowerCase() }} yet. Describe one above to create it.</template>
                 </div>

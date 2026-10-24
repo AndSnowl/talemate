@@ -384,6 +384,8 @@ world = World.create(spec["name"], root=WORLDS_DIR)
 try:
     world.set_present(WorldDate.of(spec["present_year"]))
     ids = {}
+    # a fact's text as written in the spec -> its fact id
+    fact_ids = {}
     with world.revision(Source.manual(note="e2e seed")) as rev:
         for thing in spec["things"]:
             fields = {"name": thing["name"], **(thing.get("fields") or {})}
@@ -416,7 +418,7 @@ try:
             thing_id = rev.create_thing(thing["kind"], fields)
             ids[thing["name"]] = thing_id
             for fact in thing.get("facts") or []:
-                rev.add_fact(
+                fact_ids[fact["text"]] = rev.add_fact(
                     thing_id,
                     fact["category"],
                     _refs(fact["text"], ids),
@@ -436,7 +438,7 @@ try:
             premise=scene.get("premise", ""),
             player_thing_id=ids.get(scene.get("player")),
         )
-    result = {"id": world.id, "path": str(world.path), "things": ids}
+    result = {"id": world.id, "path": str(world.path), "things": ids, "facts": fact_ids}
 finally:
     world.close()
 print(RESULT_PREFIX + json.dumps(result))
@@ -449,6 +451,8 @@ class SeededFmWorld:
     path: Path
     # thing name -> thing id
     things: dict[str, str]
+    # a fact's text, as the spec wrote it -> its fact id
+    facts: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 def seed_fm_world(
@@ -487,7 +491,10 @@ def seed_fm_world(
         },
     )
     return SeededFmWorld(
-        id=result["id"], path=Path(result["path"]), things=result["things"]
+        id=result["id"],
+        path=Path(result["path"]),
+        things=result["things"],
+        facts=result.get("facts", {}),
     )
 
 

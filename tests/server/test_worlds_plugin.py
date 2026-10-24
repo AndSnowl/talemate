@@ -5855,6 +5855,136 @@ async def test_add_facts_and_event_on_a_draft(plugin, client):
     }
 
 
+async def test_draft_facts_for_a_version_left_join_none(plugin, client):
+    """A draft's "+ Add facts..." whose reply comes after the owner made
+    another version current (here `use_version`) joins no version: neither
+    the one asked for nor the one now current gains the facts, and the
+    owner is told (`add_facts_failed`, `stale`), writing nothing."""
+
+    s = await _open_filing_world(plugin)
+    first = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = first["draft_key"]
+    second = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It hunts by moonlight."),
+        prompt="a host, again",
+        draft_key=key,
+    )
+    assert second["version"] == 2
+    head = s.world.head_rev()
+    async with MockClientContext():
+        client_responses.get().append(
+            json.dumps(
+                {"facts": [{"category": "general", "text": "It drills at dawn."}]}
+            )
+        )
+        # asked for on version 2, then version 1 restored before it comes
+        await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
+        await _act(plugin, "use_version", draft_key=key, version=1)
+        await _drain(plugin)
+    assert _replies(plugin, "add_facts") == []
+    failed = _last(plugin, "add_facts_failed")
+    assert failed["data"] == {"draft_key": key, "stale": True}
+    assert "ask again" in failed["message"]
+    for version, text in ((1, "It flies at night."), (2, "It hunts by moonlight.")):
+        await _act(plugin, "use_version", draft_key=key, version=version)
+        shown = _last(plugin, "use_version")["data"]
+        assert [f["text"] for f in shown["preview"]["facts"]] == [text]
+    assert s.world.head_rev() == head
+
+
+async def test_repeat_move_that_one_here(plugin, tmp_path, monkeypatch):
+    """ "Move that one here" on a draft fact repeating the world's: the
+    world's fact moves onto the new entry in the accept's one revision
+    (copied, the original removed) and the draft's copy isn't written. A
+    row claiming a repeat no version of the draft holds is dropped, with
+    a note, and so is every one without a draft to check against."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        freeze = rev.add_fact(s.velikoye, "general", "The Khorol freezes solid.")
+        other = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+    repeat = {
+        "fact_id": freeze,
+        "owner_id": s.velikoye,
+        "owner_name": "Velikoye",
+        "text": "The Khorol freezes solid.",
+        "score": 0.9,
+    }
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Khorol Ice Road",
+                "facts": [
+                    {"category": "general", "text": "Carts cross it in winter."},
+                    {
+                        "category": "general",
+                        "text": "The Khorol freezes over.",
+                        "ticked": False,
+                        "repeat_of": repeat,
+                    },
+                ],
+                "prose": {"description": "An ice road."},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+    await _act(plugin, "preview_thing", kind="lore", prompt="the ice road", fields={})
+    await _drain(plugin)
+    draft = _last(plugin, "preview_thing")["data"]
+    preview = draft["preview"]
+    forged = {
+        "fact_id": other,
+        "from_id": s.velikoye,
+        "text": "Velikoye has many bells.",
+        "ticked": True,
+        "repeat": True,
+    }
+    moving = {
+        "fact_id": freeze,
+        "from_id": s.velikoye,
+        "text": "The Khorol freezes solid.",
+        "ticked": True,
+        "repeat": True,
+    }
+
+    # without the draft's key there's nothing to check against: nothing moves
+    head = s.world.head_rev()
+    await _act(plugin, "accept_preview", preview={**preview, "move_here": [moving]})
+    alone = _last(plugin, "accept_preview")["data"]
+    assert any("doesn't move here" in note for note in alone["notes"])
+    assert [f["rendered"] for f in alone["facts"]] == ["Carts cross it in winter."]
+    assert s.world.head_rev() == head + 1
+
+    await _act(plugin, "preview_thing", kind="lore", prompt="the ice road", fields={})
+    await _drain(plugin)
+    draft = _last(plugin, "preview_thing")["data"]
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "accept_preview",
+        preview={**draft["preview"], "move_here": [forged, moving]},
+        draft_key=draft["draft_key"],
+    )
+    road = _last(plugin, "accept_preview")["data"]
+    assert s.world.head_rev() == head + 1
+    assert sorted(f["rendered"] for f in road["facts"]) == [
+        "Carts cross it in winter.",
+        "The Khorol freezes solid.",
+    ]
+    assert any("Velikoye has many bells" in note for note in road["notes"])
+    texts = {fact.text for fact in s.world.view().thing(s.velikoye).facts}
+    assert "The Khorol freezes solid." not in texts
+    assert "Velikoye has many bells." in texts
+
+
 async def test_accept_facts_waits_for_a_stub_draft(plugin, client):
     """A stub being drafted takes facts through its draft: `accept_facts`
     on it is refused, writing nothing, until the draft is accepted or
@@ -5883,6 +6013,56 @@ async def test_accept_facts_waits_for_a_stub_draft(plugin, client):
     await _act(plugin, "discard_preview", draft_key=draft["draft_key"])
     await _act(plugin, "accept_facts", draft=fact_draft)
     assert s.world.head_rev() == head + 1
+
+
+async def test_draft_selection_of_lowercase_words(plugin, client):
+    """Words selected on a draft that aren't capitalised ("the north
+    pass", "bells") still become a stub or a link wherever the draft
+    writes them: on the draft page and once accepted."""
+
+    s = await _open_filing_world(plugin)
+    text = "Riders guard the north pass and ring the bells; the bells wake them."
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", text), prompt="a host"
+    )
+    key = draft["draft_key"]
+    start = text.index("bells")
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("bells"),
+        kind="item",
+    )
+    start = text.index("the north pass")
+    await _act(
+        plugin,
+        "link_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("the north pass"),
+        target_id=s.khorol,
+    )
+    linked = _last(plugin, "link_text")["data"]
+    (fact,) = [f for f in linked["facts"] if f["draft"]]
+    assert [
+        seg["ref"] for seg in fact["segments"] if seg["text"] == "the north pass"
+    ] == [s.khorol]
+
+    await _act(plugin, "accept_preview", preview=linked["preview"], draft_key=key)
+    host = _last(plugin, "accept_preview")["data"]
+    (written,) = [f for f in host["facts"] if "north pass" in f["rendered"]]
+    shown = {seg["text"]: seg["ref"] for seg in written["segments"] if seg["ref"]}
+    assert shown["the north pass"] == s.khorol
+    bells = shown["bells"]
+    assert [seg["text"] for seg in written["segments"] if seg["ref"] == bells] == [
+        "bells",
+        "bells",
+    ]
+    assert s.world.view().thing(bells).kind == "item"
 
 
 async def test_selection_on_a_draft_names_and_links_by_name(plugin, client):

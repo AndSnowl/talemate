@@ -168,11 +168,15 @@ def _capitalised(written: str) -> bool:
 _Span = tuple[int, int, str]
 
 
-def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
+def _explicit_spans(
+    text: str, chosen: dict[str, str], lowercase: Collection[str] = ()
+) -> list[_Span]:
     """Every whole-word occurrence of a picked or new name (normalised key
     to thing id) in `text`, a hyphenated word counting as one. A name
     written with a capital matches only text written with one, so a stub
-    "Hope" never links "I hope"."""
+    "Hope" never links "I hope"; one the owner picked written with no
+    capital at all (`lowercase`, normalised keys: words selected on a
+    draft, "the north pass") matches as it was written."""
 
     spans: list[_Span] = []
     for key, thing_id in chosen.items():
@@ -185,7 +189,9 @@ def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
             re.IGNORECASE,
         )
         for hit in pattern.finditer(text):
-            if _norm(hit.group(0)) != key or not _capitalised(hit.group(0)):
+            if _norm(hit.group(0)) != key:
+                continue
+            if key not in lowercase and not _capitalised(hit.group(0)):
                 continue
             spans.append((hit.start(), hit.end(), thing_id))
     return spans
@@ -197,10 +203,12 @@ def _link_plain(
     chosen: dict[str, str],
     owner: str | None,
     as_new: Collection[str],
+    lowercase: Collection[str] = (),
 ) -> str:
     """Link the names in `text`, which holds no references. A name that
     means `owner` stays plain, and so does a match for a name treated as
-    new (`as_new`) unless it's chosen."""
+    new (`as_new`) unless it's chosen. `lowercase`: the chosen names
+    written without a capital (`_explicit_spans`)."""
 
     matched: list[_Span] = []
     for match in find_names(view, text):
@@ -217,7 +225,7 @@ def _link_plain(
     # leaves that name to its own match
     explicit = [
         span
-        for span in _explicit_spans(text, chosen)
+        for span in _explicit_spans(text, chosen, lowercase)
         if not any(
             m_start <= span[0]
             and span[1] <= m_end
@@ -338,6 +346,14 @@ def link_text(
     chosen = {_norm(name): thing_id for name, thing_id in (new_names or {}).items()}
     chosen.update({_norm(name): thing_id for name, thing_id in (picks or {}).items()})
     chosen.pop("", None)
+    # a name chosen as written with no capital at all (words the owner
+    # selected on a draft, "the north pass") links those words as written;
+    # one with a capital inside ("al-Qadir", a model's name) still needs it
+    lowercase = {
+        _norm(name)
+        for name in [*(new_names or {}), *(picks or {})]
+        if name.strip() and name == name.lower()
+    }
     if owner is not None:
         chosen = {
             key: thing_id for key, thing_id in chosen.items() if thing_id != owner
@@ -347,11 +363,13 @@ def link_text(
     end = 0
     for existing in REF_PATTERN.finditer(text):
         out.append(
-            _link_plain(view, text[end : existing.start()], chosen, owner, as_new)
+            _link_plain(
+                view, text[end : existing.start()], chosen, owner, as_new, lowercase
+            )
         )
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen, owner, as_new))
+    out.append(_link_plain(view, text[end:], chosen, owner, as_new, lowercase))
     return "".join(out)
 
 

@@ -7,8 +7,11 @@
             color="accent"
             prepend-icon="mdi-creation"
             :data-testid="event ? 'add-event' : 'add-facts'"
+            :disabled="onDraft && !!worlds.draft?.adding"
+            :loading="onDraft && worlds.draft?.adding === (event ? 'add_event' : 'add_facts')"
             @click="start"
         >{{ event ? '+ Add event…' : '+ Add facts…' }}</v-btn>
+        <div v-if="onDraft && worlds.draft?.addError && !asking" class="text-caption text-error" data-testid="fact-draft-error">{{ worlds.draft.addError }}</div>
 
         <div v-if="asking && !draft" class="ask pa-2" :data-testid="event ? 'add-event-form' : 'add-facts-form'" @keydown.esc="asking = false">
             <div class="d-flex align-center flex-wrap ga-2">
@@ -35,7 +38,7 @@
                     class="year"
                     data-testid="add-year"
                 ></v-text-field>
-                <v-btn color="accent" variant="flat" size="small" :disabled="!canAsk" data-testid="add-draft" @click="ask">Draft</v-btn>
+                <v-btn color="accent" variant="flat" size="small" :disabled="!canAsk || (onDraft && !!worlds.draft?.adding)" data-testid="add-draft" @click="ask">Draft</v-btn>
                 <v-btn variant="text" size="small" @click="asking = false">Cancel</v-btn>
             </div>
         </div>
@@ -84,12 +87,16 @@ import LinkedText from './LinkedText.vue';
 // `add_event`: every fact of an event dated its year), which come back as
 // a small draft to tick (`worlds.factDraft`); Accept writes the ticked
 // ones (`accept_facts`), Discard drops them. Nothing is written before.
+// On a draft page (`onDraft`) the facts join the draft itself
+// (`addDraftFacts`: the draft's current version, on the server), to tick
+// there with the rest; one addition at a time, the buttons off meanwhile.
 export default {
     name: 'EntryAddFacts',
     components: { LinkedText },
     props: {
         thing: { type: Object, required: true },
         event: { type: Boolean, default: false },
+        onDraft: { type: Boolean, default: false },
     },
     setup() {
         return { worlds: useWorldsStore() };
@@ -100,6 +107,9 @@ export default {
     computed: {
         // the page's draft of this kind, if there is one
         draft() {
+            if (this.onDraft) {
+                return null;
+            }
             const found = this.worlds.factDraft;
             return found && found.thingId === this.thing.id && found.mode === (this.event ? 'event' : 'facts') ? found : null;
         },
@@ -135,7 +145,11 @@ export default {
             if (!this.canAsk) {
                 return;
             }
-            if (this.event) {
+            if (this.onDraft) {
+                this.worlds.addDraftFacts(this.prompt.trim(), this.event ? this.year : null);
+                this.asking = false;
+                this.prompt = '';
+            } else if (this.event) {
                 this.worlds.addEvent(this.prompt.trim(), this.year);
             } else {
                 this.worlds.addFacts(this.prompt.trim());

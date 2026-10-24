@@ -1,0 +1,403 @@
+// The draft page's pure logic (spec "The draft page", mockup v2 screens 3
+// and 4, v3 screen C). No Vue, no store: the node checks
+// (checks/worlds.check.mjs) load this file.
+//
+// A draft is the page the entry will be (`preview_thing`'s reply, the
+// thing payload's shape) plus `preview`, the data `accept_preview` takes.
+// The server keeps each version's copy (`base` here) and adds to it on a
+// draft's "+ Add facts…" and selections; the owner's ticks and edits live
+// on the client (`edited`) until Accept, which sends them. So each reply
+// that changes the server's copy is rebased: the owner's changes to the
+// old copy (`rebaseDraft`) carried onto the new one. A restored version
+// (`use_version` gives back the server's copy, without the owner's edits)
+// is rebased the same way from what the client kept of it for the
+// session.
+//
+// Rows the owner adds (an "+ in…" filing, a fact "+ also here", a fact
+// moved onto another page, a "Move that one here") are `local`: kept
+// after the server's own. A server fact the owner removes (or moves) stays
+// in its place, `removed` and unticked, so the server's indices (what a
+// selection names, `index`) hold.
+
+import { kindInfo } from './worldKinds.js';
+
+// the articles a name may lead with (`talemate.world.names.ARTICLES`)
+const ARTICLES = ['the', 'a', 'an'];
+
+// A name as the backend compares it (`links.name_key`): its words
+// normalised, without a leading article.
+export function nameKey(name) {
+    const words = (name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length > 1 && ARTICLES.includes(words[0])) {
+        words.shift();
+    }
+    return words.join(' ');
+}
+
+function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// A text as `LinkedText` segments: the names it invents (`newNames`, a
+// draft's `new_names`: each name, the ways the text writes it and its
+// other names) marked `fresh`, since they become stubs on accept; the rest
+// plain. Earliest match first, then the longest.
+export function previewSegments(text, newNames = []) {
+    const spans = [];
+    for (const found of newNames) {
+        const spellings = [found.name, ...(found.written || []), ...(found.aka || []).map((entry) => entry.name)];
+        for (const spelling of spellings.filter(Boolean)) {
+            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, 'gu');
+            for (const match of text.matchAll(pattern)) {
+                spans.push({ start: match.index, end: match.index + match[0].length, kind: found.kind });
+            }
+        }
+    }
+    spans.sort((a, b) => a.start - b.start || b.end - a.end);
+    const segments = [];
+    let at = 0;
+    for (const span of spans) {
+        if (span.start < at) {
+            continue;
+        }
+        if (span.start > at) {
+            segments.push({ text: text.slice(at, span.start), ref: null, stub: false });
+        }
+        segments.push({ text: text.slice(span.start, span.end), ref: null, stub: false, fresh: true, kind: span.kind });
+        at = span.end;
+    }
+    if (at < text.length) {
+        segments.push({ text: text.slice(at), ref: null, stub: false });
+    }
+    return segments;
+}
+
+// `segments` (a draft fact's, linked by the server) with the draft's new
+// names marked `fresh` in their plain runs; a name a new name has (its
+// same-as answered) is left plain, since it links an entry then.
+export function freshSegments(segments, newNames = []) {
+    const fresh = (newNames || []).filter((row) => !row.same_target_id);
+    return (segments || []).flatMap((segment) => (segment.ref || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
+}
+
+function same(a, b) {
+    return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+// what the owner changed on a row: `edited`'s fields that differ from
+// `base`'s
+function changes(base, edited) {
+    const out = {};
+    for (const [key, value] of Object.entries(edited || {})) {
+        if (!same(base?.[key], value)) {
+            out[key] = value;
+        }
+    }
+    return out;
+}
+
+// how a list's rows are told apart from one version of the server's copy
+// to the next: by position (the server only ever appends), or by a key
+const ROW_KEYS = {
+    facts: null,
+    elsewhere: null,
+    filings: (row) => row.target_id,
+    new_names: (row) => nameKey(row.name),
+    file_into: (row) => row.thing_id,
+    move_here: (row) => `${row.fact_id}|${row.repeat ? 'repeat' : 'near'}`,
+};
+
+function rebaseRows(oldBase, oldEdited, newBase, key, fresh) {
+    oldBase = oldBase || [];
+    oldEdited = oldEdited || [];
+    newBase = newBase || [];
+    if (!key) {
+        const server = oldEdited.filter((row) => !row.local);
+        const local = oldEdited.filter((row) => row.local);
+        const rows = newBase.map((row, index) => (index < oldBase.length && index < server.length
+            ? { ...row, ...changes(oldBase[index], server[index]) }
+            : row));
+        return [...rows, ...local];
+    }
+    const before = new Map(oldBase.map((row) => [key(row), row]));
+    const edited = new Map(oldEdited.map((row) => [key(row), row]));
+    const now = new Set(newBase.map(key));
+    const rows = newBase
+        // a row the owner took out stays out
+        .filter((row) => !(before.has(key(row)) && !edited.has(key(row))))
+        .map((row) => {
+            const k = key(row);
+            return before.has(k) && edited.has(k) && !fresh.includes(k)
+                ? { ...row, ...changes(before.get(k), edited.get(k)) }
+                : row;
+        });
+    const local = oldEdited.filter((row) => !before.has(key(row)) && !now.has(key(row)));
+    return [...rows, ...local];
+}
+
+// The owner's changes to `oldBase` (as `oldEdited`) carried onto
+// `newBase`, the server's copy since: a field the owner changed keeps the
+// owner's value, any other takes the server's; rows as `ROW_KEYS` match
+// them, the owner's own rows kept after the server's. `fresh`: the new
+// names (by `nameKey`) the server has just said anew (a selection made a
+// stub of those words), which take the server's row as it is.
+export function rebaseDraft(oldBase, oldEdited, newBase, { fresh = [] } = {}) {
+    if (!oldBase || !oldEdited) {
+        return newBase;
+    }
+    const out = { ...newBase };
+    const keys = new Set([...Object.keys(newBase), ...Object.keys(oldEdited)]);
+    for (const key of keys) {
+        if (key in ROW_KEYS) {
+            out[key] = rebaseRows(oldBase[key], oldEdited[key], newBase[key], ROW_KEYS[key], fresh);
+        } else if (!same(oldBase[key], oldEdited[key])) {
+            out[key] = oldEdited[key];
+        }
+    }
+    return out;
+}
+
+// The preview to accept: the owner's draft without the page's own keys
+// (those starting with "_").
+export function acceptable(edited) {
+    return Object.fromEntries(Object.entries(edited || {}).filter(([key]) => !key.startsWith('_')));
+}
+
+// A category of `kind` for a fact that had `category`: its own when the
+// kind has it, else the kind's first (as the server's `default_category`
+// would pick one).
+export function categoryFor(kind, category) {
+    const categories = (kindInfo(kind)?.categories || []).filter((c) => c !== 'statement' && c !== 'timeline');
+    if (!categories.length || categories.includes(category)) {
+        return category;
+    }
+    return categories.includes('general') ? 'general' : categories[0];
+}
+
+// The draft's own facts as its page lists them: `{index (into `edited.facts`),
+// fact, segments, local, edited (its words changed here), serverIndex}`,
+// a removed one left out. A server fact's segments are the server's (its
+// names linked, the draft's new names marked fresh); one the owner wrote
+// or rewrote here is plain words, marked fresh.
+export function draftFactRows(page, edited) {
+    const served = new Map((page?.facts || []).filter((fact) => fact.draft).map((fact) => [fact.index, fact]));
+    const newNames = edited?.new_names || [];
+    return (edited?.facts || []).flatMap((fact, index) => {
+        if (fact.removed) {
+            return [];
+        }
+        const server = fact.local ? null : served.get(index);
+        const rewritten = !server || server.text !== fact.text;
+        return [{
+            index,
+            fact,
+            local: !!fact.local,
+            edited: rewritten,
+            // what a selection names: the server's fact, as the server has it
+            serverIndex: rewritten ? null : index,
+            segments: freshSegments(rewritten ? [{ text: fact.text, ref: null, stub: false }] : server.segments, newNames),
+        }];
+    });
+}
+
+// `rows` with the row at `index` changed (`changes` merged in).
+function changedAt(rows, index, change) {
+    return (rows || []).map((row, i) => (i === index ? { ...row, ...change } : row));
+}
+
+// --- the owner's edits, each a change to `edited` -----------------------------
+
+// a fact's tick
+export function tickFact(edited, index, ticked) {
+    return { facts: changedAt(edited.facts, index, { ticked }) };
+}
+
+// "Remove": left in place (the server's index holds), unticked and hidden
+export function removeFact(edited, index) {
+    return { facts: changedAt(edited.facts, index, { ticked: false, removed: true }) };
+}
+
+// a fact the owner edited here: its words, category or date
+export function editFact(edited, index, change) {
+    return { facts: changedAt(edited.facts, index, change) };
+}
+
+// an "elsewhere" row for `target` (`{id, name, kind}`) made from `fact`
+function elsewhereRow(fact, target) {
+    return {
+        target_id: target.id,
+        target_name: target.name,
+        new: null,
+        category: categoryFor(target.kind, fact.category),
+        text: fact.text,
+        since: fact.since ?? null,
+        held_by: fact.held_by ?? null,
+        held_by_name: fact.held_by_name ?? null,
+        ticked: true,
+        repeat_of: null,
+        local: true,
+    };
+}
+
+// "Copy to…" a draft fact: a fact for that page too ("For other pages")
+export function copyFactTo(edited, index, target) {
+    return { elsewhere: [...(edited.elsewhere || []), elsewhereRow(edited.facts[index], target)] };
+}
+
+// "Move to…" a draft fact: a fact for that page, no longer one of this
+// page's
+export function moveFactTo(edited, index, target) {
+    return { ...copyFactTo(edited, index, target), ...removeFact(edited, index) };
+}
+
+// "Held by…" a draft fact (`holder` `{id, name}`, or null: world truth)
+export function holdFact(edited, index, holder) {
+    return { facts: changedAt(edited.facts, index, { held_by: holder?.id || null, held_by_name: holder?.name || null }) };
+}
+
+// A repeat's three ways (`how`): 'move' ("Move that one here": the
+// world's fact it repeats moves here, a `repeat` "Could move here" row,
+// and this one isn't written), 'keep' ("Keep both": this one ticked) or
+// 'drop' ("Drop this": unticked).
+export function settleRepeat(edited, index, how) {
+    const fact = edited.facts[index];
+    const repeat = fact.repeat_of;
+    const others = (edited.move_here || []).filter((row) => !(row.repeat && row.fact_id === repeat?.fact_id));
+    const facts = changedAt(edited.facts, index, { ticked: how === 'keep', moveRepeat: how === 'move' });
+    if (how !== 'move' || !repeat?.fact_id) {
+        return { facts, move_here: others };
+    }
+    const row = {
+        fact_id: repeat.fact_id,
+        from_id: repeat.owner_id,
+        from_name: repeat.owner_name || null,
+        text: repeat.text,
+        ticked: true,
+        repeat: true,
+        local: true,
+    };
+    return { facts, move_here: [...others, row] };
+}
+
+// "+ also here": an "elsewhere" row's fact is one of this page's too
+export function alsoHere(edited, row) {
+    const fact = {
+        category: categoryFor(edited.kind, row.category),
+        text: row.text,
+        since: row.since ?? null,
+        overrides: [],
+        held_by: row.held_by ?? null,
+        held_by_name: row.held_by_name ?? null,
+        ticked: true,
+        repeat_of: null,
+        local: true,
+    };
+    return { facts: [...(edited.facts || []), fact] };
+}
+
+// an "elsewhere" row's target changed to `target` (`{id, name, kind}`)
+export function retarget(edited, index, target) {
+    const row = edited.elsewhere[index];
+    return {
+        elsewhere: changedAt(edited.elsewhere, index, {
+            target_id: target.id,
+            target_name: target.name,
+            new: null,
+            repeat_of: null,
+            category: categoryFor(target.kind, row.category),
+        }),
+    };
+}
+
+// an "In" row's tick or role
+export function changeFiling(edited, targetId, change) {
+    return { filings: (edited.filings || []).map((row) => (row.target_id === targetId ? { ...row, ...change } : row)) };
+}
+
+// "+ in… 🔎" on a draft: the owner's own filing, ticked (one already there
+// is ticked instead)
+export function addFiling(edited, target) {
+    const filings = edited.filings || [];
+    if (filings.some((row) => row.target_id === target.id)) {
+        return changeFiling(edited, target.id, { ticked: true });
+    }
+    const row = {
+        target_id: target.id,
+        target_name: target.name,
+        role: null,
+        since: null,
+        within: null,
+        exceptions: [],
+        ticked: true,
+        local: true,
+    };
+    return { filings: [...filings, row] };
+}
+
+// a "File into this" row's tick
+export function tickFileInto(edited, thingId, ticked) {
+    return { file_into: (edited.file_into || []).map((row) => (row.thing_id === thingId ? { ...row, ticked } : row)) };
+}
+
+// a "Could move here" row's tick
+export function tickMoveHere(edited, factId, ticked) {
+    return { move_here: (edited.move_here || []).map((row) => (row.fact_id === factId && !row.repeat ? { ...row, ticked } : row)) };
+}
+
+// a new name's kind, tag, "same as…" or "in…" (`change`)
+export function changeNewName(edited, name, change) {
+    const key = nameKey(name);
+    return { new_names: (edited.new_names || []).map((row) => (nameKey(row.name) === key ? { ...row, ...change } : row)) };
+}
+
+// The words a "Could move here" row highlights: the draft's own name and
+// other names (each also without its article, in any case), as
+// `LinkedText` segments marking them (`fresh`, in the stub colour, as the
+// name it will be).
+export function namedSegments(text, edited) {
+    const spellings = new Set();
+    for (const name of [edited?.name, ...(edited?.aka || []).map((entry) => entry?.name)]) {
+        const words = (name || '').trim().split(/\s+/).filter(Boolean);
+        if (!words.length) {
+            continue;
+        }
+        spellings.add(words.join(' '));
+        if (words.length > 1 && ARTICLES.includes(words[0].toLowerCase())) {
+            spellings.add(words.slice(1).join(' '));
+        }
+    }
+    const spans = [];
+    for (const spelling of spellings) {
+        const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, 'giu');
+        for (const match of (text || '').matchAll(pattern)) {
+            spans.push({ start: match.index, end: match.index + match[0].length });
+        }
+    }
+    spans.sort((a, b) => a.start - b.start || b.end - a.end);
+    const segments = [];
+    let at = 0;
+    for (const span of spans) {
+        if (span.start < at) {
+            continue;
+        }
+        if (span.start > at) {
+            segments.push({ text: text.slice(at, span.start), ref: null, stub: false });
+        }
+        segments.push({ text: text.slice(span.start, span.end), ref: null, stub: false, fresh: true, kind: edited?.kind });
+        at = span.end;
+    }
+    if (at < (text || '').length) {
+        segments.push({ text: text.slice(at), ref: null, stub: false });
+    }
+    return segments;
+}
+
+// The bar's versions: `{version, label, current}`, newest first.
+export function versionRows(versions, current) {
+    return [...(versions || [])].reverse().map((row) => ({
+        version: row.version,
+        label: `v${row.version} · ${row.name}`,
+        prompt: row.prompt,
+        current: row.version === current,
+    }));
+}

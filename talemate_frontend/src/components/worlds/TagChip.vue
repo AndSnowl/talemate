@@ -50,19 +50,23 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { tagChoices } from './entryPage.js';
+import { normaliseTag, tagChoices } from './entryPage.js';
 
 // An entry's tag (mockup v3, screen E): a chip, always editable (ruling
 // F8), that opens the tag picker: search the tags in use, each with how
 // many entries carry it (`list_tags`), or make a new one ("+ new tag").
 // Picking one sends `set_tag` for `thingId`; "no tag" clears it. The
-// backend keeps a tag lowercase, its first comma part.
+// backend keeps a tag lowercase, its first comma part. On a draft
+// (`local`) nothing is sent: the tag picked is emitted (`pick`, normalised
+// as the backend would store it) for the draft to keep.
 export default {
     name: 'TagChip',
     props: {
-        thingId: { type: String, required: true },
+        thingId: { type: String, default: null },
         tag: { type: String, default: null },
+        local: { type: Boolean, default: false },
     },
+    emits: ['pick'],
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -84,7 +88,12 @@ export default {
     methods: {
         pick(tag) {
             this.open = false;
-            if ((tag ?? null) !== (this.tag ?? null)) {
+            if ((tag ?? null) === (this.tag ?? null)) {
+                return;
+            }
+            if (this.local) {
+                this.$emit('pick', tag ? normaliseTag(tag) || null : null);
+            } else {
                 this.worlds.setTag(this.thingId, tag);
             }
         },

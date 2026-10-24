@@ -1,10 +1,35 @@
 <template>
-    <div v-if="rows.length" class="mt-3" data-testid="preview-stubs">
-        <div class="heading">New stubs</div>
-        <div v-for="(row, index) in rows" :key="row.name" class="stub-row" data-testid="preview-stub">
-            <div class="d-flex align-center flex-wrap ga-2">
-                <span class="stub-name">{{ row.name }}</span>
-                <span class="text-caption text-muted">{{ line(row) }}</span>
+    <div v-if="rows.length" class="mt-3" data-testid="draft-new-names">
+        <div class="heading">New names <span class="text-muted">· in this draft: stubs once it's accepted</span></div>
+        <div v-for="row in rows" :key="row.name" class="stub-row d-flex align-center flex-wrap ga-2" data-testid="new-name-row">
+            <span class="stub-name">{{ row.name }}</span>
+            <template v-if="row.same_target_id">
+                <span class="text-caption text-muted" data-testid="new-name-same">same as <b>{{ nameOf(row.same_target_id) }}</b>: no stub, it links that entry</span>
+                <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" :aria-label="'Not the same: ' + row.name" @click="change(row, { same_target_id: null })"></v-btn>
+            </template>
+            <template v-else>
+                <v-select
+                    :model-value="row.kind"
+                    :items="kindItems"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="kind"
+                    data-testid="new-name-kind"
+                    :aria-label="'Kind of ' + row.name"
+                    @update:model-value="change(row, { kind: $event })"
+                ></v-select>
+                <v-text-field
+                    :model-value="row.tag || ''"
+                    placeholder="tag"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="tag"
+                    data-testid="new-name-tag"
+                    :aria-label="'Tag of ' + row.name"
+                    @change="change(row, { tag: normaliseTag($event.target.value) || null })"
+                ></v-text-field>
                 <SameThingAsk
                     v-if="row.same_as && row.same_as.length"
                     variant="row"
@@ -12,44 +37,95 @@
                     :kind="row.kind"
                     :offers="row.same_as"
                     :chosen="row.same_target_id || null"
-                    @choose="$emit('update', rowChanged(rows, index, { same_target_id: $event }))"
+                    @choose="change(row, { same_target_id: $event })"
                 />
-            </div>
+                <v-btn variant="text" size="x-small" data-testid="new-name-same-search" @click="search(row, 'same', $event)">same as… 🔎</v-btn>
+                <span v-if="filingOf(row)" class="text-caption" data-testid="new-name-filing">
+                    in <b>{{ filingOf(row) }}</b>
+                    <v-btn icon="mdi-close" variant="text" size="x-small" density="compact" :aria-label="'Not filed: ' + row.name" @click="change(row, { filing: null })"></v-btn>
+                </span>
+                <v-btn variant="text" size="x-small" data-testid="new-name-in" @click="search(row, 'in', $event)">in… 🔎</v-btn>
+                <v-btn variant="text" size="x-small" disabled prepend-icon="mdi-refresh" data-testid="new-name-rename" title="Renaming comes later, with languages">rename · later</v-btn>
+            </template>
         </div>
+        <ReferenceMenu
+            v-model="searching"
+            :target="searchAt"
+            search-only
+            :search-label="searchMode === 'same' ? 'The same as…' : 'Filed in…'"
+            @pick="picked"
+        />
     </div>
 </template>
 
 <script>
-import { rowChanged, useWorldsStore } from '@/stores/worlds.js';
+import { useWorldsStore } from '@/stores/worlds.js';
+import { normaliseTag } from './entryPage.js';
+import { STUB_KINDS, kindInfo } from './worldKinds.js';
+import ReferenceMenu from './ReferenceMenu.vue';
 import SameThingAsk from './SameThingAsk.vue';
 
-// The stubs a preview would make (its `new_names`: names its facts use
-// that the world hasn't), each with its kind and tag and a "same as X?"
-// choice when the world may have it already (new by default: no model
-// call). Changes emit `update` with the whole list.
+// "New names" (spec "The draft page" 6): the names a draft's facts use
+// that the world hasn't (`new_names`), each a stub once the draft is
+// accepted. Each has its kind, its tag, a "same as…" choice (the offers
+// the world may have, or a search: then it links that entry and no stub is
+// made), "in…" (where its stub is filed: a search, or "this entry" as the
+// model said) and rename, greyed out: re-rolling a name comes later, with
+// languages. A change emits `change(name, changes)`.
 export default {
     name: 'PreviewStubs',
-    components: { SameThingAsk },
+    components: { ReferenceMenu, SameThingAsk },
     props: {
         rows: { type: Array, required: true },
-        type: { type: String, required: true },
     },
-    emits: ['update'],
+    emits: ['change'],
     setup() {
         return { worlds: useWorldsStore() };
     },
+    data() {
+        return { searching: false, searchAt: null, searchMode: 'same', searchRow: null };
+    },
+    computed: {
+        kindItems() {
+            return STUB_KINDS.map((kind) => ({ title: kindInfo(kind)?.singular || kind, value: kind }));
+        },
+    },
     methods: {
-        rowChanged,
-        line(row) {
-            if (row.same_target_id) {
-                return 'no stub: it links the entry picked';
+        normaliseTag,
+        change(row, changes) {
+            this.$emit('change', row.name, changes);
+        },
+        nameOf(id) {
+            return this.worlds.referenceTargets.find((target) => target.id === id)?.name || 'an entry';
+        },
+        // where its stub is filed, as a name ("this entry" for the draft)
+        filingOf(row) {
+            const filing = row.filing;
+            if (!filing || filing.ticked === false) {
+                return null;
             }
-            // its kind, and its tag when it has one
-            const parts = [row.kind];
-            if (row.tag) {
-                parts.push(row.tag);
+            if (filing.this_entry) {
+                return 'this entry';
             }
-            return parts.join(', ');
+            return filing.target_id ? this.nameOf(filing.target_id) : filing.name || null;
+        },
+        search(row, mode, event) {
+            this.searchRow = row;
+            this.searchMode = mode;
+            this.searchAt = [event.clientX, event.clientY];
+            this.searching = true;
+        },
+        picked(target) {
+            const row = this.searchRow;
+            if (!row) {
+                return;
+            }
+            if (this.searchMode === 'same') {
+                this.change(row, { same_target_id: target.id });
+            } else {
+                this.change(row, { filing: { target_id: target.id, this_entry: false, name: null, role: null, ticked: true } });
+            }
+            this.searchRow = null;
         },
     },
 };
@@ -71,5 +147,15 @@ export default {
     font-weight: 600;
     color: rgb(var(--v-theme-foreign));
     text-decoration: underline dashed;
+}
+
+.kind {
+    flex: none;
+    width: 130px;
+}
+
+.tag {
+    flex: none;
+    width: 120px;
 }
 </style>

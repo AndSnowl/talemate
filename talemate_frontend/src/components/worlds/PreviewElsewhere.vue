@@ -1,6 +1,6 @@
 <template>
     <div v-if="rows.length" class="preview-elsewhere mt-3" data-testid="preview-elsewhere">
-        <div class="heading">Belongs on other entries</div>
+        <div class="heading">For other pages <span class="count">{{ rows.length }}</span></div>
         <div v-for="group in groups" :key="group.key" class="group" data-testid="elsewhere-group">
             <div class="d-flex align-center flex-wrap ga-2">
                 <span :class="group.new ? 'stub-name' : 'entry-name'" data-testid="elsewhere-entry">{{ group.name }}</span>
@@ -41,10 +41,35 @@
                         :aria-label="'Category of ' + rows[index].text"
                         @update:model-value="change(index, { category: $event })"
                     ></v-select>
+                    <v-btn
+                        variant="text"
+                        size="x-small"
+                        append-icon="mdi-menu-down"
+                        class="target"
+                        data-testid="elsewhere-target"
+                        :title="'Write it on another page than ' + group.name"
+                        @click="startRetarget(index, $event)"
+                    >→ {{ group.name }}</v-btn>
+                    <v-btn
+                        variant="text"
+                        size="x-small"
+                        prepend-icon="mdi-plus"
+                        data-testid="elsewhere-also"
+                        :disabled="alsoHere.includes(rows[index].text)"
+                        @click="$emit('also', rows[index])"
+                    >also here</v-btn>
                 </div>
                 <div v-if="rows[index].repeat_of" class="match text-caption">≈ already on {{ rows[index].repeat_of.owner_name || group.name }}: {{ rows[index].repeat_of.text }}</div>
             </div>
         </div>
+        <ReferenceMenu
+            v-model="retargeting"
+            :target="retargetAt"
+            search-only
+            search-label="Write it on…"
+            :exclude="exclude"
+            @pick="retargetTo"
+        />
     </div>
 </template>
 
@@ -53,11 +78,15 @@ import { elsewhereGroups, elsewhereSame, previewSegments, rowChanged, rowsTicked
 import { formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
+import ReferenceMenu from './ReferenceMenu.vue';
 import SameThingAsk from './SameThingAsk.vue';
 
-// "Belongs on other entries" (curation goal 1): a preview's facts about
-// other entries, grouped by the entry they're for, each ticked as it came
-// (the owner's decision) and written onto that entry on Accept. A group
+// "For other pages" (curation goal 1, spec "The draft page" 4): a draft's
+// facts about other entries, grouped by the entry they're for, each ticked
+// as it came (the owner's decision) and written onto that entry on Accept.
+// Each row's target can be changed ("→ X ▾", a search: `retarget(index,
+// target)`), and "+ also here" makes it one of this page's facts too
+// (`also(row)`; off once this page has those words). A group
 // can be unticked (or ticked) at once; each row's category can be changed
 // among its entry's kind's (a timeline fact only when dated). A repeat of
 // what the entry already says shows its match. An entry not made yet is a
@@ -66,17 +95,24 @@ import SameThingAsk from './SameThingAsk.vue';
 // `elsewhere`; every change emits `update` with the whole list.
 export default {
     name: 'PreviewElsewhere',
-    components: { LinkedText, SameThingAsk },
+    components: { LinkedText, ReferenceMenu, SameThingAsk },
     props: {
         rows: { type: Array, required: true },
         // which preview it is ('create')
         type: { type: String, required: true },
         // the preview's new names, shown as such in the texts
         newNames: { type: Array, default: () => [] },
+        // this page's own facts' texts ("+ also here" is off for them)
+        alsoHere: { type: Array, default: () => [] },
+        // ids never offered as a target (the page's own)
+        exclude: { type: Array, default: () => [] },
     },
-    emits: ['update'],
+    emits: ['update', 'retarget', 'also'],
     setup() {
         return { worlds: useWorldsStore() };
+    },
+    data() {
+        return { retargeting: false, retargetAt: null, retargetIndex: null };
     },
     computed: {
         groups() {
@@ -86,6 +122,17 @@ export default {
     methods: {
         formatDate,
         previewSegments,
+        startRetarget(index, event) {
+            this.retargetIndex = index;
+            this.retargetAt = [event.clientX, event.clientY];
+            this.retargeting = true;
+        },
+        retargetTo(target) {
+            if (this.retargetIndex !== null) {
+                this.$emit('retarget', this.retargetIndex, target);
+            }
+            this.retargetIndex = null;
+        },
         anyTicked(group) {
             return group.rows.some((index) => this.rows[index].ticked !== false);
         },
@@ -175,6 +222,15 @@ export default {
 .match {
     margin-left: 34px;
     color: rgb(var(--v-theme-muted));
+}
+
+.count {
+    margin-left: 4px;
+}
+
+.target {
+    flex: none;
+    text-transform: none;
 }
 
 .category {

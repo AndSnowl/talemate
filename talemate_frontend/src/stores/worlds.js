@@ -10,9 +10,9 @@
 //
 // The backend holds one open world per connection and closes it when the
 // connection goes, so a disconnect forgets the open world. Opening another
-// world cancels a running preview (or scene plan) without any reply, so
-// opening (or creating) a world clears the preview, the scene setup and
-// every spinner itself.
+// world cancels a running draft (or scene plan) without any reply, and
+// drops the session's drafts, so opening (or creating) a world clears the
+// draft, the scene setup and every spinner itself.
 //
 // The open world's `now` (where creation dates things) moves with its
 // scenes, so every scene listing, and every moved scene, asks for it again
@@ -46,9 +46,9 @@
 // `find_mix`, and its reply (`mixFound`) says whether that mix exists. With
 // none, the box drafts the mix first: `acceptPreview(changes, {open:
 // false})` accepts it without opening its page and leaves the new thing in
-// `accepted`, so the character's box can carry on with it. A preview lists
+// `accepted`, so the character's box can carry on with it. A draft lists
 // the inherited facts it was made with (`preview.inherited`);
-// `setPreviewOverride` marks one as replaced by one of the preview's own
+// `setPreviewOverride` marks one as replaced by one of the draft's own
 // facts before accepting.
 //
 // Stubs (names mentioned but not made yet): `stubs` is `list_stubs`'s list,
@@ -58,11 +58,11 @@
 // the stub's page; the open page, if it's another thing, is fetched again,
 // since its links to the stub change with it. `expandStub` leaves the page
 // for the stub's kind, whose create box then expands it (`expanding`):
-// the preview carries the stub's id, and accepting fills the stub in place.
-// Expanding over an unaccepted preview asks first (`expandAsk`, answered
-// by `confirmExpand` or `keepPreview`). Expanding also asks for
-// `stub_suggestion`, the create box's starting prompt and the mention
-// context (`stubSuggestion`). A preview of a new
+// the draft carries the stub's id, and accepting fills the stub in place.
+// Expanding over an unaccepted draft asks first (`expandAsk`, answered
+// by `confirmExpand`, which discards it, or `keepPreview`). Expanding also
+// asks for `stub_suggestion`, the create box's starting prompt and the
+// mention context (`stubSuggestion`). A draft of a new
 // thing named like a stub of its kind (`matching_stub_id`) can be accepted
 // into that stub instead (`acceptPreview(changes, {intoStub})`).
 // Other names: `setAka` writes the whole `aka` list (`set_field` "aka");
@@ -77,7 +77,10 @@
 // fact form's `spans` (its existing links, by position), sent only when
 // there are any. `makeStub` makes a stub of a phrase in a fact, and
 // `repointRef` points one reference of a fact at another thing; neither
-// touches the rest of the fact. `referenceTargets` is what Add reference searches: every entry and
+// touches the rest of the fact. Selected words of a fact (the selection
+// menu) are `makeStubFromText` ("Make a stub", and "… and expand now":
+// `stubExpandAfter` opens its box once it's made) and `linkText`, by
+// their UTF-16 offsets in its rendered text (ruling F18). `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
 // Filing and tags (the entry page, mockup v3): `addFiling`, `editFiling`
@@ -104,21 +107,44 @@
 // was viewed as of, so back returns to it as it was. A world switch starts
 // the history afresh.
 //
-// Re-pointing a stub: `repointStub` sends `repoint_stub`; the reply (in
-// `stubRepointed`, for the Stubs page's note) forgets the stub, and a
-// page on the stub opens the target instead.
+// Re-pointing a stub: `repointStub` sends `repoint_stub` (with `use_name`
+// for the hard re-point, one of the target's names fetched first:
+// `fetchNames`, `namesOf`); the reply (in `stubRepointed`, for the Stubs
+// page's note) forgets the stub, and a page on the stub opens the target
+// instead.
 //
-// Curation: a preview is edited in place before it's accepted
+// Drafts (spec "The draft page"): Create asks `preview_thing`, and its
+// reply is the draft (`draft`: `{key, version, versions, page, base,
+// edited}`): `page` the page it will be, `base` the server's copy of what
+// accept takes, `edited` that as the owner left it (the `preview`
+// getter). The owner's edits (`editDraft`, `editPreview`) stay here until
+// `acceptPreview` sends them with the draft's key. Regenerate, and Create
+// after "Edit prompt" (`editPrompt`: the box shows its form, the draft
+// kept), send the key back for a new version; "Version n of m ▾"
+// (`useVersion`) restores one with `use_version`. The server gives back
+// its own copy, so what the owner left on each version is kept for the
+// session (`draftEdits`, key -> version -> `{base, edited}`) and rebased
+// onto it (draftPage.js `rebaseDraft`); when the server drops its oldest
+// version (five kept) the ones kept move down with it. "+ Add facts…",
+// "+ Add event…" (`addDraftFacts`, one at a time: `adding`) and a
+// selection (`draftSelection`) change the server's copy of the current
+// version; each reply is rebased the same way. A reply for another
+// draft, or one the server says came too late (another version current
+// meanwhile), adds nothing. Discard (`discardPreview`) drops every
+// version on the server too.
+//
+// Curation: a draft is edited in place before it's accepted
 // (`editPreview('create', changes)`): its own facts' ticks, the elsewhere
-// facts (ticks, categories, a stub row's "same as X?"), the move-in rows.
-// An accept sends the preview as the owner left it, ticks and all. The
-// answer to "Is this
-// X?" goes with the accept (`acceptPreview(..., {sameTargetId})`). Every
+// facts (ticks, categories, a stub row's "same as X?"), the Could move
+// here rows. An accept sends the draft as the owner left it, ticks and
+// all. The answer to "Same thing?" goes with the accept
+// (`acceptPreview(..., {sameTargetId})`). Every
 // accept's `notes` (what was left out, and why) land in `notes` for the
 // World tab to show, as do a move's, a merge's and a date pick's. A merge
 // (`previewMerge`, `acceptMerge`) keeps its preview in `merge`; the merged
 // entry's page opens once it's done. `moveFact`, `setHeldBy` and
-// `pickDate` edit a fact where its page shows it; `getCuration` and
+// `pickDate` edit a fact where its page shows it (`copyFact`, "Copy to…",
+// keeps it there too); `getCuration` and
 // `setCuration` read and write the world's curation knobs (`curation`).
 //
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
@@ -127,6 +153,7 @@ import { defineStore } from 'pinia';
 
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
+import { acceptable, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
@@ -339,43 +366,8 @@ export function akaRemoved(aka, index) {
     return aka.filter((_entry, i) => i !== index).map(akaEntry);
 }
 
-function escapeRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// A preview fact's text as `LinkedText` segments: the names it invents
-// (`newNames`, the preview's `new_names`: each name, the ways the text
-// writes it and its other names) marked `fresh`, since they become stubs
-// on accept; the rest plain. Earliest match first, then the longest.
-export function previewSegments(text, newNames = []) {
-    const spans = [];
-    for (const found of newNames) {
-        const spellings = [found.name, ...(found.written || []), ...(found.aka || []).map((entry) => entry.name)];
-        for (const spelling of spellings.filter(Boolean)) {
-            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, 'gu');
-            for (const match of text.matchAll(pattern)) {
-                spans.push({ start: match.index, end: match.index + match[0].length, kind: found.kind });
-            }
-        }
-    }
-    spans.sort((a, b) => a.start - b.start || b.end - a.end);
-    const segments = [];
-    let at = 0;
-    for (const span of spans) {
-        if (span.start < at) {
-            continue;
-        }
-        if (span.start > at) {
-            segments.push({ text: text.slice(at, span.start), ref: null, stub: false });
-        }
-        segments.push({ text: text.slice(span.start, span.end), ref: null, stub: false, fresh: true, kind: span.kind });
-        at = span.end;
-    }
-    if (at < text.length) {
-        segments.push({ text: text.slice(at), ref: null, stub: false });
-    }
-    return segments;
-}
+// a draft's texts, its new names marked (the setup cards use it too)
+export { nameKey, previewSegments };
 
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref', 'set_held_by'];
@@ -397,19 +389,6 @@ export function dateIn(date) {
 }
 
 // --- curation -----------------------------------------------------------------
-
-// the articles a name may lead with (`talemate.world.names.ARTICLES`)
-const ARTICLES = ['the', 'a', 'an'];
-
-// A name as the backend compares it (`links.name_key`): its words
-// normalised, without a leading article.
-export function nameKey(name) {
-    const words = (name || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (words.length > 1 && ARTICLES.includes(words[0])) {
-        words.shift();
-    }
-    return words.join(' ');
-}
 
 function plural(count, one, many = `${one}s`) {
     return `${count} ${count === 1 ? one : many}`;
@@ -438,7 +417,7 @@ export function previewCounts(preview) {
         facts: ticked(preview?.facts).length,
         elsewhere: elsewhere.length,
         stubs: stubs.size,
-        movedIn: (preview?.move_in || []).filter((row) => row.ticked).length,
+        movedIn: (preview?.move_here || []).filter((row) => row.ticked).length,
     };
 }
 
@@ -478,26 +457,18 @@ export function elsewhereGroups(rows) {
     return groups;
 }
 
-// The indices of the rows (a preview's facts) that came
-// unticked as repeats of what the world holds: "Already in the world"
-// shows these, kept apart however the owner ticks them; a repeat that came
-// ticked stays among the rest, showing its match.
-export function shelvedRows(rows) {
-    return (rows || []).flatMap((row, index) => (row.repeat_of && row.ticked === false ? [index] : []));
-}
-
 // `rows` with those at `indices` ticked (or not); the rest as they are.
 export function rowsTicked(rows, indices, ticked) {
     const picked = new Set(indices);
     return (rows || []).map((row, index) => (picked.has(index) ? { ...row, ticked } : row));
 }
 
-// The move-in rows the owner set (`moveIn`, from MoveInSection) and the
-// preview's own facts to go with them (ruling C24's other half): an own
-// fact repeating a move the owner ticks (its `repeat_of.fact_id`) is
-// unticked, marked `untickedByMove`, so the claim isn't written twice;
-// unticking the move ticks it again. A fact the owner unticked themselves
-// is left as it is. `{move_in, facts}`.
+// The "Could move here" rows the owner set (`moveIn`, a draft's
+// `move_here`, from MoveHere) and the draft's own facts to go with them
+// (ruling C24's other half): an own fact repeating a move the owner ticks
+// (its `repeat_of.fact_id`) is unticked, marked `untickedByMove`, so the
+// claim isn't written twice; unticking the move ticks it again. A fact the
+// owner unticked themselves is left as it is. `{move_here, facts}`.
 export function moveInEdit(preview, moveIn) {
     const ticked = new Set((moveIn || []).filter((row) => row.ticked).map((row) => row.fact_id));
     const facts = (preview?.facts || []).map((fact) => {
@@ -511,7 +482,7 @@ export function moveInEdit(preview, moveIn) {
         }
         return fact;
     });
-    return { move_in: moveIn || [], facts };
+    return { move_here: moveIn || [], facts };
 }
 
 // `rows` with row `index` changed (`changes` merged in).
@@ -608,14 +579,29 @@ function worldState() {
         thing: null,
         thingAt: null,
         scenes: [],
-        // the create box: the request being previewed, and its reply
+        // the create box: the request being drafted (`{kind, prompt,
+        // fields, stubId, picks, newNames, repicks}`), whether a version is
+        // being drafted, and why the last one failed
         previewRequest: null,
         previewPending: false,
-        preview: null,
         previewError: null,
-        // the indices of its facts that came unticked as repeats
-        // (`shelvedRows`)
-        previewShelved: [],
+        // the open draft (see "Drafts" in the module comment): `{key,
+        // version, versions, page, base, edited, adding, accepting,
+        // selecting}`, or null
+        draft: null,
+        // whether the create box shows the draft (false after "Edit
+        // prompt", until the next version or "Back to the draft")
+        draftShown: true,
+        // draft key -> version -> `{base, edited}`: what the owner left on
+        // each version this session, restored when it's used again
+        draftEdits: {},
+        // thing id -> its names (`[name, ...other names]`), for "use the
+        // name…", once asked for (`fetchNames`)
+        namesOf: {},
+        namesWanted: [],
+        // "Make a stub and expand now": the stub's `{kind, name}`, until
+        // its `make_stub_from_text` reply opens its create box
+        stubExpandAfter: null,
         // the parents a `find_mix` is out for, and the last reply taken
         // (`{parents, mix_id}`)
         mixLookup: null,
@@ -695,6 +681,8 @@ export const useWorldsStore = defineStore('worlds', {
 
     getters: {
         calendar: (state) => state.currentWorld?.calendar || null,
+        // the open draft's preview as the owner left it (null: none)
+        preview: (state) => state.draft?.edited || null,
         // the `match_names` matches for exactly this text and date, if any
         matchesFor: (state) => (text, at) => {
             const found = state.nameMatches;
@@ -986,13 +974,20 @@ export const useWorldsStore = defineStore('worlds', {
 
         // --- create -------------------------------------------------------
 
-        // `stubId`: the stub the preview expands (its kind's create box
+        // `stubId`: the stub the draft expands (its kind's create box
         // opened from it); `picks` and `newNames`: the prompt's names, as
         // the owner left them; `repicks`: the owner's re-picks (`{id,
-        // name}`), each thing taught its name once the preview is accepted
+        // name}`), each thing taught its name once the draft is accepted.
+        // A draft of the same kind (and stub) open already gets a new
+        // version (its `draft_key` sent back: Regenerate, Edit prompt).
         previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [] } = {}) {
+            const draft = this.draft;
+            const key = draft && draft.edited.kind === kind && (draft.edited.stub_id || null) === (stubId || null) ? draft.key : null;
+            if (draft && !key) {
+                // another entry's draft: the old one is dropped
+                this.discardPreview();
+            }
             this.previewRequest = { kind, prompt, fields, stubId, picks, newNames, repicks };
-            this.preview = null;
             this.previewError = null;
             this.previewPending = true;
             this.request('preview_thing', {
@@ -1001,9 +996,11 @@ export const useWorldsStore = defineStore('worlds', {
                 fields,
                 ...(stubId ? { stub_id: stubId } : {}),
                 ...linkFields(picks, newNames),
+                ...(key ? { draft_key: key } : {}),
             });
         },
 
+        // "↻ Regenerate": a new version from the same request
         regeneratePreview() {
             const req = this.previewRequest;
             if (req) {
@@ -1011,17 +1008,137 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
-        // drop the preview, keeping the request so the prompt can be edited
+        // "Edit prompt": back to the create box, the draft kept; the next
+        // Create is a new version of it
+        editPrompt() {
+            this.draftShown = false;
+        },
+
+        // back to the draft from the create box
+        showDraft() {
+            if (this.draft) {
+                this.draftShown = true;
+            }
+        },
+
+        // "Discard": the draft's every version goes (`discard_preview`),
+        // nothing written; the request stays, so the prompt can be edited
         discardPreview() {
-            this.preview = null;
+            const draft = this.draft;
+            if (draft) {
+                this.request('discard_preview', { draft_key: draft.key });
+                const { [draft.key]: _gone, ...rest } = this.draftEdits;
+                this.draftEdits = rest;
+            }
+            this.draft = null;
+            this.draftShown = true;
             this.previewError = null;
             this.previewPending = false;
         },
 
-        // forget the preview and its request (its box closed)
+        // forget the draft and its request (its box closed)
         cancelPreview() {
             this.discardPreview();
             this.previewRequest = null;
+        },
+
+        // what the owner left on the open version, kept for the session
+        keepDraftEdits() {
+            const draft = this.draft;
+            if (!draft) {
+                return;
+            }
+            this.draftEdits = {
+                ...this.draftEdits,
+                [draft.key]: { ...(this.draftEdits[draft.key] || {}), [draft.version]: { base: draft.base, edited: draft.edited } },
+            };
+        },
+
+        // "Version n of m ▾": restore version `version` (`use_version`)
+        useVersion(version) {
+            const draft = this.draft;
+            if (!draft || version === draft.version) {
+                return;
+            }
+            this.keepDraftEdits();
+            this.pending = { ...this.pending, use_version: true };
+            this.request('use_version', { draft_key: draft.key, version });
+        },
+
+        // the owner's edits to the draft (`changes` merged into `edited`)
+        editDraft(changes) {
+            if (this.draft) {
+                this.draft = { ...this.draft, edited: { ...this.draft.edited, ...changes } };
+            }
+        },
+
+        // "+ Add facts…" / "+ Add event…" on the draft: one at a time
+        addDraftFacts(prompt, year = null) {
+            const draft = this.draft;
+            if (!draft || draft.adding) {
+                return;
+            }
+            const action = year === null ? 'add_facts' : 'add_event';
+            this.draft = { ...draft, adding: action, addError: null };
+            this.request(action, { draft_key: draft.key, prompt, ...(year === null ? {} : { year }) });
+        },
+
+        // a selection in the draft's fact `index` (the server's), as
+        // "Make a stub" (`kind`, `tag`) or "Link to…" (`targetId`)
+        draftSelection(action, index, start, end, data) {
+            const draft = this.draft;
+            if (!draft || draft.selecting) {
+                return;
+            }
+            this.draft = { ...draft, selecting: action };
+            this.request(action, { draft_key: draft.key, index, start, end, ...data });
+        },
+
+        // a draft reply (`preview_thing`, `use_version`, a draft's
+        // additions and selections): the page, its server copy, and the
+        // owner's edits carried onto it (`how`: 'new' a new version,
+        // 'restore' a version used again, 'rebase' this version changed)
+        draftTaken(data, how, { fresh = [], done = null } = {}) {
+            const { preview, draft_key: key, version, versions, ...page } = data;
+            const before = this.draft;
+            let edited = preview;
+            if (how === 'new') {
+                if (before && before.key === key) {
+                    this.keepDraftEdits();
+                    // the oldest version was dropped: the ones kept move down
+                    if (versions.length === before.versions.length && version === versions.length) {
+                        const kept = this.draftEdits[key] || {};
+                        this.draftEdits = {
+                            ...this.draftEdits,
+                            [key]: Object.fromEntries(Object.entries(kept).filter(([n]) => Number(n) > 1).map(([n, value]) => [Number(n) - 1, value])),
+                        };
+                    }
+                }
+            } else if (how === 'restore') {
+                const kept = this.draftEdits[key]?.[version];
+                edited = kept ? rebaseDraft(kept.base, kept.edited, preview) : preview;
+            } else if (before && before.key === key && before.version === version) {
+                edited = rebaseDraft(before.base, before.edited, preview, { fresh });
+            } else {
+                const kept = this.draftEdits[key]?.[version];
+                edited = kept ? rebaseDraft(kept.base, kept.edited, preview, { fresh }) : preview;
+            }
+            this.draft = {
+                key,
+                version,
+                versions,
+                page,
+                base: preview,
+                edited,
+                // a draft's addition or selection still out stays so
+                adding: done === 'adding' || !before ? null : before.adding,
+                addError: null,
+                accepting: false,
+                selecting: done === 'selecting' || !before ? null : before.selecting,
+            };
+            if (how === 'new') {
+                this.draftShown = true;
+            }
         },
 
         // --- stubs --------------------------------------------------------
@@ -1037,10 +1154,21 @@ export const useWorldsStore = defineStore('worlds', {
 
         // point every link to the stub `stubId` at `targetId`; the stub's
         // names become the target's other names and the stub goes
-        repointStub(stubId, targetId) {
+        // `useName` (the hard re-point): one of the target's names, which
+        // every link's words become
+        repointStub(stubId, targetId, useName = null) {
             this.stubRepointed = null;
             this.pending = { ...this.pending, repoint_stub: true };
-            this.request('repoint_stub', { stub_id: stubId, target_id: targetId });
+            this.request('repoint_stub', { stub_id: stubId, target_id: targetId, ...(useName ? { use_name: useName } : {}) });
+        },
+
+        // thing `id`'s names (`namesOf[id]`: its name, then its other
+        // names), fetched for "use the name…"
+        fetchNames(id) {
+            if (!this.namesWanted.includes(id)) {
+                this.namesWanted = [...this.namesWanted, id];
+            }
+            this.request('get_thing', { id, at: null });
         },
 
         clearStubRepointed() {
@@ -1271,15 +1399,20 @@ export const useWorldsStore = defineStore('worlds', {
         // without one fills; `sameTargetId`: "Is this X?" answered yes, the
         // entry the material goes onto. The owner's re-picks are taught to
         // their things once it's accepted (the `accept_preview` reply).
+        // The draft stays (`accepting`) until the server answers, so a
+        // refusal leaves it as the owner left it.
         acceptPreview(changes = {}, { open = true, intoStub = null, sameTargetId = null } = {}) {
-            if (!this.preview) {
+            const draft = this.draft;
+            if (!draft || draft.accepting) {
                 return;
             }
             this.acceptOpens = open;
             this.accepted = null;
+            this.draft = { ...draft, accepting: true };
             this.pending = { ...this.pending, accept_preview: true };
             this.request('accept_preview', {
-                preview: { ...this.preview, ...changes },
+                preview: acceptable({ ...draft.edited, ...changes }),
+                draft_key: draft.key,
                 ...(intoStub ? { into_stub: intoStub } : {}),
                 ...(sameTargetId ? { same_target_id: sameTargetId } : {}),
             });
@@ -1287,16 +1420,11 @@ export const useWorldsStore = defineStore('worlds', {
 
         // --- curation -----------------------------------------------------
 
-        // the preview of `type` (only 'create' now; Task 10's draft page
-        // replaces it)
-        previewOf(type) {
-            return type === 'create' ? this.preview : null;
-        },
-
-        // the owner's edits to a preview before it's accepted
+        // the owner's edits to the draft before it's accepted (`type`
+        // 'create', the only preview)
         editPreview(type, changes) {
-            if (this.previewOf(type)) {
-                this.preview = { ...this.preview, ...changes };
+            if (type === 'create') {
+                this.editDraft(changes);
             }
         },
 
@@ -1334,6 +1462,27 @@ export const useWorldsStore = defineStore('worlds', {
         moveFact(factId, targetId) {
             this.pending = { ...this.pending, move_fact: true };
             this.request('move_fact', { fact_id: factId, target_id: targetId });
+        },
+
+        // copy the open page's fact `factId` onto `targetId`, keeping it
+        // here (`copy_fact`, one revision)
+        copyFact(factId, targetId) {
+            this.pending = { ...this.pending, copy_fact: true };
+            this.request('copy_fact', { fact_id: factId, target_id: targetId });
+        },
+
+        // selected words of the open page's fact `factId` (`start`/`end`
+        // in UTF-16 code units of its rendered text, ruling F18) made a
+        // stub of `kind` (and `tag`), linked there; `expand`: the stub's
+        // create box opens once it's made ("Make a stub and expand now")
+        makeStubFromText(factId, start, end, kind, tag = null, { expand = false, words = '' } = {}) {
+            this.stubExpandAfter = expand ? { kind, name: words } : null;
+            this.edit('make_stub_from_text', { fact_id: factId, start, end, kind, ...(tag ? { tag } : {}) });
+        },
+
+        // selected words of the open page's fact linked to `targetId`
+        linkText(factId, start, end, targetId) {
+            this.edit('link_text', { fact_id: factId, start, end, target_id: targetId });
         },
 
         // who holds the open page's fact `factId` as a belief (null: world
@@ -1375,7 +1524,7 @@ export const useWorldsStore = defineStore('worlds', {
                 const overrides = (fact.overrides || []).filter((id) => id !== factId);
                 return { ...fact, overrides: i === index ? [...overrides, factId] : overrides };
             });
-            this.preview = { ...this.preview, facts };
+            this.editDraft({ facts });
         },
 
         // the mix of two parents, if the world has one (`mixFound`)
@@ -1600,6 +1749,10 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 }
                 case 'get_thing':
+                    if (this.namesWanted.includes(data.id)) {
+                        this.namesWanted = this.namesWanted.filter((id) => id !== data.id);
+                        this.namesOf = { ...this.namesOf, [data.id]: [data.name, ...(data.aka || []).map((entry) => entry.name)] };
+                    }
                     if (data.id === this.backOpening) {
                         this.backOpening = null;
                     }
@@ -1653,8 +1806,19 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'add_event':
                 case 'add_facts_failed':
                 case 'add_event_failed': {
-                    // a draft page's own additions (`draft_key`) are Task
-                    // 10's; a reply for a draft since dropped is too
+                    if (data?.draft_key) {
+                        // a draft's own: the updated draft (for a draft
+                        // since dropped, nothing)
+                        if (this.draft?.key !== data.draft_key) {
+                            break;
+                        }
+                        if (action.endsWith('_failed')) {
+                            this.draft = { ...this.draft, adding: null, addError: message.message };
+                        } else {
+                            this.draftTaken(data, 'rebase', { done: 'adding' });
+                        }
+                        break;
+                    }
                     const found = this.factDraft;
                     if (!found?.pending || data?.draft_key || data?.thing_id !== found.thingId) {
                         break;
@@ -1758,10 +1922,41 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'preview_thing':
                     if (this.previewPending) {
-                        this.preview = data;
-                        this.previewShelved = shelvedRows(data.facts);
                         this.previewPending = false;
+                        this.draftTaken(data, 'new');
                     }
+                    break;
+                case 'use_version':
+                    if (this.draft?.key === data.draft_key) {
+                        this.draftTaken(data, 'restore');
+                    }
+                    break;
+                case 'discard_preview':
+                    break;
+                case 'make_stub_from_text':
+                case 'link_text':
+                    if (data.draft_key) {
+                        if (this.draft?.key === data.draft_key) {
+                            this.draftTaken(data, 'rebase', { done: 'selecting', fresh: data.new_name ? [nameKey(data.new_name)] : [] });
+                        }
+                    } else {
+                        if (data.id === this.selectedThingId) {
+                            this.pageTaken(data);
+                        } else {
+                            this.refreshThing();
+                        }
+                        this.listStubs();
+                        this.listAllThings();
+                        const expand = this.stubExpandAfter;
+                        this.stubExpandAfter = null;
+                        if (action === 'make_stub_from_text' && expand && data.stub_id) {
+                            this.expandStub({ id: data.stub_id, kind: expand.kind, name: expand.name });
+                        }
+                    }
+                    break;
+                case 'copy_fact':
+                    this.showNotes(action, [`Copied to ${data.target.name}`, ...(data.notes || [])]);
+                    this.refreshThing();
                     break;
                 case 'preview_failed':
                     if (this.previewPending) {
@@ -1774,7 +1969,12 @@ export const useWorldsStore = defineStore('worlds', {
                     for (const repick of this.previewRequest?.repicks || []) {
                         this.addOtherName(repick.id, repick.name);
                     }
-                    this.preview = null;
+                    if (this.draft) {
+                        const { [this.draft.key]: _done, ...rest } = this.draftEdits;
+                        this.draftEdits = rest;
+                    }
+                    this.draft = null;
+                    this.draftShown = true;
                     this.previewRequest = null;
                     this.expanding = null;
                     this.showNotes(action, data.notes);
@@ -1899,6 +2099,12 @@ export const useWorldsStore = defineStore('worlds', {
                         } else if (this.factDraft?.accepting) {
                             this.factDraft = { ...this.factDraft, accepting: false };
                         }
+                        // or the draft's accept, addition or selection
+                        if (this.draft) {
+                            this.draft = { ...this.draft, accepting: false, adding: null, selecting: null };
+                        }
+                        this.stubExpandAfter = null;
+                        this.namesWanted = [];
                         // the page back opened is gone: back goes on
                         const failed = this.backOpening;
                         this.backOpening = null;

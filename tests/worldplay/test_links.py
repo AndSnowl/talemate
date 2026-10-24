@@ -486,3 +486,21 @@ def test_new_names_never_link_inside_a_hyphenated_word(world):
         made = make_stubs(rev, view, [NewName(name="Owl", kind="lore")])
         linked = link_text(view, "Owl-folk and an Owl.", new_names=made)
     assert linked == f"Owl-folk and an {ref(made['Owl'], 'Owl')}."
+
+
+def test_link_text_lowercase_picks_link_as_written(world):
+    """Words the owner selected on a draft (ruling F16) are a pick or a new
+    name written as they were, often without a capital ("the north pass"):
+    they link wherever the text writes them. A capitalised pick still never
+    links the same words written lowercase ("Hope" is not "I hope")."""
+
+    _owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+    text = "Riders guard the north pass; the North Pass is cold. I hope so."
+    out = link_text(view, text, picks={"the north pass": tsardom})
+    assert out == (
+        f"Riders guard {ref(tsardom, 'the north pass')}; "
+        f"{ref(tsardom, 'the North Pass')} is cold. I hope so."
+    )
+    out = link_text(view, text, new_names={"Hope": "h1"})
+    assert out == text

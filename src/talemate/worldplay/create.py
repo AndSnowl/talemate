@@ -405,12 +405,20 @@ class MoveHereFact(BaseModel):
     """A "Could move here" row: a live fact of an entry near the new one
     whose text names it, found by code alone (no model call), offered
     unticked. Accept moves a ticked one onto the entry (`copy_facts`,
-    ruling R1)."""
+    ruling R1).
+
+    `repeat`: the owner's "Move that one here" on one of the draft's own
+    facts that repeats the world's (its `repeat_of`): the world's fact
+    moves onto the entry instead of the draft writing a second copy. Such
+    a row needn't be near or name the entry, but must be what one of the
+    preview's facts says it repeats (the router checks that against its
+    own copy of the draft too)."""
 
     fact_id: str
     from_id: str
     text: str
     ticked: bool = False
+    repeat: bool = False
 
 
 class CreatePreview(BaseModel):
@@ -3871,11 +3879,23 @@ def _write_move_here(
     for row in preview.move_here:
         if not row.ticked or row.from_id == thing_id:
             continue
-        if sources is None:
+        if sources is None and not row.repeat:
             sources = move_here_sources(before, preview)
         found = before.fact(row.fact_id)
         name = before.name_of(row.from_id) or row.from_id
-        if row.from_id not in sources:
+        if row.repeat:
+            repeats = {
+                (fact.repeat_of.get("fact_id"), fact.repeat_of.get("owner_id"))
+                for fact in preview.facts
+                if fact.repeat_of
+            }
+            if (row.fact_id, row.from_id) not in repeats:
+                notes.append(
+                    f"{name}'s fact \"{_clip(row.text, 60)}\" isn't one this "
+                    "draft repeats, so it doesn't move here"
+                )
+                continue
+        elif row.from_id not in sources:
             notes.append(
                 f"{name}'s fact \"{_clip(row.text, 60)}\" isn't near "
                 f"{preview.name}, so it doesn't move here"
@@ -3893,7 +3913,7 @@ def _write_move_here(
                 "doesn't move here"
             )
             continue
-        if not names_draft(before, found[1].text, draft):
+        if not row.repeat and not names_draft(before, found[1].text, draft):
             notes.append(
                 f"{name}'s fact \"{_clip(row.text, 60)}\" doesn't name "
                 f"{preview.name}, so it doesn't move here"

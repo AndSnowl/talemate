@@ -1,5 +1,5 @@
 <template>
-    <span class="linked-text"><template v-for="(segment, index) in shown" :key="index"><a
+    <span ref="root" class="linked-text" @contextmenu="contextMenu"><template v-for="(segment, index) in shown" :key="index"><a
         v-if="segment.ref && !segment.stub && !repoint"
         class="linked-ref"
         data-testid="linked-ref"
@@ -83,6 +83,13 @@ import StubCard from './StubCard.vue';
 // (`ReferenceMenu`) for the thing the link should mean, emitted as
 // `repoint {index, to}` (`index` into `segments`); the page rewrites the
 // fact, keeping the link's words. `exclude` are ids never offered.
+//
+// With `selectable` (a fact's words), right-clicking selected words inside
+// it emits `select {start, end, words, x, y}` instead of the browser's
+// menu: `start`/`end` count UTF-16 code units (the browser's own measure,
+// ruling F18) from the start of the text shown, which is the fact's
+// `rendered` text. A right-click with no selection in it goes on to the
+// row (its fact menu).
 export default {
     name: 'LinkedText',
     components: { ReferenceMenu, StubCard },
@@ -91,8 +98,9 @@ export default {
         text: { type: String, default: '' },
         repoint: { type: Boolean, default: false },
         exclude: { type: Array, default: () => [] },
+        selectable: { type: Boolean, default: false },
     },
-    emits: ['repoint'],
+    emits: ['repoint', 'select'],
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -138,6 +146,32 @@ export default {
             } else if (this.openCard === index) {
                 this.openCard = null;
             }
+        },
+        // the selected words, if a selection lies inside the text
+        contextMenu(event) {
+            if (!this.selectable) {
+                return;
+            }
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount || selection.isCollapsed) {
+                return;
+            }
+            const range = selection.getRangeAt(0);
+            const root = this.$refs.root;
+            if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+                return;
+            }
+            const before = document.createRange();
+            before.selectNodeContents(root);
+            before.setEnd(range.startContainer, range.startOffset);
+            const start = before.toString().length;
+            const words = range.toString();
+            if (!words.trim()) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            this.$emit('select', { start, end: start + words.length, words, x: event.clientX, y: event.clientY });
         },
         startRepoint(index, event) {
             this.openCard = null;

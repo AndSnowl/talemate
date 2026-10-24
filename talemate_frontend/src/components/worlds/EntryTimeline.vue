@@ -16,7 +16,7 @@
         </div>
         <slot></slot>
         <div v-if="!shown.length" class="empty">{{ lines.length ? 'No events among them.' : 'Nothing dated yet.' }}</div>
-        <div v-for="line in shown" :key="line.fact_id" class="line d-flex align-center ga-2" :class="{ ended: !!line.until }" data-testid="timeline-row">
+        <div v-for="(line, index) in shown" :key="line.fact_id || 'draft-' + index" class="line d-flex align-center ga-2" :class="{ ended: !!line.until }" data-testid="timeline-row">
             <span class="flex-grow-1">
                 <span class="year">{{ lineDates(worlds.calendar, line) }}</span>
                 <LinkedText :segments="line.segments" />

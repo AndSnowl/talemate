@@ -21,12 +21,35 @@
         </template>
     </v-select>
 
-    <!-- the entry's own question, at the top of its preview -->
+    <!-- the entry's own question, under its "In" rows: a search, empty
+         for new -->
     <div v-else class="same-ask pa-2 mb-3" data-testid="same-thing">
         <div class="mb-1">
-            Is <b>“{{ name }}”</b> the same as {{ offers.length === 1 ? 'this' : 'one of these' }}?
+            Is <b>“{{ name }}”</b> the same as an entry you already have?
             <span class="text-caption text-muted">If so, its facts go there, and its name becomes another name of it.</span>
         </div>
+        <v-autocomplete
+            :model-value="chosen"
+            :items="searchItems"
+            item-title="name"
+            item-value="id"
+            placeholder="Search any entry…"
+            prepend-inner-icon="mdi-magnify"
+            clearable
+            density="compact"
+            variant="outlined"
+            hide-details
+            class="same-search"
+            data-testid="same-search"
+            aria-label="The same as"
+            @update:model-value="$emit('choose', $event || null)"
+        >
+            <template #item="{ props: itemProps, item }">
+                <v-list-item v-bind="itemProps" :subtitle="item.raw.line"></v-list-item>
+            </template>
+        </v-autocomplete>
+        <div class="text-caption text-muted mt-1">{{ chosen ? `Nothing new is made: it goes onto ${chosenName}.` : "Leave it empty if it's new." }}</div>
+        <div class="text-caption text-muted mt-2">Entries that may be it:</div>
         <div
             v-for="offer in offers"
             :key="offer.thing_id"
@@ -48,18 +71,8 @@
                 :color="chosen === offer.thing_id ? 'accent' : undefined"
                 size="x-small"
                 :aria-pressed="chosen === offer.thing_id"
-                @click="$emit('choose', offer.thing_id)"
-            >Yes, fill it</v-btn>
-        </div>
-        <div class="d-flex align-center ga-2 mt-1">
-            <v-btn
-                :variant="chosen ? 'outlined' : 'flat'"
-                :color="chosen ? undefined : 'accent'"
-                size="x-small"
-                :aria-pressed="!chosen"
-                @click="$emit('choose', null)"
-            >No, it's new</v-btn>
-            <span v-if="chosen" class="text-caption text-muted">Nothing new is made: it goes onto {{ chosenName }}.</span>
+                @click="$emit('choose', chosen === offer.thing_id ? null : offer.thing_id)"
+            >Same as this</v-btn>
         </div>
     </div>
 </template>
@@ -74,10 +87,13 @@ const NEW = '__new__';
 // "Same thing?" (curation goal 4): what the world has that a new entry or
 // stub may already be (`same_as`, `SameOffer`s: name, kind, its candidate
 // line, so two of one name can be told apart; a stub marked so).
-// - `entry`: the question at the top of a create preview. The AI's
-//   verdict (`verdict`, id -> {verdict, why}) is only a hint beside its
-//   candidate, never a default: the answer starts as "new". "Yes, fill
-//   it" emits `choose` with the thing's id, "No, it's new" with null.
+// - `entry`: the draft's "Same thing?" (spec "The draft page" 2), shown
+//   only when there are candidates: a search over every entry, empty
+//   meaning the entry is new (the "No, it's new" toggle is gone), and the
+//   candidates under it, each with "Same as this". The AI's verdict
+//   (`verdict`, id -> {verdict, why}) is only a hint beside its candidate,
+//   never a default. A pick emits `choose` with the thing's id, clearing
+//   it `choose` with null.
 // - `row`: a stub row's small "same as X?" choice, "new" by default. A
 //   stub's kind is a guess, so it offers every kind; a choice of another
 //   kind than the row's (`kind`) shows "(a lore)" beside it (ruling C34).
@@ -93,6 +109,8 @@ export default {
         variant: { type: String, default: 'entry' },
         // the entry's or row's own kind, for the note on another kind
         kind: { type: String, default: null },
+        // ids the search never offers (the stub being filled)
+        exclude: { type: Array, default: () => [] },
     },
     emits: ['choose'],
     setup() {
@@ -112,7 +130,19 @@ export default {
             ];
         },
         chosenName() {
-            return this.offers.find((offer) => offer.thing_id === this.chosen)?.name || '';
+            return this.offers.find((offer) => offer.thing_id === this.chosen)?.name
+                || this.worlds.referenceTargets.find((target) => target.id === this.chosen)?.name
+                || '';
+        },
+        // the search: the candidates first, then every other entry (not
+        // stubs: filling one is Expand's)
+        searchItems() {
+            const offered = this.offers.map((offer) => ({ id: offer.thing_id, name: offer.name, line: offerSummary(offer) }));
+            const seen = new Set(offered.map((item) => item.id));
+            const rest = this.worlds.referenceTargets
+                .filter((target) => !target.stub && !seen.has(target.id) && !this.exclude.includes(target.id))
+                .map((target) => ({ id: target.id, name: target.name, line: target.kind }));
+            return [...offered, ...rest];
         },
     },
     methods: {
