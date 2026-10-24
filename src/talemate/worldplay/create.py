@@ -2698,8 +2698,8 @@ def _named_in_prompt(
 ) -> list[tuple[str, str, list[str]]]:
     """`(written, label, facts)` for each entry the owner picked for a name
     in the prompt (but `skip`, the stub being expanded): every fact it has
-    at the view's date, rendered, as scene setup shows them, in its kind's
-    category order. `ValueError` for a pick that's no thing."""
+    at the view's date, rendered (a held one worded as held), as scene setup
+    shows them, in its kind's category order, then written order. `ValueError` for a pick that's no thing."""
 
     named: list[tuple[str, str, list[str]]] = []
     for written, thing_id in picks.items():
@@ -2712,8 +2712,16 @@ def _named_in_prompt(
             view.name_of(thing_id) or "", state.kind, everyday_name(state)
         )
         rank = {c: i for i, c in enumerate(get_kind(state.kind).categories)}
-        facts = sorted(state.facts, key=lambda fact: rank.get(fact.category, len(rank)))
-        named.append((written, label, [view.render(f.text) for f in facts]))
+        facts = sorted(
+            state.facts,
+            key=lambda fact: (
+                rank.get(fact.category, len(rank)),
+                fact.created,
+                fact.fact_id,
+            ),
+        )
+        # a belief worded as held (final review I2)
+        named.append((written, label, [held_text(view, f, state) for f in facts]))
     return named
 
 

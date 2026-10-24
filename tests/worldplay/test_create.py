@@ -3021,6 +3021,41 @@ async def test_stub_accept_drops_fields_a_changed_kind_lacks(at_1020, path):
     assert count == 1
 
 
+async def test_a_picked_faith_is_named_in_the_prompt_with_its_beliefs_held(at_1020):
+    """A faith the owner picked for a name in the prompt is shown with its
+    beliefs worded as held ("... holds that ..."), never as world truth
+    (final review I2, the same rule for "Named in this prompt")."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="setup")) as rev:
+        church = rev.create_thing(
+            "lore", fields={"name": "Church of the Deep", "hint": "religion"}
+        )
+        rev.add_fact(church, "belief", "The rivers were wept into being.")
+        rev.add_fact(church, "general", "Its priests wear green.")
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            json.dumps({"name": "Veles", "facts": [
+                {"category": "nature", "text": "A river god."}
+            ]}),
+            "Veles is a river god.",
+        )
+        await preview_thing(
+            world,
+            "being",
+            "the river god of the Church of the Deep",
+            {},
+            client,
+            picks={"Church of the Deep": church},
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    named = prompt.split("Named in this prompt")[1].split("\n\n")[0]
+    assert "- Church of the Deep holds that the rivers were wept into being." in named
+    assert "- Its priests wear green." in named
+    assert "- The rivers were wept into being." not in prompt
+
+
 async def test_new_name_in_both_new_names_and_in_makes_one_stub(at_1020):
     """A name the facts invent (`new_names`) and the owner's "+ in..." on
     the same name make one stub: the facts link it, and the entry is
