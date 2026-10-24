@@ -32,28 +32,77 @@
   "scene": "plan_scene's setup is started as the model wrote it. Each narrator direction is run twice (A and B); A is pushed to the history, B is not."
  },
  "fallback_prompts": {
-  "tsardom": ["place", "Tsardom of Moscavia, the northern realm where every person became owl-folk"],
-  "velikoye": ["place", "Velikoye, the capital of the Tsardom of Moscavia"],
-  "khorol": ["place", "The Khorol River, which flows through Velikoye and the Tsardom of Moscavia"],
-  "runic": ["lore", "Runic Magic of the Tsardom: runes carved into stone that bind frost and wind"],
-  "order": ["lore", "The Order of the Talon-Scribe, the order of rune scribes that keeps and teaches the Tsardom's runes"],
-  "host": ["lore", "The Frostwing Host, the army of the Tsardom of Moscavia"],
-  "plumage": ["lore", "Plumage Signaling, the custom by which the Night Court's owl-folk speak by raising and settling their feathers"],
-  "koroleva": ["character", "Anastasiya Koroleva, Chief Scribe of the Order of the Talon-Scribe"]
+  "tsardom": [
+   "place",
+   "Tsardom of Moscavia, the northern realm where every person became owl-folk"
+  ],
+  "velikoye": [
+   "place",
+   "Velikoye, the capital of the Tsardom of Moscavia"
+  ],
+  "khorol": [
+   "place",
+   "The Khorol River, which flows through Velikoye and the Tsardom of Moscavia"
+  ],
+  "runic": [
+   "lore",
+   "Runic Magic of the Tsardom: runes carved into stone that bind frost and wind"
+  ],
+  "order": [
+   "lore",
+   "The Order of the Talon-Scribe, the order of rune scribes that keeps and teaches the Tsardom's runes"
+  ],
+  "host": [
+   "lore",
+   "The Frostwing Host, the army of the Tsardom of Moscavia"
+  ],
+  "plumage": [
+   "lore",
+   "Plumage Signaling, the custom by which the Night Court's owl-folk speak by raising and settling their feathers"
+  ],
+  "koroleva": [
+   "character",
+   "Anastasiya Koroleva, Chief Scribe of the Order of the Talon-Scribe"
+  ]
  },
  "session_prompts": {
-  "owlfolk": ["species", "Owl-folk: owl people. Everyone in the Tsardom of Moscavia became this race suddenly one day."],
-  "nightcourt": ["lore", "The Night Court, the council that governs the Tsardom of Moscavia after dark"],
-  "academy": ["place", "The Academy of the Chiseled Moon, where the Order of the Talon-Scribe trains its scribes in Velikoye"],
-  "whitetalon": ["lore", "The White Talon, the heavy regiment of the Frostwing Host"],
-  "frostedwing": ["lore", "The Frosted Wing, a regiment of eared owl-folk archers on the glacier edge of the Tsardom of Moscavia"],
-  "wattles": ["lore", "Wattles, a custom of Velikoye's owl-folk"],
-  "vasha": ["character", "Vasha, a young courier who carries sealed letters for the Order of the Talon-Scribe"],
+  "owlfolk": [
+   "species",
+   "Owl-folk: owl people. Everyone in the Tsardom of Moscavia became this race suddenly one day."
+  ],
+  "nightcourt": [
+   "lore",
+   "The Night Court, the council that governs the Tsardom of Moscavia after dark"
+  ],
+  "academy": [
+   "place",
+   "The Academy of the Chiseled Moon, where the Order of the Talon-Scribe trains its scribes in Velikoye"
+  ],
+  "whitetalon": [
+   "lore",
+   "The White Talon, the heavy regiment of the Frostwing Host"
+  ],
+  "frostedwing": [
+   "lore",
+   "The Frosted Wing, a regiment of eared owl-folk archers on the glacier edge of the Tsardom of Moscavia"
+  ],
+  "wattles": [
+   "lore",
+   "Wattles, a custom of Velikoye's owl-folk"
+  ],
+  "vasha": [
+   "character",
+   "Vasha, a young courier who carries sealed letters for the Order of the Talon-Scribe"
+  ],
   "koroleva_extra": " Chief Scribe of the Order of the Talon-Scribe. In secret she still carves runes the Order no longer approves.",
   "koroleva_extra_note": "Amended before any model call: the Task 11 test's 'pre-Blinding' names lore of the acceptance world that this fresh world doesn't have.",
   "scene": "Vasha brings a sealed letter to the Chief Scribe at The Academy of the Chiseled Moon"
  },
- "hints": {"tsardom": "nation", "runic": "field", "order": "order"},
+ "hints": {
+  "tsardom": "nation",
+  "runic": "field",
+  "order": "order"
+ },
  "owner_roles": {
   "academy>runic": "taught here",
   "plumage>owlfolk": "practised by",
@@ -75,56 +124,285 @@
  "tag": {
   "rule": "A reply's tag is right when it is in 'acceptable'. Reuse is scored only on drafts whose prompt's 'Tags in use' line holds an acceptable tag: reused when the reply's tag is one of those in use. A comma-joined tag is scored by its first part (ruling F8), as the app keeps it.",
   "acceptable": {
-   "owlfolk": ["people", "species", "race", "folk"],
-   "tsardom": ["nation", "realm", "kingdom", "tsardom", "country", "state", "empire"],
-   "velikoye": ["capital", "city"],
-   "khorol": ["river", "waterway"],
-   "nightcourt": ["council", "court", "government"],
-   "runic": ["field", "magic", "discipline", "art", "magic tradition"],
-   "order": ["order", "guild"],
-   "academy": ["institution", "academy", "school"],
-   "whitetalon": ["regiment"],
-   "frostedwing": ["regiment"],
-   "host": ["army", "military", "host", "armed forces"],
-   "plumage": ["custom", "tradition", "practice", "language"],
-   "wattles": ["custom", "tradition"],
-   "koroleva": ["official", "scribe", "administrator"],
-   "vasha": ["courier", "messenger"]
+   "owlfolk": [
+    "people",
+    "species",
+    "race",
+    "folk"
+   ],
+   "tsardom": [
+    "nation",
+    "realm",
+    "kingdom",
+    "tsardom",
+    "country",
+    "state",
+    "empire"
+   ],
+   "velikoye": [
+    "capital",
+    "city"
+   ],
+   "khorol": [
+    "river",
+    "waterway"
+   ],
+   "nightcourt": [
+    "council",
+    "court",
+    "government"
+   ],
+   "runic": [
+    "field",
+    "magic",
+    "discipline",
+    "art",
+    "magic tradition"
+   ],
+   "order": [
+    "order",
+    "guild"
+   ],
+   "academy": [
+    "institution",
+    "academy",
+    "school"
+   ],
+   "whitetalon": [
+    "regiment"
+   ],
+   "frostedwing": [
+    "regiment"
+   ],
+   "host": [
+    "army",
+    "military",
+    "host",
+    "armed forces"
+   ],
+   "plumage": [
+    "custom",
+    "tradition",
+    "practice",
+    "language"
+   ],
+   "wattles": [
+    "custom",
+    "tradition"
+   ],
+   "koroleva": [
+    "official",
+    "scribe",
+    "administrator"
+   ],
+   "vasha": [
+    "courier",
+    "messenger"
+   ]
   }
  },
  "in": {
-  "owlfolk": {"expected": [], "either": []},
-  "tsardom": {"expected": [], "either": []},
-  "velikoye": {"expected": ["tsardom"], "either": []},
-  "khorol": {"expected": ["tsardom", "velikoye"], "either": []},
-  "nightcourt": {"expected": ["tsardom"], "either": ["velikoye"]},
-  "runic": {"expected": [], "either": ["tsardom", "owlfolk", "order"]},
-  "order": {"expected": ["runic"], "either": ["tsardom", "velikoye"]},
-  "academy": {"expected": ["velikoye", "runic"], "either": ["order", "tsardom"]},
-  "whitetalon": {"expected": ["tsardom"], "either": ["host"]},
-  "frostedwing": {"expected": ["tsardom"], "either": ["host"]},
-  "host": {"expected": ["tsardom"], "either": []},
-  "plumage": {"expected": ["nightcourt", "owlfolk"], "either": ["tsardom", "velikoye"]},
-  "wattles": {"expected": ["velikoye"], "either": ["owlfolk", "tsardom"]},
-  "koroleva": {"expected": ["order"], "either": ["academy", "velikoye", "owlfolk", "tsardom"]},
-  "vasha": {"expected": ["order"], "either": ["velikoye", "tsardom", "owlfolk", "academy"]},
+  "owlfolk": {
+   "expected": [],
+   "either": []
+  },
+  "tsardom": {
+   "expected": [],
+   "either": []
+  },
+  "velikoye": {
+   "expected": [
+    "tsardom"
+   ],
+   "either": []
+  },
+  "khorol": {
+   "expected": [
+    "tsardom",
+    "velikoye"
+   ],
+   "either": []
+  },
+  "nightcourt": {
+   "expected": [
+    "tsardom"
+   ],
+   "either": [
+    "velikoye"
+   ]
+  },
+  "runic": {
+   "expected": [],
+   "either": [
+    "tsardom",
+    "owlfolk",
+    "order"
+   ]
+  },
+  "order": {
+   "expected": [
+    "runic"
+   ],
+   "either": [
+    "tsardom",
+    "velikoye"
+   ]
+  },
+  "academy": {
+   "expected": [
+    "velikoye",
+    "runic"
+   ],
+   "either": [
+    "order",
+    "tsardom"
+   ]
+  },
+  "whitetalon": {
+   "expected": [
+    "tsardom"
+   ],
+   "either": [
+    "host"
+   ]
+  },
+  "frostedwing": {
+   "expected": [
+    "tsardom"
+   ],
+   "either": [
+    "host"
+   ]
+  },
+  "host": {
+   "expected": [
+    "tsardom"
+   ],
+   "either": []
+  },
+  "plumage": {
+   "expected": [
+    "nightcourt",
+    "owlfolk"
+   ],
+   "either": [
+    "tsardom",
+    "velikoye"
+   ]
+  },
+  "wattles": {
+   "expected": [
+    "velikoye"
+   ],
+   "either": [
+    "owlfolk",
+    "tsardom"
+   ]
+  },
+  "koroleva": {
+   "expected": [
+    "order"
+   ],
+   "either": [
+    "academy",
+    "velikoye",
+    "owlfolk",
+    "tsardom"
+   ]
+  },
+  "vasha": {
+   "expected": [
+    "order"
+   ],
+   "either": [
+    "velikoye",
+    "tsardom",
+    "owlfolk",
+    "academy"
+   ]
+  },
   "judge": "A target the labels don't key (a stub the model made) is 'either' when the entry plausibly sits inside it under either side (a place in a place, a body in its realm, a member in its body), else false."
  },
  "file_into": {
-  "tsardom": {"expected": [], "either": ["velikoye", "khorol", "tsar", "nightcourt"]},
-  "velikoye": {"expected": [], "either": ["khorol", "nightcourt", "academy"]},
-  "khorol": {"expected": [], "either": []},
-  "nightcourt": {"expected": [], "either": ["tsar"]},
-  "runic": {"expected": [], "either": ["order", "academy"]},
-  "order": {"expected": [], "either": ["academy", "koroleva", "vasha"]},
-  "academy": {"expected": [], "either": ["koroleva"]},
-  "whitetalon": {"expected": [], "either": []},
-  "frostedwing": {"expected": [], "either": []},
-  "host": {"expected": ["whitetalon", "frostedwing"], "either": []},
-  "plumage": {"expected": [], "either": []},
-  "wattles": {"expected": [], "either": []},
-  "koroleva": {"expected": [], "either": []},
-  "vasha": {"expected": [], "either": []},
+  "tsardom": {
+   "expected": [],
+   "either": [
+    "velikoye",
+    "khorol",
+    "tsar",
+    "nightcourt"
+   ]
+  },
+  "velikoye": {
+   "expected": [],
+   "either": [
+    "khorol",
+    "nightcourt",
+    "academy"
+   ]
+  },
+  "khorol": {
+   "expected": [],
+   "either": []
+  },
+  "nightcourt": {
+   "expected": [],
+   "either": [
+    "tsar"
+   ]
+  },
+  "runic": {
+   "expected": [],
+   "either": [
+    "order",
+    "academy"
+   ]
+  },
+  "order": {
+   "expected": [],
+   "either": [
+    "academy",
+    "koroleva",
+    "vasha"
+   ]
+  },
+  "academy": {
+   "expected": [],
+   "either": [
+    "koroleva"
+   ]
+  },
+  "whitetalon": {
+   "expected": [],
+   "either": []
+  },
+  "frostedwing": {
+   "expected": [],
+   "either": []
+  },
+  "host": {
+   "expected": [
+    "whitetalon",
+    "frostedwing"
+   ],
+   "either": []
+  },
+  "plumage": {
+   "expected": [],
+   "either": []
+  },
+  "wattles": {
+   "expected": [],
+   "either": []
+  },
+  "koroleva": {
+   "expected": [],
+   "either": []
+  },
+  "vasha": {
+   "expected": [],
+   "either": []
+  },
   "judge": "A row the labels don't key (a stub, or an entry made later) is 'either' when it plausibly belongs inside the entry (a part, member, branch or what it holds), else false. Task 11 counted the Khorol River and the Night Court into the Host as false rows: they are false here."
  },
  "thin_stubs": {
@@ -148,24 +426,53 @@
   "rule": "Pairs from world.sameness.same_candidates over the final world, checked by hand: a pair is a duplicate when both name the same one thing."
  },
  "exceptions": {
-  "koroleva": {"expected": "one exception, on the Order's 'In' row, saying she still carves, in secret, runes the Order no longer approves, whose 'rejects' label is an Order item about which runes may be carved, taught or approved (judged). An exception whose rejects label resolves to no item is not sensible."},
-  "vasha": {"expected": "no exception (his prompt names no departure). Any exception the model writes is judged: sensible when its text departs from the very item its 'rejects' label names."},
+  "koroleva": {
+   "expected": "one exception, on the Order's 'In' row, saying she still carves, in secret, runes the Order no longer approves, whose 'rejects' label is an Order item about which runes may be carved, taught or approved (judged). An exception whose rejects label resolves to no item is not sensible."
+  },
+  "vasha": {
+   "expected": "no exception (his prompt names no departure). Any exception the model writes is judged: sensible when its text departs from the very item its 'rejects' label names."
+  },
   "rule": "An exception is sensible when its text is a real departure from (contradicts, or does differently from) the item its rejects label names, and isn't restated as an own fact."
  },
  "add_facts": {
-  "velikoye": {"prompt": "its winter markets and what they sell", "expected": "1 to 5 facts, each about Velikoye's winter markets or their goods; none repeating Velikoye's own facts; none contradicting the world"},
-  "tsardom_event": {"year": 997, "prompt": "a failed uprising of the human nobles against the owl-folk Tsar", "expected": "1 to 5 facts, each about that uprising (its cause, course, end or aftermath), all dated 997 (by code); none contradicting the world"},
+  "velikoye": {
+   "prompt": "its winter markets and what they sell",
+   "expected": "1 to 5 facts, each about Velikoye's winter markets or their goods; none repeating Velikoye's own facts; none contradicting the world"
+  },
+  "tsardom_event": {
+   "year": 997,
+   "prompt": "a failed uprising of the human nobles against the owl-folk Tsar",
+   "expected": "1 to 5 facts, each about that uprising (its cause, course, end or aftermath), all dated 997 (by code); none contradicting the world"
+  },
   "rule": "Judged by hand per fact: on the prompt and about the entry (right), off the prompt or about something else (false), a repeat of an existing fact (repeat)."
  },
  "group_add": {
-  "velikoye_none": {"tag": null, "prompt": "two taverns where owl-folk and humans drink together", "expected": "exactly 2 rows, each a named tavern or inn (kind place), each with its own tag in {tavern, inn, alehouse, taproom, pub}, neither an entry the world has"},
-  "order_none": {"tag": null, "prompt": "a chapter house of the Order in another city of the Tsardom", "expected": "exactly 1 row, a named place (kind place) with its own tag in {chapter house, chapterhouse, chapter, house, hall, outpost}, not an entry the world has"},
+  "velikoye_none": {
+   "tag": null,
+   "prompt": "two taverns where owl-folk and humans drink together",
+   "expected": "exactly 2 rows, each a named tavern or inn (kind place), each with its own tag in {tavern, inn, alehouse, taproom, pub}, neither an entry the world has"
+  },
+  "order_none": {
+   "tag": null,
+   "prompt": "a chapter house of the Order in another city of the Tsardom",
+   "expected": "exactly 1 row, a named place (kind place) with its own tag in {chapter house, chapterhouse, chapter, house, hall, outpost}, not an entry the world has"
+  },
   "rule": "Per row: right when named, of the kind and a fitting tag, and new; false otherwise (a duplicate, a role, the wrong count's extra rows). 'nearby' is the router's mentioned_in names: judged whether a row duplicates an entry that list holds or one it doesn't."
  },
  "f4": {
   "expected": "Anastasiya Koroleva is touched by the role rule when the setup's goal or premise names her filing role (whole words); her World block entry carries her filing line ('<Role> of Order of the Talon-Scribe, but: ...'). No other person is touched by a role the setup names only as part of a longer word.",
-  "touched_expected": ["velikoye", "runic", "tsardom", "order", "koroleva"],
-  "never_touched": ["vasha", "academy", "tsar"],
+  "touched_expected": [
+   "velikoye",
+   "runic",
+   "tsardom",
+   "order",
+   "koroleva"
+  ],
+  "never_touched": [
+   "vasha",
+   "academy",
+   "tsar"
+  ],
   "rule": "Score: Koroleva touched (yes/no); touched set against touched_expected (an extra entry the goal names in full is allowed); and, from the run's world, every filing role a substring match would have matched in the setup but the whole-word rule doesn't (each a false touch avoided)."
  },
  "f6": {
@@ -179,5 +486,16 @@
   ],
   "rubric": "As probe 5: per turn, the world details used from the block (listed); contradictions of the world (must be 0); flooding (passages reciting lore the direction didn't call for, judged); the Chief Scribe told as Anastasiya Koroleva, as her entry describes her (not invented); her filing line used as character, never recited; the Order's held facts told as held."
  },
- "bar": "Pass bars as Curation: at least 80% right and at most 5% false. A failure falls back to 'shown, unticked' (suggestions) or off (synopsis)."
+ "bar": "Pass bars as Curation: at least 80% right and at most 5% false. A failure falls back to 'shown, unticked' (suggestions) or off (synopsis).",
+ "fix_round_1": {
+  "note": "Added in fix round 1, before its model calls (ruling F31's re-run).",
+  "f31_cases": [
+   "runic",
+   "order",
+   "whitetalon"
+  ],
+  "f31_runs": "Each case in each run's world as it stood before that draft (rebuilt by replaying that run's recorded replies), 2 versions each, with the current code; the run's own recorded v1 is then accepted as before, so the next case sees the same world.",
+  "contradiction_rule": "A draft version contradicts the world when its own facts (not its names list) put the entry in a realm other than the Tsardom of Moscavia (an invented kingdom, tsardom or empire), or name as the realm's capital, the entry's seat city or the ruler a place or person that none of the world's entries at draft time gives for that role and that is written as the realm's own (e.g. 'the capital city of Khorov' when the world's capital is Velikoye). A new place in the realm (a city, a fortress) is no contradiction. Judged by hand per version, before (the run's recorded versions) and after (the re-run), against each run's own world.",
+  "bar": "no bar of its own: before against after, same cases"
+ }
 }
