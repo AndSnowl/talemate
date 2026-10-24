@@ -2705,7 +2705,7 @@ async def _open_sphere_world(plugin):
             },
         )
         s.tsardom = rev.create_thing(
-            "place", {"name": "Tsardom", "kind": "country", "hint": "nation"}
+            "place", {"name": "Tsardom", "tag": "country", "hint": "nation"}
         )
         rev.add_fact(s.tsardom, "description", "A northern realm.")
         s.vasha = rev.create_thing(
@@ -3082,14 +3082,14 @@ async def test_repoint_stub_notes_and_prose(plugin, monkeypatch):
     with world.revision(Source.manual(note="uses")) as rev:
         owls = rev.create_thing("species", {"name": "Owl-folk", "origin": s.tsardom})
         rev.set_field(s.harbour, "filings", [{"target": s.tsardom}], None)
-        rev.set_field(s.moscavy, "kind", "country", None)
-        rev.set_field(s.tsardom, "kind", "country", None)
+        rev.set_field(s.moscavy, "hint", "nation", None)
+        rev.set_field(s.tsardom, "hint", "nation", None)
 
     s.prose.clear()
     await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
     assert not _errors(plugin)
     assert not any(
-        "kind" in note for note in _last(plugin, "repoint_stub")["data"]["notes"]
+        "hint" in note for note in _last(plugin, "repoint_stub")["data"]["notes"]
     )
     assert owls in s.prose
     assert s.harbour not in s.prose
@@ -4899,12 +4899,13 @@ async def test_repoint_ref_teaches_the_target_its_names(plugin):
 async def test_change_stub_kind_notes_dropped_fields(plugin):
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
-        rev.set_field(s.wattle, "kind", "street", None)
+        rev.change_stub_kind(s.wattle, "event")
+        rev.set_field(s.wattle, "when", WorldDate.of(412).model_dump(), None)
 
     await _act(plugin, "change_stub_kind", id=s.wattle, kind="lore")
     reply = _last(plugin, "change_stub_kind")["data"]
     assert reply["kind"] == "lore"
-    assert reply["notes"] == ["a lore has no kind: it was dropped"]
+    assert reply["notes"] == ["a lore has no when: it was dropped"]
     # its tag and filing stay
     assert reply["tag"] == "district"
     assert [row["target_id"] for row in reply["in"]] == [s.velikoye]

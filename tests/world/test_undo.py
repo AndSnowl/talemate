@@ -393,7 +393,10 @@ def _referencing_write(kind):
     def thing_field(rev, oskar, home, new):
         rev.set_field(oskar, "heritage", new, None)
 
-    return {"fact": fact, "thing": thing_field}[kind]
+    def filing(rev, oskar, home, new):
+        rev.set_field(home, "filings", [{"target": new}], None)
+
+    return {"fact": fact, "thing": thing_field, "filing": filing}[kind]
 
 
 @pytest.fixture
@@ -404,7 +407,7 @@ def oskar_and_home(world):
     return oskar, home
 
 
-@pytest.mark.parametrize("kind", ["fact", "thing"])
+@pytest.mark.parametrize("kind", ["fact", "thing", "filing"])
 def test_undo_creation_conflicts_with_later_reference(world, oskar_and_home, kind):
     oskar, home = oskar_and_home
     with world.revision(Source.scene("s1", "E", "m1")) as rev:

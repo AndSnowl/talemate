@@ -812,3 +812,30 @@ def test_accept_same_carries_the_stubs_filings_whole(world):
         order,
         [copy.fact_id],
     )
+
+
+def test_same_offer_line_is_the_probes_entry_line(world):
+    """Review M3: an offer's line is the filing probe's entry line
+    (`create.filing_line`): kind and tag, everyday name, where it's filed
+    with its role, stub, then its summary or first fact."""
+
+    with world.revision(Source.manual(note="fen")) as rev:
+        marches = rev.create_thing("place", {"name": "The Marches"})
+        fen = rev.create_thing(
+            "place",
+            {
+                "name": "Greyholm Fen",
+                "tag": "fen",
+                "stub": {"ignored": False},
+                "aka": [{"name": "the Fen", "tag": "common", "everyday": True}],
+                "filings": [{"target": marches, "role": "border of"}],
+            },
+        )
+        rev.add_fact(fen, "description", "Reeds and mist.")
+    view = world.view()
+    (offer,) = create.same_offers(view, "Greyholm", near_ids=[])
+    assert offer.thing_id == fen
+    assert offer.line == (
+        "Greyholm Fen (place, fen; usually called the Fen; in The Marches "
+        "(border of); stub): Reeds and mist."
+    )

@@ -27,7 +27,8 @@ uncovered (undoing T1 and T2 of T1, N, T2 leaves N's value, quietly). A
 value or fact that can't come back because its thing was removed later
 counts as removed later. A thing whose creation is being undone is kept,
 with its rows, when a later revision outside the targets added rows to it
-or referenced it (from a fact, a `thing` field or a `things` field). A
+or referenced it (from a fact, a `thing` or `things` field, or a filing
+into it or `within` it). A
 stub's kind change is kept the same way when a later revision outside the
 targets gave it a value or fact the other kind has no room for.
 
@@ -57,8 +58,8 @@ CHANGED_LATER = "changed again in a later revision"
 REMOVED_LATER = "removed in a later revision"
 REFERENCED_LATER = "referenced in a later revision"
 
-# the names of fields that can hold a thing id (`thing` or `things`) on
-# some kind; each row's own kind decides whether its field
+# the names of fields that can hold a thing id (`thing` or `things`, and
+# `filings`) on some kind; each row's own kind decides whether its field
 # really does
 _REF_FIELD_NAMES = sorted(
     {
@@ -67,7 +68,20 @@ _REF_FIELD_NAMES = sorted(
         for spec in kind.fields
         if spec.type in ("thing", "things")
     }
+    # a filing names its target and its `within`
+    | {"filings"}
 )
+
+
+def _files_in(value: object, thing_id: str) -> bool:
+    """Whether a stored `filings` value files into `thing_id` or `within`
+    it."""
+
+    return isinstance(value, list) and any(
+        isinstance(filing, dict)
+        and thing_id in (filing.get("target"), filing.get("within"))
+        for filing in value
+    )
 
 
 class UndoConflict(BaseModel):
@@ -194,9 +208,10 @@ class _Planner:
     def _later_reference(self, thing_id: str, since: int) -> int | None:
         """The earliest later change after `since` (see `_later_write`)
         behind a live reference to `thing_id`: a fact mentioning it, a
-        `thing` field holding its id, or a `things` field listing it. A
-        reference an undo restored counts by its
-        origin, so a redo brings back its power to keep the thing."""
+        `thing` field holding its id, a `things` field listing it, or a
+        `filings` value filing something into it or `within` it. A
+        reference an undo restored counts by its origin, so a redo brings
+        back its power to keep the thing."""
 
         revs = [
             self._later_write("facts", row, since)
@@ -221,8 +236,10 @@ class _Planner:
         for row in rows:
             spec = next(f for f in KINDS[row["kind"]].fields if f.name == row["field"])
             value = json.loads(row["value_json"])
-            if (spec.type == "thing" and value == thing_id) or (
-                spec.type == "things" and thing_id in value
+            if (
+                (spec.type == "thing" and value == thing_id)
+                or (spec.type == "things" and thing_id in value)
+                or (spec.name == "filings" and _files_in(value, thing_id))
             ):
                 revs.append(self._later_write("field_values", row, since))
 

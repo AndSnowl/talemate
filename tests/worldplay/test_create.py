@@ -2676,3 +2676,102 @@ async def test_a_hint_sets_the_agent_default(church_world, world):
     )
     assert filled == church_world
     assert world.view().thing(church_world).fields["agent"] is True
+
+
+def test_a_hint_never_overrides_a_stubs_own_agent(church_world, world):
+    """Review M2: a stub whose `agent` is set keeps it when it's filled
+    with a hint that would default it otherwise."""
+
+    with world.revision(Source.manual(note="agent")) as rev:
+        rev.set_field(church_world, "agent", False, None)
+    preview = CreatePreview(
+        kind="lore",
+        prompt="The White Dawn",
+        name="The White Dawn",
+        facts=[PreviewFact(category="general", text="A faith of the dawn.")],
+        prose={},
+        hint="religion",
+        stub_id=church_world,
+    )
+    accept_preview(world, preview)
+    assert world.view().thing(church_world).fields["agent"] is False
+
+
+def _summary_of(world, thing_id):
+    from talemate.world.entries import summary, summary_fact
+
+    view = world.view()
+    fact = summary_fact(view.thing(thing_id))
+    return fact, summary(view, thing_id)
+
+
+async def test_accept_writes_the_replys_summary_as_the_summary_fact(world):
+    """Review F22: a create reply's `summary` is written on accept as the
+    entry's summary fact (origin `{"summary": True}`), in the category
+    a summary takes on its kind; the reads (`entries.summary`) show it."""
+
+    reply = json.dumps(
+        {
+            "name": "The Pale Order",
+            "summary": "An order of scribes who keep the rune census.",
+            "facts": [{"category": "general", "text": "They meet at dusk."}],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "The Pale Order keeps records.")
+        preview = await preview_thing(world, "lore", "an order of scribes", {}, client)
+    assert preview.summary == "An order of scribes who keep the rune census."
+    thing_id = accept_preview(world, preview)
+    fact, text = _summary_of(world, thing_id)
+    assert fact is not None and fact.origin == {"summary": True}
+    assert fact.category == "general"
+    assert text == "An order of scribes who keep the rune census."
+    others = [
+        f for f in world.view().thing(thing_id).facts if f.fact_id != fact.fact_id
+    ]
+    assert [f.text for f in others] == ["They meet at dusk."]
+
+
+def test_accept_marks_the_first_fact_the_summary(church_world, world):
+    """Review F22: with no summary in the reply, accept marks the first
+    own fact written as the summary, for a new entry and a filled stub
+    alike; its holder stays in its origin."""
+
+    preview = CreatePreview(
+        kind="lore",
+        prompt="Runeweaving",
+        name="Runeweaving",
+        facts=[
+            PreviewFact(category="general", text="Runes are cut.", ticked=False),
+            PreviewFact(category="general", text="Runeweaving binds runes."),
+            PreviewFact(category="general", text="It is taught in Velikoye."),
+        ],
+        prose={},
+    )
+    thing_id = accept_preview(world, preview)
+    fact, text = _summary_of(world, thing_id)
+    assert fact.origin == {"summary": True}
+    assert text == "Runeweaving binds runes."
+
+    filled = accept_preview(
+        world,
+        CreatePreview(
+            kind="lore",
+            prompt="The White Dawn",
+            name="The White Dawn",
+            facts=[
+                PreviewFact(
+                    category="general",
+                    text="The faith of the dawn.",
+                    held_by=thing_id,
+                ),
+            ],
+            prose={},
+            stub_id=church_world,
+        ),
+    )
+    fact, text = _summary_of(world, filled)
+    assert fact.origin == {"held_by": thing_id, "summary": True}
+    assert text == "The faith of the dawn."

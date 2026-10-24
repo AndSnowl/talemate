@@ -48,8 +48,9 @@ def test_lineage_order(world, heritage_world):
 
 
 def test_lineage_has_no_culture_layer(world, heritage_world):
-    """A character's legacy `culture` field is no longer a lineage layer:
-    the culture passes no facts down (cultures are spheres, tied to)."""
+    """A culture is no lineage layer: it passes no facts down (a
+    character is filed in a culture, lore tagged culture, never inherits
+    from it)."""
 
     h = heritage_world
     view = world.view()

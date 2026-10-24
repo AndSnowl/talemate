@@ -73,7 +73,7 @@ FALLBACK_KIND = "lore"
 class SameOffer(SameCandidate):
     """A thing a new name could be the same as (`world.sameness`), as the
     preview shows it: its name and kind, its line in the "Entries near this
-    one" list (`create.candidate_line`: kind, other name, stub, its
+    one" list (`create.filing_line`: kind and tag, other name, where it's filed, stub, its
     summary or first fact), so two of one name can be told apart, whether
     it has facts of its own (only then is a verdict asked), and whether
     it's a stub."""

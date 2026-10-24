@@ -116,7 +116,6 @@ def test_change_stub_kind_any_kind(world):
             "place",
             fields={
                 "name": "Frosthollow",
-                "kind": "valley",
                 "tag": "valley",
                 "stub": {"ignored": False},
             },
@@ -141,7 +140,6 @@ def test_change_stub_kind_any_kind(world):
         "Flooded in the thaw.": "general",
         "Few live there.": "general",
     }
-    assert "kind" not in state.fields
     assert state.fields["tag"] == "valley"
     _check_replay(world)
 
@@ -173,7 +171,6 @@ def test_change_stub_kind_any_kind(world):
     assert report.conflicts == []
     state = world.view().thing(stub)
     assert state.kind == "place"
-    assert state.fields["kind"] == "valley"
     assert _facts_by_text(world, stub) == {
         "A cold valley.": "description",
         "Flooded in the thaw.": "history",
@@ -234,13 +231,13 @@ def test_undo_kind_change_kept_when_later_rows_need_the_new_kind(world):
 def test_undo_kind_change_kept_when_a_later_field_needs_the_new_kind(world):
     stub, _, _ = _lore_stub(world)
     with world.revision(Source.manual()) as rev:
-        rev.change_stub_kind(stub, "place")
+        rev.change_stub_kind(stub, "character")
         kind_rev = rev.rev
     with world.revision(Source.manual()) as rev:
-        # a place's own field, which lore has no room for
-        rev.set_field(stub, "kind", "valley", None)
+        # a character's own field, which lore has no room for
+        rev.set_field(stub, "color", "grey", None)
 
     report = world.undo([kind_rev])
     assert [c.thing_id for c in report.conflicts] == [stub]
-    assert world.view().thing(stub).kind == "place"
+    assert world.view().thing(stub).kind == "character"
     _check_replay(world)

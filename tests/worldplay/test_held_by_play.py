@@ -266,7 +266,7 @@ def test_candidate_lines_tell_held_facts_as_belief(world, spheres_world):
     """Ruling C33: an "Entries near this one" line tells a held fact as
     belief, never as plain truth."""
 
-    from talemate.worldplay.create import candidate_line
+    from talemate.worldplay.create import filing_line
 
     s = spheres_world
     with world.revision(Source.manual()) as rev:
@@ -276,7 +276,7 @@ def test_candidate_lines_tell_held_facts_as_belief(world, spheres_world):
         )
         rev.add_fact(night, "general", "It fell in 994.")
     view = world.view()
-    assert candidate_line(view, view.thing(night)) == (
+    assert filing_line(view, view.thing(night)) == (
         "The Night of Feathers (lore): The White Dawn holds that every owl lost "
         "its sight."
     )

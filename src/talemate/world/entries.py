@@ -10,9 +10,11 @@
 - **Acting in the world.** A character, or a `being` whose `existence` is
   `real`, acts in the world (`acts_in_world`): it can be cast in a scene,
   and on a timeline it's a member of what it's filed in, never a part.
-- **Summary.** An entry's summary is its `about` fact whose origin marks
-  it `summary` (ruling P21; `summary_fact`), its description prose written
-  from it first (`summary`).
+- **Summary.** An entry's summary is its fact whose origin marks it
+  `summary` (`SUMMARY_ORIGIN`, ruling P21; `summary_fact`), in whatever
+  category its kind gives it (a place's `about`, lore's `general`), its
+  description prose written from it first (`summary`). Accepting a draft
+  writes one.
 """
 
 from .kinds import DEFAULT_EXISTENCE, EXISTENCE_VALUES
@@ -20,6 +22,7 @@ from .view import FactState, ThingState, WorldView
 
 __all__ = [
     "BELIEF_CATEGORY",
+    "SUMMARY_ORIGIN",
     "acts_in_world",
     "existence",
     "held_by",
@@ -31,6 +34,9 @@ __all__ = [
 
 # the fact category whose facts are held by their owner, unmarked
 BELIEF_CATEGORY = "belief"
+
+# the origin key that marks a fact its entry's summary
+SUMMARY_ORIGIN: dict[str, object] = {"summary": True}
 
 
 def with_held_by(
@@ -77,23 +83,20 @@ def acts_in_world(state: ThingState) -> bool:
 
 
 def is_summary_fact(fact: FactState) -> bool:
-    """Whether the fact is an entry's summary: an `about` fact whose origin
-    marks it so (ruling P21)."""
+    """Whether the fact is an entry's summary: one whose origin marks it
+    so (ruling P21), in any category."""
 
-    return fact.category == "about" and (fact.origin or {}).get("summary") is True
+    return (fact.origin or {}).get("summary") is True
 
 
 def summary_fact(state: ThingState) -> FactState | None:
-    """The entry's summary fact (`is_summary_fact`), else, for one written
-    before there was one, its first written `about` fact; `None` for
+    """The entry's summary fact (`is_summary_fact`, the first written if
+    a fold left two), else its first written `about` fact; `None` for
     neither."""
 
-    about = sorted(
-        (fact for fact in state.facts if fact.category == "about"),
-        key=lambda fact: fact.created,
-    )
-    return next((fact for fact in about if is_summary_fact(fact)), None) or (
-        about[0] if about else None
+    facts = sorted(state.facts, key=lambda fact: fact.created)
+    return next((fact for fact in facts if is_summary_fact(fact)), None) or next(
+        (fact for fact in facts if fact.category == "about"), None
     )
 
 

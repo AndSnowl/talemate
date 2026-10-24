@@ -59,11 +59,11 @@ async def test_generate_section_passes_other_categories_as_background(world):
 async def test_generate_section_background_includes_core_fields(world):
     """A place's single `description` section covers every one of its fact
     categories, so there are no "other" facts to carry as background --
-    but its core fields (here, its own `kind` and `name`) still are."""
+    but its core fields (here, its tag and `name`) still are."""
 
     with world.revision(Source.manual(note="setup")) as rev:
         lowmere = rev.create_thing(
-            "place", fields={"name": "Lowmere", "kind": "harbor town"}
+            "place", fields={"name": "Lowmere", "tag": "harbor town"}
         )
         rev.add_fact(lowmere, "description", "Half its streets are flooded.")
 
@@ -403,7 +403,7 @@ async def test_place_description_leaves_out_statements_and_timeline(world):
     with world.revision(Source.manual(note="setup")) as rev:
         tsardom = rev.create_thing(
             "place",
-            fields={"name": "Moscavia", "kind": "country"},
+            fields={"name": "Moscavia", "tag": "country"},
         )
         rev.add_fact(tsardom, "description", "A northern realm of pine forest.")
         rev.add_fact(tsardom, "statement", "Only owl-folk may hold land.")

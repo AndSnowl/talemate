@@ -148,10 +148,8 @@ KINDS: dict[str, KindSpec] = {
     ),
     "place": KindSpec(
         name="place",
-        fields=_fields(
-            ("name", "text"),
-            ("kind", "text"),
-        ),
+        # what it is ("river", "city") is its tag
+        fields=_fields(("name", "text")),
         # its timeline, summary (`about`) and statement facts too, which a
         # prompt never writes (`UNPROMPTED_CATEGORIES`)
         categories=[

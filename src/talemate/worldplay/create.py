@@ -141,6 +141,7 @@ from talemate.prompts import Prompt
 from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar, Era
 from talemate.world.curation import CurationSettings
+from talemate.world.entries import SUMMARY_ORIGIN
 from talemate.world.dates import WorldDate
 from talemate.world.filing import (
     FIELD_ROLES,
@@ -159,6 +160,7 @@ from talemate.world.kinds import (
     UNPROMPTED_CATEGORIES,
     get_kind,
     kinds_can_be_one,
+    moved_category,
     validate_field,
 )
 from talemate.world.refs import parse_refs, ref
@@ -453,6 +455,9 @@ class CreatePreview(BaseModel):
     # change), and the prompt hint it was written with, if any
     tag: str | None = None
     hint: str | None = None
+    # its one-line summary, if the reply gave one: written on accept as
+    # its summary fact (else its first own fact is marked so)
+    summary: str | None = None
     # "In": where it's filed (`PreviewFiling`)
     filings: list[PreviewFiling] = Field(default_factory=list)
     # "File into this": entries that belong in it (`FileIntoRow`)
@@ -1289,31 +1294,6 @@ def _clip(text: str, limit: int = CANDIDATE_LINE_CHARS) -> str:
     return text[: limit - 1].rsplit(" ", 1)[0] + "\u2026"
 
 
-def candidate_line(view: WorldView, state: ThingState) -> str:
-    """One entry of the "Entries near this one" list, as the curation probe
-    wrote it: "Name (kind; usually called X; stub): its summary or first
-    fact", the text cut at `CANDIDATE_LINE_CHARS`; a held fact reads as
-    belief (`held.held_text`, ruling C33)."""
-
-    bits = [state.kind]
-    everyday = everyday_name(state)
-    if everyday:
-        bits.append(f"usually called {everyday}")
-    if state.is_stub:
-        bits.append("stub")
-    # its summary fact, if it has one (`entries.is_summary_fact`)
-    fact = next((f for f in state.facts if entries.is_summary_fact(f)), None)
-    if fact is None and state.facts:
-        fact = min(state.facts, key=lambda f: f.created)
-    # a held fact as belief (ruling C33), never as plain truth
-    line = (
-        _clip(held_text(view, fact, state))
-        if fact is not None
-        else "(nothing written yet)"
-    )
-    return f"{view.name_of(state.id)} ({'; '.join(bits)}): {line}"
-
-
 def entry_names(view: WorldView, prefer: Sequence[str] = ()) -> dict[str, str]:
     """`name key -> thing id` over every live thing's name and other names
     (ignoring case and a leading article), read once for a reply's many
@@ -1614,7 +1594,7 @@ def same_offers(
                 **found.model_dump(),
                 name=view.name_of(state.id) or "",
                 kind=state.kind,
-                line=candidate_line(view, state),
+                line=filing_line(view, state),
                 has_facts=bool(state.facts),
                 stub=state.is_stub,
             )
@@ -3066,6 +3046,12 @@ async def preview_thing(
     tag = known_tag or clean_tag(
         wrapper.get("tag") if wrapper is not None else _cut_off_tag(reply)
     )
+    raw_summary = wrapper.get("summary") if wrapper is not None else None
+    summary = (
+        " ".join(raw_summary.split())
+        if isinstance(raw_summary, str) and raw_summary.strip(" .")
+        else None
+    )
     # "In": the owner's own, ticked, then the model's, unticked (F7)
     filings = list(owned)
     if nearby:
@@ -3202,6 +3188,7 @@ async def preview_thing(
         verdict=verdict,
         tag=tag,
         hint=hint,
+        summary=summary,
         filings=filings,
         file_into=file_into,
         move_here=move_here,
@@ -3513,14 +3500,17 @@ def name_thing(
         rev.set_field(thing_id, "aka", aka, None)
 
 
-def _hint_agent(preview: CreatePreview) -> dict[str, bool]:
+def _hint_agent(preview: CreatePreview, stub: Any = None) -> dict[str, bool]:
     """`{"agent": <bool>}`, the default its prompt hint gives an entry
     (`kinds.HINT_AGENT`: a religion, nation or order acts; a culture or
-    field doesn't), unless the owner's fields set it; nothing for no hint
-    or one the table doesn't list."""
+    field doesn't), unless the owner's fields set it, or the `stub` being
+    filled has it already; nothing for no hint or one the table doesn't
+    list."""
 
     agent = HINT_AGENT.get(preview.hint or "")
-    if "agent" in preview.fields or agent is None:
+    if agent is None or "agent" in preview.fields:
+        return {}
+    if stub is not None and "agent" in stub.fields:
         return {}
     return {"agent": agent}
 
@@ -3615,7 +3605,7 @@ def _write_preview(
                 rev.set_field(thing_id, "tag", preview.tag, None)
             if preview.hint:
                 rev.set_field(thing_id, "hint", preview.hint, None)
-            for field, value in _hint_agent(preview).items():
+            for field, value in _hint_agent(preview, stub).items():
                 rev.set_field(thing_id, field, value, None)
             rev.remove_field_value(thing_id, "stub", None)
 
@@ -3636,19 +3626,37 @@ def _write_preview(
             linked.update(parse_refs(written))
             return written
 
+        # its summary (ruling P21): the reply's, else its first own fact,
+        # unless the stub it fills has one already
+        has_summary = stub is not None and any(
+            entries.is_summary_fact(f) for f in stub.facts
+        )
+        summary = (preview.summary or "").strip()
+        if summary and not has_summary:
+            rev.add_fact(
+                thing_id,
+                moved_category(preview.kind, "about", False),
+                linked_text(summary),
+                origin=dict(SUMMARY_ORIGIN),
+            )
+            has_summary = True
         for fact in preview.facts:
             if not fact.ticked:
                 continue
             # a holder deleted since the preview holds nothing
             holder = redirect.get(fact.held_by or "", fact.held_by)
             held = holder is not None and view.thing(holder) is not None
+            origin = entries.with_held_by(None, holder) if held else None
+            if not has_summary:
+                origin = {**(origin or {}), **SUMMARY_ORIGIN}
+                has_summary = True
             rev.add_fact(
                 thing_id,
                 fact.category,
                 linked_text(fact.text),
                 valid_from=fact.since,
                 overrides=fact.overrides,
-                origin=entries.with_held_by(None, holder) if held else None,
+                origin=origin,
             )
         _write_entry_filings(
             rev,

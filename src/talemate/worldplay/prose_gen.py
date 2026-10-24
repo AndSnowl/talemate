@@ -93,7 +93,7 @@ PROSE_PROMPT_KIND = "analyze"
 # section's own facts say nothing about them (e.g. a personality section
 # with no appearance facts at all still knows it's writing about an owl,
 # not a human)
-_CORE_BACKGROUND_FIELDS: tuple[str, ...] = ("name", "born", "kind")
+_CORE_BACKGROUND_FIELDS: tuple[str, ...] = ("name", "born", "tag")
 
 NO_CLIENT_MESSAGE = "No AI client is configured for the creator agent"
 
@@ -271,7 +271,8 @@ def background_for_section(
         if field == "born":
             born = value if isinstance(value, WorldDate) else WorldDate(**value)
             background.append(f"Born in {calendar.format(born)}.")
-        elif field == "kind":
+        elif field == "tag":
+            # what it is: "A harbor town."
             background.append(f"A {value}.")
         elif field == "name":
             background.append(f"Named {value}.")

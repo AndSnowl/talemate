@@ -275,3 +275,5 @@ def test_the_old_structure_is_gone():
     gone |= {"template", "drawers", "owner", "place", "drops"}
     for kind in KINDS.values():
         assert not gone & {f.name for f in kind.fields}, kind.name
+    # the tag says what a place is: no `kind` text field of its own
+    assert "kind" not in {f.name for f in get_kind("place").fields}

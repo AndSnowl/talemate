@@ -113,7 +113,7 @@ def eternal(world):
             "place",
             {
                 "name": "Tsardom of Moscavia",
-                "kind": "country",
+                "tag": "country",
                 "aka": [{"name": "Moscavia", "tag": "common", "everyday": True}],
             },
         )
@@ -121,7 +121,7 @@ def eternal(world):
             "place",
             {
                 "name": "Moskov",
-                "kind": "city",
+                "tag": "city",
                 "filings": _filed(tsardom),
             },
         )
@@ -421,7 +421,8 @@ async def test_candidates_come_from_filing_nearness(world, eternal):
     )
     assert not [line for line in lines if "drawer" in line.split("):", 1)[0]]
     assert lines[1].startswith(
-        "Tsardom of Moscavia (place; usually called Moscavia): The Tsardom of "
+        "Tsardom of Moscavia (place, country; usually called Moscavia): The "
+        "Tsardom of "
         "Moscavia is a vast northern kingdom"
     )
     names = [line.split(" (", 1)[0] for line in lines]
