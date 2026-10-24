@@ -497,7 +497,7 @@ def test_move_fact_and_held_by(app, page):
     thing = _open_thing(page, "The Divine Right of the Tsar")
 
     # Esc closes an inline editor
-    thing.get_by_role("button", name="Add fact").click()
+    thing.get_by_role("button", name="Add fact", exact=True).click()
     thing.get_by_test_id("fact-form").get_by_label("Fact", exact=True).click()
     page.keyboard.press("Escape")
     expect(thing.get_by_test_id("fact-form")).to_have_count(0)

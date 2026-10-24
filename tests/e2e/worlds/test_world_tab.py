@@ -134,7 +134,7 @@ def test_add_fact_updates_page(app, page):
     _world_tab(page)
     thing = _open_thing(page, "Maren Vos")
 
-    thing.get_by_role("button", name="Add fact").click()
+    thing.get_by_role("button", name="Add fact", exact=True).click()
     form = thing.get_by_test_id("fact-form")
     form.get_by_label("Fact", exact=True).fill("A pale scar along her jaw.")
     form.get_by_label("From year").fill("316")

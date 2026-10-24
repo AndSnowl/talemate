@@ -10,7 +10,6 @@ preview files.
 
 from __future__ import annotations
 
-import re
 
 from playwright.sync_api import expect
 
@@ -214,22 +213,6 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     fact.get_by_test_id("linked-ref").filter(has_text="Yelena").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-
-    # "Make it a sphere…" on the culture stub: the Spheres box, from the
-    # stub, its template a culture
-    card = _stub_card(
-        page, fact.get_by_test_id("linked-stub").filter(has_text="Old Rite")
-    )
-    card.get_by_role("button", name="Make it a sphere…").click()
-    box = page.get_by_test_id("create-box")
-    box.get_by_test_id("from-stub").filter(has_text="Old Rite").wait_for(
-        state="visible", timeout=TIMEOUT_MS
-    )
-    assert "New sphere" in box.inner_text()
-    culture = box.get_by_test_id("sphere-template-picker").get_by_role(
-        "button", name="Culture"
-    )
-    expect(culture).to_have_class(re.compile(r"v-btn--active"))
 
 
 def test_setup_cards_show_stub_previews(app, page, fixed_setup, fixed_preview):

@@ -82,8 +82,8 @@ import { escapeCloses } from './worldKinds.js';
 // open page's own facts:
 // - "Move to…": the fact moves onto another entry (`move_fact`: copied
 //   with a new id and removed here, one revision);
-// - "Held by…": a sphere, character or being holds it as a belief
-//   (`set_held_by`), or Clear makes it the world's truth again.
+// - "Held by…": any other entry (a faith, a people, a character) holds it
+//   as a belief (`set_held_by`), or Clear makes it the world's truth again.
 // Each opens a small menu; Esc closes it (once its picker's list is shut).
 export default {
     name: 'FactRowActions',
@@ -102,11 +102,9 @@ export default {
         targets() {
             return this.worlds.referenceTargets.filter((target) => target.id !== this.worlds.selectedThingId);
         },
-        // spheres (place spheres too), characters and beings
+        // every other entry (not a stub): any live entry may hold a belief
         holders() {
-            const spheres = (this.worlds.things.sphere || []).filter((thing) => !thing.stub);
-            const people = [...(this.worlds.things.character || []), ...(this.worlds.things.being || [])].filter((thing) => !thing.stub);
-            return [...spheres, ...people].filter((thing) => thing.id !== this.worlds.selectedThingId);
+            return this.worlds.referenceTargets.filter((target) => !target.stub && target.id !== this.worlds.selectedThingId);
         },
     },
     methods: {

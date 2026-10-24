@@ -80,27 +80,22 @@
 // touches the rest of the fact. `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
-// Spheres: the create box of kind "sphere" previews a sphere's core
-// (`previewSphere`: a template and a prompt, a stub it expands, or the
-// thing "Make it a sphere…" promotes, `promoting`) into `spherePreview`;
-// "+ New branch" on a sphere's page previews a branch (`previewBranch`)
-// into `branchPreview`. Either is written by `accept_sphere`, which opens
-// the sphere. Fill (`fillDrawer`) asks for one drawer's items at a time
-// (`fill`); `acceptFill` writes those the owner kept. The page's sphere
-// edits (`setDrawers`, `setPartOf`, `setTies`, `addException`,
-// `endItem`) answer with the thing edited; when that's not the open page
-// (a thing filed from the sphere's "+ Add"), the page is fetched again.
-// `addTie` adds a tie from the sphere's side: the character is fetched
-// first, since `set_ties` writes its whole list (`tieQueue`).
-// `fetchSphere` keeps a sphere's payload in `sphereInfo` (for a Part of
-// editor's drawers, or the items an exception can reject). A character
-// preview's proposed ties can be dropped, whole or one exception at a
-// time, before it's accepted (`dropPreviewTie`, `dropPreviewException`).
+// Filing and tags (the entry page, mockup v3): `addFiling`, `editFiling`
+// ("End this" is an `until`), `removeFiling` and `addException` edit the
+// open page's "In" rows; `setTag` gives any entry its tag (the page's own
+// chip, or a Connected row dragged to another group, which may be another
+// thing: its reply refreshes the open page); `listTags` keeps `tags`
+// (`list_tags`) for the picker and the Tags tab, whose `renameTag` and
+// `mergeTag` retag every entry. A group's "✎ Synopsis" (`groupSynopsis`)
+// and "+ Add" (`groupAdd`, then `acceptGroupAdd` or `discardGroupAdd`)
+// are kept per page and tag (`groupKey`) in `synopses` and `groupAdds`.
+// "+ Add facts…" and "+ Add event…" (`addFacts`, `addEvent`) draft a few
+// facts into `factDraft`, which `acceptFacts` writes as the owner left it.
 //
 // History (the thing page's back arrow): `section` is the World tab's
 // open section (a kind's list, or 'stubs'), and a page is `{section,
 // thingId, at}` (`thingId` null for the section itself). Opening a page
-// (`openThing`: a link, a card, a drawer item, a tie, a reference; a
+// (`openThing`: a link, a card, an "In" or Connected row, a reference; a
 // section from the side list, `showSection`; an accepted preview's page)
 // pushes the page left onto `history`, unless it's the same page (a thing
 // as of another date is the same page). `goBack` pops it without pushing,
@@ -114,12 +109,10 @@
 // page on the stub opens the target instead.
 //
 // Curation: a preview is edited in place before it's accepted
-// (`editPreview(type, changes)`, type 'create', 'sphere', 'branch' or
-// 'fill'): its own facts' and items' ticks, the elsewhere facts (ticks,
-// categories, a stub row's "same as X?"), the move-in and re-file rows. An
-// accept sends the preview as the owner left it, ticks and all.
-// `addOuterBody` asks `add_outer_body` to put a body the owner names
-// around a part; the reply replaces that preview. The answer to "Is this
+// (`editPreview('create', changes)`): its own facts' ticks, the elsewhere
+// facts (ticks, categories, a stub row's "same as X?"), the move-in rows.
+// An accept sends the preview as the owner left it, ticks and all. The
+// answer to "Is this
 // X?" goes with the accept (`acceptPreview(..., {sameTargetId})`). Every
 // accept's `notes` (what was left out, and why) land in `notes` for the
 // World tab to show, as do a move's, a merge's and a date pick's. A merge
@@ -133,6 +126,7 @@
 import { defineStore } from 'pinia';
 
 import { formatDate } from '../components/worlds/worldDates.js';
+import { groupKey } from '../components/worlds/entryPage.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
@@ -386,66 +380,20 @@ export function previewSegments(text, newNames = []) {
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref', 'set_held_by'];
 
-// sphere edits: each answers with the thing it changed, which may not be
-// the open page
-const SPHERE_EDITS = ['set_drawers', 'set_part_of', 'set_ties', 'add_exception', 'end_item', 'accept_fill', 'add_statement'];
+// filing and tag edits: each answers with the thing it changed, which may
+// not be the open page (a Connected row retagged by a drag)
+const FILING_EDITS = ['add_filing', 'edit_filing', 'remove_filing', 'add_exception', 'set_tag', 'accept_group_add', 'accept_facts'];
 
-// what a sphere page shows in its drawers, Timeline and summary rather
-// than among its facts
-const SPHERE_FACT_CATEGORIES = ['statement', 'timeline', 'about'];
-
-// The facts a thing page lists under Facts: on a sphere page (a place
-// sphere too) not its statements, timeline and about facts, which show
-// (and are edited) where they belong; on a character's not its "but…"
-// exceptions, which its Ties show.
+// The facts a thing page lists under Facts: not its summary, which heads
+// the page, nor the "but…" exceptions its "In" rows show.
 export function listedFacts(thing) {
-    const exceptions = new Set((thing?.ties || []).flatMap((tie) => tie.exceptions.map((e) => e.fact_id)));
-    return (thing?.facts || []).filter(
-        (fact) => !exceptions.has(fact.fact_id) && !(thing.sphere && SPHERE_FACT_CATEGORIES.includes(fact.category)),
-    );
+    const exceptions = new Set((thing?.in || []).flatMap((row) => row.exceptions.map((e) => e.fact_id)));
+    return (thing?.facts || []).filter((fact) => !exceptions.has(fact.fact_id) && !fact.summary);
 }
-
-// the message when a character is tied from a sphere it's tied to already
-export const ALREADY_TIED = 'already tied; edit the tie on its page';
 
 // A wire date as a request takes it (no label), or null.
 export function dateIn(date) {
     return date ? { instant: date.instant, precision: date.precision } : null;
-}
-
-// A character's (or real being's) payload `ties` as `set_ties` takes
-// them, each with the part of its sphere it's `within` (null: the sphere
-// as a whole).
-export function tiesPayload(ties) {
-    return (ties || []).map((tie) => ({
-        sphere_id: tie.sphere_id,
-        role: tie.role || '',
-        since: dateIn(tie.since),
-        until: dateIn(tie.until),
-        within: tie.within || null,
-    }));
-}
-
-// The items of a sphere payload an exception can depart from: `{title,
-// value}`, value `{thing_id}` or `{fact_id}`, each once, in drawer order.
-export function rejectableItems(sphere) {
-    const items = [];
-    for (const drawer of sphere?.drawers || []) {
-        for (const item of drawer.items) {
-            const value = item.thing_id ? { thing_id: item.thing_id } : { fact_id: item.fact_id };
-            items.push({ title: item.name, value });
-        }
-    }
-    return items;
-}
-
-// A branch preview with the parent item `row` kept (`kept`) or dropped:
-// a thing item goes in `drops`, a statement in `rejects`.
-export function branchKept(preview, row, kept) {
-    const key = row.thing_id ? 'drops' : 'rejects';
-    const id = row.thing_id || row.fact_id;
-    const others = (preview[key] || []).filter((other) => other !== id);
-    return { ...preview, [key]: kept ? others : [...others, id] };
 }
 
 // --- curation -----------------------------------------------------------------
@@ -467,19 +415,14 @@ function plural(count, one, many = `${one}s`) {
     return `${count} ${count === 1 ? one : many}`;
 }
 
-// What accepting a preview (create, a sphere's core or Fill) would write:
-// `{facts, items, here, elsewhere, stubs, movedIn, refiled}` -- its own
-// facts ticked, its items ticked (a sphere's or Fill's: a statement, or
-// one linking an entry the world has; a named new one counts only as the
-// stub it makes), `here` the two together, the elsewhere facts ticked, the
-// new stubs it'd make (its new names, the new entries a ticked elsewhere
-// fact goes onto, its named new items; not one the owner marked as some
-// thing already), and the facts moving in and entries re-filed, ticked.
+// What accepting a preview would write: `{facts, elsewhere, stubs,
+// movedIn}` -- its own facts ticked, the elsewhere facts ticked, the new
+// stubs it'd make (its new names, the new entries a ticked elsewhere fact
+// goes onto; not one the owner marked as some thing already), and the
+// facts moving in, ticked.
 export function previewCounts(preview) {
     const ticked = (rows) => (rows || []).filter((row) => row.ticked !== false);
-    const isNewItem = (item) => !!item.name && !item.thing_id && !item.same_target_id;
     const elsewhere = ticked(preview?.elsewhere);
-    const items = ticked(preview?.items);
     const stubs = new Set();
     for (const row of preview?.new_names || []) {
         if (!row.same_target_id) {
@@ -491,40 +434,19 @@ export function previewCounts(preview) {
             stubs.add(nameKey(row.new.name));
         }
     }
-    for (const item of items) {
-        if (isNewItem(item)) {
-            stubs.add(nameKey(item.name));
-        }
-    }
-    const facts = ticked(preview?.facts).length;
-    const kept = items.filter((item) => !isNewItem(item)).length;
     return {
-        facts,
-        items: kept,
-        here: facts + kept,
+        facts: ticked(preview?.facts).length,
         elsewhere: elsewhere.length,
         stubs: stubs.size,
         movedIn: (preview?.move_in || []).filter((row) => row.ticked).length,
-        refiled: (preview?.refile || []).filter((row) => row.ticked).length,
     };
 }
 
-// The Accept line: "writes 3 facts here, 4 elsewhere, 1 new stub", "writes
-// 1 fact and 2 items here" (`onto`: the entry the owner said it is,
-// "writes 3 facts onto Ashenmere"); `noun` for what there's none of
-// ("writes 0 items here" for Fill).
-export function countsLine(counts, onto = null, noun = 'fact') {
-    let what;
-    if (counts.facts && counts.items) {
-        what = `${plural(counts.facts, 'fact')} and ${plural(counts.items, 'item')}`;
-    } else if (counts.items) {
-        what = plural(counts.items, 'item');
-    } else if (counts.facts) {
-        what = plural(counts.facts, 'fact');
-    } else {
-        what = plural(0, noun);
-    }
-    const parts = [`writes ${what} ${onto ? `onto ${onto}` : 'here'}`];
+// The Accept line: "writes 3 facts here, 4 elsewhere, 1 new stub"
+// (`onto`: the entry the owner said it is, "writes 3 facts onto
+// Ashenmere").
+export function countsLine(counts, onto = null) {
+    const parts = [`writes ${plural(counts.facts, 'fact')} ${onto ? `onto ${onto}` : 'here'}`];
     if (counts.elsewhere) {
         parts.push(`${counts.elsewhere} elsewhere`);
     }
@@ -533,9 +455,6 @@ export function countsLine(counts, onto = null, noun = 'fact') {
     }
     if (counts.movedIn) {
         parts.push(`moves ${counts.movedIn} in`);
-    }
-    if (counts.refiled) {
-        parts.push(`re-files ${counts.refiled}`);
     }
     return parts.join(', ');
 }
@@ -559,7 +478,7 @@ export function elsewhereGroups(rows) {
     return groups;
 }
 
-// The indices of the rows (a preview's facts, Fill's items) that came
+// The indices of the rows (a preview's facts) that came
 // unticked as repeats of what the world holds: "Already in the world"
 // shows these, kept apart however the owner ticks them; a repeat that came
 // ticked stays among the rest, showing its match.
@@ -737,35 +656,17 @@ function worldState() {
         stubSuggestion: null,
         // thing id -> the other names to add to it once it's fetched
         akaQueue: {},
-        // the sphere create box: the request (`{template, prompt, fields,
-        // stubId, promoteId, picks, newNames}`) and its preview
-        spherePreviewRequest: null,
-        spherePreviewPending: false,
-        spherePreview: null,
-        spherePreviewError: null,
-        // the thing "Make it a sphere…" promotes: `{id, kind, name}`
-        promoting: null,
-        // "+ New branch": the request (`{parentId, prompt}`) and its preview
-        branchRequest: null,
-        branchPending: false,
-        branchPreview: null,
-        branchError: null,
-        // which preview an `accept_sphere` is out for: 'sphere' or 'branch'
-        sphereAccepting: null,
-        // Fill, one drawer at a time: `{sphereId, drawerId, pending, items,
-        // elsewhere, new_names, refile, shelved, error}` (the Fill
-        // preview's parts; `shelved` as `previewShelved`)
-        fill: null,
-        // sphere id -> its payload, for editors that need its drawers
-        sphereInfo: {},
-        // the sphere ids a `get_thing` is out for, for `sphereInfo`
-        sphereWanted: [],
-        // character id -> the ties to add to it once it's fetched
-        tieQueue: {},
-        // the preview an `add_outer_body` is out for (`outerToken`): its
-        // type ('create', 'sphere', 'branch' or 'fill') and which one it
-        // was; a reply for one since replaced is dropped
-        outerFor: null,
+        // `list_tags`: `{tag, heading, count}` of every tag in use
+        tags: [],
+        // `groupKey(page, tag)` -> a group's synopsis asked for: `{pending,
+        // text, error}`
+        synopses: {},
+        // `groupKey(page, tag)` -> a group's "+ Add": `{prompt, pending,
+        // rows, error}` (the page's own "+ Add" under tag null)
+        groupAdds: {},
+        // "+ Add facts…"/"+ Add event…": `{thingId, mode: 'facts'|'event',
+        // prompt, year, pending, draft, facts, error}`
+        factDraft: null,
         // the last reply's notes to show: `{action, notes}`
         notes: null,
         // the merge dialog's: `{fromId, intoId, preview, pending}`
@@ -780,10 +681,6 @@ function worldState() {
 
 // the function actions send with; set by `connect`
 let send = null;
-
-// how many Fills have been asked for: each Fill's `ask`, so a reply for an
-// earlier Fill of the same drawer is told apart
-let fillAsks = 0;
 
 export const useWorldsStore = defineStore('worlds', {
     state: () => ({
@@ -1159,18 +1056,13 @@ export const useWorldsStore = defineStore('worlds', {
         // dropped unasked: the stub waits in `expandAsk` for the owner to
         // `confirmExpand` or `keepPreview`.
         expandStub(stub, { discard = false } = {}) {
-            // a culture (a legacy kind) is made a culture sphere
-            const target = stub.kind === 'culture'
-                ? { id: stub.id, kind: 'sphere', name: stub.name, was: 'culture' }
-                : { id: stub.id, kind: stub.kind, name: stub.name, ...(stub.was ? { was: stub.was } : {}) };
-            if ((this.preview || this.spherePreview) && !discard) {
+            const target = { id: stub.id, kind: stub.kind, name: stub.name };
+            if (this.preview && !discard) {
                 this.expandAsk = target;
                 return;
             }
             this.expandAsk = null;
             this.cancelPreview();
-            this.cancelSpherePreview();
-            this.promoting = null;
             this.visit({ section: target.kind, thingId: null });
             this.section = target.kind;
             this.closeThing();
@@ -1182,9 +1074,7 @@ export const useWorldsStore = defineStore('worlds', {
         // the owner agreed to drop the preview: expand the stub waiting
         confirmExpand() {
             const stub = this.expandAsk;
-            if (stub?.promote) {
-                this.makeSphere(stub, { discard: true });
-            } else if (stub) {
+            if (stub) {
                 this.expandStub(stub, { discard: true });
             }
         },
@@ -1198,233 +1088,161 @@ export const useWorldsStore = defineStore('worlds', {
             this.expanding = null;
         },
 
-        // --- spheres ------------------------------------------------------
+        // --- filing and tags ----------------------------------------------
 
-        // "Make it a sphere…": a stub is expanded as a sphere; a lore entry
-        // or a place is promoted in the sphere create box
-        // An unaccepted preview isn't dropped unasked (`expandAsk`, as
-        // `expandStub`).
-        makeSphere(thing, { discard = false } = {}) {
-            if (thing.stub) {
-                this.expandStub({ id: thing.id, kind: 'sphere', name: thing.name, was: thing.kind }, { discard });
-                return;
-            }
-            if ((this.preview || this.spherePreview) && !discard) {
-                this.expandAsk = { id: thing.id, kind: thing.kind, name: thing.name, promote: true };
-                return;
-            }
-            this.expandAsk = null;
-            this.cancelPreview();
-            this.cancelSpherePreview();
-            this.expanding = null;
-            this.visit({ section: 'sphere', thingId: null });
-            this.section = 'sphere';
-            this.closeThing();
-            this.promoting = { id: thing.id, kind: thing.kind, name: thing.name };
+        // `thingId` (the open page when left out) answers the edit; the
+        // open page's date goes with it only when it's that page
+        filingEdit(action, thingId, data) {
+            const id = thingId || this.selectedThingId;
+            this.pending = { ...this.pending, [action]: true };
+            this.request(action, { thing_id: id, at: id === this.selectedThingId ? this.thingAt : null, ...data });
         },
 
-        stopPromoting() {
-            this.promoting = null;
-        },
-
-        // `stubId`: the stub it expands; `promoteId`: the thing it promotes
-        previewSphere(template, prompt, fields = {}, { stubId = null, promoteId = null, picks = {}, newNames = [] } = {}) {
-            this.spherePreviewRequest = { template, prompt, fields, stubId, promoteId, picks, newNames };
-            this.spherePreview = null;
-            this.spherePreviewError = null;
-            this.spherePreviewPending = true;
-            this.request('preview_sphere', {
-                template,
-                prompt,
-                fields,
-                ...(stubId ? { stub_id: stubId } : {}),
-                ...(promoteId ? { promote_id: promoteId } : {}),
-                ...linkFields(picks, newNames),
+        // file the open page in `targetId`, or in a new stub `newName` (of
+        // `kind`, with `tag`): `{targetId | newName, kind, tag, role, since,
+        // until, within}`
+        addFiling({ targetId = null, newName = null, kind = null, tag = null, role = null, since = null, until = null, within = null }) {
+            this.filingEdit('add_filing', null, {
+                ...(targetId ? { target_id: targetId } : { new_name: newName, ...(kind ? { kind } : {}), ...(tag ? { tag } : {}) }),
+                role: role || null,
+                since: dateIn(since),
+                until: dateIn(until),
+                within,
             });
         },
 
-        regenerateSpherePreview() {
-            const req = this.spherePreviewRequest;
-            if (req) {
-                this.previewSphere(req.template, req.prompt, req.fields, req);
+        // `changes`: only what changes of `{role, since, until, within}`
+        // (null clears one; an `until` ends it, "End this")
+        editFiling(targetId, changes) {
+            const data = { target_id: targetId };
+            for (const [key, value] of Object.entries(changes)) {
+                data[key] = key === 'since' || key === 'until' ? dateIn(value) : value;
             }
+            this.filingEdit('edit_filing', null, data);
         },
 
-        discardSpherePreview() {
-            this.spherePreview = null;
-            this.spherePreviewError = null;
-            this.spherePreviewPending = false;
+        removeFiling(targetId) {
+            this.filingEdit('remove_filing', null, { target_id: targetId });
         },
 
-        cancelSpherePreview() {
-            this.discardSpherePreview();
-            this.spherePreviewRequest = null;
-        },
-
-        acceptSphere(changes = {}) {
-            if (!this.spherePreview) {
-                return;
-            }
-            this.sphereAccepting = 'sphere';
-            this.pending = { ...this.pending, accept_sphere: true };
-            this.request('accept_sphere', { preview: { ...this.spherePreview, ...changes } });
-        },
-
-        previewBranch(parentId, prompt) {
-            this.branchRequest = { parentId, prompt };
-            this.branchPreview = null;
-            this.branchError = null;
-            this.branchPending = true;
-            this.request('preview_branch', { parent_id: parentId, prompt });
-        },
-
-        discardBranch() {
-            this.branchRequest = null;
-            this.branchPreview = null;
-            this.branchError = null;
-            this.branchPending = false;
-        },
-
-        // keep (or drop) one of the parent's items in the branch preview
-        setBranchKept(row, kept) {
-            if (this.branchPreview) {
-                this.branchPreview = branchKept(this.branchPreview, row, kept);
-            }
-        },
-
-        acceptBranch(changes = {}) {
-            if (!this.branchPreview) {
-                return;
-            }
-            this.sphereAccepting = 'branch';
-            this.pending = { ...this.pending, accept_sphere: true };
-            this.request('accept_sphere', { preview: { ...this.branchPreview, ...changes } });
-        },
-
-        fillDrawer(sphereId, drawerId) {
-            fillAsks += 1;
-            this.fill = { sphereId, drawerId, ask: fillAsks, pending: true, items: null, error: null };
-            this.request('fill_drawer', { sphere_id: sphereId, drawer_id: drawerId });
-        },
-
-        discardFill() {
-            this.fill = null;
-        },
-
-        // Fill's preview as the owner left it: its items (each with its
-        // tick), elsewhere facts, outer bodies and re-file rows
-        acceptFill() {
-            const fill = this.fill;
-            if (!fill?.items) {
-                return;
-            }
-            this.pending = { ...this.pending, accept_fill: true };
-            this.request('accept_fill', {
-                sphere_id: fill.sphereId,
-                drawer_id: fill.drawerId,
-                items: fill.items,
-                elsewhere: fill.elsewhere || [],
-                new_names: fill.new_names || [],
-                refile: fill.refile || [],
-            });
-        },
-
-        // a statement written by hand into one of a sphere's drawers;
-        // `links` as addFact's
-        addStatement(sphereId, drawerId, text, { picks = {}, newNames = [], spans = [] } = {}) {
-            this.pending = { ...this.pending, add_statement: true };
-            this.request('add_statement', {
-                sphere_id: sphereId,
-                drawer_id: drawerId,
+        // a "but…" under the open page's filing in `targetId`: it departs
+        // from the entry as a whole (`rejects` null)
+        addException(targetId, text, rejects = null) {
+            this.pending = { ...this.pending, add_exception: true };
+            this.request('add_exception', {
+                character_id: this.selectedThingId,
+                target_id: targetId,
                 text,
-                ...linkFields(picks, newNames, spans),
+                rejects,
                 at: this.thingAt,
             });
         },
 
-        // the sphere's drawers, in order, as the page shows them (see
-        // `drawersPayload`); one without an `id` is new
-        setDrawers(sphereId, drawers) {
-            this.pending = { ...this.pending, set_drawers: true };
-            this.request('set_drawers', { sphere_id: sphereId, drawers, at: this.thingAt });
+        // any entry's tag (null clears it)
+        setTag(thingId, tag) {
+            this.filingEdit('set_tag', thingId, { tag });
         },
 
-        // file `thingId` in a sphere's drawer; a null `sphereId` takes it
-        // out of every sphere
-        setPartOf(thingId, sphereId, drawerId = 'unsorted') {
-            this.pending = { ...this.pending, set_part_of: true };
-            this.request('set_part_of', {
-                thing_id: thingId,
-                sphere_id: sphereId,
-                ...(sphereId ? { drawer_id: drawerId } : {}),
-                at: thingId === this.selectedThingId ? this.thingAt : null,
-            });
+        listTags() {
+            this.request('list_tags');
         },
 
-        // a character's whole ties list (`tiesPayload`'s shape)
-        setTies(characterId, ties) {
-            this.pending = { ...this.pending, set_ties: true };
-            this.request('set_ties', {
-                character_id: characterId,
-                ties,
-                at: characterId === this.selectedThingId ? this.thingAt : null,
-            });
+        renameTag(old, renamed) {
+            this.pending = { ...this.pending, rename_tag: true };
+            this.request('rename_tag', { old, new: renamed });
         },
 
-        // a tie added from the sphere's side: `{sphere_id, role, since}`,
-        // written once the character is fetched
-        addTie(characterId, tie) {
-            this.tieQueue = { ...this.tieQueue, [characterId]: [...(this.tieQueue[characterId] || []), tie] };
-            this.pending = { ...this.pending, set_ties: true };
-            this.request('get_thing', { id: characterId, at: null });
+        mergeTag(from, into) {
+            this.pending = { ...this.pending, merge_tag: true };
+            this.request('merge_tag', { from, into });
         },
 
-        // `rejects`: `{thing_id}`, `{fact_id}` or null (the sphere as a whole)
-        addException(characterId, sphereId, text, rejects = null) {
-            this.pending = { ...this.pending, add_exception: true };
-            this.request('add_exception', {
-                character_id: characterId,
-                sphere_id: sphereId,
-                text,
-                rejects,
-                at: characterId === this.selectedThingId ? this.thingAt : null,
-            });
+        // --- groups -------------------------------------------------------
+
+        // a group's synopsis (`force`: asked again, though one is cached)
+        groupSynopsis(thingId, tag, force = false) {
+            const key = groupKey(thingId, tag);
+            this.synopses = { ...this.synopses, [key]: { ...(this.synopses[key] || {}), pending: true, error: null } };
+            this.request('group_synopsis', { thing_id: thingId, tag: tag ?? null, force });
         },
 
-        // end the sphere's own `item` (a drawer item) at `at`, by `by` (any
-        // thing id, or null)
-        endItem(sphereId, item, at, by = null) {
-            this.pending = { ...this.pending, end_item: true };
-            this.request('end_item', {
-                sphere_id: sphereId,
-                ...(item.thing_id ? { thing_id: item.thing_id } : { fact_id: item.fact_id }),
-                at,
-                by,
-            });
+        // "+ Add" in a group (tag null: the page's own)
+        groupAdd(thingId, tag, prompt) {
+            const key = groupKey(thingId, tag);
+            this.groupAdds = { ...this.groupAdds, [key]: { prompt, pending: true, rows: null, error: null } };
+            this.request('group_add', { thing_id: thingId, tag: tag ?? null, prompt });
         },
 
-        // the sphere's payload into `sphereInfo`
-        fetchSphere(id) {
-            if (!this.sphereWanted.includes(id)) {
-                this.sphereWanted = [...this.sphereWanted, id];
-            }
-            this.request('get_thing', { id, at: null });
-        },
-
-        dropPreviewTie(index) {
-            if (this.preview) {
-                this.preview = { ...this.preview, ties: this.preview.ties.filter((_tie, i) => i !== index) };
+        // the owner's edits to a group's drafted rows (ticks, names)
+        editGroupAdd(thingId, tag, rows) {
+            const key = groupKey(thingId, tag);
+            if (this.groupAdds[key]) {
+                this.groupAdds = { ...this.groupAdds, [key]: { ...this.groupAdds[key], rows } };
             }
         },
 
-        dropPreviewException(tieIndex, exceptionIndex) {
-            if (!this.preview) {
+        discardGroupAdd(thingId, tag) {
+            const { [groupKey(thingId, tag)]: _gone, ...rest } = this.groupAdds;
+            this.groupAdds = rest;
+        },
+
+        acceptGroupAdd(thingId, tag) {
+            const found = this.groupAdds[groupKey(thingId, tag)];
+            if (!found?.rows) {
                 return;
             }
-            const ties = this.preview.ties.map((tie, i) => (i === tieIndex
-                ? { ...tie, exceptions: tie.exceptions.filter((_e, j) => j !== exceptionIndex) }
-                : tie));
-            this.preview = { ...this.preview, ties };
+            this.pending = { ...this.pending, accept_group_add: true };
+            this.request('accept_group_add', { thing_id: thingId, rows: found.rows });
+            this.discardGroupAdd(thingId, tag);
+        },
+
+        // --- prompt additions ---------------------------------------------
+
+        // "+ Add facts…" on the open page
+        addFacts(prompt) {
+            this.askFacts('add_facts', { prompt });
+        },
+
+        // "+ Add event…": its facts all dated `year`
+        addEvent(prompt, year) {
+            this.askFacts('add_event', { prompt, year });
+        },
+
+        askFacts(action, data) {
+            if (!this.selectedThingId) {
+                return;
+            }
+            const mode = action === 'add_event' ? 'event' : 'facts';
+            this.factDraft = { thingId: this.selectedThingId, mode, prompt: data.prompt, year: data.year ?? null, pending: true, draft: null, facts: null, error: null };
+            this.request(action, { thing_id: this.selectedThingId, at: this.thingAt, ...data });
+        },
+
+        // tick (or untick) the drafted fact `index`
+        tickDraftFact(index, ticked) {
+            const found = this.factDraft;
+            if (!found?.draft) {
+                return;
+            }
+            const facts = found.draft.facts.map((fact, i) => (i === index ? { ...fact, ticked } : fact));
+            this.factDraft = {
+                ...found,
+                draft: { ...found.draft, facts },
+                facts: found.facts.map((row) => (row.index === index ? { ...row, ticked } : row)),
+            };
+        },
+
+        discardFacts() {
+            this.factDraft = null;
+        },
+
+        acceptFacts() {
+            const found = this.factDraft;
+            if (!found?.draft) {
+                return;
+            }
+            this.pending = { ...this.pending, accept_facts: true };
+            this.request('accept_facts', { draft: found.draft, at: found.thingId === this.selectedThingId ? this.thingAt : null });
+            this.factDraft = null;
         },
 
         // the open thing's page asked for again, as of the date it's viewed at
@@ -1463,82 +1281,17 @@ export const useWorldsStore = defineStore('worlds', {
 
         // --- curation -----------------------------------------------------
 
-        // the preview of `type` ('create', 'sphere', 'branch', 'fill')
+        // the preview of `type` (only 'create' now; Task 10's draft page
+        // replaces it)
         previewOf(type) {
-            if (type === 'create') {
-                return this.preview;
-            }
-            if (type === 'sphere') {
-                return this.spherePreview;
-            }
-            if (type === 'branch') {
-                return this.branchPreview;
-            }
-            const fill = this.fill;
-            return fill?.items
-                ? { sphere_id: fill.sphereId, drawer_id: fill.drawerId, items: fill.items, elsewhere: fill.elsewhere || [], new_names: fill.new_names || [], refile: fill.refile || [] }
-                : null;
+            return type === 'create' ? this.preview : null;
         },
 
         // the owner's edits to a preview before it's accepted
         editPreview(type, changes) {
-            if (!this.previewOf(type)) {
-                return;
-            }
-            if (type === 'create') {
+            if (this.previewOf(type)) {
                 this.preview = { ...this.preview, ...changes };
-            } else if (type === 'sphere') {
-                this.spherePreview = { ...this.spherePreview, ...changes };
-            } else if (type === 'branch') {
-                this.branchPreview = { ...this.branchPreview, ...changes };
-            } else {
-                this.fill = { ...this.fill, ...changes };
             }
-        },
-
-        // which preview of `type` is shown now: its request (a Fill: its
-        // sphere and drawer), so a reply can tell it's still the one
-        outerToken(type) {
-            if (type === 'create') {
-                return { type, request: this.previewRequest, pending: this.previewPending };
-            }
-            if (type === 'sphere') {
-                return { type, request: this.spherePreviewRequest, pending: this.spherePreviewPending };
-            }
-            if (type === 'branch') {
-                return { type, request: this.branchRequest, pending: this.branchPending };
-            }
-            return { type, request: this.fill ? `${this.fill.sphereId}:${this.fill.drawerId}:${this.fill.ask}` : null, pending: !!this.fill?.pending };
-        },
-
-        // whether an `add_outer_body` reply (`previewType` as sent) is for
-        // the preview the token was taken for, still shown and not being
-        // asked for again
-        outerStillFor(token, previewType) {
-            if (!token || (token.type === 'branch' ? 'sphere' : token.type) !== previewType) {
-                return false;
-            }
-            const now = this.outerToken(token.type);
-            return now.request === token.request && !now.pending && !!this.previewOf(token.type);
-        },
-
-        // put a body the owner names (`outer`: `{name, template,
-        // part_of}`) around the part `rowName` of a preview; the reply
-        // replaces that preview, if it's still the one shown
-        addOuterBody(type, rowName, outer, asSphere = false) {
-            const preview = this.previewOf(type);
-            if (!preview) {
-                return;
-            }
-            this.outerFor = this.outerToken(type);
-            this.pending = { ...this.pending, add_outer_body: true };
-            this.request('add_outer_body', {
-                preview_type: type === 'branch' ? 'sphere' : type,
-                preview,
-                row_name: rowName,
-                outer,
-                as_sphere: asSphere,
-            });
         },
 
         clearNotes() {
@@ -1718,6 +1471,7 @@ export const useWorldsStore = defineStore('worlds', {
             this.currentWorld = info;
             this.listAllThings();
             this.listStubs();
+            this.listTags();
             this.listScenes();
         },
 
@@ -1741,46 +1495,23 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
-        // the queued ties of `character` (a `get_thing` reply) written,
-        // after its own, unless it has a tie to that sphere already
-        writeQueuedTies(character) {
-            const { [character.id]: added, ...rest } = this.tieQueue;
-            this.tieQueue = rest;
-            const ties = tiesPayload(character.ties);
-            const fresh = added.filter((tie) => !ties.some((other) => other.sphere_id === tie.sphere_id));
-            if (fresh.length < added.length) {
-                // tied already (an ended tie too): edited on its page
-                this.error = ALREADY_TIED;
-                this.clearPending('set_ties');
-                return;
-            }
-            for (const tie of fresh) {
-                ties.push({ sphere_id: tie.sphere_id, role: tie.role || '', since: dateIn(tie.since), until: null });
-            }
-            this.request('set_ties', { character_id: character.id, ties, at: null });
-        },
-
-        // a sphere edit's reply (`data`, the thing it changed): the open
-        // page takes it, or is fetched again when it's another thing (filed
-        // or tied from the page); a Fill's names, and linked text, may
-        // make stubs
-        sphereEdited(action, data) {
-            // a reply comes as of the edit's date (end_item's, the
-            // latest): a page viewed as of another date is fetched again
+        // a filing or tag edit's reply (`data`, the thing it changed): the
+        // open page takes it, or is fetched again when it's another thing
+        // (a Connected row retagged); new stubs and tags may come with it
+        filingEdited(action, data) {
             if (data.id === this.selectedThingId && !this.thingAt) {
                 this.thing = data;
             } else {
                 this.refreshThing();
             }
-            if (this.sphereInfo[data.id] && data.sphere) {
-                this.sphereInfo = { ...this.sphereInfo, [data.id]: data };
-            }
-            if (action === 'accept_fill') {
-                this.fill = null;
+            if (action === 'remove_filing' || action === 'accept_group_add') {
                 this.showNotes(action, data.notes);
-                this.listAllThings();
             }
             this.listStubs();
+            this.listAllThings();
+            if (action === 'set_tag' || action === 'accept_group_add' || action === 'add_filing') {
+                this.listTags();
+            }
         },
 
         clearPending(action) {
@@ -1856,74 +1587,59 @@ export const useWorldsStore = defineStore('worlds', {
                     if (this.akaQueue[data.id]) {
                         this.writeOtherNames(data);
                     }
-                    if (this.sphereWanted.includes(data.id)) {
-                        this.sphereWanted = this.sphereWanted.filter((id) => id !== data.id);
-                        this.sphereInfo = { ...this.sphereInfo, [data.id]: data };
-                    }
-                    if (this.tieQueue[data.id]) {
-                        this.writeQueuedTies(data);
-                    }
                     break;
-                case 'preview_sphere':
-                    if (this.spherePreviewPending) {
-                        this.spherePreview = data;
-                        this.spherePreviewPending = false;
-                    }
+                case 'list_tags':
+                    this.tags = data.tags;
                     break;
-                case 'preview_sphere_failed':
-                    if (this.spherePreviewPending) {
-                        this.spherePreviewError = message.message;
-                        this.spherePreviewPending = false;
-                    }
-                    break;
-                case 'preview_branch':
-                    if (this.branchPending) {
-                        this.branchPreview = data;
-                        this.branchPending = false;
-                    }
-                    break;
-                case 'preview_branch_failed':
-                    if (this.branchPending) {
-                        this.branchError = message.message;
-                        this.branchPending = false;
-                    }
-                    break;
-                case 'accept_sphere':
-                    if (this.sphereAccepting === 'branch') {
-                        this.discardBranch();
-                    } else {
-                        this.cancelSpherePreview();
-                        this.expanding = null;
-                        this.promoting = null;
-                    }
-                    this.sphereAccepting = null;
-                    this.showNotes(action, data.notes);
-                    this.visit({ thingId: data.id });
-                    this.openedFrom = this.selectedThingId;
-                    this.selectedThingId = data.id;
-                    this.thingAt = null;
-                    this.thing = data;
-                    this.listStubs();
+                case 'rename_tag':
+                case 'merge_tag':
+                    this.tags = data.tags;
+                    // every page with that tag reads its new one
+                    this.refreshThing();
                     this.listAllThings();
                     break;
-                case 'fill_drawer':
-                    if (this.fill?.pending && this.fill.sphereId === data.sphere_id && this.fill.drawerId === data.drawer_id) {
-                        this.fill = {
-                            ...this.fill,
-                            pending: false,
-                            items: data.items,
-                            elsewhere: data.elsewhere || [],
-                            new_names: data.new_names || [],
-                            refile: data.refile || [],
-                            shelved: shelvedRows(data.items),
+                case 'group_synopsis':
+                case 'group_synopsis_failed': {
+                    const key = groupKey(data?.thing_id, data?.tag);
+                    if (this.synopses[key]?.pending) {
+                        this.synopses = {
+                            ...this.synopses,
+                            [key]: action === 'group_synopsis'
+                                ? { pending: false, text: data.synopsis, error: null }
+                                : { ...this.synopses[key], pending: false, error: message.message },
                         };
                     }
                     break;
-                case 'fill_failed':
-                    if (this.fill?.pending && this.fill.drawerId === data?.drawer_id) {
-                        this.fill = { ...this.fill, pending: false, error: message.message };
+                }
+                case 'group_add':
+                case 'group_add_failed': {
+                    const key = groupKey(data?.thing_id, data?.tag);
+                    const found = this.groupAdds[key];
+                    if (found?.pending) {
+                        this.groupAdds = {
+                            ...this.groupAdds,
+                            [key]: action === 'group_add'
+                                ? { ...found, pending: false, rows: data.rows }
+                                : { ...found, pending: false, error: message.message },
+                        };
                     }
                     break;
+                }
+                case 'add_facts':
+                case 'add_event':
+                case 'add_facts_failed':
+                case 'add_event_failed': {
+                    // a draft page's own additions (`draft_key`) are Task
+                    // 10's; a reply for a draft since dropped is too
+                    const found = this.factDraft;
+                    if (!found?.pending || data?.draft_key || data?.thing_id !== found.thingId) {
+                        break;
+                    }
+                    this.factDraft = action.endsWith('_failed')
+                        ? { ...found, pending: false, error: message.message }
+                        : { ...found, pending: false, draft: data.draft, facts: data.facts };
+                    break;
+                }
                 case 'stub_suggestion':
                     if (this.expanding?.id === data.id) {
                         this.stubSuggestion = data;
@@ -2052,27 +1768,6 @@ export const useWorldsStore = defineStore('worlds', {
                     this.listStubs();
                     this.listAllThings();
                     break;
-                case 'add_outer_body': {
-                    // the preview it's for, if it's still the one shown
-                    const token = this.outerFor;
-                    this.outerFor = null;
-                    const type = token?.type;
-                    if (this.outerStillFor(token, data.preview_type)) {
-                        const preview = data.preview;
-                        if (type === 'fill') {
-                            this.fill = {
-                                ...this.fill,
-                                items: preview.items,
-                                elsewhere: preview.elsewhere || [],
-                                new_names: preview.new_names || [],
-                                refile: preview.refile || [],
-                            };
-                        } else {
-                            this.editPreview(type, preview);
-                        }
-                    }
-                    break;
-                }
                 case 'preview_merge':
                     if (this.merge && this.merge.fromId === data.preview.from_id && this.merge.intoId === data.preview.into_id) {
                         this.merge = { ...this.merge, preview: data.preview, pending: false };
@@ -2166,20 +1861,16 @@ export const useWorldsStore = defineStore('worlds', {
                         this.nameLookup = null;
                         this.mixLookup = null;
                         this.acceptOpens = true;
-                        // or a sphere preview, a Fill or a queued tie
-                        this.spherePreviewPending = false;
-                        this.branchPending = false;
-                        this.sphereAccepting = null;
-                        if (this.fill?.pending) {
-                            this.fill = { ...this.fill, pending: false, error: message.error.message };
-                        }
-                        this.tieQueue = {};
-                        this.sphereWanted = [];
-                        // or a merge's preview, or an outer body
+                        // or a merge's preview
                         if (this.merge?.pending) {
                             this.merge = { ...this.merge, pending: false };
                         }
-                        this.outerFor = null;
+                        // or a group's synopsis or "+ Add", or a fact draft
+                        this.synopses = Object.fromEntries(Object.entries(this.synopses).map(([key, value]) => [key, { ...value, pending: false }]));
+                        this.groupAdds = Object.fromEntries(Object.entries(this.groupAdds).filter(([, value]) => !value.pending));
+                        if (this.factDraft?.pending) {
+                            this.factDraft = null;
+                        }
                         // the page back opened is gone: back goes on
                         const failed = this.backOpening;
                         this.backOpening = null;
@@ -2191,8 +1882,8 @@ export const useWorldsStore = defineStore('worlds', {
                     }
                     break;
                 default:
-                    if (SPHERE_EDITS.includes(action)) {
-                        this.sphereEdited(action, data);
+                    if (FILING_EDITS.includes(action)) {
+                        this.filingEdited(action, data);
                     } else if (EDIT_ACTIONS.includes(action) && data.id === this.selectedThingId) {
                         this.thing = data;
                         // a linked fact (or a new name) changes the stubs' mentions

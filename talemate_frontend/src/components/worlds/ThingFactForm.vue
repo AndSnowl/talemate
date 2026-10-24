@@ -69,7 +69,7 @@ export default {
         form: { type: Object, required: true },
         categories: { type: Array, required: true },
         busy: { type: Boolean, default: false },
-        // false: an edited fact can't be removed here (a sphere's summary)
+        // false: an edited fact can't be removed here
         removable: { type: Boolean, default: true },
     },
     emits: ['save', 'cancel', 'remove'],

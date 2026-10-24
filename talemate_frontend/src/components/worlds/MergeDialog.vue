@@ -6,7 +6,7 @@
                 <v-spacer></v-spacer>
                 <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="close"></v-btn>
             </div>
-            <div class="text-caption text-muted mb-3">For two entries that turned out to be one thing: every link, part-of, tie and field moves over, in one revision, so one undo reverses it.</div>
+            <div class="text-caption text-muted mb-3">For two entries that turned out to be one thing: every link, filing and field moves over, in one revision, so one undo reverses it.</div>
             <v-autocomplete
                 v-model="intoId"
                 :items="targets"
@@ -90,15 +90,12 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 
-// kinds that merge across (ruling C17): a place and a sphere
-const PLACE_OR_SPHERE = ['place', 'sphere'];
-
 function plural(count, one, many = `${one}s`) {
     return `${count} ${count === 1 ? one : many}`;
 }
 
 // "Merge into…" (curation goal 5): the open entry (`thing`) merged into
-// another the owner picks (same kind, or a place and a sphere). The
+// another of its kind the owner picks. The
 // preview (`preview_merge`, no model call) gives the dialog: the main name
 // (the other becomes an "also known as"); its facts, a repeat of the
 // other's unticked ("already on X"); each pair that may disagree, to pick
@@ -129,8 +126,7 @@ export default {
             return this.merge?.preview || null;
         },
         targets() {
-            const mergeable = (kind) => kind === this.thing.kind || (PLACE_OR_SPHERE.includes(kind) && PLACE_OR_SPHERE.includes(this.thing.kind));
-            return this.worlds.referenceTargets.filter((target) => !target.stub && target.id !== this.thing.id && mergeable(target.kind));
+            return this.worlds.referenceTargets.filter((target) => !target.stub && target.id !== this.thing.id && target.kind === this.thing.kind);
         },
         fromFacts() {
             return (this.preview?.facts || []).filter((fact) => fact.side === 'from');
@@ -142,8 +138,7 @@ export default {
                 plural(facts, 'fact'),
                 plural(moves.links || 0, 'link'),
                 plural(moves.fields || 0, 'field'),
-                plural(moves.filings || 0, 'drawer filing'),
-                plural(moves.ties || 0, 'tie'),
+                plural(moves.filings || 0, 'filing'),
             ];
             return `${parts.join(', ')} move to ${this.preview.into_name}. One undo reverses it.`;
         },

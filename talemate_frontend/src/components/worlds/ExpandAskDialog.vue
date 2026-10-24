@@ -7,12 +7,12 @@
             </v-card-title>
             <v-card-text>
                 The preview of <strong>{{ previewName }}</strong> hasn't been accepted.
-                {{ stub.promote ? 'Making' : 'Expanding' }} <strong>{{ stub.name }}</strong>{{ stub.promote ? ' a sphere' : '' }} discards it.
+                Expanding <strong>{{ stub.name }}</strong> discards it.
             </v-card-text>
             <v-card-actions>
                 <v-spacer></v-spacer>
                 <v-btn variant="text" @click="worlds.keepPreview()">Keep the preview</v-btn>
-                <v-btn color="accent" variant="flat" @click="worlds.confirmExpand()">Discard and {{ stub.promote ? 'go on' : 'expand' }}</v-btn>
+                <v-btn color="accent" variant="flat" @click="worlds.confirmExpand()">Discard and expand</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
@@ -33,7 +33,7 @@ export default {
             return this.worlds.expandAsk;
         },
         previewName() {
-            return (this.worlds.preview || this.worlds.spherePreview)?.name || 'this thing';
+            return this.worlds.preview?.name || 'this thing';
         },
     },
 };

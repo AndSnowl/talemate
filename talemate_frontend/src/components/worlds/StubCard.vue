@@ -20,7 +20,7 @@
             <span v-if="stub.mentions != null" class="text-caption text-muted" data-testid="stub-mentions">{{ mentionsLabel }}</span>
         </div>
         <div class="d-flex ga-2 mt-3">
-            <v-btn color="accent" variant="flat" size="small" :prepend-icon="stub.kind === 'culture' ? 'mdi-orbit' : 'mdi-creation'" :disabled="!expandable || busy" @click="expand">{{ expandLabel(stub.kind) }}</v-btn>
+            <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-creation" :disabled="!expandable || busy" @click="expand">{{ expandLabel(stub.kind) }}</v-btn>
             <v-btn variant="outlined" size="small" :prepend-icon="stub.ignored ? 'mdi-eye' : 'mdi-eye-off'" :loading="!!worlds.pending.ignore_stub" :disabled="busy" @click="worlds.ignoreStub(stub.id, !stub.ignored)">
                 {{ stub.ignored ? 'Unignore' : 'Ignore' }}
             </v-btn>
@@ -39,7 +39,7 @@ import StubRepointButton from './StubRepointButton.vue';
 // One stub's card: its name (opening its page) and "not made yet", its
 // kind (a guess the owner can change), its mention count, Expand (its
 // kind's create box, from the stub; a race or mix can't be, with a note
-// why; a legacy culture stub has "Make it a sphere…" instead) and Ignore (or Unignore), then whatever the slot adds (a
+// why) and Ignore (or Unignore), then whatever the slot adds (a
 // link's "Re-point…"). Shown on hover over a stub link, and on the stub's
 // own page (`onPage`, without the name), where "Re-point…" moves every
 // link to the stub (`StubRepointButton`).

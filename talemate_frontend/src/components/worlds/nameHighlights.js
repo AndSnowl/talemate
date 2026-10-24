@@ -428,8 +428,8 @@ function isBlank(value) {
 
 // Whether a fact form (`{mode, text, category, fromYear, untilYear}`, as
 // ThingFactForm edits it) can be saved: some text, a category, each year
-// empty or a year, the end after the start. A `timeline` fact (a
-// sphere's) is a dated moment: it needs its year.
+// empty or a year, the end after the start. A `timeline` fact is a
+// dated moment: it needs its year.
 export function factFormValid(form) {
     const { text, category, fromYear, untilYear } = form;
     const yearOk = (value) => isBlank(value) || isFormYear(value);

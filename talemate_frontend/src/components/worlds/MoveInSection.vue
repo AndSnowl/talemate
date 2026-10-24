@@ -1,5 +1,5 @@
 <template>
-    <div v-if="rows.length || refile.length" class="move-in-section">
+    <div v-if="rows.length" class="move-in-section">
         <div v-if="rows.length" class="mt-3" data-testid="move-in">
             <div class="heading">Move here from where they are now</div>
             <div v-for="group in groups" :key="group.fromId" class="group">
@@ -19,23 +19,6 @@
             </div>
         </div>
 
-        <!-- entries filed where an outer body goes, offered to move into it -->
-        <div v-if="refile.length" class="mt-3" data-testid="refile">
-            <div class="heading">Re-file into the new body</div>
-            <div v-for="(row, index) in refile" :key="row.thing_id" class="d-flex align-center ga-2 row" data-testid="refile-row">
-                <v-checkbox-btn
-                    :model-value="!!row.ticked"
-                    density="compact"
-                    class="flex-grow-0"
-                    :aria-label="'Re-file ' + (row.name || 'this entry')"
-                    @update:model-value="$emit('update-refile', rowsTicked(refile, [index], $event))"
-                ></v-checkbox-btn>
-                <span :class="{ dropped: !row.ticked }">
-                    <span class="entry-name">{{ row.name || 'an entry' }}</span>
-                    <span class="text-muted"> from {{ row.from_name || 'nowhere' }} → into {{ row.to_name || 'the new body' }}</span>
-                </span>
-            </div>
-        </div>
     </div>
 </template>
 
@@ -47,18 +30,13 @@ import { rowsTicked } from '@/stores/worlds.js';
 // comes from. Every row comes unticked (ruling C24: the model's picks were
 // right 2 times of 20 in the curation flow probe); its picks come first,
 // marked "suggested", for the owner to tick or not (ruling C2). A ticked
-// one is moved, not copied. Below them,
-// the re-file rows an outer body brings (bodies within bodies): entries
-// filed where the new body goes, each unticked until the owner ticks it.
-// Changes emit `update` (the move-in rows) and `update-refile` (the
-// re-file rows), each the whole list.
+// one is moved, not copied. Changes emit `update` with the whole list.
 export default {
     name: 'MoveInSection',
     props: {
         rows: { type: Array, default: () => [] },
-        refile: { type: Array, default: () => [] },
     },
-    emits: ['update', 'update-refile'],
+    emits: ['update'],
     computed: {
         groups() {
             const groups = [];

@@ -111,7 +111,9 @@ async def test_router_list_and_get_thing(plugin):
     )
     listed = _last(plugin, "list_things")["data"]
     assert listed["kind"] == "character"
-    assert listed["things"] == [{"id": maren, "kind": "character", "name": "Maren"}]
+    assert listed["things"] == [
+        {"id": maren, "kind": "character", "name": "Maren", "tag": None, "filed_in": []}
+    ]
 
     scene_id = world.scenes().create(
         "At the harbour", WorldDate.of(313), player_thing_id=maren
@@ -1722,12 +1724,20 @@ async def test_payload_segments_and_stub_fields(plugin):
     await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
     places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
     assert places == {
-        s.harbour: {"id": s.harbour, "kind": "place", "name": "The Harbour"},
+        s.harbour: {
+            "id": s.harbour,
+            "kind": "place",
+            "name": "The Harbour",
+            "tag": None,
+            "filed_in": [],
+        },
         s.tsardom: {
             "id": s.tsardom,
             "kind": "place",
             "name": "Tsardom of Moscavia",
             "stub": {"ignored": False},
+            "tag": None,
+            "filed_in": [],
         },
     }
     await plugin.handle({"type": "worlds", "action": "list_things", "kind": "lore"})
@@ -4315,6 +4325,7 @@ async def test_payload_in_connected_mentioned(plugin):
         {
             "id": s.khorol,
             "name": "Khorol River",
+            "kind": "place",
             "stub": False,
             "line_segments": [_plain("A wide, cold river.")],
             "role": "runs through",
@@ -5945,3 +5956,82 @@ async def test_selection_on_a_draft_names_and_links_by_name(plugin, client):
         f" {ref(s.khorol, 'Old Bridge')}."
     ) in texts
     assert f"The {ref(s.khorol, 'Old Bridge')} stands." in texts
+
+
+# --- Task 9: what the entry page and the World tab's list read ----------------
+
+
+async def test_fact_rows_say_which_is_the_summary(plugin):
+    """Each own fact row says whether it's the entry's summary
+    (`entries.summary_fact`), which the page shows first."""
+
+    s = await _open_filing_world(plugin)
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert {f["fact_id"]: f["summary"] for f in velikoye["facts"]} == {s.capital: True}
+    khorol = await _get_thing(plugin, s.khorol)
+    assert [f["summary"] for f in khorol["facts"]] == [False]
+
+
+async def test_list_things_carry_tag_and_filed_in(plugin):
+    """A listing carries each entry's tag and the live entries it's filed
+    in now, in stored order (the World tab nests a place under the first
+    place it's in); one filed in nothing has none."""
+
+    s = await _open_filing_world(plugin)
+    await _act(plugin, "list_things", kind="place")
+    places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+    assert places[s.khorol]["tag"] == "river"
+    assert places[s.khorol]["filed_in"] == [s.tsardom, s.velikoye]
+    assert places[s.velikoye]["filed_in"] == [s.tsardom]
+    assert places[s.tsardom]["filed_in"] == []
+    # an ended filing is no longer "in"
+    await _act(
+        plugin,
+        "edit_filing",
+        thing_id=s.khorol,
+        target_id=s.tsardom,
+        until=WorldDate.of(1000).model_dump(mode="json"),
+    )
+    await _act(plugin, "list_things", kind="place")
+    places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+    assert places[s.khorol]["filed_in"] == [s.velikoye]
+
+
+async def test_connected_lists_real_beings_only(plugin):
+    """Connected lists the people filed in an entry: characters and real
+    beings. A believed (or undecided) being filed there never shows as one
+    of them, and shows again once it's real; its filing is kept."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        light = rev.create_thing(
+            "being",
+            {
+                "name": "The Eternal Light",
+                "tag": "god",
+                "existence": "believed",
+                "filings": [_filed(s.dawn, "worshipped")],
+            },
+        )
+        spirit = rev.create_thing(
+            "being",
+            {
+                "name": "The River Spirit",
+                "tag": "god",
+                "existence": "real",
+                "filings": [_filed(s.dawn, "protector")],
+            },
+        )
+    dawn = await _get_thing(plugin, s.dawn)
+    rows = [row["id"] for group in dawn["connected"] for row in group["rows"]]
+    assert spirit in rows and s.dmitry in rows
+    assert light not in rows
+    assert _group(dawn, "god")["rows"][0]["kind"] == "being"
+    # kept, not dropped: its own page still lists it "In" the White Dawn
+    own = await _get_thing(plugin, light)
+    assert [row["target_id"] for row in own["in"]] == [s.dawn]
+
+    with s.world.revision(Source.manual()) as rev:
+        rev.set_field(light, "existence", "real", None)
+    dawn = await _get_thing(plugin, s.dawn)
+    assert {row["id"] for row in _group(dawn, "god")["rows"]} == {light, spirit}

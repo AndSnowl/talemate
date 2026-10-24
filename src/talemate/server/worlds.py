@@ -12,8 +12,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   open world is held on the websocket handler (`handler.world`), one per
   connection, and closed when the connection goes.
 - Things: `list_things {kind}` (stubs included, each with its `stub`
-  marker; ignored stubs left out; a being with its `existence`, so the
-  scene pickers offer only real ones), `get_thing {id, at}`. A thing's payload
+  marker; ignored stubs left out; each with its `tag` and `filed_in`, the
+  live entries it's filed in now, for the World tab's list; a being with
+  its `existence`, so the scene pickers offer only real ones),
+  `get_thing {id, at}`. A thing's payload
   holds its fields, the facts visible at `at` (each with the inherited
   facts it `overrides`), its cached prose per section (with whether it's
   stale, following its lineage), its whole change history (`timeline`)
@@ -34,6 +36,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   neither), its `mentions` (every other entry's fact that references it)
   and `named_stubs` (`{id, name, kind}` of the stubs its facts link to).
 - Curation (curation spec): each own and inherited fact row carries
+  `summary` (whether it's the entry's summary fact, `entries.summary_fact`,
+  which the page shows first) and
   `held_by`, `{id, name}` of the entry that holds it as a belief
   (`entries.held_by`: a marked holder, or the owner of a `belief` fact),
   or `null`. Every kind's payload has `entry_timeline`
@@ -214,9 +218,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `tag`, `hint` (the prompt hint it was written with), `in: [{target_id,
   target_name, role, since, until, within_id, within_name, exceptions:
   [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
-  hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, stub,
-  line_segments, role, since, until}]}]` (what's filed in it, grouped by
-  tag; `synopsis` is `groups.cached_synopsis` -- a fresh cached one, read
+  hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, kind,
+  stub, line_segments, role, since, until}]}]` (what's filed in it,
+  grouped by tag, a being only while it's real -- a believed one is never
+  one of the people; `synopsis` is `groups.cached_synopsis` -- a fresh cached one, read
   with no model call, null when there's none cached or it's gone stale --
   and only at the latest telling) and `mentioned_in: [{id, name}]`.
   `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
@@ -1412,11 +1417,16 @@ def _connected_out(
             state = states.get(row_id) or view.thing(row_id)
             if state is None or state.stub_ignored:
                 continue
+            # a being shows as a member only while it's real: a believed
+            # (or undecided) one is spoken of, never one of the people
+            if state.kind == "being" and not entries.acts_in_world(state):
+                continue
             fact = _line_fact(state)
             rows.append(
                 {
                     "id": row_id,
                     "name": view.name_of(row_id) or "",
+                    "kind": state.kind,
                     "stub": state.is_stub,
                     "line_segments": links.segments(fact.text) if fact else [],
                     "role": filing.role,
@@ -1621,6 +1631,8 @@ class WorldsPlugin(Plugin):
         calendar = world.calendar
 
         links = _Links(view)
+        # the entry's summary fact, which the page heads its facts with
+        summary = entries.summary_fact(state)
         facts = [
             {
                 "fact_id": fact.fact_id,
@@ -1633,6 +1645,7 @@ class WorldsPlugin(Plugin):
                 "source_rev": fact.source_rev,
                 "overrides": list(fact.overrides),
                 "held_by": _held_out(view, fact, state),
+                "summary": summary is not None and fact.fact_id == summary.fact_id,
             }
             for fact in state.facts
         ]
@@ -2129,6 +2142,14 @@ class WorldsPlugin(Plugin):
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
+            # its tag, and the entries it's filed in now (the World tab
+            # shows a place under the first place it's in)
+            entry["tag"] = tag_of(state)
+            entry["filed_in"] = [
+                filing.target
+                for filing in filings_of(view, state.id)
+                if view.thing(filing.target) is not None
+            ]
             if state.kind == "being":
                 # only a real being is cast or played (the scene pickers)
                 entry["existence"] = entries.existence(state)

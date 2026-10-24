@@ -36,7 +36,7 @@ import { useWorldsStore } from '@/stores/worlds.js';
 
 // `talemate.world.curation.CurationSettings`, with their ranges
 const KNOBS = [
-    { key: 'reach', label: 'How far out (steps)', min: 1, max: 3, step: 1, integer: true, help: 'Steps through links a create, Fill or scene looks for nearby entries.' },
+    { key: 'reach', label: 'How far out (steps)', min: 1, max: 3, step: 1, integer: true, help: 'Steps through links a create or scene looks for nearby entries.' },
     { key: 'entries', label: 'Entries per prompt', min: 0, max: null, step: 1, integer: true, help: 'The most nearby entries a prompt brings in.' },
     { key: 'facts_per_entry', label: 'Facts per entry', min: 0, max: null, step: 1, integer: true, help: 'The most facts of each it brings.' },
     { key: 'repeat_threshold', label: 'Repeat threshold', min: 0, max: 1, step: 0.05, integer: false, help: 'Word overlap at which a new fact shows as one the world already holds.' },

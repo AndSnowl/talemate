@@ -1,20 +1,13 @@
 // The kinds the World tab shows, with their fact categories (mirroring
-// `talemate.world.kinds.KINDS`). The legacy culture kind (`viaSkill`) is
-// listed, but can't be opened or created here: a new culture is a sphere
-// (the culture template), and an old culture stub is made one ("Make it a
-// sphere…"). Races and mixes
-// (`nested`) aren't listed at the top level: they're reached from their
-// species page. The Stubs tab (`STUBS_TAB`) sits below the kinds.
-//
-// Spheres (`talemate.world.spheres`): the templates (`SPHERE_TEMPLATES`,
-// each with whether it acts in the world), the drawer types, the Spheres
-// list grouped by template (`sphereGroups`), the drawers a thing may be
-// filed in (`partOfDrawers`) and what "Make it a sphere…" is offered on
-// (`canPromote`).
+// `talemate.world.kinds.KINDS`). Races and mixes (`nested`) aren't listed
+// at the top level: they're reached from their species page; Cultures
+// (`viaSkill`) is listed but made through the culture skill. The Stubs,
+// Tags and Settings tabs (`STUBS_TAB`, `TAGS_TAB`, `SETTINGS_TAB`) sit
+// below the kinds.
 //
 // Beings (`talemate.world.kinds`, curation goal 8): a being's `existence`
 // (`EXISTENCE`), and whether it acts in the world like a character
-// (`actsInWorld`: only a real one is cast, played or tied).
+// (`actsInWorld`: only a real one is cast, played or counted as a person).
 
 const HERITAGE_CATEGORIES = ['origin', 'physical', 'instinct', 'variation', 'general'];
 
@@ -87,13 +80,8 @@ export const WORLD_KINDS = [
         categories: ['nature', 'deeds', 'worship', 'general'],
     },
     {
-        kind: 'sphere',
-        label: 'Spheres',
-        singular: 'sphere',
-        icon: 'mdi-orbit',
-        categories: ['timeline', 'about', 'statement'],
-    },
-    {
+        // not a world kind: a pointer to the cultures feature (World Editor →
+        // Cultures), whose cultures are made through the culture skill
         kind: 'culture',
         label: 'Cultures',
         singular: 'culture',
@@ -112,13 +100,15 @@ export const TOP_KINDS = WORLD_KINDS.filter((k) => !k.nested);
 // the World tab's list of stubs, below the kinds
 export const STUBS_TAB = { kind: 'stubs', label: 'Stubs', icon: 'mdi-help-circle-outline' };
 
-// the World tab's settings (curation), below the stubs
+// the World tab's tags (rename and merge), below the stubs
+export const TAGS_TAB = { kind: 'tags', label: 'Tags', icon: 'mdi-tag-multiple-outline' };
+
+// the World tab's settings (curation), below the tags
 export const SETTINGS_TAB = { kind: 'settings', label: 'Settings', icon: 'mdi-tune-variant' };
 
 // the kinds a stub's kind can be changed to: races and mixes are made from
-// their species page, so a stub isn't guessed as one; a culture is a
-// legacy kind (a culture is a sphere now)
-export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'being', 'sphere'];
+// their species page, so a stub isn't guessed as one
+export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'being'];
 
 // Why a stub of `kind` can't be expanded here (null when it can): a race
 // or mix needs its species (or parents), which only its species page's
@@ -137,10 +127,9 @@ export function canExpand(kind) {
     return !expandNote(kind);
 }
 
-// What expanding a stub of `kind` is called: a legacy culture stub is
-// made a culture sphere (`worlds.expandStub`).
-export function expandLabel(kind) {
-    return kind === 'culture' ? 'Make it a sphere…' : 'Expand';
+// What expanding a stub of `kind` is called.
+export function expandLabel(_kind) {
+    return 'Expand';
 }
 
 // the kinds a character's heritage can be (`talemate.world.kinds.HERITAGE_KINDS`)
@@ -174,131 +163,6 @@ export function kindInfo(kind) {
     return WORLD_KINDS.find((k) => k.kind === kind);
 }
 
-// --- spheres ------------------------------------------------------------------
-
-// `talemate.world.kinds.SPHERE_TEMPLATES` and `TEMPLATE_AGENT`, in order,
-// with the Spheres list's group headings
-export const SPHERE_TEMPLATES = [
-    { template: 'religion', label: 'Religion', plural: 'Religions', agent: true },
-    { template: 'nation', label: 'Nation', plural: 'Nations', agent: true },
-    { template: 'order', label: 'Order', plural: 'Orders', agent: true },
-    { template: 'culture', label: 'Culture', plural: 'Cultures', agent: false },
-    { template: 'field', label: 'Field', plural: 'Fields', agent: false },
-    { template: 'other', label: 'Other', plural: 'Other spheres', agent: false },
-];
-
-// `talemate.world.kinds.DRAWER_TYPES`
-export const DRAWER_TYPES = ['people', 'places', 'practices', 'beliefs', 'knowledge', 'structure', 'branches', 'events'];
-
-// the drawer of "no drawer yet" (`UNSORTED_DRAWER_ID`)
-export const UNSORTED = 'unsorted';
-
-// `talemate.world.kinds.WRITTEN_DRAWER_TYPES`: the drawer types whose
-// content is written (entries filed there and statements: Fill, "+ Add",
-// a preview's items); people, events and branches are the app's own
-export const WRITTEN_DRAWER_TYPES = ['places', 'practices', 'beliefs', 'knowledge', 'structure'];
-
-const ENTRY_TYPES = ['practices', 'beliefs', 'knowledge', 'structure'];
-
-// `talemate.world.kinds.ENTRY_DRAWER_TYPES`: the drawer types a thing of
-// each kind may be filed in, its keys the kinds a sphere's drawer can hold
-// (`PART_OF_KINDS`); a character is in a sphere through its ties instead
-export const ENTRY_DRAWER_TYPES = {
-    lore: ENTRY_TYPES,
-    place: ['places'],
-    item: ENTRY_TYPES,
-    event: ENTRY_TYPES,
-    sphere: ENTRY_TYPES,
-    // a god in its faith's Doctrines, a spirit in a culture's customs
-    being: ['beliefs', 'practices', 'structure'],
-};
-
-// `talemate.world.kinds.PART_OF_KINDS`
-export const PART_OF_KINDS = Object.keys(ENTRY_DRAWER_TYPES);
-
-// A template's entry, `other`'s for an unknown or missing one.
-export function templateInfo(template) {
-    return SPHERE_TEMPLATES.find((t) => t.template === template) || SPHERE_TEMPLATES[SPHERE_TEMPLATES.length - 1];
-}
-
-// The Spheres list (`list_things` "sphere" entries, place spheres
-// included) as `[{template, label, things}]` in template order, leaving out
-// empty groups; an unknown or missing template is `other`. Each group keeps
-// the listing's order, stubs among the rest.
-export function sphereGroups(things) {
-    return SPHERE_TEMPLATES.map((info) => ({
-        template: info.template,
-        label: info.plural,
-        things: (things || []).filter((thing) => templateInfo(thing.template).template === info.template),
-    })).filter((group) => group.things.length);
-}
-
-// The drawer types a `kind` thing may be filed in, as the backend allows
-// (`ENTRY_DRAWER_TYPES`): a place in a places drawer, anything else in one
-// that holds entries; none for a kind no drawer holds.
-export function drawerTypesFor(kind) {
-    return ENTRY_DRAWER_TYPES[kind] || [];
-}
-
-// The drawers of a sphere (its payload's `drawers`) a `kind` thing may be
-// filed in, as `{id, title}`, then Unsorted, always allowed.
-export function partOfDrawers(drawers, kind) {
-    const allowed = drawerTypesFor(kind);
-    const found = (drawers || [])
-        .filter((drawer) => drawer.id !== UNSORTED && allowed.includes(drawer.type))
-        .map((drawer) => ({ id: drawer.id, title: drawer.title }));
-    return [...found, { id: UNSORTED, title: 'Unsorted' }];
-}
-
-// Whether "Make it a sphere…" is offered on `thing` (a payload): a lore
-// entry, a place that isn't a sphere yet, or a stub of any kind but
-// sphere (that one's expanded as it is).
-export function canPromote(thing) {
-    if (!thing || thing.sphere) {
-        return false;
-    }
-    if (thing.kind === 'lore' || thing.kind === 'place') {
-        return true;
-    }
-    return !!thing.stub && thing.kind !== 'sphere';
-}
-
-// "Practitioner of", "Of": a tie's role leading its sphere's name.
-export function tieLead(role) {
-    const clean = (role || '').trim();
-    return clean ? `${clean[0].toUpperCase()}${clean.slice(1)} of` : 'Of';
-}
-
-// A sphere's drawers for `set_drawers`: every drawer shown but Unsorted,
-// as `{id, type, title}` (the backend keeps an inherited one sent back
-// unchanged as inherited).
-export function drawersPayload(drawers) {
-    return (drawers || []).filter((drawer) => drawer.id !== UNSORTED).map(({ id, type, title }) => ({ id, type, title }));
-}
-
-// `drawersPayload(drawers)` with the own drawer `id` moved `delta` (-1 up,
-// 1 down) among the sphere's own drawers, inherited ones kept after them;
-// null when it can't move that way.
-export function drawersMoved(drawers, id, delta) {
-    const own = (drawers || []).filter((d) => !d.inherited && d.id !== UNSORTED).map((d) => d.id);
-    const payload = drawersPayload(drawers);
-    const mine = payload.filter((d) => own.includes(d.id));
-    const rest = payload.filter((d) => !own.includes(d.id));
-    const index = mine.findIndex((d) => d.id === id);
-    const to = index + delta;
-    if (index < 0 || to < 0 || to >= mine.length) {
-        return null;
-    }
-    [mine[index], mine[to]] = [mine[to], mine[index]];
-    return [...mine, ...rest];
-}
-
-// `drawersPayload(drawers)` without the drawer `id` (its items show under
-// Unsorted then).
-export function drawersDropped(drawers, id) {
-    return drawersPayload(drawers).filter((d) => d.id !== id);
-}
-
 // --- beings -------------------------------------------------------------------
 
 // `talemate.world.kinds.EXISTENCE_VALUES`, and what an unset one reads as
@@ -313,24 +177,13 @@ export function existenceOf(thing) {
 }
 
 // Whether `thing` (a payload or a listing) acts in the world like a
-// character: a character, or a real being (`spheres.acts_in_world`). Only
-// these are cast in scenes, played, or tied to spheres.
+// character: a character, or a real being (`entries.acts_in_world`). Only
+// these are cast in scenes, played, or counted as persons.
 export function actsInWorld(thing) {
     return thing?.kind === 'character' || (thing?.kind === 'being' && existenceOf(thing) === 'real');
 }
 
 // --- same thing? ----------------------------------------------------------------
-
-// Whether "Make X a sphere…" is offered on a same-thing offer (a
-// `SameOffer`: `{kind, stub}`), as `canPromote` offers it on a page: a lore
-// entry, a place, or a stub of any kind but sphere -- by its `stub` flag,
-// never by the words of its line.
-export function promotableOffer(offer) {
-    if (!offer || offer.kind === 'sphere') {
-        return false;
-    }
-    return offer.kind === 'lore' || offer.kind === 'place' || !!offer.stub;
-}
 
 // A stub row's "same as" onto a thing of another kind (ruling C34: a
 // stub's kind is only a guess, so its row offers every kind): the small
@@ -343,22 +196,34 @@ export function otherKindNote(rowKind, offer) {
     return `(${/^[aeiou]/i.test(kind) ? 'an' : 'a'} ${kind})`;
 }
 
-// A same-thing offer's candidate line ("Name (kind; part of Y, in its Z
-// drawer; stub): its summary") without its name and kind, which show
-// beside it: "part of Y, in its Z drawer: its summary", or just the
-// summary. A line of another shape is shown as it is.
+// A same-thing offer's candidate line ("Name (kind, tag; in Y; stub): its
+// summary") without its name and kind, which show beside it: "in Y: its
+// summary", or just the summary. A line of another shape is shown as it
+// is.
 export function offerSummary(offer) {
     let line = (offer?.line || '').trim();
     if (offer?.name && line.startsWith(offer.name)) {
         line = line.slice(offer.name.length).trim();
     }
-    const found = /^\(([^)]*)\)(?::\s*([\s\S]*))?$/.exec(line);
-    if (!found) {
+    // its parenthesis, which may hold others ("in Velikoye (runs through)")
+    let close = -1;
+    if (line.startsWith('(')) {
+        let depth = 0;
+        for (let i = 0; i < line.length; i += 1) {
+            depth += line[i] === '(' ? 1 : line[i] === ')' ? -1 : 0;
+            if (depth === 0) {
+                close = i;
+                break;
+            }
+        }
+    }
+    const rest = close > 0 ? line.slice(close + 1) : '';
+    if (close < 0 || (rest && !rest.startsWith(':'))) {
         return line;
     }
-    // the kind (and a sphere's template) first; "stub" is shown apart
-    const bits = found[1].split(';').map((bit) => bit.trim()).slice(1).filter((bit) => bit && bit !== 'stub');
-    const summary = (found[2] || '').trim();
+    // the kind (and its tag) first; "stub" is shown apart
+    const bits = line.slice(1, close).split(';').map((bit) => bit.trim()).slice(1).filter((bit) => bit && bit !== 'stub');
+    const summary = rest.slice(1).trim();
     if (!bits.length) {
         return summary;
     }

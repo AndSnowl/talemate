@@ -23,29 +23,11 @@
                     <span class="text-h5 thing-name" data-testid="thing-name">{{ thing.name }}</span>
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Rename" data-testid="rename-thing" @click="startRename"></v-btn>
                 </template>
-                <v-chip v-if="!thing.sphere || thing.kind !== 'sphere'" size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
-                <template v-if="thing.sphere">
-                    <v-chip size="x-small" label variant="outlined" prepend-icon="mdi-orbit" data-testid="sphere-template">sphere{{ thing.sphere.template ? ' · ' + thing.sphere.template : '' }}</v-chip>
-                    <v-chip
-                        size="x-small"
-                        label
-                        variant="outlined"
-                        data-testid="sphere-agent"
-                        :title="thing.sphere.agent ? 'It acts in the world (click: a body of knowledge)' : 'A body of knowledge (click: it acts in the world)'"
-                        :disabled="!!worlds.pending.set_field"
-                        @click="worlds.setField('agent', !thing.sphere.agent)"
-                    >{{ thing.sphere.agent ? 'acts in the world' : 'a body of knowledge' }}</v-chip>
-                </template>
+                <v-chip size="x-small" label variant="tonal" color="muted" :prepend-icon="info?.icon" data-testid="thing-kind">{{ thing.kind }}</v-chip>
+                <TagChip :thing-id="thing.id" :tag="thing.tag" />
+                <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
+                <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
                 <v-spacer></v-spacer>
-
-                <v-btn
-                    v-if="canPromote(thing)"
-                    variant="outlined"
-                    size="small"
-                    prepend-icon="mdi-orbit"
-                    data-testid="make-sphere"
-                    @click="worlds.makeSphere(thing)"
-                >Make it a sphere…</v-btn>
 
                 <v-menu v-model="asOfMenu" :close-on-content-click="false" location="bottom end">
                     <template #activator="{ props }">
@@ -135,9 +117,25 @@
                 <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
             </div>
 
-            <SpherePage v-if="thing.sphere" />
+            <EntryIn :thing="thing" />
 
-            <v-row>
+            <!-- the entry's summary fact heads the page -->
+            <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
+                <div class="fact d-flex align-center ga-2" data-testid="fact-row">
+                    <span class="flex-grow-1 summary-text">
+                        <LinkedText :segments="summaryFact.segments" :text="summaryFact.rendered" repoint :exclude="[thing.id]" @repoint="repointLink(summaryFact, $event)" />
+                        <span v-if="summaryFact.held_by" class="held" data-testid="held-by-tag">held by {{ summaryFact.held_by.name }}</span>
+                    </span>
+                    <span class="fact-date">{{ spanLabel(worlds.calendar, summaryFact.valid_from, summaryFact.valid_until) }}</span>
+                    <FactRowActions :fact="summaryFact" />
+                    <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="startEdit(summaryFact)"></v-btn>
+                </div>
+                <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
+                    <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
+                </div>
+            </div>
+
+            <v-row class="mt-1">
                 <v-col cols="12" md="6">
                     <div v-for="field in shownFields" :key="field.name" class="field d-flex align-center flex-wrap ga-2" :data-testid="'field-' + field.name">
                         <span class="field-label">{{ field.label }}</span>
@@ -167,19 +165,17 @@
                         </v-btn-toggle>
                         <span class="text-caption text-muted">{{ existenceNote }}</span>
                     </div>
-                    <PartOfLine v-if="hasPartOf" :thing="thing" />
                     <ThingNumbers v-if="isHeritage" />
                     <ThingAka />
 
-                    <!-- a pure sphere's facts all show in its sphere part -->
-                    <template v-if="thing.kind !== 'sphere'">
                     <div class="d-flex align-center mt-4 mb-1">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
                         <v-spacer></v-spacer>
+                        <EntryAddFacts v-if="!thing.stub" :thing="thing" />
                         <v-btn v-if="!form || form.factId" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
                     </div>
 
-                    <div v-if="form && !form.factId && !form.anchor" class="mb-2">
+                    <div v-if="form && !form.factId" class="mb-2">
                         <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" />
                     </div>
 
@@ -201,7 +197,6 @@
                             <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(fact)" />
                         </div>
                     </template>
-                    </template>
 
                     <ThingInherited
                         v-if="showInherited"
@@ -213,12 +208,6 @@
                         @save="saveForm"
                         @cancel="form = null"
                     />
-                    <!-- every page's Timeline (a sphere's shows in its sphere part) -->
-                    <template v-if="!thing.sphere">
-                        <div class="text-overline text-muted mt-4">Timeline</div>
-                        <EntryTimeline :lines="thing.entry_timeline || []" />
-                    </template>
-                    <TiesSection v-if="actsInWorld(thing)" :thing="thing" />
                     <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
                     <NamedStubs :stubs="thing.named_stubs || []" />
                 </v-col>
@@ -268,6 +257,14 @@
                     </template>
                 </v-col>
             </v-row>
+
+            <EntryConnected :thing="thing" class="mt-4" />
+            <EntryMentionedIn :thing="thing" />
+            <EntryTimeline :lines="thing.entry_timeline || []" class="mt-4">
+                <template #actions>
+                    <EntryAddFacts v-if="!thing.stub" :thing="thing" event />
+                </template>
+            </EntryTimeline>
         </template>
 
         <ThingDeleteDialog />
@@ -278,38 +275,39 @@
 <script>
 import { listedFacts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
-import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, PART_OF_KINDS, actsInWorld, canPromote, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
+import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
 import { formatNumber } from './worldNumbers.js';
 import { NEW_THING, factEditState, factLinkPayload, refOccurrence, repicks } from './nameHighlights.js';
+import EntryAddFacts from './EntryAddFacts.vue';
+import EntryConnected from './EntryConnected.vue';
+import EntryIn from './EntryIn.vue';
+import EntryMentionedIn from './EntryMentionedIn.vue';
 import EntryTimeline from './EntryTimeline.vue';
 import FactRowActions from './FactRowActions.vue';
 import HeritageSections from './HeritageSections.vue';
 import LinkedText from './LinkedText.vue';
 import MergeDialog from './MergeDialog.vue';
 import NamedStubs from './NamedStubs.vue';
-import PartOfLine from './PartOfLine.vue';
-import SpherePage from './SpherePage.vue';
 import StubCard from './StubCard.vue';
+import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
 import ThingFactForm from './ThingFactForm.vue';
 import ThingInherited from './ThingInherited.vue';
 import ThingNumbers from './ThingNumbers.vue';
 import ThingReferencedIn from './ThingReferencedIn.vue';
-import TiesSection from './TiesSection.vue';
 
-// fields shown elsewhere (the name; a heritage kind's numbers; a sphere's
-// template, agent flag, drawers and branch parent; part of; ties), not
-// shown in the slice (cultures, languages, a branch's drops), or not for
-// reading (voice, colour)
+// fields shown elsewhere (the name; a heritage kind's numbers; the tag,
+// prompt hint and filings in the header and "In"; a being's existence),
+// or not for reading (voice, colour, the agent flag, other names)
 const HIDDEN_FIELDS = [
-    'name', 'culture', 'cultures', 'voice', 'color', 'lifespan', 'adult_age', 'measures',
-    'template', 'agent', 'drawers', 'part_of', 'ties', 'drops', 'language', 'existence',
+    'name', 'voice', 'color', 'lifespan', 'adult_age', 'measures',
+    'agent', 'existence', 'tag', 'hint', 'filings', 'aka',
 ];
 
 // what a being's existence means for it
 const EXISTENCE_NOTES = {
-    real: 'It acts in the world like a character: it can be cast in scenes and hold ties.',
+    real: 'It acts in the world like a character: it can be cast in scenes, and counts as a person where it is filed.',
     believed: 'Only ever spoken of in scenes.',
     undecided: 'Treated as believed until you decide.',
 };
@@ -317,7 +315,6 @@ const EXISTENCE_NOTES = {
 const FIELD_LABELS = {
     born: 'Born',
     kind: 'Kind',
-    parent: 'Inside',
     owner: 'Owner',
     place: 'Place',
     when: 'When',
@@ -362,23 +359,26 @@ function cut(text, length = 28) {
 // page has no prose: its card (kind, Expand, Ignore) and what mentions it
 // instead.
 //
-// Spheres: a sphere (or a place that took on a template) shows its
-// template and agent chips (the agent flag toggles) and its sphere part
-// (`SpherePage`: summary, drawers, Timeline, Branches); an entry a sphere
-// can hold has a "Part of" line (`PartOfLine`); a character its Ties
-// (`TiesSection`), its "but…" facts shown there rather than among its
-// facts. "Make it a sphere…" shows on a lore entry, a place that isn't a
-// sphere and a stub (`worlds.makeSphere`).
+// The entry page (mockup v3, screens A, B and D): under the header (name,
+// kind, the tag chip with its picker, its everyday name, the prompt hint
+// it was written with) come its "In" rows (`EntryIn`), its summary fact,
+// its facts ("+ Add facts…", `EntryAddFacts`), then what's filed in it
+// grouped by tag (`EntryConnected`), what names it ("Mentioned in",
+// folded) and its Timeline ("Events ▾", "+ Add event…").
 //
 // Curation: every page has a Timeline (`EntryTimeline`, its
-// `entry_timeline`; a sphere's shows in its sphere part); each own fact
+// `entry_timeline`); each own fact
 // row has "Move to…" and "Held by…" (`FactRowActions`), a held one tagged
 // "held by X"; "Merge into…" opens the merge dialog (`MergeDialog`). A
 // being has its existence picked here (real, believed or undecided); only
-// a real one has Ties, as a character does.
+// a real one is a person, with "within" and "but…" on its "In" rows.
 export default {
     name: 'ThingPage',
     components: {
+        EntryAddFacts,
+        EntryConnected,
+        EntryIn,
+        EntryMentionedIn,
         EntryTimeline,
         FactRowActions,
         HeritageSections,
@@ -392,32 +392,10 @@ export default {
         ThingInherited,
         ThingNumbers,
         ThingReferencedIn,
-        TiesSection,
-        PartOfLine,
-        SpherePage,
+        TagChip,
     },
     setup() {
         return { worlds: useWorldsStore() };
-    },
-    // the page's fact form, for the sphere part's own facts (drawer
-    // statements, Timeline rows, about facts: `SphereFactRow`,
-    // `SphereFactAdd`), which open it where they show
-    provide() {
-        return {
-            factEditor: {
-                form: () => this.form,
-                categories: () => this.categories,
-                busy: () => this.editing,
-                ownFact: (id) => (this.thing?.facts || []).find((fact) => fact.fact_id === id) || null,
-                edit: (fact) => this.startEdit(fact),
-                add: (category, anchor) => this.startAddIn(category, anchor),
-                save: () => this.saveForm(),
-                cancel: () => {
-                    this.form = null;
-                },
-                remove: (fact) => this.removeFact(fact),
-            },
-        };
     },
     data() {
         return {
@@ -475,28 +453,21 @@ export default {
         proseSectionCount() {
             return Object.keys(this.thing?.prose || {}).length;
         },
-        // a stub has nothing written yet to make prose from; a sphere's
-        // summary (its description) heads its sphere part instead
+        // a stub has nothing written yet to make prose from
         proseShown() {
-            if (this.thing?.stub) {
-                return {};
-            }
-            const prose = this.thing?.prose || {};
-            if (this.thing?.sphere) {
-                const { description: _summary, ...rest } = prose;
-                return rest;
-            }
-            return prose;
+            return this.thing?.stub ? {} : this.thing?.prose || {};
         },
-        // every kind a sphere's drawer can hold has a Part of line
-        hasPartOf() {
-            return PART_OF_KINDS.includes(this.thing?.kind);
-        },
-        // the facts listed (`listedFacts`): a sphere's statements, timeline
-        // and about facts, and a character's "but…" exceptions, show (and
-        // are edited) elsewhere on the page
+        // the facts listed (`listedFacts`): the summary heads the page, and
+        // a person's "but…" exceptions show under its "In" rows
         shownFacts() {
             return listedFacts(this.thing);
+        },
+        summaryFact() {
+            return (this.thing?.facts || []).find((fact) => fact.summary) || null;
+        },
+        // the other name it's usually called by, if one is
+        everydayName() {
+            return (this.thing?.aka || []).find((entry) => entry.everyday)?.name || null;
         },
         stubOfPage() {
             const thing = this.thing;
@@ -515,8 +486,7 @@ export default {
             const calendar = this.worlds.calendar;
             const fields = [];
             for (const [name, value] of Object.entries(this.thing.fields)) {
-                // a branch's parent heads its sphere part
-                if (HIDDEN_FIELDS.includes(name) || value == null || (name === 'parent' && this.thing.kind === 'sphere')) {
+                if (HIDDEN_FIELDS.includes(name) || value == null) {
                     continue;
                 }
                 const field = { name, label: FIELD_LABELS[name] || name };
@@ -616,8 +586,6 @@ export default {
     },
     methods: {
         repointedNote,
-        canPromote,
-        actsInWorld,
         setExistence(value) {
             if (value && value !== this.existence) {
                 this.worlds.setField('existence', value);
@@ -708,10 +676,6 @@ export default {
         },
         startAdd() {
             this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
-        },
-        // an add form opened where a sphere shows that category (`anchor`)
-        startAddIn(category, anchor) {
-            this.form = { mode: 'add', category, anchor, text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
         },
         startEdit(fact) {
             const { text, links } = this.editState(fact);
@@ -917,6 +881,11 @@ export default {
     color: rgb(var(--v-theme-muted));
     min-width: 80px;
     text-align: right;
+}
+
+.summary-text {
+    font-size: 15px;
+    line-height: 1.5;
 }
 
 .stub-panel {

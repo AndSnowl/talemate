@@ -504,6 +504,25 @@ def set_fixed_preview(root: Path, preview: dict) -> None:
     (Path(root) / FIXED_PREVIEW_FILE).write_text(json.dumps(preview))
 
 
+# The app's `worlds` router answers "+ Add facts…"/"+ Add event…"
+# (`add_facts`, `add_event`), a group's "✎ Synopsis" (`group_synopsis`) and
+# a group's "+ Add" (`group_add`) from these files (in the app root), read
+# through the real parsers as the model's reply; the `app` fixture points
+# the backend's TALEMATE_TEST_FIXED_FACTS, TALEMATE_TEST_FIXED_GROUP_SYNOPSIS
+# and TALEMATE_TEST_FIXED_GROUP_ADD at them.
+FIXED_FACTS_FILE = "e2e-fixed-facts.json"
+FIXED_GROUP_SYNOPSIS_FILE = "e2e-fixed-group-synopsis.json"
+FIXED_GROUP_ADD_FILE = "e2e-fixed-group-add.json"
+
+
+def set_fixed_reply(root: Path, file_name: str, reply: dict) -> None:
+    """Make the app's next replies of that kind ``reply``, the model's
+    reply: ``{"facts": [{"category", "text"}]}`` for facts and events,
+    ``{"synopsis": text}`` for a synopsis, ``{"entries": [{"name", "kind",
+    "tag", "line"}]}`` for a group's "+ Add"."""
+    (Path(root) / file_name).write_text(json.dumps(reply))
+
+
 # The app's `worlds` router answers `plan_scene` and `continue_scene` from
 # this file (in the app root) instead of asking a model; the `app` fixture
 # points the backend's TALEMATE_TEST_FIXED_SETUP at it.

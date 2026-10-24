@@ -25,7 +25,7 @@
     <div v-else class="same-ask pa-2 mb-3" data-testid="same-thing">
         <div class="mb-1">
             Is <b>“{{ name }}”</b> the same as {{ offers.length === 1 ? 'this' : 'one of these' }}?
-            <span class="text-caption text-muted">{{ variant === 'promote' ? 'If so, make that one a sphere instead.' : 'If so, its facts go there, and its name becomes another name of it.' }}</span>
+            <span class="text-caption text-muted">If so, its facts go there, and its name becomes another name of it.</span>
         </div>
         <div
             v-for="offer in offers"
@@ -43,12 +43,7 @@
                 <v-icon size="x-small" icon="mdi-robot-outline"></v-icon>
                 AI's hint: {{ hint(offer).verdict }}<template v-if="hint(offer).why"> — {{ hint(offer).why }}</template>
             </span>
-            <template v-if="variant === 'promote'">
-                <v-btn v-if="offer.kind === 'sphere'" variant="outlined" size="x-small" @click="worlds.openThing(offer.thing_id)">Open {{ offer.name }}</v-btn>
-                <v-btn v-else-if="promotableOffer(offer)" variant="outlined" size="x-small" prepend-icon="mdi-orbit" @click="$emit('promote', offer)">Make {{ offer.name }} a sphere…</v-btn>
-            </template>
             <v-btn
-                v-else
                 :variant="chosen === offer.thing_id ? 'flat' : 'outlined'"
                 :color="chosen === offer.thing_id ? 'accent' : undefined"
                 size="x-small"
@@ -56,7 +51,7 @@
                 @click="$emit('choose', offer.thing_id)"
             >Yes, fill it</v-btn>
         </div>
-        <div v-if="variant !== 'promote'" class="d-flex align-center ga-2 mt-1">
+        <div class="d-flex align-center ga-2 mt-1">
             <v-btn
                 :variant="chosen ? 'outlined' : 'flat'"
                 :color="chosen ? undefined : 'accent'"
@@ -71,7 +66,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { offerSummary, otherKindNote, promotableOffer } from './worldKinds.js';
+import { offerSummary, otherKindNote } from './worldKinds.js';
 
 // the row choice's value for "new"
 const NEW = '__new__';
@@ -83,9 +78,6 @@ const NEW = '__new__';
 //   verdict (`verdict`, id -> {verdict, why}) is only a hint beside its
 //   candidate, never a default: the answer starts as "new". "Yes, fill
 //   it" emits `choose` with the thing's id, "No, it's new" with null.
-// - `promote`: a sphere's core can't be accepted onto an entry (ruling
-//   C9): a lore entry, place or stub it may be is offered "Make X a
-//   sphere…" (`promote`, the offer); a sphere it may be is opened.
 // - `row`: a stub row's small "same as X?" choice, "new" by default. A
 //   stub's kind is a guess, so it offers every kind; a choice of another
 //   kind than the row's (`kind`) shows "(a lore)" beside it (ruling C34).
@@ -102,7 +94,7 @@ export default {
         // the entry's or row's own kind, for the note on another kind
         kind: { type: String, default: null },
     },
-    emits: ['choose', 'promote'],
+    emits: ['choose'],
     setup() {
         return { worlds: useWorldsStore(), NEW };
     },
@@ -135,7 +127,6 @@ export default {
         hint(offer) {
             return this.verdict?.[offer.thing_id] || null;
         },
-        promotableOffer,
     },
 };
 </script>

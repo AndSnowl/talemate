@@ -75,8 +75,7 @@ import StubCard from './StubCard.vue';
 // entry is a solid link that opens its page; one linking a stub is dashed,
 // in the stub colour, with the stub's card on hover (not made yet, its
 // kind, its mentions, Expand and Ignore), and clicking it expands it (a
-// legacy culture stub as a culture sphere; a race or mix stub, which can't
-// be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
+// race or mix stub, which can't be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
 // only made on accept. With no segments, `text` shows as it is.
 //
 // With `repoint` (an own fact on its thing's page), an entry link gets a

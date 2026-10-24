@@ -16,7 +16,6 @@
                 />
                 <v-btn variant="text" size="x-small" @click="tickGroup(group, !anyTicked(group))">{{ anyTicked(group) ? 'Untick all' : 'Tick all' }}</v-btn>
             </div>
-            <OuterBodyForm v-if="group.new && !group.new.same_target_id" :row-name="group.new.name" @submit="worlds.addOuterBody(type, group.new.name, $event)" />
             <div v-for="index in group.rows" :key="index" class="row" data-testid="elsewhere-row">
                 <div class="d-flex align-center ga-2">
                     <v-checkbox-btn
@@ -54,27 +53,23 @@ import { elsewhereGroups, elsewhereSame, previewSegments, rowChanged, rowsTicked
 import { formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
-import OuterBodyForm from './OuterBodyForm.vue';
 import SameThingAsk from './SameThingAsk.vue';
 
 // "Belongs on other entries" (curation goal 1): a preview's facts about
 // other entries, grouped by the entry they're for, each ticked as it came
 // (the owner's decision) and written onto that entry on Accept. A group
 // can be unticked (or ticked) at once; each row's category can be changed
-// among its entry's kind's (never a sphere's drawer statement: it files
-// it as `about`, or a dated one as `timeline`). A repeat of what the
-// entry already says shows its match. An entry not made yet is a new stub:
-// its kind and where it's filed, a "same as X?" choice when the world may
-// have it already (new by default), and "Part of a body not yet made…"
-// (`add_outer_body`). `rows` are the preview's `elsewhere`; every change
-// emits `update` with the whole list.
+// among its entry's kind's (a timeline fact only when dated). A repeat of
+// what the entry already says shows its match. An entry not made yet is a
+// new stub: its kind and tag, and a "same as X?" choice when the world may
+// have it already (new by default). `rows` are the preview's
+// `elsewhere`; every change emits `update` with the whole list.
 export default {
     name: 'PreviewElsewhere',
-    components: { LinkedText, OuterBodyForm, SameThingAsk },
+    components: { LinkedText, SameThingAsk },
     props: {
         rows: { type: Array, required: true },
-        // which preview it is, for `add_outer_body`: 'create', 'sphere',
-        // 'branch' or 'fill'
+        // which preview it is ('create')
         type: { type: String, required: true },
         // the preview's new names, shown as such in the texts
         newNames: { type: Array, default: () => [] },
@@ -112,25 +107,20 @@ export default {
             }
             return this.worlds.referenceTargets.find((target) => target.id === group.targetId)?.kind || null;
         },
-        // its entry's kind's categories (a sphere's but its statements; a
-        // timeline fact only when dated), and the one it has
+        // its entry's kind's categories (a timeline fact only when dated),
+        // and the one it has
         categoryOptions(group, row) {
             const kind = this.kindOf(group);
             const all = kindInfo(kind)?.categories || [];
             const options = all.filter((category) => category !== 'statement' && (category !== 'timeline' || row.since));
             return options.includes(row.category) ? options : [row.category, ...options];
         },
-        // "new stub · order sphere, part of the Tsardom — Military"
+        // "new stub · lore, custom": its kind and its tag
         newLine(group) {
             const fresh = group.new;
-            const kind = fresh.kind === 'sphere' && fresh.template ? `${fresh.template} sphere` : fresh.kind;
-            const parts = [`new stub · ${kind}`];
-            const home = fresh.part_of;
-            if (home?.name) {
-                parts.push(`part of ${home.name}`);
-            } else if (home?.sphere) {
-                const sphere = this.worlds.referenceTargets.find((target) => target.id === home.sphere);
-                parts.push(`part of ${sphere?.name || 'a sphere'}`);
+            const parts = [`new stub · ${fresh.kind}`];
+            if (fresh.tag) {
+                parts.push(fresh.tag);
             }
             if (fresh.same_target_id) {
                 return 'no stub: it goes onto the entry picked';

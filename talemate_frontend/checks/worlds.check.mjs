@@ -14,8 +14,6 @@ import {
     akaChanged,
     akaEveryday,
     akaRemoved,
-    branchKept,
-    ALREADY_TIED,
     countsLine,
     currentNameFrom,
     defaultOverrideIndex,
@@ -32,7 +30,6 @@ import {
     parseWorldTarget,
     previewCounts,
     previewSegments,
-    rejectableItems,
     repointedNote,
     moveInEdit,
     rowChanged,
@@ -40,7 +37,6 @@ import {
     shelvedRows,
     samePage,
     sameParents,
-    tiesPayload,
     useWorldsStore,
     worldTarget,
 } from '../src/stores/worlds.js';
@@ -61,20 +57,12 @@ import {
     searchReferences,
 } from '../src/components/worlds/nameHighlights.js';
 import {
-    DRAWER_TYPES,
-    ENTRY_DRAWER_TYPES,
     EXISTENCE,
-    PART_OF_KINDS,
+    LISTED_KINDS,
     STUB_KINDS,
     TOP_KINDS,
-    WRITTEN_DRAWER_TYPES,
     actsInWorld,
     canExpand,
-    canPromote,
-    drawerTypesFor,
-    drawersDropped,
-    drawersMoved,
-    drawersPayload,
     existenceOf,
     escapeCloses,
     expandLabel,
@@ -82,12 +70,20 @@ import {
     overrideCategory,
     offerSummary,
     otherKindNote,
-    partOfDrawers,
-    promotableOffer,
-    sphereGroups,
-    templateInfo,
-    tieLead,
 } from '../src/components/worlds/worldKinds.js';
+import {
+    GROUP_SHOWN,
+    connectedCount,
+    dropTag,
+    filingDates,
+    groupKey,
+    groupView,
+    kindList,
+    normaliseTag,
+    tagChoices,
+    tagHeading,
+    timelineShown,
+} from '../src/components/worlds/entryPage.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 
 let passed = 0;
@@ -504,7 +500,7 @@ const reply = (action, data, extra = {}) => ({ type: 'worlds', action, data, ...
 const WORLD = { id: 'w1', name: 'Vael', path: '/worlds/w1', calendar: {}, present: dateOf(1000), now: dateOf(1000) };
 
 // every kind's listing, as opening a world, an accept or a started scene asks
-const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being', 'sphere'];
+const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being'];
 const STUBS_REQUEST = { type: 'worlds', action: 'list_stubs', include_ignored: true };
 
 // whether `sent` asked for the stubs and every kind's listing
@@ -531,7 +527,7 @@ check('opening a world lists its things and scenes', () => {
     assert.deepEqual(store.pending, {});
     assert.deepEqual(
         sent.map((m) => m.kind || m.action),
-        [...ALL_KINDS, 'list_stubs', 'list_scenes', 'get_present'],
+        [...ALL_KINDS, 'list_stubs', 'list_tags', 'list_scenes', 'get_present'],
     );
     store.handleMessage(reply('list_things', { kind: 'place', things: [{ id: 'p1', kind: 'place', name: 'Sallowford' }] }));
     assert.equal(store.things.place[0].name, 'Sallowford');
@@ -600,7 +596,6 @@ check("accepts send the preview as the owner left it: ticks, elsewhere facts and
             { fact_id: 'm1', from_id: 'tsardom', text: 'Its law code.', ticked: true },
             { fact_id: 'm2', from_id: 'tsardom', text: 'Its army.', ticked: false },
         ],
-        refile: [{ thing_id: 'fw', from: { sphere: 'tsardom', drawer: 'mil' }, to: { name: 'Army', drawer: 'unsorted' }, ticked: false }],
         prose: {},
     };
     store.handleMessage(reply('preview_thing', preview));
@@ -609,11 +604,10 @@ check("accepts send the preview as the owner left it: ticks, elsewhere facts and
     assert.deepEqual(store.previewShelved, [0]);
     assert.deepEqual(shelvedRows([{ repeat_of: {}, ticked: true }, { repeat_of: null, ticked: false }, { repeat_of: {}, ticked: false }]), [2]);
     // the owner's edits: the repeat ticked in, the Tsardom row unticked,
-    // the stub row is the White Talon the world has, one re-file ticked
+    // the stub row is the White Talon the world has
     store.editPreview('create', { facts: rowsTicked(store.preview.facts, [0], true) });
     store.editPreview('create', { elsewhere: rowsTicked(store.preview.elsewhere, [0], false) });
     store.editPreview('create', { elsewhere: elsewhereSame(store.preview.elsewhere, 'the White Talon', 'wt') });
-    store.editPreview('create', { refile: rowsTicked(store.preview.refile, [0], true) });
     store.acceptPreview({ name: 'The Divine Right of the Tsar' }, { sameTargetId: 'church' });
     const request = sent.at(-1);
     assert.equal(request.action, 'accept_preview');
@@ -624,7 +618,6 @@ check("accepts send the preview as the owner left it: ticks, elsewhere facts and
     assert.deepEqual(out.elsewhere.map((row) => row.ticked), [false, true]);
     assert.equal(out.elsewhere[1].new.same_target_id, 'wt');
     assert.deepEqual(out.move_in.map((row) => row.ticked), [true, false]);
-    assert.deepEqual(out.refile.map((row) => row.ticked), [true]);
     // no same target, no key
     store.acceptPreview();
     assert.equal('same_target_id' in sent.at(-1), false);
@@ -634,88 +627,6 @@ check("accepts send the preview as the owner left it: ticks, elsewhere facts and
     store.clearNotes();
     assert.equal(store.notes, null);
 
-    // Fill: the whole preview, ticks as the owner left them
-    store.openThing('dawn');
-    store.fillDrawer('dawn', 'd1');
-    const items = [
-        { drawer_id: 'd1', name: '', text: 'A copy.', kind: '', names: [], ticked: false, repeat_of: { fact_id: 'f2' } },
-        { drawer_id: 'd1', name: 'Vigil', text: 'A prayer.', kind: 'lore', names: [], ticked: true },
-    ];
-    const elsewhere = [{ target_id: 't1', target_name: 'Tsardom', category: 'about', text: 'x', ticked: true }];
-    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items, elsewhere, new_names: [], refile: [] }));
-    assert.deepEqual(store.fill.shelved, [0]);
-    store.editPreview('fill', { elsewhere: rowsTicked(store.fill.elsewhere, [0], false) });
-    store.acceptFill();
-    assert.deepEqual(sent.at(-1).items.map((item) => item.ticked), [false, true]);
-    assert.deepEqual(sent.at(-1).elsewhere.map((row) => row.ticked), [false]);
-    store.handleMessage(reply('accept_fill', { id: 'dawn', kind: 'sphere', name: 'The White Dawn', sphere: {}, notes: ['one left out'] }));
-    assert.deepEqual(store.notes.notes, ['one left out']);
-});
-
-check('an outer body is asked for on the preview it is for, and its reply replaces that one', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.previewThing('lore', 'a doctrine');
-    store.handleMessage(reply('preview_thing', { kind: 'lore', name: 'Doctrine', facts: [], elsewhere: [], new_names: [], refile: [], prose: {} }));
-    const outer = { name: "The Tsar's Army", template: 'order', part_of: { sphere: 'tsardom', drawer: 'mil' } };
-    store.addOuterBody('create', 'White Talon', outer);
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds',
-        action: 'add_outer_body',
-        preview_type: 'create',
-        preview: store.preview,
-        row_name: 'White Talon',
-        outer,
-        as_sphere: false,
-    });
-    const army = { name: "The Tsar's Army", kind: 'sphere', template: 'order', part_of: { sphere: 'tsardom', drawer: 'mil' } };
-    store.handleMessage(reply('add_outer_body', { preview_type: 'create', preview: { ...store.preview, new_names: [army] } }));
-    assert.deepEqual(store.preview.new_names, [army]);
-    assert.equal(store.outerFor, null);
-
-    // a branch goes as a sphere preview, and comes back as the branch
-    store.previewBranch('dawn', 'the smiths');
-    store.handleMessage(reply('preview_branch', { name: 'The Forge Dawn', items: [], new_names: [], refile: [], drops: [], rejects: [], parent_items: [] }));
-    store.addOuterBody('branch', 'The Forge', { name: 'Guild', template: 'order', part_of: null });
-    assert.equal(sent.at(-1).preview_type, 'sphere');
-    store.handleMessage(reply('add_outer_body', { preview_type: 'sphere', preview: { ...store.branchPreview, new_names: [army] } }));
-    assert.deepEqual(store.branchPreview.new_names, [army]);
-    assert.equal(store.spherePreview, null);
-
-    // Fill's comes back into the Fill
-    store.fillDrawer('dawn', 'd1');
-    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items: [{ name: 'Talon', text: 't' }], elsewhere: [], new_names: [], refile: [] }));
-    store.addOuterBody('fill', 'Talon', outer);
-    assert.deepEqual(sent.at(-1).preview, { sphere_id: 'dawn', drawer_id: 'd1', items: [{ name: 'Talon', text: 't' }], elsewhere: [], new_names: [], refile: [] });
-    const refile = [{ thing_id: 'fw', to: { name: "The Tsar's Army", drawer: 'unsorted' }, ticked: false }];
-    store.handleMessage(reply('add_outer_body', { preview_type: 'fill', preview: { sphere_id: 'dawn', drawer_id: 'd1', items: [{ name: 'Talon', text: 't', part_of: { name: "The Tsar's Army" } }], elsewhere: [], new_names: [army], refile } }));
-    assert.deepEqual(store.fill.refile, refile);
-    assert.deepEqual(store.fill.new_names, [army]);
-    assert.equal(store.fill.sphereId, 'dawn');
-    // a reply for a preview since replaced is dropped: another drawer's
-    // Fill, or a preview asked for again meanwhile
-    const before = store.fill.items;
-    store.addOuterBody('fill', 'Talon', outer);
-    store.fillDrawer('dawn', 'd2');
-    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd2', items: [{ name: 'Other', text: 'o' }], elsewhere: [], new_names: [], refile: [] }));
-    store.handleMessage(reply('add_outer_body', { preview_type: 'fill', preview: { sphere_id: 'dawn', drawer_id: 'd1', items: before, elsewhere: [], new_names: [army], refile } }));
-    assert.deepEqual(store.fill.items, [{ name: 'Other', text: 'o' }]);
-    assert.deepEqual(store.fill.new_names, []);
-    store.previewThing('lore', 'a doctrine');
-    store.handleMessage(reply('preview_thing', { kind: 'lore', name: 'Doctrine', facts: [], elsewhere: [], new_names: [], refile: [], prose: {} }));
-    store.addOuterBody('create', 'White Talon', outer);
-    store.regeneratePreview();
-    store.handleMessage(reply('add_outer_body', { preview_type: 'create', preview: { name: 'Stale', new_names: [army] } }));
-    assert.equal(store.preview, null);
-    store.handleMessage(reply('preview_thing', { kind: 'lore', name: 'Doctrine', facts: [], elsewhere: [], new_names: [], refile: [], prose: {} }));
-    // a reply of another type than the one asked for is dropped too
-    store.addOuterBody('create', 'White Talon', outer);
-    store.handleMessage(reply('add_outer_body', { preview_type: 'fill', preview: { name: 'Odd', new_names: [army] } }));
-    assert.deepEqual(store.preview.new_names, []);
-    // an error clears what was waiting
-    store.addOuterBody('fill', 'Other', outer);
-    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'a part can\'t be its own outer body' } });
-    assert.equal(store.outerFor, null);
 });
 
 check('a same-thing offer: a stub by its flag, never by its words; its summary without the kind', () => {
@@ -723,14 +634,12 @@ check('a same-thing offer: a stub by its flag, never by its words; its summary w
     const candle = { thing_id: 'c', name: 'Old Candle', kind: 'item', line: 'Old Candle (item; part of Church, in its Rites drawer): a stub of wax.', stub: false };
     const shore = { thing_id: 's', name: 'Ashenmere Shore', kind: 'place', line: 'Ashenmere Shore (place; stub)', stub: true };
     const relic = { thing_id: 'r', name: 'Relic', kind: 'item', line: 'Relic (item; stub)', stub: true };
-    const dawn = { thing_id: 'd', name: 'Dawn', kind: 'sphere', line: 'Dawn (sphere: religion; stub)', stub: true };
-    // a full item whose summary says "stub" isn't one
-    assert.equal(promotableOffer(candle), false);
-    assert.equal(promotableOffer(relic), true);
-    assert.equal(promotableOffer(lake), true);
-    assert.equal(promotableOffer(dawn), false);
+    const river = { thing_id: 'k', name: 'Khorol', kind: 'place', line: 'Khorol (place, river; in Velikoye (runs through)): A wide river.', stub: false };
     assert.equal(offerSummary(lake), 'A stub of land juts into the lake.');
     assert.equal(offerSummary(candle), 'part of Church, in its Rites drawer: a stub of wax.');
+    // its tag goes with its kind; where it's filed stays
+    assert.equal(offerSummary(river), 'in Velikoye (runs through): A wide river.');
+    assert.equal(offerSummary(relic), '');
     assert.equal(offerSummary(shore), '');
     assert.equal(offerSummary({ name: 'X', kind: 'lore', line: 'Something else' }), 'Something else');
 });
@@ -756,31 +665,13 @@ check('the Accept line counts what an accept writes', () => {
         ],
         new_names: [{ name: "The Tsar's Army" }, { name: 'Synod', same_target_id: 's1' }],
         move_in: [{ ticked: true }, { ticked: false }],
-        refile: [{ ticked: true }],
     };
     const counts = previewCounts(preview);
-    assert.deepEqual(counts, { facts: 2, items: 0, here: 2, elsewhere: 4, stubs: 2, movedIn: 1, refiled: 1 });
-    assert.equal(countsLine(counts), 'writes 2 facts here, 4 elsewhere, 2 new stubs, moves 1 in, re-files 1');
-    const one = { facts: 1, items: 0, here: 1, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0 };
+    assert.deepEqual(counts, { facts: 2, elsewhere: 4, stubs: 2, movedIn: 1 });
+    assert.equal(countsLine(counts), 'writes 2 facts here, 4 elsewhere, 2 new stubs, moves 1 in');
+    const one = { facts: 1, elsewhere: 0, stubs: 1, movedIn: 0 };
     assert.equal(countsLine(one, 'Ashenmere'), 'writes 1 fact onto Ashenmere, 1 new stub');
-    // a sphere's (or Fill's) items count apart from its facts; a named new
-    // one only as a stub, one that links an entry (or is marked one) as an
-    // item
-    const sphere = previewCounts({
-        facts: [{ ticked: true }],
-        items: [
-            { name: 'Vigil', ticked: true },
-            { name: 'Fair', thing_id: 'f', ticked: true },
-            { name: '', text: 'Light is purity.', ticked: true },
-            { name: 'Synod', same_target_id: 's', ticked: true },
-            { name: 'Old', ticked: false },
-        ],
-    });
-    assert.deepEqual(sphere, { facts: 1, items: 3, here: 4, elsewhere: 0, stubs: 1, movedIn: 0, refiled: 0 });
-    assert.equal(countsLine(sphere), 'writes 1 fact and 3 items here, 1 new stub');
-    const fill = previewCounts({ items: [{ name: 'Vigil', ticked: true }, { name: '', text: 'x', ticked: true }, { name: '', text: 'y', ticked: true }] });
-    assert.equal(countsLine(fill, null, 'item'), 'writes 2 items here, 1 new stub');
-    assert.equal(countsLine(previewCounts({ items: [{ name: 'Vigil', ticked: true }] }), null, 'item'), 'writes 0 items here, 1 new stub');
+    assert.equal(countsLine(previewCounts({})), 'writes 0 facts here');
 });
 
 check('elsewhere rows group by entry, untick together, and a stub row answers "same as"', () => {
@@ -1523,24 +1414,24 @@ check('other routers are ignored', () => {
 
 // --- connections: kinds, other names, preview names, stubs ------------------
 
-check('events and items are kinds of their own; a culture stub is made a sphere', () => {
+check('events and items are kinds of their own; no sphere kind, and cultures via the skill', () => {
     const top = TOP_KINDS.map((k) => k.kind);
     assert.ok(top.includes('event') && top.includes('item'));
-    // a legacy kind: no stub is guessed one any more
-    assert.ok(!STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race'));
-    assert.equal(canExpand('culture'), true);
-    assert.equal(expandNote('culture'), null);
-    assert.equal(expandLabel('culture'), 'Make it a sphere…');
+    assert.ok(!top.includes('sphere'));
+    // cultures are listed, but made through the culture skill: no listing
+    assert.ok(TOP_KINDS.find((k) => k.kind === 'culture').viaSkill);
+    assert.ok(!LISTED_KINDS.includes('culture') && !LISTED_KINDS.includes('sphere'));
+    assert.ok(!STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race') && !STUB_KINDS.includes('sphere'));
     assert.equal(expandLabel('place'), 'Expand');
     assert.equal(canExpand('place'), true);
     assert.equal(expandNote('place'), null);
 });
 
-check('expanding a culture stub expands it as a culture sphere', () => {
+check('expanding a stub takes its kind as it is', () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
-    store.expandStub({ id: 'c1', kind: 'culture', name: 'Old Rite' });
-    assert.deepEqual(store.expanding, { id: 'c1', kind: 'sphere', name: 'Old Rite', was: 'culture' });
+    store.expandStub({ id: 'c1', kind: 'lore', name: 'Old Rite' });
+    assert.deepEqual(store.expanding, { id: 'c1', kind: 'lore', name: 'Old Rite' });
 });
 
 check('a race or mix stub is made from its species page, not expanded', () => {
@@ -1639,7 +1530,7 @@ check("a stub's new kind lists the old kind and the new", () => {
         { type: 'worlds', action: 'list_things', kind: 'event' },
         STUBS_REQUEST,
     ]);
-    // a culture stub isn't listed with the kinds
+    // a kind the store doesn't list (the cultures pointer) isn't asked for
     sent.length = 0;
     store.handleMessage(reply('list_stubs', { stubs: [{ ...STUB, kind: 'event' }] }));
     store.handleMessage(reply('change_stub_kind', { id: 's1', kind: 'culture', stub: { ignored: false } }));
@@ -1832,414 +1723,6 @@ check('Add reference searches entries and live stubs, not ignored ones', () => {
     assert.deepEqual(store.referenceTargets.map((t) => [t.id, t.stub]).sort(), [['s1', true], ['v', false]]);
 });
 
-// --- spheres ---------------------------------------------------------------
-
-check('the Spheres list groups by template, in template order, stubs kept in place', () => {
-    const things = [
-        { id: 'o1', kind: 'sphere', name: 'The Guild', template: 'order' },
-        { id: 'r1', kind: 'sphere', name: 'The White Dawn', template: 'religion', stub: { ignored: false } },
-        { id: 'p1', kind: 'place', name: 'Tsardom', template: 'nation' },
-        { id: 'x1', kind: 'sphere', name: 'Odd', template: 'cult' },
-        { id: 'n1', kind: 'sphere', name: 'Nameless', template: null },
-        { id: 'r2', kind: 'sphere', name: 'The Old Faith', template: 'religion' },
-    ];
-    const groups = sphereGroups(things);
-    assert.deepEqual(groups.map((g) => [g.template, g.label, g.things.map((t) => t.id)]), [
-        ['religion', 'Religions', ['r1', 'r2']],
-        ['nation', 'Nations', ['p1']],
-        ['order', 'Orders', ['o1']],
-        ['other', 'Other spheres', ['x1', 'n1']],
-    ]);
-    assert.deepEqual(groups[0].things[0].stub, { ignored: false });
-    assert.deepEqual(sphereGroups(undefined), []);
-    assert.equal(templateInfo('culture').agent, false);
-    assert.equal(templateInfo('nation').agent, true);
-    assert.equal(templateInfo(null).template, 'other');
-    // spheres are a top kind, and a stub can be guessed one
-    assert.ok(TOP_KINDS.some((k) => k.kind === 'sphere'));
-    assert.ok(STUB_KINDS.includes('sphere') && canExpand('sphere'));
-});
-
-check('a thing may be filed only in the drawers the backend allows, and Unsorted', () => {
-    const drawers = [
-        { id: 'd1', type: 'beliefs', title: 'Doctrines' },
-        { id: 'd2', type: 'places', title: 'Holy Sites' },
-        { id: 'd3', type: 'people', title: 'People' },
-        { id: 'd4', type: 'structure', title: 'Hierarchy' },
-        { id: 'd5', type: 'events', title: 'Timeline' },
-        { id: 'unsorted', type: 'knowledge', title: 'Unsorted' },
-    ];
-    assert.deepEqual(drawerTypesFor('place'), ['places']);
-    assert.deepEqual(drawerTypesFor('lore'), ['practices', 'beliefs', 'knowledge', 'structure']);
-    assert.deepEqual(partOfDrawers(drawers, 'lore').map((d) => d.id), ['d1', 'd4', 'unsorted']);
-    assert.deepEqual(partOfDrawers(drawers, 'place').map((d) => d.id), ['d2', 'unsorted']);
-    // a sphere stub has no drawers yet
-    assert.deepEqual(partOfDrawers(undefined, 'lore'), [{ id: 'unsorted', title: 'Unsorted' }]);
-});
-
-check('the drawer-type constants mirror talemate.world.kinds', () => {
-    // pinned to the backend's values (tests/world/test_kinds.py pins those)
-    assert.deepEqual(WRITTEN_DRAWER_TYPES, ['places', 'practices', 'beliefs', 'knowledge', 'structure']);
-    const entries = ['practices', 'beliefs', 'knowledge', 'structure'];
-    assert.deepEqual(ENTRY_DRAWER_TYPES, {
-        lore: entries,
-        place: ['places'],
-        item: entries,
-        event: entries,
-        sphere: entries,
-        being: ['beliefs', 'practices', 'structure'],
-    });
-    assert.deepEqual(PART_OF_KINDS, ['lore', 'place', 'item', 'event', 'sphere', 'being']);
-    assert.ok(WRITTEN_DRAWER_TYPES.every((type) => DRAWER_TYPES.includes(type)));
-    // a kind no drawer holds goes in none
-    assert.deepEqual(drawerTypesFor('character'), []);
-});
-
-check('"Make it a sphere…" is offered on lore, a place not yet a sphere and a stub', () => {
-    assert.equal(canPromote({ kind: 'lore', stub: null, sphere: null }), true);
-    assert.equal(canPromote({ kind: 'place', stub: null, sphere: null }), true);
-    assert.equal(canPromote({ kind: 'place', stub: null, sphere: { template: 'nation' } }), false);
-    assert.equal(canPromote({ kind: 'character', stub: { ignored: false }, sphere: null }), true);
-    assert.equal(canPromote({ kind: 'character', stub: null, sphere: null }), false);
-    assert.equal(canPromote({ kind: 'event', stub: null, sphere: null }), false);
-    // a sphere stub is expanded as it is
-    assert.equal(canPromote({ kind: 'sphere', stub: { ignored: false }, sphere: { template: null } }), false);
-    assert.equal(canPromote(null), false);
-});
-
-check('tie lines lead with the role; payloads drop labels and Unsorted', () => {
-    assert.equal(tieLead('practitioner'), 'Practitioner of');
-    assert.equal(tieLead('  elder '), 'Elder of');
-    assert.equal(tieLead(''), 'Of');
-    const since = { ...dateOf(1010), label: '1010' };
-    assert.deepEqual(
-        tiesPayload([{ sphere_id: 'dawn', sphere_name: 'The White Dawn', role: 'elder', since, until: null, exceptions: [] }]),
-        [{ sphere_id: 'dawn', role: 'elder', since: dateOf(1010), until: null, within: null }],
-    );
-    // the part of the sphere it's within goes back as it is
-    assert.deepEqual(
-        tiesPayload([{ sphere_id: 'army', role: 'trooper', since: null, until: null, within: 'talon', within_name: 'The White Talon', exceptions: [] }]),
-        [{ sphere_id: 'army', role: 'trooper', since: null, until: null, within: 'talon' }],
-    );
-    assert.deepEqual(
-        drawersPayload([
-            { id: 'd1', type: 'beliefs', title: 'Doctrines', inherited: false, items: [] },
-            { id: 'p1', type: 'practices', title: 'Rites', inherited: true, items: [] },
-            { id: 'unsorted', type: 'knowledge', title: 'Unsorted', inherited: false, items: [] },
-        ]),
-        [
-            { id: 'd1', type: 'beliefs', title: 'Doctrines' },
-            { id: 'p1', type: 'practices', title: 'Rites' },
-        ],
-    );
-});
-
-check('an exception can depart from any item; a branch drops what the owner unticks', () => {
-    const sphere = {
-        drawers: [
-            { id: 'd1', items: [{ thing_id: 'c1', fact_id: null, name: 'The Council' }] },
-            { id: 'd2', items: [{ thing_id: null, fact_id: 'f1', name: 'Light is purity.' }] },
-        ],
-    };
-    assert.deepEqual(rejectableItems(sphere), [
-        { title: 'The Council', value: { thing_id: 'c1' } },
-        { title: 'Light is purity.', value: { fact_id: 'f1' } },
-    ]);
-    assert.deepEqual(rejectableItems(null), []);
-    let preview = { drops: [], rejects: [] };
-    preview = branchKept(preview, { thing_id: 'c1', fact_id: null }, false);
-    preview = branchKept(preview, { thing_id: null, fact_id: 'f1' }, false);
-    assert.deepEqual([preview.drops, preview.rejects], [['c1'], ['f1']]);
-    preview = branchKept(preview, { thing_id: 'c1', fact_id: null }, true);
-    assert.deepEqual([preview.drops, preview.rejects], [[], ['f1']]);
-});
-
-check('a sphere preview, then accept, opens the sphere and lists everything', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.makeSphere({ id: 'l1', kind: 'lore', name: 'The Doctrine', stub: null });
-    assert.deepEqual(store.promoting, { id: 'l1', kind: 'lore', name: 'The Doctrine' });
-    store.previewSphere('religion', '', {}, { promoteId: 'l1' });
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'preview_sphere', template: 'religion', prompt: '', fields: {}, promote_id: 'l1',
-    });
-    store.handleMessage({ type: 'worlds', action: 'preview_sphere_failed', message: 'no outline' });
-    assert.equal(store.spherePreviewError, 'no outline');
-    assert.equal(store.spherePreviewPending, false);
-    store.regenerateSpherePreview();
-    assert.equal(sent.at(-1).promote_id, 'l1');
-    const preview = { kind: 'sphere', name: 'The Doctrine', template: 'religion', drawers: [], items: [], facts: [], prose: {} };
-    store.handleMessage(reply('preview_sphere', preview));
-    store.acceptSphere({ name: 'The Doctrine of Separation' });
-    assert.equal(sent.at(-1).preview.name, 'The Doctrine of Separation');
-    sent.length = 0;
-    store.handleMessage(reply('accept_sphere', { id: 'l1', kind: 'sphere', name: 'The Doctrine of Separation' }));
-    assert.equal(store.selectedThingId, 'l1');
-    assert.equal(store.spherePreview, null);
-    assert.equal(store.promoting, null);
-    assert.deepEqual(store.pending, {});
-    listedEverything(sent);
-
-    // a stub is made a sphere by expanding it as one
-    store.makeSphere({ id: 's2', kind: 'lore', name: 'Old Rite', stub: { ignored: false } });
-    assert.deepEqual(store.expanding, { id: 's2', kind: 'sphere', name: 'Old Rite', was: 'lore' });
-    store.previewSphere('culture', 'Old Rite', {}, { stubId: 's2' });
-    assert.equal(sent.at(-1).stub_id, 's2');
-});
-
-check('a branch preview stays on its parent until accepted', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn');
-    store.previewBranch('dawn', 'the smiths');
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'preview_branch', parent_id: 'dawn', prompt: 'the smiths' });
-    store.handleMessage(reply('preview_branch', { name: 'The Forge Dawn', drops: [], rejects: [], parent_items: [] }));
-    store.setBranchKept({ thing_id: 'vigil', fact_id: null }, false);
-    assert.deepEqual(store.branchPreview.drops, ['vigil']);
-    store.acceptBranch({ name: 'The Forge Dawn' });
-    assert.deepEqual(sent.at(-1).preview.drops, ['vigil']);
-    store.handleMessage(reply('accept_sphere', { id: 'forge', kind: 'sphere', name: 'The Forge Dawn' }));
-    assert.equal(store.branchPreview, null);
-    assert.equal(store.selectedThingId, 'forge');
-});
-
-check('Fill keeps its items for the drawer asked about, then writes those kept', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn');
-    store.fillDrawer('dawn', 'd1');
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'fill_drawer', sphere_id: 'dawn', drawer_id: 'd1' });
-    // a reply for another drawer is dropped
-    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd2', items: [{ name: 'X' }] }));
-    assert.equal(store.fill.items, null);
-    const items = [{ drawer_id: 'd1', name: 'Dawn Vigil', text: 'A prayer.', kind: 'lore', names: [] }];
-    store.handleMessage(reply('fill_drawer', { sphere_id: 'dawn', drawer_id: 'd1', items }));
-    assert.deepEqual(store.fill.items, items);
-    store.acceptFill();
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds',
-        action: 'accept_fill',
-        sphere_id: 'dawn',
-        drawer_id: 'd1',
-        items,
-        elsewhere: [],
-        new_names: [],
-        refile: [],
-    });
-    sent.length = 0;
-    store.handleMessage(reply('accept_fill', { id: 'dawn', kind: 'sphere', name: 'The White Dawn', sphere: {} }));
-    assert.equal(store.fill, null);
-    assert.equal(store.thing.id, 'dawn');
-    listedEverything(sent);
-    // a failed Fill says why
-    store.fillDrawer('dawn', 'd1');
-    store.handleMessage({ type: 'worlds', action: 'fill_failed', message: 'cut off', data: { sphere_id: 'dawn', drawer_id: 'd1' } });
-    assert.deepEqual([store.fill.pending, store.fill.error], [false, 'cut off']);
-});
-
-check("sphere edits answer with the thing edited; another thing's reply refreshes the page", () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn');
-    store.handleMessage(reply('get_thing', { id: 'dawn', kind: 'sphere', sphere: {} }));
-    store.setDrawers('dawn', [{ type: 'knowledge', title: 'Key Texts' }]);
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'set_drawers', sphere_id: 'dawn', drawers: [{ type: 'knowledge', title: 'Key Texts' }], at: null,
-    });
-    store.handleMessage(reply('set_drawers', { id: 'dawn', kind: 'sphere', name: 'The White Dawn', sphere: { drawers: [] } }));
-    assert.deepEqual(store.thing.sphere, { drawers: [] });
-    assert.deepEqual(store.pending, {});
-
-    // "+ Add" files another thing here: the page is fetched again
-    store.setPartOf('council', 'dawn', 'd1');
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'set_part_of', thing_id: 'council', sphere_id: 'dawn', drawer_id: 'd1', at: null,
-    });
-    sent.length = 0;
-    store.handleMessage(reply('set_part_of', { id: 'council', kind: 'lore', name: 'The Council' }));
-    assert.equal(store.thing.id, 'dawn');
-    assert.deepEqual(sent[0], { type: 'worlds', action: 'get_thing', id: 'dawn', at: null });
-    // taking a thing out sends no drawer
-    store.setPartOf('council', null);
-    assert.equal('drawer_id' in sent.at(-1), false);
-
-    store.endItem('dawn', { thing_id: 'dance', fact_id: null }, dateOf(1015), 'church');
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'end_item', sphere_id: 'dawn', thing_id: 'dance', at: dateOf(1015), by: 'church',
-    });
-    store.endItem('dawn', { thing_id: null, fact_id: 'f1' }, dateOf(1015));
-    assert.equal(sent.at(-1).fact_id, 'f1');
-    assert.equal(sent.at(-1).by, null);
-});
-
-check('a tie added from the sphere waits for its character, then writes the whole list', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn');
-    store.addTie('vasha', { sphere_id: 'dawn', role: 'elder', since: dateOf(1012) });
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'get_thing', id: 'vasha', at: null });
-    const old = { sphere_id: 'post', sphere_name: 'Post', role: 'courier', since: { ...dateOf(1009), label: '1009' }, until: null, exceptions: [] };
-    store.handleMessage(reply('get_thing', { id: 'vasha', kind: 'character', ties: [old] }));
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds',
-        action: 'set_ties',
-        character_id: 'vasha',
-        ties: [
-            { sphere_id: 'post', role: 'courier', since: dateOf(1009), until: null, within: null },
-            { sphere_id: 'dawn', role: 'elder', since: dateOf(1012), until: null },
-        ],
-        at: null,
-    });
-    assert.deepEqual(store.tieQueue, {});
-    assert.equal(store.pending.set_ties, true);
-    store.handleMessage(reply('set_ties', { id: 'vasha', kind: 'character' }));
-    assert.deepEqual(store.pending, {});
-});
-
-check('a fetched sphere is kept for editors; exceptions go out with what they reject', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('vasha');
-    store.fetchSphere('dawn');
-    store.handleMessage(reply('get_thing', { id: 'dawn', kind: 'sphere', sphere: { drawers: [] } }));
-    assert.deepEqual(store.sphereInfo.dawn.sphere, { drawers: [] });
-    assert.equal(store.thing, null);
-    store.addException('vasha', 'dawn', 'Skips the vigil.', { thing_id: 'vigil' });
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'add_exception', character_id: 'vasha', sphere_id: 'dawn',
-        text: 'Skips the vigil.', rejects: { thing_id: 'vigil' }, at: null,
-    });
-});
-
-check("a character preview's ties can be dropped whole or one exception at a time", () => {
-    const { store } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.previewThing('character', 'an elder');
-    const ties = [
-        { sphere_id: 'dawn', sphere: 'The White Dawn', role: 'elder', exceptions: [{ text: 'a' }, { text: 'b' }] },
-        { sphere_id: 'post', sphere: 'Post', role: 'courier', exceptions: [] },
-    ];
-    store.handleMessage(reply('preview_thing', { kind: 'character', name: 'Marfa', facts: [], prose: {}, ties }));
-    store.dropPreviewException(0, 1);
-    store.dropPreviewTie(1);
-    assert.deepEqual(store.preview.ties, [{ ...ties[0], exceptions: [{ text: 'a' }] }]);
-    // the reply's own list is untouched
-    assert.equal(ties[0].exceptions.length, 2);
-});
-
-check('a failed sphere request stops its spinners', () => {
-    const { store } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.previewSphere('order', 'smiths');
-    store.fillDrawer('dawn', 'd1');
-    store.addTie('vasha', { sphere_id: 'dawn', role: '' });
-    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'not a sphere' } });
-    assert.equal(store.spherePreviewPending, false);
-    assert.deepEqual([store.fill.pending, store.fill.error], [false, 'not a sphere']);
-    assert.deepEqual(store.tieQueue, {});
-    assert.equal(store.error, 'not a sphere');
-});
-
-check('a sphere page lists none of its statements, timeline or about facts; a character none of its exceptions', () => {
-    const facts = [
-        { fact_id: 'f1', category: 'statement' },
-        { fact_id: 'f2', category: 'timeline' },
-        { fact_id: 'f3', category: 'about' },
-        { fact_id: 'f4', category: 'description' },
-    ];
-    assert.deepEqual(listedFacts({ facts, sphere: { drawers: [] } }).map((f) => f.fact_id), ['f4']);
-    // not a sphere: every fact
-    assert.deepEqual(listedFacts({ facts, sphere: null }).map((f) => f.fact_id), ['f1', 'f2', 'f3', 'f4']);
-    const character = {
-        facts: [{ fact_id: 'e1', category: 'ties' }, { fact_id: 'b1', category: 'background' }],
-        sphere: null,
-        ties: [{ exceptions: [{ fact_id: 'e1' }] }],
-    };
-    assert.deepEqual(listedFacts(character).map((f) => f.fact_id), ['b1']);
-    assert.deepEqual(listedFacts(null), []);
-});
-
-check('a statement written into a drawer goes out with its links', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn');
-    store.addStatement('dawn', 'd1', 'Light is purity.', { picks: { Peak: 'p1' }, spans: [] });
-    assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'add_statement', sphere_id: 'dawn', drawer_id: 'd1',
-        text: 'Light is purity.', picks: { Peak: 'p1' }, at: null,
-    });
-    store.handleMessage(reply('add_statement', { id: 'dawn', kind: 'sphere', sphere: {} }));
-    assert.equal(store.thing.id, 'dawn');
-    assert.deepEqual(store.pending, {});
-});
-
-check('a sphere edit on a page viewed as of a date fetches it again', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn', dateOf(1012));
-    store.handleMessage(reply('get_thing', { id: 'dawn', kind: 'sphere', at: dateOf(1012), sphere: {} }));
-    sent.length = 0;
-    store.handleMessage(reply('end_item', { id: 'dawn', kind: 'sphere', at: null, sphere: { latest: true } }));
-    assert.deepEqual(store.thing.sphere, {});
-    assert.deepEqual(sent[0], { type: 'worlds', action: 'get_thing', id: 'dawn', at: dateOf(1012) });
-});
-
-check('tying someone tied already asks for nothing and says why', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.openThing('dawn');
-    store.addTie('vasha', { sphere_id: 'dawn', role: 'elder' });
-    sent.length = 0;
-    const ended = { sphere_id: 'dawn', role: 'novice', since: null, until: dateOf(1012), exceptions: [] };
-    store.handleMessage(reply('get_thing', { id: 'vasha', kind: 'character', ties: [ended] }));
-    assert.equal(sent.some((m) => m.action === 'set_ties'), false);
-    assert.equal(store.error, ALREADY_TIED);
-    assert.deepEqual(store.pending, {});
-});
-
-check('"Make it a sphere…" asks before it drops an unaccepted preview', () => {
-    const { store } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.previewThing('place', 'a town');
-    store.handleMessage(reply('preview_thing', { kind: 'place', name: 'Kalmara', facts: [], prose: {} }));
-    store.makeSphere({ id: 'l1', kind: 'lore', name: 'The Doctrine', stub: null });
-    assert.deepEqual(store.expandAsk, { id: 'l1', kind: 'lore', name: 'The Doctrine', promote: true });
-    assert.equal(store.promoting, null);
-    assert.equal(store.preview.name, 'Kalmara');
-    store.confirmExpand();
-    assert.deepEqual(store.promoting, { id: 'l1', kind: 'lore', name: 'The Doctrine' });
-    assert.equal(store.preview, null);
-    assert.equal(store.expandAsk, null);
-});
-
-check('a sphere preview named like a sphere stub can fill that stub instead', () => {
-    const { store, sent } = freshStore();
-    store.handleMessage(reply('open_world', WORLD));
-    store.previewSphere('religion', 'a church');
-    store.handleMessage(reply('preview_sphere', { kind: 'sphere', name: 'The White Dawn', stub_id: null, matching_stub_id: 'w1' }));
-    store.acceptSphere({ name: 'The White Dawn', stub_id: 'w1' });
-    assert.equal(sent.at(-1).preview.stub_id, 'w1');
-});
-
-check("a sphere's own drawers move among themselves and drop; inherited ones stay after them", () => {
-    const drawers = [
-        { id: 'a', type: 'beliefs', title: 'A', inherited: false },
-        { id: 'b', type: 'practices', title: 'B', inherited: false },
-        { id: 'p', type: 'structure', title: 'P', inherited: true },
-        { id: 'unsorted', type: 'knowledge', title: 'Unsorted', inherited: false },
-    ];
-    assert.deepEqual(drawersMoved(drawers, 'b', -1).map((d) => d.id), ['b', 'a', 'p']);
-    assert.deepEqual(drawersMoved(drawers, 'a', 1).map((d) => d.id), ['b', 'a', 'p']);
-    // the first can't go up, the last own one can't go down past inherited
-    assert.equal(drawersMoved(drawers, 'a', -1), null);
-    assert.equal(drawersMoved(drawers, 'b', 1), null);
-    assert.equal(drawersMoved(drawers, 'p', -1), null);
-    assert.deepEqual(drawersDropped(drawers, 'a'), [
-        { id: 'b', type: 'practices', title: 'B' },
-        { id: 'p', type: 'structure', title: 'P' },
-    ]);
-});
-
 check('a fact form needs text, a category and sane years; a timeline fact a year', () => {
     const form = { mode: 'add', text: 'Founded.', category: 'about', fromYear: null, untilYear: null };
     assert.equal(factFormValid(form), true);
@@ -2356,7 +1839,7 @@ check('back skips a deleted thing, and returns to the Stubs page it came from', 
     assert.equal(store.section, 'stubs');
 });
 
-check('expanding a stub or promoting a thing shows its section, as a visit', () => {
+check('expanding a stub shows its section, as a visit', () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.showSection('stubs');
@@ -2365,8 +1848,8 @@ check('expanding a stub or promoting a thing shows its section, as a visit', () 
     store.goBack();
     assert.equal(store.section, 'stubs');
     store.openThing('lore1');
-    store.makeSphere({ id: 'lore1', kind: 'lore', name: 'Vigil' });
-    assert.equal(store.section, 'sphere');
+    store.expandStub({ id: 's2', kind: 'lore', name: 'Vigil' });
+    assert.equal(store.section, 'lore');
     store.goBack();
     assert.equal(store.selectedThingId, 'lore1');
 });
@@ -2489,6 +1972,296 @@ check('ticking a move-in pick unticks the own facts repeating it, and back (ruli
     assert.equal('untickedByMove' in out.facts[0], false);
     // no facts, no trouble
     assert.deepEqual(moveInEdit({ move_in: [] }, []), { move_in: [], facts: [] });
+});
+
+// --- the entry page (Filing, Task 9) -----------------------------------------
+
+check('a tag reads as the backend stores it, its heading pluralised and capitalised', () => {
+    assert.equal(normaliseTag('  Royal Seat, old '), 'royal seat');
+    assert.equal(normaliseTag(null), '');
+    // as filing.tag_heading
+    assert.equal(tagHeading('river'), 'Rivers');
+    assert.equal(tagHeading('holy site'), 'Holy sites');
+    assert.equal(tagHeading('custom'), 'Customs');
+    assert.equal(tagHeading('church'), 'Churches');
+    assert.equal(tagHeading('box'), 'Boxes');
+    assert.equal(tagHeading('city'), 'Cities');
+    assert.equal(tagHeading('day'), 'Days');
+    assert.equal(tagHeading('species'), 'Specieses');
+    assert.equal(tagHeading(null), 'Other');
+    assert.equal(tagHeading('  '), 'Other');
+});
+
+check("a filing's dates: since, a span once it has ended, until alone", () => {
+    assert.equal(filingDates(null, { since: dateOf(979), until: null }), 'since 979');
+    assert.equal(filingDates(null, { since: dateOf(900), until: dateOf(1015) }), '900–1015');
+    assert.equal(filingDates(null, { since: null, until: dateOf(1015) }), 'until 1015');
+    assert.equal(filingDates(null, { since: null, until: null }), '');
+    assert.equal(filingDates(null, null), '');
+});
+
+check('a group folds its long list: a filter, the first five, then all', () => {
+    const rows = Array.from({ length: 8 }, (_v, i) => ({ id: `r${i}`, name: `Custom ${i}`, role: i === 3 ? 'danced here' : null, line_segments: [{ text: i === 6 ? 'A winter dance.' : 'A rite.' }] }));
+    assert.equal(GROUP_SHOWN, 5);
+    let view = groupView(rows);
+    assert.equal(view.long, true);
+    assert.deepEqual(view.rows.map((r) => r.id), ['r0', 'r1', 'r2', 'r3', 'r4']);
+    assert.equal(view.hidden, 3);
+    view = groupView(rows, { showAll: true });
+    assert.equal(view.rows.length, 8);
+    assert.equal(view.hidden, 0);
+    // the filter finds by name, role or line, any case, among all of them
+    assert.deepEqual(groupView(rows, { filter: 'WINTER' }).rows.map((r) => r.id), ['r6']);
+    assert.deepEqual(groupView(rows, { filter: 'danced' }).rows.map((r) => r.id), ['r3']);
+    assert.deepEqual(groupView(rows, { filter: 'custom 7' }).rows.map((r) => r.id), ['r7']);
+    assert.equal(groupView(rows, { filter: '  ' }).rows.length, 5);
+    // a short group shows every row, and has no filter
+    const short = groupView(rows.slice(0, 5), { filter: 'winter' });
+    assert.equal(short.long, false);
+    assert.equal(short.rows.length, 5);
+    assert.equal(short.hidden, 0);
+    assert.deepEqual(groupView(null), { long: false, rows: [], hidden: 0 });
+});
+
+check('Connected counts its rows; a group is keyed by page and tag', () => {
+    assert.equal(connectedCount([{ rows: [1, 2] }, { rows: [3] }]), 3);
+    assert.equal(connectedCount(null), 0);
+    assert.equal(groupKey('v', 'river'), 'v|river');
+    assert.equal(groupKey('v', null), 'v|');
+    assert.equal(groupKey('v', undefined), groupKey('v', null));
+});
+
+check('a row dropped on another group takes its tag; on its own, nothing', () => {
+    assert.equal(dropTag('river', 'district'), 'district');
+    assert.equal(dropTag('river', null), null);
+    assert.equal(dropTag(null, 'custom'), 'custom');
+    assert.equal(dropTag('river', 'river'), undefined);
+    assert.equal(dropTag(null, undefined), undefined);
+});
+
+check('the tag picker: tags in use holding the query, then a new one', () => {
+    const tags = [
+        { tag: 'river', heading: 'Rivers', count: 3 },
+        { tag: 'lake', heading: 'Lakes', count: 1 },
+        { tag: 'place', heading: 'Places', count: 9 },
+    ];
+    // the entry's own tag is left out
+    assert.deepEqual(tagChoices(tags, '', 'river'), { matches: tags.slice(1), fresh: null });
+    assert.deepEqual(tagChoices(tags, 'a').matches.map((t) => t.tag), ['lake', 'place']);
+    // a new tag, normalised as the backend stores it
+    assert.deepEqual(tagChoices(tags, 'Waterway, big'), { matches: [], fresh: 'waterway' });
+    // one in use, or its own, is no new tag
+    assert.equal(tagChoices(tags, 'Lake').fresh, null);
+    assert.equal(tagChoices(tags, 'pond', 'pond').fresh, null);
+    assert.deepEqual(tagChoices(null, 'x'), { matches: [], fresh: 'x' });
+});
+
+check('"Events ▾": every dated fact, or the event entries\' lines only', () => {
+    const lines = [{ fact_id: 'a', owner_id: 'v' }, { fact_id: 'b', owner_id: 'freeze' }, { fact_id: 'c', owner_id: 'court' }];
+    assert.equal(timelineShown(lines, 'all', ['freeze']), lines);
+    assert.deepEqual(timelineShown(lines, 'events', ['freeze']).map((l) => l.fact_id), ['b']);
+    assert.deepEqual(timelineShown(lines, 'events', []), []);
+    assert.deepEqual(timelineShown(null, 'events'), []);
+});
+
+check('the World tab lists a kind, its stubs last; a place under the first place it is in', () => {
+    const things = [
+        { id: 'k', name: 'Khorol River', filed_in: ['t', 'v'] },
+        { id: 'w', name: 'Wattle Row', stub: { ignored: false }, filed_in: ['v'] },
+        { id: 'v', name: 'Velikoye', filed_in: ['t'] },
+        { id: 't', name: 'Tsardom of Moscavia', filed_in: [] },
+        { id: 'g', name: 'Greensea Strait', filed_in: ['lore-id'] },
+    ];
+    const flat = kindList(things).map((row) => [row.thing.id, row.depth]);
+    assert.deepEqual(flat, [['k', 0], ['v', 0], ['t', 0], ['g', 0], ['w', 0]]);
+    const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
+    // the river under the Tsardom (its first place), Velikoye too, and
+    // the stub Wattle Row under Velikoye; a place in no listed place on top
+    assert.deepEqual(nested, [['t', 0], ['k', 1], ['v', 1], ['w', 2], ['g', 0]]);
+    // the search keeps what holds it, any case; a place goes under the
+    // first of its places still listed, else on top
+    assert.deepEqual(kindList(things, 'ROW', { nest: true }).map((row) => [row.thing.id, row.depth]), [['w', 0]]);
+    assert.deepEqual(kindList(things, 'e', { nest: true }).map((row) => [row.thing.id, row.depth]), [['v', 0], ['k', 1], ['w', 1], ['g', 0]]);
+    // a loop of places never hangs: each sits on top
+    const loop = [{ id: 'a', name: 'A', filed_in: ['b'] }, { id: 'b', name: 'B', filed_in: ['a'] }];
+    assert.deepEqual(kindList(loop, '', { nest: true }).map((row) => [row.thing.id, row.depth]), [['a', 0], ['b', 0]]);
+    assert.deepEqual(kindList(undefined), []);
+});
+
+check('the page lists its facts without its summary or a person\'s "but…"s', () => {
+    const thing = {
+        facts: [{ fact_id: 's', summary: true }, { fact_id: 'f' }, { fact_id: 'b' }],
+        in: [{ target_id: 't', exceptions: [{ fact_id: 'b' }] }],
+    };
+    assert.deepEqual(listedFacts(thing).map((f) => f.fact_id), ['f']);
+    assert.deepEqual(listedFacts(null), []);
+});
+
+check('filing edits go out for the open page, at its date; only what changes', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('dmitry', dateOf(1000));
+    store.addFiling({ targetId: 'court', role: 'presides', since: { ...dateOf(995), label: '995' } });
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds',
+        action: 'add_filing',
+        thing_id: 'dmitry',
+        at: dateOf(1000),
+        target_id: 'court',
+        role: 'presides',
+        since: dateOf(995),
+        until: null,
+        within: null,
+    });
+    assert.equal(store.pending.add_filing, true);
+    // a new stub: its name, kind and tag, no target
+    store.addFiling({ newName: 'The Frost Council', kind: 'lore', tag: 'council' });
+    const made = sent.at(-1);
+    assert.equal('target_id' in made, false);
+    assert.deepEqual([made.new_name, made.kind, made.tag, made.role], ['The Frost Council', 'lore', 'council', null]);
+    // only the keys that change; "End this" is an until
+    store.editFiling('court', { until: dateOf(1010) });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'edit_filing', thing_id: 'dmitry', at: dateOf(1000), target_id: 'court', until: dateOf(1010) });
+    store.editFiling('court', { role: null });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'edit_filing', thing_id: 'dmitry', at: dateOf(1000), target_id: 'court', role: null });
+    store.removeFiling('court');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'remove_filing', thing_id: 'dmitry', at: dateOf(1000), target_id: 'court' });
+    store.addException('tsardom', 'Rules only in winter.');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_exception', character_id: 'dmitry', target_id: 'tsardom', text: 'Rules only in winter.', rejects: null, at: dateOf(1000) });
+    // another entry's tag (a dragged row): at the latest, not the page's date
+    store.setTag('river', 'district');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'set_tag', thing_id: 'river', at: null, tag: 'district' });
+});
+
+check("a filing edit's reply: the open page takes it, another thing's refreshes it", () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('velikoye');
+    store.handleMessage(reply('get_thing', { id: 'velikoye', kind: 'place', name: 'Velikoye' }));
+    sent.length = 0;
+    // a Connected row retagged: its own page answers, so the open one is asked for
+    store.setTag('river', 'district');
+    sent.length = 0;
+    store.handleMessage(reply('set_tag', { id: 'river', kind: 'place', name: 'Khorol River' }));
+    assert.equal(store.thing.id, 'velikoye');
+    assert.deepEqual(sent[0], { type: 'worlds', action: 'get_thing', id: 'velikoye', at: null });
+    assert.ok(sent.some((m) => m.action === 'list_tags'));
+    listedEverything(sent);
+    assert.deepEqual(store.pending, {});
+    // the open page's own: taken as it is, its notes shown
+    store.handleMessage(reply('remove_filing', { id: 'velikoye', kind: 'place', name: 'Velikoye', in: [], notes: ['Removed the "but..."'] }));
+    assert.deepEqual(store.thing.in, []);
+    assert.deepEqual(store.notes, { action: 'remove_filing', notes: ['Removed the "but..."'] });
+});
+
+check('tags: listed on opening a world, renamed and merged', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    assert.ok(sent.some((m) => m.action === 'list_tags'));
+    const tags = [{ tag: 'school', heading: 'Schools', count: 1 }, { tag: 'institution', heading: 'Institutions', count: 2 }];
+    store.handleMessage(reply('list_tags', { tags }));
+    assert.deepEqual(store.tags, tags);
+    store.openThing('velikoye');
+    store.renameTag('school', 'academy');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'rename_tag', old: 'school', new: 'academy' });
+    sent.length = 0;
+    const renamed = [{ tag: 'academy', heading: 'Academies', count: 1 }, tags[1]];
+    store.handleMessage(reply('rename_tag', { old: 'school', new: 'academy', changed: ['a'], tags: renamed }));
+    assert.deepEqual(store.tags, renamed);
+    // the open page reads its new groups
+    assert.deepEqual(sent[0], { type: 'worlds', action: 'get_thing', id: 'velikoye', at: null });
+    store.mergeTag('academy', 'institution');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'merge_tag', from: 'academy', into: 'institution' });
+    store.handleMessage(reply('merge_tag', { from: 'academy', into: 'institution', changed: ['a'], tags: [tags[1]] }));
+    assert.deepEqual(store.tags, [tags[1]]);
+    assert.deepEqual(store.pending, {});
+});
+
+check("a group's synopsis: asked for, kept by page and tag, forced again", () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.groupSynopsis('v', 'custom');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_synopsis', thing_id: 'v', tag: 'custom', force: false });
+    assert.equal(store.synopses['v|custom'].pending, true);
+    // another group's reply leaves it waiting
+    store.handleMessage(reply('group_synopsis', { thing_id: 'v', tag: 'river', synopsis: 'Rivers.' }));
+    assert.equal(store.synopses['v|river'], undefined);
+    store.handleMessage(reply('group_synopsis', { thing_id: 'v', tag: 'custom', synopsis: 'Customs.' }));
+    assert.deepEqual(store.synopses['v|custom'], { pending: false, text: 'Customs.', error: null });
+    store.groupSynopsis('v', 'custom', true);
+    assert.equal(sent.at(-1).force, true);
+    // a failure keeps the text it had, says why
+    store.handleMessage({ type: 'worlds', action: 'group_synopsis_failed', message: 'no reply', data: { thing_id: 'v', tag: 'custom' } });
+    assert.deepEqual(store.synopses['v|custom'], { pending: false, text: 'Customs.', error: 'no reply' });
+    // the untagged group goes as null
+    store.groupSynopsis('v', null);
+    assert.equal(sent.at(-1).tag, null);
+    // an error stops it waiting
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no AI client' } });
+    assert.equal(store.synopses['v|'].pending, false);
+});
+
+check('a group\'s "+ Add": drafted rows, edited, the ticked ones accepted', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v');
+    store.groupAdd('v', 'institution', 'two guilds');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'institution', prompt: 'two guilds' });
+    const rows = [
+        { name: 'The Icewrights', kind: 'lore', tag: 'institution', line: 'Pilots.', ticked: true },
+        { name: 'The Owl Post', kind: 'lore', tag: 'institution', line: 'Letters.', ticked: true },
+    ];
+    store.handleMessage(reply('group_add', { thing_id: 'v', tag: 'institution', rows }));
+    assert.deepEqual(store.groupAdds['v|institution'].rows, rows);
+    store.editGroupAdd('v', 'institution', [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }]);
+    store.acceptGroupAdd('v', 'institution');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds',
+        action: 'accept_group_add',
+        thing_id: 'v',
+        rows: [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }],
+    });
+    assert.equal(store.groupAdds['v|institution'], undefined);
+    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [] }));
+    assert.equal(store.thing.id, 'v');
+    assert.equal(store.notes, null);
+    // the page's own "+ Add" (no tag), failed: the error shows, then it's discarded
+    store.groupAdd('v', null, 'a landmark');
+    assert.equal(sent.at(-1).tag, null);
+    store.handleMessage({ type: 'worlds', action: 'group_add_failed', message: 'unusable', data: { thing_id: 'v', tag: null } });
+    assert.deepEqual(store.groupAdds['v|'], { prompt: 'a landmark', pending: false, rows: null, error: 'unusable' });
+    store.discardGroupAdd('v', null);
+    assert.deepEqual(store.groupAdds, {});
+});
+
+check('"+ Add facts…" and "+ Add event…": a draft to tick, then written', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v', dateOf(1000));
+    store.addFacts('its laws');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_facts', thing_id: 'v', at: dateOf(1000), prompt: 'its laws' });
+    assert.equal(store.factDraft.mode, 'facts');
+    const draft = { thing_id: 'v', prompt: 'its laws', year: null, facts: [{ category: 'law', text: 'No flying.', ticked: true }, { category: 'general', text: 'Bells.', ticked: true }] };
+    const facts = [{ index: 0, rendered: 'No flying.', ticked: true }, { index: 1, rendered: 'Bells.', ticked: true }];
+    // a draft page's own addition (Task 10) is not this one
+    store.handleMessage(reply('add_facts', { draft_key: 'new:lore:x', facts: [] }));
+    assert.equal(store.factDraft.pending, true);
+    store.handleMessage(reply('add_facts', { thing_id: 'v', draft, facts }));
+    assert.equal(store.factDraft.pending, false);
+    store.tickDraftFact(1, false);
+    assert.deepEqual(store.factDraft.facts.map((f) => f.ticked), [true, false]);
+    store.acceptFacts();
+    assert.equal(sent.at(-1).action, 'accept_facts');
+    assert.deepEqual(sent.at(-1).draft.facts.map((f) => f.ticked), [true, false]);
+    assert.deepEqual(sent.at(-1).at, dateOf(1000));
+    assert.equal(store.factDraft, null);
+    // an event: its year goes along; a failure says why
+    store.addEvent('the bluff collapse', 1012);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', thing_id: 'v', at: dateOf(1000), prompt: 'the bluff collapse', year: 1012 });
+    store.handleMessage({ type: 'worlds', action: 'add_event_failed', message: 'no facts', data: { thing_id: 'v' } });
+    assert.equal(store.factDraft.error, 'no facts');
+    store.discardFacts();
+    assert.equal(store.factDraft, null);
 });
 
 if (failures.length) {

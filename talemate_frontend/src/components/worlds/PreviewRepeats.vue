@@ -30,8 +30,7 @@
 </template>
 
 <script>
-// "Already in the world" (curation goal 3): a preview's facts (or Fill's
-// items) that repeat one the world holds, each with its match ("≈ on
+// "Already in the world" (curation goal 3): a preview's facts that repeat one the world holds, each with its match ("≈ on
 // <entry>: <text>"). They come as the server ticked them -- unticked only
 // when they're near copies -- and the owner can tick any back in. The
 // section starts collapsed when every row in it is unticked. `rows` are
