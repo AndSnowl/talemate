@@ -3500,6 +3500,12 @@ def name_thing(
         rev.set_field(thing_id, "aka", aka, None)
 
 
+def _same_text(text: str) -> str:
+    """`text` as two summaries compare: whitespace and case aside."""
+
+    return " ".join(text.split()).casefold()
+
+
 def _hint_agent(preview: CreatePreview, stub: Any = None) -> dict[str, bool]:
     """`{"agent": <bool>}`, the default its prompt hint gives an entry
     (`kinds.HINT_AGENT`: a religion, nation or order acts; a culture or
@@ -3632,7 +3638,17 @@ def _write_preview(
             entries.is_summary_fact(f) for f in stub.facts
         )
         summary = (preview.summary or "").strip()
-        if summary and not has_summary:
+        # a summary with an own fact's text marks that fact, never a copy
+        same = _same_text(summary)
+        repeated = next(
+            (
+                f
+                for f in preview.facts
+                if f.ticked and summary and _same_text(f.text) == same
+            ),
+            None,
+        )
+        if summary and not has_summary and repeated is None:
             rev.add_fact(
                 thing_id,
                 moved_category(preview.kind, "about", False),
@@ -3647,7 +3663,7 @@ def _write_preview(
             holder = redirect.get(fact.held_by or "", fact.held_by)
             held = holder is not None and view.thing(holder) is not None
             origin = entries.with_held_by(None, holder) if held else None
-            if not has_summary:
+            if not has_summary and (repeated is None or fact is repeated):
                 origin = {**(origin or {}), **SUMMARY_ORIGIN}
                 has_summary = True
             rev.add_fact(

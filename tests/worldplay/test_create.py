@@ -2775,3 +2775,31 @@ def test_accept_marks_the_first_fact_the_summary(church_world, world):
     fact, text = _summary_of(world, filled)
     assert fact.origin == {"held_by": thing_id, "summary": True}
     assert text == "The faith of the dawn."
+
+
+async def test_a_summary_repeating_an_own_fact_is_written_once(world):
+    """Review round 2: a reply summary with the text of one of its own
+    facts (whitespace and case aside) writes one fact, marked the
+    summary, never a plain copy beside it."""
+
+    reply = json.dumps(
+        {
+            "name": "The Pale Order",
+            "summary": "  they meet AT dusk. ",
+            "facts": [
+                {"category": "general", "text": "Scribes of the rune census."},
+                {"category": "general", "text": "They meet at dusk."},
+            ],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "The Pale Order keeps records.")
+        preview = await preview_thing(world, "lore", "an order of scribes", {}, client)
+    thing_id = accept_preview(world, preview)
+    facts = world.view().thing(thing_id).facts
+    assert sorted((f.text, f.origin) for f in facts) == [
+        ("Scribes of the rune census.", None),
+        ("They meet at dusk.", {"summary": True}),
+    ]

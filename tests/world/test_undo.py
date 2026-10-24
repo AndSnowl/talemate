@@ -399,6 +399,24 @@ def _referencing_write(kind):
     return {"fact": fact, "thing": thing_field, "filing": filing}[kind]
 
 
+def test_undo_creation_not_blocked_by_an_id_only_in_exceptions(world, oskar_and_home):
+    """A filing that names the new thing only in its `exceptions` (fact
+    ids, never a target) is no reference: the undo goes through."""
+
+    oskar, home = oskar_and_home
+    with world.revision(Source.scene("s1", "E", "m1")) as rev:
+        new = rev.create_thing("character", fields={"name": "Maren"})
+        created = rev.rev
+    with world.revision(Source.scene("s1", "F", "m1")) as rev:
+        rev.set_field(oskar, "filings", [{"target": home, "exceptions": [new]}], None)
+
+    report = world.undo([created])
+
+    assert report.conflicts == []
+    assert report.undo_rev is not None
+    assert world.view().thing(new) is None
+
+
 @pytest.fixture
 def oskar_and_home(world):
     with world.revision(Source.manual()) as rev:
