@@ -1,5 +1,6 @@
 {
  "date": "2026-10-23",
+ "candidates": "The create prompts' 'Entries near this one' list is built by the probe (filing-based nearness, as the new app would have it): the entries whose facts name the stub, then what the prompt names, then their neighbours one step away over the hand filings (weight 2) and fact references (weight 1), most-linked first, at most 24 (the curation probe's widest list). Added before any model call, after a dry run showed the app's part_of nearness gives a stripped stub almost no list.",
  "note": "Hand labels for the filing probe, committed before any model call. 'world' is the hand-made presentation of the acceptance world as plain entries: one tag per entry (invented by hand, the obvious one) and its filings ('in', with roles), replacing part_of, drawers and ties. 'thin' entries (role and topic stubs, and duplicates) are left out of every list, as if the world had been made under the new rule. Scoring reading: 'expected' must be found (recall); 'either' may be offered or not ('either side', the owner's reading); anything else offered is false.",
  "thin_left_out": [
   "Diplomatic Relations",
@@ -881,6 +882,7 @@
    "vasha": {
     "entry": "Vasha",
     "kind": "character",
+    "prompt": "Vasha: a young Snowy Owl-folk mail courier of the Northern Postal Authority, born in owl form, who flies letters between Velikoye and the towns of the north.",
     "tag": {
      "fits_in_use": [
       "courier"
