@@ -437,3 +437,25 @@ def test_held_text_forms(world, spheres_world):
         "The White Dawn holds that Kremova burned for three days.",
         "The White Dawn holds: Healed the lame?",
     ]
+
+
+def test_moved_belief_keeps_its_old_owner_as_holder(world):
+    """A `belief` fact held by its owner unmarked, moved onto another
+    entry (`repoint.copy_facts`), is written held by that old owner: it
+    stays the Clans' belief on the Tsardom's page."""
+
+    from talemate.world.entries import held_by
+    from talemate.worldplay.repoint import copy_facts
+
+    with world.revision(Source.manual(note="clans")) as rev:
+        clans = rev.create_thing("culture", fields={"name": "The Hill Clans"})
+        tsardom = rev.create_thing("culture", fields={"name": "The Tsardom"})
+        stones = rev.add_fact(clans, "belief", "The standing stones hear oaths.")
+    with world.revision(Source.manual(note="move")) as rev:
+        copies = copy_facts(rev, world.view(), [stones], tsardom, plain_self_links=True)
+    view = world.view()
+    owner = view.thing(tsardom)
+    moved = next(f for f in owner.facts if f.fact_id == copies[stones])
+    assert moved.origin == {"held_by": clans}
+    assert held_by(view, moved, owner) == clans
+    assert all(f.fact_id != stones for f in view.thing(clans).facts)

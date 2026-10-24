@@ -808,6 +808,10 @@ GUARDED_FIELDS: dict[str, str] = {
     "part_of": "set_part_of",
     "ties": "set_ties",
     "drawers": "set_drawers",
+    # F10: until Task 4's writer, filings are written only by the shim
+    # beside the old fields (`worldplay.filing_shadow`), which would wipe
+    # a raw write; Task 4 lifts this guard
+    "filings": "set_part_of or set_ties (until Task 4)",
 }
 
 

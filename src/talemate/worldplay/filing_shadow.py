@@ -36,7 +36,7 @@ from contextlib import contextmanager
 import structlog
 from pydantic import ValidationError
 
-from talemate.world.dates import WorldDate
+from talemate.world.dates import Precision, WorldDate
 from talemate.world import spheres
 from talemate.world.filing import Filing, check_filings
 from talemate.world.store import Revision, Source, World, _decode_date
@@ -59,6 +59,10 @@ HELD_TEMPLATES: tuple[str, ...] = ("religion", "culture")
 _OLD_FIELDS = ("part_of", "parent", "ties")
 
 log = structlog.get_logger("talemate.worldplay.filing_shadow")
+
+# a date before any world date (instants start at 0, year 1): a view at it
+# sees only the undated rows, a thing's base values
+_BEFORE_ALL = WorldDate(instant=-1, precision=Precision.YEAR)
 
 
 def _date(value: object) -> WorldDate | None:
@@ -108,10 +112,12 @@ def shadow_filings(
 ) -> None:
     """Rewrite the thing's `filings` (in `rev`, from `since`, as its
     old-field write was dated) to match its `part_of`, `parent` and
-    `ties` as the revision sees them at that date. A filing the store
-    would refuse is dropped, with a log line."""
+    `ties` as the revision sees them at that date. An undated write
+    (`since` None) reads and writes the base values, the undated rows,
+    never the latest dated ones (a view at `None` would pick those). A
+    filing the store would refuse is dropped, with a log line."""
 
-    view = world.view(at=since, rev=rev.rev)
+    view = world.view(at=since if since is not None else _BEFORE_ALL, rev=rev.rev)
     # the store checks filings at the latest telling of the revision
     latest = world.view(rev=rev.rev)
     state = view.thing(thing_id)

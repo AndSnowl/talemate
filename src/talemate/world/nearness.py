@@ -261,7 +261,11 @@ def _graph(view: WorldView) -> tuple[Graph, _Links]:
     for thing_id, filings in filed.items():
         for filing in filings:
             _link(graph, thing_id, filing.target, WEIGHTS["filing"], live)
-            homes.setdefault(thing_id, []).append(filing.target)
+            # each target once (a raw write or undo can repeat one); a
+            # `within` part isn't a home: the sibling cap is per target
+            home = homes.setdefault(thing_id, [])
+            if filing.target not in home:
+                home.append(filing.target)
             within = filing.within
             if (
                 within is not None

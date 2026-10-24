@@ -4306,11 +4306,14 @@ async def test_part_of_a_deleted_sphere_is_none(plugin):
         ("part_of", None, "set_part_of"),
         ("ties", [], "set_ties"),
         ("drawers", [], "set_drawers"),
+        # F10, until Task 4: the shim rebuilds filings from the old fields
+        ("filings", [], "set_part_of"),
     ],
 )
 async def test_set_field_refuses_guarded_fields(plugin, field, value, action):
     """`part_of`, `ties` and `drawers` have actions of their own, with
-    their guards: `set_field` refuses them, naming that action."""
+    their guards: `set_field` refuses them, naming that action (and
+    `filings`, until Task 4)."""
 
     s = await _open_sphere_world(plugin)
     thing_id = s.vasha if field == "ties" else s.dawn if field == "drawers" else s.vigil

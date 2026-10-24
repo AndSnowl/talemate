@@ -156,42 +156,48 @@ def test_held_by_deleted_holder_is_hidden(world, faiths):
     assert _held(world, faiths.light, faiths.blinded) == faiths.church
 
 
-def _as_belief(world, thing_id, fact_id):
-    """The fact as the view reads it, recategorised `belief` (the category
-    the prompt hints add in Task 4; no kind here takes it yet), with its
-    owner."""
+def _hill_clans(world):
+    """The Hill Clans, a culture entry (its kind takes `belief` facts),
+    with one belief unmarked and one marked held by the Church."""
 
-    view = world.view()
-    owner = view.thing(thing_id)
-    assert owner is not None
-    fact = next(f for f in owner.facts if f.fact_id == fact_id)
-    return view, fact.model_copy(update={"category": "belief"}), owner
+    with world.revision(Source.manual(note="clans")) as rev:
+        clans = rev.create_thing("culture", fields={"name": "The Hill Clans"})
+        stones = rev.add_fact(clans, "belief", "The standing stones hear oaths.")
+        light = rev.add_fact(clans, "general", "They keep sheep on the high fells.")
+    return clans, stones, light
 
 
-def test_belief_fact_is_held_by_owner(world, faiths):
-    """A fact in the `belief` category is held by its owner, unmarked."""
+def test_belief_fact_is_held_by_owner(world):
+    """A fact in the `belief` category is held by its owner, unmarked;
+    another category of the same owner is plain."""
 
-    view, fact, owner = _as_belief(world, faiths.church, faiths.eternal)
-    assert fact.origin == {"drawer": DOCTRINES}
-    assert held_by(view, fact, owner) == faiths.church
-    view, fact, owner = _as_belief(world, faiths.doctrine, faiths.right)
-    assert fact.origin is None
-    assert held_by(view, fact, owner) == faiths.doctrine
+    clans, stones, plain = _hill_clans(world)
+    assert _held(world, clans, stones) == clans
+    assert _held(world, clans, plain) is None
 
 
 def test_held_by_explicit_still_wins(world, faiths):
     """An explicit held-by on a belief fact beats the belief rule: another
     holder holds it, and a cleared one (`None`) leaves it plain."""
 
-    view, fact, owner = _as_belief(world, faiths.church, faiths.eternal)
-    marked = fact.model_copy(update={"origin": with_held_by(fact.origin, faiths.folk)})
-    assert held_by(view, marked, owner) == faiths.folk
-    cleared = fact.model_copy(update={"origin": with_held_by(fact.origin, None)})
-    assert held_by(view, cleared, owner) is None
+    clans, stones, _plain = _hill_clans(world)
+    with world.revision(Source.manual()) as rev:
+        marked = rev.add_fact(
+            clans,
+            "belief",
+            "The Light is a stranger's god.",
+            origin=with_held_by(None, faiths.church),
+        )
+        cleared = rev.add_fact(
+            clans, "belief", "Wolves are kin.", origin=with_held_by(None, None)
+        )
+    assert _held(world, clans, marked) == faiths.church
+    assert _held(world, clans, cleared) is None
     # a deleted explicit holder holds nothing, nor does the owner then
     with world.revision(Source.manual()) as rev:
-        rev.remove_thing(faiths.folk)
-    assert held_by(world.view(), marked, owner) is None
+        rev.remove_thing(faiths.church)
+    assert _held(world, clans, marked) is None
+    assert _held(world, clans, stones) == clans
 
 
 def test_beliefs_drawer_statement_is_plain(world, faiths):

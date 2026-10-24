@@ -344,9 +344,14 @@ def test_branch_is_filed_in_its_parent(world):
         split = rev.add_fact(
             reformed, "timeline", "The reformers split.", valid_from=WorldDate.of(1001)
         )
+        # the parent's line from after the split: never the branch's
+        spire = rev.add_fact(
+            dawn, "timeline", "The Dawn built a spire.", valid_from=WorldDate.of(1007)
+        )
     assert _ids(_timeline(world, reformed)) == [split]
+    assert spire not in _ids(_timeline(world, reformed, reach=3))
     lines = _timeline(world, dawn)
-    assert _ids(lines) == [old, split]
+    assert _ids(lines) == [old, split, spire]
     assert lines[1].owner_id == reformed and not lines[1].here
 
 
