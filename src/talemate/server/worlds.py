@@ -1346,14 +1346,22 @@ def _own_fact(state: ThingState | None, fact_id: str | None) -> FactState | None
 
 
 def _in_out(
-    view: WorldView, links: _Links, calendar: Calendar, state: ThingState
+    view: WorldView,
+    links: _Links,
+    calendar: Calendar,
+    state: ThingState,
+    index: FilingIndex,
 ) -> list[dict]:
     """The thing's "In" rows: each filing it has, in stored order, ended
     ones too (the dates say so), with its target, role, dates, the part of
-    the target it's `within` (while that's live) and its "but..."
-    exceptions (its own facts the filing names, as linked runs). A filing
-    into an entry that's gone is left out, hidden until it's back."""
+    the target it's `within` (while that's live), whether that part still
+    sits in the target as the part's own page reads it (`within_holds`,
+    final review M3: the page marks one that has moved out) and its
+    "but..." exceptions (its own facts the filing names, as linked runs).
+    A filing into an entry that's gone is left out, hidden until it's
+    back. `index` is the page's shared `FilingIndex`."""
 
+    ended = view.at is None
     rows = []
     for filing in filings_of(view, state.id, live=False):
         if view.thing(filing.target) is None:
@@ -1380,6 +1388,8 @@ def _in_out(
                 "until": _date_out(calendar, filing.until),
                 "within_id": within,
                 "within_name": view.name_of(within) if within else None,
+                "within_holds": within is not None
+                and index.within_holds(filing, ended),
                 "exceptions": exceptions,
             }
         )
@@ -1776,7 +1786,7 @@ class WorldsPlugin(Plugin):
             "hint": _hint_of(state),
             # where it's filed, what's filed in it (by tag), and what names
             # it without being filed in it
-            "in": _in_out(view, links, calendar, state),
+            "in": _in_out(view, links, calendar, state, index),
             "connected": _connected_out(
                 world, view, links, calendar, thing_id, things, index
             ),

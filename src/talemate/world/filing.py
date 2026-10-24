@@ -312,7 +312,7 @@ class FilingIndex:
         self.things: Sequence[ThingState] = view.things() if things is None else things
         alive: dict[str, bool] = {}
         parsed: dict[str, list[Filing]] = {}
-        ways = {
+        self._ways = ways = {
             ended: _LiveOf(view, self.things, ended, alive=alive, parsed=parsed)
             for ended in dict.fromkeys(include_ended)
         }
@@ -333,6 +333,15 @@ class FilingIndex:
         if include_ended not in self._found:
             raise ValueError(f"not indexed with include_ended={include_ended}")
         return self._found[include_ended]
+
+    def within_holds(self, filing: Filing, include_ended: bool = False) -> bool:
+        """Whether the filing's `within` is a part of its target as this
+        index reads it (`include_ended` as `get` has it): the test that
+        lists the entry under that part (final review M3)."""
+
+        if include_ended not in self._ways:
+            raise ValueError(f"not indexed with include_ended={include_ended}")
+        return _within_live(self.view, filing, self._ways[include_ended])
 
 
 def filed_index(

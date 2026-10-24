@@ -4356,6 +4356,7 @@ async def test_payload_in_connected_mentioned(plugin):
         "until": None,
         "within_id": None,
         "within_name": None,
+        "within_holds": False,
         "exceptions": [],
     }
     # Connected: grouped by tag, headed by the plural, an entry's own line
@@ -6369,3 +6370,38 @@ async def test_get_thing_builds_one_filing_index(plugin, monkeypatch, dated):
     # no view reads every thing twice (`thing_references`, older than
     # Filing, reads them once through a view of its own)
     assert len(things_calls) == len(set(things_calls)) <= 2, things_calls
+
+
+async def test_in_row_marks_a_within_that_no_longer_holds(plugin):
+    """Final review M3: an "In" row whose `within` part has moved out of
+    the target says so (`within_holds` false), as the part's page stops
+    listing the person; while the part sits in the target it holds."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="within")) as rev:
+        rev.set_field(
+            s.dmitry,
+            "filings",
+            [_filed(s.tsardom, "sovereign", since=979, within=s.court)],
+            None,
+        )
+
+    def row_of(payload):
+        (row,) = [r for r in payload["in"] if r["target_id"] == s.tsardom]
+        return row
+
+    dmitry = await _get_thing(plugin, s.dmitry)
+    row = row_of(dmitry)
+    assert (row["within_id"], row["within_name"]) == (s.court, "The Night Court")
+    assert row["within_holds"] is True
+    court = await _get_thing(plugin, s.court)
+    assert s.dmitry in [r["id"] for g in court["connected"] for r in g["rows"]]
+
+    # the Night Court moves out of Velikoye (and so out of the Tsardom)
+    with s.world.revision(Source.manual(note="moved")) as rev:
+        rev.set_field(s.court, "filings", [_filed(s.dawn)], None)
+    row = row_of(await _get_thing(plugin, s.dmitry))
+    assert (row["within_id"], row["within_name"]) == (s.court, "The Night Court")
+    assert row["within_holds"] is False
+    court = await _get_thing(plugin, s.court)
+    assert s.dmitry not in [r["id"] for g in court["connected"] for r in g["rows"]]

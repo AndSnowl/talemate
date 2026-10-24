@@ -57,7 +57,7 @@
                 <a v-else class="thing-link" :class="{ dropped: row.draft && !row.ticked }" href="#" data-testid="in-target-link" @click.prevent="worlds.openThing(row.target_id)">{{ row.target_name }}</a>
                 <span v-if="row.new_name" class="text-caption text-muted">new stub · {{ [row.new_name.kind, row.new_name.tag].filter(Boolean).join(', ') }}</span>
                 <span v-if="row.role" class="role" data-testid="in-role-text">{{ row.role }}</span>
-                <span v-if="row.within_id" class="within">within <a class="thing-link" href="#" @click.prevent="worlds.openThing(row.within_id)">{{ row.within_name }}</a></span>
+                <span v-if="row.within_id" class="within">within <a class="thing-link" href="#" @click.prevent="worlds.openThing(row.within_id)">{{ row.within_name }}</a><span v-if="row.within_holds === false" class="within-stale" data-testid="in-within-stale"> (no longer part of {{ row.target_name }})</span></span>
                 <span v-if="dates(row)" class="when" data-testid="in-dates">{{ dates(row) }}</span>
                 <span v-if="draft && !row.draft" class="text-caption text-muted">· already filed</span>
                 <v-spacer></v-spacer>
@@ -131,6 +131,8 @@ function yearOf(date) {
 // filing (`thing.in`, ended ones too), with its target, role and dates
 // ("since 979", "900–1015"), and for a person (a character or real being)
 // the part of the target it's "within" and its "but…" exceptions under it.
+// A part that has moved out of the target is marked "(no longer part of
+// …)" (`within_holds` false; final review M3).
 // Each row can be edited (`edit_filing`: only what changes is sent),
 // ended ("End this": its `until`) or removed (`remove_filing`); a person's
 // gets "+ but…" (`add_exception`). "+ in… 🔎" searches the world's entries
@@ -394,6 +396,10 @@ export default {
 .within {
     font-size: 12px;
     color: rgb(var(--v-theme-muted));
+}
+
+.within-stale {
+    font-style: italic;
 }
 
 .when {
