@@ -605,6 +605,25 @@ def test_generic_roles_never_touch():
     assert not role_named("ward", "she walks toward it")
 
 
+def test_a_compound_role_is_named_by_its_parts():
+    """A role that joins several ("senior member and Chief Scribe", the
+    role Skyfall gave Anastasiya Koroleva 2 of 2 in the Task 12 session,
+    docs/superpowers/probes/2026-10-24-filing-flow.md) is named when the
+    setup names one of its parts, as whole words; a generic part still
+    touches no one."""
+
+    from talemate.worldplay.context import role_named
+
+    goal = "Vasha must deliver a sealed letter to the Chief Scribe."
+    assert role_named("senior member and Chief Scribe", goal)
+    assert role_named("Chief Scribe and member", goal)
+    assert role_named("courier, archivist", "the archivist sorts it")
+    assert role_named("courier; Chief Scribe", goal)
+    assert not role_named("member and follower", "a member of the Order")
+    assert not role_named("senior member and Chief Scribe", "the scribes read it")
+    assert not role_named("and", goal)
+
+
 def test_scene_block_wording(world):
     """Probe 5's block, each touched entry headed "<name> (<tag or kind>)"
     under the lead line: its summary, then up to 5 of its own facts, the

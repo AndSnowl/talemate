@@ -235,18 +235,33 @@ def _role_words(role: str | None) -> str:
     return " ".join((role or "").split()).casefold()
 
 
-def role_named(role: str | None, text: str) -> bool:
-    """Whether `text` names the filing's `role` (ruling F4): the role's
-    words, whole and in order, any case and spacing ("Chief Scribe" in
-    "...to the chief scribe of..."; never "ward" in "toward", nor
-    "scribe" in "scribes"). A generic role (`GENERIC_ROLES`), or none,
-    is never named."""
+# what joins the parts of a compound role ("senior member and Chief
+# Scribe", "courier, archivist")
+_ROLE_PARTS_RE = re.compile(r"\s*(?:,|;|/|&|\band\b)\s*", re.IGNORECASE)
 
-    words = _role_words(role)
+
+def _words_named(words: str, text: str) -> bool:
     if not words or words in GENERIC_ROLES:
         return False
     pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, words.split())) + r"(?!\w)"
     return re.search(pattern, text, re.IGNORECASE) is not None
+
+
+def role_named(role: str | None, text: str) -> bool:
+    """Whether `text` names the filing's `role` (ruling F4): the role's
+    words, whole and in order, any case and spacing ("Chief Scribe" in
+    "...to the chief scribe of..."; never "ward" in "toward", nor
+    "scribe" in "scribes"). A compound role is named by any of its parts
+    ("senior member and Chief Scribe" by "the Chief Scribe": the Task 12
+    Skyfall session, where the model's roles for the Chief Scribe were
+    compound 2 of 2, docs/superpowers/probes/2026-10-24-filing-flow.md).
+    A generic role or part (`GENERIC_ROLES`), or none, is never named."""
+
+    words = _role_words(role)
+    if _words_named(words, text):
+        return True
+    parts = [part for part in _ROLE_PARTS_RE.split(words) if part]
+    return len(parts) > 1 and any(_words_named(part, text) for part in parts)
 
 
 def _named_in(view: WorldView, text: str) -> list[str]:
