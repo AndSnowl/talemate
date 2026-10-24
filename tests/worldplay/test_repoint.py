@@ -126,8 +126,10 @@ def test_repoint_adds_names_beside_a_dated_value(world, tsardom):
 def test_hard_repoint_uses_chosen_name(world, tsardom):
     """`use_name`: every link's words become that name, one of the target's
     own (its name or an other name, any case, written as the target has
-    it), and no other names are added; anything else is refused, writing
-    nothing."""
+    it); anything else is refused, writing nothing. The stub's own name
+    and other names are still the target's (a later reply writing them
+    must find it, not make the stub again), but not the links' old words,
+    which are gone from the world (Filing Task 11)."""
 
     t = tsardom
     head = world.head_rev()
@@ -137,7 +139,7 @@ def test_hard_repoint_uses_chosen_name(world, tsardom):
     assert world.head_rev() == head
 
     done = repoint_stub(world, t["stub"], t["target"], use_name="old moscavy")
-    assert done.aka_added == []
+    assert done.aka_added == ["the Tsardom", "Moscavia"]
     assert done.links == 3
     for fact_id, words in (
         (t["born"], "Born in {}."),
@@ -146,9 +148,49 @@ def test_hard_repoint_uses_chosen_name(world, tsardom):
     ):
         assert _text(world, fact_id) == words.format(ref(t["target"], "Old Moscavy"))
     assert world.view().thing(t["target"]).fields["aka"] == [
-        _aka("Old Moscavy", tag="proper")
+        _aka("Old Moscavy", tag="proper"),
+        _aka("the Tsardom"),
+        _aka("Moscavia"),
     ]
     assert world.view().thing(t["stub"]) is None
+
+
+def test_hard_repoint_never_doubles_an_article(world):
+    """A chosen name with a leading article ("The Great Hall") written
+    where the text already has one before the link ("in the Grand Hall's
+    gallery") drops its own; where the link's words open with an article,
+    the name keeps that article as written, so mid-sentence it stays
+    lowercase (Filing Task 11: "held in the The Great Hall's gallery")."""
+
+    with world.revision(Source.manual(note="halls")) as rev:
+        hall = rev.create_thing("place", {"name": "The Great Hall"})
+        stub = rev.create_thing(
+            "place",
+            {"name": "Grand Hall of the Tsar's Palace", "stub": {"ignored": False}},
+        )
+        court = rev.create_thing("lore", {"name": "The Night Court"})
+        gallery = rev.add_fact(
+            court,
+            "general",
+            f"Audiences are held in the {ref(stub, 'Grand Hall')}'s gallery.",
+        )
+        within = rev.add_fact(
+            court, "general", f"It meets in {ref(stub, 'the Grand Hall')} at dusk."
+        )
+        opens = rev.add_fact(
+            court, "general", f"{ref(stub, 'The Grand Hall')} is lit by lanterns."
+        )
+        bare = rev.add_fact(
+            court, "general", f"Petitioners wait at {ref(stub, 'Grand Hall')}."
+        )
+
+    repoint_stub(world, stub, hall, use_name="The Great Hall")
+    assert _text(world, gallery) == (
+        f"Audiences are held in the {ref(hall, 'Great Hall')}'s gallery."
+    )
+    assert _text(world, within) == f"It meets in {ref(hall, 'the Great Hall')} at dusk."
+    assert _text(world, opens) == f"{ref(hall, 'The Great Hall')} is lit by lanterns."
+    assert _text(world, bare) == f"Petitioners wait at {ref(hall, 'The Great Hall')}."
 
 
 def test_repoint_rewrites_filings_into_the_stub(world, tsardom):

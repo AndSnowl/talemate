@@ -28,8 +28,8 @@ revision, so one undo restores it all:
   the target or a thing inside it);
 - its names: the stub's name, its other names and each distinct shown
   text become the target's common other names, unless the target or
-  another thing already has that name. A hard re-point adds none: the
-  words are gone from the world.
+  another thing already has that name. A hard re-point adds the stub's
+  name and other names only: the links' words are gone from the world.
 
 Then the stub is removed. Refused before anything is written (a
 `ValueError` naming every use that blocks it): a use by a scene, a field
@@ -78,6 +78,7 @@ from talemate.world.kinds import (
     kinds_can_be_one,
     moved_category,
 )
+from talemate.world.names import ARTICLES
 from talemate.world.refs import REF_PATTERN, ref
 from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.store import Revision, Source, World
@@ -262,6 +263,28 @@ def _field_uses(
     return uses
 
 
+# an article ending the text just before a link ("...held in the ")
+_ARTICLE_BEFORE = re.compile(r"(?<![\w-])(?:the|a|an)\s+$", re.IGNORECASE)
+
+
+def _hard_words(use_name: str, shown: str, before: str) -> str:
+    """The words a hard re-point writes for one link: `use_name`, less its
+    leading article when the text just `before` the link ends with one
+    ("the Grand Hall's" becomes "the Great Hall's", never "the The Great
+    Hall's"), or with the article the link's `shown` words open with, as
+    they wrote it ("It meets in the Great Hall", mid-sentence)."""
+
+    words = use_name.split()
+    if len(words) < 2 or words[0].casefold() not in ARTICLES:
+        return use_name
+    if _ARTICLE_BEFORE.search(before):
+        return " ".join(words[1:])
+    opening = shown.split()[:1]
+    if opening and opening[0].casefold() in ARTICLES:
+        return " ".join([opening[0], *words[1:]])
+    return use_name
+
+
 def _rewriter(
     view: WorldView,
     stub_id: str,
@@ -271,7 +294,8 @@ def _rewriter(
 ) -> Callable[[str, str, bool], tuple[str, int]]:
     """A function `(text, owner after, count) -> (text, links moved)`:
     links to the stub point at the target (their words, plain, in the
-    target's own facts; `use_name` in place of the words when given), and
+    target's own facts; `use_name` in place of the words when given, its
+    article fitted to the text, `_hard_words`), and
     in the target's own facts its links to itself become words too. Each
     moved link's words go in `shown_texts`."""
 
@@ -291,7 +315,7 @@ def _rewriter(
                     moved += 1
                     shown_texts.append(shown)
                 if use_name is not None:
-                    shown = use_name
+                    shown = _hard_words(use_name, shown, found.string[: found.start()])
                 return shown if owner == target_id else ref(target_id, shown)
             return shown if owner == target_id else found.group(0)
 
@@ -612,12 +636,14 @@ def _names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[str]]:
     """`(aka, added)`: the target's other names with the stub's name, its
     other names and the links' shown texts added (common, not everyday),
     unless the target or another thing has that name already. A hard
-    re-point (`use_name`) adds none."""
+    re-point (`use_name`) adds the stub's name and other names only: the
+    links' words are gone from the world, but a later reply writing the
+    stub's name must find the target rather than make the stub again."""
 
     view, target = job.view, job.target
     aka = list(target.fields.get("aka") or [])
     if job.use_name is not None:
-        return aka, []
+        shown_texts = []
     held = {name_key(job.target_name)} | {
         name_key(entry["name"]) for entry in aka if isinstance(entry, dict)
     }

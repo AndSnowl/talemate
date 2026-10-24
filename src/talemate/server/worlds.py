@@ -97,7 +97,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   points everything naming the stub at the target (an entry, or another
   live stub) -- fact links, fields, filings, the stub's own facts and
   filings -- teaches the target its names (`use_name`, one of the
-  target's names, rewrites the links' words to it instead) and removes
+  target's names, rewrites the links' words to it instead, its article
+  fitted to the text, and teaches only the stub's own names) and removes
   the stub, in one revision. It answers `{stub_id, stub_name, target, links, aka_added,
   facts_moved, notes}` (`target` the target's payload; `notes` what didn't
   carry over as the stub had it). Refused, writing nothing: the stub
