@@ -74,8 +74,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   back, validated by the preview models and checked again on the server
   (ruling F13: "In" and "File into this" rows for a live target and no
   cycle, a `within` that sits in its target, exceptions departing from
-  what the target holds; "Could move here" recomputed), and answers
-  `notes`. It schedules prose for each entry the world has whose prose
+  what the target holds; "Could move here" recomputed; a "Move that one
+  here" row, `move_here` with `repeat`, kept only when a version of the
+  draft this session holds says one of its facts repeats that fact), and
+  answers `notes`. It schedules prose for each entry the world has whose prose
   reads what it took (an elsewhere fact, a fact moved off it).
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
@@ -212,7 +214,11 @@ through `signal_operation_failed` (an `operation_done` envelope with
   answer `{thing_id, draft, facts}` (or `add_facts_failed` /
   `add_event_failed`), writing nothing; `accept_facts {draft, at}` writes
   the ticked ones in one revision and answers with the entry plus
-  `fact_ids`. `TALEMATE_TEST_FIXED_FACTS` (browser tests) names a file
+  `fact_ids`. With `draft_key` (a draft page) the facts join the draft's
+  current version and the draft answers; a result that comes after
+  another version became current joins none and answers
+  `add_facts_failed`/`add_event_failed` with `{draft_key, stale: true}`.
+  `TALEMATE_TEST_FIXED_FACTS` (browser tests) names a file
   holding the model's reply.
 - Filing and tags (`talemate.world.filing`): the thing payload has
   `tag`, `hint` (the prompt hint it was written with), `in: [{target_id,
