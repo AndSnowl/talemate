@@ -236,8 +236,79 @@ def _role_words(role: str | None) -> str:
 
 
 # what joins the parts of a compound role ("senior member and Chief
-# Scribe", "courier, archivist")
-_ROLE_PARTS_RE = re.compile(r"\s*(?:,|;|/|&|\band\b)\s*", re.IGNORECASE)
+# Scribe", "courier, archivist"); a strong joint (";", "/", "&") always
+# splits, a weak one ("and", ",") only before any "of ..." phrase
+_STRONG_JOINT_RE = re.compile(r"\s*[;/&]\s*")
+_WEAK_JOINT_RE = re.compile(r"\s*(?:,|\band\b)\s*", re.IGNORECASE)
+_OF_RE = re.compile(r"\bof\b", re.IGNORECASE)
+
+# a word that is no title on its own: a pronoun, or a common modifier of
+# one ("senior", "retired", "acting")
+_NOT_A_TITLE: frozenset[str] = frozenset(
+    {
+        "he",
+        "she",
+        "they",
+        "it",
+        "him",
+        "her",
+        "them",
+        "his",
+        "hers",
+        "their",
+        "senior",
+        "junior",
+        "former",
+        "retired",
+        "acting",
+        "interim",
+        "honorary",
+        "emeritus",
+        "elder",
+        "young",
+        "old",
+        "new",
+        "chief",
+        "head",
+        "first",
+        "second",
+        "deputy",
+        "assistant",
+        "sworn",
+        "lay",
+    }
+)
+# endings of a lone word that reads as an adjective or participle
+_ADJECTIVE_ENDINGS = ("ed", "ing", "ous", "ive", "ful", "less", "able", "ible", "ish")
+
+
+def _role_parts(words: str) -> list[str]:
+    """A compound role's parts: split at every ";", "/" or "&", and at
+    "and" or "," only before the first "of" of its piece ("Keeper of
+    Bread and Salt" is one title; "Chief Scribe and Keeper of Seals" is
+    two)."""
+
+    parts: list[str] = []
+    for piece in _STRONG_JOINT_RE.split(words):
+        found = _OF_RE.search(piece)
+        head, tail = (
+            (piece[: found.start()], piece[found.start() :]) if found else (piece, "")
+        )
+        bits = _WEAK_JOINT_RE.split(head)
+        bits[-1] = bits[-1] + tail
+        parts += [bit.strip() for bit in bits if bit.strip()]
+    return parts
+
+
+def _is_title(part: str) -> bool:
+    """Whether a role's part can stand as a title on its own: never a lone
+    pronoun or modifier ("she", "retired")."""
+
+    words = part.split()
+    if len(words) != 1:
+        return True
+    word = words[0]
+    return word not in _NOT_A_TITLE and not word.endswith(_ADJECTIVE_ENDINGS)
 
 
 def _words_named(words: str, text: str) -> bool:
@@ -254,14 +325,18 @@ def role_named(role: str | None, text: str) -> bool:
     "scribe" in "scribes"). A compound role is named by any of its parts
     ("senior member and Chief Scribe" by "the Chief Scribe": the Task 12
     Skyfall session, where the model's roles for the Chief Scribe were
-    compound 2 of 2, docs/superpowers/probes/2026-10-24-filing-flow.md).
-    A generic role or part (`GENERIC_ROLES`), or none, is never named."""
+    compound 2 of 2, docs/superpowers/probes/2026-10-24-filing-flow.md),
+    split as `_role_parts` does and only into titles (`_is_title`: never
+    a lone pronoun or modifier such as "she" or "retired"). A generic
+    role or part (`GENERIC_ROLES`), or none, is never named."""
 
     words = _role_words(role)
     if _words_named(words, text):
         return True
-    parts = [part for part in _ROLE_PARTS_RE.split(words) if part]
-    return len(parts) > 1 and any(_words_named(part, text) for part in parts)
+    parts = _role_parts(words)
+    return len(parts) > 1 and any(
+        _is_title(part) and _words_named(part, text) for part in parts
+    )
 
 
 def _named_in(view: WorldView, text: str) -> list[str]:

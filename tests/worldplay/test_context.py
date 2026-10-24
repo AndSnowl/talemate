@@ -621,7 +621,41 @@ def test_a_compound_role_is_named_by_its_parts():
     assert role_named("courier; Chief Scribe", goal)
     assert not role_named("member and follower", "a member of the Order")
     assert not role_named("senior member and Chief Scribe", "the scribes read it")
-    assert not role_named("and", goal)
+
+
+@pytest.mark.parametrize(
+    "role, text",
+    [
+        # an "and" or comma inside an "of ..." phrase joins its objects,
+        # not two roles
+        ("Keeper of Bread and Salt", "She brings the salt to the hall."),
+        ("Master of Coin and Ships", "The ships sail at dawn."),
+        ("Warden of the North and East", "They ride east at dusk."),
+        ("Warden of the North, East and West", "They ride west."),
+        # a part must be a title, not a lone adjective or pronoun
+        ("captain, retired", "Long retired, the old man waits."),
+        ("he/she", "She waits at the gate."),
+        ("senior, acting", "The acting envoy waits."),
+    ],
+)
+def test_a_compound_role_splits_only_into_titles(role, text):
+    """Fix round 1 (Task 12 review): the compound-role splitter never
+    splits inside an "of ..." phrase, and a part that is a lone adjective
+    or pronoun is never named on its own."""
+
+    from talemate.worldplay.context import role_named
+
+    assert not role_named(role, text)
+
+
+def test_a_compound_role_still_splits_before_an_of_phrase():
+    from talemate.worldplay.context import role_named
+
+    assert role_named(
+        "Chief Scribe and Keeper of Seals", "a letter for the keeper of seals"
+    )
+    assert role_named("Chief Scribe and Keeper of Seals", "the Chief Scribe reads")
+    assert role_named("Keeper of Bread and Salt", "the Keeper of Bread and Salt")
 
 
 def test_scene_block_wording(world):
