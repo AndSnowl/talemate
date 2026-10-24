@@ -70,7 +70,7 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -129,6 +129,21 @@ def _perf() -> dict | None:
         return None
 
 
+def replay_key(prompt: str) -> tuple[str, ...]:
+    """A prompt as the replay matches it: its lines, sorted, each line's
+    words sorted (the facts of one revision come in no fixed order in some
+    context blocks, even within a line), with fix 1's tag rule left out (it shows on more
+    prompts now). Only the harness reads this: a replayed reply answers a
+    prompt that says the same things."""
+
+    lines = []
+    for line in prompt.splitlines():
+        if line.startswith('- "tag": one or two words'):
+            continue
+        lines.append(" ".join(sorted(line.split())))
+    return tuple(sorted(lines))
+
+
 class Recorder(KoboldCppClient):
     """Talemate's KoboldCpp client, one call at a time (`lock`), each
     recorded with its uid, kind, prompt, reply, seconds and KoboldCpp's
@@ -137,14 +152,43 @@ class Recorder(KoboldCppClient):
     calls: list[dict[str, Any]]
     fake: bool = False
     lock: asyncio.Lock
-    # an earlier run's `(prompt, reply)` pairs, answered in order while
-    # each prompt is the same; the first that differs ends the replay
+    # an earlier run's `(prompt, reply)` pairs: a prompt recorded there is
+    # answered with its recorded reply (`replay_by_prompt`); any other goes
+    # to the model (or, with `fake`, the canned reply)
     replay: list[tuple[str, str]] = []
+
+    def replay_by_prompt(self) -> dict[str, list[str]]:
+        """The replay as prompt -> its recorded replies, in order: calls
+        that run concurrently (prose refreshes) may come in another order,
+        so a recorded reply answers the same prompt wherever it comes."""
+
+        if not hasattr(self, "_by_prompt"):
+            self._by_prompt: dict[str, list[str]] = {}
+            for recorded_prompt, response in self.replay:
+                self._by_prompt.setdefault(replay_key(recorded_prompt), []).append(
+                    response
+                )
+        return self._by_prompt
 
     async def send_prompt(self, prompt, kind="conversation", *args, **kwargs):
         async with self.lock:
-            if self.replay and self.replay[0][0] == str(prompt):
-                _recorded, response = self.replay.pop(0)
+            recorded = (
+                None
+                if getattr(self, "live", False)
+                else self.replay_by_prompt().get(replay_key(str(prompt)))
+            )
+            forced = getattr(self, "forced", None)
+            if (
+                not recorded
+                and not getattr(self, "live", False)
+                and forced
+                and getattr(prompt, "uid", None) == "world.create-thing"
+            ):
+                # a draft whose prompt the fixes changed: answered with the
+                # run's own recorded reply, so the world goes on as it did
+                recorded = [forced.pop(0)]
+            if recorded:
+                response = recorded.pop(0)
                 self.calls.append(
                     {
                         "uid": getattr(prompt, "uid", None),
@@ -157,9 +201,8 @@ class Recorder(KoboldCppClient):
                 )
                 self.on_call()
                 return response
-            if self.replay:
-                self.replay_ended_at = len(self.calls)
-                self.replay = []
+            if self.replay and getattr(self, "replay_missed_at", None) is None:
+                self.replay_missed_at = len(self.calls)
             started = time.monotonic()
             if self.fake:
                 response = fake_reply(str(prompt))
@@ -464,6 +507,10 @@ def tags_in_use(prompt: str) -> list[str]:
 # --- the session --------------------------------------------------------------------
 
 
+class StopSession(Exception):
+    """The session stops after `--stop-after`'s step (fix round 1)."""
+
+
 class Run:
     def __init__(self, session: Session, results: dict, save) -> None:
         self.s = session
@@ -471,6 +518,11 @@ class Run:
         self.save = save
         self.ids: dict[str, str] = {}
         self.world = session.plugin.world
+        # fix round 1 (`--retry`): the steps re-asked of the model, live,
+        # before the source run's recorded versions are replayed
+        self.retry_keys: set[str] = set()
+        self.source: dict | None = None
+        self.stop_after: str | None = None
 
     # the owner's acts -----------------------------------------------------------
 
@@ -526,6 +578,8 @@ class Run:
             data["hint"] = hint
         step["request"] = {k: v for k, v in data.items()}
         started = time.monotonic()
+        if key in self.retry_keys:
+            await self.live_versions(key, data, step)
         draft_key = None
         for version in (1, 2):
             before = len(self.s.client.calls)
@@ -585,7 +639,54 @@ class Run:
         self.ids[key] = thing["id"]
         await self.register()
         self.save()
+        if key == self.stop_after:
+            raise StopSession(key)
         return step
+
+    async def live_versions(self, key: str, data: dict, step: dict) -> None:
+        """Two versions of the draft from the model with the current code
+        (`step["retry"]`), then discarded; the source run's recorded
+        replies for this step are queued to answer the replayed versions."""
+
+        client = self.s.client
+        step["retry"] = []
+        client.live = True
+        try:
+            retry_key = None
+            for _version in (1, 2):
+                before = len(client.calls)
+                got = await self.s.retry(
+                    "preview_thing",
+                    **data,
+                    **({"draft_key": retry_key} if retry_key else {}),
+                )
+                retry_key = got["draft_key"]
+                record = draft_record(got)
+                record["calls"] = self._calls(before)
+                create = [
+                    i
+                    for i in record["calls"]
+                    if client.calls[i]["uid"] == "world.create-thing"
+                ]
+                if create:
+                    text = client.calls[create[-1]]["prompt"]
+                    record["near"] = near_lines(text)
+                    record["tags_in_use"] = tags_in_use(text)
+                step["retry"].append(record)
+                self.save()
+            await self.s.send("discard_preview", draft_key=retry_key)
+        finally:
+            client.live = False
+        source_step = next(
+            s for s in (self.source or {}).get("steps", []) if s.get("step") == key
+        )
+        calls = self.source["calls"]
+        client.forced = [
+            calls[i]["response"]
+            for version in source_step["versions"]
+            for i in version["calls"]
+            if calls[i]["uid"] == "world.create-thing"
+        ]
 
     def tick(self, key: str, preview: dict) -> list[str]:
         """The owner's ticks (the policy), each recorded."""
@@ -956,7 +1057,13 @@ class Run:
 
 
 async def main(
-    out: Path, label: str, root: Path, fake: bool, replay: str | None = None
+    out: Path,
+    label: str,
+    root: Path,
+    fake: bool,
+    replay: str | None = None,
+    retry: Sequence[str] = (),
+    stop_after: str | None = None,
 ) -> None:
     harness._quiet_loading(False)
     embedding = TrigramEmbeddingFunction()
@@ -1013,14 +1120,23 @@ async def main(
     results["world_path"] = str(plugin.world.path)
     started = time.monotonic()
     run = Run(session, results, save)
+    run.retry_keys = set(retry)
+    run.stop_after = stop_after
+    run.source = next((r for r in doc["runs"] if r["label"] == replay), None)
+    results["retry"] = list(retry)
     try:
         await run.run()
+    except StopSession as stop:
+        results["stopped_after"] = str(stop)
     except Exception as exc:
         results["error"] = repr(exc)
         raise
     finally:
         results["ids"] = dict(run.ids)
-        results["replay_ended_at"] = getattr(client, "replay_ended_at", None)
+        results["replay_missed_at"] = getattr(client, "replay_missed_at", None)
+        results["replay_missed"] = sum(
+            1 for c in client.calls if client.replay and not c.get("replayed")
+        )
         results["minutes"] = round((time.monotonic() - started) / 60, 1)
         results["failures"] = session.failures
         save()
@@ -1386,6 +1502,8 @@ if __name__ == "__main__":
     parser.add_argument("--score", action="store_true", help="score run --label of OUT")
     parser.add_argument("--replay", default=None, metavar="LABEL")
     parser.add_argument("--scene-of", default=None, metavar="LABEL")
+    parser.add_argument("--retry", nargs="*", default=[], metavar="STEP")
+    parser.add_argument("--stop-after", default=None, metavar="STEP")
     args = parser.parse_args()
     if args.scene_of:
         asyncio.run(scene_again(args.out.resolve(), args.label, args.scene_of))
@@ -1408,5 +1526,7 @@ if __name__ == "__main__":
                 args.root.resolve(),
                 args.fake,
                 args.replay,
+                args.retry,
+                args.stop_after,
             )
         )

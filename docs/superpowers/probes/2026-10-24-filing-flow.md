@@ -41,17 +41,17 @@ The bar is at least 80% right and at most 5% false.
 
 | Measure | Score (run 1 + run 2) | Verdict |
 |---|---|---|
-| Tag | 32/60 right (53%); fitting tag in use reused 15/20 (75%) | **FALLBACK**: the editable chip (ruling F8) stays |
-| "In", either side | found 41/60 (68%); 41/52 (79%) where a near list existed; false 0/60 | **FALLBACK**: shown, unticked (F7) stays |
+| Tag | 32/58 right (55%; run 2's owl-folk replayed run 1's, see below); fitting tag in use reused 15/20 (75%) | **FALLBACK**: the editable chip (ruling F8) stays |
+| "In", either side | found 41/60 (68%); 41/52 (79%) where a near list existed; false 1/60 (the Tsardom "in" the owl-folk) | **FALLBACK**: shown, unticked (F7) stays |
 | "In", strict | false 19/60 (32%) | (the "either" rows offered) |
-| Thin stubs | 4/96 (4.2%); F5 dropped 22 titles, 1 wrongly | **PASS** with the F5 filter |
-| "File into this" | expected 6/8 (75%); false 2/16 (12.5%) either side, 10/16 strict | **FALLBACK**: unticked (F7) stays |
+| Thin stubs | 4/96 (4.2%); F5 dropped 22 titles, 1 wrongly | **PASS** with the F5 filter, by one stub (a fifth would be 5.2%) |
+| "File into this" | expected 6/8 (75%); false 10/16 (62.5%) by the committed labels: code 5 false and 3 found, the model 5 false and 3 found | **FALLBACK**: unticked (F7) stays |
 | Group synopsis | 83/88 claims supported (94%); 0 invented names, dates or numbers; over 70 words 12/14 | **PASS** (the length cap is ignored) |
-| Repeats (final worlds) | 0.7: 3/194 and 0/191; 0.5: 13 and 5; 0.4: 34 and 20 | far below the curation world |
+| Repeats (final worlds) | 0.7: 3/194 and 0/191; 0.5: 13 and 5; 0.4: 34 and 20 | this session shape restates far less; not a pipeline comparison |
 | On-topic own facts | 318/324 (98%) | as the curation run (98%) |
-| No world context | 5 of 6 such drafts contradict the world | **new problem**, see below |
-| Scene: F4 role rule as ruled | Koroleva touched 1/2 runs; Chief Scribe invented 4/4 when she wasn't | **FAIL** as ruled; **PASS** with fix 2 (2/2, 0 invented) |
-| F6 sibling reach | the Frosted Wing in the Host's list 4/4 (rank 6/17, 5/14), by a link, not as a sibling | **PASS** for reach; the sibling-only path wasn't exercised |
+| No world context | contradict the world: v1s 5/6, all versions 7/12; after F31 (fix round 1) 1/6 and 2/12 | **FIXED** in part (F31), see below |
+| Scene: F4 role rule as ruled | Koroleva touched 1/2 runs; Chief Scribe invented 4/4 when she wasn't | **FAIL** as ruled; with fix 2, 1/1 attributable (the same-case re-run); run 2 consistent but its goal named her |
+| F6 sibling reach | the Frosted Wing in the Host's list in both runs (rank 6/17, 5/14): 2 independent observations, by a link, not as a sibling | **PASS** for reach; the sibling-only path wasn't exercised |
 | Character "In" with exceptions | Koroleva: written 3/4, a sensible item 3/3, also restated as a fact 3/3; Vasha: none 4/4 (right) | **FALLBACK**: unticked, the owner edits |
 | "+ Add facts" / "+ Add event" | 39/39 facts on the prompt; 0 repeats; 20/20 dated 997 | **PASS** |
 | Group "+ Add" with no tag | 12/12 rows right; count 8/8; tags fit 12/12; 0 duplicates | **PASS** |
@@ -59,7 +59,9 @@ The bar is at least 80% right and at most 5% false.
 | `nearby` (mentioned_in) | shown, no row duplicated an entry | **PASS** |
 | World block filing lines | used as character 2/2 where shown; never recited; no flooding | **PASS** |
 
-"Run 1 + run 2" means 2 versions × 15 drafts × 2 runs = 60 draft versions. The scene, synopsis, "+ Add" and fact numbers pool both runs.
+"Run 1 + run 2" means 2 versions × 15 drafts × 2 runs = 60 draft versions. The scene, synopsis, "+ Add" and fact numbers pool both runs. **One disclosure:** run 2's first 4 calls (the owl-folk's two versions and their prose) were answered from run 1's recorded replies, so run 2's owl-folk is not a second sample: it is left out of the tag score (58 versions). It carries no "In" or "File into" rows (a species gets no near list).
+
+The figures above are from before fix round 1 except where a row says so; fix round 1's own results are in its section at the end.
 
 ## Fixes (run red first; plain suite 7475 passed, 0 failed)
 
@@ -85,8 +87,7 @@ The bar is at least 80% right and at most 5% false.
    - **Test:** `test_a_compound_role_is_named_by_its_parts`, red first.
    - **Before/after on the same case** (`run 1 scene, fixed`: the same world copy and the same setup):
      - Koroleva is touched, and her block entry carries her filing line ("Senior member and Chief Scribe of the Order of the Talon-Scribe, but: …");
-     - the narrator tells the Chief Scribe as Anastasiya Koroleva in every turn she appears (3/3: by the door plate, and twice in person, with her grey hair, her styli calluses and her secret carving), and invents no one (0/4);
-     - in the fourth turn she isn't on stage.
+     - in order: turn 1 shows a door plate naming her ("CHIEF SCRIBE — ANASTASIYA KOROLEVA"); turn 2 a plaque reading only "Chief Scribe"; turns 3 and 4 show her in person as Anastasiya Koroleva (her grey hair, her styli calluses, her secret carving). No Chief Scribe is invented (0/4);
    - **Run 2:** she is touched under the new rule. The old rule would also have touched her (the planner's goal said "Chief Scribe Koroleva"), so run 2 doesn't separate the two rules. The narrator told her right 2/2, invented 0/4.
    - **This refines ruling F4.** It changes the matching rule, not prompt wording, and the controller should rule on it. Reverting is one function.
 
@@ -96,7 +97,7 @@ Prompt wording was not changed.
 
 ### Tag (bar 80%): FALLBACK, the editable chip stays (F8)
 
-- **Run 1:** 19/30. **Run 2:** 13/30. **Pooled:** 32/60 (53%). Task 1's labels gave 64%.
+- **Run 1:** 19/30. **Run 2:** 13/28 (its replayed owl-folk left out). **Pooled:** 32/58 (55%). Task 1's labels gave 64%.
 - **With a near list (and so the tag rule) in both runs:** 32/44 (73%).
 - **Reuse:** where a fitting tag was in use, it was reused 15/20 (75%).
 - **What goes wrong:**
@@ -112,9 +113,8 @@ Prompt wording was not changed.
 - **Found:** 41/60 (68%) over every draft version. 8 of the 19 misses are drafts with no near list (the Order and the White Talon, 2 versions × 2 runs), which can file nowhere. **Where a list existed: 41/52 (79%)**, the same as Task 1's 73–79%.
 - **The same miss as Task 1:** the Academy is never filed in Runic Magic (0/4), so the owner adds it.
 - **The rest vary run to run.** Plumage Signaling found the Night Court 2/4 and the owl-folk 1/4, and the Khorol found Velikoye 2/4.
-- **Either side: 0 false of 60.**
-  - Six rows the labels don't key were judged "either": the Academy in the Quill of Teaching (its own division), the Frosted Wing in the "Taloned Host" ×2 and the "Krylaya Gvardiya", the Host in the Krylaya Gvardiya, and Vasha in the Grand Scriptorium.
-  - The Tsardom "in" the owl-folk ("home of") is the plausible pair reversed.
+- **Either side: 1 false of 60 (1.7%):** the Tsardom "in" the owl-folk ("home of", run 1 v1). The labels give the Tsardom no "either" home, so it is false.
+  - Six rows the labels don't key were judged "either" by the labels' `judge` rule: the Academy in the Quill of Teaching (its own division), the Frosted Wing in the "Taloned Host" ×2 and the "Krylaya Gvardiya", the Host in the Krylaya Gvardiya, and Vasha in the Grand Scriptorium.
 - **Strict: 19/60 (32%).** These are the "either" rows offered, mostly the Academy in the Order (4/4) and the Tsardom.
 - **Roles were sane:** "flows through", "capital city", "standing army", "located in", "practised in". One was overlong: "the default communication mode used in its proceedings".
 
@@ -124,22 +124,22 @@ Prompt wording was not changed.
   - **"Ataman of the Quill":** a title, but the model tagged it "institution", so F5 let it through;
   - **"Frostwarden"** and **"Frostward":** the practitioners' name, tagged "institution";
   - **"Gorath Vaelin":** a war cry.
+- **The PASS turns on one stub:** a fifth thin stub would be 5/96 (5.2%), over the bar. Arguable cases counted proper (named things, by the thin rule) that a stricter reading would call thin: "The Binding" (an induction ceremony), "Frost March" (a recruits' trial), "Border Wars" (a vague war name, beside "Border Wars of 987"), "Midwinter", "Dawnclaw", "Ironbeak" and "Palefang" (the White Talon's companies, tagged "institution"), and "The Oath of the Unbroken Line" (an oath). Any one of them moved would fail the bar.
 - **F5 dropped 22 names** whose kind or tag is office, title or rank: Tsar, Holy Patriarch, Arch-Talon, volostnik, Nochnoy Predsedatel, Voinovo… One drop was wrong: "Bureau of Plumage and Accouterment", a named bureau tagged "office", in the discarded Wattles.
 - **Curation world:** not measured there.
 
 ### "File into this" (bar as "In"): FALLBACK, unticked (F7) stays
 
 - **The Host's expected regiments:** 6/8 over its four versions. Each v2 offered both the White Talon and the Frosted Wing; each v1 offered only the White Talon, so the accepted world never filed the Frosted Wing in the Host.
-- **False, either side: 2/16 (12.5%).** Both are run 1's Host offering the "Taloned Host" stub into itself: once with no role, once as its "parent institution" (a duplicate of the Host, judged false).
-- **Strict: 10/16.** These also count:
-  - the owl-folk offered into the Tsardom (3 of 4 versions);
-  - the Night Court's v1 and v2 offering Velikoye into the Court, which is the Court's seat reversed;
-  - Plumage Signaling v2 (run 2) putting all three of its homes into "File into this", reversed, and none under "In".
-- **The code source** (near entries whose facts name the entry) added no false row this time. Task 11's Khorol and Night Court rows didn't recur.
+- **False, by the committed labels: 10/16 (62.5%)**, split by source:
+  - **code** (near entries whose facts name the draft, and existing names whose "in" is the draft): 5 false, 3 found. The false: the owl-folk into the Tsardom (3 versions) and Velikoye into the Night Court (run 1, both versions). The found: the White Talon into the Host (run 1 v1 by its names "in", run 2 v1 and v2 by its facts).
+  - **the model's own `file_into`:** 5 false, 3 found. The false: the "Taloned Host" stub into the Host (run 1, both versions; a duplicate of the Host), and Plumage Signaling v2 (run 2) putting its three homes, the Tsardom, the Night Court and the owl-folk, into "File into this" instead of under "In". The found: the Frosted Wing into the Host (both v2s) and the White Talon (run 1 v2).
+- **No "either" row was offered,** so the strict reading is the same 10/16.
+- **Ruling F32's guard** (fix round 1) removes none of the 5 false code rows; see fix round 1.
 
 ### Group synopsis (bar 80%): PASS
 
-- **Groups (8 asked twice each):**
+- **Groups (7, each asked twice: 14 synopses):**
   - Velikoye's landmarks (run 1);
   - Velikoye's untagged group (2/2 runs);
   - the Tsardom's militaries (2/2 runs);
@@ -167,7 +167,7 @@ The final worlds, scored with the code's overlap (`world.repeats.overlap`):
 | Flagged at 0.4 | 163 (71%) | 71 (37%) | 34 (17.5%) | 20 (10.5%) |
 
 - **Run 1's three hits at 0.7** are relation claims written on both pages (the Duma's hall, its nocturnal schedule) and one Velikoye self-repeat.
-- **Like for like?** The comparison is fair in kind (both are whole sessions from a fresh world, scored the same way), but not in shape. This session has no move-in, and filing writes nothing onto another entry's facts. The curation doc's two new kinds of repeat (moved facts beside a later restatement, and relation claims on both sides) mostly can't happen here. Read the gap as "the filing pipeline restates far less", not as "the model got better".
+- **Like for like?** The comparison is fair in kind (both are whole sessions from a fresh world, scored the same way), but not in shape. This session has no move-in, and filing writes nothing onto another entry's facts. The curation doc's two new kinds of repeat (moved facts beside a later restatement, and relation claims on both sides) mostly can't happen here. So this session shape restates far less; it is not a pipeline comparison.
 
 ### Duplicate entries
 
@@ -188,7 +188,7 @@ These pairs were hand-checked from `same_candidates` and the stubs.
 - **The curation run:** 69/70 (99%); its 5 comparable entries 57/58 (98%), against the old world's 44/56 (79%).
 - **Like for like:** only the White Talon was made in both runs, from different prompts. Here it scored 11/11 and 12/12 on topic, but see the next section.
 
-### New: a draft with no world context contradicts the world (5 of 6)
+### New: a draft with no world context contradicts the world (v1s 5/6, versions 7/12)
 
 - **When it happens:** a prompt that names no entry in full ("Runic Magic of the Tsardom: …", "The Order of the Talon-Scribe, the order of rune scribes that keeps and teaches the Tsardom's runes", "The White Talon, the heavy regiment of the Frostwing Host" before the Host exists) gets no picks. The stub is new, so there are no seeds, and `filing_candidates` returns nothing. The prompt then has no "Entries near this one", no "In", no "file_into", no elsewhere, and no world at all beyond the tags line.
 - **What it costs:**
@@ -198,16 +198,13 @@ These pairs were hand-checked from `same_candidates` and the stubs.
   - only run 1's Runic Magic stayed consistent.
 - **The planner and the narrator then had several capitals to choose from.**
 - **The curation run had the same branch** (Runeweaving from a prompt, with no near list), so this isn't a regression. Every other curation create had a stub or a `part_of`.
-- **It's design (F6's candidates come from the context, and an empty context gives none), so it isn't fixed here.** Two options:
-  - offer the prompt's partial matches (`find_names` suggestions, such as "Tsardom" in "of the Tsardom") as context;
-  - with no context at all, list the world's most-filed entries.
-
-  The owner would also see it: a create box whose prompt names "the Tsardom" shows it only as a suggestion. Task 13's acceptance will meet this.
+- **Count, by the rule committed before fix round 1's calls** (labels `fix_round_1.contradiction_rule`): v1s 5/6, all versions 7/12. Run 1: Runic Magic v2 ("the Tsardom's capital, Moscow"), the Order v1 ("the capital city of Khorov"), the White Talon v1 (Aelthar) and v2 (Velmaris). Run 2: Runic Magic v1 (Kaelith, Morozgrad), the Order v1 ("the imperial capital of Velgrad"), the White Talon v1 (Valdenmere).
+- **Fixed in part by ruling F31** (fix round 1): see its section.
 
 ### Scene: ruling F4's whole-word role rule (the Chief Scribe case)
 
 - **As ruled:** FAIL on run 1. Koroleva's compound role wasn't named, and the Chief Scribe was invented 4/4, as above.
-- **With fix 2:** PASS. She was touched 2/2 (run 1's same-setup re-run and run 2), told right in every appearance (3/3 and 2/2), and invented 0/8.
+- **With fix 2: 1/1 attributable.** Only the same-case re-run separates the rules: she was touched, and no Chief Scribe was invented (0/4). Run 2 is consistent (touched, told right 2/2, invented 0/4) but its planner's goal named her ("Chief Scribe Koroleva"), so the old rule would have touched her too: run 2 is no evidence for the fix.
 - **The whole-word half of the rule:** no role in either world matched the setup only as a substring (`roles_substring_only` empty both runs), so there is no evidence on it either way.
 - **The touched sets:**
   - **Run 1:** Velikoye, Runic Magic, the Tsardom, the Order, "Verkhov" (a stub town the planner pulled in), and Koroleva once fixed.
@@ -218,7 +215,7 @@ These pairs were hand-checked from `same_candidates` and the stubs.
 ### F6 sibling reach: PASS for reach; the sibling-only path not exercised
 
 - **Neither run had a Frostwing Host stub,** so the Host came from its fallback prompt both times. Run 1's White Talon v1 never listed it as a name, and run 2's v1 didn't either.
-- **Reach:** the Frosted Wing was in the Host's "Entries near this one" in 4/4 versions (rank 6 of 17 in run 1, 5 of 14 in run 2). It got there **by a link**: the prompt's pick, the Tsardom, is a seed, and the Frosted Wing is filed in it. The sibling-only path (a stub with no filing whose mentioner's home holds the Frosted Wing) never came up on the model. It rests on `test_candidates_reach_siblings_and_parts_within`.
+- **Reach:** the Frosted Wing was in the Host's "Entries near this one" in both runs (rank 6 of 17 in run 1, 5 of 14 in run 2). That is 2 independent observations, not 4: a draft's two versions are given the same list. It got there **by a link**: the prompt's pick, the Tsardom, is a seed, and the Frosted Wing is filed in it. The sibling-only path (a stub with no filing whose mentioner's home holds the Frosted Wing) never came up on the model. It rests on `test_candidates_reach_siblings_and_parts_within`.
 - **Offers:** being in the list, it was offered into the Host in 2/4 versions (each v2), with the role "elite regiment" or "specialized regiment".
 
 ### Character "In" with exceptions: FALLBACK (unticked; the owner edits)
@@ -290,8 +287,8 @@ Both runs, mean, from KoboldCpp's own counts:
 
 ## Concerns, for the controller
 
-1. **A draft with no world context contradicts the world (5/6).** See its section above. This is the biggest cohesion problem the session showed. It's a design question for ruling F6: what a create prompt is shown when nothing in it names an entry.
-2. **Fix 2 refines ruling F4.** Compound roles are matched by their parts. It has a same-case before/after (invented 4/4 → 0/4) and one more run.
+1. **A draft with no world context contradicted the world** (v1s 5/6, versions 7/12). Ruling F31 (fix round 1) takes it to 1/6 and 2/12. The two left copy an earlier draft's contradiction that the near list now shows, so a contradiction already in the world now spreads.
+2. **Fix 2 refines ruling F4.** Compound roles are matched by their parts, guarded in fix round 1. Its evidence is 1/1 attributable, the same-case before/after (invented 4/4, then 0/4).
 3. **Scene planning doesn't reuse the Chief Scribe.** It invented one (run 1), or wrote Koroleva as a local character instead of the world's entry (run 2). Filing can't fix this.
 4. **Tags are 53%.** Three code-side gaps:
    - species are never asked for a tag;
@@ -301,3 +298,59 @@ Both runs, mean, from KoboldCpp's own counts:
 6. **Gathered timeline lines lose their subject** ("She rose to the position of Chief Scribe…" under Runic Magic). Not fixed: no narrator misuse was seen, so a wording change would have no evidence behind it.
 7. **The synopsis length cap is ignored** (12/14 over 70 words). The claims stay accurate.
 8. **The harness's run 1 group-add record:** the owner's tag-clearing step overwrote the recorded rows' tags in run 1 (fixed in the script for run 2). The model's tags in run 1 are in the raw replies (`calls[i].response`): "tavern" 4/4, "chapter house" 2/2.
+
+## Fix round 1 (review of Task 12)
+
+The plain suite ran once at the end of the round (in the report). Each fix was run red first.
+
+### B. The compound-role splitter, guarded (be268f17)
+
+- **The fault:** 7be888e0 split "Keeper of Bread and Salt" into "salt", and "captain, retired" or "he/she" into a lone "retired" or "she", each touching on any setup that merely used the word.
+- **The fix:**
+  - "and" and "," split only before a piece's first "of"; ";", "/" and "&" always split;
+  - a part on its own must be a title, never a lone pronoun or modifier ("senior", "retired", "acting", or an adjective or participle ending).
+- **Tests:** 7 negative cases, red 7/7 before the fix; "Chief Scribe and Keeper of Seals" still splits before its "of"; "senior member and Chief Scribe" still matches.
+
+### C. Ruling F31: a draft with no context is shown the world (34c510a3)
+
+- **The rule:**
+  - a draft with no context at all (its prompt names no entry in full, and it has no stub mentions, homes or owner filings) seeds filing nearness from the prompt's partial names (`find_names` suggestions: "Tsardom" in "the Tsardom's runes");
+  - with still nothing near it, the list is the world's hubs (the entries most filed in, most first), capped as F6 caps (`HUB_CANDIDATES` = 24).
+  - The suggestions are used only for a draft with no context, so stub drafts and prompts with a full name are unchanged.
+- **Tests:** 3, red first (no list, no hubs, no constant), plus one guard that a full name keeps suggestions out.
+- **The re-run** (`F31 retry, run 1` and `F31 retry, run 2` in the raw JSON):
+  - each run's world was rebuilt to the point before each draft, by replaying that run's own recorded replies offline;
+  - Runic Magic, the Order and the White Talon were each asked of Skyfall twice with the current code, then discarded;
+  - the run's own recorded v1 was then accepted, so the next case saw the same world as before.
+  - 12 creates (plus prose and verdicts), 28 calls, 8.9 minutes; creates took 38.1 s on average, at about 1,950 prompt and 1,280 reply tokens.
+- **The near lists:** Runic Magic 13 and 12 entries (from the "Tsardom" suggestion), the Order 9 and 8, the White Talon 5 and 5 (no suggestion matched: the hubs).
+- **Contradictions,** by the rule committed in d975715b before the calls, judged per version (`fix_round_1.f31_contradictions`):
+
+| | v1s | all versions |
+|---|---|---|
+| Before (the runs' own versions) | 5/6 | 7/12 |
+| After (F31) | 1/6 | 2/12 |
+
+- **The two left** are run 2's Order (both versions): "the sovereign institution of the Tsardom of Kaelith", seated in "the capital city of Morozgrad". Those are the words of run 2's own accepted Runic Magic (itself a no-context contradiction), which now heads the Order's near list. **F31 shows the world, so a contradiction already in it spreads.**
+- **In passing,** on the same 12 versions:
+  - **"In" found:** 8/8 expected (the Order in Runic Magic 4/4, the White Talon in the Tsardom 4/4); before, 0/8.
+  - **"In" false:** 5 of 19 rows, all the Order's in run 1 ("in" the Frostwarden stub ×2, the Great Rune Wall ×2 as its "maintainer", and the Oldstone Script as its "custodian": reversed or unrelated).
+  - **"File into" false:** 8 of 9 rows (run 2: the Theological Academy into Runic Magic; the Frostward, Drift School and Silent Path stubs into the Order ×2; Morozgrad into the Order), all unticked.
+  - **Tags:** 3/12 fitting ("magic" for Runic Magic 3/4), against 0/12 before.
+
+### D. Ruling F32: "File into"'s code source never offers where the draft sits (acee46bb)
+
+- **The rule:** a near entry whose facts name the draft isn't offered into it when the draft would itself sit in that entry: one of its "In" targets (the owner's own too), a stub's own home, or anything above one (`filing.sits_in`).
+- **Tests:** 2 constructed cases, red first.
+- **Measured on this session,** with both runs rebuilt offline from their stored replies (every draft answered by its recorded reply) and every draft's rows compared, before and after:
+  - **0 of the 5 false code rows removed;** the 3 found kept;
+  - none of the 5 is an "In" target, a stub's home or above one. The Tsardom has no "In" row (and its stub no filing) in the versions offering the owl-folk. Velikoye sits beside the Night Court in the Tsardom, not above it.
+  - **The guard as ruled doesn't touch this session's false rows.** They need another rule; none was tried here.
+
+### The harness (scripts/dev/probe_filing_flow.py)
+
+- `--replay` now answers by prompt, not by order, and matches prompts with their lines and words sorted. This was needed for two reasons:
+  - **the context blocks' order is not fixed:** the owl-folk's facts under "About those" (one revision) came in another order on the rebuild, even within a line — a small nondeterminism in the prompt itself;
+  - **fix 1 changed the prompt in one more way:** with no tags in use, its tag rule leaves out "Use a tag from the tags in use…".
+- `--retry STEP…` and `--stop-after STEP` drive C's re-run.
+
