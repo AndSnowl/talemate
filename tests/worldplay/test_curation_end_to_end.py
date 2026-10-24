@@ -7,26 +7,22 @@ judge it"), in a fresh world (present year 1000).
    Talon and the Frosted Wing in Military, Moskov in Lands, and names its
    state church, the Church of the Eternal Light, as a religion stub.
 2. **The White Talon**, expanded from its stub: its facts say "regiments
-   such as the White Talon". The owner names the outer body, the Tsar's
-   Army (an order filed in the Tsardom's Military, `add_outer_body`), and
-   ticks the Frosted Wing's re-file row: on accept the army is a stub in
-   Military, and both regiments are inside it.
+   such as the White Talon". (The owner no longer names an outer body
+   around a create preview: Filing, Task 4.)
 3. **The Church**, a religion sphere from its stub: a Doctrines statement
    and the Divine Right of the Tsar, a doctrine item.
 4. **The Divine Right**, expanded from its stub: its own facts stay on it,
-   and its elsewhere items land on Moskov, the army and the Tsardom (a
-   law). The owner marks one of its own facts held by the Church. Then
-   **the army**, expanded from its stub as an order (ruling C32): it sits
-   in the Tsardom's Military, so the Tsardom's facts are offered to move
-   in, unticked; the owner ticks the army's raising, and it moves.
+   and its elsewhere items land on Moskov, the Tsardom (a law) and a new
+   stub for the Tsar's Army. The owner marks one of its own facts held by
+   the Church.
 5. **Runeweaving**, a field sphere, made from a prompt; **Ashenmere**, its
    site, expanded with the 947 rediscovery; **the First Codex**, whose
    reply names "the Ashenmere Caves" (offered as the same as Ashenmere:
    the owner says yes, so no second entry is made) and "the Conclave"
    (offered as the same as Runeweavers' Conclave: left new).
-6. **The Deep Galleries**, a place inside Ashenmere: the fact about them
-   is the model's pick to move in from Ashenmere: it arrives unticked
-   (ruling C24), the owner ticks it, and it moves (moved, not copied).
+6. **The Deep Galleries**, a place filed in Ashenmere: Ashenmere's fact
+   naming them could move here, found by code (Filing, Task 4); it arrives
+   unticked, the owner ticks it, and it moves (moved, not copied).
    Then **Fill** of Runeweaving's Techniques: new items, and the reply's
    facts about the art's children go elsewhere, onto Ashenmere and the
    Deepcarving stub.
@@ -59,6 +55,7 @@ from talemate.config.schema import RecentScenes
 from talemate.context import ActiveScene
 from talemate.load import load_scene
 from talemate.server.worlds import WorldsPlugin
+from talemate.world.filing import filings_of
 from talemate.tale_mate import Scene
 from talemate.world.dates import WorldDate
 from talemate.worldplay.context import world_context_block
@@ -176,29 +173,6 @@ TALON_REPLY = json.dumps(
 )
 TALON_PROSE = "An elite regiment."
 ARMY = "The Tsar's Army"
-
-# --- 4b. the army, expanded: a Tsardom fact moves in (ruling C32) -------------
-
-ARMY_SUMMARY = "The Tsar's Army is the Tsardom's standing host of regiments."
-ARMY_CORE = json.dumps(
-    {
-        "name": ARMY,
-        "summary": ARMY_SUMMARY,
-        "aka": [],
-        "timeline": [],
-        "drawers": [{"type": "structure", "title": "Regiments"}],
-        "items": [
-            {
-                "drawer": "Regiments",
-                "name": "White Talon",
-                "text": TALON_LINE,
-                "kind": "lore",
-            },
-            {"drawer": "Regiments", "text": "Every regiment flies a white banner."},
-        ],
-        "names": [],
-    }
-)
 
 # --- 3. the Church --------------------------------------------------------------
 
@@ -396,9 +370,8 @@ GALLERIES_REPLY = json.dumps(
         ],
         "names": [],
         "elsewhere": [],
-        # Ashenmere's facts, in the order written: M1 its drawer line, M2
-        # its description, M3 the 947 rediscovery, M4 the galleries'
-        # inscriptions (the prompt is checked below)
+        # the old move-in labels, ignored now: "Could move here" is found
+        # by code (Filing, Task 4)
         "move_in": ["M4"],
     }
 )
@@ -673,47 +646,16 @@ async def test_curation_end_to_end(plugin, client, loadable):
     military = _drawer(tsardom, "Military")
     assert [i["name"] for i in military["items"]] == ["White Talon", "Frosted Wing"]
     talon_id = _item_id(tsardom, "Military", "White Talon")
-    wing_id = _item_id(tsardom, "Military", "Frosted Wing")
     moskov_id = _item_id(tsardom, "Lands", "Moskov")
     church_id = (await _stubs(plugin))["Church of the Eternal Light"]["id"]
 
-    # 2. the White Talon from its stub; the owner names the army around it
+    # 2. the White Talon from its stub (the owner no longer names an outer
+    # body around a create preview: Filing, Task 4 files it through its
+    # "In" rows)
     preview = await _expand(plugin, talon_id, "lore", TALON_REPLY, TALON_PROSE)
-    # the owner names the army around it, filed in the Tsardom's Military;
-    # the Frosted Wing, filed there too, gets an unticked re-file row
-    before = len(client.prompt_history)
-    framed = await _send(
-        plugin,
-        "add_outer_body",
-        preview_type="create",
-        preview=preview,
-        row_name="White Talon",
-        outer={
-            "name": ARMY,
-            "template": "order",
-            "part_of": {"sphere": tsardom_id, "drawer": military["id"]},
-        },
-    )
-    assert client.prompt_history[before:] == []
-    preview = framed["preview"]
-    assert preview["part_of"] == {"name": ARMY, "drawer": "unsorted"}
-    [army_row] = [n for n in preview["new_names"] if n["name"] == ARMY]
-    assert (army_row["kind"], army_row["template"]) == ("sphere", "order")
-    assert army_row["part_of"] == {"sphere": tsardom_id, "drawer": military["id"]}
-    [refile] = preview["refile"]
-    assert (refile["thing_id"], refile["ticked"]) == (wing_id, False)
-    refile["ticked"] = True
+    assert "refile" not in preview and "part_of" not in preview
     talon = await _send(plugin, "accept_preview", preview=preview, into_stub=talon_id)
-    army_id = (await _stubs(plugin))[ARMY]["id"]
-    assert talon["part_of"]["sphere_id"] == army_id
-    army = await _thing(plugin, army_id)
-    assert army["part_of"]["sphere_id"] == tsardom_id
-    assert army["part_of"]["drawer_title"] == "Military"
-    assert sorted(
-        i["thing_id"] for d in army["sphere"]["drawers"] for i in d["items"]
-    ) == sorted([talon_id, wing_id])
-    tsardom = await _thing(plugin, tsardom_id)
-    assert [i["thing_id"] for i in _drawer(tsardom, "Military")["items"]] == [army_id]
+    assert talon["stub"] is None
 
     # 3. the Church, from the Tsardom's stub, as a religion
     church = await _expand_sphere(plugin, church_id, "religion", CHURCH_CORE)
@@ -723,12 +665,14 @@ async def test_curation_end_to_end(plugin, client, loadable):
     # 4. the Divine Right: its own facts stay, the rest goes elsewhere
     preview = await _expand(plugin, right_id, "lore", RIGHT_REPLY, RIGHT_PROSE)
     assert [f["text"] for f in preview["facts"]] == [RIGHT_OWN, RIGHT_HELD]
+    # the army is no entry yet: its fact goes onto a new stub
     assert {(e["target_id"], e["text"], e["ticked"]) for e in preview["elsewhere"]} == {
         (moskov_id, TO_MOSKOV, True),
-        (army_id, TO_ARMY, True),
+        (None, TO_ARMY, True),
         (tsardom_id, TO_TSARDOM, True),
     }
     right = await _send(plugin, "accept_preview", preview=preview, into_stub=right_id)
+    army_id = (await _stubs(plugin))[ARMY]["id"]
     # its drawer line, and its own two
     assert sorted(_facts(right)) == sorted([RIGHT_LINE, RIGHT_OWN, RIGHT_HELD])
     for target_id, text in (
@@ -748,47 +692,6 @@ async def test_curation_end_to_end(plugin, client, loadable):
     )
     [held] = [f for f in right["facts"] if f["fact_id"] == held["fact_id"]]
     assert held["held_by"]["id"] == church_id
-
-    # 4b. the army stub, named as the White Talon's outer body, expanded as
-    # an order (ruling C32): it sits in the Tsardom's Military, so every
-    # Tsardom fact is offered to move in, unticked and never picked; the
-    # owner ticks the army's raising, and it moves (moved, not copied)
-    before = len(client.prompt_history)
-    preview = await _send(
-        plugin,
-        "preview_sphere",
-        ARMY_CORE,
-        template="order",
-        prompt=(await _send(plugin, "stub_suggestion", id=army_id))["prompt"],
-        fields={},
-        stub_id=army_id,
-    )
-    assert [c["kind"] for c in client.prompt_history[before:]] == [
-        "creative_instruction_2048"
-    ]
-    assert "M1:" not in str(client.prompt_history[-1]["prompt"])
-    rows = preview["move_in"]
-    assert rows and {row["from_id"] for row in rows} == {tsardom_id}
-    assert not any(row["ticked"] or row["picked"] for row in rows)
-    assert {row["from_name"] for row in rows} == {"Tsardom of Moscavia"}
-    [raised] = [row for row in rows if row["text"] == ARMY_RAISED]
-    raised["ticked"] = True
-    scheduled = len(plugin.scheduled_prose)
-    army = await _send(plugin, "accept_sphere", preview=preview)
-    assert army["id"] == army_id and army["stub"] is None
-    assert ARMY_RAISED in _facts(army)
-    assert TO_ARMY in _facts(army)
-    assert ARMY_RAISED not in _facts(await _thing(plugin, tsardom_id))
-    # a sphere's timeline feeds no prose (rulings P18, P19): the Tsardom's
-    # isn't refreshed for losing it
-    assert tsardom_id not in plugin.scheduled_prose[scheduled:]
-    # its regiments stay inside it
-    assert sorted(
-        i["thing_id"]
-        for d in army["sphere"]["drawers"]
-        for i in d["items"]
-        if i["thing_id"]
-    ) == sorted([talon_id, wing_id])
 
     # 5. Runeweaving from a prompt; Ashenmere, its site, from its stub
     preview = await _send(
@@ -833,7 +736,9 @@ async def test_curation_end_to_end(plugin, client, loadable):
     assert links["Ashenmere Caves"] == ashenmere_id
     assert links["The Conclave"] == the_conclave_id
 
-    # 6. the Deep Galleries, inside Ashenmere: the fact about them moves in
+    # 6. the Deep Galleries, filed in Ashenmere (the owner's pick, ticked):
+    # Ashenmere's fact naming them could move here, found by code and
+    # unticked; the owner ticks it and it moves
     preview = await _send(
         plugin,
         "preview_thing",
@@ -845,18 +750,23 @@ async def test_curation_end_to_end(plugin, client, loadable):
         picks={"Ashenmere": ashenmere_id},
     )
     create_prompt = str(client.prompt_history[-2]["prompt"])
-    assert "Ashenmere is the broader entry this place is part of" in create_prompt
-    assert f"- M4: {GALLERIES_FACT}" in create_prompt
-    # the model's pick is first and unticked (ruling C24): the owner ticks it
-    assert not any(row["ticked"] for row in preview["move_in"])
-    picked = [row for row in preview["move_in"] if row["picked"]]
-    assert [row["text"] for row in picked] == [GALLERIES_FACT]
-    assert preview["move_in"][0] is picked[0]
-    picked[0]["ticked"] = True
+    assert "is the broader entry" not in create_prompt
+    assert "M1" not in create_prompt
+    assert [(f["target_id"], f["ticked"]) for f in preview["filings"]] == [
+        (ashenmere_id, True)
+    ]
+    assert [
+        (row["text"], row["from_id"], row["from_name"], row["ticked"])
+        for row in preview["move_here"]
+    ] == [(GALLERIES_FACT, ashenmere_id, "Ashenmere", False)]
+    preview["move_here"][0]["ticked"] = True
     galleries = await _send(plugin, "accept_preview", preview=preview)
     assert GALLERIES_FACT in _facts(galleries)
     ashenmere = await _thing(plugin, ashenmere_id)
     assert GALLERIES_FACT not in _facts(ashenmere)
+    assert [f.target for f in filings_of(world.view(), galleries["id"])] == [
+        ashenmere_id
+    ]
 
     # 6b. Fill Runeweaving's Techniques: new items beside Deepcarving, and
     # the reply's facts about other entries, the runic magic's children,
@@ -893,7 +803,11 @@ async def test_curation_end_to_end(plugin, client, loadable):
     # Ashenmere's prose reads what it took; a stub has none
     assert plugin.scheduled_prose[scheduled:] == [ashenmere_id]
 
-    # 7. merge the Conclave into Runeweavers' Conclave: the link follows
+    # 7. merge the Conclave into Runeweavers' Conclave: the link follows.
+    # A create's names make no sphere now (Filing, Task 4), so the Conclave
+    # is a lore stub; the owner makes it the sphere stub a sphere core
+    # made the Runeweavers' Conclave first (only one kind merges)
+    await _send(plugin, "change_stub_kind", id=the_conclave_id, kind="sphere")
     merge = await _send(
         plugin, "preview_merge", from_id=the_conclave_id, into_id=conclave_id
     )
@@ -1009,17 +923,16 @@ async def test_curation_end_to_end(plugin, client, loadable):
     finally:
         close_world_scene(scene)
 
-    # the run's model calls: nothing for add_outer_body, the same-thing
-    # offers (a stub row asks no model), move-in, the merge or timelines
+    # the run's model calls: nothing for the same-thing offers (a stub row
+    # asks no model), "Could move here", the merge or timelines
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
         # species, the White Talon, the Divine Right, Ashenmere, the Codex,
         # the Hollows (onto Ashenmere),
         # the Deep Galleries, and the Cathedral's stub preview at planning
         "creative_instruction_3072": 8,
-        # the Tsardom's, the army's, the Church's and Runeweaving's cores;
-        # the plan
-        "creative_instruction_2048": 5,
+        # the Tsardom's, the Church's and Runeweaving's cores; the plan
+        "creative_instruction_2048": 4,
         # Fill of Runeweaving's Techniques
         "creative_instruction_1024": 1,
         # each create's prose (8); no same-thing verdict for the Cathedral's

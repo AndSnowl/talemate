@@ -1,19 +1,20 @@
-"""Facts move in to a more specific entry (curation Task 8, spec goal 2).
+"""Facts move to a more specific entry.
 
-When a new entry is part of a broader one (a sphere it's filed in, a
-place's parent, or the outer body the owner names), the create prompt
-lists the broader entry's facts, labelled M1..., and the reply picks the
-ones that belong on the new entry (`"move_in"`, ruling Q1: the same
-call). The curation probe's probe 2 found every move and wrongly picked
-7% of the stays, so (ruling C2) every fact is listed, the picks ticked and
-first, the rest unticked. Accept moves the ticked ones (ruling R1: a copy
-with a new id, the original removed, overrides re-pointed) in its own
-revision. `move_fact` moves one fact by hand ("Move to...").
+A create preview's "Could move here" (Filing, Task 4, replacing the
+create move-in): the facts on entries near the new one whose text names
+it, found by code with no model call, offered unticked; accept moves the
+ticked ones (ruling R1: a copy with a new id, the original removed,
+overrides re-pointed) in its one revision, checking each row again.
 
-The MockClient replies are raw Skyfall output from the probe
-(docs/superpowers/probes/raw/2026-10-22-curation.json, probe 2), copied
-verbatim but for their `"move_in"` labels, which are this world's; the
-broader entry's facts are the probe's own lines."""
+A sphere preview's move-in (curation Task 8, spec goal 2) stays until the
+spheres go (Task 7): the broader entry's facts, every one unticked, the
+picks marked. `move_fact` moves one fact by hand ("Move to...").
+
+The Zakonnik and Architecture replies are raw Skyfall output from the
+curation probe (docs/superpowers/probes/raw/2026-10-22-curation.json,
+probe 2), copied verbatim but for their `"move_in"` labels, which are
+this world's (and ignored by a create preview now); the broader entry's
+facts are the probe's own lines."""
 
 import json
 from typing import NamedTuple
@@ -21,14 +22,13 @@ from typing import NamedTuple
 import pytest
 
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.curation import CurationSettings
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
 from talemate.worldplay import prose_gen
 from talemate.worldplay.bodies import OuterBody, add_outer_body
 from talemate.worldplay.create import (
-    MOVE_IN_SHOWN,
+    MoveHereFact,
     MoveInFact,
     PreviewFact,
     accept_preview,
@@ -49,9 +49,6 @@ from conftest import MockClient, MockClientContext, client_responses
 # Zakonnik (a stub in the Tsardom), run 2: it moved M11 in and wrote it
 # again as its second fact (overlap 0.78)
 ZAKONNIK_REPLY = '{ "name": "Zakonnik", "aka": [], "facts": [ { "category": "general", "text": "The Zakonnik is the comprehensive legal code of the Tsardom of Moscavia, revised in the years following the Illumination of 994 to address the practical and legal needs of a society of Owl-folk.", "since": "994" }, { "category": "general", "text": "The revised Zakonnik governs matters of roosting rights, territorial disputes over nesting spaces, and the regulation of nighttime commerce—the economic norm in a kingdom of nocturnal beings.", "since": "996" }, { "category": "general", "text": "The code establishes clear legal frameworks for property disputes involving elevated nesting platforms, which Owl-folk instinctively seek out and fiercely defend as territory.", "since": "996" }, { "category": "general", "text": "Nighttime trade is regulated under the Zakonnik to ensure fair commerce, with markets mandated to remain open from dusk to dawn across all towns and cities within the Tsardom.", "since": "996" }, { "category": "general", "text": "The Zakonnik includes provisions for the construction and legal recognition of roosting platforms in public buildings, workplaces, and residential structures, with minimum size requirements based on the occupant\'s wingspan.", "since": "997" }, { "category": "general", "text": "Disputes over nesting rights are adjudicated by local magistrates appointed under the Zakonnik, with appeals available to regional courts presided over by Owl-folk judges.", "since": "996" }, { "category": "general", "text": "The code addresses the unique legal challenges of Owl-folk society, including noise regulations during daylight hours when the majority of the population sleeps, and liability for disturbances to roosting neighbors.", "since": "996" }, { "category": "general", "text": "The Zakonnik was drafted by a council of legal scholars convened by the Tsar in the years immediately following the Illumination, drawing upon pre-994 Moscavian law while adapting it for the transformed population.", "since": "995" }, { "category": "general", "text": "Public buildings constructed before the Illumination have been retrofitted under Zakonnik mandates to include wider doorways, taller ceilings, and structural reinforcements to support roosting platforms weighing several hundred pounds.", "since": "996" }, { "category": "general", "text": "The Zakonnik also regulates the trade of materials essential to Owl-folk life, including furs, timber for nesting, and candles—staples of the nocturnal economy.", "since": "997" }, { "category": "general", "text": "Copies of the revised Zakonnik are maintained in every parish church in Moscavia, where they are read aloud in the dim, candlelit interiors that suit Owl-folk eyes, ensuring the code is accessible to all citizens.", "since": "998" } ], "names": [ { "name": "Tsardom of Moscavia", "kind": "place", "aka": [] }, { "name": "Owl-folk", "kind": "species", "aka": [] }, { "name": "Moscavian Owl-folk", "kind": "species", "aka": [] }, { "name": "Snowy Owl-folk", "kind": "race", "aka": [] } ], "elsewhere": [ { "entry": "Tsardom of Moscavia", "text": "The Zakonnik serves as the legal backbone of the Tsardom of Moscavia, ensuring that the vast northern kingdom\'s governance adapts seamlessly to the transformed Owl-folk population.", "held_by": null } ], "part_of": { "entry": "Tsardom of Moscavia", "drawer": "Doctrines & Laws" }, "move_in": ["M11"] }'
-
-# The Architecture of Moskov (new), run 1
-ARCHITECTURE_REPLY = '{ "name": "Architecture of Moskov", "aka": [{"name": "Moskovian Architecture", "tag": "common", "everyday": true}], "facts": [{"category": "general", "text": "The buildings of Moskov are constructed primarily from fieldstone and oak timber, materials chosen for their durability against the harsh northern winters and their availability from the surrounding forests of the upper Volga basin.", "held_by": null}, {"category": "general", "text": "Onion domes, gilded or painted in deep reds and golds, crown the city\'s churches and monastic buildings, their distinctive rounded forms visible across the skyline and serving as landmarks for Owl-folk navigating home through fog or darkness.", "held_by": null}, {"category": "general", "text": "Roofs throughout the city are steeply pitched with overhanging eaves, designed to shed heavy snowfalls that would otherwise collapse flatter structures, and they are traditionally painted in dark reds and greens with gold trim.", "held_by": null}, {"category": "general", "text": "Windows in Moskovian buildings are large and numerous, set high in walls to allow moonlight and candlelight to penetrate deep into interior spaces, accommodating the nocturnal habits of the Owl-folk who inhabit them.", "held_by": null}, {"category": "general", "text": "Many structures feature wide, elevated porches and open galleries along their facades, providing sheltered perches where Owl-folk can rest, socialize, or survey the streets below in safety.", "held_by": null}, {"category": "general", "text": "The Kremlin\'s walls are built from massive blocks of local limestone quarried from the banks of the Volga, with towers rising at each corner and along the curtain walls at regular intervals, each tower topped with a pointed roof and weather vane.", "held_by": null}, {"category": "general", "text": "Interior spaces are designed with high, vaulted ceilings to accommodate the tallest of the Owl-folk, and rooms are organized around large central hearths or stove-hearths that serve as both heat sources and communal gathering points during winter nights.", "held_by": null}, {"category": "general", "text": "Wooden lattice screens and decorated shutters, carved with geometric patterns and religious motifs, are fitted to windows and balconies throughout the city, allowing ventilation while maintaining privacy.", "held_by": null}, {"category": "general", "text": "The Tsar\'s palace within the Kremlin combines stone foundations with elaborate timber construction above, its halls hung with icon screens and illuminated by chandeliers of wrought iron holding dozens of beeswax candles.", "held_by": null}, {"category": "general", "text": "Market stalls and trade halls in the merchant quarters are built with open-air ground floors shaded by canvas awnings and enclosed upper galleries, allowing nighttime commerce to proceed even during summer rainstorms.", "held_by": null}, {"category": "general", "text": "Bridges across the Moskva and Volga within the city are reinforced with stone piers and timber decks, wide enough for carts and laden birds to cross side by side, and lit by rows of iron lantern brackets carrying oil lamps from dusk until dawn.", "held_by": null}], "names": [{"name": "Kremlin", "kind": "place", "aka": []}, {"name": "Tsar\'s Palace", "kind": "place", "aka": []}, {"name": "Volga", "kind": "place", "aka": []}, {"name": "Moskva River", "kind": "place", "aka": []}, {"name": "Owl-folk", "kind": "race", "aka": []}, {"name": "Tsar", "kind": "lore", "aka": []}], "elsewhere": [{"entry": "Moskov", "text": "The radial street plan of Moskov means that the city\'s concentric neighborhoods each have a character shaped by proximity to the Kremlin, with stone fortifications giving way to timber merchant halls and residential quarters in the outer rings.", "held_by": null}, {"entry": "Cathedral of the Eternal Light", "text": "The Cathedral\'s interior is designed with a cavernous, candlelit nave where the light of thousands of flames reflects off gilded icon screens and the polished surfaces of its onion domes, creating an atmosphere intended to evoke the Eternal Light itself.", "held_by": null}, {"entry": "Baptism by Candlelight", "text": "The rite\'s architecture demands shallow stone font basins built into church floors, wide enough for a young Owl to stand in while surrounded by water, with tall candelabras positioned at each corner to cast flickering light across the ceremony.", "held_by": null}, {"entry": "Zakonnik", "text": "The Zakonnik includes specific building codes governing the minimum dimensions of roosting spaces in all residential structures, ensuring compliance with the physical needs of Owl-folk tenancy as defined by law.", "held_by": null}], "part_of": {"entry": "Moskov", "drawer": "Lands & Sites"}, "move_in": ["M2", "M3", "M4", "M11"] }'
 
 LAWS, LANDS, DOCTRINES = "1a5a0001", "1a4d0001", "d0c70001"
 
@@ -196,57 +193,12 @@ def _queue(*responses: str) -> None:
         client_responses.get().append(response)
 
 
-def _with_move_in(reply: str, labels: list[str]) -> str:
-    """The probe's reply with this world's labels in its `"move_in"`."""
-
-    obj = json.loads(reply)
-    obj["move_in"] = labels
-    return json.dumps(obj)
-
-
 async def _preview(world, kind, prompt, fields, reply, **kwargs):
     client = MockClient("test")
     async with MockClientContext():
         _queue(reply)
         preview = await preview_thing(world, kind, prompt, fields, client, **kwargs)
     return preview, str(client.prompt_history[0]["prompt"])
-
-
-async def _zakonnik(world, t, labels=("M3",)):
-    """The Zakonnik stub expanded with the probe's reply: M3 is the law
-    code."""
-
-    return await _preview(
-        world,
-        "lore",
-        "The Zakonnik: the Tsardom's legal code.",
-        {},
-        _with_move_in(ZAKONNIK_REPLY, list(labels)),
-        stub_id=t.zakonnik,
-    )
-
-
-def _tick_picks(preview):
-    """The owner ticks the model's picks (they arrive unticked, ruling
-    C24), and unticks each own fact flagged as repeating one of them."""
-
-    picked = {m.fact_id for m in preview.move_in if m.picked}
-    for row in preview.move_in:
-        row.ticked = row.ticked or row.picked
-    for fact in preview.facts:
-        if (fact.repeat_of or {}).get("fact_id") in picked:
-            fact.ticked = False
-    return preview
-
-
-def _block(prompt: str) -> list[str]:
-    head = (
-        "Tsardom of Moscavia is the broader entry this lore is part of. What "
-        "Tsardom of Moscavia says now, labelled M1, M2...:\n"
-    )
-    assert head in prompt
-    block = prompt.split(head, 1)[1].split("\n\n", 1)[0]
-    return block.splitlines()
 
 
 def _live_ids(world, thing_id):
@@ -263,89 +215,273 @@ def _fact(world, thing_id, text):
     return found[0]
 
 
-# --- the preview ---------------------------------------------------------------
+# --- could move here (Filing, Task 4: by code, replacing move-in) -----------------
 
 
-async def test_move_in_offered_for_part_of_new_entry(world, tsardom):
-    """A new entry filed in a sphere is shown the sphere's facts (not its
-    summary), labelled M1..., with the probe's wording, a held one as
-    belief (ruling C33); the Tsardom isn't
-    "Named in this prompt" too. Every fact is offered unticked
-    (ruling C24): the model's pick marked `picked` and first, an unknown
-    label dropped, the rest in order."""
+# a short reply of the Zakonnik's own: none of its facts repeats the law
+# code (the probe's replies write it again, see below)
+ZAKONNIK_OWN = json.dumps(
+    {
+        "name": "Zakonnik",
+        "aka": [],
+        "facts": [
+            {
+                "category": "general",
+                "text": "Copies of the Zakonnik are read aloud in every parish church.",
+            }
+        ],
+        "names": [],
+        "move_in": ["M3"],
+    }
+)
+
+
+async def _zakonnik_here(world, t, reply=None):
+    """The Zakonnik stub expanded: the Tsardom's law code names it, so it
+    could move here."""
+
+    return await _preview(
+        world,
+        "lore",
+        "The Zakonnik: the Tsardom's legal code.",
+        {},
+        reply if reply is not None else ZAKONNIK_OWN,
+        stub_id=t.zakonnik,
+    )
+
+
+def _tick_moves(preview):
+    for row in preview.move_here:
+        row.ticked = True
+    return preview
+
+
+async def test_move_here_offers_facts_that_name_it(world, tsardom):
+    """A stub's "Could move here" rows are the facts near it that name it
+    (the Tsardom's law code, linking the Zakonnik), unticked; the reply's
+    `"move_in"` labels are ignored and the prompt lists no broader entry's
+    facts. Facts that don't name it (the capital, the 994 transformation)
+    aren't offered."""
 
     t = tsardom
-    preview, prompt = await _preview(
-        world,
-        "lore",
-        "The Architecture of Moskov, in the Tsardom of Moscavia.",
-        {"part_of": {"sphere": t.tsardom, "drawer": LAWS}},
-        _with_move_in(ARCHITECTURE_REPLY, ["M4", "M9"]),
-    )
-    assert _block(prompt) == [
-        f"- M1: {CAPITAL}",
-        # held by the Church: told as belief (ruling C33)
-        f"- M2: (In 994) Church of the Eternal Light holds: {TRANSFORMATION}",
-        f"- M3: {LAW_CODE.format('the Zakonnik')}",
-        f"- M4: {ARCHITECTURE}",
+    preview, prompt = await _zakonnik_here(world, t)
+    assert [(m.fact_id, m.from_id, m.ticked) for m in preview.move_here] == [
+        (t.law_code, t.tsardom, False)
     ]
-    assert SUMMARY not in prompt.split("Entries near this one", 1)[0]
-    assert '"Tsardom of Moscavia" means' not in prompt
-    assert ', "move_in": ["<an M label>"]' in prompt
-    assert (
-        '- "move_in": the labels of Tsardom of Moscavia\'s facts above that are '
-        "mainly about this lore, so they belong on its page rather than on "
-        "Tsardom of Moscavia's. They move here: don't write them again in "
-        '"facts". A fact that only mentions the lore in passing stays where '
-        "it is. An empty list is fine."
-    ) in prompt
-
-    assert [(m.fact_id, m.from_id, m.picked) for m in preview.move_in] == [
-        (t.architecture, t.tsardom, True),
-        (t.capital, t.tsardom, False),
-        (t.transformation, t.tsardom, False),
-        (t.law_code, t.tsardom, False),
-    ]
-    assert not any(m.ticked for m in preview.move_in)
-    assert preview.move_in[0].text == ARCHITECTURE
-    assert preview.move_in[3].text == LAW_CODE.format("the Zakonnik")
-
-
-async def test_no_move_in_block_without_a_broader_entry(world, tsardom):
-    preview, prompt = await _preview(
-        world,
-        "lore",
-        "The Architecture of Moskov.",
-        {},
-        _with_move_in(ARCHITECTURE_REPLY, ["M4"]),
-    )
+    assert preview.move_here[0].text == LAW_CODE.format("the Zakonnik")
     assert "is the broader entry" not in prompt
     assert '"move_in"' not in prompt
-    assert preview.move_in == []
 
 
-async def test_move_in_for_a_stub_in_a_sphere_flags_its_repeat(world, tsardom):
-    """The Zakonnik stub, filed in the Tsardom, picks the law code to move
-    in; its reply wrote the code again as its second fact (the probe's
-    duplicate). The pick arrives unticked (ruling C24), so nothing moves
-    unless the owner ticks it. The copy restates the law code the Tsardom
-    still has, so it arrives unticked as already in the world, a repeat of
-    it: the claim isn't lost either way."""
+async def test_move_here_leaves_out_what_the_reply_repeats(world, tsardom):
+    """The probe's verbatim reply wrote the law code again (its second
+    fact, overlap 0.78): that fact is flagged a repeat of the law code, so
+    the law code isn't offered to move here too -- the repeat's own row
+    offers it (the claim isn't lost either way)."""
 
     t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    assert [(m.fact_id, m.picked, m.ticked) for m in preview.move_in] == [
-        (t.law_code, True, False),
-        (t.capital, False, False),
-        (t.transformation, False, False),
-        (t.architecture, False, False),
-    ]
+    preview, _prompt = await _zakonnik_here(world, t, ZAKONNIK_REPLY)
     again = preview.facts[1]
     assert again.text.startswith("The revised Zakonnik governs matters of roosting")
-    assert again.ticked is False
     assert again.repeat_of["fact_id"] == t.law_code
-    assert again.repeat_of["owner_id"] == t.tsardom
-    assert again.repeat_of["score"] >= 0.7
+    assert preview.move_here == []
+
+
+async def test_move_here_copies_and_removes(world, tsardom):
+    """The ticked fact goes onto the entry as a new fact, in the accept's
+    one revision: its link to the entry itself becomes its words, and it's
+    gone from the Tsardom, whose prose read it."""
+
+    t = tsardom
+    preview, _prompt = await _zakonnik_here(world, t)
+    _tick_moves(preview)
+    head = world.head_rev()
+    prose: list[str] = []
+    thing_id = accept_preview(world, preview, prose=prose)
+    assert thing_id == t.zakonnik
+    assert world.head_rev() == head + 1
+
+    assert t.law_code not in _live_ids(world, t.tsardom)
+    for kept in (t.summary, t.capital, t.transformation, t.architecture):
+        assert kept in _live_ids(world, t.tsardom)
+    moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
+    assert moved.fact_id != t.law_code
+    assert moved.text == LAW_CODE.format("the Zakonnik")
+    assert moved.category == "general"
+    assert t.tsardom in prose
+
+
+async def test_move_here_keeps_dates_origin_held_by(world, tsardom):
+    t = tsardom
+    with world.revision(Source.manual(note="sealed")) as rev:
+        sealed = rev.add_fact(
+            t.tsardom,
+            "timeline",
+            f"The Church sealed {ref(t.zakonnik, 'the Zakonnik')} in 995.",
+            valid_from=WorldDate.of(995),
+            origin={"held_by": t.church},
+        )
+    preview, _prompt = await _zakonnik_here(world, t)
+    assert sealed in [m.fact_id for m in preview.move_here]
+    accept_preview(world, _tick_moves(preview))
+    moved = _fact(world, t.zakonnik, "The Church sealed the Zakonnik in 995.")
+    assert moved.fact_id != sealed
+    assert moved.valid_from == WorldDate.of(995)
+    assert moved.valid_until is None
+    assert moved.origin == {"held_by": t.church}
+    # a lore entry has no timeline: its general category, as dated
+    assert moved.category == "general"
+
+
+async def test_move_here_repoints_overrides(world, tsardom):
+    """Moskov's waiver overrode the law code: it overrides the copy now."""
+
+    t = tsardom
+    preview, _prompt = await _zakonnik_here(world, t)
+    accept_preview(world, _tick_moves(preview))
+    moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
+    waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
+    assert waiver.overrides == [moved.fact_id]
+
+
+async def test_move_here_owner_ticks_and_rows_checked_again(world, tsardom):
+    """The owner's ticks win: an unticked row stays. A row whose fact was
+    removed since, or one forged for a fact that doesn't name the entry,
+    moves nothing, with a note."""
+
+    t = tsardom
+    preview, _prompt = await _zakonnik_here(world, t)
+    assert [m.ticked for m in preview.move_here] == [False]
+    accept_preview(world, preview.model_copy(deep=True))
+    assert t.law_code in _live_ids(world, t.tsardom)
+
+    with world.revision(Source.manual(note="stub again")) as rev:
+        zakonnik = rev.create_thing(
+            "lore", {"name": "Code of Roosts", "stub": {"ignored": False}}
+        )
+        named = rev.add_fact(
+            t.moskov, "law", f"Moskov keeps {ref(zakonnik, 'the Code of Roosts')}."
+        )
+    reply = json.dumps(
+        {
+            "name": "Code of Roosts",
+            "facts": [
+                {"category": "general", "text": "Its pages are bound in birch bark."}
+            ],
+        }
+    )
+    preview, _prompt = await _preview(
+        world, "lore", "The Code of Roosts.", {}, reply, stub_id=zakonnik
+    )
+    assert [m.fact_id for m in preview.move_here] == [named]
+    preview.move_here[0].ticked = True
+    preview.move_here.append(
+        MoveHereFact(fact_id=t.cathedral, from_id=t.moskov, text="x", ticked=True)
+    )
+    with world.revision(Source.manual(note="gone")) as rev:
+        rev.remove_fact(named)
+    notes: list[str] = []
+    accept_preview(world, preview, notes=notes)
+    assert t.cathedral in _live_ids(world, t.moskov)
+    assert any("since the preview" in note for note in notes)
+    assert any("doesn't name Code of Roosts" in note for note in notes)
+
+
+async def test_moved_source_prose_goes_stale(world, tsardom):
+    """The Tsardom's cached description reads stale once a fact it's
+    written from moves out."""
+
+    t = tsardom
+    cache = world.prose()
+    start, end = prose_gen.stretch_containing(world, t.tsardom, None)
+    for section in prose_gen.sections_for("sphere"):
+        cache.put(t.tsardom, section, start, end, "Old prose.")
+
+    def stale() -> bool:
+        return cache.stale(
+            t.tsardom,
+            "description",
+            None,
+            prose_gen.staleness_also(world, t.tsardom, "description", None),
+            prose_gen.unread_categories("sphere", "description"),
+        )
+
+    assert stale() is False
+    preview, _prompt = await _zakonnik_here(world, t)
+    accept_preview(world, _tick_moves(preview))
+    assert stale() is True
+
+
+async def test_moved_here_fact_leaves_the_new_entrys_prose_stale(world, tsardom):
+    """Final review I2: the preview's prose was written from its own facts
+    only, so with a fact moved here (every own fact still ticked) it's
+    cached as of before the accept -- it reads stale -- and the entry goes
+    in `prose` to be written again."""
+
+    t = tsardom
+    preview, _prompt = await _zakonnik_here(world, t)
+    _tick_moves(preview)
+    for fact in preview.facts:
+        fact.ticked = True
+    assert preview.prose
+    prose: list[str] = []
+    thing_id = accept_preview(world, preview, prose=prose)
+    _fact(world, thing_id, LAW_CODE.format("the Zakonnik"))
+    assert thing_id in prose
+    cache = world.prose()
+    for section in preview.prose:
+        assert cache.stale(
+            thing_id,
+            section,
+            None,
+            prose_gen.staleness_also(world, thing_id, section, None),
+            prose_gen.unread_categories("lore", section),
+        )
+
+
+async def test_no_move_here_keeps_the_new_entrys_prose_current(world, tsardom):
+    t = tsardom
+    preview, _prompt = await _zakonnik_here(world, t)
+    for fact in preview.facts:
+        fact.ticked = True
+    prose: list[str] = []
+    thing_id = accept_preview(world, preview, prose=prose)
+    assert thing_id not in prose
+    cache = world.prose()
+    for section in preview.prose:
+        assert not cache.stale(
+            thing_id,
+            section,
+            None,
+            prose_gen.staleness_also(world, thing_id, section, None),
+            prose_gen.unread_categories("lore", section),
+        )
+
+
+async def test_undo_redo_move_here(world, tsardom):
+    t = tsardom
+    before = {thing: _live_ids(world, thing) for thing in (t.tsardom, t.moskov)}
+    preview, _prompt = await _zakonnik_here(world, t)
+    accept_preview(world, _tick_moves(preview))
+    rev = world.head_rev()
+    moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik")).fact_id
+
+    undone = world.undo([rev])
+    assert undone.conflicts == []
+    assert {thing: _live_ids(world, thing) for thing in before} == before
+    waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
+    assert waiver.overrides == [t.law_code]
+    assert world.view().thing(t.zakonnik).is_stub
+
+    redone = world.undo([undone.undo_rev])
+    assert redone.conflicts == []
+    assert t.law_code not in _live_ids(world, t.tsardom)
+    assert moved in _live_ids(world, t.zakonnik)
+    waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
+    assert waiver.overrides == [moved]
+
+
+# --- the sphere move-in, still used by a sphere preview until Task 7 -------
 
 
 def test_untick_moved_repeats(world, tsardom):
@@ -402,318 +538,6 @@ def test_untick_moved_repeats(world, tsardom):
         view, facts, moves[:1], CurationSettings(repeat_untick_threshold=1.0)
     )
     assert facts[0].ticked is True
-
-
-async def test_move_in_for_a_place_in_its_parent(world, tsardom):
-    """A new place's parent is its broader entry."""
-
-    t = tsardom
-    reply = json.dumps(
-        {
-            "name": "The Kremlin",
-            "aka": [],
-            "facts": [
-                {"category": "description", "text": "The fortified heart of Moskov."}
-            ],
-            "names": [],
-            "move_in": ["M1"],
-        }
-    )
-    preview, prompt = await _preview(
-        world, "place", "The Kremlin of Moskov.", {"parent": t.moskov}, reply
-    )
-    assert "Moskov is the broader entry this place is part of." in prompt
-    assert [(m.fact_id, m.from_id, m.picked) for m in preview.move_in] == [
-        (t.waiver, t.moskov, True),
-        (t.cathedral, t.moskov, False),
-    ]
-
-
-async def test_move_in_shows_at_most_its_cap(world, tsardom):
-    """A broader entry with more facts than fit: the first
-    `MOVE_IN_SHOWN` are labelled, and every one is still offered, the
-    unshown ones unticked."""
-
-    t = tsardom
-    with world.revision(Source.manual(note="more")) as rev:
-        extra = [
-            rev.add_fact(t.tsardom, "about", f"The Tsardom keeps custom number {n}.")
-            for n in range(MOVE_IN_SHOWN)
-        ]
-    labels = [f"M{MOVE_IN_SHOWN}", f"M{MOVE_IN_SHOWN + 1}"]
-    preview, prompt = await _zakonnik(world, t, labels)
-    block = _block(prompt)
-    assert len(block) == MOVE_IN_SHOWN
-    assert block[-1].startswith(f"- M{MOVE_IN_SHOWN}: The Tsardom keeps custom")
-    assert len(preview.move_in) == MOVE_IN_SHOWN + 4
-    # M30 is the 26th extra fact; M31 was never shown
-    assert [m.fact_id for m in preview.move_in if m.picked] == [
-        extra[MOVE_IN_SHOWN - 5]
-    ]
-
-
-async def test_outer_body_changes_what_moves_in(world, tsardom):
-    """The entry put into an outer body (rulings C11, C13): it still sits
-    in its home, the Tsardom, through the body, so the model's picks from
-    the Tsardom stay, unless the owner files the body somewhere else. A
-    body the world has adds its own facts, unticked (the model never saw
-    them); a new one has none."""
-
-    t = tsardom
-    before = [(t.law_code, True), (t.capital, False)]
-    before += [(t.transformation, False), (t.architecture, False)]
-    tsardom_rows = [(fact_id, t.tsardom, picked) for fact_id, picked in before]
-
-    preview, _prompt = await _zakonnik(world, t)
-    add_outer_body(
-        world, preview, "Zakonnik", OuterBody(name="The Codes", template="field")
-    )
-    rows = [(m.fact_id, m.from_id, m.picked) for m in preview.move_in]
-    assert rows == tsardom_rows
-
-    # filed in the Church instead: no longer inside the Tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    add_outer_body(
-        world,
-        preview,
-        "Zakonnik",
-        OuterBody(
-            name="The Codes",
-            template="field",
-            part_of={"sphere": t.church, "drawer": UNSORTED_DRAWER_ID},
-        ),
-    )
-    assert preview.move_in == []
-
-    preview, _prompt = await _zakonnik(world, t)
-    add_outer_body(
-        world,
-        preview,
-        "Zakonnik",
-        OuterBody(name="Church of the Eternal Light", template="religion"),
-        as_sphere=True,
-    )
-    rows = [(m.fact_id, m.from_id, m.picked) for m in preview.move_in]
-    assert rows == [*tsardom_rows, (t.light, t.church, False)]
-
-    # a body the world has that sits in the Tsardom keeps its rows too
-    with world.revision(Source.manual(note="courts")) as rev:
-        courts = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Courts",
-                "template": "order",
-                "part_of": {"sphere": t.tsardom, "drawer": UNSORTED_DRAWER_ID},
-            },
-        )
-        ruling = rev.add_fact(courts, "about", "The Courts sit in Moskov.")
-    preview, _prompt = await _zakonnik(world, t)
-    add_outer_body(
-        world,
-        preview,
-        "Zakonnik",
-        OuterBody(
-            name="The Courts",
-            template="order",
-            part_of={"sphere": t.church, "drawer": UNSORTED_DRAWER_ID},
-        ),
-        as_sphere=True,
-    )
-    rows = [(m.fact_id, m.from_id, m.picked) for m in preview.move_in]
-    assert rows == [*tsardom_rows, (ruling, courts, False)]
-
-
-# --- accept ----------------------------------------------------------------
-
-
-async def test_move_in_copies_and_removes(world, tsardom):
-    """The ticked fact goes onto the new entry as a new fact, in the
-    accept's one revision: its link to the entry itself becomes its words,
-    and it's gone from the Tsardom. Unticked ones stay, and the duplicate
-    own fact the owner unticked isn't written."""
-
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    _tick_picks(preview)
-    head = world.head_rev()
-    prose: list[str] = []
-    thing_id = accept_preview(world, preview, prose=prose)
-    assert thing_id == t.zakonnik
-    assert world.head_rev() == head + 1
-
-    assert t.law_code not in _live_ids(world, t.tsardom)
-    for kept in (t.summary, t.capital, t.transformation, t.architecture):
-        assert kept in _live_ids(world, t.tsardom)
-    moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
-    assert moved.fact_id != t.law_code
-    assert moved.text == LAW_CODE.format("the Zakonnik")
-    assert moved.category == "general"
-    texts = [f.text for f in world.live_facts(t.zakonnik)]
-    assert not any(text.startswith("The revised Zakonnik") for text in texts)
-    # the Tsardom lost a fact its prose reads
-    assert t.tsardom in prose
-
-
-async def test_accept_skips_an_own_fact_repeating_a_ticked_move(world, tsardom):
-    """The safety net behind the preview (ruling C24): an own fact still
-    ticked that says again what a ticked move brings in (the Zakonnik's
-    copy of the law code, ticked by a client that didn't untick it) isn't
-    written twice. The move brings the claim; a note says so."""
-
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    for row in preview.move_in:
-        row.ticked = row.picked
-    again = preview.facts[1]
-    assert again.text.startswith("The revised Zakonnik")
-    again.ticked = True
-    notes: list[str] = []
-    accept_preview(world, preview, notes=notes)
-    texts = [f.text for f in world.live_facts(t.zakonnik)]
-    assert not any(text.startswith("The revised Zakonnik") for text in texts)
-    _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
-    assert any("moved in" in note for note in notes)
-
-
-async def test_move_in_keeps_dates_origin_held_by(world, tsardom):
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t, ["M2"])
-    accept_preview(world, _tick_picks(preview))
-    moved = _fact(world, t.zakonnik, TRANSFORMATION)
-    assert moved.fact_id != t.transformation
-    assert moved.valid_from == WorldDate.of(994)
-    assert moved.valid_until is None
-    assert moved.origin == {"held_by": t.church}
-    # a lore entry has no timeline: its general category, as dated
-    assert moved.category == "general"
-
-
-async def test_move_in_repoints_overrides(world, tsardom):
-    """Moskov's waiver overrode the law code: it overrides the copy now."""
-
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    accept_preview(world, _tick_picks(preview))
-    moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik"))
-    waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
-    assert waiver.overrides == [moved.fact_id]
-
-
-async def test_move_in_owner_unticks_and_ticks(world, tsardom):
-    """The owner's ticks win: a pick left unticked stays, a ticked other
-    row moves. A row whose fact was removed since is left, with a note."""
-
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    rows = {m.fact_id: m for m in preview.move_in}
-    rows[t.law_code].ticked = False
-    rows[t.architecture].ticked = True
-    rows[t.capital].ticked = True
-    with world.revision(Source.manual(note="gone")) as rev:
-        rev.remove_fact(t.capital)
-    notes: list[str] = []
-    accept_preview(world, preview, notes=notes)
-    assert t.law_code in _live_ids(world, t.tsardom)
-    assert t.architecture not in _live_ids(world, t.tsardom)
-    _fact(world, t.zakonnik, ARCHITECTURE)
-    assert any("Tsardom of Moscavia" in note and "since" in note for note in notes)
-
-
-async def test_broader_prose_goes_stale(world, tsardom):
-    """The Tsardom's cached description reads stale once a fact it's
-    written from moves out."""
-
-    t = tsardom
-    cache = world.prose()
-    start, end = prose_gen.stretch_containing(world, t.tsardom, None)
-    for section in prose_gen.sections_for("sphere"):
-        cache.put(t.tsardom, section, start, end, "Old prose.")
-
-    def stale() -> bool:
-        return cache.stale(
-            t.tsardom,
-            "description",
-            None,
-            prose_gen.staleness_also(world, t.tsardom, "description", None),
-            prose_gen.unread_categories("sphere", "description"),
-        )
-
-    assert stale() is False
-    preview, _prompt = await _zakonnik(world, t)
-    accept_preview(world, _tick_picks(preview))
-    assert stale() is True
-
-
-async def test_moved_in_fact_leaves_the_new_entrys_prose_stale(world, tsardom):
-    """Final review I2: the preview's prose was written from its own facts
-    only, so with a fact moved in (every own fact still ticked) it's cached
-    as of before the accept -- it reads stale -- and the new entry goes in
-    `prose` to be written again."""
-
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    for row in preview.move_in:
-        row.ticked = row.fact_id == t.architecture
-    for fact in preview.facts:
-        fact.ticked = True
-    assert preview.prose
-    prose: list[str] = []
-    thing_id = accept_preview(world, preview, prose=prose)
-    _fact(world, thing_id, ARCHITECTURE)
-    assert thing_id in prose
-    cache = world.prose()
-    for section in preview.prose:
-        assert cache.stale(
-            thing_id,
-            section,
-            None,
-            prose_gen.staleness_also(world, thing_id, section, None),
-            prose_gen.unread_categories("lore", section),
-        )
-
-
-async def test_no_move_in_keeps_the_new_entrys_prose_current(world, tsardom):
-    t = tsardom
-    preview, _prompt = await _zakonnik(world, t)
-    for row in preview.move_in:
-        row.ticked = False
-    for fact in preview.facts:
-        fact.ticked = True
-    prose: list[str] = []
-    thing_id = accept_preview(world, preview, prose=prose)
-    assert thing_id not in prose
-    cache = world.prose()
-    for section in preview.prose:
-        assert not cache.stale(
-            thing_id,
-            section,
-            None,
-            prose_gen.staleness_also(world, thing_id, section, None),
-            prose_gen.unread_categories("lore", section),
-        )
-
-
-async def test_undo_redo_move_in(world, tsardom):
-    t = tsardom
-    before = {thing: _live_ids(world, thing) for thing in (t.tsardom, t.moskov)}
-    preview, _prompt = await _zakonnik(world, t)
-    accept_preview(world, _tick_picks(preview))
-    rev = world.head_rev()
-    moved = _fact(world, t.zakonnik, LAW_CODE.format("the Zakonnik")).fact_id
-
-    undone = world.undo([rev])
-    assert undone.conflicts == []
-    assert {thing: _live_ids(world, thing) for thing in before} == before
-    waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
-    assert waiver.overrides == [t.law_code]
-    assert world.view().thing(t.zakonnik).is_stub
-
-    redone = world.undo([undone.undo_rev])
-    assert redone.conflicts == []
-    assert t.law_code not in _live_ids(world, t.tsardom)
-    assert moved in _live_ids(world, t.zakonnik)
-    waiver = next(f for f in world.live_facts(t.moskov) if f.fact_id == t.waiver)
-    assert waiver.overrides == [moved]
 
 
 # --- sphere expansions (ruling C32) ------------------------------------------------

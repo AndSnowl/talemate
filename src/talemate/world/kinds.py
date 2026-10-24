@@ -279,10 +279,12 @@ KINDS: dict[str, KindSpec] = {
         ),
         categories=["summary", "consequence", "general"],
     ),
+    # `belief`: what a faith, culture or order teaches, held by the entry
+    # itself (`entries.held_by`); offered only under those prompt hints
     "lore": KindSpec(
         name="lore",
         fields=_fields(("name", "text")),
-        categories=["general"],
+        categories=["general", "belief"],
     ),
     # a god, a spirit, a legendary creature; `ties` count only while its
     # `existence` is real (`entries.acts_in_world`)

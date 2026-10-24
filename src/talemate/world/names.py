@@ -34,6 +34,7 @@ are left out.
 """
 
 import re
+from collections.abc import Sequence
 from typing import Literal
 
 import structlog
@@ -270,9 +271,10 @@ def _first_name(words: list[str]) -> str | None:
 Aliases = dict[str, list[tuple[int, NameCandidate]]]
 
 
-def _aliases(view: WorldView) -> Aliases:
+def _aliases(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
     """Every matchable alias (normalised) and the things it names, each
-    with its rank."""
+    with its rank: the view's things', then `extra`'s (things not in the
+    view, named by their own `name` field)."""
 
     aliases: Aliases = {}
 
@@ -285,10 +287,14 @@ def _aliases(view: WorldView) -> Aliases:
         )
         aliases.setdefault(key, []).append((_RANKS[via], candidate))
 
-    for state in view.things():
+    pool = [(state, False) for state in view.things()]
+    pool += [(state, True) for state in extra]
+    for state, drafted in pool:
         if state.stub_ignored:
             continue
-        name = " ".join((view.name_of(state.id) or "").split())
+        own = state.fields.get("name") if drafted else None
+        written = own if isinstance(own, str) else view.name_of(state.id)
+        name = " ".join((written or "").split())
         if not name:
             continue
         add(name, state, name, "name")
@@ -357,12 +363,16 @@ def _needs_capital(candidate: NameCandidate) -> bool:
     return candidate.stub or candidate.via in ("aka", "adjective", "partial")
 
 
-def find_names(view: WorldView, text: str) -> list[NameMatch]:
+def find_names(
+    view: WorldView, text: str, *, extra: Sequence[ThingState] = ()
+) -> list[NameMatch]:
     """Every name of the view's things in `text`, as they're named at the
     view's date, in order. Longer names are tried first, so overlapping
-    names match once ("Maren Vos" never also as "Maren")."""
+    names match once ("Maren Vos" never also as "Maren"). `extra` are
+    things matched as if the view had them (an entry still being drafted,
+    named by its `name` and `aka` fields)."""
 
-    aliases = _aliases(view)
+    aliases = _aliases(view, extra)
     folded = text.casefold()
 
     # (start, end, end with any `'s`, written, candidates)

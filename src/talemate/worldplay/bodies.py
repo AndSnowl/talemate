@@ -28,8 +28,12 @@ pre-filled as `outer_name` gives it ("<inner part>'s parent"), and
   files the body elsewhere, and a body the world has adds its own facts,
   unticked (`create.offer_move_in`, spec goal 2).
 
-Accept (`create.accept_preview`, `spheres.accept_sphere`,
-`spheres.accept_fill`) makes the chain outer first and files it in one
+A create preview no longer takes an outer body (Filing, Task 4: it's
+filed through its "In" rows, and "+ in..." makes a stub); a sphere's core
+or branch and Fill still do until the spheres go (Task 7).
+
+Accept (`spheres.accept_sphere`, `spheres.accept_fill`) makes the chain
+outer first and files it in one
 revision with the ticked re-file rows (`create.file_chain`), refusing a
 cycle.
 """
@@ -307,6 +311,12 @@ def add_outer_body(
     it, by the preview's names or the world's filings; or a filing that
     isn't a sphere's drawer a sphere goes in."""
 
+    if not isinstance(preview, (SpherePreview, FillPreview)):
+        # a create preview has no `part_of` or re-file rows any more
+        # (Filing, Task 4): its outer bodies are made through "+ in..."
+        raise ValueError(
+            "an entry being written is filed through its In rows, not an outer body"
+        )
     view = world.view()
     name = " ".join(outer.name.split()) or outer_name(row_name)
     key = name_key(name)

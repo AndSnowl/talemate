@@ -18,7 +18,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import KINDS, get_kind
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
-from talemate.worldplay import prose_gen
+from talemate.worldplay import create, prose_gen
 from talemate.worldplay.create import (
     ElsewhereFact,
     accept_preview,
@@ -431,17 +431,21 @@ async def test_elsewhere_target_deleted_before_accept(world, eternal):
     assert view.thing(thing_id) is not None
 
 
-async def test_candidates_come_from_nearness(world, eternal):
+async def test_candidates_come_from_filing_nearness(world, eternal):
+    """Ruling F6: today's context first (where the stub is filed, then what
+    mentions it), then what's one link from those -- filings either way
+    counting twice a reference -- most linked first, then the stub's
+    siblings; never the stub itself or the Iron Guild, linked to nothing.
+    Each line reads "Name (kind, tag; usually called X; in A; stub)", no
+    drawer titles (rulings C29, C30)."""
+
     preview, client = await _divine_preview(world, eternal)
     prompt = str(client.prompt_history[0]["prompt"])
     block = prompt.split("Entries near this one in the world:", 1)[1]
-    block = block.split("The world's calendar", 1)[0]
+    block = block.split("Tags in use", 1)[0].split("The world's calendar", 1)[0]
     lines = [line[2:] for line in block.strip().splitlines()]
-    # today's context first: its sphere, then what mentions it
-    # no drawer titles at all (rulings C29, C30): the curation flow
-    # probe's facts took them up ("the Frontier drawer of Runeweaving")
     assert lines[0].startswith(
-        "Church of the Eternal Light (sphere: religion; usually called The Church): "
+        "Church of the Eternal Light (sphere; usually called The Church): "
         "The Church of the Eternal Light is the state religion"
     )
     assert not [line for line in lines if "drawer" in line.split("):", 1)[0]]
@@ -449,48 +453,33 @@ async def test_candidates_come_from_nearness(world, eternal):
         "Tsardom of Moscavia (place; usually called Moscavia): The Tsardom of "
         "Moscavia is a vast northern kingdom"
     )
-    # reach 1 by default: one step out, so not its siblings in the Church
-    # nor Moskov (two steps), never the stub itself or the Iron Guild
     names = [line.split(" (", 1)[0] for line in lines]
-    assert names == ["Church of the Eternal Light", "Tsardom of Moscavia"]
-    assert all(len(line.split("): ", 1)[1]) <= 130 for line in lines)
-
-    def listed(prompt):
-        block = prompt.split("Entries near this one in the world:", 1)[1]
-        block = block.split("The world's calendar", 1)[0]
-        return [line[2:] for line in block.strip().splitlines()]
-
-    # further out: its siblings and Moskov, still never the Iron Guild
-    world.set_curation(CurationSettings(reach=2))
-    preview, client = await _divine_preview(world, eternal)
-    lines = listed(str(client.prompt_history[0]["prompt"]))
-    names = [line.split(" (", 1)[0] for line in lines]
-    assert names[:2] == ["Church of the Eternal Light", "Tsardom of Moscavia"]
-    assert set(names[2:]) == {
-        "The Patriarch of Moscavia",
-        "The Shrine of First Dawn",
-        "Moskov",
-    }
-    patriarch = next(line for line in lines if line.startswith("The Patriarch"))
-    # ruling C29: "part of Y" only, no drawer title (the curation flow
-    # probe's facts said "the Techniques drawer of Runeweaving")
-    assert patriarch.startswith(
-        "The Patriarch of Moscavia (lore; part of Church of the Eternal Light; "
-        "stub): The supreme head of the Church"
-    )
-
-    # and capped at the world's `entries`
-    world.set_curation(CurationSettings(reach=2, entries=3))
-    preview, client = await _divine_preview(world, eternal)
-    names = [
-        line.split(" (", 1)[0]
-        for line in listed(str(client.prompt_history[0]["prompt"]))
-    ]
+    # Moskov: filed in the Tsardom and named by the Church; the Patriarch
+    # and the Shrine: filed in the Church, beside the stub
     assert names == [
         "Church of the Eternal Light",
         "Tsardom of Moscavia",
+        "Moskov",
         "The Patriarch of Moscavia",
+        "The Shrine of First Dawn",
     ]
+    patriarch = next(line for line in lines if line.startswith("The Patriarch"))
+    assert patriarch.startswith(
+        "The Patriarch of Moscavia (lore; in Church of the Eternal Light; "
+        "stub): The supreme head of the Church"
+    )
+    assert all(len(line.split("): ", 1)[1]) <= 130 for line in lines)
+
+    # and capped
+    view = world.view()
+    capped = create.filing_candidates(
+        view,
+        [eternal.divine, eternal.church, eternal.tsardom],
+        [eternal.church, eternal.tsardom],
+        {eternal.divine},
+        limit=3,
+    )
+    assert capped == [eternal.church, eternal.tsardom, eternal.moskov]
 
 
 async def test_undo_then_redo_elsewhere_accept(world, eternal):

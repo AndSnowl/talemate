@@ -1167,7 +1167,10 @@ async def test_accept_makes_stubs_and_links_facts(at_1020):
     # its everyday name, in the prompt
     prompt = str(client.prompt_history[0]["prompt"])
     assert '"aka": [{"name": "...", "tag": "common", "everyday": true}]' in prompt
-    assert '"names": [{"name": "...", "kind": "place", "aka": []}]' in prompt
+    assert (
+        '"names": [{"name": "...", "kind": "place", "tag": "...", "in": null, '
+        '"aka": []}]' in prompt
+    )
     assert '"names": after the facts, every proper name your facts use' in prompt
     assert 'a people\'s adjective such as "Moscavian" on its own' in prompt
     assert (
@@ -1899,8 +1902,14 @@ def test_adjective_form_name_is_still_stubbed(at_1020):
     assert parse_refs(linked) == [magian, magi]
 
 
-# --- ties at character creation ----------------------------------------------
+# --- a character's "In" rows and their exceptions ------------------------------
+#
+# The ties at character creation (spheres probe (c)) became "In" rows
+# (Filing, Task 4): the entries the character may belong in are shown with
+# their items labelled S1..., and an "in" item's "exceptions" map to those
+# items, written on accept as `ties` facts the filing's `exceptions` hold.
 
+from talemate.world.filing import filings_of  # noqa: E402
 from talemate.world.spheres import exceptions as sphere_exceptions  # noqa: E402
 
 
@@ -1915,103 +1924,85 @@ class DawnWorld(NamedTuple):
     law: str
 
 
-def _sphere_drawer(drawer_id: str, type_: str, title: str) -> dict:
-    return {"id": drawer_id, "type": type_, "title": title}
+def _filed_in(*targets: str) -> list[dict]:
+    return [{"target": target, "role": None} for target in targets]
 
 
 @pytest.fixture
 def dawn_world(at_1020):
-    """The spheres probe's White Dawn (a religion, everyday "the Dawn")
-    with a doctrine, a rite and a statement, Kremova as a holy site (a
-    place: never an item), and the Tsardom of Moscavia, a nation place
-    sphere (other name Moscavia) holding Kremova and Kovask, with one
-    law."""
+    """The spheres probe's White Dawn, now lore tagged religion (everyday
+    "the Dawn"), with its creed, a belief, and a doctrine and a rite filed
+    in it; Kremova, a holy city filed in the Dawn and in the Tsardom of
+    Moscavia, a nation place (other name Moscavia) with one law, which
+    Kovask is filed in too."""
 
-    with at_1020.revision(Source.manual(note="spheres")) as rev:
+    with at_1020.revision(Source.manual(note="filings")) as rev:
         tsardom = rev.create_thing(
             "place",
             fields={
                 "name": "Tsardom of Moscavia",
+                "tag": "nation",
                 "aka": [_aka("Moscavia", everyday=True)],
-                "template": "nation",
-                "drawers": [
-                    _sphere_drawer("d0000101", "beliefs", "Laws"),
-                    _sphere_drawer("d0000102", "places", "Lands"),
-                ],
             },
         )
-        rev.add_fact(tsardom, "about", "A northern realm of owl-folk.")
-        law = rev.add_fact(
-            tsardom,
-            "statement",
-            "Only owl-folk may hold land.",
-            origin={"drawer": "d0000101"},
+        rev.add_fact(tsardom, "description", "A northern realm of owl-folk.")
+        law = rev.add_fact(tsardom, "law", "Only owl-folk may hold land.")
+        kovask = rev.create_thing(
+            "place", fields={"name": "Kovask", "filings": _filed_in(tsardom)}
         )
-        kovask = rev.create_thing("place", fields={"name": "Kovask", "parent": tsardom})
         dawn = rev.create_thing(
-            "sphere",
+            "lore",
             fields={
                 "name": "The White Dawn",
+                "tag": "religion",
                 "aka": [_aka("Dawn Church", tag="proper"), _aka("the Dawn")],
-                "template": "religion",
-                "drawers": [
-                    _sphere_drawer("d0000001", "beliefs", "Doctrines"),
-                    _sphere_drawer("d0000002", "practices", "Rites and Ceremonies"),
-                    _sphere_drawer("d0000003", "places", "Holy Sites"),
-                ],
             },
         )
-        rev.add_fact(dawn, "about", "The state church of the owl-folk.")
+        rev.add_fact(dawn, "general", "The state church of the owl-folk.")
+        purity = rev.add_fact(
+            dawn, "belief", "Snowy owl-folk are the purest of the folk."
+        )
         separation = rev.create_thing(
             "lore",
             fields={
                 "name": "The Doctrine of Separation",
-                "part_of": {"sphere": dawn, "drawer": "d0000001"},
+                "tag": "doctrine",
+                "filings": _filed_in(dawn),
             },
         )
         rev.add_fact(separation, "general", "The faithful may not marry humans.")
         rev.add_fact(separation, "general", "Issued in 1019.")
         kremova = rev.create_thing(
             "place",
-            fields={
-                "name": "Kremova",
-                "parent": tsardom,
-                "part_of": {"sphere": dawn, "drawer": "d0000003"},
-            },
+            fields={"name": "Kremova", "filings": _filed_in(dawn, tsardom)},
         )
         rev.add_fact(kremova, "general", "The white city.")
         vigil = rev.create_thing(
             "lore",
             fields={
                 "name": "The Dawn Vigil",
-                "part_of": {"sphere": dawn, "drawer": "d0000002"},
+                "tag": "rite",
+                "filings": _filed_in(dawn),
             },
         )
         rev.add_fact(vigil, "general", "The faithful watch the first light.")
-        purity = rev.add_fact(
-            dawn,
-            "statement",
-            "Snowy owl-folk are the purest of the folk.",
-            origin={"drawer": "d0000001"},
-        )
     return DawnWorld(dawn, separation, vigil, purity, kremova, tsardom, kovask, law)
 
 
 DAWN_BLOCK = (
-    "Spheres in the world (faiths, nations, orders, cultures, fields of "
-    "knowledge) the character may belong to, each with what it holds, "
-    "labelled S1, S2...:\n"
+    "Entries in the world the character may belong in (faiths, orders, "
+    "cultures, fields of knowledge), each with what it holds, labelled S1, "
+    "S2...:\n"
     "The White Dawn (religion):\n"
-    "- The state church of the owl-folk.\n"
-    "- S1 (Doctrines): The Doctrine of Separation: The faithful may not "
-    "marry humans.\n"
-    "- S2 (Rites and Ceremonies): The Dawn Vigil: The faithful watch the "
-    "first light.\n"
-    "- S3 (Doctrines): Snowy owl-folk are the purest of the folk.\n"
+    "- S1: The state church of the owl-folk.\n"
+    "- S2: Snowy owl-folk are the purest of the folk.\n"
+    "- S3: The Doctrine of Separation (doctrine): The faithful may not marry "
+    "humans.\n"
+    "- S4: The Dawn Vigil (rite): The faithful watch the first light.\n"
 )
 
 
-def _priestess_reply(ties: list) -> str:
+def _priestess_reply(into: list) -> str:
     return json.dumps(
         {
             "name": "Ilyana",
@@ -2021,24 +2012,25 @@ def _priestess_reply(ties: list) -> str:
                 {"category": "personality", "text": "Patient and wry."},
             ],
             "names": [],
-            "ties": ties,
+            "in": into,
         }
     )
 
 
-async def _preview_priestess(world, prompt: str, ties: list, **extra):
+async def _preview_priestess(world, prompt: str, into: list, **extra):
     client = MockClient("test")
     async with MockClientContext():
-        _queue(_priestess_reply(ties), "She is tall.", "She is patient.")
+        _queue(_priestess_reply(into), "She is tall.", "She is patient.")
         preview = await preview_thing(world, "character", prompt, {}, client, **extra)
     return preview, str(client.prompt_history[0]["prompt"])
 
 
-async def test_character_preview_proposes_ties_to_existing_spheres(at_1020, dawn_world):
-    """The probe's (c): a sphere named in the prompt is shown with its
-    items labelled S1..., places left out, and not again under "Named in
-    this prompt"; the reply's ties resolve to it, with `since` read as a
-    fact's and each exception's label mapped to its item."""
+async def test_character_preview_offers_in_rows_with_exceptions(at_1020, dawn_world):
+    """An entry named in the prompt is shown with its items labelled
+    S1..., places left out, and not again under "Named in this prompt";
+    the reply's "in" row resolves to it, unticked (ruling F7), with
+    `since` read as a fact's and each exception's label mapped to its
+    item."""
 
     d = dawn_world
     preview, prompt = await _preview_priestess(
@@ -2046,134 +2038,134 @@ async def test_character_preview_proposes_ties_to_existing_spheres(at_1020, dawn
         "a priestess of the White Dawn who loves a human",
         [
             {
-                "sphere": "The White Dawn",
+                "entry": "The White Dawn",
                 "role": "priest",
                 "since": "1004",
                 "exceptions": [
-                    {"text": "She means to marry a human.", "rejects": "S1"},
-                    {"text": "She thinks all folk equal.", "rejects": "s3"},
+                    {"text": "She means to marry a human.", "rejects": "S3"},
+                    {"text": "She thinks all folk equal.", "rejects": "s2"},
                 ],
             }
         ],
     )
 
-    # then the entries near it (curation), before the calendar
     assert DAWN_BLOCK + "\nEntries near this one in the world:\n" in prompt
     assert "Named in this prompt" not in prompt
-    # the example object and the rules, verbatim
     assert (
-        '"names": [{"name": "...", "kind": "place", "aka": []}], "elsewhere": '
-        '[{"entry": "<an entry\'s name>", "text": "A claim mainly about that '
-        'entry, in a full sentence.", "held_by": null}], "ties": '
-        '[{"sphere": "...", "role": "practitioner", "since": "YEAR", '
-        '"exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]}' in prompt
+        '"in": [{"entry": "<an entry\'s name>", "role": "a few words", '
+        '"exceptions": [{"text": "One sentence.", "rejects": "S1"}]}]' in prompt
     )
     assert (
-        '- "ties": after the names, the spheres above this character belongs '
-        'to, each {"sphere", "role", "since", "exceptions"}: "sphere" its name '
-        'as written above; "role" a word or two for how they belong '
-        '(practitioner, priest, elder, scholar, member); "since" the year '
-        "they joined, as a bare number no later than 1020, or left out. Only "
-        "the spheres above: never invent one here. An empty list is fine.\n"
-        '- "exceptions": only where this character departs from the sphere, '
-        'each {"text", "rejects"}: "text" one sentence on what they reject or '
-        'do differently, and "rejects" the label of the item it departs from, '
-        'such as "S3". The character already holds everything else the sphere '
-        "holds, so never restate it, in an exception or in the facts. Most "
-        "ties have no exception or one.\n"
+        '- "exceptions": in an "in" item, only where this character departs '
+        'from that entry, each {"text", "rejects"}: "text" one sentence on '
+        'what they reject or do differently, and "rejects" the label of the '
+        'item it departs from, such as "S3". The character already holds '
+        "everything else the entry holds, so never restate it, in an "
+        "exception or in the facts. Most entries have no exception or one.\n"
         "- Write each exception only there, never again as one of the facts.\n"
         "\nNo commentary" in prompt
     )
 
-    assert len(preview.ties) == 1
-    tie = preview.ties[0]
-    assert (tie.sphere_id, tie.sphere, tie.role) == (d.dawn, "The White Dawn", "priest")
-    assert tie.since == WorldDate.of(1004)
-    assert [(e.text, e.thing_id, e.fact_id) for e in tie.exceptions] == [
+    [row] = preview.filings
+    assert (row.target_id, row.target_name, row.role, row.ticked) == (
+        d.dawn,
+        "The White Dawn",
+        "priest",
+        False,
+    )
+    assert row.since == WorldDate.of(1004)
+    assert [(e.text, e.thing_id, e.fact_id) for e in row.exceptions] == [
         ("She means to marry a human.", d.separation, None),
         ("She thinks all folk equal.", None, d.purity),
     ]
-    # the owner sees the sphere as context too
+    # the owner sees the entry as context too
     assert (
-        "Sphere: The White Dawn (religion)",
+        "May belong in: The White Dawn (religion)",
         [
-            "The state church of the owl-folk.",
-            "S1 (Doctrines): The Doctrine of Separation: The faithful may not "
+            "S1: The state church of the owl-folk.",
+            "S2: Snowy owl-folk are the purest of the folk.",
+            "S3: The Doctrine of Separation (doctrine): The faithful may not "
             "marry humans.",
-            "S2 (Rites and Ceremonies): The Dawn Vigil: The faithful watch the "
-            "first light.",
-            "S3 (Doctrines): Snowy owl-folk are the purest of the folk.",
+            "S4: The Dawn Vigil (rite): The faithful watch the first light.",
         ],
     ) in preview.context
 
 
-async def test_no_spheres_no_ties_wording(at_1020):
-    """With no sphere in context the prompt doesn't ask for ties, and a
-    reply's stray ties resolve to nothing."""
+async def test_no_homes_no_exceptions_wording(at_1020):
+    """With nothing in context there's no list of entries, so the prompt
+    asks for no "in" rows or exceptions, and a reply's stray ones resolve
+    to nothing."""
 
     preview, prompt = await _preview_priestess(
         at_1020,
         "a wandering priestess",
-        [{"sphere": "The White Dawn", "role": "priest"}],
+        [{"entry": "The White Dawn", "role": "priest"}],
     )
 
-    assert "Spheres in the world" not in prompt
-    assert '"ties"' not in prompt
-    assert preview.ties == []
+    assert "may belong in" not in prompt
+    assert '"exceptions"' not in prompt and '"in": [' not in prompt
+    assert preview.filings == []
 
 
-async def test_unknown_sphere_tie_dropped(at_1020, dawn_world):
-    """A tie resolves only by a sphere's name or other name: an unknown
-    sphere, and an adjective form ("Moscavian", ruling P8), are dropped;
-    a tie without a role is a member."""
+async def test_unknown_in_entry_dropped(at_1020, dawn_world):
+    """An "in" row resolves by an entry's name or other name, any case, a
+    leading article dropped: an unknown entry and an adjective form
+    ("Moscavian") are dropped, an entry listed twice is one row, and a row
+    without a role has none."""
 
     d = dawn_world
     preview, _prompt = await _preview_priestess(
         at_1020,
         "a priestess of the White Dawn",
         [
-            {"sphere": "The Iron Covenant", "role": "member"},
-            {"sphere": "Moscavian", "role": "subject"},
-            {"sphere": "Dawn Church", "role": "priest"},
-            {"sphere": "moscavia"},
-            {"sphere": "Kremova", "role": "pilgrim"},
+            {"entry": "The Iron Covenant", "role": "member"},
+            {"entry": "Moscavian", "role": "subject"},
+            {"entry": "Dawn Church", "role": "priest"},
+            {"entry": "moscavia"},
+            {"entry": "white dawn", "role": "again"},
+            {"entry": "Kremova", "role": "pilgrim"},
             "The White Dawn",
         ],
     )
 
-    assert [(t.sphere_id, t.role) for t in preview.ties] == [
+    assert [(f.target_id, f.role) for f in preview.filings] == [
         (d.dawn, "priest"),
-        (d.tsardom, "member"),
+        (d.tsardom, None),
+        (d.kremova, "pilgrim"),
     ]
 
 
-async def test_tie_since_parsed_like_a_facts(at_1020, dawn_world):
+async def test_in_since_parsed_like_a_facts(at_1020, dawn_world):
     """`since` is a string or a number, read like a fact's; a year after
     now, a placeholder or a phrase is no date."""
 
-    sinces = [1004, "1010", "1996", 1994, "YEAR", "since childhood", None]
+    sinces = [1004, "1010", "1996", "YEAR", "since childhood", None]
+    entries = ["The White Dawn", "Kremova", "Kovask", "Moscavia", "Dawn Vigil"]
+    entries += ["Doctrine of Separation"]
     preview, _prompt = await _preview_priestess(
         at_1020,
         "a priestess of the White Dawn",
-        [{"sphere": "The White Dawn", "role": "priest", "since": s} for s in sinces],
+        [
+            {"entry": entry, "role": "priest", "since": s}
+            for entry, s in zip(entries, sinces)
+        ],
     )
 
-    assert [t.since for t in preview.ties] == [
+    assert [f.since for f in preview.filings] == [
         WorldDate.of(1004),
         WorldDate.of(1010),
         None,
         None,
         None,
         None,
-        None,
     ]
 
 
-async def test_sphere_labels_run_across_spheres(at_1020, dawn_world):
-    """A picked place brings the spheres whose territory holds it (the
-    Tsardom holds Kovask; Kremova is the Dawn's holy site and in the
-    Tsardom); a sphere reached twice is listed once; labels run on from
-    one sphere into the next."""
+async def test_home_labels_run_across_entries(at_1020, dawn_world):
+    """A picked place brings what it's filed in (Kremova is in the Dawn and
+    the Tsardom), lore or place; an entry reached twice is listed once;
+    labels run on from one entry into the next. An exception whose label
+    is another entry's item is dropped, as is an unknown or missing one."""
 
     d = dawn_world
     preview, prompt = await _preview_priestess(
@@ -2181,13 +2173,13 @@ async def test_sphere_labels_run_across_spheres(at_1020, dawn_world):
         "a priestess of the White Dawn from Kremova",
         [
             {
-                "sphere": "Tsardom of Moscavia",
+                "entry": "Tsardom of Moscavia",
                 "role": "subject",
                 "exceptions": [
-                    {"text": "She rents land to humans.", "rejects": "S4"},
-                    # the Dawn's label under the Tsardom's tie: dropped
-                    {"text": "She skips the vigil.", "rejects": "S2"},
-                    {"text": "Unlabelled.", "rejects": "S9"},
+                    {"text": "She rents land to humans.", "rejects": "S6"},
+                    # the Dawn's label under the Tsardom's row: dropped
+                    {"text": "She skips the vigil.", "rejects": "S4"},
+                    {"text": "Unlabelled.", "rejects": "S99"},
                     {"text": "No label at all."},
                 ],
             }
@@ -2197,25 +2189,26 @@ async def test_sphere_labels_run_across_spheres(at_1020, dawn_world):
     assert prompt.count("The White Dawn (religion):") == 1
     assert (
         "Tsardom of Moscavia (nation, usually called Moscavia):\n"
-        "- A northern realm of owl-folk.\n"
-        "- S4 (Laws): Only owl-folk may hold land.\n" in prompt
+        "- S5: A northern realm of owl-folk.\n"
+        "- S6: Only owl-folk may hold land.\n" in prompt
     )
-    assert "- S3 (Doctrines): Snowy owl-folk are the purest" in prompt
-    # Kremova, a plain place, is still named; the spheres aren't
+    # Kremova, a plain place, is still named; the Dawn isn't
     assert '"Kremova" means Kremova (place):' in prompt
     assert '"White Dawn"' not in prompt.split("Named in this prompt")[1]
-    [tie] = preview.ties
-    assert tie.sphere_id == d.tsardom
-    assert [(e.text, e.fact_id) for e in tie.exceptions] == [
+    [row] = preview.filings
+    assert row.target_id == d.tsardom
+    assert [(e.text, e.fact_id) for e in row.exceptions] == [
         ("She rents land to humans.", d.law)
     ]
 
 
 async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
-    """On accept the ties are written and each exception becomes a `ties`
-    fact: one rejecting a thing item ends with a reference to it, one
-    rejecting a statement references the sphere and records the fact in
-    its origin; `spheres.exceptions` finds both (ruling P3)."""
+    """On accept a ticked row is written as a filing, and each exception
+    becomes a `ties` fact whose id the filing's `exceptions` hold: one
+    departing from a filed entry ends with a reference to it, one from a
+    fact references the entry and records the fact in its origin;
+    `spheres.exceptions` still finds both (ruling P3). No `ties` field is
+    written."""
 
     d = dawn_world
     preview, _prompt = await _preview_priestess(
@@ -2223,38 +2216,38 @@ async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
         "a priestess of the White Dawn",
         [
             {
-                "sphere": "The White Dawn",
+                "entry": "The White Dawn",
                 "role": "priest",
                 "since": 1004,
                 "exceptions": [
-                    {"text": "She means to marry a human", "rejects": "S1"},
-                    {"text": "She thinks all folk equal.", "rejects": "S3"},
+                    {"text": "She means to marry a human", "rejects": "S3"},
+                    {"text": "She thinks all folk equal.", "rejects": "S2"},
                 ],
             }
         ],
     )
+    preview.filings[0].ticked = True
 
     thing_id = accept_preview(at_1020, preview)
 
     view = at_1020.view(None)
     state = view.thing(thing_id)
-    assert state.fields["ties"] == [
-        {
-            "sphere": d.dawn,
-            "role": "priest",
-            "since": WorldDate.of(1004).model_dump(mode="json"),
-            "until": None,
-        }
-    ]
+    assert "ties" not in state.fields
+    [filing] = filings_of(view, thing_id)
+    assert (filing.target, filing.role, filing.since) == (
+        d.dawn,
+        "priest",
+        WorldDate.of(1004),
+    )
     ties_facts = {f.fact_id: f for f in state.facts if f.category == "ties"}
     assert len(ties_facts) == 2
+    assert set(filing.exceptions) == set(ties_facts)
     by_thing = next(f for f in ties_facts.values() if d.separation in f.refs)
     assert by_thing.text.endswith(ref(d.separation, "The Doctrine of Separation"))
     assert view.render(by_thing.text) == (
         "She means to marry a human. Departs from The Doctrine of Separation"
     )
     by_fact = next(f for f in ties_facts.values() if f.fact_id != by_thing.fact_id)
-    # filed under its tie (ruling P22), naming the statement it rejects
     assert by_fact.origin == {"tie": d.dawn, "rejects_fact": d.purity}
     assert by_thing.origin == {"tie": d.dawn}
     assert d.dawn in by_fact.refs
@@ -2265,14 +2258,14 @@ async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
 
 
 def test_cut_off_reply_ties_are_no_facts():
-    """A reply cut off inside its ties: neither a tie nor an exception
-    object is read as a fact."""
+    """A reply cut off inside its "in" list: neither an "in" item nor an
+    exception object is read as a fact."""
 
     reply = (
         '{"name": "Ilyana", "facts": [{"category": "background", "text": '
-        '"Raised in a cloister."}], "names": [], "ties": [{"sphere": "The '
+        '"Raised in a cloister."}], "names": [], "in": [{"entry": "The '
         'White Dawn", "role": "priest", "since": 1004, "exceptions": '
-        '[{"text": "She marries.", "rejects": "S1"}]}, {"sphere": "Mosc'
+        '[{"text": "She marries.", "rejects": "S1"}]}, {"entry": "Mosc'
     )
 
     _name, _age, facts = parse_create_reply(reply, "character", Calendar(), 1020)
@@ -2280,27 +2273,22 @@ def test_cut_off_reply_ties_are_no_facts():
     assert [f.text for f in facts] == ["Raised in a cloister."]
 
 
-async def test_heritage_character_gets_the_ties_wording(probe_world):
-    """The probe ran (c) on the heritage branch: its example object gains
-    the ties too, after "names", and the block sits before the calendar."""
+async def test_heritage_character_gets_the_in_wording(probe_world):
+    """The heritage branch asks for "in" too, its example object gaining
+    the rows (with exceptions when entries are shown) after "names"; the
+    block sits before the list of entries near it, and no "elsewhere" is
+    asked for."""
 
     world = probe_world.world
-    with world.revision(Source.manual(note="sphere")) as rev:
+    with world.revision(Source.manual(note="faith")) as rev:
         dawn = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "The White Dawn",
-                "template": "religion",
-                "drawers": [_sphere_drawer("d0000001", "beliefs", "Doctrines")],
-            },
+            "lore", fields={"name": "The White Dawn", "tag": "religion"}
         )
-        rev.add_fact(
-            dawn, "statement", "Snowy owl-folk are pure.", origin={"drawer": "d0000001"}
-        )
+        rev.add_fact(dawn, "belief", "Snowy owl-folk are pure.")
     client = MockClient("test")
     async with MockClientContext():
         _queue(
-            _priestess_reply([{"sphere": "White Dawn", "role": "practitioner"}]),
+            _priestess_reply([{"entry": "White Dawn", "role": "practitioner"}]),
             "She is white.",
             "She is calm.",
         )
@@ -2314,77 +2302,72 @@ async def test_heritage_character_gets_the_ties_wording(probe_world):
 
     prompt = str(client.prompt_history[0]["prompt"])
     assert (
-        "The White Dawn (religion):\n- S1 (Doctrines): Snowy owl-folk are pure.\n"
-        "\nThe world's calendar:" in prompt
+        "The White Dawn (religion):\n- S1: Snowy owl-folk are pure.\n"
+        "\nEntries near this one in the world:" in prompt
     )
     assert '"overrides": []' in prompt
-    assert '"aka": []}], "ties": [{"sphere": "...", "role": "practitioner"' in prompt
-    assert [(t.sphere_id, t.role, t.since) for t in preview.ties] == [
+    assert '"aka": []}], "in": [{"entry": "<an entry\'s name>"' in prompt
+    assert '"elsewhere"' not in prompt
+    assert [(f.target_id, f.role, f.since) for f in preview.filings] == [
         (dawn, "practitioner", None)
     ]
 
 
-async def test_accept_refuses_a_tie_to_a_deleted_sphere(at_1020, dawn_world):
+async def test_accept_leaves_out_a_filing_to_a_deleted_entry(at_1020, dawn_world):
     preview, _prompt = await _preview_priestess(
         at_1020,
         "a priestess of the White Dawn",
-        [{"sphere": "The White Dawn", "role": "priest"}],
+        [{"entry": "The White Dawn", "role": "priest"}],
     )
+    preview.filings[0].ticked = True
     with at_1020.revision(Source.manual(note="gone")) as rev:
         rev.remove_thing(dawn_world.dawn)
-    head = at_1020.head_rev()
+    notes: list[str] = []
 
-    with pytest.raises(ValueError, match="no sphere"):
-        accept_preview(at_1020, preview)
-    assert at_1020.head_rev() == head
+    thing_id = accept_preview(at_1020, preview, notes=notes)
+
+    view = at_1020.view(None)
+    assert filings_of(view, thing_id, live=False) == []
+    assert any("The White Dawn is gone" in note for note in notes)
 
 
-async def test_spheres_block_caps_items_per_sphere(at_1020, dawn_world):
-    """Ruling P9: each sphere shows its first 8 non-place items (places
-    skipped before counting); only those get labels, so the next sphere
-    starts at S9."""
+async def test_homes_block_caps_items_per_entry(at_1020, dawn_world):
+    """Ruling P9: each entry shows its first 8 items (places and people
+    left out); only those get labels, so the next entry starts at S9."""
 
     d = dawn_world
     with at_1020.revision(Source.manual(note="more")) as rev:
         for n in range(1, 8):
-            rev.add_fact(
-                d.dawn,
-                "statement",
-                f"Teaching number {n}.",
-                origin={"drawer": "d0000001"},
-            )
+            rev.add_fact(d.dawn, "general", f"Teaching number {n}.")
     preview, prompt = await _preview_priestess(
         at_1020,
         "a priestess of the White Dawn from Kremova",
         [
             {
-                "sphere": "Tsardom of Moscavia",
+                "entry": "Tsardom of Moscavia",
                 "role": "subject",
-                "exceptions": [{"text": "She rents land to humans.", "rejects": "S9"}],
+                "exceptions": [{"text": "She rents land to humans.", "rejects": "S10"}],
             }
         ],
     )
 
-    assert "- S8 (Doctrines): Teaching number 5.\n" in prompt
-    assert "Teaching number 6." not in prompt
-    assert "- S9 (Laws): Only owl-folk may hold land.\n" in prompt
-    assert "S10" not in prompt
-    [tie] = preview.ties
-    assert [e.fact_id for e in tie.exceptions] == [d.law]
+    assert "- S8: Teaching number 6.\n" in prompt
+    assert "Teaching number 7." not in prompt.split("Entries near this one")[0]
+    assert "- S10: Only owl-folk may hold land.\n" in prompt
+    assert "S11" not in prompt
+    [row] = preview.filings
+    assert [e.fact_id for e in row.exceptions] == [d.law]
 
 
-async def test_spheres_block_item_line_not_doubled(at_1020, dawn_world):
-    """Ruling P5: a thing item whose text already opens with its name is
+async def test_homes_block_item_line_not_doubled(at_1020, dawn_world):
+    """Ruling P5: a filed entry whose text already opens with its name is
     listed as the text alone, never "Name: Name ..."."""
 
     d = dawn_world
     with at_1020.revision(Source.manual(note="named")) as rev:
         doctrine = rev.create_thing(
             "lore",
-            fields={
-                "name": "The Doctrine of Purity",
-                "part_of": {"sphere": d.dawn, "drawer": "d0000001"},
-            },
+            fields={"name": "The Doctrine of Purity", "filings": _filed_in(d.dawn)},
         )
         rev.add_fact(
             doctrine, "general", "The Doctrine of Purity keeps the roosts apart."
@@ -2393,16 +2376,14 @@ async def test_spheres_block_item_line_not_doubled(at_1020, dawn_world):
         at_1020, "a priestess of the White Dawn", []
     )
 
-    assert "- S3 (Doctrines): The Doctrine of Purity keeps the roosts apart.\n" in (
-        prompt
-    )
-    assert "The Doctrine of Purity: The Doctrine of Purity" not in prompt
+    assert "- S5: The Doctrine of Purity keeps the roosts apart.\n" in prompt
+    assert "The Doctrine of Purity (lore): The Doctrine of Purity" not in prompt
 
 
-async def test_stub_mentioned_by_a_sphere_shows_it_as_a_sphere(at_1020, dawn_world):
-    """Expanding a character stub a sphere mentions: the sphere comes in
-    through the mention context and is shown in the spheres block, never
-    as "Named in this prompt", even when picked too."""
+async def test_stub_mentioned_by_a_faith_shows_it_with_its_items(at_1020, dawn_world):
+    """Expanding a character stub a faith mentions: the faith comes in
+    through the mention context and is shown with its items, never as
+    "Named in this prompt", even when picked too."""
 
     d = dawn_world
     with at_1020.revision(Source.manual(note="stub")) as rev:
@@ -2410,29 +2391,25 @@ async def test_stub_mentioned_by_a_sphere_shows_it_as_a_sphere(at_1020, dawn_wor
             "character", fields={"name": "Ilyana", "stub": {"ignored": False}}
         )
         rev.add_fact(
-            d.dawn,
-            "statement",
-            "%s keeps the vigil flame." % ref(stub, "Ilyana"),
-            origin={"drawer": "d0000002"},
+            d.dawn, "general", "%s keeps the vigil flame." % ref(stub, "Ilyana")
         )
     for picks in ({}, {"White Dawn": d.dawn}):
         preview, prompt = await _preview_priestess(
             at_1020,
             "a priestess of the White Dawn",
-            [{"sphere": "The White Dawn", "role": "priest"}],
+            [{"entry": "The White Dawn", "role": "priest"}],
             stub_id=stub,
             picks=picks,
         )
         assert "The White Dawn (religion):\n" in prompt
-        assert "- S4 (Rites and Ceremonies): Ilyana keeps the vigil flame.\n" in prompt
+        assert "- S3: Ilyana keeps the vigil flame.\n" in prompt
         assert "Named in this prompt" not in prompt
-        assert [t.sphere_id for t in preview.ties] == [d.dawn]
+        assert [f.target_id for f in preview.filings] == [d.dawn]
 
 
 async def test_accept_drops_exceptions_whose_item_is_gone(at_1020, dawn_world):
-    """An exception whose rejected thing or statement is gone from the
-    sphere by accept (deleted, or ended) is dropped quietly; the tie
-    stays."""
+    """An exception whose item is gone from its entry by accept (a filed
+    entry deleted, a fact removed) is dropped quietly; the filing stays."""
 
     d = dawn_world
     preview, _prompt = await _preview_priestess(
@@ -2440,16 +2417,17 @@ async def test_accept_drops_exceptions_whose_item_is_gone(at_1020, dawn_world):
         "a priestess of the White Dawn",
         [
             {
-                "sphere": "The White Dawn",
+                "entry": "The White Dawn",
                 "role": "priest",
                 "exceptions": [
-                    {"text": "She means to marry a human.", "rejects": "S1"},
-                    {"text": "She skips the vigil.", "rejects": "S2"},
-                    {"text": "She thinks all folk equal.", "rejects": "S3"},
+                    {"text": "She means to marry a human.", "rejects": "S3"},
+                    {"text": "She skips the vigil.", "rejects": "S4"},
+                    {"text": "She thinks all folk equal.", "rejects": "S2"},
                 ],
             }
         ],
     )
+    preview.filings[0].ticked = True
     with at_1020.revision(Source.manual(note="gone")) as rev:
         rev.remove_thing(d.separation)
         rev.remove_fact(d.purity)
@@ -2458,11 +2436,13 @@ async def test_accept_drops_exceptions_whose_item_is_gone(at_1020, dawn_world):
 
     view = at_1020.view(None)
     state = view.thing(thing_id)
-    assert [t["sphere"] for t in state.fields["ties"]] == [d.dawn]
+    [filing] = filings_of(view, thing_id)
+    assert filing.target == d.dawn
     ties_facts = [f for f in state.facts if f.category == "ties"]
     assert [view.render(f.text) for f in ties_facts] == [
         "She skips the vigil. Departs from The Dawn Vigil"
     ]
+    assert filing.exceptions == [ties_facts[0].fact_id]
 
 
 async def test_accept_skips_blank_exceptions(at_1020, dawn_world):
@@ -2473,16 +2453,19 @@ async def test_accept_skips_blank_exceptions(at_1020, dawn_world):
         "a priestess of the White Dawn",
         [
             {
-                "sphere": "The White Dawn",
+                "entry": "The White Dawn",
                 "role": "priest",
-                "exceptions": [{"text": "She skips the vigil.", "rejects": "S2"}],
+                "exceptions": [{"text": "She skips the vigil.", "rejects": "S4"}],
             }
         ],
     )
-    preview.ties[0].exceptions[0].text = "   "
+    preview.filings[0].ticked = True
+    preview.filings[0].exceptions[0].text = "   "
 
     thing_id = accept_preview(at_1020, preview)
 
-    state = at_1020.view(None).thing(thing_id)
+    view = at_1020.view(None)
+    state = view.thing(thing_id)
     assert [f for f in state.facts if f.category == "ties"] == []
-    assert len(state.fields["ties"]) == 1
+    [filing] = filings_of(view, thing_id)
+    assert filing.exceptions == []

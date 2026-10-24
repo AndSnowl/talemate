@@ -13,6 +13,7 @@ from talemate.world.kinds import (
     validate_field,
 )
 from talemate.world.entries import acts_in_world, existence
+from talemate.world.filing import filings_of
 from talemate.world.spheres import people, ties_of
 from talemate.world.kinds import ENTRY_DRAWER_TYPES
 from talemate.world.store import Source
@@ -23,7 +24,8 @@ from talemate.worldplay.create import (
     NAME_KINDS,
     CreatePreview,
     PreviewFact,
-    PreviewTie,
+    PreviewException,
+    PreviewFiling,
     accept_preview,
     name_guess,
 )
@@ -294,24 +296,39 @@ def _being_preview(church, existence):
         name="The Ford Spirit",
         facts=[PreviewFact(category="nature", text="A spirit of the ford.")],
         prose={"description": "A spirit."},
-        ties=[PreviewTie(sphere_id=church, sphere="The Church", role="patron")],
+        filings=[
+            PreviewFiling(
+                target_id=church,
+                target_name="The Church",
+                role="patron",
+                exceptions=[
+                    PreviewException(text="It keeps no fast.", item="The Church")
+                ],
+                ticked=True,
+            )
+        ],
     )
 
 
-def test_accept_refuses_ties_unless_real(world, beings):
-    """Accept writes a real being's ties; a believed or undecided being's
-    (or any other kind's) are refused before anything is written."""
+def test_only_a_real_being_gets_exceptions(world, beings):
+    """Any entry can be filed (Filing, Task 4), but only one that acts in
+    the world -- a real being, as a character -- gets its row's "but..."
+    exceptions; a believed or undecided being's are left out."""
 
-    head = world.head_rev()
     for setting in ("believed", None):
-        with pytest.raises(ValueError):
-            accept_preview(world, _being_preview(beings["church"], setting))
-    lore = _being_preview(beings["church"], None).model_copy(
-        update={"kind": "lore", "facts": [PreviewFact(category="general", text="x")]}
-    )
-    with pytest.raises(ValueError):
-        accept_preview(world, lore)
-    assert world.head_rev() == head
+        thing_id = accept_preview(world, _being_preview(beings["church"], setting))
+        view = world.view()
+        (filing,) = filings_of(view, thing_id)
+        assert (filing.target, filing.role, filing.exceptions) == (
+            beings["church"],
+            "patron",
+            [],
+        )
+        assert not [f for f in view.thing(thing_id).facts if f.category == "ties"]
 
     thing_id = accept_preview(world, _being_preview(beings["church"], "real"))
-    assert [t.role for t in ties_of(world.view(), thing_id)] == ["patron"]
+    view = world.view()
+    (filing,) = filings_of(view, thing_id)
+    (exception,) = [f for f in view.thing(thing_id).facts if f.category == "ties"]
+    assert filing.exceptions == [exception.fact_id]
+    assert "ties" not in view.thing(thing_id).fields

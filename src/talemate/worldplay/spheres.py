@@ -213,6 +213,14 @@ class SpherePreview(CreatePreview):
     # the reply's top object didn't parse: read from its complete parts
     # (`_salvaged_core`, ruling C26), so the owner is told part was lost
     salvaged: bool = False
+    # the old structure, which a create preview no longer has (Filing,
+    # Task 4) and a sphere keeps until it goes (Task 7): the drawer an
+    # expanded stub joins (or `{"name", "drawer"}`, an outer body), the
+    # entries offered to move into an outer body, and the broader
+    # entry's facts offered to move onto it
+    part_of: dict[str, str] | None = None
+    refile: list[dict[str, Any]] = Field(default_factory=list)
+    move_in: list[create.MoveInFact] = Field(default_factory=list)
 
 
 class FillPreview(BaseModel):
@@ -1808,7 +1816,7 @@ def accept_fill(
 
     while True:
         try:
-            with shadowed_revision(world, Source.manual(note=_FILLED_NOTE)) as rev:
+            with world.revision(Source.manual(note=_FILLED_NOTE)) as rev:
                 written: list[str] = []
                 chain = create.outer_first([*rows, *elsewhere_names])
                 made = create._row_stubs(
@@ -1830,6 +1838,10 @@ def accept_fill(
                 unlinked = _orphans(view, stubs, rows, linked)
                 if unlinked:
                     raise create._UnlinkedNames([n.name for n in unlinked])
+                # what the drawers' readers still read is `part_of`; the
+                # world's readers read filings, written here beside it
+                # (Filing, Task 4, ruling F11: no shim)
+                _file_what_was_filed(rev, world, view, written)
             break
         except create._UnlinkedNames as unlinked_names:
             rows = _without_unlinked(rows, unlinked_names)
@@ -1841,6 +1853,27 @@ def accept_fill(
         items=len(items),
         elsewhere=len(others),
     )
+
+
+def _file_what_was_filed(
+    rev: Any, world: World, before: WorldView, notes: list[str]
+) -> None:
+    """Each thing whose `part_of` this revision set to a sphere, filed in
+    that sphere too (`create.write_filings`, which adds the filing beside
+    any it has), so the world's readers, which read only filings, see the
+    drawer it was put in."""
+
+    live = world.view()
+    for state in live.things():
+        link = state.fields.get("part_of")
+        if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
+            continue
+        held = before.thing(state.id)
+        if held is not None and held.fields.get("part_of") == link:
+            continue
+        create.write_filings(
+            rev, world, state.id, [create.Filing(target=link["sphere"])], notes
+        )
 
 
 # --- branches ----------------------------------------------------------------

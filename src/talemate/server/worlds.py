@@ -61,7 +61,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   Previews (`preview_thing`, `preview_sphere`, `preview_branch`,
   `fill_drawer`, `add_outer_body`) are the preview's dump plus names for
   display: `held_by_name` on each fact and elsewhere fact, `from_name`
-  on each `move_in` row, `name`, `from_name` and `to_name` on each
+  on each `move_in` and `move_here` row, `name`, `from_name` and `to_name` on each
   `refile` row. Everything curation adds is in the dump: facts' `ticked`,
   `repeat_of`, `held_by`; `elsewhere` (`target_id`, `target_name`, `new`,
   `category`, `text`, `since`, `held_by`, `ticked`, `repeat_of`);
@@ -117,24 +117,28 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `find_mix {parents: [a, b]}` answers `{parents, mix_id}`, the mix of
   those two parents in either order (`null` if there's none yet).
 - Create: `preview_thing {kind, prompt, fields, stub_id, picks,
-  new_names}` runs in the background and answers `preview_thing {preview}`
-  or `preview_failed {message}`; it writes nothing. `stub_id` expands that
-  stub, `picks` maps a name written in the prompt to the thing the owner
-  matched it to, and `new_names` are written names the owner treats as new.
+  new_names, hint}` runs in the background and answers `preview_thing
+  {preview}` or `preview_failed {message}`; it writes nothing. `stub_id`
+  expands that stub, `picks` maps a name written in the prompt to the
+  thing the owner matched it to, `new_names` are written names the owner
+  treats as new, and `hint` a prompt hint's name. A create preview carries
+  `tag`, `hint`, `filings` ("In"), `file_into` and `move_here` (Filing,
+  Task 4; the page payload for them is Task 6's), and no `part_of`,
+  `ties`, `move_in` or `refile`.
   `accept_preview {preview, into_stub, same_target_id}` writes it (into
   the stub `into_stub`, or onto the entry `same_target_id`, "Is this
   X?", if given) and answers with the thing and `notes` (what was left
   out, as an elsewhere fact whose target was deleted since the preview);
   the prose of what else it changed is scheduled. For the browser
   tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
-  facts, prose, fields?, ties?}`) that previews are answered from instead
-  of the model (listing what the request's fields inherit, and for a
-  `stub_id` its kind, name, mention context and sphere `part_of`, as a
+  facts, prose, fields?, tag?, in?, file_into?}`) that previews are
+  answered from instead of the model (listing what the request's fields
+  inherit, and for a `stub_id` its kind, name and mention context, as a
   real preview does). The file's facts may name a `held_by` holder, and
-  it may hold `elsewhere` (`[{entry, text, since?, held_by?}]`) and
-  `move_in` (`["M1", ...]`, the broader entry's facts as labelled), each
+  it may hold `elsewhere` (`[{entry, text, since?, held_by?}]`), each
   read through the real parsers (`create.holder_named`,
-  `parse_elsewhere`, `broader_entry` and `parse_move_in`). The entry's
+  `parse_elsewhere`, `parse_in`, `parse_file_into`); "Could move here" is
+  found by code as the real one's. The entry's
   `same_as` is offered as the real preview's is (`create.same_offers`),
   and the file's `verdict` (`{verdict, why}`) stands in for the model's
   hint on the top candidate when both sides have facts.
@@ -292,30 +296,31 @@ from talemate.worldplay.create import (
     PART_OF_KINDS,
     CreatePreview,
     ElsewhereFact,
-    MoveInFact,
     PreviewException,
     PreviewFact,
     PreviewTie,
     accept_preview,
-    broader_entry,
-    broader_lines,
-    child_part_of,
+    clean_tag,
     current_date,
+    drafted,
     drawer_types_for,
+    entry_names,
     exception_fact,
     flag_elsewhere_repeats,
     holder_named,
     matching_stub,
-    move_in_rows,
+    move_here_rows,
+    naming_facts,
     offer_same,
+    owner_filings,
     parse_elsewhere,
-    parse_move_in,
+    parse_file_into,
+    parse_in,
     part_of_since,
     preview_inherited,
     preview_thing,
     prose_reads,
     same_offers,
-    untick_moved_repeats,
 )
 from talemate.worldplay.decide import Verdict
 from talemate.worldplay.held import held_text
@@ -328,7 +333,12 @@ from talemate.worldplay.links import (
     name_key,
     repoint_ref,
 )
-from talemate.worldplay.mentions import mention_context, mentions, suggested_prompt
+from talemate.worldplay.mentions import (
+    gather_mentions,
+    mention_context,
+    mentions,
+    suggested_prompt,
+)
 from talemate.worldplay.persistence import save_world_scene, world_target
 from talemate.worldplay.references import thing_references
 from talemate.worldplay.merge import (
@@ -439,6 +449,8 @@ class PreviewPayload(pydantic.BaseModel):
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
     # names written in the prompt the owner treats as new
     new_names: list[str] = pydantic.Field(default_factory=list)
+    # the prompt hint the owner picked (`create.hint_names`), if any
+    hint: str | None = None
 
 
 class RefileRow(pydantic.BaseModel):
@@ -502,11 +514,6 @@ class AcceptPreviewPayload(pydantic.BaseModel):
     into_stub: str | None = None
     # "Is this X?" -- yes: the entry the preview's material goes onto
     same_target_id: str | None = None
-
-    @pydantic.model_validator(mode="after")
-    def _rows(self) -> "AcceptPreviewPayload":
-        self.preview.refile = _refile_in(self.preview.refile)
-        return self
 
 
 class _ThingEdit(pydantic.BaseModel):
@@ -910,20 +917,20 @@ async def _fixed_preview(
     the stub's kind and name and carries its mention context, refusing a
     stub of a kind that can't be expanded as the real one does; without
     one, a live stub of the same kind and name is offered as
-    `matching_stub_id`. An expanded stub that belongs in a sphere carries
-    its `part_of` as the real one does (`create.child_part_of`), and a
-    character's `ties` are the file's own, each `{sphere_id, sphere, role,
-    since?, exceptions: [{text, item, thing_id?, fact_id?}]}`.
+    `matching_stub_id`.
 
-    Curation, read through the real parsers: a fact's `held_by` (a
-    holder's name, `create.holder_named`); `elsewhere`, the model's
-    `[{entry, text, since?, held_by?}]` (`create.parse_elsewhere`, repeats
-    flagged, a new entry's row offered what it may be the same as); and
-    `move_in`, the model's labels (`["M1", ...]`) of the broader entry's
-    facts (`create.broader_entry`, `parse_move_in`, `move_in_rows`); the
-    entry's `same_as` (`create.same_offers`), with the file's `verdict`
-    as the hint on the top candidate. Async so it runs through the same background task and reply path as
-    the real one."""
+    Read through the real parsers: a fact's `held_by` (a holder's name,
+    `create.holder_named`); `elsewhere`, the model's `[{entry, text,
+    since?, held_by?}]` (`create.parse_elsewhere`, repeats flagged, a new
+    entry's row offered what it may be the same as); the file's `tag`
+    (`create.clean_tag`), `in` and `file_into` (`[{entry, role}]`,
+    `create.parse_in`, `parse_file_into`, unticked), after the owner's own
+    filings from the fields (ticked, `create.owner_filings`); "Could move
+    here" found by code as the real one's (`naming_facts`,
+    `move_here_rows`) among where it's filed, what mentions the stub and
+    the picks; and the entry's `same_as` (`create.same_offers`), with the
+    file's `verdict` as the hint on the top candidate. Async so it runs
+    through the same background task and reply path as the real one."""
 
     view = world.view()
 
@@ -944,11 +951,6 @@ async def _fixed_preview(
         kind = stub.kind
         name = view.name_of(stub.id) or name
         context = mention_context(view, stub.id)
-    part_of = (
-        child_part_of(view, stub, payload.prompt, payload.picks)
-        if stub is not None
-        else None
-    )
     # a fact's `held_by` is a holder's name, as the model writes it
     facts = [
         PreviewFact.model_validate(
@@ -983,15 +985,45 @@ async def _fixed_preview(
         near_ids=[],
         exclude=[stub.id] if stub is not None else [],
     )
-    move_in: list[MoveInFact] = []
-    if "move_in" in fixed:
-        broader_id = broader_entry(view, part_of=part_of, fields=fields, stub=stub)
-        if broader_id is not None:
-            _lines, labels = broader_lines(view, calendar, broader_id)
-            wrapper = {"move_in": fixed["move_in"]}
-            picked = parse_move_in(json.dumps(wrapper), wrapper, labels)
-            move_in = move_in_rows(view, broader_id, picked)
-            untick_moved_repeats(view, facts, move_in, settings)
+    # the file's "in" and "file_into", `[{entry, role}]`, read as the
+    # model's are (unticked); "Could move here" found as the real one's
+    own_keys = {name_key(name)}
+    own_ids = {stub.id} if stub is not None else set()
+    lookup = entry_names(view)
+    # the owner's own filings (a `part_of`, a place's `parent`...) are
+    # ticked "In" rows, as the real preview makes them, then the file's
+    filings = owner_filings(view, fields)
+    for row in parse_in(
+        fixed.get("in") or [],
+        view,
+        own_keys=own_keys,
+        own_ids=own_ids,
+        prefer=[],
+        lookup=lookup,
+        calendar=calendar,
+        now_year=now_year,
+    ):
+        if not any(r.target_id == row.target_id for r in filings):
+            filings.append(row)
+    file_into = parse_file_into(
+        fixed.get("file_into") or [],
+        view,
+        own_keys=own_keys,
+        own_ids=own_ids,
+        prefer=[],
+        lookup=lookup,
+    )
+    # near it, as the real preview's context: where it's filed, what
+    # mentions the stub, what the prompt picks
+    near = [row.target_id for row in filings if row.ticked]
+    if stub is not None:
+        near += [m.owner_id for m in gather_mentions(view, stub.id).mentioned]
+    near += list(payload.picks.values())
+    move_here = move_here_rows(
+        view,
+        naming_facts(view, near, drafted(name, [], kind, payload.stub_id)),
+        facts,
+    )
     # same thing?: what the entry may already be, as the real preview
     # offers it (never the stub filled, nor the matching stub); the file's
     # `verdict` (`{verdict, why}`) stands in for the model's hint on the
@@ -1016,12 +1048,14 @@ async def _fixed_preview(
         context=context,
         picks=payload.picks,
         treated_as_new=payload.new_names,
-        part_of=part_of,
-        ties=fixed.get("ties", []) if kind == "character" else [],
         elsewhere=elsewhere,
-        move_in=move_in,
         same_as=same_as,
         verdict=verdict,
+        tag=clean_tag(fixed.get("tag")),
+        hint=payload.hint,
+        filings=filings,
+        file_into=file_into,
+        move_here=move_here,
     )
 
 
@@ -1259,7 +1293,7 @@ def _preview_out(world: World, preview: pydantic.BaseModel) -> dict:
 
     for row in [*out.get("facts", []), *out.get("elsewhere", [])]:
         row["held_by_name"] = name(row.get("held_by"))
-    for row in out.get("move_in", []):
+    for row in [*out.get("move_in", []), *out.get("move_here", [])]:
         row["from_name"] = name(row.get("from_id"))
     for row in out.get("refile", []):
         row["name"] = name(row.get("thing_id"))
@@ -2264,6 +2298,7 @@ class WorldsPlugin(Plugin):
                 stub_id=payload.stub_id,
                 picks=payload.picks,
                 new_names=payload.new_names,
+                hint=payload.hint,
             )
         self._spawn(
             preview,

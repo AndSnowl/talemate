@@ -18,6 +18,7 @@ from talemate.world import entries, spheres
 from talemate.world.dates import WorldDate
 from talemate.world.refs import ref
 from talemate.world.scenes import MessageRecord
+from talemate.world.filing import filings_of
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
@@ -3371,8 +3372,9 @@ async def test_set_ties_within(plugin, client):
 
 async def test_add_outer_body(plugin, client):
     """`add_outer_body` puts the owner's outer body around a part of a
-    preview, with no model call and nothing written; a Fill accept takes
-    its new names and re-file rows (curation Task 7, ruling C10)."""
+    Fill (or sphere) preview, with no model call and nothing written; a
+    Fill accept takes its new names and re-file rows (curation Task 7,
+    ruling C10). A create preview takes none (Filing, Task 4)."""
 
     s = await _open_sphere_world(plugin)
     head = s.world.head_rev()
@@ -3384,44 +3386,20 @@ async def test_add_outer_body(plugin, client):
         prose={},
         new_names=[{"name": "Vigil Watch", "kind": "lore"}],
     )
+    # a create preview takes no outer body any more (Filing, Task 4)
+    before = len(_errors(plugin))
     await _act(
         plugin,
         "add_outer_body",
         preview_type="create",
         preview=preview.model_dump(mode="json"),
         row_name="Vigil Watch",
-        outer={
-            "name": "Order of the Dawn",
-            "template": "order",
-            "part_of": {"sphere": s.dawn, "drawer": RITES},
-        },
+        outer={"name": "Order of the Dawn", "template": "order"},
     )
-    assert not _errors(plugin)
-    reply = _last(plugin, "add_outer_body")["data"]
-    assert reply["preview_type"] == "create"
-    rows = {n["name"]: n for n in reply["preview"]["new_names"]}
-    assert rows["Vigil Watch"]["part_of"] == {
-        "name": "Order of the Dawn",
-        "drawer": "unsorted",
-    }
-    assert rows["Order of the Dawn"]["kind"] == "sphere"
-    assert [(r["thing_id"], r["ticked"]) for r in reply["preview"]["refile"]] == [
-        (s.vigil, False)
-    ]
+    assert len(_errors(plugin)) == before + 1
+    assert "In rows" in _errors(plugin)[-1]["error"]["message"]
     assert s.world.head_rev() == head
     assert client.prompt_history == []
-
-    # ticked and accepted: the Vigil moves into the order
-    accepted = CreatePreview.model_validate(reply["preview"])
-    accepted.refile[0]["ticked"] = True
-    await _act(plugin, "accept_preview", preview=accepted.model_dump(mode="json"))
-    assert not _errors(plugin)
-    view = s.world.view()
-    order = next(
-        t for t in view.things("sphere") if t.fields["name"] == "Order of the Dawn"
-    )
-    assert order.fields["part_of"] == {"sphere": s.dawn, "drawer": RITES}
-    assert view.thing(s.vigil).fields["part_of"]["sphere"] == order.id
 
     # Fill: the item goes inside a new body in the drawer it was for
     fill = {
@@ -3458,7 +3436,7 @@ async def test_add_outer_body(plugin, client):
         new_names=filled["new_names"],
         refile=filled["refile"],
     )
-    assert not _errors(plugin)
+    assert len(_errors(plugin)) == before + 1
     view = s.world.view()
     teachings = next(
         t for t in view.things("sphere") if t.fields["name"] == "Dawn Teachings"
@@ -3720,9 +3698,10 @@ async def test_end_item(plugin, client):
     assert s.world.head_rev() == head
 
 
-async def test_accept_preview_carries_ties(plugin, client):
-    """A character preview's ties round-trip through accept_preview, as the
-    owner left them: here with one tie's exception dropped."""
+async def test_accept_preview_carries_filings(plugin, client):
+    """A character preview's "In" rows round-trip through accept_preview,
+    as the owner left them: the ticked ones filed (one with its
+    exception, written as a `ties` fact), the unticked one not."""
 
     s = await _open_sphere_world(plugin)
     preview = {
@@ -3731,35 +3710,37 @@ async def test_accept_preview_carries_ties(plugin, client):
         "name": "Oskar",
         "facts": [{"category": "background", "text": "A smith."}],
         "prose": {},
-        "ties": [
+        "filings": [
             {
-                "sphere_id": s.dawn,
-                "sphere": "The White Dawn",
+                "target_id": s.dawn,
+                "target_name": "The White Dawn",
                 "role": "deacon",
-                "since": None,
-                "exceptions": [],
+                "ticked": True,
             },
             {
-                "sphere_id": s.tsardom,
-                "sphere": "Tsardom",
+                "target_id": s.tsardom,
+                "target_name": "Tsardom",
                 "role": "subject",
-                "since": None,
                 "exceptions": [
                     {"text": "Pays no tithe", "item": "Tsardom", "thing_id": None}
                 ],
+                "ticked": True,
             },
+            {"target_id": s.peak, "target_name": "Dawn Peak", "ticked": False},
         ],
     }
     await _act(plugin, "accept_preview", preview=preview)
     assert not _errors(plugin)
     oskar = _last(plugin, "accept_preview")["data"]
-    assert [(t["sphere_name"], t["role"]) for t in oskar["ties"]] == [
-        ("The White Dawn", "deacon"),
-        ("Tsardom", "subject"),
+    view = s.world.view()
+    filings = filings_of(view, oskar["id"])
+    assert [(f.target, f.role) for f in filings] == [
+        (s.dawn, "deacon"),
+        (s.tsardom, "subject"),
     ]
-    assert oskar["ties"][0]["exceptions"] == []
-    (tithe,) = oskar["ties"][1]["exceptions"]
-    assert _text(tithe["segments"]).startswith("Pays no tithe.")
+    assert filings[0].exceptions == []
+    (tithe,) = filings[1].exceptions
+    assert view.render(view.fact(tithe)[1].text).startswith("Pays no tithe.")
 
 
 async def test_set_part_of_refiles_an_ended_item(plugin, client):
@@ -4059,77 +4040,51 @@ async def test_fixed_sphere_file_without_the_key_asks_the_model(
     )
 
 
-async def test_fixed_preview_carries_ties_and_part_of(plugin, tmp_path, monkeypatch):
-    """The browser tests' fixed preview gives a character the file's
-    `ties`, and an expanded stub that belongs in a sphere its `part_of`,
-    as a real preview does."""
+async def test_fixed_preview_carries_tag_in_and_file_into(
+    plugin, tmp_path, monkeypatch
+):
+    """The browser tests' fixed preview gives the file's `tag`, its `in`
+    and `file_into` rows (resolved by name, unticked) after the owner's
+    own filing (ticked), as a real preview does."""
 
     s = await _open_sphere_world(plugin)
-    with s.world.revision(Source.manual(note="stub")) as rev:
-        council = rev.create_thing(
-            "lore", {"name": "Council of Dawn", "stub": {"ignored": False}}
-        )
-    tie = {
-        "sphere_id": s.dawn,
-        "sphere": "The White Dawn",
-        "role": "elder",
-        "exceptions": [
-            {"text": "Skips the vigil.", "item": "Dawn Vigil", "thing_id": s.vigil}
-        ],
-    }
     fixed = tmp_path / "fixed-preview.json"
     fixed.write_text(
         json.dumps(
             {
                 "name": "Ilya",
+                "tag": "Elder, priest",
                 "facts": [{"category": "background", "text": "An elder."}],
                 "prose": {},
-                "ties": [tie],
+                "in": [
+                    {"entry": "The White Dawn", "role": "elder"},
+                    {"entry": "Nowhere Hall", "role": "guest"},
+                ],
+                "file_into": [{"entry": "Dawn Peak", "role": None}],
             }
         )
     )
     monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
 
-    await _act(plugin, "preview_thing", kind="character", prompt="an elder")
+    await _act(
+        plugin,
+        "preview_thing",
+        kind="character",
+        prompt="an elder",
+        fields={"filings": [{"target": s.tsardom, "role": "subject"}]},
+    )
     await _drain(plugin)
     preview = _last(plugin, "preview_thing")["data"]
-    assert [t["role"] for t in preview["ties"]] == ["elder"]
-    assert preview["ties"][0]["exceptions"][0]["thing_id"] == s.vigil
-
-    await _act(
-        plugin,
-        "preview_thing",
-        kind="lore",
-        prompt="The council of The White Dawn",
-        stub_id=council,
-        picks={"The White Dawn": s.dawn},
-    )
-    await _drain(plugin)
-    expanded = _last(plugin, "preview_thing")["data"]
-    assert expanded["ties"] == []
-    # the White Dawn is no stub: a prompt naming it files nothing
-    assert expanded["part_of"] is None
-
-    with s.world.revision(Source.manual(note="sphere stub")) as rev:
-        church = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Old Church",
-                "template": "religion",
-                "stub": {"ignored": False},
-            },
-        )
-    await _act(
-        plugin,
-        "preview_thing",
-        kind="lore",
-        prompt="The council of The Old Church",
-        stub_id=council,
-        picks={"The Old Church": church},
-    )
-    await _drain(plugin)
-    expanded = _last(plugin, "preview_thing")["data"]
-    assert expanded["part_of"] == {"sphere": church, "drawer": "unsorted"}
+    assert preview["tag"] == "elder"
+    assert [(f["target_id"], f["role"], f["ticked"]) for f in preview["filings"]] == [
+        (s.tsardom, "subject", True),
+        (s.dawn, "elder", False),
+    ]
+    assert [(r["thing_id"], r["ticked"]) for r in preview["file_into"]] == [
+        (s.peak, False)
+    ]
+    for key in ("ties", "part_of", "move_in", "refile"):
+        assert key not in preview
 
 
 async def test_add_statement(plugin, client):
@@ -5434,8 +5389,8 @@ async def test_accepts_schedule_prose_for_elsewhere_targets(plugin, monkeypatch)
 
 async def test_accept_payloads_validate_shapes(plugin):
     """The accepts validate the rows the owner sends back: a re-file row
-    names its thing and where it goes; an item has its text. A bad shape
-    is refused, writing nothing."""
+    names its thing and where it goes; an item has its text; an "In" row
+    names its entry. A bad shape is refused, writing nothing."""
 
     s = await _open_sphere_world(plugin)
     head = s.world.head_rev()
@@ -5462,7 +5417,7 @@ async def test_accept_payloads_validate_shapes(plugin):
             {
                 "preview": {
                     **_ember_preview(s).model_dump(mode="json"),
-                    "refile": [{"thing_id": s.vigil, "ticked": "maybe"}],
+                    "filings": [{"target_id": s.vigil, "ticked": "maybe"}],
                 }
             },
         ),
@@ -5482,13 +5437,14 @@ def _fixed_preview_file(tmp_path, monkeypatch, **fixed):
 
 
 async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
-    """A create preview carries what curation adds -- each fact's
-    `ticked`, `repeat_of` and `held_by` (with `held_by_name`); the
+    """A create preview carries what curation and filing add -- each
+    fact's `ticked`, `repeat_of` and `held_by` (with `held_by_name`); the
     elsewhere facts (category, held_by, ticked, repeat_of, a new entry's
-    row with `same_as`); the facts that may move in (`move_in`, with
-    `from_name`) -- and `accept_preview` takes the owner's edits to them.
-    The browser tests' fixed preview reads its `held_by`, `elsewhere` and
-    `move_in` through the real parsers."""
+    row with `same_as`); its "In" rows; the facts that could move here
+    (`move_here`, with `from_name`) -- and `accept_preview` takes the
+    owner's edits to them. The browser tests' fixed preview reads its
+    `held_by` and `elsewhere` through the real parsers, and finds "Could
+    move here" as the real one does."""
 
     s = await _open_sphere_world(plugin)
     _fixed_preview_file(
@@ -5515,6 +5471,8 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
         ],
         move_in=["M2"],
     )
+    with s.world.revision(Source.manual(note="names it")) as rev:
+        tends = rev.add_fact(s.dawn, "about", "The Ember Keeper tends the coals.")
     await _act(
         plugin,
         "preview_thing",
@@ -5539,25 +5497,31 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
     )
     assert to_vasha["ticked"] is True and "repeat_of" in to_vasha
     assert gate["target_id"] is None and gate["new"]["name"] == "Ashen Gate"
-    assert {"same_as", "same_target_id", "part_of"} <= set(gate["new"])
+    assert {"same_as", "same_target_id", "tag", "filing"} <= set(gate["new"])
     assert s.vigil in [offer["thing_id"] for offer in vigils["new"]["same_as"]]
 
-    # the pick first, marked, and unticked like the rest (ruling C24)
-    rows = preview["move_in"]
-    assert rows[0]["from_id"] == s.dawn and rows[0]["picked"]
-    assert rows[0]["from_name"] == "The White Dawn"
-    assert rows[0]["text"] == "The state church."
-    assert not any(row["ticked"] for row in rows)
-    assert not any(row["picked"] for row in rows[1:])
-    for key in ("same_as", "verdict", "refile", "new_names"):
+    # the owner's `part_of` is a ticked "In" row; the Dawn's fact naming it
+    # could move here, unticked (the file's `move_in` labels are ignored)
+    assert [(f["target_id"], f["ticked"]) for f in preview["filings"]] == [
+        (s.dawn, True)
+    ]
+    [row] = preview["move_here"]
+    assert (row["fact_id"], row["from_id"], row["from_name"], row["ticked"]) == (
+        tends,
+        s.dawn,
+        "The White Dawn",
+        False,
+    )
+    for key in ("same_as", "verdict", "filings", "file_into", "new_names"):
         assert key in preview
+    assert "move_in" not in preview and "refile" not in preview
 
     # the owner's edits: the Ashen Gate unticked, the Vigils are the Dawn
-    # Vigil, the plain fact held by Vasha, the pick ticked to move in
+    # Vigil, the plain fact held by Vasha, the Dawn's fact ticked to move
     gate["ticked"] = False
     vigils["new"]["same_target_id"] = s.vigil
     plain["held_by"] = s.vasha
-    rows[0]["ticked"] = True
+    row["ticked"] = True
     head = s.world.head_rev()
     await _act(plugin, "accept_preview", preview=preview)
     assert not _errors(plugin)
@@ -5566,12 +5530,14 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
     assert data["notes"] == []
     view = s.world.view()
     keeper = view.thing(data["id"])
+    assert "part_of" not in keeper.fields
+    assert [f.target for f in filings_of(view, data["id"])] == [s.dawn]
     by_text = {f.text: f for f in keeper.facts}
     assert entries.held_by(view, by_text["The keeper walks the peak."], keeper) == (
         s.vasha
     )
-    assert "The state church." in by_text
-    assert "The state church." not in [f.text for f in view.thing(s.dawn).facts]
+    assert "The Ember Keeper tends the coals." in by_text
+    assert tends not in [f.fact_id for f in view.thing(s.dawn).facts]
     vasha_fact = next(
         f for f in view.thing(s.vasha).facts if "trained" in view.render(f.text)
     )
@@ -5615,19 +5581,25 @@ async def test_preview_rows_carry_names(plugin, client):
     bodies they move between."""
 
     s = await _open_sphere_world(plugin)
-    preview = CreatePreview(
-        kind="character",
-        prompt="A keeper of the Vigil Watch.",
-        name="Olya",
-        facts=[PreviewFact(category="background", text="Olya keeps the Vigil Watch.")],
-        prose={},
-        new_names=[{"name": "Vigil Watch", "kind": "lore"}],
-    )
+    fill = {
+        "sphere_id": s.dawn,
+        "drawer_id": DOCTRINES,
+        "items": [
+            {
+                "drawer_id": DOCTRINES,
+                "name": "Vigil Watch",
+                "text": "Keepers of the vigil.",
+                "kind": "lore",
+                "names": [],
+                "ticked": True,
+            }
+        ],
+    }
     await _act(
         plugin,
         "add_outer_body",
-        preview_type="create",
-        preview=preview.model_dump(mode="json"),
+        preview_type="fill",
+        preview=fill,
         row_name="Vigil Watch",
         outer={
             "name": "Order of the Dawn",
@@ -5693,60 +5665,44 @@ async def test_preview_merge_payload_and_akas(plugin, monkeypatch):
     assert built_b in texts and built_a not in texts
 
 
-async def test_forged_move_in_rows_are_dropped(plugin, monkeypatch):
-    """`accept_preview` moves in only facts of the entries the server
-    offers them from (the broader entry, or C13's): a forged row naming
-    another entry's fact is dropped with a note, and that fact stays."""
+async def test_forged_move_here_rows_are_dropped(plugin, monkeypatch):
+    """`accept_preview` moves here only a fact that's still its entry's and
+    names the entry being written, the rows checked again: a forged row
+    for another entry's fact is dropped with a note, and that fact stays;
+    a real one moves."""
 
-    from talemate.worldplay.create import MoveInFact
+    from talemate.worldplay.create import MoveHereFact
 
     s = await _open_sphere_world(plugin)
     _record_prose(plugin, monkeypatch)
-    about = next(f for f in s.world.view().thing(s.dawn).facts if f.category == "about")
-    forged = MoveInFact(
+    with s.world.revision(Source.manual(note="names it")) as rev:
+        lore = rev.add_fact(s.dawn, "about", "The Dawn keeps the Ember Lore.")
+    forged = MoveHereFact(
         fact_id=s.skips, from_id=s.vasha, text="Skips the vigil.", ticked=True
     )
-
-    # no broader entry at all: nothing may move in
-    lone = CreatePreview(
-        kind="lore",
-        prompt="ash lore",
-        name="Ash Lore",
-        facts=[PreviewFact(category="general", text="Ash falls in spring.")],
-        prose={},
-        move_in=[forged],
-    )
-    await _act(plugin, "accept_preview", preview=lone.model_dump(mode="json"))
-    assert not _errors(plugin)
-    data = _last(plugin, "accept_preview")["data"]
-    assert any("Vasha" in note and "move in" in note for note in data["notes"])
-    assert s.skips in [f.fact_id for f in s.world.view().thing(s.vasha).facts]
-
-    # filed in the Dawn: the Dawn's fact moves, Vasha's still doesn't
-    filed = CreatePreview(
+    preview = CreatePreview(
         kind="lore",
         prompt="ember lore",
         name="Ember Lore",
-        fields={"part_of": {"sphere": s.dawn, "drawer": RITES}},
         facts=[PreviewFact(category="general", text="Embers glow.")],
         prose={},
-        move_in=[
-            MoveInFact(fact_id=about.fact_id, from_id=s.dawn, text="x", ticked=True),
+        move_here=[
+            MoveHereFact(fact_id=lore, from_id=s.dawn, text="x", ticked=True),
             forged,
         ],
     )
-    await _act(plugin, "accept_preview", preview=filed.model_dump(mode="json"))
+    await _act(plugin, "accept_preview", preview=preview.model_dump(mode="json"))
     assert not _errors(plugin)
     data = _last(plugin, "accept_preview")["data"]
     view = s.world.view()
-    assert about.fact_id not in [f.fact_id for f in view.thing(s.dawn).facts]
-    assert "The state church." in [f["rendered"] for f in data["facts"]]
+    assert lore not in [f.fact_id for f in view.thing(s.dawn).facts]
+    assert "The Dawn keeps the Ember Lore." in [f["rendered"] for f in data["facts"]]
     assert s.skips in [f.fact_id for f in view.thing(s.vasha).facts]
-    assert any("Vasha" in note for note in data["notes"])
+    assert any("Vasha" in note and "move here" in note for note in data["notes"])
 
 
 async def test_forged_refile_rows_are_refused(plugin, monkeypatch):
-    """A re-file row moves an entry only into an outer body the preview
+    """A Fill's re-file row moves an entry only into an outer body it
     names, from where that body goes: `to` naming a sphere the world has
     is refused outright (nothing written), and a row moving an entry from
     elsewhere is dropped with a note, the entry left where it is."""
@@ -5754,13 +5710,12 @@ async def test_forged_refile_rows_are_refused(plugin, monkeypatch):
     s = await _open_sphere_world(plugin)
     _record_prose(plugin, monkeypatch)
     head = s.world.head_rev()
-    preview = CreatePreview(
-        kind="lore",
-        prompt="a watch",
-        name="Vigil Watch",
-        facts=[PreviewFact(category="general", text="It keeps watch.")],
-        prose={},
-        new_names=[
+    peak_home = {"sphere": s.dawn, "drawer": SITES}
+    fill = {
+        "sphere_id": s.dawn,
+        "drawer_id": RITES,
+        "items": [],
+        "new_names": [
             {
                 "name": "Order of the Dawn",
                 "kind": "sphere",
@@ -5768,23 +5723,21 @@ async def test_forged_refile_rows_are_refused(plugin, monkeypatch):
                 "part_of": {"sphere": s.dawn, "drawer": RITES},
             }
         ],
-    )
-    peak_home = {"sphere": s.dawn, "drawer": SITES}
-    forged = preview.model_dump(mode="json")
-    forged["refile"] = [
-        {
-            "thing_id": s.peak,
-            "from": peak_home,
-            "to": {"sphere": s.tsardom, "drawer": LANDS},
-            "ticked": True,
-        }
-    ]
+        "refile": [
+            {
+                "thing_id": s.peak,
+                "from": peak_home,
+                "to": {"sphere": s.tsardom, "drawer": LANDS},
+                "ticked": True,
+            }
+        ],
+    }
     before = len(_errors(plugin))
-    await _act(plugin, "accept_preview", preview=forged)
+    await _act(plugin, "accept_fill", **fill)
     assert len(_errors(plugin)) == before + 1
     assert s.world.head_rev() == head
 
-    forged["refile"] = [
+    fill["refile"] = [
         {
             "thing_id": s.peak,
             "from": peak_home,
@@ -5792,9 +5745,9 @@ async def test_forged_refile_rows_are_refused(plugin, monkeypatch):
             "ticked": True,
         }
     ]
-    await _act(plugin, "accept_preview", preview=forged)
+    await _act(plugin, "accept_fill", **fill)
     assert not _errors(plugin)[before + 1 :]
-    data = _last(plugin, "accept_preview")["data"]
+    data = _last(plugin, "accept_fill")["data"]
     assert s.world.view().thing(s.peak).fields["part_of"] == peak_home
     assert any("Dawn Peak" in note for note in data["notes"])
 

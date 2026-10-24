@@ -85,6 +85,18 @@ class SameOffer(SameCandidate):
     stub: bool = False
 
 
+class NameFiling(BaseModel):
+    """Where a new name's stub is filed on accept (its reply's `"in"`): an
+    entry the world has (`target_id`), or, by `name`, the entry being
+    written or another new name of the same accept. Ticked: it's written
+    when the name itself becomes a stub (ruling F12)."""
+
+    target_id: str | None = None
+    name: str | None = None
+    role: str | None = None
+    ticked: bool = True
+
+
 class NewName(BaseModel):
     """A proper name a generation used that may not exist yet: its name in
     full, its kind, and any other names (`aka` entries) for it. `written`
@@ -96,7 +108,10 @@ class NewName(BaseModel):
     `part_of` is where its stub is filed on accept (bodies within bodies):
     `{"sphere": <id>, "drawer": <id>}`, a sphere the world has, or
     `{"name": <name>, "drawer": <id>}`, a thing the same accept makes (an
-    outer body, or the sphere being made); None files it nowhere."""
+    outer body, or the sphere being made); None files it nowhere.
+
+    `tag` is the stub's tag (what it is: "fortification"), and `filing`
+    the one filing its stub is given (`NameFiling`), when ticked."""
 
     name: str
     kind: str
@@ -108,6 +123,8 @@ class NewName(BaseModel):
     same_as: list[SameOffer] = []
     same_target_id: str | None = None
     part_of: dict[str, str] | None = None
+    tag: str | None = None
+    filing: NameFiling | None = None
 
 
 def _norm(text: str) -> str:
@@ -552,6 +569,8 @@ def make_stubs(
         }
         if kind == "sphere" and new.template:
             fields["template"] = new.template
+        if new.tag:
+            fields["tag"] = new.tag
         thing_id = rev.create_thing(kind, fields=fields)
         others = [str(entry["name"]) for entry in aka]
         thing = _Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)])

@@ -672,16 +672,15 @@ async def _stub_previews(
 def _own_facts_only(preview: CreatePreview) -> CreatePreview:
     """A stub preview as scene planning accepts it, with no owner to tick
     anything (ruling C25): only its own facts are written. Its elsewhere
-    items, the facts it would move in from its broader entry and any
-    re-file rows are unticked, so starting the scene adds, moves and
-    re-files nothing on another entry."""
+    items, its "In" rows, the entries it would file into it and the facts
+    it would move here are unticked, so starting the scene adds, files
+    and moves nothing on another entry."""
 
     for item in preview.elsewhere:
         item.ticked = False
-    for row in preview.move_in:
-        row.ticked = False
-    for refile in preview.refile:
-        refile["ticked"] = False
+    for rows in (preview.filings, preview.file_into, preview.move_here):
+        for row in rows:
+            row.ticked = False
     return preview
 
 

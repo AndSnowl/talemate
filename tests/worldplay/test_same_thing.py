@@ -13,6 +13,7 @@ import json
 import pytest
 
 from talemate.world.dates import WorldDate
+from talemate.world.filing import filings_of
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
 from talemate.worldplay import create, decide, prose_gen
@@ -707,14 +708,7 @@ def _keth(world, ids, *, color="grey"):
             {
                 "name": "Keth",
                 "color": color,
-                "ties": [
-                    {
-                        "sphere": ids["faith"],
-                        "role": "member",
-                        "since": None,
-                        "until": None,
-                    }
-                ],
+                "filings": [{"target": ids["faith"], "role": "member"}],
             },
         )
         rev.add_fact(ids["keth"], "background", "A weaver of Stonehold.")
@@ -729,13 +723,11 @@ def _keth_preview(ids):
         facts=[create.PreviewFact(category="background", text="Reads old runes.")],
         prose={},
         aka=[{"name": "Old Keth", "tag": "common", "everyday": False}],
-        ties=[
-            create.PreviewTie(
-                sphere_id=ids["faith"], sphere="The Ashen Faith", role="member"
-            ),
-            create.PreviewTie(
-                sphere_id=ids["faith"],
-                sphere="The Ashen Faith",
+        filings=[
+            # the target is filed in the faith already: not twice
+            create.PreviewFiling(
+                target_id=ids["faith"],
+                target_name="The Ashen Faith",
                 role="priest",
                 exceptions=[
                     create.PreviewException(
@@ -744,6 +736,13 @@ def _keth_preview(ids):
                         fact_id=ids["fast"],
                     )
                 ],
+                ticked=True,
+            ),
+            create.PreviewFiling(
+                target_id=ids["stonehold"],
+                target_name="Stonehold",
+                role="weaver",
+                ticked=True,
             ),
         ],
     )
@@ -762,11 +761,12 @@ async def test_accept_same_carries_entry_material(world):
 
     view = world.view()
     keth = view.thing(ids["keth"])
-    # the new tie, not the one it had already
-    assert [(t["sphere"], t["role"]) for t in keth.fields["ties"]] == [
+    # the new filing; the one it had already kept, never doubled
+    assert [(f.target, f.role) for f in filings_of(view, ids["keth"])] == [
         (ids["faith"], "member"),
-        (ids["faith"], "priest"),
+        (ids["stonehold"], "weaver"),
     ]
+    assert "ties" not in keth.fields
     exception = next(f for f in keth.facts if f.category == "ties")
     assert exception.origin["tie"] == ids["faith"]
     assert exception.origin["rejects_fact"] == ids["fast"]
@@ -981,36 +981,27 @@ async def test_fold_undo(world):
     assert parse_refs(mention.text) == [ids["caves"]]
 
 
-async def test_merge_part_of_only_when_none_and_fitted(world):
+async def test_merge_tag_only_when_none(world):
+    """Onto an entry the world has: the preview's tag is the target's only
+    when it has none; a different one is kept, with a note."""
+
     ids = _make(world, stub=False)
-    faith = _faith(world, ids)
     preview = create.CreatePreview(
         kind="place",
         prompt="the caves",
         name="Ashenmere Caverns",
         facts=[create.PreviewFact(category="description", text="Dark and deep.")],
         prose={},
-        # a place in a practices drawer: fitted to the places drawer
-        part_of={"sphere": faith, "drawer": RITES},
+        tag="cave",
     )
     accept_preview(world, preview.model_copy(), same_target_id=ids["ashenmere"])
-    assert world.view().thing(ids["ashenmere"]).fields["part_of"] == {
-        "sphere": faith,
-        "drawer": SITES,
-    }
+    assert world.view().thing(ids["ashenmere"]).fields["tag"] == "cave"
 
-    # filed already: it stays, with a note
-    other = _faith_named(world, "The Second Faith")
     notes: list[str] = []
-    again = preview.model_copy(
-        update={
-            "name": "Ashenmere Hollows",
-            "part_of": {"sphere": other, "drawer": SITES},
-        }
-    )
+    again = preview.model_copy(update={"name": "Ashenmere Hollows", "tag": "hollow"})
     accept_preview(world, again, same_target_id=ids["ashenmere"], notes=notes)
-    assert world.view().thing(ids["ashenmere"]).fields["part_of"]["sphere"] == faith
-    assert any("filed" in note for note in notes)
+    assert world.view().thing(ids["ashenmere"]).fields["tag"] == "cave"
+    assert any("keeps its own tag" in note for note in notes)
 
 
 def _faith_named(world, name):

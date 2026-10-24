@@ -18,7 +18,8 @@ from talemate.world.index import WorldIndex
 from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source
 from talemate.worldplay.context import world_context_block
-from talemate.worldplay.create import current_date
+from talemate.world.filing import filings_of
+from talemate.worldplay.create import FileIntoRow, current_date
 from talemate.worldplay.persistence import (
     close_world_scene,
     save_world_scene,
@@ -1242,8 +1243,8 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
 async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
     """Ruling C25: a stub the scene fills is previewed and accepted with no
     owner to tick anything, so it writes only its own facts. Its elsewhere
-    items and the facts it would move in from its broader entry arrive
-    unticked and are never written; no same-thing
+    items, its "In" rows, its "File into this" rows and the facts that
+    could move here arrive unticked and are never written; no same-thing
     verdict is asked (nobody sees it). Every other entry keeps exactly the
     facts it had (the curation flow probe: a scene start wrote 5 facts
     onto 4 entries and moved 2 of the Church's out)."""
@@ -1261,8 +1262,6 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
             fields={
                 "name": "Frosthollow",
                 "stub": {"ignored": False},
-                "parent": weir,
-                # what nearness reads (the parent feeds move-in until Task 5)
                 "filings": [
                     {
                         "target": weir,
@@ -1294,8 +1293,8 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
                 },
                 {"entry": "The Weir", "text": "The Weir freezes solid each winter."},
             ],
-            # M2: the Weir's ice-fishers line
-            "move_in": ["M2"],
+            "in": [{"entry": "Frosthollow Inn", "role": "beside it"}],
+            "file_into": [{"entry": "Frosthollow Inn", "role": None}],
         }
     )
     reply = {
@@ -1318,9 +1317,9 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
         )
     [preview] = setup.stub_previews
     assert preview.elsewhere and not any(e.ticked for e in preview.elsewhere)
-    assert preview.move_in and not any(m.ticked for m in preview.move_in)
-    # (no re-file rows here: a stub preview names no outer body; the
-    # setup unticks them all the same, `setup._own_facts_only`)
+    # the Weir's ice-fishers line names Frosthollow: it could move here
+    assert preview.move_here and not any(m.ticked for m in preview.move_here)
+    assert preview.filings and not any(f.ticked for f in preview.filings)
     # no verdict call: the create and its prose only
     assert len(client.prompt_history) == 2
     assert preview.verdict is None
@@ -1332,9 +1331,12 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
         [sent] = setup.stub_previews
         for item in sent.elsewhere:
             item.ticked = True
-        for row in sent.move_in:
-            row.ticked = True
-        sent.refile.append({"thing_id": weir, "to": {"name": "X"}, "ticked": True})
+        for rows in (sent.move_here, sent.filings, sent.file_into):
+            for row in rows:
+                row.ticked = True
+        sent.file_into.append(
+            FileIntoRow(thing_id=inn, name="Frosthollow Inn", ticked=True)
+        )
     async with MockClientContext():
         await start_scene(world, setup, MockClient("test"))
 
@@ -1348,6 +1350,8 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
     assert [view.render(f.text) for f in view.thing(frost).facts] == [
         "A snowbound village on the weir."
     ]
+    assert [f.target for f in filings_of(view, frost)] == [weir]
+    assert filings_of(view, inn) == []
     assert view.thing(weir).fields.get("part_of") is None
 
 

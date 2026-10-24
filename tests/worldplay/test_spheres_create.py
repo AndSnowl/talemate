@@ -15,12 +15,12 @@ from talemate.world import entries, spheres
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.refs import parse_refs, ref
+from talemate.world.filing import filings_of
 from talemate.world.store import Source
 from talemate.worldplay import prose_gen
 from talemate.worldplay.create import (
-    CreatePreview,
-    spheres_block,
-    PreviewFact,
+    cached_summary,
+    homes_block,
     accept_preview,
     preview_thing,
 )
@@ -360,7 +360,11 @@ LORE_REPLY = json.dumps(
 )
 
 
-async def test_child_first_gets_part_of_stub_parent_untouched(moscavia, world):
+async def test_filing_into_a_stub_parent_leaves_it_untouched(moscavia, world):
+    """An expanded child filed in its parent (a ticked "In" row; the
+    child-first `part_of` went with Filing, Task 4) is filed there, and
+    the parent is never written to: still a bare stub."""
+
     with world.revision(Source.manual(note="council stub")) as rev:
         council = rev.create_thing(
             "lore", {"name": "Council of Elders", "stub": {"ignored": False}}
@@ -372,10 +376,12 @@ async def test_child_first_gets_part_of_stub_parent_untouched(moscavia, world):
             f"{ref(moscavia.dawn, 'the White Dawn')} sits in Kremova.",
         )
     dawn_before = world.view().thing(moscavia.dawn)
+    reply = json.loads(LORE_REPLY)
+    reply["in"] = [{"entry": "The White Dawn", "role": "its elders"}]
 
     client = MockClient("test")
     async with MockClientContext():
-        _queue(LORE_REPLY, "Seven elders.")
+        _queue(json.dumps(reply), "Seven elders.")
         preview = await preview_thing(
             world,
             "lore",
@@ -385,49 +391,19 @@ async def test_child_first_gets_part_of_stub_parent_untouched(moscavia, world):
             client,
             stub_id=council,
         )
-    assert preview.part_of == {"sphere": moscavia.dawn, "drawer": UNSORTED_DRAWER_ID}
+    [row] = preview.filings
+    assert (row.target_id, row.role, row.ticked) == (moscavia.dawn, "its elders", False)
+    row.ticked = True
 
     accept_preview(world, preview)
     view = world.view()
-    assert view.thing(council).fields["part_of"] == preview.part_of
+    assert [f.target for f in filings_of(view, council)] == [moscavia.dawn]
+    assert "part_of" not in view.thing(council).fields
     # the parent was never generated: still a bare stub
     dawn = view.thing(moscavia.dawn)
     assert dawn.is_stub
     assert dawn.fields == dawn_before.fields
     assert dawn.facts == []
-    assert [i.thing_id for i in spheres.items(view, moscavia.dawn)] == [council]
-
-
-async def test_child_first_from_sphere_items_guesses_drawer(moscavia, world):
-    preview, _ = await _dawn_preview(world, moscavia.dawn)
-    accept_sphere(world, preview)
-    ids = _drawer_ids(preview)
-    with world.revision(Source.manual(note="spire")) as rev:
-        spire = rev.create_thing(
-            "place", {"name": "Pale Spire", "stub": {"ignored": False}}
-        )
-        # mentioned only by a statement of the sphere's Rites drawer
-        rev.add_fact(
-            moscavia.dawn,
-            "statement",
-            f"Pilgrims climb the {ref(spire, 'Pale Spire')} at midwinter.",
-            origin={"drawer": ids["Rites and Ceremonies"]},
-        )
-
-    client = MockClient("test")
-    reply = json.dumps(
-        {
-            "name": "Pale Spire",
-            "facts": [{"category": "description", "text": "A white tower."}],
-        }
-    )
-    async with MockClientContext():
-        _queue(reply, "A white tower.")
-        child = await preview_thing(
-            world, "place", "Pale Spire: a white tower.", {}, client, stub_id=spire
-        )
-    # a place goes to the sphere's places drawer
-    assert child.part_of == {"sphere": moscavia.dawn, "drawer": ids["Holy Sites"]}
 
 
 # --- promotion ---------------------------------------------------------------
@@ -541,11 +517,10 @@ async def test_place_create_prompt_hides_sphere_categories(moscavia, world):
     assert [f.category for f in preview.facts] == ["description", "general"]
 
 
-async def test_create_prompt_names_faiths_and_orders_as_spheres(moscavia, world):
-    """A thing's create prompt lists names of kind "sphere" with a template,
-    in the core's wording (the spheres Task 10 session: from the old "a
-    group, order or faction is lore", the Tsardom's state church came back
-    as lore), so the faith a place names becomes a religion sphere stub."""
+async def test_create_prompt_names_faiths_and_orders_as_lore(moscavia, world):
+    """A thing's create prompt names a faith, order or culture as lore (the
+    filing probe's names rule: the sphere kind goes, Filing Task 4), so a
+    reply that still gives one the sphere kind makes a lore stub."""
 
     reply = json.dumps(
         {
@@ -572,15 +547,15 @@ async def test_create_prompt_names_faiths_and_orders_as_spheres(moscavia, world)
         _queue(reply, "A river town.")
         preview = await preview_thing(world, "place", "a river town", {}, client)
     prompt = str(client.prompt_history[0]["prompt"])
-    assert '"kind" one of character, place, species, race, sphere, event' in prompt
     assert (
-        "A faith or church, an order, academy, guild or council, a culture, or a "
-        'field of knowledge or magic is "sphere", with a "template": religion, '
-        "order, culture or field, only these" in prompt
+        '"kind" one of character, place, species, race, event, item, lore (a '
+        "country, realm or city is a place; a faith, order, council, guild, "
+        "culture, field of knowledge or magic, law, script or language is "
+        "lore)" in prompt
     )
-    assert "a group, order or faction is lore" not in prompt
+    assert '"sphere"' not in prompt
     assert [(n.name, n.kind, n.template) for n in preview.new_names] == [
-        ("Church of the Vesna", "sphere", "religion")
+        ("Church of the Vesna", "lore", None)
     ]
 
 
@@ -642,6 +617,11 @@ async def test_fill_drawer_no_write_until_accept(moscavia, world, full_dawn):
         if item.drawer_id == rites
     }
     assert {"The Pale Spire Pilgrimage", "The Separation Covenant"} <= in_rites
+    # filed in the sphere too, as the world's readers read it (Filing,
+    # Task 4: written beside `part_of`, with no shim)
+    for name in ("The Pale Spire Pilgrimage", "The Separation Covenant"):
+        (made,) = _named(view, name)
+        assert [f.target for f in filings_of(view, made.id)] == [moscavia.dawn]
 
 
 async def test_fill_new_items_statements_and_months(moscavia, world, full_dawn):
@@ -673,7 +653,10 @@ async def test_fill_new_items_statements_and_months(moscavia, world, full_dawn):
 # --- stub kind guesses -------------------------------------------------------
 
 
-async def test_culture_guess_becomes_culture_sphere(moscavia, world):
+async def test_culture_and_order_guesses_become_lore(moscavia, world):
+    """A culture, an order or a sphere the reply names is lore now (Filing,
+    Task 4): never a sphere stub, never the legacy culture kind."""
+
     reply = json.dumps(
         {
             "name": "Vesnagrad",
@@ -698,18 +681,17 @@ async def test_culture_guess_becomes_culture_sphere(moscavia, world):
 
     guesses = {n.name: (n.kind, n.template) for n in preview.new_names}
     assert guesses == {
-        "Moscavian Way": ("sphere", "culture"),
-        "Guild of Rafters": ("sphere", "order"),
-        # a template outside the set is dropped, the sphere guess kept
-        "Rite of Amber": ("sphere", None),
+        "Moscavian Way": ("lore", None),
+        "Guild of Rafters": ("lore", None),
+        "Rite of Amber": ("lore", None),
     }
 
     accept_preview(world, preview)
     view = world.view()
     (way,) = _named(view, "Moscavian Way")
-    assert way.kind == "sphere"
+    assert way.kind == "lore"
     assert way.is_stub
-    assert way.fields["template"] == "culture"
+    assert "template" not in way.fields
     assert not view.things("culture")
 
 
@@ -1020,36 +1002,6 @@ async def test_child_first_never_joins_its_own_child(moscavia, world):
                 world, "religion", prompt, {}, client, stub_id=stub
             )
         assert preview.part_of is None, prompt
-    assert len(client.prompt_history) == 2
-
-
-async def test_child_first_character_gets_no_part_of(moscavia, world):
-    with world.revision(Source.manual(note="orel")) as rev:
-        orel = rev.create_thing(
-            "character", {"name": "Orel", "stub": {"ignored": False}}
-        )
-    reply = json.dumps(
-        {
-            "name": "Orel",
-            "age": 60,
-            "facts": [
-                {"category": "background", "text": "A hermit of the White Dawn."}
-            ],
-        }
-    )
-    client = MockClient("test")
-    async with MockClientContext():
-        _queue(reply, "A hermit.")
-        preview = await preview_thing(
-            world,
-            "character",
-            "Orel, hermit of the White Dawn.",
-            {},
-            client,
-            stub_id=orel,
-        )
-    assert preview.part_of is None
-    # every queued reply used, so none leaks into the next test
     assert len(client.prompt_history) == 2
 
 
@@ -1561,35 +1513,6 @@ async def test_adoption_files_after_a_dated_link(moscavia, world, full_dawn):
     assert view.field_since(vigil.thing_id, "part_of") == WorldDate.of(1020)
 
 
-async def test_accept_preview_files_an_ended_stub_from_now(moscavia, world, full_dawn):
-    """Expanding an ended item stub with a child-first `part_of` files it
-    from now: the dated end doesn't hide it."""
-
-    rites = full_dawn
-    vigil = _vigil(world, moscavia.dawn)
-    end_item(world, moscavia.dawn, vigil, WorldDate.of(1015), None)
-    preview = CreatePreview(
-        kind="lore",
-        prompt="the vigil",
-        name="The Dawn Vigil",
-        facts=[PreviewFact(category="general", text="A vigil kept again.")],
-        prose={},
-        stub_id=vigil.thing_id,
-        part_of={"sphere": moscavia.dawn, "drawer": rites},
-    )
-    accept_preview(world, preview)
-
-    view = world.view()
-    assert view.thing(vigil.thing_id).fields["part_of"] == {
-        "sphere": moscavia.dawn,
-        "drawer": rites,
-    }
-    assert view.field_since(vigil.thing_id, "part_of") == WorldDate.of(1020)
-    assert vigil.thing_id in {
-        i.thing_id for i in spheres.items(view, moscavia.dawn) if i.drawer_id == rites
-    }
-
-
 # --- the summary (ruling P21) ------------------------------------------------
 
 
@@ -1690,15 +1613,18 @@ async def test_summary_survives_ending_a_statement(moscavia, world, full_dawn):
     ] == [True]
 
 
-async def test_ties_block_carries_a_core_made_summary(moscavia, world):
+async def test_homes_block_carries_a_core_made_summary(moscavia, world):
     """A sphere made by the core has no about fact but its summary: the
-    character prompt's spheres block carries that summary line."""
+    character prompt's block of entries it may belong in carries that
+    summary line."""
 
     preview, _ = await _dawn_preview(world, moscavia.dawn)
     accept_sphere(world, preview)
     view = world.view()
 
-    (block,), _labels = spheres_block(view, [moscavia.dawn])
+    (block,), _labels = homes_block(
+        view, [moscavia.dawn], lambda thing_id: cached_summary(world, thing_id)
+    )
     assert block[1] == preview.prose["description"]
 
     client = MockClient("test")
