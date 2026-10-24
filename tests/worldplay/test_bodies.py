@@ -18,7 +18,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import UNSORTED_DRAWER_ID, get_kind, validate_field
 from talemate.world.store import Source
 from talemate.worldplay.bodies import OuterBody, add_outer_body, outer_name
-from talemate.worldplay.characters import tie_lines
+from talemate.worldplay.characters import filing_lines
 from talemate.world.filing import filings_of
 from talemate.worldplay.create import (
     CreatePreview,
@@ -562,30 +562,38 @@ def test_tie_within_must_be_part_of_sphere(world):
     assert spheres.ties_of(world.view(), ids["ivan"])[0].within is None
 
 
-def test_tie_line_reads_within(world):
+def test_filing_line_reads_within(world):
+    """A filing within a part reads "<Role> in <entry>, within <part>" on
+    the sheet (ruling C12); without a part, "<Role> of <entry>"."""
+
     ids = _army(world)
-    view = world.view(WorldDate.of(1020))
-    assert tie_lines(view, world.calendar, ids["ivan"]) == [
-        "Trooper in the Tsar's Army, within the White Talon (since 1012)"
-    ]
-    # without a part, the line reads as before
+    _filed_army(world, ids)
     with world.revision(Source.manual()) as rev:
-        rev.create_thing(
+        rev.set_field(
+            ids["ivan"],
+            "filings",
+            [
+                {
+                    "target": ids["army"],
+                    "role": "trooper",
+                    "since": WorldDate.of(1012).model_dump(mode="json"),
+                    "within": ids["talon"],
+                }
+            ],
+            None,
+        )
+        olga = rev.create_thing(
             "character",
             {
                 "name": "Olga",
-                "ties": [
-                    {
-                        "sphere": ids["army"],
-                        "role": "quartermaster",
-                        "since": None,
-                        "until": None,
-                    }
-                ],
+                "filings": [{"target": ids["army"], "role": "quartermaster"}],
             },
         )
-    olga = _named(world.view(), "Olga")
-    assert tie_lines(world.view(), world.calendar, olga.id) == [
+    view = world.view(WorldDate.of(1020))
+    assert filing_lines(view, world.calendar, ids["ivan"]) == [
+        "Trooper in the Tsar's Army, within the White Talon (since 1012)"
+    ]
+    assert filing_lines(world.view(), world.calendar, olga) == [
         "Quartermaster of the Tsar's Army"
     ]
 
@@ -637,39 +645,31 @@ def test_created_filing_carries_within(world):
 
 
 def test_repoint_carries_within(world):
-    """Re-pointing a stub a tie is within moves the tie's part to the
-    entry, as other tie fields are."""
+    """Re-pointing a stub a filing is within moves the filing's part to
+    the entry, as filings into it are."""
 
     ids = _army(world)
+    _filed_army(world, ids)
     with world.revision(Source.manual()) as rev:
         stub = rev.create_thing(
             "lore",
             {
                 "name": "Talon Regiment",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": ids["army"], "drawer": MILITARY},
+                "filings": [{"target": ids["army"]}],
             },
         )
         rev.set_field(
             ids["ivan"],
-            "ties",
-            [
-                {
-                    "sphere": ids["army"],
-                    "role": "trooper",
-                    "since": None,
-                    "until": None,
-                    "within": stub,
-                }
-            ],
+            "filings",
+            [{"target": ids["army"], "role": "trooper", "within": stub}],
             None,
         )
-    assert spheres.ties_of(world.view(), ids["ivan"])[0].within == stub
 
     repoint_stub(world, stub, ids["talon"])
 
-    (tie,) = spheres.ties_of(world.view(), ids["ivan"])
-    assert tie.within == ids["talon"]
+    (filing,) = filings_of(world.view(), ids["ivan"])
+    assert (filing.target, filing.within) == (ids["army"], ids["talon"])
 
 
 # --- fix round 1 -------------------------------------------------------------

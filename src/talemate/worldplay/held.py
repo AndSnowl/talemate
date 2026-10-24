@@ -196,3 +196,35 @@ def timeline_text(view: WorldView, line: TimelineLine) -> str:
     if owner is None or line.fact is None:
         return line.text
     return held_text(view, line.fact, owner, line.text)
+
+
+# a role that ends with one of these already says how it holds its entry
+# ("took place in", "owned by", "branch of"): no "of" goes after it
+ROLE_PREPOSITIONS = ("in", "of", "by", "at", "for", "to", "from", "with", "on", "under")
+
+
+def mid_sentence_name(name: str) -> str:
+    """A name as it reads mid-sentence: a leading "The" lowercased ("of
+    the White Dawn")."""
+
+    return "the " + name[4:] if name.startswith("The ") else name
+
+
+def filed_as(role: str | None, name: str) -> str:
+    """A filing as a sentence's start reads it, the role capitalised:
+    "Practitioner of the White Dawn"; one whose role ends with a
+    preposition, "Took place in Kremova", "Owned by Vasha"; one that opens
+    "of" ("of this culture"), "Of the Moscavian culture"; no role, "Part
+    of the White Dawn". The name mid-sentence (`mid_sentence_name`)."""
+
+    name = mid_sentence_name(name)
+    words = " ".join((role or "").split())
+    if not words:
+        return f"Part of {name}"
+    folded = words.casefold().split()
+    lead = words[0].upper() + words[1:]
+    if folded[0] == "of":
+        return f"Of {name}"
+    if folded[-1] in ROLE_PREPOSITIONS:
+        return f"{lead} {name}"
+    return f"{lead} of {name}"

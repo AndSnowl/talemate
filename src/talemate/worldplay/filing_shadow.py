@@ -25,7 +25,11 @@ reads only what's marked (or a `belief` fact). So a writer of a sphere's
 statements marks such a one held as it writes it (`statement_origin`),
 as the spec has the religion hint mark its belief facts at write time.
 
-Task 4 deletes this module.
+Ruling F11 takes the writers off it task by task: create (Task 4), and
+merge, re-point, `move_fact` and `end_item` (Task 5) write filings
+themselves. What's left: the server's `set_part_of`, `set_ties`,
+`set_field` and `add_statement` (Task 6) and `accept_sphere` and
+`accept_fill` (Task 7, which deletes this module).
 """
 
 from __future__ import annotations

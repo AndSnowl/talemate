@@ -28,10 +28,11 @@ from __future__ import annotations
 import structlog
 from pydantic import BaseModel
 
-from talemate.world import spheres
+from talemate.world.filing import filings_of
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
 from talemate.world.names import everyday_name
 from talemate.world.view import WorldView
+from talemate.worldplay.held import filed_as
 
 log = structlog.get_logger("talemate.worldplay.mentions")
 
@@ -254,34 +255,21 @@ def _cut(text: str, limit: int, start: int) -> str:
 
 
 def _home_line(view: WorldView, thing_id: str) -> str:
-    """ "Part of the White Dawn, under Rites." for a thing in a sphere's
-    drawer ("Part of the White Dawn." when unsorted), else ""."""
+    """What the thing is filed in, a sentence a filing (`held.filed_as`):
+    "Rite of the White Dawn." for one with a role, "Part of the White
+    Dawn." without; "" when it's filed nowhere."""
 
-    state = view.thing(thing_id)
-    link = state.fields.get("part_of") if state is not None else None
-    if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
-        return ""
-    sphere = view.thing(link["sphere"])
-    name = view.name_of(link["sphere"]) or ""
-    if sphere is None or not spheres.is_sphere(sphere) or not name:
-        return ""
-    # mid-sentence: "Part of the White Dawn"
-    name = "the " + name[4:] if name.startswith("The ") else name
-    title = next(
-        (
-            drawer.title
-            for drawer in spheres.drawers(view, sphere.id)
-            if drawer.id == link.get("drawer")
-        ),
-        None,
+    return " ".join(
+        f"{filed_as(filing.role, name)}."
+        for filing in filings_of(view, thing_id)
+        if (name := view.name_of(filing.target))
     )
-    return f"Part of {name}, under {title}." if title else f"Part of {name}."
 
 
 def suggested_prompt(view: WorldView, stub_id: str) -> str:
     """The create box's starting prompt for a stub: "<name>: ", the stub's
-    own facts (an item a sphere's core made has its text), the sphere it's
-    part of (`_home_line`), then its mentioning facts, rendered and joined
+    own facts (an item a sphere's core made has its text), what it's filed
+    in (`_home_line`), then its mentioning facts, rendered and joined
     (the most-mentioning entries first), cut at `PROMPT_MAX` characters on
     a sentence's end. Just the name when there's none of these.
 

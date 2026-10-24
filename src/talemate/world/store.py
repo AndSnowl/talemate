@@ -32,7 +32,13 @@ from talemate.path import WORLDS_DIR
 from . import schema
 from .calendar import Calendar
 from .dates import Precision, WorldDate
-from .kinds import KindSpec, get_kind, normalise_field, validate_field
+from .kinds import (
+    KindSpec,
+    get_kind,
+    moved_category,
+    normalise_field,
+    validate_field,
+)
 from .curation import CurationSettings
 from .refs import parse_refs
 from .filing import check_filings, stored_filings_value
@@ -568,12 +574,16 @@ class Revision:
 
     @_require_open
     def change_stub_kind(self, thing_id: str, kind: str) -> None:
-        """Give a stub another kind: its thing row is retired and a row of
-        `kind` with the same id is added, so undo reverses it like any other
-        write. Its field values and facts are kept as they are. Raises
-        `ValueError` unless the thing is a stub (a live `stub` value at any
-        date), and when a live field or fact category of it doesn't exist on
-        `kind`."""
+        """Give a stub another kind, any kind: its thing row is retired and
+        a row of `kind` with the same id is added, so undo reverses it like
+        any other write. Its facts are kept by id: one in a category `kind`
+        lacks takes the category `kinds.moved_category` gives (a new
+        version of the fact, as `correct_fact` writes: a lore `general`
+        fact is a character's `background`, a sphere's `about`). Its field
+        values are kept, but those of a field `kind` lacks (or has with
+        another type) are retired with it -- a stub's place `kind` text,
+        say. Raises `ValueError` unless the thing is a stub (a live `stub`
+        value at any date)."""
 
         new_spec = _kind_for(kind)
         old_kind = self._require_thing(thing_id)
@@ -582,16 +592,36 @@ class Revision:
         if kind == old_kind:
             return
 
-        self._check_fields_fit(thing_id, old_kind, new_spec)
-        for (category,) in self._conn.execute(
-            "SELECT DISTINCT category FROM facts "
+        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
+        new_types = {spec.name: spec.type for spec in new_spec.fields}
+        self._conn.execute(
+            "UPDATE field_values SET rev_removed = ? "
+            "WHERE thing_id = ? AND rev_removed IS NULL "
+            "AND field IN (SELECT value FROM json_each(?))",
+            (
+                self.rev,
+                thing_id,
+                json.dumps(
+                    [
+                        field
+                        for field, type_ in old_types.items()
+                        if new_types.get(field) != type_
+                    ]
+                ),
+            ),
+        )
+        self._rekind(thing_id, kind)
+        facts = self._conn.execute(
+            "SELECT fact_id, category, valid_from FROM facts "
             "WHERE thing_id = ? AND rev_removed IS NULL",
             (thing_id,),
-        ):
+        ).fetchall()
+        for fact_id, category, valid_from in facts:
             if category not in new_spec.categories:
-                raise ValueError(f"{kind!r} has no fact category {category!r}")
-
-        self._rekind(thing_id, kind)
+                self.correct_fact(
+                    fact_id,
+                    category=moved_category(kind, category, valid_from is not None),
+                )
 
     @_require_open
     def promote_to_sphere(self, thing_id: str) -> None:

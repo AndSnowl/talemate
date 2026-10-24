@@ -256,28 +256,26 @@ def test_heritage_origin_facts_outlast_the_cap(world):
     assert _heads(facts[1:]) == [*["Physical"] * 5, *["Instinct"] * 3, "Origin:"]
 
 
-def test_suggested_prompt_of_a_sphere_item_stub(world):
-    """A stub a sphere's core made (the Dawn Vigil, in the White Dawn's
-    Rites) suggests its own fact first, then the sphere it's part of, then
-    what mentions it: in the spheres Task 10 session the Vigil's prompt
-    led with a character's "but..." exception, and the model wrote the
-    Vigil around her."""
+def test_suggested_prompt_of_a_filed_stub(world):
+    """A stub filed in an entry (the Dawn Vigil, a rite of the White Dawn)
+    suggests its own fact first, then what it's filed in, as the sheet
+    reads a filing ("Rite of the White Dawn."; "Part of ..." with no
+    role), then what mentions it: in the spheres Task 10 session the
+    Vigil's prompt led with a character's "but..." exception, and the
+    model wrote the Vigil around her."""
 
     with world.revision(Source.manual(note="setup")) as rev:
-        dawn = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "The White Dawn",
-                "template": "religion",
-                "drawers": [{"id": "0000000a", "type": "practices", "title": "Rites"}],
-            },
-        )
+        dawn = rev.create_thing("lore", fields={"name": "The White Dawn"})
+        peak = rev.create_thing("place", fields={"name": "Dawn Peak"})
         vigil = rev.create_thing(
             "lore",
             fields={
                 "name": "The Dawn Vigil",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": dawn, "drawer": "0000000a"},
+                "filings": [
+                    {"target": dawn, "role": "rite"},
+                    {"target": peak, "role": "held at"},
+                ],
             },
         )
         rev.add_fact(vigil, "general", "A silent prayer at first light")
@@ -288,6 +286,10 @@ def test_suggested_prompt_of_a_sphere_item_stub(world):
     view = world.view(None)
 
     assert suggested_prompt(view, vigil) == (
-        "The Dawn Vigil: A silent prayer at first light. Part of the White "
-        "Dawn, under Rites. She keeps the Dawn Vigil out of habit."
+        "The Dawn Vigil: A silent prayer at first light. Rite of the White "
+        "Dawn. Held at Dawn Peak. She keeps the Dawn Vigil out of habit."
     )
+
+    with world.revision(Source.manual(note="no role")) as rev:
+        rev.set_field(vigil, "filings", [{"target": dawn}], None)
+    assert "Part of the White Dawn." in suggested_prompt(world.view(None), vigil)

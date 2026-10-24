@@ -24,19 +24,23 @@ import structlog
 
 from talemate.character import Character
 from talemate.util import replace_smart_quotes
-from talemate.world import heritage, spheres
+from talemate.world import heritage
 from talemate.world.calendar import Calendar
 from talemate.world.dates import Precision, WorldDate
+from talemate.world.filing import Filing, filings_of
 from talemate.world.prose import CachedProse, stretches
 from talemate.world.refs import REF_PATTERN
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
-from talemate.world.view import ThingState, WorldView
+from talemate.world.view import FactState, ThingState, WorldView
 from talemate.worldplay.held import (  # noqa: F401 -- re-exported
+    ROLE_PREPOSITIONS,
     _mid_sentence,
     _opens_with_a_name,
     attributes_itself,
+    filed_as,
     held_text,
+    mid_sentence_name,
 )
 from talemate.worldplay.prose_gen import inherited_categories, lineage_ids
 
@@ -377,50 +381,63 @@ def exception_text(text: str) -> str:
     return _DEPARTS_SUFFIX.sub("", text).strip()
 
 
-def mid_sentence_name(name: str) -> str:
-    """A name as it reads mid-sentence: a leading "The" lowercased ("of
-    the White Dawn")."""
+def filing_exceptions(
+    view: WorldView, state: ThingState, filing: Filing
+) -> list[FactState]:
+    """The character's exceptions to a filing, in the order written: its
+    own facts the filing lists (`exceptions`), and those filed under its
+    entry (origin `tie`, as character creation writes them)."""
 
-    return "the " + name[4:] if name.startswith("The ") else name
+    listed = set(filing.exceptions)
+    return sorted(
+        (
+            fact
+            for fact in state.facts
+            if fact.fact_id in listed or (fact.origin or {}).get("tie") == filing.target
+        ),
+        key=lambda fact: fact.created,
+    )
 
 
-def tie_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
-    """One line per tie of the character's that holds at `view.at`, e.g.
-    "Practitioner of the White Dawn (since 1010), but: doesn't believe
-    snowy owl-folk are superior": the role capitalised "of" the sphere, or,
-    for a tie within a part of it, "in" the sphere and ", within <part>"
-    ("Trooper in the Tsar's Army, within the White Talon (since 1012)");
-    "(since <year>)"
-    when the tie has a since, and its exceptions (`spheres.exceptions`, in
-    the order they were written) joined with "; ". A tie stores its
-    sphere's id, not its name, so a tie to a sphere that's since been
-    deleted, or that has no name at the view's date, is left out. The
-    since is given as its year, however precise."""
+def filing_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
+    """One line per filing of the character's with a role that holds at
+    `view.at`, in the Spheres tie-line format, e.g. "Practitioner of the
+    White Dawn (since 1010), but: doesn't believe snowy owl-folk are
+    superior": the role capitalised "of" the entry (`held.filed_as`: a
+    role that ends with a preposition takes none), or, for a filing
+    within a part of it, "in" the entry and ", within <part>" ("Trooper in
+    the Tsar's Army, within the White Talon (since 1012)", ruling C12);
+    "(since <year>)" when it has a since, given as its year however
+    precise; and its exceptions (`filing_exceptions`) joined with "; ",
+    each read mid-sentence (ruling C6's names keep their capitals). A
+    filing without a role gives no line, nor one into an entry since
+    deleted or with no name at the view's date (never "⟨unknown⟩")."""
 
+    state = view.thing(thing_id)
+    if state is None:
+        return []
     lines: list[str] = []
-    for tie in spheres.ties_of(view, thing_id, live=True):
-        name = view.name_of(tie.sphere_id)
-        if view.thing(tie.sphere_id) is None or not name:
+    for filing in filings_of(view, thing_id):
+        role = (filing.role or "").strip()
+        name = view.name_of(filing.target)
+        if not role or not name:
             continue
-        role = tie.role.strip() or "member"
-        role = f"{role[0].upper()}{role[1:]}"
-        within = view.name_of(tie.within) if tie.within is not None else None
-        if within:
-            line = (
-                f"{role} in {mid_sentence_name(name)}, "
-                f"within {mid_sentence_name(within)}"
-            )
+        within = view.name_of(filing.within) if filing.within is not None else None
+        words = role.casefold().split()
+        plain = words[0] != "of" and words[-1] not in ROLE_PREPOSITIONS
+        if within and plain:
+            # "Trooper in the Tsar's Army, within the White Talon" (C12)
+            line = f"{role[0].upper()}{role[1:]} in {mid_sentence_name(name)}"
         else:
-            line = f"{role} of {mid_sentence_name(name)}"
-        if tie.since is not None:
-            year = WorldDate(instant=tie.since.instant, precision=Precision.YEAR)
+            line = filed_as(role, name)
+        if within:
+            line += f", within {mid_sentence_name(within)}"
+        if filing.since is not None:
+            year = WorldDate(instant=filing.since.instant, precision=Precision.YEAR)
             line += f" (since {calendar.format(year)})"
         texts = [
             _mid_sentence(view, raw, view.render(raw))
-            for fact in sorted(
-                spheres.exceptions(view, thing_id, tie.sphere_id),
-                key=lambda fact: fact.created,
-            )
+            for fact in filing_exceptions(view, state, filing)
             if (raw := exception_text(fact.text))
         ]
         texts = [text for text in texts if text]
@@ -492,7 +509,9 @@ def character_from_world(
         if stage is not None:
             base_attributes["life_stage"] = stage
 
-    ties = tie_lines(view, world.calendar, thing_id)
+    # the sheet's "ties" attribute keeps its name: its lines are the
+    # character's filings with a role now
+    ties = filing_lines(view, world.calendar, thing_id)
     if ties:
         base_attributes["ties"] = "\n".join(ties)
 

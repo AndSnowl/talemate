@@ -93,14 +93,105 @@ def test_change_stub_kind_refuses_bad_changes(world):
     with pytest.raises(ValueError):
         with world.revision(Source.manual()) as rev:
             rev.change_stub_kind(stub, "magic")
-    # a lore "general" fact has nowhere to go on a character
-    with pytest.raises(ValueError):
-        with world.revision(Source.manual()) as rev:
-            rev.change_stub_kind(stub, "character")
     with pytest.raises(KeyError):
         with world.revision(Source.manual()) as rev:
             rev.change_stub_kind("0" * 32, "place")
     assert world.view().thing(stub).kind == "lore"
+
+
+def _facts_by_text(world, thing_id):
+    return {f.text: f.category for f in world.view().thing(thing_id).facts}
+
+
+def test_change_stub_kind_any_kind(world):
+    """A stub's kind changes to any kind (the curation acceptance's "'sphere'
+    has no fact category 'general'"): each fact keeps its id, one in a
+    category the new kind lacks taking the kind's fallback
+    (`kinds.moved_category`: a dated one its dated fallback), and a field
+    the new kind lacks is retired. One undo puts it all back."""
+
+    from talemate.world.dates import WorldDate
+
+    with world.revision(Source.manual()) as rev:
+        north = rev.create_thing("place", fields={"name": "The North"})
+        stub = rev.create_thing(
+            "place",
+            fields={
+                "name": "Frosthollow",
+                "kind": "valley",
+                "parent": north,
+                "tag": "valley",
+                "stub": {"ignored": False},
+            },
+        )
+        cold = rev.add_fact(stub, "description", "A cold valley.")
+        flood = rev.add_fact(
+            stub, "history", "Flooded in the thaw.", valid_from=WorldDate.of(990)
+        )
+        rev.add_fact(stub, "general", "Few live there.")
+        created = rev.rev
+
+    # place -> lore: description and history become general; the place's
+    # own fields go, the shared ones stay
+    with world.revision(Source.manual()) as rev:
+        rev.change_stub_kind(stub, "lore")
+        kind_rev = rev.rev
+    state = world.view().thing(stub)
+    assert state.kind == "lore" and state.is_stub
+    assert {f.fact_id for f in state.facts} >= {cold, flood}
+    assert _facts_by_text(world, stub) == {
+        "A cold valley.": "general",
+        "Flooded in the thaw.": "general",
+        "Few live there.": "general",
+    }
+    assert "kind" not in state.fields and "parent" not in state.fields
+    assert state.fields["tag"] == "valley"
+    _check_replay(world)
+
+    # lore -> place: general stays general (a place has it)
+    with world.revision(Source.manual()) as rev:
+        rev.change_stub_kind(stub, "place")
+    assert set(_facts_by_text(world, stub).values()) == {"general"}
+
+    # place -> character: a character has no general, so background
+    with world.revision(Source.manual()) as rev:
+        rev.change_stub_kind(stub, "character")
+    assert set(_facts_by_text(world, stub).values()) == {"background"}
+
+    # character -> lore -> sphere: background is general, then about,
+    # the dated one a sphere's timeline
+    with world.revision(Source.manual()) as rev:
+        rev.change_stub_kind(stub, "lore")
+    assert set(_facts_by_text(world, stub).values()) == {"general"}
+    with world.revision(Source.manual()) as rev:
+        rev.change_stub_kind(stub, "sphere")
+    assert _facts_by_text(world, stub) == {
+        "A cold valley.": "about",
+        "Flooded in the thaw.": "timeline",
+        "Few live there.": "about",
+    }
+    _check_replay(world)
+
+    # and every other kind takes it too
+    for kind in ("item", "event", "being", "species", "race", "mix", "culture"):
+        with world.revision(Source.manual()) as rev:
+            rev.change_stub_kind(stub, kind)
+        assert world.view().thing(stub).kind == kind
+
+    # undoing the first change (and all after it) puts the place back
+    later = list(range(kind_rev, world.head_rev() + 1))
+    report = world.undo(later)
+    assert report.conflicts == []
+    state = world.view().thing(stub)
+    assert state.kind == "place"
+    assert state.fields["parent"] == north and state.fields["kind"] == "valley"
+    assert _facts_by_text(world, stub) == {
+        "A cold valley.": "description",
+        "Flooded in the thaw.": "history",
+        "Few live there.": "general",
+    }
+    assert created < kind_rev
+    _check_replay(world)
 
 
 def test_change_stub_kind_no_longer_a_stub(world):

@@ -45,13 +45,14 @@ from collections.abc import Collection, Sequence
 
 from pydantic import BaseModel, Field
 
-from .dates import WorldDate
+from .calendar import Calendar
+from .dates import Precision, WorldDate
 from .entries import acts_in_world
 from .filing import filed_index
 from .repeats import disagreeing_dates
 from .view import FactState, ThingState, WorldView, _fact_state_from_row
 
-__all__ = ["TimelineLine", "entry_timeline", "prompt_timeline"]
+__all__ = ["TimelineLine", "dated_line", "entry_timeline", "prompt_timeline"]
 
 
 class TimelineLine(BaseModel):
@@ -248,3 +249,28 @@ def prompt_timeline(
             else line.owner_id not in shown
         )
     ]
+
+
+def _year(date: WorldDate) -> WorldDate:
+    return WorldDate(instant=date.instant, precision=Precision.YEAR)
+
+
+def dated_line(
+    calendar: Calendar,
+    date: WorldDate | None,
+    text: str,
+    until: WorldDate | None = None,
+) -> str:
+    """A timeline line as a prompt is given it: "In <year>: <text>" (the
+    spheres probe's (d) wording, probe 5's too), or "From <year> to
+    <year>: <text>" for one that has ended (`until`, ruling C18), each
+    year as `calendar` labels it; the text alone when it's undated."""
+
+    if date is None:
+        return text
+    if until is not None:
+        return (
+            f"From {calendar.format(_year(date))} to "
+            f"{calendar.format(_year(until))}: {text}"
+        )
+    return f"In {calendar.format(_year(date))}: {text}"

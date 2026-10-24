@@ -13,7 +13,7 @@ C14: the curation probe's probe 3 fell back to code):
 - **the pairs:** facts that may disagree, one from each side
   (`decide.contradiction_pairs`: word overlap, and the dates that
   disagree), for the owner to pick between;
-- **the moves:** how many facts, links, fields, filings and ties go over.
+- **the moves:** how many facts, links, fields and filings go over.
 
 **Repeats and pairs.** A fact is never both. A from-side fact in a pair of
 disagreeing dates is a pair, never a repeat: the years are the owner's to
@@ -42,8 +42,10 @@ Re-point uses), so one undo reverses it:
   dropped, with a note;
 - the preview is the client's: accept finds the pairs again and counts
   only those, and each repeat must restate a live into-side fact;
-- every reference, field, filing and tie naming the from-side moves over,
-  the into-side's empty fields are filled, and it keeps its own filing;
+- every reference, field and filing naming the from-side moves over
+  (filings rewritten, never `part_of`, ties or a parent: ruling F11), the
+  into-side's empty fields are filled, and it keeps its own filings,
+  taking the from-side's too;
 - the main name is set, the other becomes a common other name;
 - the from-side is removed.
 """
@@ -62,7 +64,6 @@ from talemate.world.repeats import content_words
 from talemate.world.store import Revision, Source, World
 from talemate.world.view import WorldView
 from talemate.worldplay.create import current_date, repeat_flags
-from talemate.worldplay.filing_shadow import shadowed_revision
 from talemate.worldplay.decide import Pair, contradiction_pairs
 from talemate.worldplay.repoint import RepointResult, plan_merge
 
@@ -103,7 +104,7 @@ class MergePreview(BaseModel):
     names: list[str]
     facts: list[MergeFact] = Field(default_factory=list)
     pairs: list[Pair] = Field(default_factory=list)
-    # how much moves over: facts (ticked), links, fields, filings, ties
+    # how much moves over: facts (ticked), links, fields, filings
     moves: dict[str, int] = Field(default_factory=dict)
     notes: list[str] = Field(default_factory=list)
     # the other names the links' words would add (not the two names, nor
@@ -325,7 +326,7 @@ def accept_merge(
         for fact in world.live_facts(preview.from_id)
         if fact.fact_id in copied and entries.is_summary_fact(fact)
     ]
-    with shadowed_revision(world, Source.manual(note=plan.note)) as rev:
+    with world.revision(Source.manual(note=plan.note)) as rev:
         plan.write(rev)
         copies = plan.copies
         inside = world.view()

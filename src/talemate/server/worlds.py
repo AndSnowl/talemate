@@ -80,11 +80,12 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `change_stub_kind {id, kind}` answer with the stub's payload.
   `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
   starting prompt for the stub and the mention context its expansion gets.
-  `repoint_stub {stub_id, target_id}` (`talemate.worldplay.repoint`)
+  `repoint_stub {stub_id, target_id, use_name?}` (`talemate.worldplay.repoint`)
   points everything naming the stub at the target (an entry, or another
-  live stub) -- fact links, fields, filings, ties, the stub's own facts
-  and filing -- teaches the target its names and removes the stub, in one
-  revision. It answers `{stub_id, stub_name, target, links, aka_added,
+  live stub) -- fact links, fields, filings, the stub's own facts and
+  filings -- teaches the target its names (`use_name`, one of the
+  target's names, rewrites the links' words to it instead) and removes
+  the stub, in one revision. It answers `{stub_id, stub_name, target, links, aka_added,
   facts_moved, notes}` (`target` the target's payload; `notes` what didn't
   carry over as the stub had it). Refused, writing nothing: the stub
   itself, a deleted thing or an ignored stub as the target, and a use the
@@ -268,6 +269,7 @@ from talemate.world import entries, heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
+from talemate.world.filing import FIELD_ROLES
 from talemate.world.kinds import (
     DRAWER_TYPES,
     HERITAGE_KINDS,
@@ -306,6 +308,7 @@ from talemate.worldplay.create import (
     drawer_types_for,
     entry_names,
     exception_fact,
+    file_by_role,
     flag_elsewhere_repeats,
     holder_named,
     matching_stub,
@@ -574,6 +577,8 @@ class IgnoreStubPayload(pydantic.BaseModel):
 class RepointStubPayload(pydantic.BaseModel):
     stub_id: str
     target_id: str
+    # the hard re-point: one of the target's names for every link's words
+    use_name: str | None = None
 
 
 class MoveFactPayload(pydantic.BaseModel):
@@ -992,7 +997,7 @@ async def _fixed_preview(
     lookup = entry_names(view)
     # the owner's own filings (a `part_of`, a place's `parent`...) are
     # ticked "In" rows, as the real preview makes them, then the file's
-    filings = owner_filings(view, fields)
+    filings = owner_filings(view, fields, kind)
     for row in parse_in(
         fixed.get("in") or [],
         view,
@@ -2950,7 +2955,9 @@ class WorldsPlugin(Plugin):
 
         payload = RepointStubPayload(**data)
         world = self._require_world()
-        done = repoint_stub(world, payload.stub_id, payload.target_id)
+        done = repoint_stub(
+            world, payload.stub_id, payload.target_id, use_name=payload.use_name
+        )
         self._reply(
             "repoint_stub",
             {
@@ -3267,7 +3274,9 @@ class WorldsPlugin(Plugin):
     async def handle_set_field(self, data: dict):
         """Set one field. The fields with an action of their own, which
         guards them, are refused here: `part_of` (`set_part_of`), `ties`
-        (`set_ties`) and `drawers` (`set_drawers`)."""
+        (`set_ties`) and `drawers` (`set_drawers`). An event's `place` and
+        an item's `owner` are filings (`filing.FIELD_ROLES`): set as the
+        thing's filing with that role (`create.file_by_role`)."""
 
         payload = SetFieldPayload(**data)
         if payload.field in GUARDED_FIELDS:
@@ -3275,13 +3284,22 @@ class WorldsPlugin(Plugin):
                 f"{payload.field!r} is set with {GUARDED_FIELDS[payload.field]}"
             )
         world = self._require_world()
-        with shadowed_revision(world, Source.manual()) as rev:
-            rev.set_field(
-                payload.thing_id,
-                payload.field,
-                payload.value,
-                _date_in(payload.valid_from),
-            )
+        state = world.view().thing(payload.thing_id)
+        role = FIELD_ROLES.get((state.kind, payload.field)) if state else None
+        if role is not None:
+            # an event's place, an item's owner: a filing, never the field
+            if payload.value is not None and not isinstance(payload.value, str):
+                raise ValueError(f"{payload.field!r} must be a thing id")
+            with world.revision(Source.manual()) as rev:
+                file_by_role(rev, world, payload.thing_id, role, payload.value)
+        else:
+            with shadowed_revision(world, Source.manual()) as rev:
+                rev.set_field(
+                    payload.thing_id,
+                    payload.field,
+                    payload.value,
+                    _date_in(payload.valid_from),
+                )
         self._edited(
             "set_field",
             payload.thing_id,

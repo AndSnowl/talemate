@@ -81,6 +81,7 @@ from talemate.prompts import Prompt
 from talemate.world import entries, spheres, timelines
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
+from talemate.world.filing import filings_of
 from talemate.world.kinds import (
     SPHERE_TEMPLATES,
     TEMPLATE_AGENT,
@@ -2123,7 +2124,8 @@ def end_item(
     """End one of the sphere's own items at `at` (the owner's "End
     this..."), in one revision:
 
-    - a thing item's `part_of` becomes `None` from `at`, and it gets an
+    - a thing item's `part_of` becomes `None` from `at`, as does its
+      filing into the sphere (its other filings kept), and it gets an
       `about` fact (`general` for a kind without one), "Ended in <date>",
       with " by <by>" when something ended it;
     - a statement's fact ends at `at`, and the sphere gets that `about`
@@ -2150,7 +2152,7 @@ def end_item(
     if by is not None:
         note += f" by {ref(by, view.name_of(by) or '')}"
 
-    with shadowed_revision(world, Source.manual(note=_ENDED_NOTE)) as rev:
+    with world.revision(Source.manual(note=_ENDED_NOTE)) as rev:
         if item.thing_id is not None:
             state = view.thing(item.thing_id)
             link = state.fields.get("part_of") if state is not None else None
@@ -2160,7 +2162,15 @@ def end_item(
                 or link.get("sphere") != sphere_id
             ):
                 raise ValueError(f"not part of the sphere: {item.thing_id}")
+            # the drawers still read `part_of` (until Task 7); the filing
+            # is what the world reads: from `at`, it's filed there no more
             rev.set_field(state.id, "part_of", None, at)
+            then = filings_of(world.view(at=at), state.id, live=False)
+            kept = [f for f in then if f.target != sphere_id]
+            if kept != then:
+                rev.set_field(
+                    state.id, "filings", [f.model_dump(mode="json") for f in kept], at
+                )
             category = (
                 "about" if "about" in get_kind(state.kind).categories else "general"
             )

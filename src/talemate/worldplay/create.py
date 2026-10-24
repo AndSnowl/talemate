@@ -139,7 +139,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -152,6 +152,7 @@ from talemate.world.calendar import Calendar, Era
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.filing import (
+    FIELD_ROLES,
     Filing,
     check_filings,
     filed_index,
@@ -2624,10 +2625,15 @@ def name_filings(
     return names, into_entry
 
 
-def owner_filings(view: WorldView, fields: dict[str, Any]) -> list[PreviewFiling]:
+def owner_filings(
+    view: WorldView, fields: dict[str, Any], kind: str | None = None
+) -> list[PreviewFiling]:
     """The filings the owner's fields give, taken out of `fields`, ticked:
     its `filings`, a place's `parent`, a `part_of` and `ties` (the old
-    fields, which the writer no longer writes), each live target once."""
+    fields, which the writer no longer writes), and for a `kind` thing
+    the fields that are filings (`filing.FIELD_ROLES`: an event's
+    `place`, "took place in"; an item's `owner`, "owned by"), each live
+    target once."""
 
     found: list[Filing] = []
     for raw in fields.pop("filings", None) or []:
@@ -2635,6 +2641,12 @@ def owner_filings(view: WorldView, fields: dict[str, Any]) -> list[PreviewFiling
             found.append(Filing.model_validate(raw))
         except ValueError:
             continue
+    for (field_kind, field), role in FIELD_ROLES.items():
+        if field_kind != kind:
+            continue
+        value = fields.pop(field, None)
+        if isinstance(value, str):
+            found.append(Filing(target=value, role=role))
     parent = fields.pop("parent", None)
     if isinstance(parent, str):
         found.append(Filing(target=parent))
@@ -2892,27 +2904,46 @@ def _home_exceptions(
 
 
 def _live_home_exceptions(
-    view: WorldView, row: PreviewFiling
+    view: WorldView,
+    row: PreviewFiling,
+    target_id: str | None = None,
+    redirect: Mapping[str, str] | None = None,
+    copies: Mapping[str, str] | None = None,
 ) -> list[PreviewException]:
     """The row's exceptions worth writing: not blank, and departing from
-    an item its entry still holds (a fact still its own, an entry still
-    filed in it); one gone since the preview is dropped quietly."""
+    an item its entry still holds at `view` (a fact still its own, an
+    entry still filed in it); one gone since the preview is dropped
+    quietly. The entry is `target_id`, where the filing goes, else the
+    row's own: under a fold (`redirect`, the folded stub onto the one
+    being filled, whose facts moved as `copies`, old id -> new) a row
+    into the folded stub is checked against the filled one, and its
+    exceptions name the moved copies, so the filing, its exceptions and
+    what they depart from agree."""
 
     if not row.exceptions:
         return []
-    state = view.thing(row.target_id)
+    moved = redirect or {}
+    copied = copies or {}
+    entry_id = target_id or row.target_id
+    state = view.thing(entry_id)
     fact_ids = {f.fact_id for f in state.facts} if state is not None else set()
-    filed = {s.id for s, _f in filed_index(view).get(row.target_id, [])}
-    return [
-        exception
-        for exception in row.exceptions
-        if exception.text.strip()
-        and (
-            exception.thing_id in filed
-            if exception.thing_id is not None
-            else exception.fact_id is None or exception.fact_id in fact_ids
-        )
-    ]
+    filed = {s.id for s, _f in filed_index(view).get(entry_id, [])}
+    found: list[PreviewException] = []
+    for exception in row.exceptions:
+        if not exception.text.strip():
+            continue
+        if exception.thing_id is not None:
+            thing_id = moved.get(exception.thing_id, exception.thing_id)
+            if thing_id in filed:
+                found.append(exception.model_copy(update={"thing_id": thing_id}))
+            continue
+        if exception.fact_id is None:
+            found.append(exception)
+            continue
+        fact_id = copied.get(exception.fact_id, exception.fact_id)
+        if fact_id in fact_ids:
+            found.append(exception.model_copy(update={"fact_id": fact_id}))
+    return found
 
 
 def filing_exception_fact(
@@ -2985,6 +3016,35 @@ def write_filings(
         added = True
     if added:
         rev.set_field(thing_id, "filings", value, filings_since(world, thing_id))
+
+
+def file_by_role(
+    rev: Any, world: World, thing_id: str, role: str, target_id: str | None
+) -> None:
+    """The thing's one filing with `role` (a field that is a filing,
+    `filing.FIELD_ROLES`: an event's place, an item's owner) set to
+    `target_id`, in `rev`, its other filings kept: the old one with that
+    role goes, and `None` leaves none. One into an entry it's filed in
+    already takes the role. Refused (`ValueError`) as the store refuses
+    any filing: a cycle, a target that isn't live."""
+
+    live = world.view()
+    current = filings_of(live, thing_id, live=False)
+    value = [f for f in current if f.role != role]
+    if target_id is not None:
+        same = next((i for i, f in enumerate(value) if f.target == target_id), None)
+        if same is not None:
+            value[same] = value[same].model_copy(update={"role": role})
+        else:
+            value.append(Filing(target=target_id, role=role))
+    if value == current:
+        return
+    rev.set_field(
+        thing_id,
+        "filings",
+        [f.model_dump(mode="json") for f in value],
+        filings_since(world, thing_id),
+    )
 
 
 # --- preview and accept ------------------------------------------------------
@@ -3714,7 +3774,7 @@ async def preview_thing(
     owner_aka = fields.pop("aka", None)
     fields.pop("stub", None)
     owner_tag = clean_tag(fields.pop("tag", None))
-    owned = owner_filings(view, fields)
+    owned = owner_filings(view, fields, kind)
     if stub is not None and not fields.get("name"):
         fields["name"] = view.name_of(stub.id) or ""
     treated_as_new = [name for name in new_names if name.strip()]
@@ -4269,7 +4329,7 @@ def accept_preview(
     # the old structure a client may still send in the fields is filed,
     # never written as it is (`owner_filings`)
     preview = preview.model_copy(deep=True)
-    for row in owner_filings(world.view(), preview.fields):
+    for row in owner_filings(world.view(), preview.fields, preview.kind):
         if not any(r.target_id == row.target_id for r in preview.filings):
             preview.filings.append(row)
     if same_target_id is not None:
@@ -4547,7 +4607,15 @@ def _write_preview(
                 origin=entries.with_held_by(None, holder) if held else None,
             )
         _write_entry_filings(
-            rev, world, view, preview, thing_id, redirect, linked_text, notes
+            rev,
+            world,
+            view,
+            preview,
+            thing_id,
+            redirect,
+            linked_text,
+            notes,
+            fold.copies if fold is not None else None,
         )
         _file_new_names(rev, world, view, rows, made, thing_id, notes)
         _write_file_into(rev, world, preview.file_into, thing_id, redirect, notes)
@@ -4588,6 +4656,7 @@ def _write_entry_filings(
     redirect: dict[str, str],
     linked_text: Callable[[str], str],
     notes: list[str],
+    copies: Mapping[str, str] | None = None,
 ) -> None:
     """The entry's ticked "In" rows as its filings, in `rev`, beside any it
     has (`write_filings`). A thing that acts in the world gets each row's
@@ -4610,7 +4679,10 @@ def _write_entry_filings(
             notes.append(f"{row.target_name} is gone, so it isn't filed there")
             continue
         exception_ids: list[str] = []
-        for exception in _live_home_exceptions(before, row) if acts else []:
+        # checked against the entry the filing goes to, as the revision
+        # has it (a fold's redirect, its facts moved as `copies`)
+        live = _live_home_exceptions(world.view(), row, target, redirect, copies)
+        for exception in live if acts else []:
             text, origin = filing_exception_fact(
                 linked_text(exception.text), target, row.target_name, exception
             )
@@ -4875,7 +4947,7 @@ def _accept_same(
       facts move onto it;
     - a stub the preview expanded is re-pointed onto the target
       (`repoint.plan_repoint`) in the same revision, its filings carried
-      over (`_carry_filings`), so nothing is left behind; a re-point the
+      over by the re-point, so nothing is left behind; a re-point the
       stub can't take is refused (`ValueError`) before anything is
       written.
 
@@ -4954,53 +5026,6 @@ def _accept_same(
         moved_here=len(moved),
     )
     return target_id
-
-
-def _carry_filings(
-    rev: Any, world: World, from_id: str, to_id: str, notes: list[str]
-) -> None:
-    """A stub re-pointed onto `to_id`, its filings carried over, in `rev`:
-    what it's filed in files `to_id` too (`write_filings`), and every
-    filing into it (or `within` it) points at `to_id` instead -- a thing
-    filed in both keeps the one it had in `to_id`. The stub's own filings
-    reach `to_id` without their `within` and exceptions (Task 5's repoint
-    carries those)."""
-
-    live = world.view()
-    stored = filings_of(live, from_id, live=False)
-    if stored:
-        write_filings(
-            rev,
-            world,
-            to_id,
-            [f.model_copy(update={"within": None, "exceptions": []}) for f in stored],
-            notes,
-        )
-    for state in live.things():
-        if state.id in (from_id, to_id):
-            continue
-        current = filings_of(live, state.id, live=False)
-        if not any(from_id in (f.target, f.within) for f in current):
-            continue
-        value: list[Filing] = []
-        for filing in current:
-            if filing.within == from_id:
-                filing = filing.model_copy(update={"within": to_id})
-            if filing.target == from_id:
-                if any(f.target == to_id for f in current):
-                    continue
-                filing = filing.model_copy(update={"target": to_id})
-            if filing.within == filing.target:
-                filing = filing.model_copy(update={"within": None})
-            value.append(filing)
-        dumped = [f.model_dump(mode="json") for f in value]
-        if check_filings(world.view(), state.id, dumped):
-            name = live.name_of(state.id) or state.id
-            notes.append(
-                f"{name} isn't filed in {live.name_of(to_id) or to_id}: it would be inside itself"
-            )
-            dumped = [f.model_dump(mode="json") for f in current if f.target != from_id]
-        rev.set_field(state.id, "filings", dumped, filings_since(world, state.id))
 
 
 def _stored(value: object, type_: str) -> object:
@@ -5083,7 +5108,7 @@ def _write_same(
     elsewhere: Sequence[ElsewhereFact],
 ) -> tuple[dict[str, str], list[str], list[tuple[str, FactState]]]:
     """`_accept_same`'s one revision: the re-point first (the stub's links,
-    names and facts go to the target, and its filings, `_carry_filings`),
+    names, facts and filings go to the target),
     then the preview's name and entry material (`_merge_entry`), the
     stubs, the facts, the filings (with their exceptions), the entries
     filed into it, the facts moved here and the elsewhere facts. Returns
@@ -5109,7 +5134,8 @@ def _write_same(
     notes: list[str] = []
     with world.revision(Source.manual(note=_SAME_NOTE)) as rev:
         if plan is not None:
-            _carry_filings(rev, world, plan.stub_id, target_id, notes)
+            # its filings too: what it's filed in (with each `within` and
+            # its exceptions) and what's filed in it (`RepointPlan.write`)
             plan.write(rev)
         _common_name(rev, world.view(), target_id, preview.name)
         _merge_entry(rev, world, preview, target_id, notes, redirect)
@@ -5161,7 +5187,15 @@ def _write_same(
                 origin=entries.with_held_by(None, holder) if held else None,
             )
         _write_entry_filings(
-            rev, world, view, preview, target_id, redirect, linked_text, notes
+            rev,
+            world,
+            view,
+            preview,
+            target_id,
+            redirect,
+            linked_text,
+            notes,
+            plan.copies if plan is not None else None,
         )
         _file_new_names(rev, world, view, rows, made, target_id, notes)
         _write_file_into(rev, world, preview.file_into, target_id, redirect, notes)

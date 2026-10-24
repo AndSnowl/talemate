@@ -313,6 +313,34 @@ SPHERE_CATEGORIES: tuple[str, ...] = ("timeline", "about", "statement")
 LEGACY_KINDS: tuple[str, ...] = ("culture",)
 
 
+# where a fact goes on a kind that lacks its category: a kind's plain and
+# dated fallbacks, where they differ from "general" (a sphere's `about`
+# and `timeline`, a place's `history` when dated, a character's
+# `background`), then a catch-all, then the kind's first
+_FALLBACK_CATEGORIES: dict[str, tuple[str, str]] = {
+    "sphere": ("about", "timeline"),
+    "place": ("general", "history"),
+    "character": ("background", "background"),
+}
+_CATCH_ALL_CATEGORIES: tuple[str, ...] = ("general", "about")
+
+
+def moved_category(kind: str, category: str, dated: bool) -> str:
+    """The category a fact in `category` takes on a `kind` thing (a stub
+    whose kind changes, a fact moved onto another entry): its own when the
+    kind has it; else the kind's fallback (`dated` for a fact with a start
+    date), a catch-all, or the kind's first category."""
+
+    categories = get_kind(kind).categories
+    if category in categories:
+        return category
+    plain, when = _FALLBACK_CATEGORIES.get(kind, ("general", "general"))
+    fallback = when if dated else plain
+    if fallback in categories:
+        return fallback
+    return next((c for c in _CATCH_ALL_CATEGORIES if c in categories), categories[0])
+
+
 def kinds_can_be_one(a: str, b: str) -> bool:
     """Whether a thing of kind `a` and one of kind `b` can be one entry:
     only the same kind (a place and a sphere no longer can: a place

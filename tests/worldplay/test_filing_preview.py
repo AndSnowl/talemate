@@ -652,3 +652,91 @@ def test_accept_files_the_old_fields_a_client_sends(world, moscavia):
     view = world.view()
     assert "parent" not in view.thing(thing_id).fields
     assert _targets(view, thing_id) == [moscavia.khorol]
+
+
+def test_home_exceptions_follow_a_fold(world):
+    """Task 4 review, M4: an "In" row's exceptions are checked against the
+    entry the filing goes to, as the revision has it. Under a fold (the
+    folded stub's facts moved onto the one being filled, as `copies`, and
+    the stub itself `redirect`ed), a fact item is its moved copy and a
+    thing item the one it now is; one its entry no longer holds is
+    dropped."""
+
+    from talemate.worldplay.create import (
+        PreviewException,
+        PreviewFiling,
+        _live_home_exceptions,
+    )
+
+    with world.revision(Source.manual(note="homes")) as rev:
+        dawn = rev.create_thing("lore", {"name": "The White Dawn"})
+        fast = rev.add_fact(dawn, "general", "The faithful fast at midwinter.")
+        old = rev.add_fact(dawn, "general", "An old rule.")
+        filled = rev.create_thing("lore", {"name": "The Vigil"})
+        rev.set_field(filled, "filings", [{"target": dawn}], None)
+        folded = rev.create_thing(
+            "lore", {"name": "the vigil", "stub": {"ignored": False}}
+        )
+    row = PreviewFiling(
+        target_id=folded,
+        target_name="the vigil",
+        role="believer",
+        exceptions=[
+            PreviewException(text="Eats at midwinter.", item="fast", fact_id="f" * 32),
+            PreviewException(
+                text="Skips the vigil.", item="the vigil", thing_id=folded
+            ),
+            PreviewException(text="Keeps no rule.", item="old", fact_id=old),
+        ],
+    )
+    found = _live_home_exceptions(
+        world.view(), row, dawn, {folded: filled}, {"f" * 32: fast}
+    )
+    assert [(e.text, e.fact_id, e.thing_id) for e in found] == [
+        ("Eats at midwinter.", fast, None),
+        ("Skips the vigil.", None, filled),
+        ("Keeps no rule.", old, None),
+    ]
+    # checked against the row's own entry, the stub holds none of them
+    assert _live_home_exceptions(world.view(), row) == []
+
+
+def test_event_place_and_item_owner_are_filings(world, moscavia):
+    """An event's `place` and an item's `owner` are filings, "took place
+    in" and "owned by" (filing spec, "Other fields"): sent in a preview's
+    fields they're filed, never written as the field, and a reader finds
+    them as filings (`filing.field_filing`)."""
+
+    from talemate.world.filing import field_filing
+
+    event = accept_preview(
+        world,
+        CreatePreview(
+            kind="event",
+            prompt="the flood",
+            name="The Great Flood",
+            fields={"place": moscavia.khorol},
+            facts=[PreviewFact(category="summary", text="The river rose.")],
+            prose={},
+        ),
+    )
+    item = accept_preview(
+        world,
+        CreatePreview(
+            kind="item",
+            prompt="a lantern",
+            name="The Ferry Lantern",
+            fields={"owner": moscavia.khorol},
+            facts=[PreviewFact(category="description", text="It never goes out.")],
+            prose={},
+        ),
+    )
+    view = world.view()
+    assert "place" not in view.thing(event).fields
+    assert "owner" not in view.thing(item).fields
+    assert [(f.target, f.role) for f in filings_of(view, event)] == [
+        (moscavia.khorol, "took place in")
+    ]
+    assert field_filing(view, event, "place").target == moscavia.khorol
+    assert field_filing(view, item, "owner").role == "owned by"
+    assert field_filing(view, item, "place") is None

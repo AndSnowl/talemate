@@ -73,7 +73,6 @@ from talemate.world.kinds import HERITAGE_KINDS
 from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
 from talemate.world.entries import acts_in_world
-from talemate.world.spheres import is_sphere
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
@@ -140,9 +139,9 @@ class SetupRef(BaseModel):
 
 class SceneSetup(BaseModel):
     """A planned scene: who (the player and the other characters), where,
-    when, what it's about and how it opens. `pulled_in` is the lore the
-    scene draws on (spheres too: a place sphere named in the prompt is
-    pulled in, ruling P10); `invented` names everything made up for it. `prompt`
+    when, what it's about and how it opens. `pulled_in` is what the prompt
+    names that the scene touches (places too, but its own); `invented`
+    names everything made up for it. `prompt`
     (the owner's storyline) and `summary` (of the scene it continues, if
     any) become the scene's premise."""
 
@@ -601,8 +600,8 @@ def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
     if setup.place is not None:
         refs.append(setup.place)
     thing_ids = [ref.thing_id for ref in refs if ref.thing_id is not None]
-    # a place is filled only as the scene's place: a place sphere pulled in
-    # (ruling P10) stays as it is, as it did before it was pulled in
+    # a place is filled only as the scene's place: a place pulled in stays
+    # as it is, as it did before it was pulled in
     pulled_in = [
         thing_id
         for thing_id in setup.pulled_in
@@ -780,17 +779,18 @@ async def plan_scene(
         prompt=prompt,
         new_names=frozenset(_norm(name) for name in new_names or [] if name.strip()),
     )
-    # ruling P10: a place sphere named in the prompt is pulled in (the
-    # scene touches it), unless it's the scene's own place; other places
-    # and characters (real beings too) never are, nor a being that isn't
-    # real: its facts reach the scene through what refers to it
+    # what the prompt names is pulled in: the scene touches it (filing
+    # spec, "Scene context"; ruling P10 had only place spheres), a place
+    # too unless it's the scene's own; characters (real beings too) never
+    # are, nor a being that isn't real: its facts reach the scene through
+    # what refers to it
     own_place = setup.place.thing_id if setup.place is not None else None
     setup.pulled_in = [
         thing_id
         for thing_id in _dedupe([*shown, *_stubs_named(view, setup)])
         if (state := view.thing(thing_id)) is not None
         and state.kind not in ("character", "being")
-        and (state.kind != "place" or (is_sphere(state) and thing_id != own_place))
+        and thing_id != own_place
     ]
     setup.stub_previews = await _stub_previews(world, setup, client)
     log.info(
@@ -909,8 +909,8 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
         )
 
     # the final place shows as the place, never again as pulled in: a
-    # setup edited or continued after planning may have made a place
-    # sphere pulled in its place (ruling P10)
+    # setup edited or continued after planning may have made a place it
+    # pulled in its place
     place_id = setup.place.thing_id if setup.place is not None else None
     state: dict[str, object] = {
         "intro": setup.intro,

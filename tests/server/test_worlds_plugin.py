@@ -2079,8 +2079,8 @@ async def test_repoint_stub_is_undone_in_one_step(plugin, monkeypatch):
 async def test_repoint_stub_refusals_write_nothing(plugin, monkeypatch):
     """Refused, writing nothing: the stub itself, a deleted thing, an
     ignored stub, a full entry as the stub, a field use the target's kind
-    can't take, the target's own use of the stub, and a scene's use.
-    Another live stub is a target like any entry."""
+    can't take, the target's own use of the stub (filed in it), and a
+    scene's use. Another live stub is a target like any entry."""
 
     s = await _open_repoint_world(plugin, monkeypatch)
     world = s.world
@@ -2101,23 +2101,23 @@ async def test_repoint_stub_refusals_write_nothing(plugin, monkeypatch):
         assert words in _last(plugin, "operation_done")["error"]["message"]
         assert world.head_rev() == head
 
-    # a place's parent can't be lore: the use is named
-    with world.revision(Source.manual(note="parent")) as rev:
-        rev.set_field(s.harbour, "parent", s.tsardom, None)
+    # a character's heritage can't be lore: the use is named
+    with world.revision(Source.manual(note="heritage")) as rev:
+        rev.set_field(s.maren, "heritage", s.tsardom, None)
     head = world.head_rev()
     await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=saltlore)
     message = _last(plugin, "operation_done")["error"]["message"]
-    assert "The Harbour's parent" in message and "lore" in message
+    assert "Maren's heritage" in message and "lore" in message
     assert world.head_rev() == head
     world.undo([head])
 
-    # the target's own parent is the stub: it would be its own parent
-    with world.revision(Source.manual(note="own parent")) as rev:
-        rev.set_field(s.moscavy, "parent", s.tsardom, None)
+    # the target is filed in the stub: it would point at itself
+    with world.revision(Source.manual(note="own filing")) as rev:
+        rev.set_field(s.moscavy, "filings", [{"target": s.tsardom}], None)
     head = world.head_rev()
     await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
     message = _last(plugin, "operation_done")["error"]["message"]
-    assert "Moscavy's parent" in message
+    assert "Moscavy's filings" in message
     assert world.head_rev() == head
     world.undo([head])
 
@@ -4283,10 +4283,11 @@ async def test_set_field_refuses_guarded_fields(plugin, field, value, action):
 
 
 async def test_repoint_stub_carries_a_fill_stubs_filing_and_facts(plugin, client):
-    """A stub Fill made (filed in its drawer, with its item fact) re-pointed
-    onto an unfiled entry: the entry is filed where the stub was and takes
-    its facts, a link to itself made plain words. Onto an entry filed
-    elsewhere, the entry keeps its own filing and the reply says so."""
+    """A stub Fill made (filed in the sphere, with its item fact)
+    re-pointed onto an unfiled entry: the entry is filed where the stub
+    was (a filing; `part_of` is never written, ruling F11) and takes its
+    facts, a link to itself made plain words. Onto an entry filed there
+    already, the entry keeps its own filing, once."""
 
     s = await _open_sphere_world(plugin)
     world = s.world
@@ -4325,7 +4326,8 @@ async def test_repoint_stub_carries_a_fill_stubs_filing_and_facts(plugin, client
     assert not _errors(plugin)
     assert world.head_rev() == head + 1
     view = world.view()
-    assert view.thing(noon).fields["part_of"] == {"sphere": s.dawn, "drawer": RITES}
+    assert [f.target for f in filings_of(view, noon)] == [s.dawn]
+    assert view.thing(noon).fields.get("part_of") is None
     moved = {f.text: f for f in world.live_facts(noon)}
     assert set(moved) == {"Rung at noon.", "Echoes the Noon Bells."}
     # a new fact of Noon's, with the category and dates; its link to Noon
@@ -4337,31 +4339,20 @@ async def test_repoint_stub_carries_a_fill_stubs_filing_and_facts(plugin, client
         WorldDate.of(1001),
         WorldDate.of(1015),
     )
-    dawn = await _get_thing(plugin, s.dawn)
-    rites = next(d for d in dawn["sphere"]["drawers"] if d["id"] == RITES)
-    assert "Noon Bells" in [i["name"] for i in rites["items"]]
-    assert "Bell Rite" not in [i["name"] for i in rites["items"]]
 
-    # onto the Vigil, filed already (in Rites, not Doctrines): it stays put
+    # onto the Vigil, filed in the Dawn already: one filing there still
+    before = filings_of(world.view(), s.vigil, live=False)
     await _act(plugin, "repoint_stub", stub_id=ash, target_id=s.vigil)
     assert not _errors(plugin)
-    reply = _last(plugin, "repoint_stub")["data"]
-    assert any(
-        "Dawn Vigil stays in The White Dawn · Rites" in note and "Doctrines" in note
-        for note in reply["notes"]
-    )
-    assert world.view().thing(s.vigil).fields["part_of"] == {
-        "sphere": s.dawn,
-        "drawer": RITES,
-    }
+    assert filings_of(world.view(), s.vigil, live=False) == before
     assert "Ash on the brow." in [f.text for f in world.live_facts(s.vigil)]
 
 
-async def test_repoint_stub_carries_fields_filings_and_ties(plugin, client):
+async def test_repoint_stub_carries_fields_filings_and_exceptions(plugin, client):
     """Every use of the stub moves to the target at the dates it holds: a
-    place's parent (its undated value, not a dated one naming another
-    place), a lore entry filed in a sphere stub, a character's tie to it
-    and the exception filed under that tie."""
+    place filed in a place stub (its undated filing, not a dated one into
+    another place), a lore entry filed in a lore stub, a character's
+    filing in it and the exception filed under that filing."""
 
     s = await _open_sphere_world(plugin)
     world = s.world
@@ -4371,21 +4362,16 @@ async def test_repoint_stub_carries_fields_filings_and_ties(plugin, client):
         )
         mark = rev.create_thing("place", {"name": "Northmark"})
         south = rev.create_thing("place", {"name": "Southmark"})
-        harbour = rev.create_thing("place", {"name": "The Harbour", "parent": north})
-        rev.set_field(harbour, "parent", south, WorldDate.of(1015))
+        harbour = rev.create_thing(
+            "place", {"name": "The Harbour", "filings": [{"target": north}]}
+        )
+        rev.set_field(harbour, "filings", [{"target": south}], WorldDate.of(1015))
         faith = rev.create_thing(
-            "sphere",
-            {"name": "Old Faith", "template": "religion", "stub": {"ignored": False}},
+            "lore", {"name": "Old Faith", "stub": {"ignored": False}}
         )
+        lore = rev.create_thing("lore", {"name": "The Old Ways"})
         ember = rev.create_thing(
-            "lore",
-            {"name": "Ember Rite", "part_of": {"sphere": faith, "drawer": "unsorted"}},
-        )
-        rev.set_field(
-            s.maren,
-            "ties",
-            [{"sphere": faith, "role": "keeper", "since": None, "until": None}],
-            None,
+            "lore", {"name": "Ember Rite", "filings": [{"target": faith}]}
         )
         doubt = rev.add_fact(
             s.maren,
@@ -4393,19 +4379,26 @@ async def test_repoint_stub_carries_fields_filings_and_ties(plugin, client):
             f"Doubts {ref(faith, 'the Old Faith')}.",
             origin={"tie": faith},
         )
+        rev.set_field(
+            s.maren,
+            "filings",
+            [{"target": faith, "role": "keeper", "exceptions": [doubt]}],
+            None,
+        )
 
     await _act(plugin, "repoint_stub", stub_id=north, target_id=mark)
-    await _act(plugin, "repoint_stub", stub_id=faith, target_id=s.dawn)
+    await _act(plugin, "repoint_stub", stub_id=faith, target_id=lore)
     assert not _errors(plugin)
-    assert world.view(WorldDate.of(1010)).thing(harbour).fields["parent"] == mark
-    assert world.view(WorldDate.of(1020)).thing(harbour).fields["parent"] == south
-    assert world.view().thing(ember).fields["part_of"] == {
-        "sphere": s.dawn,
-        "drawer": "unsorted",
-    }
-    assert [t.sphere_id for t in spheres.ties_of(world.view(), s.maren)] == [s.dawn]
-    exceptions = spheres.exceptions(world.view(), s.maren, s.dawn)
-    assert [f.fact_id for f in exceptions] == [doubt]
+    targets = lambda at, thing: [  # noqa: E731
+        f.target for f in filings_of(world.view(at), thing)
+    ]
+    assert targets(WorldDate.of(1010), harbour) == [mark]
+    assert targets(WorldDate.of(1020), harbour) == [south]
+    assert targets(None, ember) == [lore]
+    (filing,) = filings_of(world.view(), s.maren)
+    assert (filing.target, filing.role, filing.exceptions) == (lore, "keeper", [doubt])
+    exception = next(f for f in world.live_facts(s.maren) if f.fact_id == doubt)
+    assert exception.origin == {"tie": lore}
 
 
 async def test_repoint_stub_redo_keeps_the_moved_facts(plugin, monkeypatch):
@@ -4442,103 +4435,101 @@ async def test_repoint_stub_redo_keeps_the_moved_facts(plugin, monkeypatch):
     ] == [[moved.fact_id]]
 
 
-async def test_repoint_stub_never_makes_a_parent_cycle(plugin, monkeypatch):
-    """A place stub whose own parent is the target leaves the target
-    without that parent (noted); a parent use that would close a loop
-    (Region in the stub, Bay in Region, the stub onto Bay) is refused."""
+async def test_repoint_stub_never_makes_a_filing_cycle(plugin, monkeypatch):
+    """A place stub filed in the target leaves the target unfiled there
+    (it can't be filed in itself; noted); a filing that would close a
+    loop (Region in the stub, Bay in Region, the stub onto Bay) is
+    refused."""
 
     s = await _open_repoint_world(plugin, monkeypatch)
     world = s.world
     with world.revision(Source.manual(note="places")) as rev:
         cove = rev.create_thing(
-            "place", {"name": "Cove", "stub": {"ignored": False}, "parent": s.moscavy}
+            "place",
+            {
+                "name": "Cove",
+                "stub": {"ignored": False},
+                "filings": [{"target": s.moscavy}],
+            },
         )
-        region = rev.create_thing("place", {"name": "Region", "parent": s.tsardom})
-        bay = rev.create_thing("place", {"name": "Bay", "parent": region})
+        region = rev.create_thing(
+            "place", {"name": "Region", "filings": [{"target": s.tsardom}]}
+        )
+        bay = rev.create_thing(
+            "place", {"name": "Bay", "filings": [{"target": region}]}
+        )
 
     await _act(plugin, "repoint_stub", stub_id=cove, target_id=s.moscavy)
     assert not _errors(plugin)
-    assert world.view().thing(s.moscavy).fields.get("parent") is None
+    assert filings_of(world.view(), s.moscavy) == []
     notes = _last(plugin, "repoint_stub")["data"]["notes"]
-    assert any("parent" in note for note in notes)
+    assert any("isn't filed in itself" in note for note in notes)
 
     head = world.head_rev()
     await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=bay)
     message = _last(plugin, "operation_done")["error"]["message"]
-    assert "Region's parent" in message
+    assert "Region's filings" in message and "inside itself" in message
     assert world.head_rev() == head
 
 
 async def test_repoint_stub_more_refusals(plugin, client):
-    """Refused, naming the use: a filing and a tie when the target isn't
-    a sphere, a filing that would loop, a mix whose two parents would be
-    one, and shares naming the target twice."""
+    """Refused, naming the use: a filing that would loop, a mix whose two
+    parents would be one, and shares naming the target twice. Any entry
+    takes filings now: a lore target isn't refused for them."""
 
     s = await _open_sphere_world(plugin)
     world = s.world
     with world.revision(Source.manual(note="uses")) as rev:
         faith = rev.create_thing(
-            "sphere",
-            {"name": "Old Faith", "template": "religion", "stub": {"ignored": False}},
+            "lore", {"name": "Old Faith", "stub": {"ignored": False}}
         )
-        rev.create_thing(
-            "lore",
-            {"name": "Ember Rite", "part_of": {"sphere": faith, "drawer": "unsorted"}},
-        )
-        rev.set_field(
-            s.maren,
-            "ties",
-            [{"sphere": faith, "role": "keeper", "since": None, "until": None}],
-            None,
-        )
+        rev.create_thing("lore", {"name": "Ember Rite", "filings": [{"target": faith}]})
         plain = rev.create_thing("lore", {"name": "Plain Lore"})
         order = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Order",
-                "template": "order",
-                "part_of": {"sphere": faith, "drawer": "unsorted"},
-            },
+            "lore", {"name": "The Order", "filings": [{"target": faith}]}
         )
         chapter = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Chapter",
-                "template": "order",
-                "part_of": {"sphere": order, "drawer": "unsorted"},
-            },
+            "lore", {"name": "The Chapter", "filings": [{"target": order}]}
         )
         orc = rev.create_thing("species", {"name": "Orc"})
         elf = rev.create_thing("species", {"name": "Elf", "stub": {"ignored": False}})
         rev.create_thing("mix", {"name": "Half-elf", "parents": [orc, elf]})
+        culture = rev.create_thing(
+            "sphere",
+            {"name": "Old Ways", "template": "culture", "stub": {"ignored": False}},
+        )
         rev.create_thing(
             "place",
             {
                 "name": "Borderland",
                 "cultures": [
-                    {"thing_id": faith, "share": 50},
+                    {"thing_id": culture, "share": 50},
                     {"thing_id": s.dawn, "share": 50},
                 ],
             },
         )
     head = world.head_rev()
     for stub_id, target_id, words in (
-        (faith, plain, ("Ember Rite's part of", "Maren's ties", "a sphere")),
-        (faith, chapter, ("The Order's part of", "inside itself")),
+        (faith, chapter, ("The Order's filings", "inside itself")),
         (elf, orc, ("Half-elf's parents",)),
-        (faith, s.dawn, ("Borderland's cultures",)),
+        (culture, s.dawn, ("Borderland's cultures",)),
     ):
         await _act(plugin, "repoint_stub", stub_id=stub_id, target_id=target_id)
         message = _last(plugin, "operation_done")["error"]["message"]
         assert all(word in message for word in words), message
         assert world.head_rev() == head
 
+    errors = len(_errors(plugin))
+    await _act(plugin, "repoint_stub", stub_id=faith, target_id=plain)
+    assert len(_errors(plugin)) == errors
+    assert _last(plugin, "repoint_stub")["data"]["stub_id"] == faith
+
 
 async def test_repoint_stub_sphere_fields_and_prose(plugin, monkeypatch):
     """A sphere stub's template, agent and drawers stay off a target that
     isn't a sphere (noted); an equal value carries no note. Prose is
-    refreshed for a thing whose rendered field was rewritten (a parent),
-    not for an unrendered one (a filing)."""
+    refreshed for a thing whose rendered field was rewritten (a species'
+    origin), not for an unrendered one (a filing)."""
 
     s = await _open_repoint_world(plugin, monkeypatch)
     world = s.world
@@ -4553,7 +4544,8 @@ async def test_repoint_stub_sphere_fields_and_prose(plugin, monkeypatch):
             },
         )
         shrine = rev.create_thing("place", {"name": "Shrine"})
-        rev.set_field(s.harbour, "parent", s.tsardom, None)
+        owls = rev.create_thing("species", {"name": "Owl-folk", "origin": s.tsardom})
+        rev.set_field(s.harbour, "filings", [{"target": s.tsardom}], None)
         rev.set_field(s.moscavy, "kind", "country", None)
         rev.set_field(s.tsardom, "kind", "country", None)
 
@@ -4570,7 +4562,8 @@ async def test_repoint_stub_sphere_fields_and_prose(plugin, monkeypatch):
     assert not any(
         "kind" in note for note in _last(plugin, "repoint_stub")["data"]["notes"]
     )
-    assert s.harbour in s.prose
+    assert owls in s.prose
+    assert s.harbour not in s.prose
 
 
 async def test_accept_preview_onto_target_schedules_its_prose(plugin, monkeypatch):
@@ -5900,3 +5893,35 @@ async def test_same_offers_say_whether_a_stub(plugin, tmp_path, monkeypatch):
         shore: True,
     }
     assert "stub" in next(o["line"] for o in offers if o["thing_id"] == lake)
+
+
+async def test_set_field_event_place_and_item_owner_are_filings(plugin, monkeypatch):
+    """`set_field` of an event's `place` or an item's `owner` files the
+    thing ("took place in", "owned by"; filing spec, "Other fields") and
+    never writes the field: another value replaces that filing, its other
+    filings kept, and null takes it away."""
+
+    s = await _open_repoint_world(plugin, monkeypatch)
+    world = s.world
+    with world.revision(Source.manual(note="things")) as rev:
+        flood = rev.create_thing(
+            "event", {"name": "The Flood", "filings": [{"target": s.moscavy}]}
+        )
+        lantern = rev.create_thing("item", {"name": "Lantern"})
+
+    def filed(thing_id):
+        return [(f.target, f.role) for f in filings_of(world.view(), thing_id)]
+
+    await _act(plugin, "set_field", thing_id=flood, field="place", value=s.harbour)
+    await _act(plugin, "set_field", thing_id=lantern, field="owner", value=s.maren)
+    assert not _errors(plugin)
+    assert filed(flood) == [(s.moscavy, None), (s.harbour, "took place in")]
+    assert filed(lantern) == [(s.maren, "owned by")]
+    assert "place" not in world.view().thing(flood).fields
+    assert "owner" not in world.view().thing(lantern).fields
+
+    await _act(plugin, "set_field", thing_id=flood, field="place", value=s.moscavy)
+    assert filed(flood) == [(s.moscavy, "took place in")]
+    await _act(plugin, "set_field", thing_id=lantern, field="owner", value=None)
+    assert filed(lantern) == []
+    assert not _errors(plugin)

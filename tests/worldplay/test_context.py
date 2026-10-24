@@ -376,8 +376,9 @@ EVERYDAY_LINE = (
 
 
 def test_context_block_uses_everyday_name(world):
-    """A place or lore entry with an everyday name is shown "<main>
-    (usually called <everyday>)", and the block opens with the line asking
+    """A place or touched entry with an everyday name is shown "<main>
+    (usually called <everyday>)" ("<main> (<tag or kind>, usually called
+    <everyday>)" for a touched one), and the block opens with the line asking
     for everyday names (connections probe, recommendation (d))."""
 
     aka = [
@@ -400,7 +401,7 @@ def test_context_block_uses_everyday_name(world):
     assert lines[0] == "[world]"
     assert lines[1] == EVERYDAY_LINE
     assert "Place: Barrowford\n" in block
-    assert "Tsardom of Moscavia (usually called Moscavia)\n" in block
+    assert "Tsardom of Moscavia (lore, usually called Moscavia)\n" in block
 
     # with no everyday name anywhere, no line
     with world.revision(Source.manual(note="no aka")) as rev:
@@ -428,183 +429,351 @@ def test_context_block_everyday_name_of_the_place(world):
     assert EVERYDAY_LINE in block
 
 
-# --- spheres -------------------------------------------------------------------
+# --- touched entries, from filings (filing spec, "Scene context"; probe 5) -------
 
-SPHERES_LEAD = (
-    "Spheres this scene touches (faiths, nations, orders, cultures): keep what "
-    "they hold true, and bring it in only where the scene calls for it."
+TOUCHED_LEAD = (
+    "What this scene touches: keep what these say true, and bring it in only "
+    "where the scene calls for it."
 )
 
-DAWN_BLOCK = (
-    "The White Dawn (religion)\n"
-    "- The White Dawn is the state church of Moscavia.\n"
-    "- The Doctrine of Separation forbids the faithful to marry humans.\n"
-    "- The White Dawn holds: Snowy owl-folk are the purest of the folk.\n"
-    "- The Council of Elders: Seven elders seated in Kremova.\n"
-    "- In 994: Declared the Night of Feathers a purification.\n"
-    "- In 1019: Issued the Doctrine of Separation.\n"
-)
-
-TSARDOM_BLOCK = (
-    "Tsardom of Moscavia (nation, usually called Moscavia)\n"
-    "- A northern realm of owl-folk.\n"
-    "- Only owl-folk may hold land.\n"
-    "- In 990: Crowned the first Tsar.\n"
-)
+SCRIBE_GOAL = "Deliver a sealed letter to the Chief Scribe of the Talon-Scribe Order."
+SCRIBE_PREMISE = "Vasha walks toward the Academy; a member of the Order lets her in."
 
 
-def _sphere_scene(world, **state):
+def _scene(world, at, *, goal="", premise="", **state):
     scenes = world.scenes()
-    scene_id = scenes.create("Test Scene", WorldDate.of(1020), goal="Keep the vigil")
+    scene_id = scenes.create("Test Scene", at, goal=goal, premise=premise)
     scenes.update(scene_id, state=state)
-    return world_context_block(world, scenes.get(scene_id), WorldDate.of(1020))
+    return world_context_block(world, scenes.get(scene_id), at)
 
 
 def _present(*thing_ids):
     return [{"thing_id": thing_id, "active": True} for thing_id in thing_ids]
 
 
-def test_context_touched_sphere_key_facts(world, spheres_world):
-    """A sphere the scene touches is one block of its key facts, after the
-    lore and before who is here, under the probe's (d) lead line: the
-    summary (its cached description prose), its top items (a thing item
-    whose text opens with its name as the text alone), then its latest
-    timeline facts dated "In <year>". Named (pulled in) and holding the
-    place (Dawn Peak, a holy site), it's still there once, and never also
-    as a lore entry."""
+def _headings(block):
+    """The touched entries' headings, in order."""
 
-    s = spheres_world
-    block = _sphere_scene(world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn])
-
-    assert f"\n{SPHERES_LEAD}\n{DAWN_BLOCK}" in block
-    # the Council, nested in the Dawn with no block of its own, stays one
-    # of the Dawn's key facts (ruling P20)
-    assert "- The Council of Elders: Seven elders seated in Kremova." in block
-    assert "The Council of Elders (order)" not in block
-    # the heading, the summary and the held doctrine
-    assert block.count("The White Dawn") == 3
-    assert block.count("Snowy owl-folk are the purest") == 1
-    assert "A faith of the dawn." not in block
-    assert "[[thing:" not in block
-    assert block.endswith(DAWN_BLOCK + "\n[end of world]")
+    body = block.split(TOUCHED_LEAD, 1)[1] if TOUCHED_LEAD in block else ""
+    return [
+        line
+        for line in body.splitlines()
+        if line and not line.startswith(("- ", "[end"))
+    ]
 
 
-def test_pulled_in_item_shows_once(world, spheres_world):
-    """An item of a touched sphere that's pulled in as lore (the Doctrine
-    of Separation, named by the scene) shows once, as the lore entry with
-    all its facts, after which the sphere's key facts leave it out (the
-    spheres Task 10 session: the Council of Elders showed twice)."""
-
-    s = spheres_world
-    block = _sphere_scene(
-        world, place_thing_id=s.dawn_peak, pulled_in=[s.dawn, s.separation]
-    )
-
-    separation = "The Doctrine of Separation forbids the faithful to marry humans."
-    assert block.count(separation) == 1
-    # shown as lore, before the spheres
-    assert block.index(f"The Doctrine of Separation\n- {separation}") < block.index(
-        SPHERES_LEAD
-    )
-    without = DAWN_BLOCK.replace(f"- {separation}\n", "")
-    assert f"\n{SPHERES_LEAD}\n{without}" in block
-
-
-def test_context_touched_by_territory_and_members(world, spheres_world):
-    """The Tsardom holds Kremova, the scene's place; Vasha, present, is a
-    practitioner of the Dawn; Brenna, present, an elder of the Council,
-    nested in the Dawn: the Council brings its parent's summary only, and
-    not when the parent is in the block itself. Territory, then named,
-    then members. With a block of its own, the Council is left out of the
-    Dawn's key facts (ruling P20), so its line shows once."""
-
-    s = spheres_world
-    block = _sphere_scene(
-        world, place_thing_id=s.kremova, characters=_present(s.vasha, s.brenna)
-    )
-    council_line = "- The Council of Elders: Seven elders seated in Kremova.\n"
-    dawn = DAWN_BLOCK.replace(council_line, "")
-    council = "The Council of Elders (order)\n- Seven elders seated in Kremova.\n"
-    assert f"{SPHERES_LEAD}\n{TSARDOM_BLOCK}\n{dawn}\n{council}" in block
-    assert block.count(SPHERES_LEAD) == 1
-    assert block.count("Seven elders seated in Kremova.") == 1
-
-    block = _sphere_scene(
-        world, place_thing_id=s.kremova, characters=_present(s.brenna)
-    )
-    council = (
-        "The Council of Elders (order)\n"
-        "- Part of the White Dawn: The White Dawn is the state church of "
-        "Moscavia.\n"
-        "- Seven elders seated in Kremova.\n"
-    )
-    assert f"{SPHERES_LEAD}\n{TSARDOM_BLOCK}\n{council}" in block
-    assert "The White Dawn (religion)" not in block
-
-    # an inactive character is no member present; an ended tie neither
-    block = _sphere_scene(
+def _scribe_scene(world, s, **kwargs):
+    return _scene(
         world,
-        place_thing_id=s.dawn_peak,
-        characters=[{"thing_id": s.brenna, "active": False}],
-    )
-    assert "The Council of Elders (order)" not in block
-
-
-def test_place_sphere_context_once(world, spheres_world):
-    """The scene's place is itself a sphere (the Tsardom): it shows once,
-    as the place, its own place facts followed by its key facts, never
-    again as a sphere block."""
-
-    s = spheres_world
-    block = _sphere_scene(world, place_thing_id=s.tsardom)
-
-    assert (
-        "Place: Tsardom of Moscavia (usually called Moscavia)\n"
-        "- Cold forests and frozen rivers.\n"
-        "- A northern realm of owl-folk.\n"
-        "- Only owl-folk may hold land.\n"
-        "- In 990: Crowned the first Tsar.\n"
-    ) in block
-    assert "(nation" not in block
-    assert SPHERES_LEAD not in block
-    assert block.count("Only owl-folk may hold land.") == 1
-    assert block.count("Crowned the first Tsar.") == 1
-
-    # with other spheres touched, still once
-    block = _sphere_scene(
-        world,
-        place_thing_id=s.tsardom,
-        pulled_in=[s.dawn],
+        WorldDate.of(1000),
+        goal=SCRIBE_GOAL,
+        premise=SCRIBE_PREMISE,
+        place_thing_id=s.academy,
         characters=_present(s.vasha),
+        **kwargs,
     )
-    assert block.count("Only owl-folk may hold land.") == 1
-    assert "(nation" not in block
-    assert block.count("The White Dawn (religion)") == 1
 
 
-def test_untouched_sphere_not_in_context(world, spheres_world):
-    """A sphere nothing touches never shows: not the Iron Guild, and with
-    nothing touched at all, no lead line either."""
+def test_scene_touched_by_filings(world, scribe_world):
+    """What the scene touches: what its place is filed in, followed up to
+    the timeline reach (the Academy is in Velikoye and Runic Magic,
+    Velikoye in the Tsardom); what each present character is filed in
+    (Vasha, a courier of the Postal Authority); what the setup names (the
+    Order, in the goal); and (ruling F4) a character filed in one of
+    those, or in the place, whose role the goal or premise names as whole
+    words: Anastasiya, the Order's Chief Scribe. Not Ilya, a "member" (a
+    generic role, though the premise says "member"), nor Oleg, the
+    Order's "ward" (the premise's "toward" isn't the word), nor Vasha
+    herself (her sheet covers her), nor the place."""
+
+    s = scribe_world
+    block = _scribe_scene(world, s)
+
+    assert _headings(block) == [
+        "Velikoye (city)",
+        "Runic Magic (field)",
+        "Tsardom of Moscavia (nation, usually called Moscavia)",
+        "Northern Postal Authority (service)",
+        "Talon-Scribe Order (order)",
+        "Anastasiya Koroleva (character)",
+    ]
+    assert "- A tawny-brown owl-folk with burnt-orange eyes." in block
+    # Wattle Row's opening, told by Velikoye and by Wattle Row (gathered
+    # by Velikoye and, two steps up, by the Tsardom), shows once: as
+    # Velikoye's own line (probe 5's note: dedupe by text overlap)
+    assert block.count("Wattle Row opened its first workshops") == 1
+    assert (
+        "Velikoye (city)\n"
+        "- The river capital.\n"
+        "- In 998: Wattle Row opened its first workshops.\n"
+    ) in block
+    assert (
+        "Tsardom of Moscavia (nation, usually called Moscavia)\n"
+        "- A northern realm of owl-folk.\n"
+        "- In 990: Crowned the first Tsar.\n\n"
+    ) in block
+    assert "Ilya" not in block and "Oleg" not in block
+    assert "A snowy owl-folk." not in block
+    assert block.count("A courtyard of training stones.") == 1
+
+    # the role rule is whole words, either case: "chief scribes" isn't
+    # "Chief Scribe"
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Bring the chief scribes their ink.",
+        place_thing_id=s.academy,
+        characters=_present(s.vasha),
+        pulled_in=[s.order],
+    )
+    assert "Anastasiya" not in block
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Bring the CHIEF SCRIBE her ink.",
+        place_thing_id=s.academy,
+        pulled_in=[s.order],
+    )
+    assert "Anastasiya Koroleva (character)" in block
+
+    # filed in the place itself counts too; a filing that has ended, or a
+    # character who isn't here, doesn't touch anything
+    with world.revision(Source.manual(note="the place")) as rev:
+        rev.set_field(
+            s.ilya,
+            "filings",
+            [_in_record(s.academy, "gatekeeper")],
+            None,
+        )
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Get past the gatekeeper.",
+        place_thing_id=s.academy,
+    )
+    assert "Ilya (character)" in block
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Get past the gatekeeper.",
+        place_thing_id=s.academy,
+        characters=[{"thing_id": s.vasha, "active": False}],
+    )
+    assert "Northern Postal Authority" not in block
+
+
+def _in_record(target, role=None, since=None, until=None, exceptions=()):
+    return {
+        "target": target,
+        "role": role,
+        "since": since.model_dump(mode="json") if since else None,
+        "until": until.model_dump(mode="json") if until else None,
+        "within": None,
+        "exceptions": list(exceptions),
+    }
+
+
+def test_generic_roles_never_touch():
+    """The role rule ignores generic roles, listed in one constant, and an
+    empty one; it matches the rest as whole words, any case."""
+
+    from talemate.worldplay.context import GENERIC_ROLES, role_named
+
+    for role in ("member", "part", "in", "practitioner", "of this culture"):
+        assert role in GENERIC_ROLES
+        assert not role_named(role, f"Every {role} of the Order is here.")
+    assert not role_named(None, "anything")
+    assert not role_named("  ", "anything")
+    assert role_named("Chief Scribe", "the chief  scribe reads it")
+    assert not role_named("scribe", "the scribes read it")
+    assert not role_named("ward", "she walks toward it")
+
+
+def test_scene_block_wording(world):
+    """Probe 5's block, each touched entry headed "<name> (<tag or kind>)"
+    under the lead line: its summary, then up to 5 of its own facts, the
+    most-linked first (a held one worded as held), then its latest 3
+    timeline lines ("In <year>: ..."; "From <year> to <year>: ..." once
+    ended, ruling C18), the same event told twice counted once (the
+    Shrine's telling of the Doctrine gives way to the Dawn's own), and at
+    most 8 lines in all: the timeline keeps its 3, the own facts give way.
+    The goal, place and cast blocks are as before."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="dawn")) as rev:
+        peak = rev.create_thing("place", fields={"name": "Dawn Peak"})
+        rev.add_fact(peak, "description", "A bare summit.")
+        kremova = rev.create_thing("place", fields={"name": "Kremova"})
+        dawn = rev.create_thing(
+            "lore", fields={"name": "The White Dawn", "tag": "religion"}
+        )
+        rev.add_fact(dawn, "general", "The White Dawn is the state church.")
+        rev.add_fact(dawn, "general", "Its priests wear white.")
+        rev.add_fact(dawn, "general", f"Its seat is in {ref(kremova)}.")
+        rev.add_fact(
+            dawn,
+            "general",
+            f"Pilgrims climb from {ref(kremova)} to {ref(peak)}.",
+        )
+        rev.add_fact(dawn, "belief", "Snowy owl-folk are the purest of the folk.")
+        rev.add_fact(dawn, "general", "Bells ring at first light.")
+        rev.add_fact(dawn, "general", "It keeps no images.")
+        rev.add_fact(
+            dawn,
+            "general",
+            "Held the old spire.",
+            valid_from=WorldDate.of(1001),
+            valid_until=WorldDate.of(1010),
+        )
+        rev.add_fact(
+            dawn,
+            "general",
+            "Declared the Night of Feathers a purification.",
+            valid_from=WorldDate.of(994),
+        )
+        rev.add_fact(
+            dawn,
+            "general",
+            "Issued the Doctrine of Separation.",
+            valid_from=WorldDate.of(1019),
+        )
+        shrine = rev.create_thing(
+            "lore",
+            fields={"name": "The Shrine", "filings": [_in_record(dawn)]},
+        )
+        rev.add_fact(
+            shrine,
+            "general",
+            "The White Dawn issued the Doctrine of Separation at the shrine.",
+            valid_from=WorldDate.of(1019),
+        )
+
+    block = _scene(
+        world,
+        WorldDate.of(1020),
+        goal="Keep the vigil.",
+        place_thing_id=peak,
+        pulled_in=[dawn],
+    )
+    assert block == (
+        "[world]\n"
+        "Goal: Keep the vigil.\n"
+        "Place: Dawn Peak\n"
+        "- A bare summit.\n"
+        "\n"
+        f"{TOUCHED_LEAD}\n"
+        "The White Dawn (religion)\n"
+        "- The White Dawn is the state church.\n"
+        "- Pilgrims climb from Kremova to Dawn Peak.\n"
+        "- Its seat is in Kremova.\n"
+        "- Its priests wear white.\n"
+        "- The White Dawn holds: Snowy owl-folk are the purest of the folk.\n"
+        "- In 994: Declared the Night of Feathers a purification.\n"
+        "- From 1001 to 1010: Held the old spire.\n"
+        "- In 1019: Issued the Doctrine of Separation.\n"
+        "\n"
+        "[end of world]"
+    )
+
+
+def test_scene_place_and_touched_entries_show_once(world, scribe_world):
+    """The scene's place shows once, as the place, though the setup names
+    it (pulled in); an entry touched two ways (Velikoye, filed above the
+    place and pulled in) is one block, and no fact is told twice."""
+
+    s = scribe_world
+    block = _scribe_scene(world, s, pulled_in=[s.academy, s.velikoye, s.order])
+    assert block.count("The Academy") == 1
+    assert "The Academy (" not in block
+    assert block.count("Velikoye (city)") == 1
+    assert block.count("The river capital.") == 1
+    assert block.count("Talon-Scribe Order (order)") == 1
+
+    # the place pulled in, with nothing else touched: the place alone
+    block = _scene(
+        world, WorldDate.of(1000), place_thing_id=s.tsardom, pulled_in=[s.tsardom]
+    )
+    assert "Place: Tsardom of Moscavia (usually called Moscavia)\n" in block
+    assert TOUCHED_LEAD not in block
+    assert block.count("A northern realm of owl-folk.") == 1
+
+
+def test_untouched_entry_not_in_context(world):
+    """An entry nothing touches never shows: one unlinked from the place,
+    the cast and the setup, one merely mentioned by the place's facts, and
+    a believed being even when named (it's only spoken of). With nothing
+    touched there's no lead line."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        place = rev.create_thing("place", fields={"name": "Veldhaer"})
+        rev.add_fact(place, "description", "A harbor town built on stilts.")
+        treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
+        rev.add_fact(treaty, "general", "Signed after the flood of 301.")
+        rev.add_fact(place, "history", f"Bound by {ref(treaty)}.")
+        other = rev.create_thing("lore", fields={"name": "Far Mountains"})
+        rev.add_fact(other, "general", "Snow all year.")
+        mother = rev.create_thing(
+            "being", fields={"name": "Sea Mother", "existence": "believed"}
+        )
+        rev.add_fact(mother, "nature", "A goddess of the deep.")
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        rev.add_fact(maren, "background", "A ferrywoman.")
+
+    block = _scene(
+        world,
+        WorldDate.of(310),
+        goal="Find the envoy",
+        place_thing_id=place,
+        characters=_present(maren),
+        pulled_in=[mother],
+    )
+    assert block == (
+        "[world]\n"
+        "Goal: Find the envoy\n"
+        "Place: Veldhaer\n"
+        "- A harbor town built on stilts.\n"
+        "- Bound by The River Treaty.\n"
+        "[end of world]"
+    )
+
+
+def test_scene_timeline_gathers_what_is_filed(world, spheres_world):
+    """A touched entry's timeline lines gather what's filed in it: Dawn
+    Peak's raising, filed in the Dawn, is among the Dawn's latest lines,
+    held as belief when it's held; with Dawn Peak the scene's place, its
+    fact is told once, as the place's."""
 
     s = spheres_world
-    block = _sphere_scene(world, place_thing_id=s.dawn_peak)
-    assert "Iron Guild" not in block
-    assert "Smiths of the far south." not in block
+    with world.revision(Source.manual(note="later")) as rev:
+        rev.add_fact(
+            s.dawn_peak,
+            "general",
+            "The shrine on the peak was raised by the dawn's own light.",
+            valid_from=WorldDate.of(1015),
+            origin={"held_by": s.dawn},
+        )
+    at = WorldDate.of(1020)
+    block = _scene(world, at, place_thing_id=s.kremova, characters=_present(s.vasha))
+    assert (
+        "- In 994: Declared the Night of Feathers a purification.\n"
+        "- In 1015: The White Dawn holds that the shrine on the peak was raised "
+        "by the dawn's own light.\n"
+        "- In 1019: Issued the Doctrine of Separation.\n"
+    ) in block
 
-    with world.revision(Source.manual(note="elsewhere")) as rev:
-        elsewhere = rev.create_thing("place", fields={"name": "The Southern Wastes"})
-    block = _sphere_scene(world, place_thing_id=elsewhere)
-    assert SPHERES_LEAD not in block
-    assert "Iron Guild" not in block
-    assert "White Dawn" not in block
-    assert "Moscavia" not in block
+    block = _scene(world, at, place_thing_id=s.dawn_peak, characters=_present(s.vasha))
+    assert block.count("shrine on the peak") == 1
+    assert "- In 1015:" not in block
 
 
 @pytest.mark.asyncio
 async def test_no_extra_model_calls_on_turn(world, spheres_world):
-    """Spheres in play cost no model call: the World instruction (narrator
-    and conversation) carries the touched spheres, and a time passage
-    rebuilds Vasha's sheet with her tie line, all from what's stored."""
+    """Filings in play cost no model call: the World instruction (narrator
+    and conversation) carries the touched entries, and a time passage
+    rebuilds Vasha's sheet with her filing line, all from what's stored."""
 
     s = spheres_world
     scenes = world.scenes()
@@ -632,8 +801,10 @@ async def test_no_extra_model_calls_on_turn(world, spheres_world):
     )
     await async_signals.get("agent.conversation.inject_instructions").send(emission)
     [instruction] = [i for i in emission.dynamic_instructions if i.title == "World"]
-    assert TSARDOM_BLOCK in instruction.content
-    assert DAWN_BLOCK in instruction.content
+    assert _headings(instruction.content) == [
+        "Tsardom of Moscavia (place, usually called Moscavia)",
+        "The White Dawn (sphere)",
+    ]
 
     world_state = instance.get_agent("world_state")
     await world_state.advance_time("P30D")
@@ -644,202 +815,3 @@ async def test_no_extra_model_calls_on_turn(world, spheres_world):
     )
 
     assert scene.mock_client.prompt_history == []
-
-
-def test_named_place_sphere_context_once(world, spheres_world, monkeypatch):
-    """Ruling P10: the Tsardom, named in the prompt (pulled in) while the
-    scene is at Dawn Peak, outside it, shows once as a sphere block and
-    never as lore. Who holds the place is found from one snapshot
-    (`spheres.holders`), never by asking each sphere's territory."""
-
-    from talemate.world import spheres as world_spheres
-
-    def no_territory(*_args, **_kwargs):
-        raise AssertionError("territory asked per sphere")
-
-    monkeypatch.setattr(world_spheres, "territory", no_territory)
-
-    s = spheres_world
-    block = _sphere_scene(world, place_thing_id=s.dawn_peak, pulled_in=[s.tsardom])
-    assert f"{SPHERES_LEAD}\n{DAWN_BLOCK}\n{TSARDOM_BLOCK}" in block
-    assert block.count("Tsardom of Moscavia") == 1
-    assert block.count("Only owl-folk may hold land.") == 1
-    assert "Cold forests and frozen rivers." not in block
-
-
-# --- nearness and timelines (curation spec, goals 6 and 10) ----------------------
-
-
-def _near_scene(world, place_id, pulled_in=(), characters=()):
-    scenes = world.scenes()
-    scene_id = scenes.create("Test Scene", WorldDate.of(310), goal="Find the envoy")
-    scenes.update(
-        scene_id,
-        state={
-            "place_thing_id": place_id,
-            "pulled_in": list(pulled_in),
-            "characters": [{"thing_id": c, "active": True} for c in characters],
-        },
-    )
-    return world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
-
-
-def test_scene_context_adds_near_lore_within_knobs(world):
-    """After today's rules (the place, what's named, who's here, the
-    spheres touched), the things nearest the place and the cast come in as
-    lore: each once, never a believed being, a held fact as belief, and no
-    more entries or facts per entry than the world's knobs allow."""
-
-    from talemate.world.curation import CurationSettings
-    from talemate.world.refs import ref
-
-    with world.revision(Source.manual(note="setup")) as rev:
-        place = rev.create_thing("place", fields={"name": "Veldhaer"})
-        treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
-        guild = rev.create_thing("lore", fields={"name": "Harbor Guild"})
-        lighthouse = rev.create_thing("lore", fields={"name": "Old Lighthouse"})
-        mother = rev.create_thing(
-            "being", fields={"name": "Sea Mother", "existence": "believed"}
-        )
-        maren = rev.create_thing("character", fields={"name": "Maren"})
-        rev.add_fact(place, "history", f"Bound by {ref(treaty)}.")
-        rev.add_fact(place, "general", f"The tides belong to {ref(mother)}.")
-        rev.add_fact(treaty, "general", "Signed after the flood of 301.")
-        rev.add_fact(guild, "general", f"Runs the docks of {ref(place)}.")
-        rev.add_fact(
-            guild,
-            "general",
-            "The guild was blessed by the tides.",
-            origin={"held_by": maren},
-        )
-        rev.add_fact(mother, "nature", "A goddess of the deep.")
-        rev.add_fact(maren, "background", f"Keeps {ref(lighthouse)}.")
-        rev.add_fact(lighthouse, "general", "Its lamp is never lit.")
-
-    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
-    assert "Harbor Guild\n- Runs the docks of Veldhaer.\n" in block
-    assert "- Maren holds that the guild was blessed by the tides.\n" in block
-    assert "Old Lighthouse\n- Its lamp is never lit.\n" in block
-    # what's shown already shows once: the named treaty, the place, Maren
-    assert block.count("Signed after the flood of 301.") == 1
-    assert block.count("The River Treaty\n") == 1
-    assert "\nVeldhaer\n" not in block and "\nMaren\n" not in block
-    # a believed being is only spoken of
-    assert "A goddess of the deep." not in block
-    # today's rules first: the named lore leads the near ones
-    assert block.index("The River Treaty\n") < block.index("Harbor Guild\n")
-
-    # three entries in all (the place, the named treaty and one more), and
-    # one fact each: the nearest, by name on a tie, and its first fact
-    world.set_curation(CurationSettings(entries=3, facts_per_entry=1))
-    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
-    assert "Harbor Guild\n- Runs the docks of Veldhaer.\n\n" in block
-    assert "blessed by the tides" not in block
-    assert "Old Lighthouse" not in block
-    assert "Signed after the flood of 301." in block
-
-    # no room left: today's rules alone, never cut
-    world.set_curation(CurationSettings(entries=1))
-    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
-    assert "Harbor Guild" not in block and "Old Lighthouse" not in block
-    assert "Signed after the flood of 301." in block
-
-
-def test_scene_context_unchanged_when_no_links(world):
-    """A world with no links between its entries gets today's block: an
-    unlinked entry never comes in by nearness."""
-
-    from talemate.world.curation import CurationSettings
-
-    with world.revision(Source.manual(note="setup")) as rev:
-        place = rev.create_thing("place", fields={"name": "Veldhaer"})
-        rev.add_fact(place, "description", "A harbor town built on stilts.")
-        treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
-        rev.add_fact(treaty, "general", "Signed after the flood of 301.")
-        other = rev.create_thing("lore", fields={"name": "Far Mountains"})
-        rev.add_fact(other, "general", "Snow all year.")
-        maren = rev.create_thing("character", fields={"name": "Maren"})
-        rev.add_fact(maren, "background", "A ferrywoman.")
-
-    block = _near_scene(world, place, pulled_in=[treaty], characters=[maren])
-    assert "Far Mountains" not in block
-    world.set_curation(CurationSettings(entries=0))
-    assert _near_scene(world, place, pulled_in=[treaty], characters=[maren]) == block
-    assert block == (
-        "[world]\n"
-        "Goal: Find the envoy\n"
-        "Place: Veldhaer\n"
-        "- A harbor town built on stilts.\n"
-        "\n"
-        "The River Treaty\n"
-        "- Signed after the flood of 301.\n"
-        "\n"
-        "[end of world]"
-    )
-
-
-def test_scene_sphere_timeline_gathers_its_parts(world, spheres_world):
-    """A touched sphere's key facts end with its gathered timeline: Dawn
-    Peak's raising, a holy site of the Dawn, is among the Dawn's latest
-    lines, in the probe's "In <year>: " wording, held as belief when it's
-    held; a part shown as the scene's place isn't told twice."""
-
-    s = spheres_world
-    with world.revision(Source.manual(note="later")) as rev:
-        rev.add_fact(
-            s.dawn_peak,
-            "general",
-            "The shrine on the peak was raised by the dawn's own light.",
-            valid_from=WorldDate.of(1015),
-            origin={"held_by": s.dawn},
-        )
-    block = _sphere_scene(world, place_thing_id=s.kremova, characters=_present(s.vasha))
-    assert (
-        "- In 994: Declared the Night of Feathers a purification.\n"
-        "- In 1015: The White Dawn holds that the shrine on the peak was raised "
-        "by the dawn's own light.\n"
-        "- In 1019: Issued the Doctrine of Separation.\n"
-    ) in block
-
-    block = _sphere_scene(
-        world, place_thing_id=s.dawn_peak, characters=_present(s.vasha)
-    )
-    assert block.count("shrine on the peak") == 1
-    assert "- In 1015:" not in block
-
-
-def test_sphere_item_with_a_dated_first_fact_shows_once(world, spheres_world):
-    """An item the key facts print (its first fact dated) isn't told
-    again among the timeline lines; an ended timeline fact shows its span
-    (ruling C18)."""
-
-    s = spheres_world
-    with world.revision(Source.manual(note="later")) as rev:
-        light = rev.create_thing(
-            "lore",
-            fields={
-                "name": "The Doctrine of Light",
-                "part_of": {"sphere": s.dawn, "drawer": "d0000001"},
-            },
-        )
-        rev.add_fact(
-            light,
-            "general",
-            "The Doctrine of Light was proclaimed.",
-            valid_from=WorldDate.of(1000),
-        )
-        rev.add_fact(
-            s.dawn,
-            "timeline",
-            "Held the old spire.",
-            valid_from=WorldDate.of(1001),
-            valid_until=WorldDate.of(1010),
-        )
-    block = _sphere_scene(world, place_thing_id=s.kremova, characters=_present(s.vasha))
-    assert block.count("The Doctrine of Light was proclaimed.") == 1
-    assert "In 1000:" not in block
-    assert (
-        "- In 994: Declared the Night of Feathers a purification.\n"
-        "- From 1001 to 1010: Held the old spire.\n"
-        "- In 1019: Issued the Doctrine of Separation.\n"
-    ) in block

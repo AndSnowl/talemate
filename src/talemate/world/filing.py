@@ -27,6 +27,11 @@ bring a cycle back: every reader that walks filings must be cycle-safe
 
 A stored filing always has the full shape (`stored_filings_value`), with
 a blank role kept as `None`.
+
+An event's `place` and an item's `owner` are filings too (`FIELD_ROLES`):
+an event "took place in" its place, an item is "owned by" its owner.
+Whatever would write those fields writes the filing instead, and readers
+read the filing (`field_filing`).
 """
 
 from collections.abc import Sequence
@@ -40,11 +45,13 @@ from .view import ThingState, WorldView
 log = structlog.get_logger("talemate.world.filing")
 
 __all__ = [
+    "FIELD_ROLES",
     "OTHER_HEADING",
     "Filing",
     "Group",
     "check_filings",
     "connected",
+    "field_filing",
     "filed_in",
     "filed_index",
     "filing_live",
@@ -59,6 +66,12 @@ __all__ = [
 
 # the heading of the group of untagged entries
 OTHER_HEADING = "Other"
+
+# the fields that are filings, by kind: `(kind, field) -> role`
+FIELD_ROLES: dict[tuple[str, str], str] = {
+    ("event", "place"): "took place in",
+    ("item", "owner"): "owned by",
+}
 
 
 class Filing(BaseModel):
@@ -146,6 +159,18 @@ def filings_of(view: WorldView, thing_id: str, *, live: bool = True) -> list[Fil
     if state is None:
         return []
     return _live(view, state) if live else _stored_filings(state)
+
+
+def field_filing(view: WorldView, thing_id: str, field: str) -> Filing | None:
+    """The thing's live filing that stands for its `field` (`FIELD_ROLES`:
+    an event's place, an item's owner), the first with that role; `None`
+    for none, or for a field no filing stands for."""
+
+    state = view.thing(thing_id)
+    role = FIELD_ROLES.get((state.kind, field)) if state is not None else None
+    if state is None or role is None:
+        return None
+    return next((f for f in _live(view, state) if f.role == role), None)
 
 
 def sits_in(view: WorldView, start_id: str, thing_id: str) -> bool:

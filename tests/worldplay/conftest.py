@@ -126,8 +126,9 @@ def spheres_world(world):
     nested in the Dawn's Hierarchy; the Iron Guild, touched by nothing;
     Vasha, a practitioner of the Dawn since 1010 with two exceptions
     (worded as character creation writes them), and Brenna, an elder of
-    the Council. Each `part_of`, `parent` and tie has its matching filing;
-    the Dawn's beliefs statement is marked held by it."""
+    the Council. Each `part_of`, `parent` and tie has its matching filing
+    (Vasha's carrying her exceptions); the Dawn's beliefs statement is
+    marked held by it."""
 
     from talemate.world.refs import ref
 
@@ -237,18 +238,30 @@ def spheres_world(world):
                 "filings": [_in(dawn, "practitioner", since=WorldDate.of(1010))],
             },
         )
-        rev.add_fact(
+        doubts = rev.add_fact(
             vasha,
             "ties",
             "Doesn't believe snowy owl-folk are superior. Departs from a "
             f"teaching of {ref(dawn, 'The White Dawn')}",
             origin={"rejects_fact": superiority},
         )
-        rev.add_fact(
+        marries = rev.add_fact(
             vasha,
             "ties",
             "Means to marry a human. Departs from "
             f"{ref(separation, 'The Doctrine of Separation')}",
+        )
+        # her filing's "but..." exceptions, as character creation files them
+        rev.set_field(
+            vasha,
+            "filings",
+            [
+                {
+                    **_in(dawn, "practitioner", since=WorldDate.of(1010)),
+                    "exceptions": [doubts, marries],
+                }
+            ],
+            None,
         )
         brenna = rev.create_thing(
             "character",
@@ -278,4 +291,128 @@ def spheres_world(world):
         guild=guild,
         vasha=vasha,
         brenna=brenna,
+    )
+
+
+class ScribeWorld(NamedTuple):
+    tsardom: str
+    velikoye: str
+    academy: str
+    runes: str
+    order: str
+    post: str
+    anastasiya: str
+    ilya: str
+    oleg: str
+    vasha: str
+    wattle_row: str
+
+
+@pytest.fixture
+def scribe_world(world):
+    """Probe 5's scene, small and filed only (no old structure): the
+    Academy, filed in Velikoye and in Runic Magic; Velikoye in the
+    Tsardom; Wattle Row, a street of Velikoye, whose opening Velikoye's
+    own timeline tells again; the Talon-Scribe Order, with Anastasiya
+    Koroleva its chief scribe, Ilya a member and Oleg its ward; Vasha, a
+    courier of the Northern Postal Authority."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="scribes")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={
+                "name": "Tsardom of Moscavia",
+                "tag": "nation",
+                "aka": [{"name": "Moscavia", "tag": "common", "everyday": True}],
+            },
+        )
+        rev.add_fact(tsardom, "description", "A northern realm of owl-folk.")
+        rev.add_fact(
+            tsardom,
+            "history",
+            "Crowned the first Tsar.",
+            valid_from=WorldDate.of(990),
+        )
+        velikoye = rev.create_thing(
+            "place",
+            fields={"name": "Velikoye", "tag": "city", "filings": [_in(tsardom)]},
+        )
+        rev.add_fact(velikoye, "description", "The river capital.")
+        rev.add_fact(
+            velikoye,
+            "history",
+            "Wattle Row opened its first workshops.",
+            valid_from=WorldDate.of(998),
+        )
+        wattle_row = rev.create_thing(
+            "place",
+            fields={"name": "Wattle Row", "tag": "street", "filings": [_in(velikoye)]},
+        )
+        rev.add_fact(
+            wattle_row,
+            "history",
+            "Wattle Row opened its first workshops by the river.",
+            valid_from=WorldDate.of(998),
+        )
+        runes = rev.create_thing("lore", fields={"name": "Runic Magic", "tag": "field"})
+        rev.add_fact(runes, "general", "Runes are cut, never painted.")
+        academy = rev.create_thing(
+            "place",
+            fields={
+                "name": "The Academy",
+                "tag": "academy",
+                "filings": [_in(velikoye), _in(runes, "school of")],
+            },
+        )
+        rev.add_fact(academy, "description", "A courtyard of training stones.")
+        order = rev.create_thing(
+            "lore", fields={"name": "Talon-Scribe Order", "tag": "order"}
+        )
+        rev.add_fact(order, "general", f"Keeps the rune census of {ref(tsardom)}.")
+        post = rev.create_thing(
+            "lore", fields={"name": "Northern Postal Authority", "tag": "service"}
+        )
+        rev.add_fact(post, "general", "Carries sealed letters by wing.")
+        anastasiya = rev.create_thing(
+            "character",
+            fields={
+                "name": "Anastasiya Koroleva",
+                "filings": [_in(order, "Chief Scribe")],
+            },
+        )
+        rev.add_fact(
+            anastasiya,
+            "appearance",
+            "A tawny-brown owl-folk with burnt-orange eyes.",
+        )
+        ilya = rev.create_thing(
+            "character",
+            fields={"name": "Ilya", "filings": [_in(order, "member")]},
+        )
+        rev.add_fact(ilya, "appearance", "A grey owl-folk.")
+        oleg = rev.create_thing(
+            "character",
+            fields={"name": "Oleg", "filings": [_in(order, "ward")]},
+        )
+        rev.add_fact(oleg, "appearance", "A fledgling.")
+        vasha = rev.create_thing(
+            "character",
+            fields={"name": "Vasha", "filings": [_in(post, "courier")]},
+        )
+        rev.add_fact(vasha, "appearance", "A snowy owl-folk.")
+
+    return ScribeWorld(
+        tsardom=tsardom,
+        velikoye=velikoye,
+        academy=academy,
+        runes=runes,
+        order=order,
+        post=post,
+        anastasiya=anastasiya,
+        ilya=ilya,
+        oleg=oleg,
+        vasha=vasha,
+        wattle_row=wattle_row,
     )

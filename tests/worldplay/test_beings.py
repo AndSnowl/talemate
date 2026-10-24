@@ -64,6 +64,7 @@ def beings(world):
                 "name": "The River Spirit",
                 "existence": "real",
                 "ties": [_tie(church, "protector")],
+                "filings": [{"target": church, "role": "protector"}],
             },
         )
         rev.add_fact(spirit, "nature", "A shape of moving water.")

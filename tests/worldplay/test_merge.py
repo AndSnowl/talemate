@@ -12,13 +12,12 @@ from typing import NamedTuple
 import pytest
 
 from talemate.world.dates import WorldDate
+from talemate.world.filing import filings_of
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
 from talemate.worldplay.decide import contradiction_pairs
 from talemate.worldplay.merge import MergePreview, accept_merge, preview_merge
 from talemate.worldplay.repoint import repoint_stub
-
-LANDS, MILITARY, DIVISIONS, RANKS = "1a4d0001", "3111a001", "d1d50001", "4a5c0001"
 
 SYSTEM_A = "Ashenmere is a cave system beneath the northern hills."
 SYSTEM_B = "The Ashenmere Caves are a cave system beneath the northern hills."
@@ -31,6 +30,26 @@ SMUGGLERS = "Smugglers hide their goods in the caves."
 
 def _aka(name, tag="common", everyday=False):
     return {"name": name, "tag": tag, "everyday": everyday}
+
+
+def _in(target, role=None, *, within=None, since=None, exceptions=()):
+    """One filing into `target`, as `filings` stores it."""
+
+    return {
+        "target": target,
+        "role": role,
+        "since": since.model_dump(mode="json") if since else None,
+        "until": None,
+        "within": within,
+        "exceptions": list(exceptions),
+    }
+
+
+def _filed(world, thing_id):
+    return [
+        (f.target, f.role, f.within)
+        for f in filings_of(world.view(), thing_id, live=False)
+    ]
 
 
 class Mere(NamedTuple):
@@ -53,43 +72,40 @@ class Mere(NamedTuple):
 
 @pytest.fixture
 def mere(world):
-    """Present 1000. Ashenmere, a region in the Tsardom's Lands & Sites,
-    and The Ashenmere Caves, a cave system under Northreach: one place
-    written twice. The Caves restate Ashenmere's first line (a repeat),
-    date the dialect's rediscovery 950 against Ashenmere's 947, and give
-    the lichen another colour. Deepvault's parent is the Caves, and Vasha
-    and Ashenmere both link to them."""
+    """Present 1000. Ashenmere, a region filed in the Tsardom, and The
+    Ashenmere Caves, a cave system filed in Northreach: one place written
+    twice. The Caves restate Ashenmere's first line (a repeat), date the
+    dialect's rediscovery 950 against Ashenmere's 947, and give the lichen
+    another colour. Deepvault is filed in the Caves, and Vasha and
+    Ashenmere both link to them."""
 
     world.set_present(WorldDate.of(1000))
     with world.revision(Source.manual(note="mere")) as rev:
         tsardom = rev.create_thing(
-            "sphere",
-            {
-                "name": "Tsardom of Moscavia",
-                "template": "nation",
-                "drawers": [{"id": LANDS, "type": "places", "title": "Lands & Sites"}],
-            },
+            "lore", {"name": "Tsardom of Moscavia", "tag": "nation"}
         )
         northreach = rev.create_thing("place", {"name": "Northreach"})
         ashenmere = rev.create_thing(
             "place",
             {
                 "name": "Ashenmere",
-                "kind": "region",
+                "tag": "region",
                 "aka": [_aka("the Mere", everyday=True)],
-                "part_of": {"sphere": tsardom, "drawer": LANDS},
+                "filings": [_in(tsardom)],
             },
         )
         caves = rev.create_thing(
             "place",
             {
                 "name": "The Ashenmere Caves",
-                "kind": "cave system",
-                "parent": northreach,
+                "tag": "cave system",
+                "filings": [_in(northreach)],
                 "aka": [_aka("the Deeps", tag="proper")],
             },
         )
-        deepvault = rev.create_thing("place", {"name": "Deepvault", "parent": caves})
+        deepvault = rev.create_thing(
+            "place", {"name": "Deepvault", "filings": [_in(caves)]}
+        )
         vasha = rev.create_thing("character", {"name": "Vasha"})
         system_a = rev.add_fact(ashenmere, "general", SYSTEM_A)
         dialect_a = rev.add_fact(
@@ -194,13 +210,7 @@ def test_merge_preview_names_facts_pairs(world, mere):
     ]
     assert preview.pairs[1].a_text == LICHEN_B
     assert preview.pairs[1].b_text == LICHEN_A
-    assert preview.moves == {
-        "facts": 3,
-        "links": 2,
-        "fields": 1,
-        "filings": 0,
-        "ties": 0,
-    }
+    assert preview.moves == {"facts": 3, "links": 2, "fields": 0, "filings": 1}
 
 
 def test_contradiction_pairs_is_code_only(world, mere):
@@ -225,10 +235,9 @@ def test_contradiction_pairs_is_code_only(world, mere):
 
 def test_merge_moves_links_and_fields(world, mere):
     """One revision: the ticked facts copied (new ids), the links and the
-    field naming the Caves pointed at Ashenmere (Ashenmere's own link made
-    its words), an empty field filled and a conflicting one noted, the
-    filing kept, the Caves removed; prose for Ashenmere and for the field
-    that changed."""
+    filing naming the Caves pointed at Ashenmere (Ashenmere's own link made
+    its words), a conflicting tag noted, Ashenmere's filing kept and the
+    Caves' added beside it, the Caves removed; prose for Ashenmere."""
 
     m = mere
     preview = preview_merge(world, m.caves, m.ashenmere)
@@ -255,13 +264,14 @@ def test_merge_moves_links_and_fields(world, mere):
 
     vasha = next(f for f in world.live_facts(m.vasha) if f.fact_id == m.explored)
     assert vasha.text == f"Explored {ref(m.ashenmere, 'the Caves')} as a girl."
-    assert view.thing(m.deepvault).fields["parent"] == m.ashenmere
-    assert ashenmere.fields["parent"] == m.northreach
-    assert ashenmere.fields["kind"] == "region"
-    assert any("kind" in note for note in done.notes)
-    assert ashenmere.fields["part_of"] == {"sphere": m.tsardom, "drawer": LANDS}
-    assert done.prose[0] == m.ashenmere
-    assert m.deepvault in done.prose
+    assert _filed(world, m.deepvault) == [(m.ashenmere, None, None)]
+    assert _filed(world, m.ashenmere) == [
+        (m.tsardom, None, None),
+        (m.northreach, None, None),
+    ]
+    assert ashenmere.fields["tag"] == "region"
+    assert any("tag" in note for note in done.notes)
+    assert done.prose == [m.ashenmere]
 
 
 def test_merge_main_name_choice_other_becomes_aka(world, mere):
@@ -399,7 +409,7 @@ def test_merge_refusals_write_nothing(world, mere):
         # ruling C17: one kind (a place and a sphere no longer, Task 3)
         (m.caves, saltlore, ValueError, "only entries of one kind"),
         (m.vasha, m.caves, ValueError, "a character and The Ashenmere Caves a place"),
-        (m.caves, m.tsardom, ValueError, "a place and Tsardom of Moscavia a sphere"),
+        (m.caves, m.tsardom, ValueError, "a place and Tsardom of Moscavia a lore"),
         (m.tsardom, m.northreach, ValueError, "only entries of one kind"),
         # a scene's player
         (m.vasha, oskar, ValueError, "the scene Descent"),
@@ -456,7 +466,7 @@ def test_undo_redo_merge(world, mere):
     assert _snapshot(world, ids) == after
 
 
-# --- ties ----------------------------------------------------------------------
+# --- filings ----------------------------------------------------------------------
 
 
 class Host(NamedTuple):
@@ -471,254 +481,135 @@ class Host(NamedTuple):
 
 @pytest.fixture
 def host(world):
-    """The Tsar's Army (an order sphere, unfiled, with the White Talon in
-    its Divisions) and the Tsar's Host (the same army written twice: an
-    order filed in the Tsardom's Military, with the Frosted Wing in its
-    Divisions). Oskar rides with the Host, within the Frosted Wing; Ilya
-    is a soldier of the Tsardom, within the Host."""
+    """The Tsar's Army (unfiled, with the White Talon filed in it) and the
+    Tsar's Host (the same army written twice: filed in the Tsardom, with
+    the Frosted Wing filed in it). Oskar rides with the Host, within the
+    Frosted Wing; Ilya is a soldier of the Tsardom, within the Host."""
 
     with world.revision(Source.manual(note="host")) as rev:
         tsardom = rev.create_thing(
-            "sphere",
-            {
-                "name": "Tsardom of Moscavia",
-                "template": "nation",
-                "drawers": [{"id": MILITARY, "type": "structure", "title": "Military"}],
-            },
+            "lore", {"name": "Tsardom of Moscavia", "tag": "nation"}
         )
-        army = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Tsar's Army",
-                "template": "order",
-                "drawers": [
-                    {"id": DIVISIONS, "type": "structure", "title": "Divisions"}
-                ],
-            },
-        )
+        army = rev.create_thing("lore", {"name": "The Tsar's Army", "tag": "army"})
         host = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Tsar's Host",
-                "template": "order",
-                "drawers": [{"id": RANKS, "type": "structure", "title": "Divisions"}],
-                "part_of": {"sphere": tsardom, "drawer": MILITARY},
-            },
+            "lore",
+            {"name": "The Tsar's Host", "tag": "army", "filings": [_in(tsardom)]},
         )
         talon = rev.create_thing(
-            "lore",
-            {
-                "name": "The White Talon",
-                "part_of": {"sphere": army, "drawer": DIVISIONS},
-            },
+            "lore", {"name": "The White Talon", "filings": [_in(army, "division")]}
         )
         frost = rev.create_thing(
-            "lore",
-            {"name": "The Frosted Wing", "part_of": {"sphere": host, "drawer": RANKS}},
+            "lore", {"name": "The Frosted Wing", "filings": [_in(host, "division")]}
         )
         oskar = rev.create_thing(
             "character",
-            {
-                "name": "Oskar",
-                "ties": [
-                    {
-                        "sphere": host,
-                        "role": "rider",
-                        "since": None,
-                        "until": None,
-                        "within": frost,
-                    }
-                ],
-            },
+            {"name": "Oskar", "filings": [_in(host, "rider", within=frost)]},
         )
         ilya = rev.create_thing(
             "character",
-            {
-                "name": "Ilya",
-                "ties": [
-                    {
-                        "sphere": tsardom,
-                        "role": "soldier",
-                        "since": None,
-                        "until": None,
-                        "within": host,
-                    }
-                ],
-            },
+            {"name": "Ilya", "filings": [_in(tsardom, "soldier", within=host)]},
         )
-        rev.add_fact(host, "about", "The Tsar's Host is the Tsardom's army.")
+        rev.add_fact(host, "general", "The Tsar's Host is the Tsardom's army.")
     return Host(tsardom, army, host, frost, talon, oskar, ilya)
 
 
-def test_merge_sphere_repoints_parts_and_ties(world, host):
-    """A sphere merged into a sphere: its parts are filed in the other,
-    ties to it and `within` it point at the other, and the other, filed
-    nowhere, takes its filing."""
+def test_merge_rewrites_filings(world, host):
+    """An entry merged into another: what's filed in it is filed in the
+    other, a filing `within` it is within the other, and the other, filed
+    nowhere, takes its filings -- so Ilya's part still holds. Filings are
+    written, never `part_of`, ties or a parent (ruling F11)."""
 
     h = host
     preview = preview_merge(world, h.host, h.army)
-    assert preview.moves["filings"] == 1
-    assert preview.moves["ties"] == 2
+    assert preview.moves["filings"] == 3
+    assert "ties" not in preview.moves
     accept_merge(world, preview, main_name="The Tsar's Army")
     view = world.view()
     assert view.thing(h.host) is None
-    # ruling C15: the Host's Divisions is the Army's by type and title
-    assert view.thing(h.frost).fields["part_of"] == {
-        "sphere": h.army,
-        "drawer": DIVISIONS,
-    }
-    assert view.thing(h.army).fields["drawers"] == [
-        {"id": DIVISIONS, "type": "structure", "title": "Divisions"}
-    ]
-    assert view.thing(h.army).fields["part_of"] == {
-        "sphere": h.tsardom,
-        "drawer": MILITARY,
-    }
-    (oskar,) = view.thing(h.oskar).fields["ties"]
-    assert (oskar["sphere"], oskar["within"]) == (h.army, h.frost)
-    (ilya,) = view.thing(h.ilya).fields["ties"]
-    assert (ilya["sphere"], ilya["within"]) == (h.tsardom, h.army)
+    assert _filed(world, h.frost) == [(h.army, "division", None)]
+    assert _filed(world, h.talon) == [(h.army, "division", None)]
+    assert _filed(world, h.army) == [(h.tsardom, None, None)]
+    assert _filed(world, h.oskar) == [(h.army, "rider", h.frost)]
+    assert _filed(world, h.ilya) == [(h.tsardom, "soldier", h.army)]
+    for thing_id in (h.army, h.frost, h.oskar, h.ilya):
+        fields = view.thing(thing_id).fields
+        assert all(fields.get(old) is None for old in ("part_of", "ties", "parent"))
+
+    # one undo puts the Host and every filing back
+    world.undo([world.head_rev()])
+    assert _filed(world, h.oskar) == [(h.host, "rider", h.frost)]
+    assert _filed(world, h.army) == []
 
 
-def test_merge_sphere_into_non_sphere_refused(world, host):
+def test_merge_into_a_non_lore_refused(world, host):
     h = host
     with world.revision(Source.manual(note="camp")) as rev:
         camp = rev.create_thing("place", {"name": "The Winter Camp"})
     head = world.head_rev()
-    # a sphere and a place are two kinds now, which never merge
+    # two kinds never merge
     with pytest.raises(ValueError, match="only entries of one kind"):
         preview_merge(world, h.host, camp)
     assert world.head_rev() == head
 
 
-def test_merge_sphere_drawers_matched_or_added(world, host):
-    """Ruling C15: a drawer of the Host's the Army has none like (by id,
-    or type and title) is added to the Army's, and its part follows it; a
-    statement in a drawer matched by title keeps its drawer, the Army's;
-    one in the added drawer keeps it too."""
-
-    h = host
-    with world.revision(Source.manual(note="drawers")) as rev:
-        rev.set_field(
-            h.host,
-            "drawers",
-            [
-                {"id": RANKS, "type": "structure", "title": "Divisions"},
-                {"id": "c0de0001", "type": "beliefs", "title": " the  CODE "},
-                {"id": "fea50001", "type": "practices", "title": "Feasts"},
-            ],
-            None,
-        )
-        rev.set_field(
-            h.army,
-            "drawers",
-            [
-                {"id": DIVISIONS, "type": "structure", "title": "Divisions"},
-                {"id": "c0de0002", "type": "beliefs", "title": "The Code"},
-            ],
-            None,
-        )
-        feast = rev.create_thing(
-            "lore",
-            {
-                "name": "The Thaw Feast",
-                "part_of": {"sphere": h.host, "drawer": "fea50001"},
-            },
-        )
-        oath = rev.add_fact(
-            h.host, "statement", "No rider flies alone.", origin={"drawer": "c0de0001"}
-        )
-        toast = rev.add_fact(
-            h.host,
-            "statement",
-            "The first cup goes to the fallen.",
-            origin={"drawer": "fea50001"},
-        )
-    preview = preview_merge(world, h.host, h.army)
-    done = accept_merge(world, preview, main_name="The Tsar's Army")
-    view = world.view()
-    assert view.thing(h.army).fields["drawers"] == [
-        {"id": DIVISIONS, "type": "structure", "title": "Divisions"},
-        {"id": "c0de0002", "type": "beliefs", "title": "The Code"},
-        {"id": "fea50001", "type": "practices", "title": "Feasts"},
-    ]
-    assert view.thing(feast).fields["part_of"] == {
-        "sphere": h.army,
-        "drawer": "fea50001",
-    }
-    assert any("Feasts" in note for note in done.notes)
-    statements = {
-        f.text: f.origin for f in world.live_facts(h.army) if f.category == "statement"
-    }
-    assert statements["No rider flies alone."]["drawer"] == "c0de0002"
-    assert statements["The first cup goes to the fallen."]["drawer"] == "fea50001"
-    assert oath not in [f.fact_id for f in world.live_facts(h.army)]
-    assert toast not in [f.fact_id for f in world.live_facts(h.army)]
-
-
-def test_merge_sphere_into_its_own_branch(world, host):
-    """The Host merged into its branch, the Northern Host: the branch sits
-    where the Host sat (its parent, the Host, is cleared since the Host has
-    none; it takes the Host's filing), keeps the Host's drawers, and its
-    parts and people follow."""
+def test_merge_into_an_entry_filed_in_it(world, host):
+    """The Host merged into its branch, the Northern Host, filed in it: the
+    branch sits where the Host sat (its filing in the Host goes, and it
+    takes the Host's, in the Tsardom), and what was filed in the Host
+    follows it; a note says so."""
 
     h = host
     with world.revision(Source.manual(note="branch")) as rev:
         branch = rev.create_thing(
-            "sphere",
-            {"name": "The Northern Host", "template": "order", "parent": h.host},
+            "lore",
+            {"name": "The Northern Host", "filings": [_in(h.host, "branch of")]},
         )
     preview = preview_merge(world, h.host, branch)
     done = accept_merge(world, preview, main_name="The Northern Host")
-    view = world.view()
-    state = view.thing(branch)
-    assert "parent" not in state.fields or state.fields["parent"] is None
-    assert state.fields["part_of"] == {"sphere": h.tsardom, "drawer": MILITARY}
-    assert state.fields["drawers"] == [
-        {"id": RANKS, "type": "structure", "title": "Divisions"}
-    ]
-    assert view.thing(h.frost).fields["part_of"] == {"sphere": branch, "drawer": RANKS}
-    (ilya,) = view.thing(h.ilya).fields["ties"]
-    assert (ilya["sphere"], ilya["within"]) == (h.tsardom, branch)
-    assert any("parent was The Tsar's Host" in note for note in done.notes)
+    assert _filed(world, branch) == [(h.tsardom, None, None)]
+    assert _filed(world, h.frost) == [(branch, "division", None)]
+    assert _filed(world, h.ilya) == [(h.tsardom, "soldier", branch)]
+    assert any(
+        "The Northern Host was filed in The Tsar's Host: it takes" in note
+        for note in done.notes
+    )
 
 
-def test_merge_character_ties_carry_over(world, host):
-    """A character's ties go over, but one the other has by sphere and
-    role; its exceptions go with its facts."""
+def test_merge_character_filings_carry_over(world, host):
+    """A character's filings go over, but one into an entry the other is
+    filed in already, whose exceptions join the other's; its exceptions
+    go with its facts (copied, the filing naming the copies)."""
 
     h = host
     with world.revision(Source.manual(note="grey")) as rev:
-        grey = rev.create_thing(
-            "character",
-            {
-                "name": "Oskar the Grey",
-                "ties": [
-                    {"sphere": h.host, "role": "rider", "since": None, "until": None},
-                    {
-                        "sphere": h.tsardom,
-                        "role": "subject",
-                        "since": None,
-                        "until": None,
-                    },
-                ],
-            },
+        grey = rev.create_thing("character", {"name": "Oskar the Grey"})
+        saddle = rev.add_fact(
+            grey, "ties", "Rides without a saddle.", origin={"tie": h.host}
         )
-        rev.add_fact(
+        levies = rev.add_fact(
             grey,
             "ties",
             "Exempt from the Tsardom's levies.",
             origin={"tie": h.tsardom},
         )
+        rev.set_field(
+            grey,
+            "filings",
+            [
+                _in(h.host, "scout", exceptions=[saddle]),
+                _in(h.tsardom, "subject", exceptions=[levies]),
+            ],
+            None,
+        )
     preview = preview_merge(world, grey, h.oskar)
     accept_merge(world, preview, main_name="Oskar")
     view = world.view()
-    ties = view.thing(h.oskar).fields["ties"]
-    assert [(t["sphere"], t["role"]) for t in ties] == [
-        (h.host, "rider"),
-        (h.tsardom, "subject"),
-    ]
-    assert ties[0]["within"] == h.frost
+    copies = {f.text: f.fact_id for f in world.live_facts(h.oskar)}
+    rider, subject = filings_of(view, h.oskar)
+    assert (rider.target, rider.role, rider.within) == (h.host, "rider", h.frost)
+    assert rider.exceptions == [copies["Rides without a saddle."]]
+    assert (subject.target, subject.role) == (h.tsardom, "subject")
+    assert subject.exceptions == [copies["Exempt from the Tsardom's levies."]]
     (exception,) = [
         f for f in world.live_facts(h.oskar) if f.origin == {"tie": h.tsardom}
     ]
@@ -745,28 +636,21 @@ def test_repoint_stub_unchanged(world, mere):
         repoint_stub(world, m.caves, m.ashenmere)
 
 
-def test_merge_tie_within_a_part_outside_its_sphere(world, host):
-    """A tie re-pointed `within` the into-side, when the into-side won't be
-    inside that tie's sphere (it keeps a filing elsewhere), is within no
-    part, with a note."""
+def test_merge_within_that_no_longer_holds(world, host):
+    """A filing re-pointed `within` the into-side, when the into-side won't
+    sit in that filing's entry (the Army can't take the Host's filing in
+    the Tsardom: the Tsardom is filed in the Army), is within no part,
+    with a note."""
 
     h = host
     with world.revision(Source.manual(note="rivals")) as rev:
-        rivals = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Rival Court",
-                "template": "nation",
-                "drawers": [{"id": MILITARY, "type": "structure", "title": "Military"}],
-            },
-        )
-        rev.set_field(h.army, "part_of", {"sphere": rivals, "drawer": MILITARY}, None)
+        rev.set_field(h.tsardom, "filings", [_in(h.army)], None)
     preview = preview_merge(world, h.host, h.army)
     done = accept_merge(world, preview, main_name="The Tsar's Army")
-    (ilya,) = world.view().thing(h.ilya).fields["ties"]
-    assert (ilya["sphere"], ilya["within"]) == (h.tsardom, None)
-    assert any("Ilya's tie" in note for note in done.notes)
-    assert world.view().thing(h.army).fields["part_of"]["sphere"] == rivals
+    assert _filed(world, h.ilya) == [(h.tsardom, "soldier", None)]
+    assert any("Ilya's filing in Tsardom of Moscavia" in note for note in done.notes)
+    assert any("would be inside itself" in note for note in done.notes)
+    assert _filed(world, h.army) == []
 
 
 # --- fix round 1 -----------------------------------------------------------------
@@ -823,30 +707,37 @@ def test_merge_refuses_forged_pairs_and_repeats(world, mere):
     assert world.head_rev() == head
 
 
-def test_merge_redirects_the_into_sides_own_field(world, mere):
-    """Ashenmere merged into the Caves, whose parent is Ashenmere: the
-    Caves take Ashenmere's own parent, Northreach, and its filing, with a
-    note; with no parent of Ashenmere's, the Caves' parent is cleared."""
+def test_merge_redirects_the_into_sides_own_filing(world, mere):
+    """Ashenmere merged into the Caves, which are filed in Ashenmere: that
+    filing goes and the Caves take Ashenmere's own, in the Tsardom, with a
+    note; with no filing of Ashenmere's, the Caves are no longer filed
+    there and keep the rest."""
 
     m = mere
-    with world.revision(Source.manual(note="parents")) as rev:
-        rev.set_field(m.caves, "parent", m.ashenmere, None)
-        rev.set_field(m.ashenmere, "parent", m.northreach, None)
+    with world.revision(Source.manual(note="filed")) as rev:
+        rev.set_field(
+            m.caves, "filings", [_in(m.northreach), _in(m.ashenmere, "under")], None
+        )
     preview = preview_merge(world, m.ashenmere, m.caves)
     done = accept_merge(world, preview, main_name="Ashenmere")
-    caves = world.view().thing(m.caves)
-    assert caves.fields["parent"] == m.northreach
-    assert caves.fields["part_of"] == {"sphere": m.tsardom, "drawer": LANDS}
-    assert any("parent was Ashenmere" in note for note in done.notes)
+    assert _filed(world, m.caves) == [
+        (m.northreach, None, None),
+        (m.tsardom, None, None),
+    ]
+    assert any(
+        "The Ashenmere Caves was filed in Ashenmere: it takes Ashenmere's"
+        " filings, Tsardom of Moscavia" in note
+        for note in done.notes
+    )
     assert world.view().name_of(m.caves) == "Ashenmere"
 
     world.undo([world.head_rev()])
-    with world.revision(Source.manual(note="no parent")) as rev:
-        rev.remove_field_value(m.ashenmere, "parent", None)
+    with world.revision(Source.manual(note="no filing")) as rev:
+        rev.remove_field_value(m.ashenmere, "filings", None)
     preview = preview_merge(world, m.ashenmere, m.caves)
     done = accept_merge(world, preview, main_name="Ashenmere")
-    assert world.view().thing(m.caves).fields.get("parent") is None
-    assert any("cleared" in note for note in done.notes)
+    assert _filed(world, m.caves) == [(m.northreach, None, None)]
+    assert any("it's no longer filed there" in note for note in done.notes)
 
 
 def test_merge_repeat_adds_no_word(world, mere):
@@ -926,105 +817,41 @@ def test_merge_link_words_offered_as_akas(world, mere):
 LAWS = "1a5a0001"
 
 
-def test_merge_sphere_into_a_place_sphere_refused(world):
-    """A sphere no longer folds into a place sphere (`kinds_can_be_one`
-    drops the place-and-sphere rule): the Guild and the City are two
-    kinds, so the merge is refused and nothing is written."""
+def test_merge_lore_into_a_place_refused(world):
+    """A lore entry and a place are two kinds (`kinds_can_be_one`), so the
+    merge is refused and nothing is written: what's filed in either stays
+    where it is."""
 
-    laws = [{"id": LAWS, "type": "beliefs", "title": "Laws"}]
     with world.revision(Source.manual(note="realm")) as rev:
-        realm = rev.create_thing(
-            "place", {"name": "The Realm", "template": "nation", "drawers": laws}
-        )
-        city = rev.create_thing(
-            "place", {"name": "The City", "template": "nation", "parent": realm}
-        )
-        guild = rev.create_thing(
-            "sphere", {"name": "The Guild", "template": "order", "drawers": laws}
-        )
+        city = rev.create_thing("place", {"name": "The City"})
+        guild = rev.create_thing("lore", {"name": "The Guild"})
         charter = rev.create_thing(
-            "lore",
-            {"name": "The Charter", "part_of": {"sphere": guild, "drawer": LAWS}},
-        )
-        rev.add_fact(
-            guild, "statement", "Dues are paid at midwinter.", origin={"drawer": LAWS}
+            "lore", {"name": "The Charter", "filings": [_in(guild)]}
         )
     head = world.head_rev()
     with pytest.raises(ValueError, match="only entries of one kind"):
         preview_merge(world, guild, city)
     assert world.head_rev() == head
-    assert world.view().thing(charter).fields["part_of"] == {
-        "sphere": guild,
-        "drawer": LAWS,
-    }
-
-
-def test_merge_drawer_id_match_needs_its_type(world, host):
-    """A drawer of the same id but another type isn't the same drawer: the
-    Host's Divisions goes by title to the Army's, and its Feasts, whose id
-    the Army's Oaths has, is added under a fresh id, its part following."""
-
-    h = host
-    with world.revision(Source.manual(note="drawers")) as rev:
-        rev.set_field(
-            h.host,
-            "drawers",
-            [
-                {"id": RANKS, "type": "structure", "title": "Divisions"},
-                {"id": "fea50001", "type": "practices", "title": "Feasts"},
-            ],
-            None,
-        )
-        rev.set_field(
-            h.army,
-            "drawers",
-            [
-                {"id": DIVISIONS, "type": "structure", "title": "Divisions"},
-                {"id": RANKS, "type": "beliefs", "title": "Creed"},
-                {"id": "fea50001", "type": "beliefs", "title": "Oaths"},
-            ],
-            None,
-        )
-        feast = rev.create_thing(
-            "lore",
-            {
-                "name": "The Thaw Feast",
-                "part_of": {"sphere": h.host, "drawer": "fea50001"},
-            },
-        )
-    preview = preview_merge(world, h.host, h.army)
-    accept_merge(world, preview, main_name="The Tsar's Army")
-    view = world.view()
-    assert view.thing(h.frost).fields["part_of"] == {
-        "sphere": h.army,
-        "drawer": DIVISIONS,
-    }
-    drawers = view.thing(h.army).fields["drawers"]
-    assert len(drawers) == 4
-    added = drawers[3]
-    assert (added["type"], added["title"]) == ("practices", "Feasts")
-    assert added["id"] not in (DIVISIONS, RANKS, "fea50001")
-    assert view.thing(feast).fields["part_of"] == {
-        "sphere": h.army,
-        "drawer": added["id"],
-    }
+    assert _filed(world, charter) == [(guild, None, None)]
 
 
 def test_merge_retired_value_note_says_what_shows(world, mere):
-    """The Caves' parent was Northreach, then from 990 Ashenmere: merged
-    with Ashenmere (no parent of its own), the 990 value is retired and the
-    note says Northreach shows again."""
+    """The Caves were filed in Northreach, then from 990 in Ashenmere:
+    merged with Ashenmere (filed nowhere of its own), the 990 value is
+    left empty, so it's retired and the note says Northreach shows
+    again."""
 
     m = mere
     with world.revision(Source.manual(note="moved")) as rev:
-        rev.set_field(m.caves, "parent", m.ashenmere, WorldDate.of(990))
+        rev.remove_field_value(m.ashenmere, "filings", None)
+        rev.set_field(m.caves, "filings", [_in(m.ashenmere)], WorldDate.of(990))
     preview = preview_merge(world, m.ashenmere, m.caves)
     done = accept_merge(world, preview, main_name="The Ashenmere Caves")
-    assert world.view().thing(m.caves).fields["parent"] == m.northreach
+    assert _filed(world, m.caves) == [(m.northreach, None, None)]
     assert any(
-        "falls back to its earlier parent, Northreach" in note for note in done.notes
+        "filings fall back to its earlier filings, Northreach" in note
+        for note in done.notes
     )
-    assert not any("cleared" in note for note in done.notes)
 
 
 def test_merge_refuses_conflicting_choices_for_one_fact(world, mere):

@@ -41,7 +41,7 @@ import structlog
 from pydantic import BaseModel, ValidationError
 
 from .calendar import Calendar
-from .dates import Precision, WorldDate
+from .dates import WorldDate
 from .entries import acts_in_world, summary, summary_fact
 from .heritage import overriders
 from .kinds import (
@@ -51,6 +51,7 @@ from .kinds import (
     WRITTEN_DRAWER_TYPES,
 )
 from .refs import REF_PATTERN, parse_refs
+from .timelines import dated_line as timelines_dated_line
 from .view import FactState, ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.spheres")
@@ -817,29 +818,8 @@ def _round_robin(sizes: list[int], budget: int) -> list[int]:
     return taken
 
 
-def _year(date: WorldDate) -> WorldDate:
-    return WorldDate(instant=date.instant, precision=Precision.YEAR)
-
-
-def dated_line(
-    calendar: Calendar,
-    date: WorldDate | None,
-    text: str,
-    until: WorldDate | None = None,
-) -> str:
-    """A timeline line as key facts give it: "In <year>: <text>" (the
-    spheres probe's (d) wording), or "From <year> to <year>: <text>" for
-    one that has ended (`until`, ruling C18), each year as `calendar`
-    labels it; the text alone when it's undated."""
-
-    if date is None:
-        return text
-    if until is not None:
-        return (
-            f"From {calendar.format(_year(date))} to "
-            f"{calendar.format(_year(until))}: {text}"
-        )
-    return f"In {calendar.format(_year(date))}: {text}"
+# the timeline line wording lives with timelines now (the scene block's)
+dated_line = timelines_dated_line
 
 
 def _timeline_line(view: WorldView, fact: FactState, calendar: Calendar) -> str:

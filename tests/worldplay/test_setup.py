@@ -1365,11 +1365,12 @@ VIGIL_REPLY = {
 }
 
 
-async def test_plan_scene_pulls_in_a_named_place_sphere(world, spheres_world):
-    """Ruling P10: a place sphere the prompt names (the Tsardom, the scene
-    at Dawn Peak) is pulled in, so the scene touches it; a plain place
-    isn't, nor the scene's own place, and a named place-sphere stub isn't
-    previewed (places only ever are as the scene's place)."""
+async def test_plan_scene_pulls_in_a_named_place(world, spheres_world):
+    """A place the prompt names (the Tsardom, the Marches, Kremova; the
+    scene at Dawn Peak) is pulled in, so the scene touches it (filing
+    spec: what the prompt names is touched; ruling P10 had only place
+    spheres), but never the scene's own place, and a named place stub
+    isn't previewed (places only ever are as the scene's place)."""
 
     s = spheres_world
     with world.revision(Source.manual(note="stub")) as rev:
@@ -1398,10 +1399,10 @@ async def test_plan_scene_pulls_in_a_named_place_sphere(world, spheres_world):
     )
 
     assert setup.place == SetupRef(thing_id=s.dawn_peak)
-    assert setup.pulled_in == [s.tsardom, marches]
+    assert setup.pulled_in == [s.tsardom, marches, s.kremova]
     assert stubs_to_fill(world, setup) == []
 
-    # the scene's own place is never pulled in, place sphere or not
+    # the scene's own place is never pulled in
     setup = await plan_scene(
         world,
         "Vasha rides through the Tsardom",
@@ -1417,8 +1418,8 @@ async def test_plan_scene_pulls_in_a_named_place_sphere(world, spheres_world):
 
 async def test_start_scene_leaves_its_place_out_of_pulled_in(world, spheres_world):
     """A setup edited (or continued) after planning whose place became a
-    place sphere it also pulled in starts with that sphere as its place
-    only: never pulled in too (Task 7 parked item (a))."""
+    place it also pulled in starts with that place as its place only:
+    never pulled in too (Task 7 parked item (a))."""
 
     s = spheres_world
     setup = await plan_scene(

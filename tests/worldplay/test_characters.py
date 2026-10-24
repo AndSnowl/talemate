@@ -666,78 +666,92 @@ def test_since_lines_after_a_dated_heritage_change_past_the_cache(
     ]
 
 
-# --- ties ---------------------------------------------------------------------
+# --- filing lines (filing spec; the Spheres tie-line format) ---------------------
 
 
-def test_sheet_has_tie_lines_with_exceptions(world, spheres_world):
-    """Each live tie is one line on the sheet: the role capitalised, "of"
-    the sphere, "(since <year>)" when there's a since, then "but: " and its
-    exceptions read as text (character creation's "Departs from ..." link
-    left off), joined with "; "."""
+def test_sheet_filing_lines(world, spheres_world):
+    """A character's sheet has one line per live filing with a role, in
+    the Spheres tie-line format: the role capitalised "of" the entry,
+    "(since <year>)" when dated, and "but: " with its exceptions (the
+    filing's own, in the order written; ruling C6's mid-sentence rule),
+    joined with "; "; a filing within a part reads "<Role> in <entry>,
+    within <part>" (ruling C12). A filing with no role gives no line, nor
+    one that has ended or hasn't begun."""
 
     s = spheres_world
+    with world.revision(Source.manual(note="more filings")) as rev:
+        rev.set_field(
+            s.brenna,
+            "filings",
+            [
+                {
+                    "target": s.council,
+                    "role": "elder",
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.tsardom,
+                    "role": "trooper",
+                    "since": WorldDate.of(1012, 5, 1).model_dump(mode="json"),
+                    "until": None,
+                    "within": s.kremova,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.guild,
+                    "role": "apprentice",
+                    "since": WorldDate.of(990).model_dump(mode="json"),
+                    "until": WorldDate.of(1000).model_dump(mode="json"),
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.dawn_peak,
+                    "role": None,
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+            ],
+            None,
+        )
+
     vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
     assert vasha.base_attributes["ties"] == (
         "Practitioner of the White Dawn (since 1010), but: doesn't believe "
         "snowy owl-folk are superior; means to marry a human"
     )
-    assert "ties: Practitioner of the White Dawn" in vasha.sheet
     assert "Departs" not in vasha.sheet
     assert "[[thing:" not in vasha.sheet
 
-    # no since, no exceptions
     brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
-    assert brenna.base_attributes["ties"] == "Elder of the Council of Elders"
+    assert brenna.base_attributes["ties"] == (
+        "Elder of the Council of Elders\n"
+        "Trooper in Tsardom of Moscavia, within Kremova (since 1012)"
+    )
 
-    # before the tie began, there's none
+    # before the filing began, there's none
     young = character_from_world(world, s.vasha, WorldDate.of(1005), is_player=False)
     assert "ties" not in young.base_attributes
 
 
-def test_sheet_has_one_line_per_live_tie(world, spheres_world):
-    s = spheres_world
-    with world.revision(Source.manual(note="more ties")) as rev:
-        rev.set_field(
-            s.brenna,
-            "ties",
-            [
-                {"sphere": s.council, "role": "elder", "since": None, "until": None},
-                {
-                    "sphere": s.guild,
-                    "role": "apprentice",
-                    "since": WorldDate.of(990).model_dump(mode="json"),
-                    "until": WorldDate.of(1000).model_dump(mode="json"),
-                },
-                {
-                    "sphere": s.tsardom,
-                    "role": "subject",
-                    "since": WorldDate.of(1001).model_dump(mode="json"),
-                    "until": None,
-                },
-            ],
-            None,
-        )
-    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
-    # one line each, the ended apprenticeship left out; a leading "The"
-    # is lowercased mid-line, a name without one is as written
-    assert brenna.base_attributes["ties"] == (
-        "Elder of the Council of Elders\nSubject of Tsardom of Moscavia (since 1001)"
-    )
-
-
-def test_tie_to_deleted_sphere(world, spheres_world):
-    """A tie stores the sphere's id, not its name, so a tie to a sphere
-    since deleted has no name to show and is left out (never
-    "⟨unknown⟩"), as are its exceptions."""
+def test_filing_line_to_a_deleted_or_nameless_entry_is_left_out(world, spheres_world):
+    """A filing stores its entry's id, so one into an entry since deleted,
+    or with no name at the scene's date, is left out (never
+    "⟨unknown⟩"), its exceptions with it."""
 
     s = spheres_world
-    with world.revision(Source.manual(note="gone")) as rev:
-        rev.remove_thing(s.council)
+    with world.revision(Source.manual(note="nameless")) as rev:
+        rev.remove_field_value(s.council, "name", None)
     brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
     assert "ties" not in brenna.base_attributes
     assert "⟨unknown⟩" not in brenna.sheet
 
-    with world.revision(Source.manual(note="gone too")) as rev:
+    with world.revision(Source.manual(note="gone")) as rev:
         rev.remove_thing(s.dawn)
     vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
     assert "ties" not in vasha.base_attributes
@@ -793,38 +807,48 @@ def test_exception_text_strips_what_creation_appends():
         assert exception_text(text) == exception.text.rstrip(".") + "."
 
 
-def test_tie_line_keeps_names_and_capitals_opening_an_exception(world, spheres_world):
+def _add_exceptions(world, s, *texts):
+    """Vasha's exceptions `texts`, filed under her filing in the Dawn as
+    character creation files them (origin `tie`, id in `exceptions`)."""
+
+    from talemate.world.filing import filings_of
+
+    with world.revision(Source.manual(note="more")) as rev:
+        ids = [
+            rev.add_fact(s.vasha, "ties", text, origin={"tie": s.dawn})
+            for text in texts
+        ]
+        (filing,) = filings_of(world.view(), s.vasha, live=False)
+        rev.set_field(
+            s.vasha,
+            "filings",
+            [
+                {
+                    **filing.model_dump(mode="json"),
+                    "exceptions": [*filing.exceptions, *ids],
+                }
+            ],
+            None,
+        )
+
+
+def test_filing_line_keeps_names_and_capitals_opening_an_exception(
+    world, spheres_world
+):
     """An exception opening with a name -- a reference, or the character's
     own (left unlinked by creation) -- or with "I" or a word in capitals
     keeps its case after "but: "; any other opens lowercase."""
 
     s = spheres_world
-    with world.revision(Source.manual(note="more")) as rev:
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"Vasha skips [[thing:{s.separation}|the doctrine]]'s fast.",
-            origin={"tie": s.dawn},
-        )
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"[[thing:{s.kremova}]] is where she breaks "
-            f"[[thing:{s.separation}|the doctrine]].",
-            origin={"tie": s.dawn},
-        )
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"I'll not bow, she says of [[thing:{s.separation}|the doctrine]].",
-            origin={"tie": s.dawn},
-        )
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"NEVER kneels at [[thing:{s.separation}|the doctrine]]'s reading.",
-            origin={"tie": s.dawn},
-        )
+    _add_exceptions(
+        world,
+        s,
+        f"Vasha skips [[thing:{s.separation}|the doctrine]]'s fast.",
+        f"[[thing:{s.kremova}]] is where she breaks "
+        f"[[thing:{s.separation}|the doctrine]].",
+        f"I'll not bow, she says of [[thing:{s.separation}|the doctrine]].",
+        f"NEVER kneels at [[thing:{s.separation}|the doctrine]]'s reading.",
+    )
     vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
     assert vasha.base_attributes["ties"].endswith(
         "but: doesn't believe snowy owl-folk are superior; means to marry a "
@@ -843,24 +867,13 @@ def test_exception_opening_with_a_world_name_keeps_its_capital(world, spheres_wo
     s = spheres_world
     with world.revision(Source.manual(note="names")) as rev:
         rev.set_field(s.vasha, "name", "The Grey Wanderer", None)
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"Brenna taught her to doubt [[thing:{s.separation}|the doctrine]].",
-            origin={"tie": s.dawn},
-        )
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"The vigil at [[thing:{s.separation}|the doctrine]]'s feast bores her.",
-            origin={"tie": s.dawn},
-        )
-        rev.add_fact(
-            s.vasha,
-            "ties",
-            f"Skips [[thing:{s.separation}|the doctrine]]'s fast.",
-            origin={"tie": s.dawn},
-        )
+    _add_exceptions(
+        world,
+        s,
+        f"Brenna taught her to doubt [[thing:{s.separation}|the doctrine]].",
+        f"The vigil at [[thing:{s.separation}|the doctrine]]'s feast bores her.",
+        f"Skips [[thing:{s.separation}|the doctrine]]'s fast.",
+    )
     vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
     assert vasha.base_attributes["ties"].endswith(
         "; Brenna taught her to doubt the doctrine; the vigil at the "
@@ -868,32 +881,39 @@ def test_exception_opening_with_a_world_name_keeps_its_capital(world, spheres_wo
     )
 
 
-def test_tie_since_reads_as_a_year(world, spheres_world):
+def test_filing_line_for_a_role_that_says_how(world, spheres_world):
+    """A role that ends with a preposition takes no "of" ("Ward under the
+    Council of Elders"), and one that opens "of" ("of this culture", the
+    spec's culture role) reads "Of <entry>"; within a part, either keeps
+    its own form before ", within <part>"."""
+
+    from talemate.worldplay.characters import filing_lines
+
     s = spheres_world
-    with world.revision(Source.manual(note="precise")) as rev:
+    with world.revision(Source.manual(note="roles")) as rev:
         rev.set_field(
             s.brenna,
-            "ties",
+            "filings",
             [
-                {
-                    "sphere": s.council,
-                    "role": "elder",
-                    "since": WorldDate.of(1010, 3, 4).model_dump(mode="json"),
-                    "until": None,
-                }
+                {"target": s.council, "role": "ward under"},
+                {"target": s.tsardom, "role": "of this culture"},
             ],
             None,
         )
-    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
-    assert brenna.base_attributes["ties"] == (
-        "Elder of the Council of Elders (since 1010)"
-    )
-
-
-def test_tie_to_a_nameless_sphere_is_left_out(world, spheres_world):
-    s = spheres_world
-    with world.revision(Source.manual(note="nameless")) as rev:
-        rev.remove_field_value(s.council, "name", None)
-    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
-    assert "ties" not in brenna.base_attributes
-    assert "⟨unknown⟩" not in brenna.sheet
+        oleg = rev.create_thing(
+            "character",
+            {
+                "name": "Oleg",
+                "filings": [
+                    {"target": s.tsardom, "role": "born in", "within": s.kremova}
+                ],
+            },
+        )
+    view = world.view(WorldDate.of(1020))
+    assert filing_lines(view, world.calendar, s.brenna) == [
+        "Ward under the Council of Elders",
+        "Of Tsardom of Moscavia",
+    ]
+    assert filing_lines(view, world.calendar, oleg) == [
+        "Born in Tsardom of Moscavia, within Kremova"
+    ]

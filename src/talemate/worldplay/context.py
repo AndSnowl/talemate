@@ -16,6 +16,7 @@ context and calls `connect`; a scene that never gets a
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,23 +25,22 @@ import structlog
 import talemate.emit.async_signals as async_signals
 from talemate.agents.base import DynamicInstruction
 from talemate.prompts import Prompt
-from talemate.world import entries, heritage, spheres, timelines
+from talemate.world import entries, heritage
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
-from talemate.world.kinds import HERITAGE_KINDS, SPHERE_CATEGORIES
-from talemate.world.names import everyday_name
-from talemate.world.nearness import near
-from talemate.world.spheres import KEY_TIMELINE as _KEY_TIMELINE
+from talemate.world.filing import filed_index, filings_of, tag_of
+from talemate.world.kinds import HERITAGE_KINDS
+from talemate.world.names import everyday_name, find_names
+from talemate.world.repeats import overlap
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
+from talemate.world.timelines import TimelineLine, dated_line, entry_timeline
 from talemate.world.view import FactState, ThingState, WorldView
 
 from .characters import (
     WORLD_DERIVED_FIELDS,
-    _cached_section,
     character_from_world,
     held_text,
-    mid_sentence_name,
 )
 from .held import timeline_text
 
@@ -57,6 +57,43 @@ _BODY_CATEGORIES = ("physical", "variation")
 _INSTINCT_CATEGORIES = ("instinct",)
 
 SECTION_TITLE = "World"
+
+# a touched entry's lines (filing spec, "Scene context"; probe 5): up to
+# this many of its own facts, its latest this many timeline lines, and at
+# most this many lines in all
+TOUCHED_FACTS = 5
+TOUCHED_TIMELINE = 3
+TOUCHED_LINES = 8
+
+# filing roles too broad to say who a scene is about (ruling F4): a
+# setup that says "a member of the Order" touches no member of it. The
+# probe's own list ("member", "part", "practitioner", "of this culture")
+# and the like
+GENERIC_ROLES: frozenset[str] = frozenset(
+    {
+        "in",
+        "of",
+        "part",
+        "member",
+        "members",
+        "practitioner",
+        "follower",
+        "believer",
+        "adherent",
+        "faithful",
+        "citizen",
+        "subject",
+        "resident",
+        "inhabitant",
+        "native",
+        "people",
+        "folk",
+        "branch of",
+        "of this culture",
+        "took place in",
+        "owned by",
+    }
+)
 
 
 def scene_date(record: SceneRecord, scene_ts: str) -> WorldDate:
@@ -176,77 +213,6 @@ def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
     return cast
 
 
-def _touched_spheres(
-    view: WorldView,
-    record: SceneRecord,
-    place_thing_id: str | None,
-    things: list[ThingState],
-) -> list[str]:
-    """The spheres the scene touches, each once: those whose territory
-    holds the scene's place (`spheres.holders`, in the order they were
-    made), those the prompt or setup named (pulled in), then those a
-    character here has a live tie to (Global Constraints, "Context").
-    `things` is one snapshot of the view's things."""
-
-    sphere_ids = {state.id for state in things if spheres.is_sphere(state)}
-    touched: list[str] = []
-
-    def touch(sphere_id: str) -> None:
-        if sphere_id in sphere_ids and sphere_id not in touched:
-            touched.append(sphere_id)
-
-    if place_thing_id:
-        for sphere_id in spheres.holders(view, place_thing_id, things):
-            touch(sphere_id)
-    for thing_id in record.state.get("pulled_in") or []:
-        touch(thing_id)
-    for entry in _present(record):
-        thing_id = entry.get("thing_id")
-        if isinstance(thing_id, str):
-            for tie in spheres.ties_of(view, thing_id, live=True):
-                touch(tie.sphere_id)
-    return touched
-
-
-def _sphere_summary(world: World, view: WorldView, sphere_id: str) -> str:
-    """The sphere's summary (`entries.summary`, rulings P1, P21): its
-    cached description prose as of the view's date, else its summary
-    fact, rendered."""
-
-    cached = _cached_section(world, sphere_id, "description", view.at)
-    return entries.summary(view, sphere_id, cached.text if cached else None)
-
-
-def _sphere_parent(view: WorldView, state: ThingState) -> str | None:
-    """The sphere a sphere sits in: a branch's `parent`, else the sphere
-    it's part of (the Council of Elders in the White Dawn's Hierarchy);
-    `None` when neither is a live sphere."""
-
-    candidates: list[object] = []
-    if state.kind == "sphere":
-        candidates.append(state.fields.get("parent"))
-    part_of = state.fields.get("part_of")
-    if isinstance(part_of, dict):
-        candidates.append(part_of.get("sphere"))
-    for candidate in candidates:
-        if not isinstance(candidate, str) or candidate == state.id:
-            continue
-        parent = view.thing(candidate)
-        if parent is not None and spheres.is_sphere(parent):
-            return candidate
-    return None
-
-
-def _held_line(view: WorldView) -> spheres.FactLine:
-    """Key facts' wording of an item's fact: as belief when it's held
-    (`held_text`)."""
-
-    def line(fact: FactState, owner: ThingState, text: str) -> str:
-        return held_text(view, fact, owner, text)
-
-    return line
-
-
 def _facts(view: WorldView, state: ThingState, facts: list[FactState]) -> list[str]:
     """`facts` (of `state`) as a scene is told them: rendered, a held one
     as belief (`held_text`)."""
@@ -254,312 +220,299 @@ def _facts(view: WorldView, state: ThingState, facts: list[FactState]) -> list[s
     return [held_text(view, fact, state) for fact in facts]
 
 
-def _latest(
-    world: World,
-    view: WorldView,
-    sphere_id: str,
-    things: list[ThingState],
-    shown: set[str],
-    skip: set[str],
-    summary: str | None,
-    settings: CurationSettings,
-) -> list[tuple[str, str]]:
-    """The sphere's timeline lines for its key facts, as `(owner id,
-    text)`: its gathered timeline (`timelines.prompt_timeline`, as far out
-    as `timeline_reach`) less the lines of the things `shown` in the block
-    and of the items its key facts print (`spheres.key_items`, `skip` left
-    out of them, after the summary: `summary`, else its summary fact), the
-    last `_KEY_TIMELINE` of the rest, each "In <year>: <text>" (the
-    spheres probe's (d) wording) or "From <year> to <year>: <text>" when
-    it has ended (ruling C18), a held one as belief. Only those are worded:
-    wording a held line looks names up."""
-
-    lines = timelines.prompt_timeline(
-        view,
-        sphere_id,
-        shown,
-        reach=settings.timeline_reach,
-        threshold=settings.date_threshold,
-        things=things,
-    )
-    head = 1 if (summary or entries.summary(view, sphere_id)) else 0
-    printed = {
-        item.thing_id
-        for item in spheres.key_items(
-            view, sphere_id, head + min(len(lines), _KEY_TIMELINE), things, skip
-        )
-        if item.thing_id
-    }
-    kept = [line for line in lines if line.owner_id not in printed][-_KEY_TIMELINE:]
-    return [
-        (
-            line.owner_id,
-            spheres.dated_line(
-                world.calendar, line.date, timeline_text(view, line), line.until
-            ),
-        )
-        for line in kept
-    ]
-
-
-def _sphere_entries(
-    world: World,
-    view: WorldView,
-    sphere_ids: list[str],
-    shown: set[str],
-    things: list[ThingState],
-    shown_elsewhere: set[str],
-    settings: CurationSettings,
-    place_thing_id: str | None = None,
-) -> list[dict[str, Any]]:
-    """The spheres block, one entry per sphere in `sphere_ids`: its key
-    facts (`spheres.key_facts`, with its summary, less the items
-    `shown_elsewhere` in the block: as lore, or a nested sphere's own
-    block, and ending with its gathered timeline less the lines of those
-    and of the scene's place: `_latest`) and, for a nested sphere whose
-    parent isn't `shown` in the block already, the parent's summary
-    alone."""
-
-    entries: list[dict[str, Any]] = []
-    for sphere_id in sphere_ids:
-        state = view.thing(sphere_id)
-        if state is None:
-            continue
-        template = state.fields.get("template")
-        summary = _sphere_summary(world, view, sphere_id) or None
-        entry: dict[str, Any] = {
-            "name": view.name_of(sphere_id) or "",
-            "template": template if isinstance(template, str) else "sphere",
-            "everyday": everyday_name(state),
-            "parent_name": "",
-            "parent_summary": "",
-            "key_facts": spheres.key_facts(
-                view,
-                sphere_id,
-                summary,
-                world.calendar,
-                things,
-                shown_elsewhere,
-                _held_line(view),
-                _latest(
-                    world,
-                    view,
-                    sphere_id,
-                    things,
-                    shown_elsewhere | ({place_thing_id} if place_thing_id else set()),
-                    shown_elsewhere,
-                    summary,
-                    settings,
-                ),
-            ),
-        }
-        parent_id = _sphere_parent(view, state)
-        if parent_id is not None and parent_id not in shown:
-            entry["parent_name"] = mid_sentence_name(view.name_of(parent_id) or "")
-            entry["parent_summary"] = _sphere_summary(world, view, parent_id)
-        entries.append(entry)
-    return entries
-
-
-def _may_be_lore(state: ThingState) -> bool:
-    """Whether the thing can be shown as lore: anything but a being that
-    isn't real (believed or undecided), which is only spoken of -- its
-    facts reach the scene through whatever refers to it."""
+def _may_be_touched(state: ThingState) -> bool:
+    """Whether the thing can be touched: anything but a being that isn't
+    real (believed or undecided), which is only spoken of -- its facts
+    reach the scene through whatever refers to it."""
 
     return state.kind != "being" or entries.acts_in_world(state)
 
 
-def _lore_entry(
-    view: WorldView, state: ThingState, facts: list[FactState]
-) -> dict[str, Any]:
-    """A lore entry of the block: the thing's name, its everyday name and
-    `facts` as a scene is told them (`_facts`)."""
-
-    return {
-        "name": view.name_of(state.id) or "",
-        "everyday": everyday_name(state),
-        "facts": _facts(view, state, facts),
-    }
+def _role_words(role: str | None) -> str:
+    return " ".join((role or "").split()).casefold()
 
 
-def _filed_in(state: ThingState) -> str | None:
-    """The sphere the thing is filed in (its `part_of`), or `None`."""
+def role_named(role: str | None, text: str) -> bool:
+    """Whether `text` names the filing's `role` (ruling F4): the role's
+    words, whole and in order, any case and spacing ("Chief Scribe" in
+    "...to the chief scribe of..."; never "ward" in "toward", nor
+    "scribe" in "scribes"). A generic role (`GENERIC_ROLES`), or none,
+    is never named."""
 
-    part_of = state.fields.get("part_of")
-    sphere = part_of.get("sphere") if isinstance(part_of, dict) else None
-    return sphere if isinstance(sphere, str) else None
+    words = _role_words(role)
+    if not words or words in GENERIC_ROLES:
+        return False
+    pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, words.split())) + r"(?!\w)"
+    return re.search(pattern, text, re.IGNORECASE) is not None
 
 
-def _near_lore(
-    view: WorldView,
-    seeds: list[str],
-    shown: set[str],
-    touched: list[str],
-    room: int,
-    settings: CurationSettings,
-) -> list[ThingState]:
-    """At most `room` things near the scene's place and cast (`seeds`), as
-    lore: from each seed's `near` list, at the world's `reach`, the best
-    first (score, then fewer steps, then the seeds' order and each list's
-    own). Never one `shown` already, a sphere (a sphere the scene touches
-    has its own block; one it doesn't isn't the scene's), a thing filed in
-    a sphere of `touched` (its block's key facts give it, as the spheres
-    probe's (d) block has them), a heritage (the cast lines carry it), a
-    being that isn't real (`_may_be_lore`), or a thing with no facts to
-    show."""
+def _named_in(view: WorldView, text: str) -> list[str]:
+    """The live entries `text` names in full (`find_names`, never a mere
+    suggestion), each once, in order."""
 
-    if room <= 0 or settings.facts_per_entry <= 0 or not seeds:
-        return []
-    best: dict[str, tuple[float, int, int]] = {}
-    order = 0
-    for seed in seeds:
-        # each list is cut before the filter below, which skips what's
-        # shown and what can't be lore: the limit leaves room for those,
-        # so a seed's list can still come up short of `room` when most of
-        # its nearest are skipped (the next seed's then fill in)
-        for found in near(
-            view, seed, reach=settings.reach, limit=room + len(shown) + settings.entries
-        ):
-            order += 1
-            key = (-round(found.score, 9), found.steps, order)
-            if found.thing_id not in best or key < best[found.thing_id]:
-                best[found.thing_id] = key
-
-    kept: list[ThingState] = []
-    for thing_id in sorted(best, key=lambda thing_id: best[thing_id]):
-        if thing_id in shown:
+    found: list[str] = []
+    for match in find_names(view, text):
+        if match.suggested or not match.candidates:
             continue
-        state = view.thing(thing_id)
-        if (
-            state is None
-            or spheres.is_sphere(state)
-            or _filed_in(state) in touched
-            or state.kind in HERITAGE_KINDS
-            or not _may_be_lore(state)
-            or not state.facts
-        ):
-            continue
-        kept.append(state)
-        if len(kept) == room:
-            break
-    return kept
+        thing_id = match.candidates[0].id
+        if thing_id not in found:
+            found.append(thing_id)
+    return found
 
 
-def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
-    """The "World" instruction's content: the scene's goal, its current
-    place, whatever lore has been pulled into it, and who is here by
-    heritage (`_cast`), all as of `at`. The
-    place is the world thing `record.state["place_thing_id"]` or, when the
-    scene invented its place, the scene-local place thing
-    `record.state["place_local_id"]` (its name and facts); the lore entries
-    are `record.state["pulled_in"]`, then (curation spec, goal 10) the
-    things nearest the scene's place and the characters here
-    (`_near_lore`), each with at most the world's `facts_per_entry` facts,
-    while the place, lore and sphere blocks number fewer than its
-    `entries`. Today's rules come first: what's near only fills the room
-    left, and never shows a thing a second time.
+def touched_entries(
+    view: WorldView, record: SceneRecord, *, reach: int = 2
+) -> list[str]:
+    """The entries the scene touches (filing spec, "Scene context"), each
+    once, in this order:
 
-    The spheres the scene touches (`_touched_spheres`) follow the lore,
-    one block each under one lead line (the spheres probe's (d)), with
-    their key facts, which end with the latest lines of each one's gathered
-    timeline (`_latest`); a pulled-in sphere shows there, not as lore, and
-    a pulled-in or near item of a sphere shows as lore, and a nested sphere
-    in its own block, not again in its parent's key facts.
-    When the
-    scene's place is itself a sphere, it shows once, as the place: its own
-    place facts, then its key facts (summary from its `about` fact, since
-    its description prose retells those place facts), never again as a
-    sphere block.
+    - what the scene's place is filed in, followed upward `reach` steps
+      (the world's `timeline_reach`; a place filed in several brings each
+      in);
+    - what each present character is filed in (and the part it's within);
+    - what the setup names: the pulled-in entries (the prompt's picks),
+      then any entry the goal or premise names in full;
+    - (ruling F4) a character, or a real being, filed in one of those or
+      in the place whose filing role the goal or premise names
+      (`role_named`): the Chief Scribe the scene is about.
 
-    A place or lore entry with an everyday name is shown "<main> (usually
-    called <everyday>)", and the block then opens with a line asking for
-    everyday names in narration and dialogue: the connections probe
-    (docs/superpowers/probes/2026-10-21-connections.md, probe 4) found the
-    plain heading kept the full name every time."""
+    Never the place itself, a present character (their sheet covers
+    them), a being that isn't real (`_may_be_touched`), or one gone at the
+    view."""
 
-    view = world.view(at)
-    # one snapshot of the world's things for every sphere lookup below
-    things = view.things()
-    settings = world.curation()
-
-    lore = []
-    # a sphere's item pulled in as lore shows once, there, in full: the
-    # sphere's key facts leave it out
-    as_lore: set[str] = set()
-    for lore_thing_id in record.state.get("pulled_in") or []:
-        lore_state = view.thing(lore_thing_id)
-        if lore_state is None or spheres.is_sphere(lore_state):
-            continue
-        # a being that isn't real is only spoken of: its facts reach the
-        # scene through whatever refers to it, never as lore of its own
-        if not _may_be_lore(lore_state):
-            continue
-        as_lore.add(lore_thing_id)
-        lore.append(_lore_entry(view, lore_state, lore_state.facts))
-
-    place_thing_id = record.state.get("place_thing_id")
-    place_local_id = record.state.get("place_local_id")
-    place_state = view.thing(place_thing_id) if place_thing_id else None
-
-    touched = _touched_spheres(view, record, place_thing_id, things)
-    in_block = [sphere_id for sphere_id in touched if sphere_id != place_thing_id]
-
-    # then what's near the place and the cast, as lore, within the knobs
+    place_id = record.state.get("place_thing_id")
+    place_id = place_id if isinstance(place_id, str) else None
     present = [
         entry["thing_id"]
         for entry in _present(record)
         if isinstance(entry.get("thing_id"), str)
     ]
-    seeds = ([place_thing_id] if place_state is not None else []) + present
-    shown = {*seeds, *as_lore, *touched}
-    room = settings.entries - len(lore) - len(in_block) - (1 if place_state else 0)
-    for near_state in _near_lore(view, seeds, shown, touched, room, settings):
-        as_lore.add(near_state.id)
-        lore.append(
-            _lore_entry(
-                view,
-                near_state,
-                sorted(near_state.facts, key=lambda fact: fact.created)[
-                    : settings.facts_per_entry
-                ],
-            )
-        )
+    skip = {*present, *([place_id] if place_id else [])}
+    touched: list[str] = []
 
+    def touch(thing_id: str | None) -> None:
+        if thing_id is None or thing_id in skip or thing_id in touched:
+            return
+        state = view.thing(thing_id)
+        if state is not None and _may_be_touched(state):
+            touched.append(thing_id)
+
+    if place_id and view.thing(place_id) is not None:
+        frontier, seen = [place_id], {place_id}
+        for _ in range(reach):
+            above: list[str] = []
+            for thing_id in frontier:
+                for filing in filings_of(view, thing_id):
+                    touch(filing.target)
+                    if filing.target not in seen:
+                        seen.add(filing.target)
+                        above.append(filing.target)
+            frontier = above
+    for thing_id in present:
+        for filing in filings_of(view, thing_id):
+            touch(filing.target)
+            touch(filing.within)
+    for thing_id in record.state.get("pulled_in") or []:
+        if isinstance(thing_id, str):
+            touch(thing_id)
+    setup = "\n".join(part for part in (record.goal, record.premise) if part)
+    for thing_id in _named_in(view, setup) if setup.strip() else []:
+        touch(thing_id)
+    if setup.strip():
+        index = filed_index(view)
+        for target_id in [*([place_id] if place_id else []), *list(touched)]:
+            for state, filing in index.get(target_id, []):
+                if entries.acts_in_world(state) and role_named(filing.role, setup):
+                    touch(state.id)
+    return touched
+
+
+def _summary_fact(state: ThingState) -> FactState | None:
+    """The fact a touched entry leads with (as probe 5 read it): its
+    summary (`entries.summary_fact`), else its first written `summary` or
+    `description` fact, else its first undated fact."""
+
+    fact = entries.summary_fact(state)
+    if fact is not None:
+        return fact
+    for category in ("summary", "description"):
+        found = [f for f in state.facts if f.category == category]
+        if found:
+            return min(found, key=lambda f: f.created)
+    undated = [f for f in state.facts if f.valid_from is None]
+    return min(undated, key=lambda f: f.created) if undated else None
+
+
+def _same_event(a: str, b: str, threshold: float) -> bool:
+    """Whether two timeline texts tell the same event: either holds at
+    least `threshold` of the other's content words."""
+
+    return max(overlap(a, b), overlap(b, a)) >= threshold
+
+
+def _latest_lines(
+    world: World,
+    view: WorldView,
+    thing_id: str,
+    elsewhere: set[str],
+    shown: set[str],
+    settings: CurationSettings,
+    things: list[ThingState],
+) -> list[str]:
+    """The entry's latest `TOUCHED_TIMELINE` timeline lines, oldest first,
+    each "In <year>: <text>" or, once ended, "From <year> to <year>:
+    <text>" (ruling C18), a held one as belief: its own dated facts and
+    what it gathers (`timelines.entry_timeline`, out to the world's
+    `timeline_reach`), less the lines of the things `elsewhere` (shown in
+    the block another way) and of facts `shown` already. The same event
+    told twice (from two entries: word overlap at the world's
+    `date_threshold`) counts once, the entry's own telling kept, and
+    neither is told again in the block."""
+
+    lines = [
+        line
+        for line in entry_timeline(
+            view,
+            thing_id,
+            reach=settings.timeline_reach,
+            threshold=settings.date_threshold,
+            things=things,
+            disagreements=False,
+        )
+        if line.fact_id not in shown and (line.here or line.owner_id not in elsewhere)
+    ]
+    kept: list[TimelineLine] = []
+    # the other tellings of a kept line's event: told, too
+    told: list[str] = []
+    for line in reversed(lines):
+        twice = next(
+            (
+                i
+                for i, other in enumerate(kept)
+                if _same_event(line.text, other.text, settings.date_threshold)
+            ),
+            None,
+        )
+        if twice is not None:
+            if line.here and not kept[twice].here:
+                line, kept[twice] = kept[twice], line
+            told.append(line.fact_id)
+            continue
+        if len(kept) == TOUCHED_TIMELINE:
+            break
+        kept.append(line)
+    kept.sort(
+        key=lambda line: (line.date.instant, line.fact.created if line.fact else 0)
+    )
+    shown.update(told)
+    for line in kept:
+        shown.add(line.fact_id)
+    return [
+        dated_line(world.calendar, line.date, timeline_text(view, line), line.until)
+        for line in kept
+    ]
+
+
+def _touched_entry(
+    world: World,
+    view: WorldView,
+    thing_id: str,
+    elsewhere: set[str],
+    shown: set[str],
+    settings: CurationSettings,
+    things: list[ThingState],
+) -> dict[str, Any] | None:
+    """One touched entry of the block, `{"name", "kind", "tag", "everyday",
+    "lines"}` (probe 5's shape): its summary (`_summary_fact`), up to
+    `TOUCHED_FACTS` of its own undated facts, the most-linked first, then
+    its latest timeline lines (`_latest_lines`), at most `TOUCHED_LINES`
+    in all (the own facts give way to the timeline), each held fact worded
+    as held; a fact `shown` already in the block isn't told again. `None`
+    for an entry with nothing to say."""
+
+    state = view.thing(thing_id)
+    if state is None:
+        return None
+    head = _summary_fact(state)
+    if head is not None and head.fact_id in shown:
+        head = None
+    own = sorted(
+        (
+            fact
+            for fact in state.facts
+            if fact.valid_from is None
+            and fact.fact_id not in shown
+            and (head is None or fact.fact_id != head.fact_id)
+            and not entries.is_summary_fact(fact)
+        ),
+        key=lambda fact: (-len(set(fact.refs)), fact.created),
+    )[:TOUCHED_FACTS]
+    for fact in [*([head] if head else []), *own]:
+        shown.add(fact.fact_id)
+    timeline = _latest_lines(world, view, thing_id, elsewhere, shown, settings, things)
+    room = TOUCHED_LINES - len(timeline) - (1 if head else 0)
+    lines = [
+        *_facts(view, state, [head] if head else []),
+        *_facts(view, state, own[: max(room, 0)]),
+        *timeline,
+    ][:TOUCHED_LINES]
+    if not lines:
+        return None
+    return {
+        "name": view.name_of(thing_id) or "",
+        "kind": state.kind,
+        "tag": tag_of(state),
+        "everyday": everyday_name(state),
+        "lines": lines,
+    }
+
+
+def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
+    """The "World" instruction's content (probe 5's v2 block): the scene's
+    goal, its current place, what the scene touches (`touched_entries`,
+    each `_touched_entry`) and who is here by heritage (`_cast`), all as
+    of `at`. The place is the world thing `record.state["place_thing_id"]`
+    (its facts, a held one as belief) or, when the scene invented its
+    place, the scene-local place thing `record.state["place_local_id"]`
+    (its name and facts). The agent flag no longer changes it.
+
+    A touched entry's timeline leaves out the lines of the place, of who
+    is here and of the other touched entries (each told where it is
+    shown), and no fact is told twice in the block.
+
+    A place or touched entry with an everyday name is shown with
+    "usually called <everyday>", and the block then opens with a line
+    asking for everyday names in narration and dialogue: the connections
+    probe (docs/superpowers/probes/2026-10-21-connections.md, probe 4)
+    found the plain heading kept the full name every time."""
+
+    view = world.view(at)
+    things = view.things()
+    settings = world.curation()
+
+    place_thing_id = record.state.get("place_thing_id")
+    place_local_id = record.state.get("place_local_id")
+    place_state = view.thing(place_thing_id) if place_thing_id else None
+
+    touched = touched_entries(view, record, reach=settings.timeline_reach)
+
+    present = {
+        entry["thing_id"]
+        for entry in _present(record)
+        if isinstance(entry.get("thing_id"), str)
+    }
+    shown: set[str] = set()
     place = None
     if place_state is not None and place_thing_id:
-        facts = _facts(view, place_state, place_state.facts)
-        if spheres.is_sphere(place_state):
-            facts = _facts(
-                view,
-                place_state,
-                [
-                    fact
-                    for fact in place_state.facts
-                    if fact.category not in SPHERE_CATEGORIES
-                ],
-            ) + spheres.key_facts(
-                view,
-                place_thing_id,
-                None,
-                world.calendar,
-                things,
-                as_lore,
-                _held_line(view),
-                _latest(
-                    world,
-                    view,
-                    place_thing_id,
-                    things,
-                    as_lore,
-                    as_lore,
-                    None,
-                    settings,
-                ),
-            )
+        shown |= {fact.fact_id for fact in place_state.facts}
         place = {
             "name": view.name_of(place_thing_id) or "",
             "everyday": everyday_name(place_state),
-            "facts": facts,
+            "facts": _facts(
+                view,
+                place_state,
+                sorted(place_state.facts, key=lambda fact: fact.created),
+            ),
         }
     elif place_local_id:
         local = next(
@@ -579,18 +532,18 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
-    # a nested sphere with a block of its own is left out of its parent's
-    # key facts too (ruling P20)
-    sphere_entries = _sphere_entries(
-        world,
-        view,
-        in_block,
-        set(touched),
-        things,
-        as_lore | set(in_block),
-        settings,
-        place_thing_id,
-    )
+    touched_block: list[dict[str, Any]] = []
+    for thing_id in touched:
+        elsewhere = {
+            *present,
+            *([place_thing_id] if isinstance(place_thing_id, str) else []),
+            *(other for other in touched if other != thing_id),
+        }
+        entry = _touched_entry(
+            world, view, thing_id, elsewhere, shown, settings, things
+        )
+        if entry is not None:
+            touched_block.append(entry)
 
     return str(
         Prompt.get(
@@ -598,11 +551,10 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
             vars={
                 "goal": record.goal,
                 "place": place,
-                "lore": lore,
-                "spheres": sphere_entries,
+                "touched": touched_block,
                 "everyday": any(
                     entry["everyday"]
-                    for entry in [*([place] if place else []), *lore, *sphere_entries]
+                    for entry in [*([place] if place else []), *touched_block]
                 ),
                 "cast": _cast(world, record, view),
             },

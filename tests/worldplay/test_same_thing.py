@@ -1148,3 +1148,60 @@ async def test_row_notes_not_doubled_on_retry(world):
 
     assert len([n for n in notes if "Greymarch Mountains" in n]) == 1
     assert _named(world.view(), "Zzyzx") == []
+
+
+def _filing(target, role=None, *, within=None, exceptions=()):
+    return {
+        "target": target,
+        "role": role,
+        "since": None,
+        "until": None,
+        "within": within,
+        "exceptions": list(exceptions),
+    }
+
+
+def test_accept_same_carries_the_stubs_filings_whole(world):
+    """Task 4 review, M5: "Is this X?" re-points the stub it expanded onto
+    X, and its filings go over whole -- the role, the `within` and the
+    exceptions, mapped onto the moved copies (`repoint`'s own logic)."""
+
+    from talemate.worldplay.create import CreatePreview
+
+    with world.revision(Source.manual(note="weaver")) as rev:
+        faith = rev.create_thing("lore", {"name": "The Loom Faith"})
+        order = rev.create_thing(
+            "lore", {"name": "The Order of Threads", "filings": [_filing(faith)]}
+        )
+        keth = rev.create_thing("character", {"name": "Keth"})
+        rev.add_fact(keth, "background", "Keth weaves.")
+        stub = rev.create_thing(
+            "character", {"name": "the Weaver", "stub": {"ignored": False}}
+        )
+        doubt = rev.add_fact(stub, "ties", "Doubts the loom.", origin={"tie": faith})
+        rev.set_field(
+            stub,
+            "filings",
+            [_filing(faith, "weaver", within=order, exceptions=[doubt])],
+            None,
+        )
+    preview = CreatePreview(
+        kind="character",
+        prompt="The Weaver.",
+        name="the Weaver",
+        facts=[],
+        prose={},
+        stub_id=stub,
+    )
+    accept_preview(world, preview, same_target_id=keth)
+
+    view = world.view()
+    assert view.thing(stub) is None
+    (copy,) = [f for f in view.thing(keth).facts if f.text == "Doubts the loom."]
+    (filing,) = filings_of(view, keth)
+    assert (filing.target, filing.role, filing.within, filing.exceptions) == (
+        faith,
+        "weaver",
+        order,
+        [copy.fact_id],
+    )
