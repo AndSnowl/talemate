@@ -2981,6 +2981,46 @@ async def test_accept_drops_fields_a_changed_kind_lacks(at_1020):
     assert any("born" in note for note in notes)
 
 
+@pytest.mark.parametrize("path", ["stub_id", "into_stub"])
+async def test_stub_accept_drops_fields_a_changed_kind_lacks(at_1020, path):
+    """Final review I1: a character stub's draft (carrying `born`) whose
+    kind the owner changed to place is written as a place, filling the
+    stub, by its own draft or by "Fill the stub instead"; `born` is left
+    out with a note, and the name is written once (by `name_thing`)."""
+
+    world = at_1020
+    with world.revision(Source.manual(note="stub")) as rev:
+        stub = rev.create_thing(
+            "character", fields={"name": "Oskar", "stub": {"ignored": False}}
+        )
+    notes: list[str] = []
+    preview = CreatePreview(
+        kind="place",
+        prompt="a ferry crossing",
+        name="Oskar's Crossing",
+        fields={"born": WorldDate.of(990), "name": "Oskar's Crossing"},
+        facts=[PreviewFact(category="general", text="A ferry crossing.")],
+        prose={},
+        stub_id=stub if path == "stub_id" else None,
+    )
+    kwargs = {"into_stub": stub} if path == "into_stub" else {}
+    assert accept_preview(world, preview, notes=notes, **kwargs) == stub
+    view = world.view(None)
+    state = view.thing(stub)
+    assert state.kind == "place"
+    assert "born" not in state.fields
+    assert "stub" not in state.fields
+    assert view.name_of(stub) == "Oskar's Crossing"
+    assert any("born" in note for note in notes)
+    # the name is one write: the accept's revision adds one `name` row
+    (count,) = world._conn.execute(
+        "SELECT COUNT(*) FROM field_values"
+        " WHERE thing_id = ? AND field = 'name' AND rev_added = ?",
+        (stub, world.head_rev()),
+    ).fetchone()
+    assert count == 1
+
+
 async def test_new_name_in_both_new_names_and_in_makes_one_stub(at_1020):
     """A name the facts invent (`new_names`) and the owner's "+ in..." on
     the same name make one stub: the facts link it, and the entry is
