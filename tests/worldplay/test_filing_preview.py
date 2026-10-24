@@ -582,6 +582,89 @@ async def test_file_into_code_never_offers_the_stubs_own_home(world):
     assert khorol not in offered and tsardom not in offered
 
 
+def _hub_world(world):
+    """The Tsardom with Velikoye and the Night Court filed in it, the
+    Academy filed in Velikoye; the Khorol River filed nowhere."""
+
+    world.set_present(WorldDate.of(1000))
+    with world.revision(Source.manual(note="hubs")) as rev:
+        tsardom = rev.create_thing("place", {"name": "Tsardom of Moscavia"})
+        rev.add_fact(tsardom, "general", "A northern realm of owl-folk.")
+        velikoye = rev.create_thing(
+            "place", {"name": "Velikoye", "filings": _filed(tsardom)}
+        )
+        rev.add_fact(velikoye, "general", "The capital.")
+        court = rev.create_thing(
+            "lore", {"name": "The Night Court", "filings": _filed(tsardom)}
+        )
+        rev.add_fact(court, "general", "The council that rules by night.")
+        academy = rev.create_thing(
+            "place", {"name": "The Academy", "filings": _filed(velikoye)}
+        )
+        rev.add_fact(academy, "general", "A school of scribes.")
+        khorol = rev.create_thing("place", {"name": "Khorol River"})
+        rev.add_fact(khorol, "general", "A river.")
+    return tsardom, velikoye, court, academy, khorol
+
+
+async def _near_for(world, prompt: str, picks=None) -> list[str]:
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(WARDENS_REPLY)
+        await preview_thing(world, "lore", prompt, {}, client, picks=picks or {})
+    prompt_text = _create_prompt(client)
+    if "Entries near this one in the world:" not in prompt_text:
+        return []
+    body = prompt_text.split("Entries near this one in the world:\n", 1)[1]
+    names = []
+    for line in body.splitlines():
+        if not line.startswith("- "):
+            break
+        names.append(line[2:].split(" (", 1)[0])
+    return names
+
+
+async def test_partial_names_seed_a_prompt_that_names_none(world):
+    """Ruling F31: a prompt that names no entry in full is given what its
+    partial names suggest ("Tsardom" in "the Tsardom's runes") as the
+    context its near list grows from -- the Task 12 session's Runic Magic
+    and Order drafts had no near list, and 5 of 6 contradicted the world."""
+
+    _hub_world(world)
+    near = await _near_for(world, "The Rune Wardens, who guard the Tsardom's runes")
+    assert near[0] == "Tsardom of Moscavia"
+    assert {"Velikoye", "The Night Court"} <= set(near)
+
+
+async def test_partial_names_unused_when_a_name_is_given_in_full(world):
+    """The suggestions seed only a prompt with no full name: with
+    Velikoye named, the Khorol (suggested by "khorol", filed nowhere,
+    linked to nothing) isn't brought in."""
+
+    _, velikoye, *_ = _hub_world(world)
+    near = await _near_for(
+        world,
+        "The Ferrymen of Velikoye, who cross the khorol",
+        picks={"Velikoye": velikoye},
+    )
+    assert "Velikoye" in near
+    assert "Khorol River" not in near
+
+
+async def test_no_seed_falls_back_to_the_hubs(world):
+    """Ruling F31: with no seed at all, the near list is the world's most
+    filed-in entries (the Tsardom holds 2, Velikoye 1), most first,
+    nothing filed in nothing, and capped as filing nearness is."""
+
+    _hub_world(world)
+    near = await _near_for(world, "The Lantern Wardens, keepers of the night lamps")
+    assert near == ["Tsardom of Moscavia", "Velikoye"]
+
+
+def test_hubs_are_capped():
+    assert create.HUB_CANDIDATES <= create.CREATE_CANDIDATES
+
+
 async def test_tag_rule_without_entries_near(world):
     """The reply's tag is asked of every entry the generic branch writes,
     with or without "Entries near this one": the Skyfall session (Task 12,

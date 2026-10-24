@@ -1867,6 +1867,55 @@ def filing_candidates(
     return order
 
 
+# the hubs a create prompt with no context at all is shown (ruling F31),
+# at most: filing nearness's own cap
+HUB_CANDIDATES = CREATE_CANDIDATES
+
+
+def suggested_in_prompt(
+    view: WorldView, prompt: str, as_new: Sequence[str], skip: Collection[str]
+) -> list[str]:
+    """Ruling F31: the entries the prompt's partial names suggest
+    (`find_names`' suggestions, "Tsardom" in "the Tsardom's runes"), each
+    its best candidate, once, in order -- never a name treated as new
+    (`as_new`), one in `skip`, or an ignored stub. Seeds for a prompt that
+    names no entry in full."""
+
+    found: list[str] = []
+    for match in find_names(view, prompt):
+        if not match.suggested or not match.candidates:
+            continue
+        if is_new(match.text, as_new):
+            continue
+        thing_id = match.candidates[0].id
+        state = view.thing(thing_id)
+        if thing_id in skip or thing_id in found or state is None or state.stub_ignored:
+            continue
+        found.append(thing_id)
+    return found
+
+
+def hub_entries(
+    view: WorldView, exclude: Collection[str], limit: int = HUB_CANDIDATES
+) -> list[str]:
+    """Ruling F31: the world's hubs, for a create prompt with no seed at
+    all -- the entries most filed in (`filed_index`), most first, then by
+    name; never one nothing is filed in, one in `exclude`, or an ignored
+    stub; at most `limit`."""
+
+    index = filed_index(view)
+    counted = [
+        (len(rows), thing_id)
+        for thing_id, rows in index.items()
+        if rows
+        and thing_id not in exclude
+        and (state := view.thing(thing_id)) is not None
+        and not state.stub_ignored
+    ]
+    counted.sort(key=lambda item: (-item[0], (view.name_of(item[1]) or "").casefold()))
+    return [thing_id for _count, thing_id in counted[:limit]]
+
+
 def filing_line(view: WorldView, state: ThingState) -> str:
     """One entry of the "Entries near this one" list, as the filing probe
     wrote it: "Name (kind, tag; usually called X; in A (role), B; stub):
@@ -2904,10 +2953,18 @@ async def preview_thing(
         first += [m.owner_id for m in gathered.mentioned]
     first += list(picks.values())
     first += home_ids
+    excluded = {stub.id} if stub is not None else set()
+    if not first:
+        # ruling F31: a draft with no context -- its prompt names no entry
+        # in full, and it has no stub mentions, homes or owner filings --
+        # grows its list from what the prompt's partial names suggest
+        first += suggested_in_prompt(view, prompt, treated_as_new, {*excluded, *first})
     seeds = [*([stub.id] if stub is not None else []), *first]
-    near_ids = filing_candidates(
-        view, seeds, first, {stub.id} if stub is not None else set()
-    )
+    near_ids = filing_candidates(view, seeds, first, excluded)
+    if not near_ids:
+        # ruling F31: still nothing near it -- the world's hubs, so the
+        # model writes into this world rather than inventing one
+        near_ids = hub_entries(view, excluded)
     generic = _generic_branch(kind, sources)
     # filing is asked of every branch but the heritage kinds' own
     nearby = (
