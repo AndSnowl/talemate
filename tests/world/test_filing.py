@@ -216,12 +216,39 @@ def test_within_lists_person_under_both(world):
     in_talon = filed_in(world.view(), talon)
     assert [(state.id, f.role) for state, f in in_talon] == [(vasha, "captain")]
 
+    # filed in the Talon directly and within it through the Army: listed
+    # once, by the direct filing
+    with world.revision(Source.manual()) as rev:
+        oleg = _thing(
+            rev,
+            "character",
+            "Oleg",
+            filings=[
+                _filing(army, role="sergeant", within=talon),
+                _filing(talon, role="drummer"),
+            ],
+        )
+    in_talon = filed_in(world.view(), talon)
+    assert [(state.id, f.role) for state, f in in_talon] == [
+        (vasha, "captain"),
+        (oleg, "drummer"),
+    ]
+
     # `within` must sit in the target
     with world.revision(Source.manual()) as rev:
         stray = _thing(rev, "lore", "The Stray Company")
     with pytest.raises(ValueError):
         with world.revision(Source.manual()) as rev:
             rev.set_field(vasha, "filings", [_filing(army, within=stray)], None)
+
+    # a `within` whose part is deleted: still in the target, under nothing
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(talon)
+    assert [(state.id, f.within) for state, f in filed_in(world.view(), army)] == [
+        (vasha, talon),
+        (oleg, talon),
+    ]
+    assert filed_in(world.view(), talon) == []
 
 
 def test_filing_cycle_refused(world):
@@ -239,6 +266,79 @@ def test_filing_cycle_refused(world):
         with world.revision(Source.manual()) as rev:
             rev.set_field(realm, "filings", [_filing(town)], None)
     assert filings_of(world.view(), realm) == []
+
+
+def test_filing_cycle_through_deleted_refused(world):
+    with world.revision(Source.manual()) as rev:
+        a = _thing(rev, "place", "A")
+        b = _thing(rev, "place", "B", filings=[_filing(a)])
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(b)
+
+    # B is gone, but undoing its removal would close the cycle A -> B -> A
+    with pytest.raises(ValueError):
+        with world.revision(Source.manual()) as rev:
+            rev.set_field(a, "filings", [_filing(b)], None)
+
+
+def test_filings_stored_in_full_shape_blank_role_none(world):
+    with world.revision(Source.manual()) as rev:
+        velikoye = _thing(rev, "place", "Velikoye")
+        dance = _thing(
+            rev,
+            "lore",
+            "The Feather Dance",
+            filings=[{"target": velikoye, "role": "   "}],
+        )
+    assert world.view().thing(dance).fields["filings"] == [
+        {
+            "target": velikoye,
+            "role": None,
+            "since": None,
+            "until": None,
+            "within": None,
+            "exceptions": [],
+        }
+    ]
+
+
+def test_connected_rows_role_since_name_order(world):
+    with world.revision(Source.manual()) as rev:
+        hall = _thing(rev, "place", "The Hall", tag="hall")
+        plain = _thing(rev, "lore", "Aa plain", tag="custom", filings=[_filing(hall)])
+        b_role = _thing(
+            rev, "lore", "Bb", tag="custom", filings=[_filing(hall, role="b")]
+        )
+        a_late = _thing(
+            rev,
+            "lore",
+            "Aa late",
+            tag="custom",
+            filings=[_filing(hall, role="a", since=WorldDate.of(1000))],
+        )
+        a_early = _thing(
+            rev,
+            "lore",
+            "Zz early",
+            tag="custom",
+            filings=[_filing(hall, role="a", since=WorldDate.of(900))],
+        )
+        a_undated_z = _thing(
+            rev, "lore", "Zz undated", tag="custom", filings=[_filing(hall, role="a")]
+        )
+        a_undated_m = _thing(
+            rev, "lore", "Mm undated", tag="custom", filings=[_filing(hall, role="a")]
+        )
+
+    (group,) = connected(world.view(), hall)
+    assert [thing_id for thing_id, _ in group.rows] == [
+        a_undated_m,
+        a_undated_z,
+        a_early,
+        a_late,
+        b_role,
+        plain,
+    ]
 
 
 def test_filing_to_deleted_target_hidden_then_back(world):

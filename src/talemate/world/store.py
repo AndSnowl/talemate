@@ -35,7 +35,7 @@ from .dates import Precision, WorldDate
 from .kinds import KindSpec, get_kind, normalise_field, validate_field
 from .curation import CurationSettings
 from .refs import parse_refs
-from .filing import check_filings
+from .filing import check_filings, stored_filings_value
 from .view import FactState, WorldView, _fact_state_from_row
 
 if TYPE_CHECKING:
@@ -323,6 +323,8 @@ class Revision:
             )
             if errors:
                 raise ValueError("; ".join(errors))
+            # the full exact shape, a blank role as None
+            value = stored_filings_value(cast("list[object]", value))
 
         value_json = _encode_value(kind_spec, field, value)
         from_instant, from_precision = _date_parts(valid_from)

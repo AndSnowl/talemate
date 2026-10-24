@@ -18,7 +18,15 @@ entry goes under "Other".
 
 The store runs `check_filings` on every write of `filings`; it refuses a
 filing into the thing itself, a `within` that doesn't sit in its target,
-and a cycle (a thing filed, directly or through others, in itself).
+and a cycle (a thing filed, directly or through others, in itself). It
+also refuses a new target or `within` that isn't live, so a deleted entry
+can't be used to close a cycle that would reappear when it's restored.
+Undo restores rows without these checks, so undoing a removal can still
+bring a cycle back: every reader that walks filings must be cycle-safe
+(`sits_in` visits each thing once).
+
+A stored filing always has the full shape (`stored_filings_value`), with
+a blank role kept as `None`.
 """
 
 from collections.abc import Sequence
@@ -42,6 +50,7 @@ __all__ = [
     "filings_of",
     "mentioned_in",
     "sits_in",
+    "stored_filings_value",
     "tag_heading",
     "tag_of",
     "tags_in_use",
@@ -80,6 +89,20 @@ def _stored_filings(state: ThingState) -> list[Filing]:
         except ValidationError:
             log.warning("unreadable filing", thing_id=state.id, filing=raw)
     return found
+
+
+def stored_filings_value(filings: Sequence[object]) -> list[dict[str, object]]:
+    """`filings` (already of the right shape, `kinds.validate_field`) as
+    they're stored: every key present (`Filing`'s defaults filling the
+    missing ones), dates in their JSON form, and a blank role as `None`."""
+
+    stored: list[dict[str, object]] = []
+    for raw in filings:
+        filing = Filing.model_validate(raw)
+        if filing.role is not None and not filing.role.strip():
+            filing.role = None
+        stored.append(filing.model_dump(mode="json"))
+    return stored
 
 
 def filing_live(filing: Filing, at: WorldDate | None) -> bool:
@@ -163,7 +186,8 @@ def filed_in(
     """Every live `(entry, filing)` filed directly in the target, in the
     order the entries were made. A filing `within` the target (a person in
     the White Talon, filed in the Tsar's Army) lists the entry here too,
-    while that part still sits in its own target. `things` is the
+    while that part still sits in its own target. An entry is listed once,
+    by its direct filing when it has both. `things` is the
     snapshot to scan (all the view's things when not given)."""
 
     pool = view.things() if things is None else things
@@ -172,11 +196,16 @@ def filed_in(
     for state in sorted(pool, key=lambda thing: thing.created):
         if state.id == target_id:
             continue
-        for filing in _live(view, state, alive):
-            if filing.target == target_id or (
-                filing.within == target_id and _within_holds(view, filing)
-            ):
-                found.append((state, filing))
+        live = _live(view, state, alive)
+        # one row per entry: its direct filing, else one within the target
+        direct = next((f for f in live if f.target == target_id), None)
+        within = next(
+            (f for f in live if f.within == target_id and _within_holds(view, f)),
+            None,
+        )
+        chosen = direct or within
+        if chosen is not None:
+            found.append((state, chosen))
     return found
 
 
@@ -204,11 +233,19 @@ def connected(
     for state, filing in filed_in(view, target_id, things=things):
         by_tag.setdefault(tag_of(state), []).append((state, filing))
 
-    def row_key(row: tuple[ThingState, Filing]) -> tuple[bool, str, int, str]:
+    def row_key(
+        row: tuple[ThingState, Filing],
+    ) -> tuple[bool, str, bool, int, str]:
         state, filing = row
         role = filing.role.casefold() if filing.role else ""
-        since = filing.since.instant if filing.since is not None else -(10**15)
-        return (filing.role is None, role, since, _name(state).casefold())
+        since = filing.since
+        return (
+            filing.role is None,
+            role,
+            since is not None,
+            since.instant if since is not None else 0,
+            _name(state).casefold(),
+        )
 
     groups = [
         Group(
@@ -276,7 +313,10 @@ def check_filings(
     """What's wrong with giving the thing these `filings` (already of the
     right shape, `kinds.validate_field`), read through `view`: a filing
     into the thing itself, a cycle (a target that sits in the thing), or a
-    `within` that doesn't sit in its target. A `within` the thing already
+    `within` that doesn't sit in its target, or a new target that isn't
+    live (a deleted one, through which a cycle could be closed and come
+    back on restore; one the thing already files in stays allowed, so a
+    hidden filing never blocks rewriting the list). A `within` the thing already
     has on that target is kept unchecked, so a part moved out later never
     blocks rewriting the rest of the list (it reads as filed in the target
     alone). Empty when the write is fine."""
@@ -294,6 +334,9 @@ def check_filings(
             continue
         if filing.target == thing_id:
             errors.append("an entry can't be filed in itself")
+            continue
+        if filing.target not in current and view.thing(filing.target) is None:
+            errors.append(f"{filing.target} isn't a live entry to file in")
             continue
         if sits_in(view, filing.target, thing_id):
             errors.append(
