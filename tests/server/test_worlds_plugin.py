@@ -6315,3 +6315,57 @@ async def test_connected_marks_believed_beings(plugin):
         light: False,
         spirit: False,
     }
+
+
+@pytest.mark.parametrize("dated", [False, True])
+async def test_get_thing_builds_one_filing_index(plugin, monkeypatch, dated):
+    """Final review I4: a page builds its filing index once -- Connected,
+    Mentioned in and the timeline share it, and a group's synopsis with
+    nothing cached builds nothing -- and reads the world's things once for
+    them. A cheap guard against the old per-group whole-world passes
+    (about 1.4 s a hub page at 1000 entries)."""
+
+    from talemate.world import filing, view as view_mod
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Vael"})
+    world = plugin.world
+    with world.revision(Source.manual(note="seed")) as rev:
+        realm = rev.create_thing("place", {"name": "Realm"})
+        city = rev.create_thing(
+            "place", {"name": "City", "tag": "city", "filings": [{"target": realm}]}
+        )
+        for i, tag in enumerate(["river", "river", "guild", "temple", None]):
+            fields = {"name": f"Entry {i}", "filings": [{"target": realm}]}
+            if tag:
+                fields["tag"] = tag
+            entry = rev.create_thing("lore", fields)
+            rev.add_fact(entry, "general", f"Near the {ref(realm, 'Realm')}.")
+        rev.add_fact(city, "general", f"In the {ref(realm, 'Realm')}.")
+
+    builds = []
+    live_of_init = filing._LiveOf.__init__
+
+    def counting(self, view, things, include_ended=False, **kwargs):
+        builds.append(include_ended)
+        live_of_init(self, view, things, include_ended, **kwargs)
+
+    monkeypatch.setattr(filing._LiveOf, "__init__", counting)
+    things_calls = []
+    things = view_mod.WorldView.things
+
+    def counting_things(self, kind=None):
+        if kind is None:
+            things_calls.append(id(self))
+        return things(self, kind)
+
+    monkeypatch.setattr(view_mod.WorldView, "things", counting_things)
+
+    at = {"at": WorldDate.of(1000).model_dump()} if dated else {}
+    await plugin.handle({"type": "worlds", "action": "get_thing", "id": realm, **at})
+    payload = _last(plugin, "get_thing")["data"]
+    assert len(payload["connected"]) == 5
+    # one index: each way it's read (with ended filings, and without) once
+    assert sorted(builds) == sorted(set(builds)), builds
+    # no view reads every thing twice (`thing_references`, older than
+    # Filing, reads them once through a view of its own)
+    assert len(things_calls) == len(set(things_calls)) <= 2, things_calls

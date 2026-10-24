@@ -497,3 +497,46 @@ def test_retag_reaches_removed_things_and_undoes_exactly(world):
     assert world.view(WorldDate.of(950)).thing(kept).fields["tag"] == "school"
     world.undo([deleted])
     assert world.view().thing(gone).fields["tag"] == "school"
+
+
+@pytest.mark.parametrize("at", [None, WorldDate.of(950), WorldDate.of(1020)])
+def test_one_filing_index_reads_as_filed_index_both_ways(world, at):
+    """A page's shared `FilingIndex` (final review I4) gives what
+    `filed_index` gives, with ended filings and without, at the latest
+    telling and at dates: direct rows, `within` rows (a part that moved
+    out of its target), a direct filing that ended beside a live one
+    within, and a filing not begun yet."""
+
+    from talemate.world.filing import FilingIndex, filed_index
+
+    with world.revision(Source.manual()) as rev:
+        army = _thing(rev, "lore", "The Tsar's Army", tag="army")
+        talon = _thing(
+            rev,
+            "lore",
+            "The White Talon",
+            tag="regiment",
+            filings=[_filing(army, until=WorldDate.of(1000))],
+        )
+        _thing(
+            rev,
+            "character",
+            "Vasha",
+            filings=[
+                _filing(army, role="captain", within=talon),
+                _filing(talon, role="drummer", until=WorldDate.of(990)),
+            ],
+        )
+        _thing(
+            rev,
+            "place",
+            "Fort",
+            filings=[_filing(army, since=WorldDate.of(1010))],
+        )
+    view = world.view(at)
+    index = FilingIndex(view)
+    for ended in (False, True):
+        assert index.get(ended) == filed_index(view, include_ended=ended)
+    assert [s.id for s in index.things] == [s.id for s in view.things()]
+    with pytest.raises(ValueError):
+        FilingIndex(view, include_ended=(False,)).get(True)

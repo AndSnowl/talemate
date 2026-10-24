@@ -48,7 +48,7 @@ from pydantic import BaseModel, Field
 from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .entries import acts_in_world
-from .filing import filed_index
+from .filing import FilingIndex, filed_index
 from .repeats import disagreeing_dates
 from .view import FactState, ThingState, WorldView, _fact_state_from_row
 
@@ -76,25 +76,30 @@ class TimelineLine(BaseModel):
 
 
 def _parts(
-    view: WorldView, thing_id: str, reach: int, things: Sequence[ThingState]
+    view: WorldView,
+    thing_id: str,
+    reach: int,
+    things: Sequence[ThingState],
+    index: FilingIndex | None = None,
 ) -> list[str]:
     """The ids of the entry's parts within `reach` steps down, nearest
     first, each once: the entries filed in it at the view's date
     (`filing.filed_index`), the entries filed in those, and so on. An
     entry that acts in the world (a character, a real being) is a member,
     never a part: its births and postings stay its own, and nothing is
-    gathered through it."""
+    gathered through it. `index`, a page's shared `FilingIndex`, saves
+    the pass."""
 
     if reach <= 0:
         return []
-    index = filed_index(view, things=things)
+    filed = index.get(False) if index is not None else filed_index(view, things=things)
     found: list[str] = []
     seen = {thing_id}
     frontier = [thing_id]
     for _ in range(reach):
         below: list[str] = []
         for parent_id in frontier:
-            for state, _filing in index.get(parent_id, []):
+            for state, _filing in filed.get(parent_id, []):
                 if state.id not in seen and not acts_in_world(state):
                     seen.add(state.id)
                     below.append(state.id)
@@ -155,6 +160,7 @@ def entry_timeline(
     threshold: float,
     things: Sequence[ThingState] | None = None,
     disagreements: bool = True,
+    index: FilingIndex | None = None,
 ) -> list[TimelineLine]:
     """The entry's timeline at the view, in date order (then the order the
     facts were written): its own dated facts and, unless it acts in the
@@ -163,7 +169,8 @@ def entry_timeline(
     `disagrees_with` is the other lines whose words overlap it by at least
     `threshold` with another start year (left empty, and not worked out,
     without `disagreements`). `things`, a snapshot of the
-    view's things, saves a scan. An entry that isn't live at the
+    view's things, saves a scan, and `index` (a page's shared
+    `FilingIndex`) the filing pass. An entry that isn't live at the
     view has no timeline."""
 
     state = view.thing(thing_id)
@@ -174,8 +181,13 @@ def entry_timeline(
     if acts_in_world(state):
         found = _dated_facts(view, [thing_id], [])
     else:
-        snapshot = view.things() if things is None else things
-        parts = _parts(view, thing_id, reach, snapshot)
+        if things is not None:
+            snapshot = things
+        elif index is not None:
+            snapshot = index.things
+        else:
+            snapshot = view.things()
+        parts = _parts(view, thing_id, reach, snapshot, index)
         found = _dated_facts(view, [thing_id, *parts], [thing_id, *parts])
 
     unique: dict[str, tuple[str, WorldDate, FactState]] = {}

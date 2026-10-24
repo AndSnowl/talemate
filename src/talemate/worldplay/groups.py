@@ -294,25 +294,40 @@ def _synopsis_members_and_key(
     return members, key
 
 
-def cached_synopsis(world: World, thing_id: str, tag: str | None) -> str | None:
+def cached_synopsis(
+    world: World,
+    thing_id: str,
+    tag: str | None,
+    *,
+    view: WorldView | None = None,
+    rows: list[tuple[ThingState, Filing]] | None = None,
+) -> str | None:
     """Ruling I3: the group's synopsis, only when a content key built from
     its *current* members matches what's cached -- no model call, nothing
     written. `None` for a missing `thing_id`, an empty group, nothing
     cached yet, or a stale cache (a member filed, unfiled, edited, or a
-    filing of one ended since). For `get_thing`'s `connected[].synopsis`."""
+    filing of one ended since). For `get_thing`'s `connected[].synopsis`,
+    which passes its latest-telling `view` and the group's live, unignored
+    `rows` (`_group_rows`), worked out once for the page.
+
+    The cache is read first (final review I4): a synopsis is written only
+    when the owner asks for one, so most groups have none, and the
+    members and key are built only for one that does."""
 
     tag = normalise_tag(tag) if tag else None
-    view = world.view()
-    if view.thing(thing_id) is None:
-        return None
-    rows = _group_rows(view, thing_id, tag)
-    if not rows:
-        return None
-    _members, key = _synopsis_members_and_key(world, view, thing_id, tag, rows)
     cached = world.prose().get(thing_id, _group_section(tag), None)
     if cached is None:
         return None
     stored_key, stored_synopsis = _decode_synopsis(cached.text)
+    if stored_key is None:
+        return None
+    view = world.view() if view is None else view
+    if view.thing(thing_id) is None:
+        return None
+    rows = _group_rows(view, thing_id, tag) if rows is None else rows
+    if not rows:
+        return None
+    _members, key = _synopsis_members_and_key(world, view, thing_id, tag, rows)
     return stored_synopsis if stored_key == key else None
 
 

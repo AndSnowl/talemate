@@ -48,6 +48,7 @@ __all__ = [
     "FIELD_ROLES",
     "OTHER_HEADING",
     "Filing",
+    "FilingIndex",
     "Group",
     "check_filings",
     "connected",
@@ -134,13 +135,20 @@ def _live(
     state: ThingState,
     alive: dict[str, bool] | None = None,
     include_ended: bool = False,
+    parsed: dict[str, list[Filing]] | None = None,
 ) -> list[Filing]:
     """The thing's filings whose dates cover the view's date and whose
-    target exists at it; `alive` caches which targets do, across calls.
-    With `include_ended`, a filing counts whatever its dates (one that has
-    ended, or not begun)."""
+    target exists at it; `alive` caches which targets do, across calls,
+    and `parsed` each thing's stored filings. With `include_ended`, a
+    filing counts whatever its dates (one that has ended, or not begun)."""
 
     cache = {} if alive is None else alive
+    if parsed is None:
+        stored = _stored_filings(state)
+    else:
+        if state.id not in parsed:
+            parsed[state.id] = _stored_filings(state)
+        stored = parsed[state.id]
 
     def exists(thing_id: str) -> bool:
         if thing_id not in cache:
@@ -149,7 +157,7 @@ def _live(
 
     return [
         filing
-        for filing in _stored_filings(state)
+        for filing in stored
         if (include_ended or filing_live(filing, view.at)) and exists(filing.target)
     ]
 
@@ -227,11 +235,16 @@ class _LiveOf:
         view: WorldView,
         things: Sequence[ThingState],
         include_ended: bool = False,
+        *,
+        alive: dict[str, bool] | None = None,
+        parsed: dict[str, list[Filing]] | None = None,
     ) -> None:
         self.view = view
         self.include_ended = include_ended
         self.states = {state.id: state for state in things}
-        self.alive: dict[str, bool] = {}
+        # shareable with another `_LiveOf` of the same view (`FilingIndex`)
+        self.alive: dict[str, bool] = {} if alive is None else alive
+        self.parsed: dict[str, list[Filing]] = {} if parsed is None else parsed
         self.found: dict[str, list[Filing]] = {}
 
     def __call__(self, thing_id: str) -> list[Filing]:
@@ -240,7 +253,9 @@ class _LiveOf:
             self.found[thing_id] = (
                 []
                 if state is None
-                else _live(self.view, state, self.alive, self.include_ended)
+                else _live(
+                    self.view, state, self.alive, self.include_ended, self.parsed
+                )
             )
         return self.found[thing_id]
 
@@ -259,6 +274,67 @@ def _within_live(view: WorldView, filing: Filing, live_of: _LiveOf) -> bool:
     )
 
 
+def _chosen(view: WorldView, state: ThingState, live_of: _LiveOf) -> dict[str, Filing]:
+    """`state`'s rows in `filed_index`: one per target, its direct filing,
+    else one `within` it."""
+
+    chosen: dict[str, Filing] = {}
+    for filing in live_of(state.id):
+        if filing.target != state.id:
+            chosen[filing.target] = filing
+    for filing in live_of(state.id):
+        within = filing.within
+        if (
+            within is not None
+            and within != state.id
+            and within not in chosen
+            and _within_live(view, filing, live_of)
+        ):
+            chosen[within] = filing
+    return chosen
+
+
+class FilingIndex:
+    """`filed_index` read once for a page, both ways at once: `get(False)`
+    (what holds at the view's date) and `get(True)` (ended filings too),
+    from one pass over `things` (all the view's things when not given),
+    which it keeps as `things`. Connected, Mentioned in and the timeline
+    of one page share it (final review I4: each built its own, over a
+    fresh read of every thing). `include_ended` limits it to those ways."""
+
+    def __init__(
+        self,
+        view: WorldView,
+        things: Sequence[ThingState] | None = None,
+        include_ended: Sequence[bool] = (False, True),
+    ) -> None:
+        self.view = view
+        self.things: Sequence[ThingState] = view.things() if things is None else things
+        alive: dict[str, bool] = {}
+        parsed: dict[str, list[Filing]] = {}
+        ways = {
+            ended: _LiveOf(view, self.things, ended, alive=alive, parsed=parsed)
+            for ended in dict.fromkeys(include_ended)
+        }
+        self._found: dict[bool, dict[str, list[tuple[ThingState, Filing]]]] = {
+            ended: {} for ended in ways
+        }
+        for state in sorted(self.things, key=lambda thing: thing.created):
+            for ended, live_of in ways.items():
+                found = self._found[ended]
+                for target_id, filing in _chosen(view, state, live_of).items():
+                    found.setdefault(target_id, []).append((state, filing))
+
+    def get(
+        self, include_ended: bool = False
+    ) -> dict[str, list[tuple[ThingState, Filing]]]:
+        """`target id -> [(entry, filing)]`, as `filed_index` has it."""
+
+        if include_ended not in self._found:
+            raise ValueError(f"not indexed with include_ended={include_ended}")
+        return self._found[include_ended]
+
+
 def filed_index(
     view: WorldView,
     *,
@@ -270,29 +346,10 @@ def filed_index(
     pass over `things` (all the view's things when not given). With
     `include_ended`, a filing counts whatever its dates: an entry page at
     the latest telling lists what was filed in it and has ended too
-    ("in Velikoye from 900 to 1015")."""
+    ("in Velikoye from 900 to 1015"). A page reading it more than one
+    way shares a `FilingIndex`."""
 
-    pool = view.things() if things is None else things
-    live_of = _LiveOf(view, pool, include_ended)
-    found: dict[str, list[tuple[ThingState, Filing]]] = {}
-    for state in sorted(pool, key=lambda thing: thing.created):
-        chosen: dict[str, Filing] = {}
-        for filing in live_of(state.id):
-            if filing.target != state.id:
-                chosen[filing.target] = filing
-        # one row per entry and target: its direct filing, else one within
-        for filing in live_of(state.id):
-            within = filing.within
-            if (
-                within is not None
-                and within != state.id
-                and within not in chosen
-                and _within_live(view, filing, live_of)
-            ):
-                chosen[within] = filing
-        for target_id, filing in chosen.items():
-            found.setdefault(target_id, []).append((state, filing))
-    return found
+    return FilingIndex(view, things, (include_ended,)).get(include_ended)
 
 
 def filed_in(
@@ -301,6 +358,7 @@ def filed_in(
     *,
     things: Sequence[ThingState] | None = None,
     include_ended: bool = False,
+    index: FilingIndex | None = None,
 ) -> list[tuple[ThingState, Filing]]:
     """Every live `(entry, filing)` filed directly in the target, in the
     order the entries were made. A filing `within` the target (a person in
@@ -308,8 +366,11 @@ def filed_in(
     while that part sits in its own target at the view's date. An entry is
     listed once, by its direct filing when it has both. `things` is the
     snapshot to scan (all the view's things when not given);
-    `include_ended` as `filed_index` has it."""
+    `include_ended` as `filed_index` has it; `index`, a page's shared
+    `FilingIndex`, saves the pass."""
 
+    if index is not None:
+        return index.get(include_ended).get(target_id, [])
     return filed_index(view, things=things, include_ended=include_ended).get(
         target_id, []
     )
@@ -333,6 +394,7 @@ def connected(
     *,
     things: Sequence[ThingState] | None = None,
     include_ended: bool = False,
+    index: FilingIndex | None = None,
 ) -> list[Group]:
     """What is filed in the target (`filed_in`, ended filings too with
     `include_ended`), grouped by each entry's tag, an untagged entry under
@@ -341,7 +403,7 @@ def connected(
 
     by_tag: dict[str | None, list[tuple[ThingState, Filing]]] = {}
     for state, filing in filed_in(
-        view, target_id, things=things, include_ended=include_ended
+        view, target_id, things=things, include_ended=include_ended, index=index
     ):
         by_tag.setdefault(tag_of(state), []).append((state, filing))
 
@@ -372,14 +434,22 @@ def connected(
 
 
 def mentioned_in(
-    view: WorldView, thing_id: str, *, include_ended: bool = False
+    view: WorldView,
+    thing_id: str,
+    *,
+    include_ended: bool = False,
+    index: FilingIndex | None = None,
 ) -> list[str]:
     """The live entries, other than the thing, whose facts visible at the
     view reference it and that aren't filed in it (`filed_in`, with
-    `include_ended` as Connected has it), in the order they were made."""
+    `include_ended` as Connected has it, through `index` when given), in
+    the order they were made."""
 
     filed = {
-        state.id for state, _ in filed_in(view, thing_id, include_ended=include_ended)
+        state.id
+        for state, _ in filed_in(
+            view, thing_id, include_ended=include_ended, index=index
+        )
     }
     owners: dict[str, int] = {}
     for owner_id, _ in view.referencing(thing_id):

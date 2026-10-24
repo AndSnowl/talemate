@@ -322,6 +322,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.filing import (
     FIELD_ROLES,
     Filing,
+    FilingIndex,
     connected,
     filed_in,
     filings_of,
@@ -1407,8 +1408,10 @@ def _connected_out(
     calendar: Calendar,
     thing_id: str,
     things: list[ThingState],
+    index: FilingIndex | None = None,
 ) -> list[dict]:
-    """What is filed in the thing, grouped by tag (`filing.connected`):
+    """What is filed in the thing, grouped by tag (`filing.connected`,
+    through the page's `index` when given):
     each group's tag (`None` for Other), heading and synopsis
     (`groups.cached_synopsis`: only a fresh cached one, no model call,
     and only at the latest telling -- `group_synopsis` has no sense of a
@@ -1425,13 +1428,15 @@ def _connected_out(
     # at the latest telling, what has ended shows too, with its dates; at
     # a date, only what holds then
     for group in connected(
-        view, thing_id, things=things, include_ended=view.at is None
+        view, thing_id, things=things, include_ended=view.at is None, index=index
     ):
         rows = []
+        members: list[tuple[ThingState, Filing]] = []
         for row_id, filing in group.rows:
             state = states.get(row_id) or view.thing(row_id)
             if state is None or state.stub_ignored:
                 continue
+            members.append((state, filing))
             fact = _line_fact(state)
             rows.append(
                 {
@@ -1453,8 +1458,12 @@ def _connected_out(
                 {
                     "tag": group.tag,
                     "heading": group.heading,
+                    # the group's rows, worked out once here (final
+                    # review I4)
                     "synopsis": (
-                        cached_synopsis(world, thing_id, group.tag)
+                        cached_synopsis(
+                            world, thing_id, group.tag, view=view, rows=members
+                        )
                         if view.at is None
                         else None
                     ),
@@ -1464,12 +1473,17 @@ def _connected_out(
     return groups
 
 
-def _mentioned_out(view: WorldView, thing_id: str) -> list[dict]:
+def _mentioned_out(
+    view: WorldView, thing_id: str, index: FilingIndex | None = None
+) -> list[dict]:
     """The entries whose facts name the thing without being filed in it
-    (`filing.mentioned_in`), an ignored stub left out."""
+    (`filing.mentioned_in`, through the page's `index` when given), an
+    ignored stub left out."""
 
     found = []
-    for owner_id in mentioned_in(view, thing_id, include_ended=view.at is None):
+    for owner_id in mentioned_in(
+        view, thing_id, include_ended=view.at is None, index=index
+    ):
         state = view.thing(owner_id)
         if state is None or state.stub_ignored:
             continue
@@ -1678,8 +1692,14 @@ class WorldsPlugin(Plugin):
             for item in heritage.inherited(view, thing_id)
         ]
         settings = world.curation()
-        # Connected and the timeline read every thing: once
+        # Connected, Mentioned in and the timeline read every thing and
+        # every filing: once, in one index (final review I4). At the latest
+        # telling Connected and Mentioned in count ended filings too; the
+        # timeline never does
         things = view.things()
+        index = FilingIndex(
+            view, things, (False, True) if view.at is None else (False,)
+        )
         entry_lines = [
             _line_out(view, links, calendar, line)
             for line in entry_timeline(
@@ -1688,6 +1708,7 @@ class WorldsPlugin(Plugin):
                 reach=settings.timeline_reach,
                 threshold=settings.date_threshold,
                 things=things,
+                index=index,
             )
         ]
 
@@ -1756,8 +1777,10 @@ class WorldsPlugin(Plugin):
             # where it's filed, what's filed in it (by tag), and what names
             # it without being filed in it
             "in": _in_out(view, links, calendar, state),
-            "connected": _connected_out(world, view, links, calendar, thing_id, things),
-            "mentioned_in": _mentioned_out(view, thing_id),
+            "connected": _connected_out(
+                world, view, links, calendar, thing_id, things, index
+            ),
+            "mentioned_in": _mentioned_out(view, thing_id, index),
             # every change made to the thing (`World.timeline`)
             "timeline": timeline,
             # its dated facts, and what it gathers from what's filed in it
