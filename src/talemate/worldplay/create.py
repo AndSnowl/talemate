@@ -2390,7 +2390,8 @@ def homes_block(
             fact = entries.summary_fact(filed) or (
                 min(filed.facts, key=lambda f: f.created) if filed.facts else None
             )
-            text = _clip(view.render(fact.text)) if fact is not None else ""
+            # a held one worded as held (ruling C33)
+            text = _clip(held_text(view, fact, filed)) if fact is not None else ""
             what = tag_of(filed) or filed.kind
             items.append(_HomeItem(home_id, name, filed.id, None))
             # a text opening with its name stands alone (ruling P5)

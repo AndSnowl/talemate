@@ -362,7 +362,8 @@ async def generate_section(
         world.calendar,
         state.kind,
         section,
-        [(fact.category, view.render(fact.text)) for fact in state.facts],
+        # a held one worded as held, as the section's own facts are
+        [(fact.category, held_text(view, fact, state)) for fact in state.facts],
         state.fields,
         _heritage_line(view, thing_id) + inherited_background,
     )

@@ -41,6 +41,7 @@ from talemate.world.repeats import (
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.held import held_text
 
 log = structlog.get_logger("talemate.worldplay.decide")
 
@@ -151,7 +152,7 @@ async def same_thing(
     judges it, or `None`: when either side has no facts (no call is made),
     the candidate is gone, or the reply gives no verdict. The facts shown
     are the first `SIDE_FACTS` of each side, the candidate's in the order
-    they were made, rendered, each cut at `SIDE_FACT_CHARS`. A failed call
+    they were made, rendered (a held one worded as held), each cut at `SIDE_FACT_CHARS`. A failed call
     is logged and is `None` too: a hint never costs the preview."""
 
     view = world.view()
@@ -159,9 +160,10 @@ async def same_thing(
     if state is None:
         return None
     a_facts = _side_facts(preview_facts)
+    # a held one worded as held: a faith's doctrine is no world truth
     b_facts = _side_facts(
         [
-            view.render(fact.text)
+            held_text(view, fact, state)
             for fact in sorted(state.facts, key=lambda fact: fact.created)
         ]
     )

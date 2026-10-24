@@ -43,6 +43,7 @@ from talemate.worldplay.create import (
     parse_create_reply,
     repeat_flags,
 )
+from talemate.worldplay.held import held_text
 from talemate.worldplay.links import link_text
 
 __all__ = ["FactDraft", "accept_facts", "draft_facts", "draft_facts_for"]
@@ -163,8 +164,9 @@ async def draft_facts(
         kind=state.kind,
         tag=state.fields.get("tag"),
         hint=state.fields.get("hint"),
-        summary=view.render(summary.text) if summary else "",
-        known=[view.render(f.text) for f in known],
+        # a held one worded as held, never as world truth
+        summary=held_text(view, summary, state) if summary else "",
+        known=[held_text(view, f, state) for f in known],
         owners=[thing_id],
         prompt=prompt,
         client=client,
@@ -199,7 +201,7 @@ async def draft_facts_for(
     stub = view.thing(preview.stub_id) if preview.stub_id else None
     known = [fact.text for fact in preview.facts]
     if stub is not None:
-        known += [view.render(fact.text) for fact in stub.facts]
+        known += [held_text(view, fact, stub) for fact in stub.facts]
     facts = await _ask(
         world,
         name=preview.name,

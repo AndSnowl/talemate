@@ -215,12 +215,14 @@ def _own_facts(view: WorldView, state: ThingState, limit: int) -> list[str]:
 
 def _stub_facts(view: WorldView, thing_id: str) -> list[str]:
     """Up to `STUB_MENTIONS` "(stub) mentioned by X: ..." lines, from what
-    else references the stub (`view.referencing`)."""
+    else references the stub (`view.referencing`), a held one worded as
+    held (`held_text`)."""
 
     lines = []
     for owner_id, fact in view.referencing(thing_id):
         name = view.name_of(owner_id) or ""
-        lines.append(f"(stub) mentioned by {name}: {view.render(fact.text)}")
+        text = held_text(view, fact, view.thing(owner_id))
+        lines.append(f"(stub) mentioned by {name}: {text}")
         if len(lines) == STUB_MENTIONS:
             break
     return lines
