@@ -2125,6 +2125,18 @@ class WorldsPlugin(Plugin):
         if not path.is_relative_to(self.root.resolve()):
             raise ValueError(f"not a world in {self.root}: {payload.path}")
         world = World.open(path)
+        old = world.unknown_structure()
+        if old:
+            # a world made before Filing (final review I3): refused with a
+            # plain message, not opened to fail on every list. Fresh worlds
+            # only, no migration (the spec)
+            world.close()
+            log.info("worlds.open_refused", path=str(path), unknown=old)
+            await self.signal_operation_failed(
+                "This world was made before Filing and can't be opened here "
+                f"(it uses {', '.join(old[:4])}). Start a fresh world."
+            )
+            return
         self._set_world(world)
         self._reply("open_world", self._world_info(world))
 

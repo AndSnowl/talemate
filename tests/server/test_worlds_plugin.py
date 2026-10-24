@@ -169,6 +169,55 @@ async def test_open_world_by_path(plugin, tmp_path):
     assert plugin.world.name == "Other"
 
 
+def _old_world(root, rows: str):
+    """A world made before Filing: a fresh one with `rows` (raw SQL, the
+    old structure) written into it. Returns its path."""
+
+    import sqlite3
+
+    old = World.create("Curation", root=root)
+    path = old.path
+    old.close()
+    conn = sqlite3.connect(path / "world.sqlite")
+    conn.execute(
+        "INSERT INTO revisions (source_kind, note, created_at)"
+        " VALUES ('manual', 'old', '2026-10-01')"
+    )
+    conn.executescript(rows)
+    conn.commit()
+    conn.close()
+    return path
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        # a kind Filing has no more
+        "INSERT INTO things (id, kind, rev_added) VALUES ('a' || hex(randomblob(15)), 'sphere', 1);",
+        # a field its kind has no more
+        "INSERT INTO things (id, kind, rev_added) VALUES ('c1', 'character', 1);"
+        "INSERT INTO field_values (thing_id, field, value_json, rev_added)"
+        " VALUES ('c1', 'name', '\"Maren\"', 1);"
+        "INSERT INTO field_values (thing_id, field, value_json, rev_added)"
+        " VALUES ('c1', 'ties', '[]', 1);",
+    ],
+    ids=["kind", "field"],
+)
+async def test_open_world_made_before_filing_is_refused(plugin, tmp_path, rows):
+    """Final review I3: a world made before Filing (spheres, part_of,
+    ties) is refused at open with a plain message, not opened to fail on
+    every list with raw KeyErrors."""
+
+    path = _old_world(tmp_path, rows)
+    await plugin.handle({"type": "worlds", "action": "open_world", "path": str(path)})
+    assert _replies(plugin, "open_world") == []
+    message = _last(plugin, "operation_done")["error"]["message"]
+    assert message.startswith("This world was made before Filing")
+    assert "Start a fresh world." in message
+    assert "Error during" not in message
+    assert plugin.world is None
+
+
 async def test_open_world_outside_root_is_refused(plugin, tmp_path_factory):
     elsewhere = World.create("Elsewhere", root=tmp_path_factory.mktemp("elsewhere"))
     path = str(elsewhere.path)

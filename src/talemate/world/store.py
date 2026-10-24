@@ -33,6 +33,7 @@ from . import schema
 from .calendar import Calendar
 from .dates import Precision, WorldDate
 from .kinds import (
+    KINDS,
     KindSpec,
     get_kind,
     moved_category,
@@ -829,6 +830,35 @@ class World:
     def head_rev(self) -> int:
         row = self._conn.execute("SELECT MAX(rev) FROM revisions").fetchone()
         return row[0] or 0
+
+    def unknown_structure(self) -> builtins.list[str]:
+        """The kinds and fields this world's rows use that no kind has any
+        more -- a world made before Filing (its spheres, `part_of`,
+        `ties`), which the views can't read. Empty for a world this
+        version made: every write is checked against its kind. One pass
+        over the distinct kinds and (kind, field) pairs, any revision."""
+
+        found: builtins.list[str] = []
+        kinds = [
+            row[0]
+            for row in self._conn.execute(
+                "SELECT DISTINCT kind FROM things ORDER BY kind"
+            )
+        ]
+        found += [kind for kind in kinds if kind not in KINDS]
+        pairs = self._conn.execute(
+            "SELECT DISTINCT t.kind, fv.field FROM field_values fv"
+            " JOIN things t ON t.id = fv.thing_id ORDER BY fv.field"
+        ).fetchall()
+        for kind, field in pairs:
+            spec = KINDS.get(kind)
+            if (
+                spec is not None
+                and field not in found
+                and not any(f.name == field for f in spec.fields)
+            ):
+                found.append(field)
+        return found
 
     def view(self, at: WorldDate | None = None, rev: int | None = None) -> WorldView:
         """A snapshot of the world at `(at, rev)`. `at=None` means the

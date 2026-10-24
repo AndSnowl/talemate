@@ -403,3 +403,30 @@ def test_fact_without_origin_is_none(world):
     thing = view.thing(lore_id)
     fact = next(f for f in thing.facts if f.fact_id == fact_id)
     assert fact.origin is None
+
+
+def test_unknown_structure_names_what_a_world_made_before_filing_uses(world):
+    """A fresh world's rows use only kinds and fields this version has; a
+    world made before Filing names its sphere kind and its part_of and
+    ties fields (final review I3)."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        for kind in ("character", "place", "lore", "being", "event"):
+            rev.create_thing(kind, {"name": kind.title(), "tag": "custom"})
+    assert world.unknown_structure() == []
+
+    conn = world._conn
+    with conn:
+        conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES ('s1', 'sphere', 1)"
+        )
+        conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES ('c1', 'character', 1)"
+        )
+        for field in ("part_of", "ties", "name"):
+            conn.execute(
+                "INSERT INTO field_values (thing_id, field, value_json, rev_added)"
+                " VALUES ('c1', ?, '[]', 1)",
+                (field,),
+            )
+    assert world.unknown_structure() == ["sphere", "part_of", "ties"]
