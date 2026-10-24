@@ -306,7 +306,9 @@ def _church_world(world):
         church = rev.create_thing(
             "lore", fields={"name": "Church of the Deep", "hint": "religion"}
         )
-        rev.add_fact(church, "belief", f"{ref(veles, 'Veles')} wept the rivers into being.")
+        rev.add_fact(
+            church, "belief", f"{ref(veles, 'Veles')} wept the rivers into being."
+        )
         rev.add_fact(church, "belief", "The drowned are reborn as fish.")
         rev.add_fact(church, "general", "Its priests wear green.")
         rev.add_fact(

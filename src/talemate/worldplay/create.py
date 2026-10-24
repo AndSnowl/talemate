@@ -3716,9 +3716,7 @@ def _write_preview(
                 rev.change_stub_kind(thing_id, preview.kind)
             # the fields its (perhaps changed) kind has, as a new entry's
             # are (final review I1); its names are `name_thing`'s to write
-            own = {
-                f: v for f, v in preview.fields.items() if f not in ("name", "aka")
-            }
+            own = {f: v for f, v in preview.fields.items() if f not in ("name", "aka")}
             for field, value in _kind_fields(preview.kind, own, notes).items():
                 rev.set_field(thing_id, field, value, None)
             # filling a stub the preview wasn't made from keeps the stub's

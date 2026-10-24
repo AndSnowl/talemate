@@ -3036,9 +3036,12 @@ async def test_a_picked_faith_is_named_in_the_prompt_with_its_beliefs_held(at_10
     client = MockClient("test")
     async with MockClientContext():
         _queue(
-            json.dumps({"name": "Veles", "facts": [
-                {"category": "nature", "text": "A river god."}
-            ]}),
+            json.dumps(
+                {
+                    "name": "Veles",
+                    "facts": [{"category": "nature", "text": "A river god."}],
+                }
+            ),
             "Veles is a river god.",
         )
         await preview_thing(
