@@ -12,8 +12,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   open world is held on the websocket handler (`handler.world`), one per
   connection, and closed when the connection goes.
 - Things: `list_things {kind}` (stubs included, each with its `stub`
-  marker; ignored stubs left out; each with its `tag` and `filed_in`, the
-  live entries it's filed in now, for the World tab's list; a being with
+  marker; ignored stubs left out; each with `filed_in`, the live
+  entries it's filed in now, for the World tab's list; a being with
   its `existence`, so the scene pickers offer only real ones),
   `get_thing {id, at}`. A thing's payload
   holds its fields, the facts visible at `at` (each with the inherited
@@ -218,10 +218,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `tag`, `hint` (the prompt hint it was written with), `in: [{target_id,
   target_name, role, since, until, within_id, within_name, exceptions:
   [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
-  hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, kind,
-  stub, line_segments, role, since, until}]}]` (what's filed in it,
-  grouped by tag, a being only while it's real -- a believed one is never
-  one of the people; `synopsis` is `groups.cached_synopsis` -- a fresh cached one, read
+  hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, stub,
+  believed, line_segments, role, since, until}]}]` (what's filed in it,
+  grouped by tag; `believed` marks a believed or undecided being, shown
+  but not one of the people, ruling F24; `synopsis` is `groups.cached_synopsis` -- a fresh cached one, read
   with no model call, null when there's none cached or it's gone stale --
   and only at the latest telling) and `mentioned_in: [{id, name}]`.
   `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
@@ -1400,7 +1400,9 @@ def _connected_out(
     (`groups.cached_synopsis`: only a fresh cached one, no model call,
     and only at the latest telling -- `group_synopsis` has no sense of a
     past date), then one row per entry with its own line (its summary, as
-    linked runs), whether it's a stub, and the filing's role and dates.
+    linked runs), whether it's a stub, whether it's a believed (or
+    undecided) being -- listed, marked so (ruling F24) -- and the
+    filing's role and dates.
     At the latest telling an ended filing is listed too (its `until`
     says so); at a date, only what holds then. An ignored stub is hidden
     here as everywhere."""
@@ -1417,17 +1419,16 @@ def _connected_out(
             state = states.get(row_id) or view.thing(row_id)
             if state is None or state.stub_ignored:
                 continue
-            # a being shows as a member only while it's real: a believed
-            # (or undecided) one is spoken of, never one of the people
-            if state.kind == "being" and not entries.acts_in_world(state):
-                continue
             fact = _line_fact(state)
             rows.append(
                 {
                     "id": row_id,
                     "name": view.name_of(row_id) or "",
-                    "kind": state.kind,
                     "stub": state.is_stub,
+                    # a believed (or undecided) being: shown, marked so
+                    # (ruling F24)
+                    "believed": state.kind == "being"
+                    and not entries.acts_in_world(state),
                     "line_segments": links.segments(fact.text) if fact else [],
                     "role": filing.role,
                     "since": _date_out(calendar, filing.since),
@@ -2142,9 +2143,8 @@ class WorldsPlugin(Plugin):
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
-            # its tag, and the entries it's filed in now (the World tab
-            # shows a place under the first place it's in)
-            entry["tag"] = tag_of(state)
+            # the entries it's filed in now (the World tab shows a place
+            # under the first place it's in)
             entry["filed_in"] = [
                 filing.target
                 for filing in filings_of(view, state.id)

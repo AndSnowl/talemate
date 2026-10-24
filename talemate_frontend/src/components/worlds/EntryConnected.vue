@@ -9,7 +9,13 @@
         <GroupAddForm v-if="adding || drafting" :thing-id="thing.id" :tag="null" @close="adding = false" />
         <div v-if="!groups.length" class="empty text-body-2">Nothing is filed in {{ thing.name }} yet.</div>
         <div class="groups">
-            <ConnectedGroup v-for="group in groups" :key="group.tag ?? ''" :thing-id="thing.id" :group="group" />
+            <ConnectedGroup
+                v-for="group in groups"
+                :key="`${thing.id}|${group.tag ?? ''}`"
+                :thing-id="thing.id"
+                :group="group"
+                :others="othersOf(group)"
+            />
         </div>
     </div>
 </template>
@@ -24,9 +30,9 @@ import GroupAddForm from './GroupAddForm.vue';
 // entry -- places, people and lore alike -- grouped by each one's tag
 // (`thing.connected`, largest group first; untagged ones under "Other"),
 // each group a `ConnectedGroup`. At the latest telling an ended filing is
-// listed too, with its dates. A being shows as one of the people only
-// while it's real. The top-level "+ Add" drafts new entries filed here
-// with no tag preset.
+// listed too, with its dates. A believed (or undecided) being is listed,
+// marked "believed" (ruling F24). The top-level "+ Add" drafts new entries
+// filed here with no tag preset.
 export default {
     name: 'EntryConnected',
     components: { ConnectedGroup, GroupAddForm },
@@ -49,6 +55,18 @@ export default {
         },
         drafting() {
             return !!this.worlds.groupAdds[groupKey(this.thing.id, null)];
+        },
+    },
+    watch: {
+        // another page: its own "+ Add" starts closed
+        'thing.id'() {
+            this.adding = false;
+        },
+    },
+    methods: {
+        // the groups a row of `group` can move to
+        othersOf(group) {
+            return this.groups.filter((other) => (other.tag ?? null) !== (group.tag ?? null)).map(({ tag, heading }) => ({ tag, heading }));
         },
     },
 };

@@ -11,6 +11,7 @@
                 variant="outlined"
                 hide-details
                 clearable
+                aria-label="Search entries"
                 class="px-1 mb-2"
                 data-testid="world-search"
             ></v-text-field>
@@ -25,8 +26,11 @@
                     class="kind-head d-flex align-center ga-2"
                     :class="{ active: !worlds.selectedThingId && item.kind === kind }"
                     role="button"
+                    tabindex="0"
                     :data-testid="'kind-' + item.kind"
                     @click="selectKind(item.kind)"
+                    @keydown.enter.prevent="selectKind(item.kind)"
+                    @keydown.space.prevent="selectKind(item.kind)"
                 >
                     <v-icon size="small">{{ item.icon }}</v-icon>
                     <span class="flex-grow-1">{{ item.label }}</span>
@@ -40,7 +44,11 @@
                     :class="{ stub: row.thing.stub, active: row.thing.id === worlds.selectedThingId }"
                     :style="{ paddingLeft: 22 + row.depth * 14 + 'px' }"
                     :data-testid="row.thing.stub ? 'stub-item' : 'thing-card'"
+                    role="button"
+                    tabindex="0"
                     @click="worlds.openThing(row.thing.id)"
+                    @keydown.enter.prevent="worlds.openThing(row.thing.id)"
+                    @keydown.space.prevent="worlds.openThing(row.thing.id)"
                 >
                     <span :class="row.thing.stub ? 'stub-name' : 'card-name'">{{ row.thing.name }}</span>
                     <span v-if="row.thing.stub" class="text-caption text-muted text-no-wrap">not made yet</span>
@@ -53,8 +61,11 @@
                 class="kind-head d-flex align-center ga-2"
                 :class="{ active: !worlds.selectedThingId && kind === tab.kind }"
                 role="button"
+                tabindex="0"
                 :data-testid="'kind-' + tab.kind"
                 @click="selectKind(tab.kind)"
+                @keydown.enter.prevent="selectKind(tab.kind)"
+                @keydown.space.prevent="selectKind(tab.kind)"
             >
                 <v-icon size="small">{{ tab.icon }}</v-icon>
                 <span class="flex-grow-1">{{ tab.label }}</span>
@@ -150,6 +161,12 @@ export default {
             return this.worlds.stubs.filter((stub) => !stub.ignored).length;
         },
     },
+    watch: {
+        // another world: the search starts afresh
+        'worlds.currentWorld.id'() {
+            this.query = '';
+        },
+    },
     methods: {
         // a kind's full entries, not its stubs
         entriesOf(kind) {
@@ -202,6 +219,11 @@ export default {
     font-weight: 600;
     font-size: 14px;
     color: rgb(var(--v-theme-muted));
+}
+
+.kind-head:focus-visible,
+.list-item:focus-visible {
+    outline: 1px solid rgb(var(--v-theme-accent));
 }
 
 .kind-head:hover,

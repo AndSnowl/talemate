@@ -112,7 +112,7 @@ async def test_router_list_and_get_thing(plugin):
     listed = _last(plugin, "list_things")["data"]
     assert listed["kind"] == "character"
     assert listed["things"] == [
-        {"id": maren, "kind": "character", "name": "Maren", "tag": None, "filed_in": []}
+        {"id": maren, "kind": "character", "name": "Maren", "filed_in": []}
     ]
 
     scene_id = world.scenes().create(
@@ -1728,7 +1728,6 @@ async def test_payload_segments_and_stub_fields(plugin):
             "id": s.harbour,
             "kind": "place",
             "name": "The Harbour",
-            "tag": None,
             "filed_in": [],
         },
         s.tsardom: {
@@ -1736,7 +1735,6 @@ async def test_payload_segments_and_stub_fields(plugin):
             "kind": "place",
             "name": "Tsardom of Moscavia",
             "stub": {"ignored": False},
-            "tag": None,
             "filed_in": [],
         },
     }
@@ -4325,8 +4323,8 @@ async def test_payload_in_connected_mentioned(plugin):
         {
             "id": s.khorol,
             "name": "Khorol River",
-            "kind": "place",
             "stub": False,
+            "believed": False,
             "line_segments": [_plain("A wide, cold river.")],
             "role": "runs through",
             "since": None,
@@ -5972,15 +5970,15 @@ async def test_fact_rows_say_which_is_the_summary(plugin):
     assert [f["summary"] for f in khorol["facts"]] == [False]
 
 
-async def test_list_things_carry_tag_and_filed_in(plugin):
-    """A listing carries each entry's tag and the live entries it's filed
+async def test_list_things_carry_filed_in(plugin):
+    """A listing carries the live entries each entry is filed
     in now, in stored order (the World tab nests a place under the first
     place it's in); one filed in nothing has none."""
 
     s = await _open_filing_world(plugin)
     await _act(plugin, "list_things", kind="place")
     places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
-    assert places[s.khorol]["tag"] == "river"
+    assert "tag" not in places[s.khorol]
     assert places[s.khorol]["filed_in"] == [s.tsardom, s.velikoye]
     assert places[s.velikoye]["filed_in"] == [s.tsardom]
     assert places[s.tsardom]["filed_in"] == []
@@ -5997,10 +5995,10 @@ async def test_list_things_carry_tag_and_filed_in(plugin):
     assert places[s.khorol]["filed_in"] == [s.velikoye]
 
 
-async def test_connected_lists_real_beings_only(plugin):
-    """Connected lists the people filed in an entry: characters and real
-    beings. A believed (or undecided) being filed there never shows as one
-    of them, and shows again once it's real; its filing is kept."""
+async def test_connected_marks_believed_beings(plugin):
+    """Connected lists every being filed in an entry (ruling F24): a
+    believed (or undecided) one is marked `believed`, a real one isn't, and
+    the mark goes once it's real."""
 
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
@@ -6023,15 +6021,20 @@ async def test_connected_lists_real_beings_only(plugin):
             },
         )
     dawn = await _get_thing(plugin, s.dawn)
-    rows = [row["id"] for group in dawn["connected"] for row in group["rows"]]
-    assert spirit in rows and s.dmitry in rows
-    assert light not in rows
-    assert _group(dawn, "god")["rows"][0]["kind"] == "being"
-    # kept, not dropped: its own page still lists it "In" the White Dawn
-    own = await _get_thing(plugin, light)
-    assert [row["target_id"] for row in own["in"]] == [s.dawn]
+    believed = {
+        row["id"]: row["believed"]
+        for group in dawn["connected"]
+        for row in group["rows"]
+    }
+    assert believed[light] is True
+    assert believed[spirit] is False
+    assert believed[s.dmitry] is False
+    assert "kind" not in _group(dawn, "god")["rows"][0]
 
     with s.world.revision(Source.manual()) as rev:
         rev.set_field(light, "existence", "real", None)
     dawn = await _get_thing(plugin, s.dawn)
-    assert {row["id"] for row in _group(dawn, "god")["rows"]} == {light, spirit}
+    assert {row["id"]: row["believed"] for row in _group(dawn, "god")["rows"]} == {
+        light: False,
+        spirit: False,
+    }

@@ -48,8 +48,8 @@
             </div>
             <div v-if="!found.rows.length" class="text-caption text-muted">Nothing to add from that.</div>
             <div class="d-flex ga-2 mt-2">
-                <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!ticked" data-testid="group-add-accept" @click="accept">Add {{ ticked }}</v-btn>
-                <v-btn variant="outlined" size="small" data-testid="group-add-discard" @click="discard">Discard</v-btn>
+                <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!ticked" :loading="!!found.accepting" data-testid="group-add-accept" @click="accept">Add {{ ticked }}</v-btn>
+                <v-btn variant="outlined" size="small" :disabled="!!found.accepting" data-testid="group-add-discard" @click="discard">Discard</v-btn>
             </div>
         </template>
     </div>
@@ -99,6 +99,7 @@ export default {
             const rows = this.found.rows.map((row, i) => (i === index ? { ...row, ...changes } : row));
             this.worlds.editGroupAdd(this.thingId, this.tag, rows);
         },
+        // the rows stay until the server answers (`accepting`)
         accept() {
             this.worlds.acceptGroupAdd(this.thingId, this.tag);
             this.$emit('close');

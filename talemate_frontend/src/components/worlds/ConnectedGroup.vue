@@ -4,9 +4,9 @@
         :class="{ over: dragOver }"
         data-testid="connected-group"
         :data-tag="group.tag ?? ''"
-        @dragover.prevent="dragOver = true"
+        @dragover="dragOverRow"
         @dragleave="dragOver = false"
-        @drop.prevent="drop"
+        @drop="drop"
     >
         <div class="group-head d-flex align-center ga-2">
             <v-btn
@@ -42,6 +42,7 @@
                 variant="plain"
                 hide-details
                 clearable
+                :aria-label="`Filter ${group.heading}`"
                 class="group-filter"
                 data-testid="group-filter"
             ></v-text-field>
@@ -60,10 +61,34 @@
                 @dragstart="dragStart($event, row)"
             >
                 <a href="#" :class="row.stub ? 'stub-link' : 'thing-link'" draggable="false" data-testid="connected-name" @click.prevent="worlds.openThing(row.id)">{{ row.name }}</a>
+                <span v-if="row.believed" class="believed" data-testid="connected-believed">believed</span>
                 <span v-if="row.stub && !lineOf(row)" class="text-caption text-muted"> stub</span>
                 <span v-if="lineOf(row)" class="line"> — {{ lineOf(row) }}</span>
                 <span v-if="row.role" class="role">{{ row.role }}</span>
                 <span v-if="dates(row)" class="when" data-testid="connected-dates">{{ dates(row) }}</span>
+                <!-- the keyboard's way to another group: drag's twin -->
+                <v-menu v-if="others.length" location="bottom end">
+                    <template #activator="{ props }">
+                        <button
+                            v-bind="props"
+                            type="button"
+                            class="move-btn"
+                            :aria-label="`Move ${row.name} to another group`"
+                            title="Move to another group"
+                            data-testid="connected-move"
+                        >▾</button>
+                    </template>
+                    <v-list density="compact">
+                        <v-list-subheader>Move {{ row.name }} to</v-list-subheader>
+                        <v-list-item
+                            v-for="other in others"
+                            :key="other.tag ?? ''"
+                            :title="other.heading"
+                            data-testid="connected-move-option"
+                            @click="moveTo(row, other.tag)"
+                        ></v-list-item>
+                    </v-list>
+                </v-menu>
             </div>
             <div v-if="view.long && !filter" class="more">
                 <a v-if="view.hidden" href="#" data-testid="group-show-all" @click.prevent="showAll = true">show all {{ group.rows.length }}</a>
@@ -91,7 +116,10 @@ const DRAG_TYPE = 'application/x-fantasymate-row';
 // group's synopsis (`group_synopsis`; again, skipping the cache, once
 // there is one); "+ Add" drafts new entries for it (`GroupAddForm`).
 // A row dragged onto another group takes that group's tag (`set_tag`),
-// so it moves there on every page it's filed in.
+// so it moves there on every page it's filed in; its "▾" menu does the
+// same from the keyboard. A believed (or undecided) being is marked
+// "believed" (ruling F24). The page keys each group by page and tag, so
+// its fold, filter and "show all" never carry over to another page.
 export default {
     name: 'ConnectedGroup',
     components: { GroupAddForm },
@@ -100,6 +128,8 @@ export default {
         thingId: { type: String, required: true },
         // `{tag, heading, synopsis, rows}`
         group: { type: Object, required: true },
+        // the page's other groups (`{tag, heading}`), a row's "move to"
+        others: { type: Array, default: () => [] },
     },
     setup() {
         return { worlds: useWorldsStore() };
@@ -117,9 +147,10 @@ export default {
         synopsisState() {
             return this.worlds.synopses[this.key] || null;
         },
-        // the one asked for this session, else the page's cached one
+        // the page's own (the server's cache), else the one asked for
+        // this session since the page was last fetched
         synopsis() {
-            return this.synopsisState?.text || this.group.synopsis || '';
+            return this.group.synopsis || this.synopsisState?.text || '';
         },
         // a draft for this group is out or waiting: its rows show
         drafting() {
@@ -136,6 +167,19 @@ export default {
         askSynopsis() {
             this.worlds.groupSynopsis(this.thingId, this.group.tag, !!this.synopsis);
         },
+        moveTo(row, tag) {
+            const to = dropTag(this.group.tag, tag);
+            if (to !== undefined) {
+                this.worlds.setTag(row.id, to);
+            }
+        },
+        // only a Connected row may be dropped here
+        dragOverRow(event) {
+            if (event.dataTransfer?.types?.includes(DRAG_TYPE)) {
+                event.preventDefault();
+                this.dragOver = true;
+            }
+        },
         dragStart(event, row) {
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ id: row.id, tag: this.group.tag ?? null }));
@@ -147,6 +191,7 @@ export default {
             if (!raw) {
                 return;
             }
+            event.preventDefault();
             const dragged = JSON.parse(raw);
             const tag = dropTag(dragged.tag, this.group.tag);
             if (tag !== undefined) {
@@ -231,6 +276,26 @@ export default {
 .when {
     font-size: 11px;
     color: rgb(var(--v-theme-date));
+}
+
+.believed {
+    margin-left: 6px;
+    font-size: 12px;
+    font-style: italic;
+    color: rgb(var(--v-theme-muted));
+}
+
+.move-btn {
+    margin-left: 6px;
+    padding: 0 4px;
+    border-radius: 3px;
+    color: rgb(var(--v-theme-muted));
+}
+
+.move-btn:hover,
+.move-btn:focus-visible {
+    color: rgb(var(--v-theme-accent));
+    outline: 1px solid rgb(var(--v-theme-accent));
 }
 
 .more {

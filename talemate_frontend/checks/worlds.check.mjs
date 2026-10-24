@@ -2168,11 +2168,16 @@ check('tags: listed on opening a world, renamed and merged', () => {
     const renamed = [{ tag: 'academy', heading: 'Academies', count: 1 }, tags[1]];
     store.handleMessage(reply('rename_tag', { old: 'school', new: 'academy', changed: ['a'], tags: renamed }));
     assert.deepEqual(store.tags, renamed);
+    // the Tags tab closes the form this answers, not on a mere listing
+    assert.deepEqual(store.tagsChanged, { from: 'school', to: 'academy' });
+    store.handleMessage(reply('list_tags', { tags: renamed }));
+    assert.deepEqual(store.tagsChanged, { from: 'school', to: 'academy' });
     // the open page reads its new groups
     assert.deepEqual(sent[0], { type: 'worlds', action: 'get_thing', id: 'velikoye', at: null });
     store.mergeTag('academy', 'institution');
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'merge_tag', from: 'academy', into: 'institution' });
     store.handleMessage(reply('merge_tag', { from: 'academy', into: 'institution', changed: ['a'], tags: [tags[1]] }));
+    assert.deepEqual(store.tagsChanged, { from: 'academy', to: 'institution' });
     assert.deepEqual(store.tags, [tags[1]]);
     assert.deepEqual(store.pending, {});
 });
@@ -2215,14 +2220,22 @@ check('a group\'s "+ Add": drafted rows, edited, the ticked ones accepted', () =
     assert.deepEqual(store.groupAdds['v|institution'].rows, rows);
     store.editGroupAdd('v', 'institution', [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }]);
     store.acceptGroupAdd('v', 'institution');
-    assert.deepEqual(sent.at(-1), {
+    const accept = {
         type: 'worlds',
         action: 'accept_group_add',
         thing_id: 'v',
         rows: [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }],
-    });
-    assert.equal(store.groupAdds['v|institution'], undefined);
+    };
+    assert.deepEqual(sent.at(-1), accept);
+    // kept until the server answers: a failure leaves the rows as they were
+    assert.equal(store.groupAdds['v|institution'].accepting, true);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'refused' } });
+    assert.equal(store.groupAdds['v|institution'].accepting, false);
+    assert.equal(store.groupAdds['v|institution'].rows[0].name, 'The Ice Guild');
+    store.acceptGroupAdd('v', 'institution');
+    assert.deepEqual(sent.at(-1), accept);
     store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [] }));
+    assert.equal(store.groupAdds['v|institution'], undefined);
     assert.equal(store.thing.id, 'v');
     assert.equal(store.notes, null);
     // the page's own "+ Add" (no tag), failed: the error shows, then it's discarded
@@ -2254,6 +2267,13 @@ check('"+ Add facts…" and "+ Add event…": a draft to tick, then written', ()
     assert.equal(sent.at(-1).action, 'accept_facts');
     assert.deepEqual(sent.at(-1).draft.facts.map((f) => f.ticked), [true, false]);
     assert.deepEqual(sent.at(-1).at, dateOf(1000));
+    // kept until the server answers: a failure leaves the ticks as they were
+    assert.equal(store.factDraft.accepting, true);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'refused' } });
+    assert.equal(store.factDraft.accepting, false);
+    assert.deepEqual(store.factDraft.facts.map((f) => f.ticked), [true, false]);
+    store.acceptFacts();
+    store.handleMessage(reply('accept_facts', { id: 'v', kind: 'place', name: 'Velikoye', fact_ids: ['f'] }));
     assert.equal(store.factDraft, null);
     // an event: its year goes along; a failure says why
     store.addEvent('the bluff collapse', 1012);
@@ -2262,6 +2282,28 @@ check('"+ Add facts…" and "+ Add event…": a draft to tick, then written', ()
     assert.equal(store.factDraft.error, 'no facts');
     store.discardFacts();
     assert.equal(store.factDraft, null);
+});
+
+check("a page's synopsis: the server's wins; the session's goes on a refetch", () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v');
+    store.groupSynopsis('v', 'custom');
+    store.handleMessage(reply('group_synopsis', { thing_id: 'v', tag: 'custom', synopsis: 'Customs.' }));
+    assert.equal(store.synopses['v|custom'].text, 'Customs.');
+    // the page fetched again (a member changed): its own synopsis stands,
+    // null when the cached one went stale
+    store.handleMessage(reply('get_thing', { id: 'v', kind: 'place', name: 'Velikoye', connected: [{ tag: 'custom', synopsis: null, rows: [] }] }));
+    assert.equal(store.synopses['v|custom'], undefined);
+    // one still being asked for is kept
+    store.groupSynopsis('v', 'river');
+    store.handleMessage(reply('get_thing', { id: 'v', kind: 'place', name: 'Velikoye', connected: [] }));
+    assert.equal(store.synopses['v|river'].pending, true);
+    // another page's are left alone
+    store.groupSynopsis('k', 'custom');
+    store.handleMessage(reply('group_synopsis', { thing_id: 'k', tag: 'custom', synopsis: 'K.' }));
+    store.handleMessage(reply('get_thing', { id: 'v', kind: 'place', name: 'Velikoye', connected: [] }));
+    assert.equal(store.synopses['k|custom'].text, 'K.');
 });
 
 if (failures.length) {

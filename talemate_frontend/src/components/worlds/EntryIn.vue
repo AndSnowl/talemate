@@ -175,6 +175,13 @@ export default {
         },
     },
     watch: {
+        // a request failed (no reply replaced the page): the form stays,
+        // and the next page update doesn't close it
+        'worlds.error'(error) {
+            if (error) {
+                this.sent = false;
+            }
+        },
         // what the owner types (picking an item writes its title there)
         'adding.search'(value) {
             if (this.adding && value != null && !value.startsWith(NEW_LABEL) && this.adding.target !== NEW) {

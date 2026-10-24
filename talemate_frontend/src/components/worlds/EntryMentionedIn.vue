@@ -1,6 +1,15 @@
 <template>
     <div class="entry-mentioned" data-testid="entry-mentioned">
-        <div class="mentioned-head d-flex align-center ga-2" @click="open = !open">
+        <div
+            class="mentioned-head d-flex align-center ga-2"
+            role="button"
+            tabindex="0"
+            :aria-expanded="open"
+            data-testid="mentioned-toggle"
+            @click="open = !open"
+            @keydown.enter.prevent="open = !open"
+            @keydown.space.prevent="open = !open"
+        >
             <v-icon size="small">{{ open ? 'mdi-chevron-down' : 'mdi-chevron-right' }}</v-icon>
             <b>Mentioned in</b>
             <span class="text-caption text-muted">{{ entries.length }} · entries that name {{ thing.name }} but aren't filed in it</span>

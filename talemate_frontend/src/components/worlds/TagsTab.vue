@@ -80,10 +80,24 @@ export default {
         },
     },
     watch: {
-        // a rename or merge is answered with the new tags: the row closes
-        'worlds.tags'() {
-            this.renaming = null;
-            this.merging = null;
+        // the row's own rename or merge answered: it closes (`sent`); a
+        // listing or another change of the tags leaves an open form be
+        'worlds.tagsChanged'(changed) {
+            const form = this.renaming || this.merging;
+            if (form?.sent && changed?.from === form.tag) {
+                this.renaming = null;
+                this.merging = null;
+            }
+        },
+        // refused: the form stays, to change and try again
+        'worlds.error'(error) {
+            if (error) {
+                for (const form of [this.renaming, this.merging]) {
+                    if (form) {
+                        form.sent = false;
+                    }
+                }
+            }
         },
     },
     mounted() {
@@ -95,20 +109,22 @@ export default {
         },
         startRename(tag) {
             this.merging = null;
-            this.renaming = { tag, text: tag };
+            this.renaming = { tag, text: tag, sent: false };
         },
         saveRename() {
             if (this.renameValid) {
                 this.worlds.renameTag(this.renaming.tag, this.renameClean);
+                this.renaming.sent = true;
             }
         },
         startMerge(tag) {
             this.renaming = null;
-            this.merging = { tag, into: null };
+            this.merging = { tag, into: null, sent: false };
         },
         saveMerge() {
             if (this.merging?.into) {
                 this.worlds.mergeTag(this.merging.tag, this.merging.into);
+                this.merging.sent = true;
             }
         },
     },

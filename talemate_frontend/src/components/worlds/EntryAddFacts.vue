@@ -66,8 +66,8 @@
                 </div>
                 <div v-if="!draft.facts.length" class="text-caption text-muted">Nothing new from that.</div>
                 <div class="d-flex ga-2 mt-2">
-                    <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!ticked" data-testid="fact-draft-accept" @click="worlds.acceptFacts()">Write {{ ticked }}</v-btn>
-                    <v-btn variant="outlined" size="small" data-testid="fact-draft-discard" @click="worlds.discardFacts()">Discard</v-btn>
+                    <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!ticked" :loading="!!draft.accepting" data-testid="fact-draft-accept" @click="worlds.acceptFacts()">Write {{ ticked }}</v-btn>
+                    <v-btn variant="outlined" size="small" :disabled="!!draft.accepting" data-testid="fact-draft-discard" @click="worlds.discardFacts()">Discard</v-btn>
                 </div>
             </template>
         </div>

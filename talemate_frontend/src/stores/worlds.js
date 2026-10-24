@@ -658,6 +658,8 @@ function worldState() {
         akaQueue: {},
         // `list_tags`: `{tag, heading, count}` of every tag in use
         tags: [],
+        // the last rename or merge answered: `{from, to}`
+        tagsChanged: null,
         // `groupKey(page, tag)` -> a group's synopsis asked for: `{pending,
         // text, error}`
         synopses: {},
@@ -1186,14 +1188,17 @@ export const useWorldsStore = defineStore('worlds', {
             this.groupAdds = rest;
         },
 
+        // the rows stay (`accepting`) until the server answers, so a
+        // refusal leaves them as the owner left them
         acceptGroupAdd(thingId, tag) {
-            const found = this.groupAdds[groupKey(thingId, tag)];
-            if (!found?.rows) {
+            const key = groupKey(thingId, tag);
+            const found = this.groupAdds[key];
+            if (!found?.rows || found.accepting) {
                 return;
             }
+            this.groupAdds = { ...this.groupAdds, [key]: { ...found, accepting: true } };
             this.pending = { ...this.pending, accept_group_add: true };
             this.request('accept_group_add', { thing_id: thingId, rows: found.rows });
-            this.discardGroupAdd(thingId, tag);
         },
 
         // --- prompt additions ---------------------------------------------
@@ -1235,14 +1240,15 @@ export const useWorldsStore = defineStore('worlds', {
             this.factDraft = null;
         },
 
+        // the draft stays (`accepting`) until the server answers
         acceptFacts() {
             const found = this.factDraft;
-            if (!found?.draft) {
+            if (!found?.draft || found.accepting) {
                 return;
             }
+            this.factDraft = { ...found, accepting: true };
             this.pending = { ...this.pending, accept_facts: true };
             this.request('accept_facts', { draft: found.draft, at: found.thingId === this.selectedThingId ? this.thingAt : null });
-            this.factDraft = null;
         },
 
         // the open thing's page asked for again, as of the date it's viewed at
@@ -1499,8 +1505,15 @@ export const useWorldsStore = defineStore('worlds', {
         // open page takes it, or is fetched again when it's another thing
         // (a Connected row retagged); new stubs and tags may come with it
         filingEdited(action, data) {
+            // an accepted draft is done with
+            if (action === 'accept_facts' && this.factDraft?.accepting) {
+                this.factDraft = null;
+            }
+            if (action === 'accept_group_add') {
+                this.groupAdds = Object.fromEntries(Object.entries(this.groupAdds).filter(([key, value]) => !(value.accepting && key.startsWith(`${data.id}|`))));
+            }
             if (data.id === this.selectedThingId && !this.thingAt) {
-                this.thing = data;
+                this.pageTaken(data);
             } else {
                 this.refreshThing();
             }
@@ -1512,6 +1525,15 @@ export const useWorldsStore = defineStore('worlds', {
             if (action === 'set_tag' || action === 'accept_group_add' || action === 'add_filing') {
                 this.listTags();
             }
+        },
+
+        // the open page's payload, as a reply brings it: the synopses asked
+        // for this session give way to its own (null when one went stale),
+        // all but those still being asked for
+        pageTaken(data) {
+            this.thing = data;
+            const prefix = `${data.id}|`;
+            this.synopses = Object.fromEntries(Object.entries(this.synopses).filter(([key, value]) => !key.startsWith(prefix) || value.pending));
         },
 
         clearPending(action) {
@@ -1582,7 +1604,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.backOpening = null;
                     }
                     if (data.id === this.selectedThingId) {
-                        this.thing = data;
+                        this.pageTaken(data);
                     }
                     if (this.akaQueue[data.id]) {
                         this.writeOtherNames(data);
@@ -1594,6 +1616,8 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'rename_tag':
                 case 'merge_tag':
                     this.tags = data.tags;
+                    // which rename or merge was answered (the Tags tab's form)
+                    this.tagsChanged = action === 'rename_tag' ? { from: data.old, to: data.new } : { from: data.from, to: data.into };
                     // every page with that tag reads its new one
                     this.refreshThing();
                     this.listAllThings();
@@ -1867,9 +1891,13 @@ export const useWorldsStore = defineStore('worlds', {
                         }
                         // or a group's synopsis or "+ Add", or a fact draft
                         this.synopses = Object.fromEntries(Object.entries(this.synopses).map(([key, value]) => [key, { ...value, pending: false }]));
-                        this.groupAdds = Object.fromEntries(Object.entries(this.groupAdds).filter(([, value]) => !value.pending));
+                        this.groupAdds = Object.fromEntries(Object.entries(this.groupAdds)
+                            .filter(([, value]) => !value.pending)
+                            .map(([key, value]) => [key, { ...value, accepting: false }]));
                         if (this.factDraft?.pending) {
                             this.factDraft = null;
+                        } else if (this.factDraft?.accepting) {
+                            this.factDraft = { ...this.factDraft, accepting: false };
                         }
                         // the page back opened is gone: back goes on
                         const failed = this.backOpening;

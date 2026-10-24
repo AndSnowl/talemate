@@ -29,6 +29,17 @@ from e2e.worlds.test_world_tab import (
     _world_tab,
 )
 
+# records what the app's backend socket receives (`seed.SOCKET_HOOK_JS`
+# keeps its sockets)
+RECEIVE_SPY_JS = """
+() => {
+    window.__e2eGot = [];
+    for (const socket of window.__e2eSockets || []) {
+        socket.addEventListener('message', (event) => window.__e2eGot.push(event.data));
+    }
+}
+"""
+
 TSARDOM = {"kind": "place", "name": "Tsardom of Moscavia", "fields": {"tag": "nation"}}
 
 VELIKOYE = {
@@ -230,6 +241,7 @@ def test_velikoye_connected_by_tag(app, page):
         "Customs",
         "Rulers",
         "Spirits",
+        "Gods",
         "Disasters",
     }
     institutions = _group(thing, "Institutions")
@@ -250,12 +262,14 @@ def test_velikoye_connected_by_tag(app, page):
     expect(_row(_group(thing, "Customs"), "The Feather Dance")).to_contain_text(
         "900–1015"
     )
-    # persons are real beings only: the believed god is never one of them
-    expect(_row(_group(thing, "Spirits"), "The Bluff Spirit")).to_be_visible()
-    expect(thing.get_by_test_id("entry-connected")).not_to_contain_text(
-        "The Eternal Light"
-    )
-    expect(thing.get_by_test_id("connected-count")).to_contain_text("9 entries")
+    # a believed god is shown, marked believed (ruling F24); a real spirit
+    # isn't marked
+    light = _row(_group(thing, "Gods"), "The Eternal Light")
+    expect(light.get_by_test_id("connected-believed")).to_have_text("believed")
+    spirit = _row(_group(thing, "Spirits"), "The Bluff Spirit")
+    expect(spirit).to_be_visible()
+    expect(spirit.get_by_test_id("connected-believed")).to_have_count(0)
+    expect(thing.get_by_test_id("connected-count")).to_contain_text("10 entries")
 
     # a group folds
     customs = _group(thing, "Customs")
@@ -278,6 +292,15 @@ def test_velikoye_connected_by_tag(app, page):
     page.get_by_test_id("timeline-events").click()
     expect(timeline.get_by_test_id("timeline-row")).to_have_count(1)
     expect(timeline.get_by_test_id("timeline-row")).to_contain_text("froze to the sea")
+
+    # a folded group is this page's own: the next page's starts unfolded
+    _group(thing, "Rivers").get_by_test_id("group-fold").click()
+    expect(_row(_group(thing, "Rivers"), "Khorol River")).to_have_count(0)
+    thing.get_by_test_id("in-row").get_by_test_id("in-target-link").click()
+    tsardom = _opened(page, "Tsardom of Moscavia")
+    expect(_row(_group(tsardom, "Rivers"), "Khorol River")).to_be_visible()
+    tsardom.get_by_role("button", name="Back").click()
+    thing = _opened(page, "Velikoye")
 
     # a row opens its page, whose "In" lists both places (screen D)
     _row(_group(thing, "Rivers"), "Khorol River").get_by_test_id(
@@ -433,6 +456,25 @@ def test_change_tag_moves_group(app, page):
     expect(_group(thing, "Institutions").get_by_test_id("group-count")).to_have_text(
         "4"
     )
+
+    # by keyboard: a row's "move to group" menu
+    move = _row(_group(thing, "Institutions"), "Wattle Row").get_by_test_id(
+        "connected-move"
+    )
+    move.focus()
+    page.keyboard.press("Enter")
+    page.get_by_test_id("connected-move-option").filter(has_text="Customs").click()
+    page.wait_for_function(
+        "() => window.__e2eSent.filter((m) => JSON.parse(m).action === 'set_tag').length === 4"
+    )
+    assert _sent(page, "set_tag")[-1]["tag"] == "custom"
+    expect(_row(_group(thing, "Customs"), "Wattle Row")).to_be_visible()
+
+    # the list is reached by keyboard: Enter on an entry opens it
+    card = page.get_by_test_id("thing-card").filter(has_text="Tsar Dmitry IV")
+    card.focus()
+    page.keyboard.press("Enter")
+    _opened(page, "Tsar Dmitry IV")
     assert page.console_errors == []
 
 
@@ -473,8 +515,9 @@ def test_big_group_folds(app, page, fixed_group_synopsis):
 
     # the filter finds by name or line, among all of them
     customs.get_by_test_id("group-filter").locator("input").fill("glide")
-    expect(customs.get_by_test_id("connected-row")).to_have_text(
-        ["The Long Glide — A youth's first flight off the bluff."]
+    expect(customs.get_by_test_id("connected-row")).to_have_count(1)
+    expect(customs.get_by_test_id("connected-row")).to_contain_text(
+        "The Long Glide — A youth's first flight off the bluff."
     )
     customs.get_by_test_id("group-filter").locator("input").fill("")
     expect(customs.get_by_test_id("connected-row")).to_have_count(5)
@@ -643,7 +686,14 @@ def test_tags_rename_merge(app, page):
         _entry("lore", "The Archive", "institution", [_in("Velikoye")], "Old books."),
     ]
     world, thing = _open_velikoye(page, app, _world_name("Tags"), things)
+    # the tab asks for the tags when it opens: wait for that reply, so it
+    # can't land on a form opened meanwhile
+    page.evaluate(RECEIVE_SPY_JS)
     page.get_by_test_id("kind-tags").click()
+    page.wait_for_function(
+        "() => window.__e2eGot.some((m) => m.includes('\"list_tags\"'))",
+        timeout=TIMEOUT_MS,
+    )
     tab = page.get_by_test_id("tags-tab")
     rows = tab.get_by_test_id("tag-row")
     expect(rows.filter(has_text="institution")).to_contain_text("2 entries")
