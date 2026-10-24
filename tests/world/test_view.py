@@ -214,3 +214,23 @@ def test_referencing_any_date_keeps_ended_facts(world, maren):
         (oskar_id, ended_fact),
         (oskar_id, later_fact),
     ]
+
+
+def test_facts_of_one_date_come_in_written_order(world):
+    """A thing's facts, and the facts referencing it, that start on the
+    same date come in the order they were written (then fact id), not in
+    their random fact ids' order: one world, one prompt (final review,
+    T12 nondeterminism)."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        lake = rev.create_thing("place", fields={"name": "Lake"})
+        city = rev.create_thing("place", fields={"name": "City"})
+        texts = [f"Fact {i} of the {ref(lake, 'Lake')}." for i in range(10)]
+        for text in texts:
+            rev.add_fact(city, "general", text)
+    view = world.view(None)
+    assert [f.text for f in view.thing(city).facts] == texts
+    assert [f.text for _owner, f in view.referencing(lake)] == texts
+    assert [f.text for _owner, f in view.referencing(lake, any_date=True)] == texts
+    (state,) = [t for t in view.things("place") if t.id == city]
+    assert [f.text for f in state.facts] == texts

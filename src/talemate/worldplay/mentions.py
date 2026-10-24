@@ -166,7 +166,12 @@ def _key_facts(view: WorldView, owner_id: str, skip: set[str]) -> list[str]:
     rank = {category: i for i, category in enumerate(order)}
     facts = sorted(
         (fact for fact in state.facts if fact.fact_id not in skip),
-        key=lambda fact: rank.get(fact.category, len(order)),
+        # written order within a category, never the random fact ids'
+        key=lambda fact: (
+            rank.get(fact.category, len(order)),
+            fact.created,
+            fact.fact_id,
+        ),
     )
     kept = facts[:KEY_FACTS]
     if state.kind in HERITAGE_KINDS:

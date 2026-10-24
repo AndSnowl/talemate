@@ -339,3 +339,28 @@ def test_held_facts_reach_the_expand_context_as_held(world):
     assert "Church of the Deep holds that Veles wept the rivers into being." in prompt
     held = "Church of the Deep holds that Veles wept the rivers into being."
     assert "Veles wept the rivers" not in prompt.replace(held, "")
+
+
+def test_key_facts_come_in_written_order_within_a_category(world):
+    """Final review (T12 nondeterminism): within a category, "About those"
+    lists an entry's facts in the order they were written, never in its
+    random fact ids' order, so one world always gives one prompt."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        stub = rev.create_thing(
+            "place", fields={"name": "Kitezh", "stub": {"ignored": False}}
+        )
+        lake = rev.create_thing("place", fields={"name": "Lake Svetloyar"})
+        rev.add_fact(lake, "general", f"{ref(stub, 'Kitezh')} sank beneath it.")
+    texts = [f"Fact {i}." for i in range(8)]
+    for text in texts:
+        # one revision each, and several in one: both keep written order
+        with world.revision(Source.manual(note=text)) as rev:
+            rev.add_fact(lake, "general", text)
+    with world.revision(Source.manual(note="more")) as rev:
+        more = [f"More {i}." for i in range(3)]
+        for text in more:
+            rev.add_fact(lake, "description", text)
+    (about,) = gather_mentions(world.view(None), stub).about
+    # a place's descriptions come before its general facts
+    assert about.facts == (more + texts)[:KEY_FACTS]

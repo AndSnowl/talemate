@@ -222,7 +222,7 @@ class WorldView:
         thing_id: str | None = None,
     ) -> dict[str, list[FactState]]:
         """`thing_id -> [FactState, ...]`, ordered by `valid_from` (NULL
-        first), then `fact_id`. Joined against `things` (narrowed to
+        first), then written order (`created`), then `fact_id`. Joined against `things` (narrowed to
         `kind` or `thing_id` when given) rather than an `IN (...)` list of
         `thing_ids`, which is only used here to seed the empty result for
         things with no facts."""
@@ -248,7 +248,8 @@ class WorldView:
             WHERE f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
               AND (f.valid_from IS NULL OR f.valid_from <= ?)
               AND (f.valid_until IS NULL OR f.valid_until > ?)
-            ORDER BY f.thing_id, f.valid_from ASC, f.fact_id ASC, fo.rowid ASC
+            ORDER BY f.thing_id, f.valid_from ASC, created ASC, f.fact_id ASC,
+                     fo.rowid ASC
             """,
             (*things_params, self.rev, self.rev, at_instant, at_instant),
         ).fetchall()
@@ -420,7 +421,7 @@ class WorldView:
     ) -> list[tuple[str, FactState]]:
         """The `(owner thing id, fact)` pairs for visible facts that
         reference `thing_id`, ordered by `valid_from` (NULL first), then
-        `fact_id`. With `any_date`, every fact live at `rev` counts,
+        written order (`created`), then `fact_id`. With `any_date`, every fact live at `rev` counts,
         whatever story dates it's true between (ended facts too)."""
 
         at_instant = self._at_instant()
@@ -442,7 +443,7 @@ class WorldView:
             WHERE fr.thing_id = :thing_id
               AND f.rev_added <= :rev AND (f.rev_removed IS NULL OR f.rev_removed > :rev)
               {dated}
-            ORDER BY f.valid_from ASC, f.fact_id ASC
+            ORDER BY f.valid_from ASC, created ASC, f.fact_id ASC
             """,
             {"thing_id": thing_id, "rev": self.rev, "at": at_instant},
         ).fetchall()
