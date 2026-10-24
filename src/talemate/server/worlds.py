@@ -216,8 +216,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
   [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
   hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, stub,
   line_segments, role, since, until}]}]` (what's filed in it, grouped by
-  tag; `synopsis` always null here -- it's asked for on demand, below, never
-  read off this payload) and `mentioned_in: [{id, name}]`.
+  tag; `synopsis` is `groups.cached_synopsis` -- a fresh cached one, read
+  with no model call, null when there's none cached or it's gone stale --
+  and only at the latest telling) and `mentioned_in: [{id, name}]`.
   `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
   until, within, at}`, `edit_filing {thing_id, target_id, role?, since?,
   until?, within?, at}` (an `until` ends it) and `remove_filing {thing_id,
@@ -229,20 +230,26 @@ through `signal_operation_failed` (an `operation_done` envelope with
   every entry in one revision and answer `{old, new | from, into,
   changed, tags}`. Filings and tags are no prose input: none is
   scheduled.
-- Groups (`talemate.worldplay.groups`): `group_synopsis {thing_id, tag}`
-  (`tag` null for the untagged "Other" group) asks the model for the
-  group's synopsis, cached, in the background, and answers
-  `group_synopsis {thing_id, tag, synopsis}` or `group_synopsis_failed`;
-  "" for an empty group, or with synopses off (a probe fallback).
-  `group_add {thing_id, tag, prompt}` (`tag` null is the page's own
-  top-level "+ Add", no tag preset) drafts up to 3 new entries from the
-  owner's prompt, in the background, writing nothing, and answers
-  `group_add {thing_id, tag, rows}` (each row `{name, kind, tag, line,
-  ticked}`) or `group_add_failed`. `accept_group_add {thing_id, rows}`
-  writes the ticked rows as stubs, filed in `thing_id` with each its own
-  tag, its line their first fact and summary, in one revision, checked
-  again rather than trusted from the client, and answers the thing plus
-  `thing_ids` (the new stubs' ids, in the order written).
+- Groups (`talemate.worldplay.groups`): `group_synopsis {thing_id, tag,
+  force?}` (`tag` null for the untagged "Other" group) asks the model
+  for the group's synopsis, cached, in the background (skipping the
+  cache with `force`), and answers `group_synopsis {thing_id, tag,
+  synopsis}` or `group_synopsis_failed` (an unusable reply, never an
+  empty synopsis cached as a real one); "" for an empty group, or with
+  synopses off (a probe fallback). `group_add {thing_id, tag, prompt}`
+  (`tag` null is the page's own top-level "+ Add", no tag preset) drafts
+  up to 3 new entries from the owner's prompt, in the background,
+  writing nothing, and answers `group_add {thing_id, tag, rows}` (each
+  row `{name, kind, tag, line, ticked}`) or `group_add_failed`.
+  `accept_group_add {thing_id, rows}` writes the ticked rows, each filed
+  in `thing_id` with its own tag, its line its first fact and (unless it
+  already has one) its summary, in one revision, checked again rather
+  than trusted from the client -- a row whose name the world already
+  has reuses that entry rather than duplicating it, and only a
+  genuinely new one becomes a stub -- and answers the thing plus
+  `thing_ids` (each kept row's resolved entry id, new or reused, in
+  order). `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`/`TALEMATE_TEST_FIXED_GROUP_ADD`
+  (browser tests) each name a file holding the model's reply.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -363,6 +370,7 @@ from talemate.worldplay.facts import (
 from talemate.worldplay.groups import (
     GroupAddRow,
     accept_group_add,
+    cached_synopsis,
     group_add,
     group_synopsis,
 )
@@ -454,6 +462,11 @@ DRAFTS_KEPT = 20
 # browser tests only: a JSON file holding the model's reply `add_facts`
 # and `add_event` read through their real parsing instead of asking it
 FIXED_FACTS_ENV = "TALEMATE_TEST_FIXED_FACTS"
+
+# browser tests only: a JSON file holding the model's reply `group_synopsis`
+# and `group_add` read through their real parsing instead of asking it
+FIXED_GROUP_SYNOPSIS_ENV = "TALEMATE_TEST_FIXED_GROUP_SYNOPSIS"
+FIXED_GROUP_ADD_ENV = "TALEMATE_TEST_FIXED_GROUP_ADD"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -744,6 +757,8 @@ class MergeTagPayload(pydantic.BaseModel):
 class GroupSynopsisPayload(pydantic.BaseModel):
     thing_id: str
     tag: str | None = None
+    # ask the model again even if a fresh one is cached
+    force: bool = False
 
 
 class GroupAddPayload(pydantic.BaseModel):
@@ -1366,6 +1381,7 @@ def _line_fact(state: ThingState) -> FactState | None:
 
 
 def _connected_out(
+    world: World,
     view: WorldView,
     links: _Links,
     calendar: Calendar,
@@ -1373,13 +1389,14 @@ def _connected_out(
     things: list[ThingState],
 ) -> list[dict]:
     """What is filed in the thing, grouped by tag (`filing.connected`):
-    each group's tag (`None` for Other), heading and synopsis (always
-    `None` here: the owner asks for it with `group_synopsis`, which
-    caches it -- this payload never reads that cache), then one row per
-    entry with its own line (its summary, as linked runs), whether it's a
-    stub, and the filing's role and dates. At the latest telling an ended
-    filing is listed too (its `until` says so); at a date, only what
-    holds then. An ignored stub is hidden here as everywhere."""
+    each group's tag (`None` for Other), heading and synopsis
+    (`groups.cached_synopsis`: only a fresh cached one, no model call,
+    and only at the latest telling -- `group_synopsis` has no sense of a
+    past date), then one row per entry with its own line (its summary, as
+    linked runs), whether it's a stub, and the filing's role and dates.
+    At the latest telling an ended filing is listed too (its `until`
+    says so); at a date, only what holds then. An ignored stub is hidden
+    here as everywhere."""
 
     states = {state.id: state for state in things}
     groups = []
@@ -1410,7 +1427,11 @@ def _connected_out(
                 {
                     "tag": group.tag,
                     "heading": group.heading,
-                    "synopsis": None,
+                    "synopsis": (
+                        cached_synopsis(world, thing_id, group.tag)
+                        if view.at is None
+                        else None
+                    ),
                     "rows": rows,
                 }
             )
@@ -1706,7 +1727,7 @@ class WorldsPlugin(Plugin):
             # where it's filed, what's filed in it (by tag), and what names
             # it without being filed in it
             "in": _in_out(view, links, calendar, state),
-            "connected": _connected_out(view, links, calendar, thing_id, things),
+            "connected": _connected_out(world, view, links, calendar, thing_id, things),
             "mentioned_in": _mentioned_out(view, thing_id),
             # every change made to the thing (`World.timeline`)
             "timeline": timeline,
@@ -2886,16 +2907,27 @@ class WorldsPlugin(Plugin):
     async def handle_group_synopsis(self, data: dict):
         """A group's synopsis (`worldplay.groups.group_synopsis`), cached,
         in the background: asks the model only when nothing fresh is
-        cached. Answers `group_synopsis {thing_id, tag, synopsis}` (""
-        for an empty group, or with synopses off) or
-        `group_synopsis_failed`. Writes nothing."""
+        cached, or with `force`. Answers `group_synopsis {thing_id, tag,
+        synopsis}` ("" for an empty group, or with synopses off) or
+        `group_synopsis_failed` (an unusable reply raises rather than
+        caching an empty one). Writes nothing. `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`
+        (browser tests) names a file holding the model's reply."""
 
         payload = GroupSynopsisPayload(**data)
         world = self._require_world()
         self._require_entry(world.view(), payload.thing_id)
-        client = self._client()
+        fixed = _fixed_file(FIXED_GROUP_SYNOPSIS_ENV)
+        client = self._client() if fixed is None else None
+        reply = fixed.read_text(encoding="utf-8") if fixed is not None else None
         self._spawn(
-            group_synopsis(world, payload.thing_id, payload.tag, client),
+            group_synopsis(
+                world,
+                payload.thing_id,
+                payload.tag,
+                client,
+                force=payload.force,
+                reply=reply,
+            ),
             self.create_task_done_callback(
                 "group_synopsis",
                 "group_synopsis_failed",
@@ -2915,14 +2947,24 @@ class WorldsPlugin(Plugin):
         background: at most 3 draft rows, each ticked, `{name, kind, tag,
         line, ticked}`, for the owner to amend before
         `accept_group_add`. Answers `group_add {thing_id, tag, rows}` or
-        `group_add_failed`. Writes nothing."""
+        `group_add_failed`. Writes nothing. `TALEMATE_TEST_FIXED_GROUP_ADD`
+        (browser tests) names a file holding the model's reply."""
 
         payload = GroupAddPayload(**data)
         world = self._require_world()
         self._require_entry(world.view(), payload.thing_id)
-        client = self._client()
+        fixed = _fixed_file(FIXED_GROUP_ADD_ENV)
+        client = self._client() if fixed is None else None
+        reply = fixed.read_text(encoding="utf-8") if fixed is not None else None
         self._spawn(
-            group_add(world, payload.thing_id, payload.tag, payload.prompt, client),
+            group_add(
+                world,
+                payload.thing_id,
+                payload.tag,
+                payload.prompt,
+                client,
+                reply=reply,
+            ),
             self.create_task_done_callback(
                 "group_add",
                 "group_add_failed",
@@ -2937,11 +2979,13 @@ class WorldsPlugin(Plugin):
         )
 
     async def handle_accept_group_add(self, data: dict):
-        """Write `group_add`'s ticked rows as stubs, filed in the page
-        with each its own tag, in one revision
-        (`worldplay.groups.accept_group_add`); checked again here, never
-        trusted from the client. Answers `accept_group_add {..., thing_ids}`
-        with the page's payload plus the new stubs' ids."""
+        """Write `group_add`'s ticked rows, each filed in the page with
+        its own tag, in one revision (`worldplay.groups.accept_group_add`);
+        checked again here, never trusted from the client. A row whose
+        name the world already has reuses that entry instead of
+        duplicating it; only a genuinely new one becomes a stub. Answers
+        `accept_group_add {..., thing_ids}` with the page's payload plus
+        each kept row's resolved entry id (new or reused)."""
 
         payload = AcceptGroupAddPayload(**data)
         world = self._require_world()

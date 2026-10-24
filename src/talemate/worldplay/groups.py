@@ -1,4 +1,4 @@
-"""Group synopses and group "+ Add" (Filing plan, Task 8).
+"""Group synopses and group "+ Add" (Filing plan, Task 8; review round 1).
 
 A page's Connected section groups what's filed in it by tag
 (`world.filing.connected`). Each group gets:
@@ -11,22 +11,35 @@ A page's Connected section groups what's filed in it by tag
   summary) rather than the usual story-time staleness: unlike an ordinary
   prose section, a filing or tag change (`world.prose.UNRENDERED_FIELDS`)
   must invalidate it, and that's a change to a *member*, which the page's
-  own timeline never sees. Probe 3 passed
+  own timeline never sees -- including a filing that merely ended (its
+  label gains "until <date>"). Probe 3 passed
   (docs/superpowers/probes/2026-10-23-filing.md), so synopses are on;
   `SYNOPSIS_ENABLED` is the flag a probe fallback would clear, which makes
   `group_synopsis` return "" without asking the model or touching the
-  cache.
+  cache. `cached_synopsis` reads that cache with no model call at all (for
+  `get_thing`'s payload); `force=True` on `group_synopsis` asks again even
+  when the cache is fresh. An unusable reply raises rather than caching an
+  empty synopsis.
 - **"+ Add"** (`group_add`): up to 3 new entries from the owner's prompt
   (probe 6's wording, v2), as draft rows (ticked, for the owner to amend);
-  `accept_group_add` writes the ticked ones as stubs in one revision, filed
-  in the page with the row's tag, the row's line their first fact and
-  their summary (ruling F22: `{"summary": True}`). `tag=None` is the
+  `accept_group_add` writes the ticked ones in one revision, each filed in
+  the page with its own tag, its line its first fact and (unless it
+  already has one) its summary (ruling F22: `entries.SUMMARY_ORIGIN`). A
+  row whose name the world already has reuses that entry rather than
+  duplicating it (as `links.make_stubs` does for a generation's own
+  names); only a genuinely new name becomes a stub. `tag=None` is the
   page's own top-level "+ Add" (no tag preset, the spec's "same with no
   tag preset"); the probed wording is unprobed for that case, so the
   template adapts rather than forcing a false tag onto it (and a row's own
-  tag, cleaned, is kept rather than overridden). Either way, a name whose
-  kind or tag is a title word is dropped (ruling F5), in the draft and
-  again on accept -- the client's copy is never trusted.
+  tag, cleaned, is kept rather than overridden; an untagged filed entry
+  then counts as "already filed", never as a false "member"). Either way,
+  a name whose kind or tag is a title word is dropped (ruling F5), in the
+  draft and again on accept -- the client's copy is never trusted.
+
+Both `group_synopsis` and `group_add` take a `reply` override (the browser
+tests' `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`/`TALEMATE_TEST_FIXED_GROUP_ADD`,
+read by `server.worlds`), which answers through the real parsing without a
+client, as `worldplay.facts`' does.
 """
 
 from __future__ import annotations
@@ -47,20 +60,23 @@ from talemate.world.filing import (
     tag_heading,
     tag_of,
 )
+from talemate.world.kinds import normalise_tag
 from talemate.world.prose import content_key
 from talemate.world.store import Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.create import (
+    CANDIDATE_LINE_CHARS,
     TITLE_WORDS,
     clean_tag,
     current_date,
     default_category,
     json_objects,
+    write_filings,
 )
 from talemate.worldplay.held import held_text
-from talemate.worldplay.links import FALLBACK_KIND, link_text
+from talemate.worldplay.links import FALLBACK_KIND, NewName, link_text, make_stubs
 
 log = structlog.get_logger("talemate.worldplay.groups")
 
@@ -69,6 +85,7 @@ __all__ = [
     "GroupAddRow",
     "SYNOPSIS_ENABLED",
     "accept_group_add",
+    "cached_synopsis",
     "group_add",
     "group_synopsis",
 ]
@@ -86,8 +103,11 @@ ADD_PROMPT_KIND = "creative_instruction_1024"
 MEMBER_FACTS = 5
 # a stub member's "mentioned by" lines, at most (probe 3's "up to 3")
 STUB_MENTIONS = 3
-# the page's own facts shown to group-add, beyond its summary
-PAGE_FACTS_SHOWN = 8
+# a stub with nothing of its own and nothing mentioning it either
+STUB_NOTHING = "(stub: nothing written yet)"
+# the page's own facts shown to group-add, beyond its summary (probe 6's
+# own page_facts lists ran to 8 lines in all)
+PAGE_FACTS_SHOWN = 7
 # "Other entries near it", at most
 NEARBY_SHOWN = 12
 
@@ -154,29 +174,37 @@ def _group_rows(
     return []
 
 
-def _member_label(view: WorldView, state: ThingState, filing: Filing) -> str:
+def _member_label(
+    view: WorldView, state: ThingState, filing: Filing, calendar: Any
+) -> str:
+    """ "Name (kind, tag, role, until <date>)", each part only when it
+    applies (ruling M1: an ended filing's "until" is part of the label,
+    so ending one changes the content key and the prompt tells the
+    truth)."""
+
     bits = [state.kind]
     tag = tag_of(state)
     if tag:
         bits.append(tag)
     if filing.role:
         bits.append(filing.role)
+    if filing.until is not None:
+        bits.append(f"until {calendar.format(filing.until)}")
     return f"{view.name_of(state.id) or ''} ({', '.join(bits)})"
 
 
 def _own_facts(view: WorldView, state: ThingState, limit: int) -> list[str]:
-    """`state`'s summary, then up to `limit` of its own undated facts, the
-    most-linked first (as a scene's touched entries are shown,
-    `worldplay.context._touched_entry`), each rendered as belief when it's
-    held."""
+    """`state`'s summary, then up to `limit` of its own facts (dated ones
+    too, ruling M4), the most-linked first (as a scene's touched entries
+    are shown, `worldplay.context._touched_entry`), each rendered as
+    belief when it's held."""
 
     head = entries.summary_fact(state)
     own = sorted(
         (
             fact
             for fact in state.facts
-            if fact.valid_from is None
-            and not entries.is_summary_fact(fact)
+            if not entries.is_summary_fact(fact)
             and (head is None or fact.fact_id != head.fact_id)
         ),
         key=lambda fact: (-len(set(fact.refs)), fact.created),
@@ -199,14 +227,20 @@ def _stub_facts(view: WorldView, thing_id: str) -> list[str]:
 
 
 def _member_payload(
-    view: WorldView, state: ThingState, filing: Filing
+    view: WorldView, state: ThingState, filing: Filing, calendar: Any
 ) -> dict[str, object]:
-    facts = (
-        _stub_facts(view, state.id)
-        if state.is_stub
-        else _own_facts(view, state, MEMBER_FACTS)
-    )
-    return {"label": _member_label(view, state, filing), "facts": facts}
+    """Ruling I2: a stub's facts are decided by whether it already has a
+    summary fact (`entries.summary_fact`), as probe 3's `member_facts`
+    does -- not by the stub marker alone, which a partly-filled stub
+    still carries: one with a summary reads its own facts; a bare one
+    reads what mentions it (`_stub_facts`), or `STUB_NOTHING` with no
+    mentions either. A non-stub always reads its own facts."""
+
+    if state.is_stub and entries.summary_fact(state) is None:
+        facts = _stub_facts(view, state.id) or [STUB_NOTHING]
+    else:
+        facts = _own_facts(view, state, MEMBER_FACTS)
+    return {"label": _member_label(view, state, filing, calendar), "facts": facts}
 
 
 def _page_summary(world: World, view: WorldView, thing_id: str) -> str:
@@ -241,19 +275,72 @@ def _decode_synopsis(text: str) -> tuple[str | None, str]:
     return None, ""
 
 
+def _synopsis_members_and_key(
+    world: World,
+    view: WorldView,
+    thing_id: str,
+    tag: str | None,
+    rows: list[tuple[ThingState, Filing]],
+) -> tuple[list[dict[str, object]], str]:
+    """The group's `members` payload and the content key built from it
+    and the page's own summary -- shared by `group_synopsis` (to decide
+    whether to ask the model) and `cached_synopsis` (which never does)."""
+
+    members = [
+        _member_payload(view, state, filing, world.calendar) for state, filing in rows
+    ]
+    page_summary = _page_summary(world, view, thing_id)
+    key = content_key(tag, page_summary, [(m["label"], m["facts"]) for m in members])
+    return members, key
+
+
+def cached_synopsis(world: World, thing_id: str, tag: str | None) -> str | None:
+    """Ruling I3: the group's synopsis, only when a content key built from
+    its *current* members matches what's cached -- no model call, nothing
+    written. `None` for a missing `thing_id`, an empty group, nothing
+    cached yet, or a stale cache (a member filed, unfiled, edited, or a
+    filing of one ended since). For `get_thing`'s `connected[].synopsis`."""
+
+    tag = normalise_tag(tag) if tag else None
+    view = world.view()
+    if view.thing(thing_id) is None:
+        return None
+    rows = _group_rows(view, thing_id, tag)
+    if not rows:
+        return None
+    _members, key = _synopsis_members_and_key(world, view, thing_id, tag, rows)
+    cached = world.prose().get(thing_id, _group_section(tag), None)
+    if cached is None:
+        return None
+    stored_key, stored_synopsis = _decode_synopsis(cached.text)
+    return stored_synopsis if stored_key == key else None
+
+
 async def group_synopsis(
-    world: World, thing_id: str, tag: str | None, client: Any
+    world: World,
+    thing_id: str,
+    tag: str | None,
+    client: Any,
+    *,
+    force: bool = False,
+    reply: str | None = None,
 ) -> str:
     """The group's synopsis (probe 3's wording, the `analyze` kind),
     cached as the page's prose section `synopsis:<tag>`. Fresh when a
     content key built from the group's current members (their labels and
     facts) and the page's own summary matches what's cached; stale
-    otherwise, including nothing cached yet. "" with no members to
-    summarise, or with `SYNOPSIS_ENABLED` off: nothing is asked and
-    nothing is cached either way. A missing `thing_id` is a `KeyError`."""
+    otherwise, including nothing cached yet. With `force`, the model is
+    asked again regardless. "" with no members to summarise, or with
+    `SYNOPSIS_ENABLED` off: nothing is asked and nothing is cached either
+    way. Ruling I4: an unusable reply (no synopsis in it) is a
+    `ValueError` rather than an empty synopsis cached as if it were real.
+    `reply` stands in for the model's (the browser tests' fixed reply),
+    read through the same parsing, and needs no `client`. A missing
+    `thing_id` is a `KeyError`."""
 
     if not SYNOPSIS_ENABLED:
         return ""
+    tag = normalise_tag(tag) if tag else None
     view = world.view()
     if view.thing(thing_id) is None:
         raise KeyError(f"no such entry: {thing_id}")
@@ -261,33 +348,36 @@ async def group_synopsis(
     if not rows:
         return ""
 
-    members = [_member_payload(view, state, filing) for state, filing in rows]
-    page_summary = _page_summary(world, view, thing_id)
-    key = content_key(tag, page_summary, [(m["label"], m["facts"]) for m in members])
-
+    members, key = _synopsis_members_and_key(world, view, thing_id, tag, rows)
     section = _group_section(tag)
     cache = world.prose()
-    cached = cache.get(thing_id, section, None)
-    if cached is not None:
-        stored_key, stored_synopsis = _decode_synopsis(cached.text)
-        if stored_key == key:
-            return stored_synopsis
+    if not force:
+        cached = cache.get(thing_id, section, None)
+        if cached is not None:
+            stored_key, stored_synopsis = _decode_synopsis(cached.text)
+            if stored_key == key:
+                return stored_synopsis
 
-    prose_gen.require_client(client)
-    page_name = view.name_of(thing_id) or ""
-    with world_ai_call():
-        _response, extracted = await Prompt.request(
-            "world.group-synopsis",
-            client,
-            SYNOPSIS_PROMPT_KIND,
-            vars={
-                "group": _group_label(tag),
-                "page": page_name,
-                "page_summary": page_summary,
-                "members": members,
-            },
-        )
-    synopsis = _parse_synopsis(extracted["response"])
+    if reply is None:
+        prose_gen.require_client(client)
+        page_name = view.name_of(thing_id) or ""
+        page_summary = _page_summary(world, view, thing_id)
+        with world_ai_call():
+            _response, extracted = await Prompt.request(
+                "world.group-synopsis",
+                client,
+                SYNOPSIS_PROMPT_KIND,
+                vars={
+                    "group": _group_label(tag),
+                    "page": page_name,
+                    "page_summary": page_summary,
+                    "members": members,
+                },
+            )
+        reply = extracted["response"]
+    synopsis = _parse_synopsis(reply)
+    if not synopsis:
+        raise ValueError("the model's reply had no synopsis in it")
     cache.put(thing_id, section, None, None, _encode_synopsis(key, synopsis))
     log.info("groups.synopsis", thing_id=thing_id, tag=tag, members=len(members))
     return synopsis
@@ -315,13 +405,43 @@ def _parse_add_entries(reply: str) -> list[dict[str, Any]]:
     return []
 
 
+def _clip(text: str, limit: int = CANDIDATE_LINE_CHARS) -> str:
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rsplit(" ", 1)[0] + "…"
+
+
+def _member_line(view: WorldView, state: ThingState) -> str:
+    """Ruling I5: one existing member, "Name (kind, tag): clipped
+    summary", as probe 6's own raw inputs showed the model ("Wattles
+    (lore, custom): They are popular primarily..."). Its summary fact if
+    it has one (`entries.is_summary_fact`), else its first written fact,
+    else "(nothing written yet)"."""
+
+    tag = tag_of(state)
+    bits = f"{state.kind}, {tag}" if tag else state.kind
+    fact = next((f for f in state.facts if entries.is_summary_fact(f)), None)
+    if fact is None and state.facts:
+        fact = min(state.facts, key=lambda f: f.created)
+    summary = (
+        _clip(held_text(view, fact, state))
+        if fact is not None
+        else "(nothing written yet)"
+    )
+    return f"{view.name_of(state.id) or ''} ({bits}): {summary}"
+
+
 def _group_and_filed(
     view: WorldView, thing_id: str, tag: str | None
 ) -> tuple[list[str], list[str]]:
-    """`(members, filed)` for the group-add prompt: the names already in
-    this tag's group (`tag=None` is the untagged/"Other" one -- the
-    page's own top-level "+ Add" acts on it), and, as "Name (tag)", what
-    else is filed in the page, an ignored stub left out of both."""
+    """`(members, filed)` for the group-add prompt: the group's existing
+    members (`_member_line`), and, as "Name (tag)", what else is filed in
+    the page, an ignored stub left out of both. Ruling M2: with no tag
+    preset (`tag=None`, the page's own top-level "+ Add"), there's no
+    group of "members" to speak of -- every filed entry, tagged or not,
+    goes in `filed` instead, so it's still deduped against (the template
+    never shows `members` without a tag anyway)."""
 
     members: list[str] = []
     filed: list[str] = []
@@ -331,8 +451,8 @@ def _group_and_filed(
             if state is None or state.stub_ignored:
                 continue
             name = view.name_of(row_id) or ""
-            if group.tag == tag:
-                members.append(name)
+            if tag is not None and group.tag == tag:
+                members.append(_member_line(view, state))
             elif group.tag is not None:
                 filed.append(f"{name} ({group.tag})")
             else:
@@ -341,56 +461,67 @@ def _group_and_filed(
 
 
 async def group_add(
-    world: World, thing_id: str, tag: str | None, prompt: str, client: Any
+    world: World,
+    thing_id: str,
+    tag: str | None,
+    prompt: str,
+    client: Any,
+    *,
+    reply: str | None = None,
 ) -> list[GroupAddRow]:
     """New entries for one tag group, or (`tag=None`) the page's own
     top-level "+ Add", from the owner's `prompt` (probe 6's wording, the
     `creative_instruction_1024` kind), writing nothing. At most
     `MAX_ADD_ROWS` ticked rows, each dropped if its name is blank or its
     kind or tag is a title word (ruling F5) -- `accept_group_add` checks
-    again, never trusting this draft back from the client. A missing
-    `thing_id` is a `KeyError`; a blank `prompt` a `ValueError`."""
+    again, never trusting this draft back from the client. `reply` stands
+    in for the model's (the browser tests' fixed reply), read through the
+    same parsing, and needs no `client`. A missing `thing_id` is a
+    `KeyError`; a blank `prompt` a `ValueError`."""
 
     if not prompt.strip():
         raise ValueError("say what the new entries are")
+    tag = normalise_tag(tag) if tag else None
     view = world.view()
     state = view.thing(thing_id)
     if state is None:
         raise KeyError(f"no such entry: {thing_id}")
-    prose_gen.require_client(client)
 
-    calendar = world.calendar
-    now = current_date(world)
-    page_name = view.name_of(thing_id) or ""
-    page_facts = _own_facts(view, state, PAGE_FACTS_SHOWN)
-    members, filed = _group_and_filed(view, thing_id, tag)
-    nearby = [
-        view.name_of(owner_id) or ""
-        for owner_id in mentioned_in(view, thing_id, include_ended=True)
-    ][:NEARBY_SHOWN]
+    if reply is None:
+        prose_gen.require_client(client)
+        calendar = world.calendar
+        now = current_date(world)
+        page_name = view.name_of(thing_id) or ""
+        page_facts = _own_facts(view, state, PAGE_FACTS_SHOWN)
+        members, filed = _group_and_filed(view, thing_id, tag)
+        nearby = [
+            view.name_of(owner_id) or ""
+            for owner_id in mentioned_in(view, thing_id, include_ended=True)
+        ][:NEARBY_SHOWN]
 
-    with world_ai_call():
-        _response, extracted = await Prompt.request(
-            "world.group-add",
-            client,
-            ADD_PROMPT_KIND,
-            vars={
-                "tag": tag,
-                "page": page_name,
-                "prompt": prompt.strip(),
-                "page_kind": state.kind,
-                "page_tag": tag_of(state),
-                "page_facts": page_facts,
-                "members": members,
-                "filed": filed,
-                "nearby": nearby,
-                "now_label": calendar.format(now),
-                "now_year": now.to_datetime().year,
-            },
-        )
+        with world_ai_call():
+            _response, extracted = await Prompt.request(
+                "world.group-add",
+                client,
+                ADD_PROMPT_KIND,
+                vars={
+                    "tag": tag,
+                    "page": page_name,
+                    "prompt": prompt.strip(),
+                    "page_kind": state.kind,
+                    "page_tag": tag_of(state),
+                    "page_facts": page_facts,
+                    "members": members,
+                    "filed": filed,
+                    "nearby": nearby,
+                    "now_label": calendar.format(now),
+                    "now_year": now.to_datetime().year,
+                },
+            )
+        reply = extracted["response"]
 
     rows: list[GroupAddRow] = []
-    for raw in _parse_add_entries(extracted["response"])[:MAX_ADD_ROWS]:
+    for raw in _parse_add_entries(reply)[:MAX_ADD_ROWS]:
         name = " ".join(str(raw.get("name") or "").split())
         line = " ".join(str(raw.get("line") or "").split())
         if not name or not line:
@@ -407,13 +538,21 @@ async def group_add(
 
 
 def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> list[str]:
-    """Write `rows`' ticked ones as stubs, in one revision: each filed in
-    `thing_id` with its own `tag`, its `line` its first fact and its
-    summary (ruling F22: `{"summary": True}`), its text linked as a
-    hand-written fact's. Checked again here, never trusted from the
-    client: a blank name, an unknown kind, or a kind/tag that's a title
-    word (ruling F5) drops the row. Returns the new stubs' ids, in the
-    order written. `thing_id` must be live (`KeyError`)."""
+    """Write `rows`' ticked ones, in one revision, each filed in
+    `thing_id` with its own `tag`, its `line` its first fact, its text
+    linked as a hand-written fact's. Checked again here, never trusted
+    from the client: a blank name, an unknown kind, or a kind/tag that's
+    a title word (ruling F5) drops the row.
+
+    Ruling M3: a row whose name the world already has (`links.make_stubs`'
+    own reuse rule) reuses that entry rather than duplicating it; only a
+    genuinely new name becomes a stub (`stub={"ignored": False}`, ruling
+    I1). Either way, the line becomes a fact, marked its summary (ruling
+    F22: `entries.SUMMARY_ORIGIN`) only when the entry didn't already have
+    one -- a reused entry's own summary is never displaced.
+
+    Returns each kept row's resolved entry id (new or reused), in order.
+    `thing_id` must be live (`KeyError`)."""
 
     view = world.view()
     if view.thing(thing_id) is None:
@@ -436,30 +575,28 @@ def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> li
     written: list[str] = []
     if not kept:
         return written
+
+    names = [NewName(name=name, kind=kind, tag=tag) for name, kind, tag, _line in kept]
     with world.revision(Source.manual(note="added from a group prompt")) as rev:
+        made = make_stubs(rev, view, names)
         for name, kind, tag, line in kept:
-            fields: dict[str, object] = {
-                "name": name,
-                "filings": [
-                    {
-                        "target": thing_id,
-                        "role": None,
-                        "since": None,
-                        "until": None,
-                        "within": None,
-                        "exceptions": [],
-                    }
-                ],
-            }
-            if tag:
-                fields["tag"] = tag
-            new_id = rev.create_thing(kind, fields=fields)
-            rev.add_fact(
-                new_id,
-                default_category(kind, False),
-                link_text(view, line, owner=new_id),
-                origin={"summary": True},
+            entry_id = made.get(name)
+            if entry_id is None:
+                continue
+            before = view.thing(entry_id)
+            actual_kind = before.kind if before is not None else kind
+            write_filings(
+                rev, world, entry_id, [Filing(target=thing_id, role=None)], None
             )
-            written.append(new_id)
+            has_summary = (
+                before is not None and entries.summary_fact(before) is not None
+            )
+            rev.add_fact(
+                entry_id,
+                default_category(actual_kind, False),
+                link_text(view, line, owner=entry_id),
+                origin=None if has_summary else entries.SUMMARY_ORIGIN,
+            )
+            written.append(entry_id)
     log.info("groups.accept_add", thing_id=thing_id, written=len(written))
     return written

@@ -4779,6 +4779,111 @@ async def test_group_add_unknown_entry_fails(plugin, client):
     assert "no such entry" in _errors(plugin)[-1]["error"]["message"]
 
 
+async def test_connected_synopsis_from_cache(plugin, client):
+    """I3: after `group_synopsis`, `get_thing`'s `connected` shows the
+    cached synopsis with no model call; it goes back to null once a
+    member changes and the cache no longer matches."""
+
+    s = await _open_filing_world(plugin)
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert _group(velikoye, "river")["synopsis"] is None
+
+    reply = json.dumps({"synopsis": "The Khorol River runs through Velikoye."})
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
+        await _drain(plugin)
+    calls = len(client.prompt_history)
+
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert _group(velikoye, "river")["synopsis"] == (
+        "The Khorol River runs through Velikoye."
+    )
+    # reading it back made no model call
+    assert len(client.prompt_history) == calls
+
+    with s.world.revision(Source.manual(note="edit")) as rev:
+        rev.add_fact(s.khorol, "description", "Something changed.")
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert _group(velikoye, "river")["synopsis"] is None
+
+
+async def test_group_synopsis_force_regenerates(plugin, client):
+    s = await _open_filing_world(plugin)
+    reply = json.dumps({"synopsis": "First telling."})
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
+        await _drain(plugin)
+    assert _last(plugin, "group_synopsis")["data"]["synopsis"] == "First telling."
+
+    async with MockClientContext():
+        # no reply queued: without force, it would answer from the cache
+        client_responses.get().append(json.dumps({"synopsis": "Forced telling."}))
+        await _act(
+            plugin, "group_synopsis", thing_id=s.velikoye, tag="river", force=True
+        )
+        await _drain(plugin)
+    assert _last(plugin, "group_synopsis")["data"]["synopsis"] == "Forced telling."
+    assert len(client.prompt_history) == 2
+
+
+async def test_group_synopsis_unusable_reply_fails(plugin, client):
+    s = await _open_filing_world(plugin)
+    async with MockClientContext():
+        client_responses.get().append(json.dumps({"nonsense": True}))
+        await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
+        await _drain(plugin)
+    assert "synopsis" in _last(plugin, "group_synopsis_failed")["message"]
+
+
+async def test_fixed_group_synopsis_answer_without_a_model(
+    plugin, tmp_path, monkeypatch
+):
+    s = await _open_filing_world(plugin)
+    path = tmp_path / "fixed-group-synopsis.json"
+    path.write_text(json.dumps({"synopsis": "A fixed telling of Velikoye's rivers."}))
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_GROUP_SYNOPSIS", str(path))
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+    await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
+    await _drain(plugin)
+    out = _last(plugin, "group_synopsis")["data"]
+    assert out["synopsis"] == "A fixed telling of Velikoye's rivers."
+
+
+async def test_fixed_group_add_answer_without_a_model(plugin, tmp_path, monkeypatch):
+    s = await _open_filing_world(plugin)
+    path = tmp_path / "fixed-group-add.json"
+    path.write_text(
+        json.dumps(
+            {
+                "entries": [
+                    {
+                        "name": "The Icewrights",
+                        "kind": "lore",
+                        "tag": "guild",
+                        "line": "A guild of ice-road pilots.",
+                    }
+                ]
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_GROUP_ADD", str(path))
+    monkeypatch.setitem(instance.AGENTS, "creator", SimpleNamespace(client=None))
+    await _act(plugin, "group_add", thing_id=s.velikoye, tag="guild", prompt="a guild")
+    await _drain(plugin)
+    drafted = _last(plugin, "group_add")["data"]
+    assert drafted["rows"] == [
+        {
+            "name": "The Icewrights",
+            "kind": "lore",
+            "tag": "guild",
+            "line": "A guild of ice-road pilots.",
+            "ticked": True,
+        }
+    ]
+
+
 async def test_add_facts(plugin, client):
     s = await _open_filing_world(plugin)
     tower = "The Court meets in the old observatory tower."

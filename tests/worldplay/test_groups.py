@@ -9,8 +9,10 @@ ticked ones as stubs, filed in the page, in one revision."""
 
 import json
 
+from talemate.world.dates import WorldDate
 from talemate.world.entries import is_summary_fact
 from talemate.world.filing import filed_in
+from talemate.world.refs import ref
 from talemate.world.store import Source
 from talemate.worldplay import groups
 from talemate.worldplay.groups import GroupAddRow
@@ -291,6 +293,7 @@ async def test_group_add_accept_one_revision(world):
         assert state is not None
         assert state.fields["name"] == row.name
         assert state.fields["tag"] == "guild"
+        assert state.is_stub
         assert len(state.facts) == 1
         fact = state.facts[0]
         assert fact.text == row.line
@@ -329,3 +332,366 @@ async def test_group_add_accept_missing_page_is_key_error(world):
         raise AssertionError("expected KeyError")
     except KeyError:
         pass
+
+
+async def test_group_add_accept_reuses_existing_entry_by_name(world):
+    """M3: a row whose name the world already has reuses that entry
+    rather than making a duplicate, and files it in the page."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    with world.revision(Source.manual(note="existing")) as rev:
+        old_mill = rev.create_thing("lore", {"name": "The Old Mill", "tag": "landmark"})
+        rev.add_fact(
+            old_mill,
+            "general",
+            "Already stands by the Lesnaya.",
+            origin={"summary": True},
+        )
+    head = world.head_rev()
+
+    rows = [
+        GroupAddRow(
+            name="The Old Mill",
+            kind="lore",
+            tag="guild",
+            line="A guild gathers there now.",
+            ticked=True,
+        ),
+    ]
+    ids = groups.accept_group_add(world, khorol, rows)
+
+    assert ids == [old_mill]
+    assert world.head_rev() == head + 1
+
+    view = world.view()
+    assert sum(1 for t in view.things() if t.fields.get("name") == "The Old Mill") == 1
+    reused = view.thing(old_mill)
+    assert not reused.is_stub
+    assert reused.fields["tag"] == "landmark"
+    filed_ids = {state.id for state, _f in filed_in(view, khorol)}
+    assert old_mill in filed_ids
+
+    assert len(reused.facts) == 2
+    new_fact = next(
+        f for f in reused.facts if f.text != "Already stands by the Lesnaya."
+    )
+    assert not is_summary_fact(new_fact)
+
+
+# --- review round 1 fixes ----------------------------------------------------
+
+
+async def test_synopsis_stub_members_by_summary_presence(world):
+    """I2: a member's facts in the synopsis are decided by whether it has
+    a summary fact (`entries.summary_fact`), not by the stub marker
+    alone: a stub that already has one reads its own facts; a bare stub
+    reads what mentions it, or the fallback text with no mentions
+    either."""
+
+    with world.revision(Source.manual(note="seed")) as rev:
+        velikoye = rev.create_thing("place", {"name": "Velikoye"})
+        rev.create_thing(
+            "place",
+            {
+                "name": "Nowhere Yet",
+                "tag": "river",
+                "stub": {"ignored": False},
+                "filings": [{"target": velikoye, "role": None}],
+            },
+        )
+        mentioned_stub = rev.create_thing(
+            "place",
+            {
+                "name": "Whispered River",
+                "tag": "river",
+                "stub": {"ignored": False},
+                "filings": [{"target": velikoye, "role": None}],
+            },
+        )
+        teller = rev.create_thing("lore", {"name": "An Old Song"})
+        rev.add_fact(
+            teller,
+            "general",
+            f"It names {ref(mentioned_stub, 'Whispered River')} as a ghost.",
+        )
+        filled_stub = rev.create_thing(
+            "place",
+            {
+                "name": "Half-Written River",
+                "tag": "river",
+                "stub": {"ignored": False},
+                "filings": [{"target": velikoye, "role": None}],
+            },
+        )
+        rev.add_fact(
+            filled_stub,
+            "general",
+            "A river already known to be cold.",
+            origin={"summary": True},
+        )
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({"synopsis": "Three rivers, told differently."}))
+        await groups.group_synopsis(world, velikoye, "river", client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "(stub: nothing written yet)" in prompt
+    assert "(stub) mentioned by An Old Song" in prompt
+    assert "A river already known to be cold." in prompt
+
+
+async def test_cached_synopsis_no_model_call(world):
+    """I3: `cached_synopsis` reads the cache (a content-key match) and
+    never asks the model."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    assert groups.cached_synopsis(world, velikoye, "river") is None
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({"synopsis": "Two rivers."}))
+        await groups.group_synopsis(world, velikoye, "river", client)
+
+    assert groups.cached_synopsis(world, velikoye, "river") == "Two rivers."
+
+    with world.revision(Source.manual(note="edit")) as rev:
+        rev.add_fact(khorol, "description", "Something new.")
+    assert groups.cached_synopsis(world, velikoye, "river") is None
+
+
+async def test_synopsis_unusable_reply_raises_and_caches_nothing(world):
+    """I4: an unusable reply raises rather than caching an empty
+    synopsis."""
+
+    velikoye, _khorol, _lesnaya, _court = _seed_rivers(world)
+    client = MockClient("test")
+
+    async with MockClientContext():
+        _queue(json.dumps({"nonsense": True}))
+        try:
+            await groups.group_synopsis(world, velikoye, "river", client)
+            raise AssertionError("expected ValueError")
+        except ValueError:
+            pass
+
+    assert groups.cached_synopsis(world, velikoye, "river") is None
+    assert world.prose().get(velikoye, "synopsis:river", None) is None
+
+
+async def test_synopsis_force_regenerates(world):
+    """I4: `force=True` asks the model again even when the cache is
+    still fresh."""
+
+    velikoye, _khorol, _lesnaya, _court = _seed_rivers(world)
+    client = MockClient("test")
+
+    async with MockClientContext():
+        _queue(json.dumps({"synopsis": "First telling."}))
+        first = await groups.group_synopsis(world, velikoye, "river", client)
+        assert first == "First telling."
+        assert len(client.prompt_history) == 1
+
+        again = await groups.group_synopsis(world, velikoye, "river", client)
+        assert again == first
+        assert len(client.prompt_history) == 1
+
+        _queue(json.dumps({"synopsis": "Second telling, forced."}))
+        forced = await groups.group_synopsis(
+            world, velikoye, "river", client, force=True
+        )
+        assert forced == "Second telling, forced."
+        assert len(client.prompt_history) == 2
+
+        again2 = await groups.group_synopsis(world, velikoye, "river", client)
+        assert again2 == forced
+        assert len(client.prompt_history) == 2
+
+
+async def test_synopsis_label_includes_until_when_filing_ended(world):
+    """M1: ending a member's filing changes its label (an "until" date),
+    which changes the content key and tells the model the truth."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    client = MockClient("test")
+
+    async with MockClientContext():
+        _queue(json.dumps({"synopsis": "Still flowing."}))
+        await groups.group_synopsis(world, velikoye, "river", client)
+        assert len(client.prompt_history) == 1
+
+        with world.revision(Source.manual(note="end filing")) as rev:
+            rev.set_field(
+                khorol,
+                "filings",
+                [
+                    {
+                        "target": velikoye,
+                        "role": None,
+                        "since": None,
+                        "until": WorldDate.of(1005).model_dump(mode="json"),
+                        "within": None,
+                        "exceptions": [],
+                    }
+                ],
+                None,
+            )
+        _queue(json.dumps({"synopsis": "Khorol dried up."}))
+        changed = await groups.group_synopsis(world, velikoye, "river", client)
+        assert changed == "Khorol dried up."
+        assert len(client.prompt_history) == 2
+        prompt = str(client.prompt_history[-1]["prompt"])
+        assert "until" in prompt
+
+
+async def test_group_add_no_tag_dedupes_untagged_filed(world):
+    """M2: with no tag preset, an untagged filed entry goes in `filed`
+    (shown to the model) rather than the invisible `members` list."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    with world.revision(Source.manual(note="untagged")) as rev:
+        rev.create_thing(
+            "lore",
+            {
+                "name": "The Old Ferry",
+                "filings": [{"target": khorol, "role": None}],
+            },
+        )
+    client = MockClient("test")
+
+    reply = json.dumps(
+        {
+            "entries": [
+                {"name": "A New Dock", "kind": "lore", "tag": "landmark", "line": "x."}
+            ]
+        }
+    )
+    async with MockClientContext():
+        _queue(reply)
+        await groups.group_add(world, khorol, None, "something new", client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "The Old Ferry" in prompt
+    assert "Also filed in Khorol River" in prompt
+
+
+async def test_own_facts_include_dated(world):
+    """M4: `_own_facts` (shown to both the synopsis and group-add) no
+    longer drops a member's dated facts."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    with world.revision(Source.manual(note="dated")) as rev:
+        rev.add_fact(khorol, "history", "Flooded in 950.", valid_from=WorldDate.of(950))
+    client = MockClient("test")
+
+    async with MockClientContext():
+        _queue(json.dumps({"synopsis": "x"}))
+        await groups.group_synopsis(world, velikoye, "river", client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "Flooded in 950." in prompt
+
+
+async def test_group_add_page_facts_capped_at_seven(world):
+    """M4: group-add's `page_facts` shows the summary plus at most 7 own
+    facts."""
+
+    with world.revision(Source.manual(note="many")) as rev:
+        page = rev.create_thing("place", {"name": "Big Place"})
+        for i in range(10):
+            rev.add_fact(page, "description", f"Fact number {i}.")
+    client = MockClient("test")
+    reply = json.dumps(
+        {"entries": [{"name": "X", "kind": "lore", "tag": "guild", "line": "y."}]}
+    )
+    async with MockClientContext():
+        _queue(reply)
+        await groups.group_add(world, page, "guild", "something", client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    shown = sum(1 for i in range(10) if f"Fact number {i}." in prompt)
+    assert shown == 7
+
+
+async def test_group_add_members_use_filing_line_format(world):
+    """I5: group-add's `members` read "Name (kind, tag): clipped
+    summary", as probe 6's own raw inputs show them."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    with world.revision(Source.manual(note="existing guild")) as rev:
+        guild = rev.create_thing(
+            "lore",
+            {
+                "name": "The Icewrights",
+                "tag": "guild",
+                "filings": [{"target": khorol, "role": None}],
+            },
+        )
+        rev.add_fact(guild, "general", "Guides sledges across the frozen river.")
+    client = MockClient("test")
+    reply = json.dumps(
+        {"entries": [{"name": "New", "kind": "lore", "tag": "guild", "line": "x."}]}
+    )
+    async with MockClientContext():
+        _queue(reply)
+        await groups.group_add(world, khorol, "guild", "another guild", client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert (
+        "The Icewrights (lore, guild): Guides sledges across the frozen river."
+        in prompt
+    )
+
+
+async def test_group_synopsis_normalises_incoming_tag(world):
+    """M5: the incoming `tag` is normalised (`kinds.normalise_tag`), so a
+    differently-cased or spaced tag still finds the group and its
+    cache."""
+
+    velikoye, _khorol, _lesnaya, _court = _seed_rivers(world)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({"synopsis": "ok"}))
+        result = await groups.group_synopsis(world, velikoye, " River ", client)
+        assert result == "ok"
+        again = await groups.group_synopsis(world, velikoye, "river", client)
+        assert again == "ok"
+        assert len(client.prompt_history) == 1
+
+
+async def test_group_add_normalises_incoming_tag(world):
+    """M5: group-add's incoming `tag` is normalised before it's forced
+    onto the drafted rows."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    client = MockClient("test")
+    reply = json.dumps(
+        {"entries": [{"name": "X", "kind": "lore", "tag": "trade", "line": "y."}]}
+    )
+    async with MockClientContext():
+        _queue(reply)
+        rows = await groups.group_add(world, khorol, " Guild", "something", client)
+    assert rows[0].tag == "guild"
+
+
+async def test_group_synopsis_reply_override_skips_client(world):
+    """Browser-test hook: a `reply` override answers without a client."""
+
+    velikoye, _khorol, _lesnaya, _court = _seed_rivers(world)
+    result = await groups.group_synopsis(
+        world, velikoye, "river", None, reply=json.dumps({"synopsis": "Fixed reply."})
+    )
+    assert result == "Fixed reply."
+
+
+async def test_group_add_reply_override_skips_client(world):
+    """Browser-test hook: a `reply` override answers without a client."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    reply = json.dumps(
+        {"entries": [{"name": "X", "kind": "lore", "tag": "guild", "line": "y."}]}
+    )
+    rows = await groups.group_add(
+        world, khorol, "guild", "something", None, reply=reply
+    )
+    assert rows[0].name == "X"
