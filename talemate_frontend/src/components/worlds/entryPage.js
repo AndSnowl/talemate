@@ -14,6 +14,16 @@ export const GROUP_SHOWN = 5;
 // the heading of the untagged entries' group (`filing.OTHER_HEADING`)
 export const OTHER_HEADING = 'Other';
 
+// How the delete dialog names a field that refers to the thing
+// (`references._field_entries`): a filing into it (or within it) is
+// "filed in it" (final review M2); the other thing fields read as their
+// names.
+const REFERENCE_FIELD_LABELS = { filings: 'filed in it', parents: 'a parent' };
+
+export function referenceFieldLabel(field) {
+    return REFERENCE_FIELD_LABELS[field] || field;
+}
+
 // A tag as the backend stores it (`kinds.normalise_tag`): its first
 // comma-separated part, trimmed and lowercased (ruling F8).
 export function normaliseTag(value) {

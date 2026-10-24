@@ -79,6 +79,7 @@ import {
     groupView,
     kindList,
     normaliseTag,
+    referenceFieldLabel,
     tagChoices,
     tagHeading,
     timelineShown,
@@ -2196,6 +2197,17 @@ check("a filing edit's reply: the open page takes it, another thing's refreshes 
     store.handleMessage(reply('remove_filing', { id: 'velikoye', kind: 'place', name: 'Velikoye', in: [], notes: ['Removed the "but..."'] }));
     assert.deepEqual(store.thing.in, []);
     assert.deepEqual(store.notes, { action: 'remove_filing', notes: ['Removed the "but..."'] });
+});
+
+check('delete dialog: a field reference reads in words, the retired fields gone', () => {
+    // final review M2: a filing into (or within) the thing, never the raw "filings"
+    assert.equal(referenceFieldLabel('filings'), 'filed in it');
+    assert.equal(referenceFieldLabel('parents'), 'a parent');
+    assert.equal(referenceFieldLabel('heritage'), 'heritage');
+    // the sphere-era fields have no label of their own any more
+    for (const retired of ['parent', 'culture', 'cultures']) {
+        assert.equal(referenceFieldLabel(retired), retired);
+    }
 });
 
 check('tags: listed on opening a world, renamed and merged', () => {
