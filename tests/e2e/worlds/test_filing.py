@@ -638,6 +638,33 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     form.get_by_test_id("group-add-accept").click()
     expect(_row(_group(thing, "Landmarks"), "The Bluff Stair")).to_be_visible()
 
+    # a row naming an entry the world has reuses it, which keeps its own
+    # tag: the note says where it's listed (final review M4)
+    fixed_group_add(
+        {
+            "entries": [
+                {
+                    "name": "The Bluff Stair",
+                    "kind": "place",
+                    "tag": "institution",
+                    "line": "The stair-keepers' hall.",
+                }
+            ]
+        }
+    )
+    institutions = _group(thing, "Institutions")
+    institutions.get_by_test_id("group-add-button").click()
+    form = institutions.get_by_test_id("group-add")
+    form.get_by_test_id("group-add-prompt").locator("input").fill("the stair")
+    form.get_by_test_id("group-add-draft").click()
+    expect(form.get_by_test_id("group-add-row")).to_have_count(1)
+    form.get_by_test_id("group-add-accept").click()
+    expect(page.get_by_test_id("accept-notes")).to_contain_text(
+        "The Bluff Stair was in the world already: it keeps its tag "
+        "\u201clandmark\u201d, so it's listed under Landmarks, not Institutions"
+    )
+    expect(_row(_group(thing, "Landmarks"), "The Bluff Stair")).to_be_visible()
+
     # "+ Add facts…": a small draft to tick, written on Accept
     fixed_facts(
         {

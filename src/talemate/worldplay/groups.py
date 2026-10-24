@@ -529,6 +529,24 @@ async def group_add(
     return rows
 
 
+def _kept_tag_note(name: str, own: str | None, row: str | None) -> list[str]:
+    """Final review M4: a reused entry keeps its own tag (it's never
+    retagged quietly), so it may join another group on the page than the
+    row's -- the note saying so, or none when the tags agree."""
+
+    if own == row:
+        return []
+
+    def heading(tag: str | None) -> str:
+        return tag_heading(tag) if tag is not None else OTHER_HEADING
+
+    kept = f"keeps its tag \u201c{own}\u201d" if own is not None else "has no tag"
+    return [
+        f"{name} was in the world already: it {kept}, so it's listed "
+        f"under {heading(own)}, not {heading(row)}"
+    ]
+
+
 def accept_group_add(
     world: World,
     thing_id: str,
@@ -556,6 +574,10 @@ def accept_group_add(
     store (a cycle, or a target gone since) -- `notes`, when given, gains
     one line for each row that happens to; the fact is written regardless,
     since it's the owner's row, just left unfiled.
+
+    Final review M4: a reused entry keeps its own tag (never retagged
+    quietly), so it may be listed under another group than the row's;
+    `notes` gains a line saying so (`_kept_tag_note`).
 
     Returns each kept row's resolved entry id (new or reused), in order.
     `thing_id` must be live (`KeyError`)."""
@@ -592,9 +614,15 @@ def accept_group_add(
                 continue
             before = view.thing(entry_id)
             actual_kind = before.kind if before is not None else kind
+            refused: list[str] = []
             write_filings(
-                rev, world, entry_id, [Filing(target=thing_id, role=None)], notes
+                rev, world, entry_id, [Filing(target=thing_id, role=None)], refused
             )
+            if notes is not None:
+                notes.extend(refused)
+                # filed, a reused entry shows under its own tag's group
+                if before is not None and not refused:
+                    notes.extend(_kept_tag_note(name, tag_of(before), tag))
             has_summary = entry_id in marked_summary or (
                 before is not None and entries.summary_fact(before) is not None
             )

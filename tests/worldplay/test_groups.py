@@ -358,10 +358,17 @@ async def test_group_add_accept_reuses_existing_entry_by_name(world):
             ticked=True,
         ),
     ]
-    ids = groups.accept_group_add(world, khorol, rows)
+    notes: list[str] = []
+    ids = groups.accept_group_add(world, khorol, rows, notes=notes)
 
     assert ids == [old_mill]
     assert world.head_rev() == head + 1
+    # final review M4: it keeps its own tag, and the note says where it
+    # shows on the page
+    assert notes == [
+        "The Old Mill was in the world already: it keeps its tag "
+        "\u201clandmark\u201d, so it's listed under Landmarks, not Guilds"
+    ]
 
     view = world.view()
     assert sum(1 for t in view.things() if t.fields.get("name") == "The Old Mill") == 1
@@ -376,6 +383,23 @@ async def test_group_add_accept_reuses_existing_entry_by_name(world):
         f for f in reused.facts if f.text != "Already stands by the Lesnaya."
     )
     assert not is_summary_fact(new_fact)
+
+
+async def test_group_add_accept_reuse_with_the_rows_tag_has_no_note(world):
+    """A reused entry already of the row's tag joins that group: nothing to
+    say (final review M4)."""
+
+    _velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    with world.revision(Source.manual(note="existing")) as rev:
+        mill = rev.create_thing("lore", {"name": "The Old Mill", "tag": "guild"})
+    notes: list[str] = []
+    rows = [
+        GroupAddRow(
+            name="The Old Mill", kind="lore", tag="guild", line="A guild.", ticked=True
+        )
+    ]
+    assert groups.accept_group_add(world, khorol, rows, notes=notes) == [mill]
+    assert notes == []
 
 
 # --- review round 1 fixes ----------------------------------------------------

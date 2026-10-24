@@ -268,7 +268,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `thing_ids` (each kept row's resolved entry id, new or reused, in
   order) and `notes` (a row whose filing the store refused -- a cycle, a
   target gone since -- noted rather than silently dropped; its fact is
-  still written). `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`/`TALEMATE_TEST_FIXED_GROUP_ADD`
+  still written; and a reused entry, which keeps its own tag, with the
+  group it's listed under). `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`/`TALEMATE_TEST_FIXED_GROUP_ADD`
   (browser tests) each name a file holding the model's reply.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
