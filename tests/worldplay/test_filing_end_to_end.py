@@ -910,7 +910,10 @@ async def test_filing_end_to_end(plugin, client, loadable):
     )
     plumage = await _accept(plugin, draft, into_stub=plumage_id)
     assert plumage["tag"] == "custom"
-    assert set(_filed(world, plumage_id)) == {court_id, owlfolk_id}
+    assert _filed(world, plumage_id) == {
+        court_id: "a communication practice used during its formal sessions",
+        owlfolk_id: "practised by",
+    }
     for page_id in (court_id, owlfolk_id):
         group = _group(await _thing(plugin, page_id), "custom")
         assert group["heading"] == "Customs"
@@ -1067,11 +1070,10 @@ async def test_filing_end_to_end(plugin, client, loadable):
     prompt = "Vasha, a young courier who carries sealed letters for the Order of the Talon-Scribe"
     draft = await _new(plugin, "character", _with_exception(VASHA_REPLY, oath), prompt)
     [row] = draft["preview"]["filings"]
-    assert (row["target_id"], row["role"], len(row["exceptions"])) == (
-        order_id,
-        "courier",
-        1,
-    )
+    assert (row["target_id"], row["role"]) == (order_id, "courier")
+    assert [(e["text"], e["fact_id"]) for e in row["exceptions"]] == [
+        (VASHA_BUT, _fact_id(world, order_id, oath))
+    ]
     row["ticked"] = True
     vasha = await _accept(plugin, draft)
     vasha_id = vasha["id"]
@@ -1128,6 +1130,13 @@ async def test_filing_end_to_end(plugin, client, loadable):
     )
     # the Order's belief, told as held, once, never as plain truth
     assert block.count(ORDER_HELD) == 1
+    # its summary is its first plain fact, never the belief (ruling F28)
+    assert (
+        touched["Order of the Talon-Scribe (order, usually called Talon-Scribe Order)"][
+            0
+        ]
+        == ORDER_SUMMARY
+    )
     assert ORDER_BELIEF not in block
     # M7: the Chief Scribe's "but..." reaches the block as her filing line
     koroleva_lines = touched["Anastasiya Koroleva (official)"]

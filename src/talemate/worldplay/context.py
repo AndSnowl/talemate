@@ -40,8 +40,10 @@ from talemate.world.view import FactState, ThingState, WorldView
 from .characters import (
     WORLD_DERIVED_FIELDS,
     character_from_world,
+    filing_exceptions,
     filing_lines,
     held_text,
+    lined_filings,
 )
 from .held import timeline_text
 
@@ -430,9 +432,10 @@ def _touched_entry(
     facts, the most-linked first, then its latest timeline lines
     (`_latest_lines`), at most `TOUCHED_LINES` in all (the own facts give
     way to the timeline), each held fact worded as held; a fact `shown`
-    already in the block isn't told again. A person's exceptions to its
-    filings (`ties` facts) are told only in its filing lines, never as
-    facts with their "Departs from <link>" sentence (Filing Task 11).
+    already in the block isn't told again. A person's exceptions that its
+    filing lines tell are never told again as facts, with their "Departs
+    from <link>" sentence (Filing Task 11); one no line tells (a filing
+    with no role) stays a fact.
     `None` for an entry with nothing to say."""
 
     state = view.thing(thing_id)
@@ -440,10 +443,18 @@ def _touched_entry(
         return None
     person = entries.acts_in_world(state)
     filed = filing_lines(view, world.calendar, thing_id) if person else []
+    # the exceptions those lines tell: never told again as facts
+    told = (
+        {
+            fact.fact_id
+            for filing in lined_filings(view, thing_id)
+            for fact in filing_exceptions(view, state, filing)
+        }
+        if person
+        else set()
+    )
     head = _summary_fact(state)
-    if head is not None and (
-        head.fact_id in shown or (person and head.category == "ties")
-    ):
+    if head is not None and (head.fact_id in shown or head.fact_id in told):
         head = None
     own = sorted(
         (
@@ -453,7 +464,7 @@ def _touched_entry(
             and fact.fact_id not in shown
             and (head is None or fact.fact_id != head.fact_id)
             and not entries.is_summary_fact(fact)
-            and not (person and fact.category == "ties")
+            and fact.fact_id not in told
         ),
         key=lambda fact: (-len(set(fact.refs)), fact.created),
     )[:TOUCHED_FACTS]

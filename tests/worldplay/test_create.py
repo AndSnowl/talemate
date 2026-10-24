@@ -2772,9 +2772,58 @@ def test_accept_marks_the_first_fact_the_summary(church_world, world):
             stub_id=church_world,
         ),
     )
-    fact, text = _summary_of(world, filled)
-    assert fact.origin == {"held_by": thing_id, "summary": True}
+    # every fact held: none is marked the summary (ruling F28)
+    fact, _text = _summary_of(world, filled)
+    assert fact is None
+    [only] = world.view().thing(filled).facts
+    assert only.origin == {"held_by": thing_id}
+
+
+async def test_accept_summary_skips_beliefs(world):
+    """Ruling F28: with no summary in the reply, the first plain own fact
+    is the summary, never a held one -- under the religion hint the reply
+    puts its belief first; with every fact held, none is marked."""
+
+    reply = json.dumps(
+        {
+            "name": "The White Dawn",
+            "tag": "faith",
+            "facts": [
+                {"category": "belief", "text": "The dead return as stars."},
+                {"category": "general", "text": "The faith of the dawn."},
+            ],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "The White Dawn is a faith.")
+        preview = await preview_thing(
+            world, "lore", "a dawn faith", {}, client, hint="religion"
+        )
+    assert [f.category for f in preview.facts] == ["belief", "general"]
+    thing_id = accept_preview(world, preview)
+    fact, text = _summary_of(world, thing_id)
+    assert fact is not None and fact.origin == {"summary": True}
     assert text == "The faith of the dawn."
+
+    reply = json.dumps(
+        {
+            "name": "The Pale Rite",
+            "facts": [{"category": "belief", "text": "Ash keeps the dead warm."}],
+            "names": [],
+        }
+    )
+    async with MockClientContext():
+        _queue(reply, "The Pale Rite is a faith.")
+        preview = await preview_thing(
+            world, "lore", "a rite of ash", {}, client, hint="religion"
+        )
+    held = accept_preview(world, preview)
+    fact, _text = _summary_of(world, held)
+    assert fact is None
+    [only] = world.view().thing(held).facts
+    assert not (only.origin or {}).get("summary")
 
 
 async def test_a_summary_repeating_an_own_fact_is_written_once(world):

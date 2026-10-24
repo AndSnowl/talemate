@@ -264,20 +264,22 @@ def _field_uses(
 
 
 # an article ending the text just before a link ("...held in the ")
-_ARTICLE_BEFORE = re.compile(r"(?<![\w-])(?:the|a|an)\s+$", re.IGNORECASE)
+_ARTICLE_BEFORE = re.compile(r"(?<![\w-])(the|a|an)\s+$", re.IGNORECASE)
 
 
 def _hard_words(use_name: str, shown: str, before: str) -> str:
     """The words a hard re-point writes for one link: `use_name`, less its
     leading article when the text just `before` the link ends with one
-    ("the Grand Hall's" becomes "the Great Hall's", never "the The Great
-    Hall's"), or with the article the link's `shown` words open with, as
+    and either of the two is "the" ("the Grand Hall's" becomes "the Great
+    Hall's", never "the The Great Hall's"; "Plan A" before "An Old Hall"
+    keeps it), or with the article the link's `shown` words open with, as
     they wrote it ("It meets in the Great Hall", mid-sentence)."""
 
     words = use_name.split()
     if len(words) < 2 or words[0].casefold() not in ARTICLES:
         return use_name
-    if _ARTICLE_BEFORE.search(before):
+    found = _ARTICLE_BEFORE.search(before)
+    if found and "the" in (found.group(1).casefold(), words[0].casefold()):
         return " ".join(words[1:])
     opening = shown.split()[:1]
     if opening and opening[0].casefold() in ARTICLES:

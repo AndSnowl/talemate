@@ -734,13 +734,24 @@ def test_touched_person_tells_its_filing_lines(world, scribe_world):
             + ref(s.order, "Talon-Scribe Order"),
             origin={"tie": s.order},
         )
+        # a "but..." of a filing with no role gets no line: told as a fact
+        aside = rev.add_fact(
+            s.anastasiya,
+            "ties",
+            "She keeps her own rune stones.",
+            origin={"tie": s.runes},
+        )
         rev.set_field(
             s.anastasiya,
             "filings",
-            [_in_record(s.order, "Chief Scribe", exceptions=[but])],
+            [
+                _in_record(s.order, "Chief Scribe", exceptions=[but]),
+                _in_record(s.runes, exceptions=[aside]),
+            ],
             None,
         )
     block = _scribe_scene(world, s)
+    assert "- She keeps her own rune stones.\n" in block
     assert (
         "Anastasiya Koroleva (character)\n"
         "- A tawny-brown owl-folk with burnt-orange eyes.\n"

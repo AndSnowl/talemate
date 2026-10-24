@@ -3662,8 +3662,10 @@ def _write_preview(
             linked.update(parse_refs(written))
             return written
 
-        # its summary (ruling P21): the reply's, else its first own fact,
-        # unless the stub it fills has one already
+        # its summary (ruling P21): the reply's, else its first own fact
+        # that isn't held (ruling F28: a belief, often first under a
+        # religion hint, never sums an entry up; with every fact held, none
+        # is marked), unless the stub it fills has one already
         has_summary = stub is not None and any(
             entries.is_summary_fact(f) for f in stub.facts
         )
@@ -3693,7 +3695,10 @@ def _write_preview(
             holder = redirect.get(fact.held_by or "", fact.held_by)
             held = holder is not None and view.thing(holder) is not None
             origin = entries.with_held_by(None, holder) if held else None
-            if not has_summary and (repeated is None or fact is repeated):
+            plain = not held and fact.category != entries.BELIEF_CATEGORY
+            if not has_summary and (
+                fact is repeated if repeated is not None else plain
+            ):
                 origin = {**(origin or {}), **SUMMARY_ORIGIN}
                 has_summary = True
             rev.add_fact(

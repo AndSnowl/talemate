@@ -193,6 +193,30 @@ def test_hard_repoint_never_doubles_an_article(world):
     assert _text(world, bare) == f"Petitioners wait at {ref(hall, 'The Great Hall')}."
 
 
+@pytest.mark.parametrize(
+    "use_name, shown, before, words",
+    [
+        # the name's own article is "the": dropped after any article
+        ("The Old Mill", "Old Mill", "built beside an ", "Old Mill"),
+        # the article before it is "the": the name's own goes
+        ("An Old Hall", "Old Hall", "held in the ", "Old Hall"),
+        # only an article right before the link counts
+        ("The Great Hall", "Grand Hall", "held in the old ", "The Great Hall"),
+        # neither is "the" (a letter "A", "an" before "A"): kept
+        ("An Old Hall", "Old Hall", "see Plan A ", "An Old Hall"),
+        ("A Hall", "Hall", "beside an ", "A Hall"),
+    ],
+)
+def test_hard_words_article_edges(use_name, shown, before, words):
+    """`_hard_words` drops the chosen name's article only when the article
+    before the link, or the name's own, is "the" (Filing Task 11
+    follow-up)."""
+
+    from talemate.worldplay.repoint import _hard_words
+
+    assert _hard_words(use_name, shown, before) == words
+
+
 def test_repoint_rewrites_filings_into_the_stub(world, tsardom):
     """A thing filed in the stub is filed in the target, its role, dates
     and exceptions kept; one filed `within` the stub is within the target;
