@@ -22,6 +22,17 @@ in (the White Talon of the Tsar's Army), never the sphere itself. Whether
 it's live and part of the sphere is read through a view
 (`spheres.within_sphere`).
 
+Every kind also has a `tag` (text), the one word saying what the entry is
+("river", "custom", "ruler"): lowercase and singular, normalised when
+written (`normalise_field`), and its `filings`: a list of `{"target":
+<32-hex>, "role": str|null, "since": date|null, "until": date|null,
+"within": <32-hex>|null, "exceptions": [fact id...]}`, the entries it is
+filed in (`filing.py` reads them). `within` is a part of the target (never
+the target itself), and no target may appear twice. What needs the world
+to check (a filing into itself, a `within` that doesn't sit in its target,
+a cycle) is `filing.check_filings`, which the store runs on every write.
+These sit beside `part_of`, `ties` and the place `parent` until those go.
+
 A `being` (a god, a spirit, a legendary creature) has an `existence`:
 `real` (it acts in the world like a character: it can be cast in scenes
 and hold ties), `believed` (only ever spoken of) or `undecided` (treated
@@ -59,6 +70,8 @@ _SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (
     ("aka", "json"),
     ("stub", "json"),
     ("part_of", "json"),
+    ("tag", "text"),
+    ("filings", "json"),
 )
 
 AKA_TAGS: tuple[str, ...] = ("proper", "common")
@@ -323,6 +336,22 @@ def _field_spec(kind: KindSpec, field: str) -> FieldSpec:
     raise ValueError(f"{kind.name!r} has no field {field!r}")
 
 
+def normalise_tag(value: str) -> str:
+    """A tag as stored: its first comma-separated part (ruling F8),
+    stripped and lowercased."""
+
+    return value.split(",", 1)[0].strip().lower()
+
+
+def normalise_field(field: str, value: object) -> object:
+    """`value` as it's stored in `field`: a `tag` string is normalised
+    (`normalise_tag`); everything else is kept as given."""
+
+    if field == "tag" and isinstance(value, str):
+        return normalise_tag(value)
+    return value
+
+
 def validate_field(kind: KindSpec, field: str, value: object) -> None:
     """Raise `ValueError` if `field` isn't on `kind`, or `value` doesn't fit
     its type."""
@@ -394,6 +423,8 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
             _validate_part_of(field, value)
         elif field == "ties":
             _validate_ties(field, value)
+        elif field == "filings":
+            _validate_filings(field, value)
         # otherwise any JSON-serializable value is accepted
 
 
@@ -531,3 +562,58 @@ def _validate_ties(field: str, value: object) -> None:
             )
         _validate_world_date_or_null(field, "since", tie.get("since"))
         _validate_world_date_or_null(field, "until", tie.get("until"))
+
+
+FILING_KEYS: tuple[str, ...] = (
+    "target",
+    "role",
+    "since",
+    "until",
+    "within",
+    "exceptions",
+)
+
+
+def _validate_filings(field: str, value: object) -> None:
+    """A list of filings, each with a 32-hex `target` and, optionally, the
+    other `FILING_KEYS`; no target twice, and `within` never its target."""
+
+    shape = (
+        f"{field!r} entries must be "
+        '{"target": <32-hex>, "role": str|null, "since": WorldDate|null, '
+        '"until": WorldDate|null, "within": <32-hex>|null, '
+        '"exceptions": [fact id...]}'
+    )
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list of filings")
+    targets: list[str] = []
+    for filing in value:
+        if (
+            not isinstance(filing, dict)
+            or "target" not in filing
+            or not set(filing) <= set(FILING_KEYS)
+            or not isinstance(filing["target"], str)
+            or not _THING_ID_RE.match(filing["target"])
+            or not (filing.get("role") is None or isinstance(filing["role"], str))
+            or not (
+                filing.get("within") is None
+                or (
+                    isinstance(filing["within"], str)
+                    and _THING_ID_RE.match(filing["within"])
+                )
+            )
+            or not isinstance(filing.get("exceptions", []), list)
+            or not all(isinstance(e, str) for e in filing.get("exceptions", []))
+        ):
+            raise ValueError(shape)
+        if filing.get("within") == filing["target"]:
+            raise ValueError(f"{field!r}: within must be a part of the target")
+        _validate_world_date_or_null(field, "since", filing.get("since"))
+        _validate_world_date_or_null(field, "until", filing.get("until"))
+        since, until = filing.get("since"), filing.get("until")
+        if since is not None and until is not None:
+            if WorldDate.model_validate(until) <= WorldDate.model_validate(since):
+                raise ValueError(f"{field!r}: until must be after since")
+        targets.append(filing["target"])
+    if len(set(targets)) != len(targets):
+        raise ValueError(f"{field!r} must not file into the same target twice")

@@ -31,6 +31,8 @@ def test_sphere_kind_fields():
         "aka",
         "stub",
         "part_of",
+        "tag",
+        "filings",
     ]
     assert [f.type for f in sphere.fields] == [
         "text",
@@ -42,6 +44,8 @@ def test_sphere_kind_fields():
         "json",
         "json",
         "json",
+        "json",
+        "text",
         "json",
     ]
     assert sphere.categories == ["timeline", "about", "statement"]

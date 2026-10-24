@@ -50,6 +50,8 @@ UNRENDERED_FIELDS: tuple[str, ...] = (
     "drawers",
     "part_of",
     "ties",
+    # where an entry is filed links it, as part_of does
+    "filings",
     "agent",
     # a being's existence changes who it acts as, not what it is
     "existence",

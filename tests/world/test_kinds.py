@@ -19,6 +19,8 @@ def test_kinds_table():
         "aka",
         "stub",
         "part_of",
+        "tag",
+        "filings",
     ]
     assert [f.type for f in character.fields] == [
         "text",
@@ -30,6 +32,8 @@ def test_kinds_table():
         "json",
         "json",
         "json",
+        "json",
+        "text",
         "json",
     ]
     assert character.categories == [
@@ -52,6 +56,8 @@ def test_every_kind_has_aka_and_stub():
         assert types["aka"] == "json", kind.name
         assert types["stub"] == "json", kind.name
         assert types["part_of"] == "json", kind.name
+        assert types["tag"] == "text", kind.name
+        assert types["filings"] == "json", kind.name
 
 
 def test_aka_shape_validated():
@@ -120,6 +126,8 @@ def test_species_race_mix_kinds():
         "aka",
         "stub",
         "part_of",
+        "tag",
+        "filings",
     ]
     assert [f.type for f in species.fields] == [
         "text",
@@ -129,6 +137,8 @@ def test_species_race_mix_kinds():
         "json",
         "json",
         "json",
+        "json",
+        "text",
         "json",
     ]
     assert species.categories == _HERITAGE_CATEGORIES
@@ -143,6 +153,8 @@ def test_species_race_mix_kinds():
         "aka",
         "stub",
         "part_of",
+        "tag",
+        "filings",
     ]
     assert [f.type for f in race.fields] == [
         "text",
@@ -152,6 +164,8 @@ def test_species_race_mix_kinds():
         "json",
         "json",
         "json",
+        "json",
+        "text",
         "json",
     ]
     assert race.categories == _HERITAGE_CATEGORIES
@@ -166,6 +180,8 @@ def test_species_race_mix_kinds():
         "aka",
         "stub",
         "part_of",
+        "tag",
+        "filings",
     ]
     assert [f.type for f in mix.fields] == [
         "text",
@@ -175,6 +191,8 @@ def test_species_race_mix_kinds():
         "json",
         "json",
         "json",
+        "json",
+        "text",
         "json",
     ]
     assert mix.categories == _HERITAGE_CATEGORIES

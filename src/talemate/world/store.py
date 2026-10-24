@@ -32,9 +32,10 @@ from talemate.path import WORLDS_DIR
 from . import schema
 from .calendar import Calendar
 from .dates import Precision, WorldDate
-from .kinds import KindSpec, get_kind, validate_field
+from .kinds import KindSpec, get_kind, normalise_field, validate_field
 from .curation import CurationSettings
 from .refs import parse_refs
+from .filing import check_filings
 from .view import FactState, WorldView, _fact_state_from_row
 
 if TYPE_CHECKING:
@@ -304,11 +305,24 @@ class Revision:
     ) -> None:
         """Add a field value at `valid_from`. If a live value of that field
         already has the same `valid_from`, it's retired first (a
-        correction)."""
+        correction). A `tag` is normalised first (`kinds.normalise_field`);
+        `filings` are also checked against the world
+        (`filing.check_filings`)."""
 
         kind = self._require_thing(thing_id)
         kind_spec = get_kind(kind)
+        value = normalise_field(field, value)
         validate_field(kind_spec, field, value)
+        if field == "filings":
+            # what needs the world: no filing into itself, no cycle, a
+            # `within` that sits in its target; read at this revision
+            errors = check_filings(
+                WorldView(self._conn, None, self.rev),
+                thing_id,
+                cast("list[object]", value),
+            )
+            if errors:
+                raise ValueError("; ".join(errors))
 
         value_json = _encode_value(kind_spec, field, value)
         from_instant, from_precision = _date_parts(valid_from)
