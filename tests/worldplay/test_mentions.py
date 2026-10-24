@@ -293,3 +293,49 @@ def test_suggested_prompt_of_a_filed_stub(world):
     with world.revision(Source.manual(note="no role")) as rev:
         rev.set_field(vigil, "filings", [{"target": dawn}], None)
     assert "Part of the White Dawn." in suggested_prompt(world.view(None), vigil)
+
+
+def _church_world(world):
+    """A faith, the Church of the Deep, whose beliefs name the stub Veles;
+    Veles' own fact is the church's belief too. Returns `(church, veles)`."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        veles = rev.create_thing(
+            "being", fields={"name": "Veles", "stub": {"ignored": False}}
+        )
+        church = rev.create_thing(
+            "lore", fields={"name": "Church of the Deep", "hint": "religion"}
+        )
+        rev.add_fact(church, "belief", f"{ref(veles, 'Veles')} wept the rivers into being.")
+        rev.add_fact(church, "belief", "The drowned are reborn as fish.")
+        rev.add_fact(church, "general", "Its priests wear green.")
+        rev.add_fact(
+            veles,
+            "nature",
+            "Veles sleeps beneath the lake.",
+            origin={"held_by": church},
+        )
+    return church, veles
+
+
+def test_held_facts_reach_the_expand_context_as_held(world):
+    """Final review I2: a faith's beliefs reach "Mentioned elsewhere",
+    "About those" and the suggested prompt worded as held, never as world
+    truth."""
+
+    _church, veles = _church_world(world)
+    view = world.view(None)
+    ((heading, facts),) = mention_context(view, veles)
+    assert heading == "Church of the Deep (lore)"
+    assert "Church of the Deep holds that Veles wept the rivers into being." in facts
+    assert "Church of the Deep holds that the drowned are reborn as fish." in facts
+    assert "Its priests wear green." in facts
+    assert "Veles wept the rivers into being." not in facts
+
+    prompt = suggested_prompt(view, veles)
+    assert prompt.startswith(
+        "Veles: Church of the Deep holds that Veles sleeps beneath the lake."
+    )
+    assert "Church of the Deep holds that Veles wept the rivers into being." in prompt
+    held = "Church of the Deep holds that Veles wept the rivers into being."
+    assert "Veles wept the rivers" not in prompt.replace(held, "")
