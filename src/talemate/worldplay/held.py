@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from talemate.world import spheres
+from talemate.world import entries
 from talemate.world.names import find_names
 from talemate.world.timelines import TimelineLine
 from talemate.world.view import FactState, ThingState, WorldView
@@ -142,19 +142,19 @@ def held_text(
 ) -> str:
     """`fact` (of `owner`) as a scene is told it, `text` its rendering
     (`view.render(fact.text)` when not given). Held by someone
-    (`spheres.held_by`), it's "<Holder> holds that <text>", the text
+    (`entries.held_by`), it's "<Holder> holds that <text>", the text
     lowered as `_mid_sentence` lowers it (not when it opens with a name,
     but a name's leading "The" is), when it has a subject of its own (`has_subject`); otherwise
     "<Holder> holds: <Text>", its first letter capitalised (ruling C6).
     It's as it is when it isn't held, its holder has no name, or it
     already says who holds it (`attributes_itself`). A caller that has
-    worked out the holder (`spheres.held_by`) passes it as `holder_id`;
+    worked out the holder (`entries.held_by`) passes it as `holder_id`;
     one with no `owner` (a preview's fact, not written yet) must.
     """
 
     rendered = view.render(fact.text) if text is None else text
     if holder_id is _UNSET:
-        holder_id = spheres.held_by(view, fact, owner) if owner is not None else None
+        holder_id = entries.held_by(view, fact, owner) if owner is not None else None
     if not isinstance(holder_id, str):
         return rendered
     holder = view.thing(holder_id)

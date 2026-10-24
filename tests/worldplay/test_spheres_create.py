@@ -11,7 +11,7 @@ from typing import NamedTuple
 
 import pytest
 
-from talemate.world import spheres
+from talemate.world import entries, spheres
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import UNSORTED_DRAWER_ID
 from talemate.world.refs import parse_refs, ref
@@ -1345,7 +1345,7 @@ async def test_end_item_links_both_sides(moscavia, world, full_dawn):
     about = [
         view.render(f.text)
         for f in view.thing(moscavia.dawn).facts
-        if f.category == "about" and not spheres.is_summary_fact(f)
+        if f.category == "about" and not entries.is_summary_fact(f)
     ]
     assert about == [f"Ended in 1016: {offering.text}"]
     # no `by`, no timeline fact anywhere
@@ -1459,7 +1459,7 @@ async def test_branch_statement_overridden_once(moscavia, world, full_dawn):
     assert not [
         f
         for f in world.view().thing(branch).facts
-        if f.category == "about" and not spheres.is_summary_fact(f)
+        if f.category == "about" and not entries.is_summary_fact(f)
     ]
 
 
@@ -1601,7 +1601,7 @@ def _summary_facts(world, sphere_id):
     return [
         view.render(f.text)
         for f in view.thing(sphere_id).facts
-        if spheres.is_summary_fact(f)
+        if entries.is_summary_fact(f)
     ]
 
 
@@ -1613,7 +1613,7 @@ async def test_core_summary_is_a_summary_fact(moscavia, world):
     accept_sphere(world, preview)
 
     assert _summary_facts(world, moscavia.dawn) == [preview.prose["description"]]
-    assert spheres.summary(world.view(), moscavia.dawn) == preview.prose["description"]
+    assert entries.summary(world.view(), moscavia.dawn) == preview.prose["description"]
     cached = world.prose().get(moscavia.dawn, "description", None)
     assert cached.text == preview.prose["description"]
     assert not world.prose().stale(

@@ -7,7 +7,7 @@ import json
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.refs import ref
-from talemate.world.spheres import with_held_by
+from talemate.world.entries import with_held_by
 from talemate.world.store import Source
 from talemate.worldplay.characters import attributes_itself, held_text
 from talemate.worldplay.context import world_context_block

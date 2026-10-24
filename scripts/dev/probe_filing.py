@@ -73,7 +73,7 @@ import talemate.worldplay.create as create  # noqa: E402
 from talemate.context import ActiveScene  # noqa: E402
 from talemate.prompts.base import PrependTemplateDirectories, Prompt  # noqa: E402
 from talemate.scene_message import NarratorMessage  # noqa: E402
-from talemate.world import spheres  # noqa: E402
+from talemate.world import entries, spheres  # noqa: E402
 from talemate.world.dates import WorldDate  # noqa: E402
 from talemate.world.names import everyday_name  # noqa: E402
 from talemate.world.refs import ref  # noqa: E402
@@ -467,7 +467,7 @@ class Probe:
         return [f for f in self.label_of(name)["in"] if f["entry"] in live and f["entry"] not in skip]
 
     def summary_fact(self, state):
-        fact = spheres.summary_fact(state) if spheres.is_sphere(state) else None
+        fact = entries.summary_fact(state) if spheres.is_sphere(state) else None
         if fact is None:
             for category in ("summary", "about", "description"):
                 found = [f for f in state.facts if f.category == category]

@@ -1258,7 +1258,22 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
         rev.add_fact(inn, "description", "A warm inn by the road.")
         frost = rev.create_thing(
             "place",
-            fields={"name": "Frosthollow", "stub": {"ignored": False}, "parent": weir},
+            fields={
+                "name": "Frosthollow",
+                "stub": {"ignored": False},
+                "parent": weir,
+                # what nearness reads (the parent feeds move-in until Task 5)
+                "filings": [
+                    {
+                        "target": weir,
+                        "role": None,
+                        "since": None,
+                        "until": None,
+                        "within": None,
+                        "exceptions": [],
+                    }
+                ],
+            },
         )
     before = {
         thing.id: sorted(f.fact_id for f in thing.facts)

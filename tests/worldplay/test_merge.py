@@ -396,13 +396,11 @@ def test_merge_refusals_write_nothing(world, mere):
         (m.caves, gone, KeyError, "no such thing"),
         (m.caves, hope, ValueError, "ignored"),
         (m.caves, rumour, ValueError, "stub"),
-        # ruling C17: one kind, or a place and a sphere
+        # ruling C17: one kind (a place and a sphere no longer, Task 3)
         (m.caves, saltlore, ValueError, "only entries of one kind"),
         (m.vasha, m.caves, ValueError, "a character and The Ashenmere Caves a place"),
-        # Deepvault's parent can't be a sphere
-        (m.caves, m.tsardom, ValueError, "Deepvault's parent can't be a sphere"),
-        # a sphere with parts can't fold into a place
-        (m.tsardom, m.northreach, ValueError, "isn't a sphere"),
+        (m.caves, m.tsardom, ValueError, "a place and Tsardom of Moscavia a sphere"),
+        (m.tsardom, m.northreach, ValueError, "only entries of one kind"),
         # a scene's player
         (m.vasha, oskar, ValueError, "the scene Descent"),
     ):
@@ -587,7 +585,8 @@ def test_merge_sphere_into_non_sphere_refused(world, host):
     with world.revision(Source.manual(note="camp")) as rev:
         camp = rev.create_thing("place", {"name": "The Winter Camp"})
     head = world.head_rev()
-    with pytest.raises(ValueError, match="parts or ties"):
+    # a sphere and a place are two kinds now, which never merge
+    with pytest.raises(ValueError, match="only entries of one kind"):
         preview_merge(world, h.host, camp)
     assert world.head_rev() == head
 
@@ -927,10 +926,10 @@ def test_merge_link_words_offered_as_akas(world, mere):
 LAWS = "1a5a0001"
 
 
-def test_merge_into_a_place_sphere_inherits_no_drawers(world):
-    """A place sphere's parent is where it lies, not a branch's parent: the
-    Guild's Laws (whose id the Realm's Laws share) is added to the City's
-    own drawers, and the Charter and the Guild's statement keep it."""
+def test_merge_sphere_into_a_place_sphere_refused(world):
+    """A sphere no longer folds into a place sphere (`kinds_can_be_one`
+    drops the place-and-sphere rule): the Guild and the City are two
+    kinds, so the merge is refused and nothing is written."""
 
     laws = [{"id": LAWS, "type": "beliefs", "title": "Laws"}]
     with world.revision(Source.manual(note="realm")) as rev:
@@ -950,13 +949,14 @@ def test_merge_into_a_place_sphere_inherits_no_drawers(world):
         rev.add_fact(
             guild, "statement", "Dues are paid at midwinter.", origin={"drawer": LAWS}
         )
-    preview = preview_merge(world, guild, city)
-    accept_merge(world, preview, main_name="The City")
-    view = world.view()
-    assert view.thing(city).fields["drawers"] == laws
-    assert view.thing(charter).fields["part_of"] == {"sphere": city, "drawer": LAWS}
-    (statement,) = [f for f in world.live_facts(city) if f.category == "statement"]
-    assert statement.origin["drawer"] == LAWS
+    head = world.head_rev()
+    with pytest.raises(ValueError, match="only entries of one kind"):
+        preview_merge(world, guild, city)
+    assert world.head_rev() == head
+    assert world.view().thing(charter).fields["part_of"] == {
+        "sphere": guild,
+        "drawer": LAWS,
+    }
 
 
 def test_merge_drawer_id_match_needs_its_type(world, host):

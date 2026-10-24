@@ -46,6 +46,7 @@ __all__ = [
     "check_filings",
     "connected",
     "filed_in",
+    "filed_index",
     "filing_live",
     "filings_of",
     "mentioned_in",
@@ -180,33 +181,99 @@ def _within_holds(view: WorldView, filing: Filing) -> bool:
     )
 
 
+def _sits_in_live(
+    view: WorldView, start_id: str, thing_id: str, live_of: "_LiveOf"
+) -> bool:
+    """`sits_in` over live filings only (`live_of`): whether `thing_id`
+    is `start_id` or an entry `start_id` sits in at the view's date. Each
+    thing once, so a cycle ends."""
+
+    seen: set[str] = set()
+    stack = [start_id]
+    while stack:
+        current = stack.pop()
+        if current == thing_id:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(filing.target for filing in live_of(current))
+    return False
+
+
+class _LiveOf:
+    """Each thing's live filings at one view (`_live`), read once."""
+
+    def __init__(self, view: WorldView, things: Sequence[ThingState]) -> None:
+        self.view = view
+        self.states = {state.id: state for state in things}
+        self.alive: dict[str, bool] = {}
+        self.found: dict[str, list[Filing]] = {}
+
+    def __call__(self, thing_id: str) -> list[Filing]:
+        if thing_id not in self.found:
+            state = self.states.get(thing_id) or self.view.thing(thing_id)
+            self.found[thing_id] = (
+                [] if state is None else _live(self.view, state, self.alive)
+            )
+        return self.found[thing_id]
+
+
+def _within_live(view: WorldView, filing: Filing, live_of: _LiveOf) -> bool:
+    """Whether the filing's `within` is, at the view's date, a live part
+    of its target: an entry other than the target that sits in it through
+    filings live then (a part filed in the target only from 900 is no part
+    of it at 800)."""
+
+    return (
+        filing.within is not None
+        and filing.within != filing.target
+        and view.thing(filing.within) is not None
+        and _sits_in_live(view, filing.within, filing.target, live_of)
+    )
+
+
+def filed_index(
+    view: WorldView, *, things: Sequence[ThingState] | None = None
+) -> dict[str, list[tuple[ThingState, Filing]]]:
+    """`filed_in` for every target at once: `target id -> [(entry,
+    filing)]`, each list in the order the entries were made, read in one
+    pass over `things` (all the view's things when not given)."""
+
+    pool = view.things() if things is None else things
+    live_of = _LiveOf(view, pool)
+    found: dict[str, list[tuple[ThingState, Filing]]] = {}
+    for state in sorted(pool, key=lambda thing: thing.created):
+        chosen: dict[str, Filing] = {}
+        for filing in live_of(state.id):
+            if filing.target != state.id:
+                chosen[filing.target] = filing
+        # one row per entry and target: its direct filing, else one within
+        for filing in live_of(state.id):
+            within = filing.within
+            if (
+                within is not None
+                and within != state.id
+                and within not in chosen
+                and _within_live(view, filing, live_of)
+            ):
+                chosen[within] = filing
+        for target_id, filing in chosen.items():
+            found.setdefault(target_id, []).append((state, filing))
+    return found
+
+
 def filed_in(
     view: WorldView, target_id: str, *, things: Sequence[ThingState] | None = None
 ) -> list[tuple[ThingState, Filing]]:
     """Every live `(entry, filing)` filed directly in the target, in the
     order the entries were made. A filing `within` the target (a person in
     the White Talon, filed in the Tsar's Army) lists the entry here too,
-    while that part still sits in its own target. An entry is listed once,
-    by its direct filing when it has both. `things` is the
+    while that part sits in its own target at the view's date. An entry is
+    listed once, by its direct filing when it has both. `things` is the
     snapshot to scan (all the view's things when not given)."""
 
-    pool = view.things() if things is None else things
-    alive: dict[str, bool] = {}
-    found: list[tuple[ThingState, Filing]] = []
-    for state in sorted(pool, key=lambda thing: thing.created):
-        if state.id == target_id:
-            continue
-        live = _live(view, state, alive)
-        # one row per entry: its direct filing, else one within the target
-        direct = next((f for f in live if f.target == target_id), None)
-        within = next(
-            (f for f in live if f.within == target_id and _within_holds(view, f)),
-            None,
-        )
-        chosen = direct or within
-        if chosen is not None:
-            found.append((state, chosen))
-    return found
+    return filed_index(view, things=things).get(target_id, [])
 
 
 def tag_of(state: ThingState) -> str | None:

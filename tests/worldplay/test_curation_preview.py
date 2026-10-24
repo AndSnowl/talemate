@@ -12,7 +12,7 @@ from typing import NamedTuple
 
 import pytest
 
-from talemate.world import spheres
+from talemate.world import entries, spheres
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import KINDS, get_kind
@@ -88,6 +88,23 @@ class Eternal(NamedTuple):
     zakonnik: str
 
 
+def _filed(target):
+    """`filings` putting a thing in `target`: what the world's readers
+    (nearness) read; the `part_of` and `parent` beside them feed what
+    still reads those until Task 7."""
+
+    return [
+        {
+            "target": target,
+            "role": None,
+            "since": None,
+            "until": None,
+            "within": None,
+            "exceptions": [],
+        }
+    ]
+
+
 @pytest.fixture
 def eternal(world):
     """The probe's world, small, present year 1000: the Church of the
@@ -123,7 +140,13 @@ def eternal(world):
             },
         )
         moskov = rev.create_thing(
-            "place", {"name": "Moskov", "kind": "city", "parent": tsardom}
+            "place",
+            {
+                "name": "Moskov",
+                "kind": "city",
+                "parent": tsardom,
+                "filings": _filed(tsardom),
+            },
         )
         divine = rev.create_thing(
             "lore",
@@ -131,6 +154,7 @@ def eternal(world):
                 "name": "The Divine Right of the Tsar",
                 "stub": {"ignored": False},
                 "part_of": {"sphere": church, "drawer": DOCTRINES},
+                "filings": _filed(church),
             },
         )
         patriarch = rev.create_thing(
@@ -139,6 +163,7 @@ def eternal(world):
                 "name": "The Patriarch of Moscavia",
                 "stub": {"ignored": False},
                 "part_of": {"sphere": church, "drawer": HIERARCHY},
+                "filings": _filed(church),
             },
         )
         rev.add_fact(
@@ -153,6 +178,7 @@ def eternal(world):
                 "name": "The Shrine of First Dawn",
                 "stub": {"ignored": False},
                 "part_of": {"sphere": church, "drawer": SITES},
+                "filings": _filed(church),
             },
         )
         guild = rev.create_thing("lore", {"name": "Iron Guild"})
@@ -299,7 +325,7 @@ async def test_accept_writes_elsewhere_to_targets_one_revision(world, eternal):
             assert item.text not in _texts(world.view(rev=head), eternal.church)
     held = next(e for e in preview.elsewhere if e.held_by is not None)
     fact = written[held.text]
-    assert spheres.held_by(view, fact, church) == eternal.church
+    assert entries.held_by(view, fact, church) == eternal.church
     # the elsewhere text is linked like any fact: the Divine Right by name
     tsardom = view.thing(eternal.tsardom)
     linked = [f for f in tsardom.facts if view.render(f.text) == tsardom_items[0].text]
@@ -554,7 +580,7 @@ async def test_fill_elsewhere_and_repeats(world, eternal):
     assert filled.elsewhere[1].text in _texts(view, synod[0].id)
     shrine_state = view.thing(eternal.shrine)
     fact = next(f for f in shrine_state.facts if view.render(f.text) == shrine.text)
-    assert spheres.held_by(view, fact, shrine_state) == eternal.church
+    assert entries.held_by(view, fact, shrine_state) == eternal.church
 
 
 class Runes(NamedTuple):

@@ -50,7 +50,7 @@ from typing import Any
 import structlog
 
 from talemate.prompts import Prompt
-from talemate.world import heritage, spheres
+from talemate.world import entries, heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
@@ -194,7 +194,7 @@ def _section_facts(
     made it narrate the body instead of writing personality (acceptance
     probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md).
     `description`'s own background is unaffected. A sphere's summary fact
-    (`spheres.is_summary_fact`) comes first."""
+    (`entries.is_summary_fact`) comes first."""
 
     own_categories = section_categories(state.kind, section)
     by_kind = inherited_categories(section) if state.kind == "character" else {}
@@ -207,7 +207,7 @@ def _section_facts(
     found = heritage.effective_facts(view, state.id)
     # a sphere's summary fact leads its description (ruling P21): the
     # other about facts add to it, never replace it
-    found.sort(key=lambda pair: not spheres.is_summary_fact(pair[0]))
+    found.sort(key=lambda pair: not entries.is_summary_fact(pair[0]))
     owners: dict[str, ThingState | None] = {}
     for fact, layer in found:
         # rendered: a linked fact reads as written, never as `[[thing:...]]`;

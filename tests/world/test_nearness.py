@@ -1,6 +1,6 @@
 """Nearness: what's near an entry, ranked from the links between entries
-(references, part of, parent and child, ties, heritage), and the curation
-settings a world keeps."""
+(references, filings, heritage), and the curation settings a world
+keeps."""
 
 import pytest
 from pydantic import ValidationError
@@ -10,47 +10,47 @@ from talemate.world.nearness import WEIGHTS, CurationSettings, near
 from talemate.world.refs import ref
 from talemate.world.store import Source, World
 
-DRAWER = "d0000001"
 
+def _in(target, role=None, since=None, until=None, within=None):
+    """One filing into `target`, as `filings` stores it."""
 
-def _part_of(sphere):
-    return {"sphere": sphere, "drawer": DRAWER}
-
-
-def _tie(sphere, role="member", since=None, until=None):
     return {
-        "sphere": sphere,
+        "target": target,
         "role": role,
         "since": since.model_dump(mode="json") if since else None,
         "until": until.model_dump(mode="json") if until else None,
+        "within": within,
+        "exceptions": [],
     }
 
 
+def _filed(*targets):
+    """`fields` filing a new thing in each of `targets`."""
+
+    return [_in(target) for target in targets]
+
+
 def _sphere(rev, name):
-    return rev.create_thing(
-        "sphere",
-        fields={
-            "name": name,
-            "template": "order",
-            "drawers": [{"id": DRAWER, "type": "people", "title": "Members"}],
-        },
-    )
+    return rev.create_thing("lore", fields={"name": name, "tag": "order"})
 
 
 def _ids(found):
     return [n.thing_id for n in found]
 
 
-def test_near_follows_links_both_ways(world):
+def test_near_follows_filings_both_ways(world):
     with world.revision(Source.manual()) as rev:
         tsardom = rev.create_thing("place", fields={"name": "Tsardom"})
-        moskov = rev.create_thing("place", fields={"name": "Moskov", "parent": tsardom})
+        moskov = rev.create_thing(
+            "place", fields={"name": "Moskov", "filings": _filed(tsardom)}
+        )
         order = _sphere(rev, "White Talon")
         bell = rev.create_thing(
-            "item", fields={"name": "Bell", "part_of": _part_of(order)}
+            "item", fields={"name": "Bell", "filings": _filed(order)}
         )
         vasha = rev.create_thing(
-            "character", fields={"name": "Vasha", "ties": [_tie(order)]}
+            "character",
+            fields={"name": "Vasha", "filings": [_in(order, role="member")]},
         )
         owl = rev.create_thing("species", fields={"name": "Owl-folk"})
         snowy = rev.create_thing("race", fields={"name": "Snowy", "species": owl})
@@ -62,13 +62,13 @@ def test_near_follows_links_both_ways(world):
     # reference: owner -> target and target -> owner
     assert brenna in _ids(near(view, moskov, reach=1))
     assert moskov in _ids(near(view, brenna, reach=1))
-    # place parent and child
+    # a place filed in a place, both ways
     assert tsardom in _ids(near(view, moskov, reach=1))
     assert moskov in _ids(near(view, tsardom, reach=1))
-    # part of, both ways
+    # an item filed in an order, both ways
     assert order in _ids(near(view, bell, reach=1))
     assert bell in _ids(near(view, order, reach=1))
-    # a tie, both ways
+    # a person filed in it with a role, both ways
     assert order in _ids(near(view, vasha, reach=1))
     assert vasha in _ids(near(view, order, reach=1))
     # heritage, both ways
@@ -76,23 +76,27 @@ def test_near_follows_links_both_ways(world):
     assert snowy in _ids(near(view, owl, reach=1))
 
     assert set(_ids(near(view, order, reach=1))) == {bell, vasha}
+    assert near(view, bell, reach=1)[0].score == pytest.approx(WEIGHTS["filing"])
+    # the old structure links nothing any more
+    assert set(WEIGHTS) == {"filing", "reference", "heritage"}
     # the start is never in its own list
     assert order not in _ids(near(view, order, reach=3))
 
 
-def test_near_scores_part_of_above_reference(world):
+def test_near_scores_filing_above_reference(world):
     with world.revision(Source.manual()) as rev:
         order = _sphere(rev, "White Talon")
         # named "A..." so a name-order tie-break would put it first
         archive = rev.create_thing("lore", fields={"name": "Archive"})
         rite = rev.create_thing(
-            "lore", fields={"name": "Rite", "part_of": _part_of(order)}
+            "lore", fields={"name": "Rite", "filings": _filed(order)}
         )
-        rev.add_fact(order, "about", f"Keeps the {ref(archive)}.")
+        rev.add_fact(order, "general", f"Keeps the {ref(archive)}.")
 
     found = near(world.view(), order)
     assert _ids(found) == [rite, archive]
-    assert found[0].score == pytest.approx(WEIGHTS["part_of"])
+    assert WEIGHTS["filing"] == 1.0
+    assert found[0].score == pytest.approx(WEIGHTS["filing"])
     assert found[1].score == pytest.approx(WEIGHTS["reference"])
     assert found[0].score > found[1].score
     assert [n.steps for n in found] == [1, 1]
@@ -101,14 +105,14 @@ def test_near_scores_part_of_above_reference(world):
 def test_near_respects_reach_and_limit(world):
     with world.revision(Source.manual()) as rev:
         a = rev.create_thing("place", fields={"name": "A"})
-        b = rev.create_thing("place", fields={"name": "B", "parent": a})
-        c = rev.create_thing("place", fields={"name": "C", "parent": b})
-        d = rev.create_thing("place", fields={"name": "D", "parent": c})
+        b = rev.create_thing("place", fields={"name": "B", "filings": _filed(a)})
+        c = rev.create_thing("place", fields={"name": "C", "filings": _filed(b)})
+        d = rev.create_thing("place", fields={"name": "D", "filings": _filed(c)})
         e = rev.create_thing("lore", fields={"name": "E"})
         rev.add_fact(e, "general", f"Of {ref(d)}.")
         # two children of A, equal scores: ordered by name
-        z = rev.create_thing("place", fields={"name": "Zed", "parent": a})
-        y = rev.create_thing("place", fields={"name": "Yew", "parent": a})
+        z = rev.create_thing("place", fields={"name": "Zed", "filings": _filed(a)})
+        y = rev.create_thing("place", fields={"name": "Yew", "filings": _filed(a)})
 
     view = world.view()
     assert _ids(near(view, a, reach=1)) == [b, y, z]
@@ -124,7 +128,7 @@ def test_near_respects_reach_and_limit(world):
     four = near(view, a, reach=4)
     assert four[-1].thing_id == e
     assert four[-1].score == pytest.approx(
-        WEIGHTS["parent"] ** 3 * WEIGHTS["reference"]
+        WEIGHTS["filing"] ** 3 * WEIGHTS["reference"]
     )
     assert four[-1].steps == 4
 
@@ -138,12 +142,12 @@ def test_near_keeps_best_path(world):
 
     with world.revision(Source.manual()) as rev:
         a = rev.create_thing("place", fields={"name": "A"})
-        b = rev.create_thing("place", fields={"name": "B", "parent": a})
-        c = rev.create_thing("place", fields={"name": "C", "parent": b})
+        b = rev.create_thing("place", fields={"name": "B", "filings": _filed(a)})
+        c = rev.create_thing("place", fields={"name": "C", "filings": _filed(b)})
         rev.add_fact(a, "general", f"Near {ref(c)}.")
 
     found = {n.thing_id: n for n in near(world.view(), a, reach=2)}
-    assert found[c].score == pytest.approx(WEIGHTS["parent"] ** 2)
+    assert found[c].score == pytest.approx(WEIGHTS["filing"] ** 2)
     assert found[c].steps == 2
 
 
@@ -160,8 +164,8 @@ def test_isolated_entry(world):
 def test_deleted_things_never_near(world):
     with world.revision(Source.manual()) as rev:
         a = rev.create_thing("place", fields={"name": "A"})
-        b = rev.create_thing("place", fields={"name": "B", "parent": a})
-        c = rev.create_thing("place", fields={"name": "C", "parent": b})
+        b = rev.create_thing("place", fields={"name": "B", "filings": _filed(a)})
+        c = rev.create_thing("place", fields={"name": "C", "filings": _filed(b)})
         r = rev.create_thing("lore", fields={"name": "R"})
         rev.add_fact(a, "general", f"Mentions {ref(r)}.")
         before = rev.rev
@@ -185,15 +189,18 @@ def test_near_reads_the_view_date(world):
         order = _sphere(rev, "White Talon")
         bell = rev.create_thing(
             "item",
-            fields={"name": "Bell", "part_of": _part_of(order)},
+            fields={"name": "Bell", "filings": _filed(order)},
             valid_from=WorldDate.of(100),
         )
-        rev.set_field(bell, "part_of", None, WorldDate.of(200))
+        # the Bell's filings, as dated values; Vasha's, by its own dates
+        rev.set_field(bell, "filings", [], WorldDate.of(200))
         vasha = rev.create_thing(
             "character",
             fields={
                 "name": "Vasha",
-                "ties": [_tie(order, since=WorldDate.of(150), until=WorldDate.of(250))],
+                "filings": [
+                    _in(order, since=WorldDate.of(150), until=WorldDate.of(250))
+                ],
             },
         )
         scroll = rev.create_thing("lore", fields={"name": "Scroll"})
@@ -261,7 +268,9 @@ def test_ignored_stub_never_near(world):
         ignored = rev.create_thing(
             "place", fields={"name": "Ignored", "stub": {"ignored": True}}
         )
-        third = rev.create_thing("place", fields={"name": "Third", "parent": ignored})
+        third = rev.create_thing(
+            "place", fields={"name": "Third", "filings": _filed(ignored)}
+        )
         plain = rev.create_thing(
             "lore", fields={"name": "Plain", "stub": {"ignored": False}}
         )
@@ -279,8 +288,8 @@ def test_ignored_stub_never_near(world):
 def test_unnamed_things_sort_last(world):
     with world.revision(Source.manual()) as rev:
         a = rev.create_thing("place", fields={"name": "A"})
-        unnamed = rev.create_thing("place", fields={"parent": a})
-        zed = rev.create_thing("place", fields={"name": "Zed", "parent": a})
+        unnamed = rev.create_thing("place", fields={"filings": _filed(a)})
+        zed = rev.create_thing("place", fields={"name": "Zed", "filings": _filed(a)})
 
     assert _ids(near(world.view(), a)) == [zed, unnamed]
 
@@ -291,29 +300,55 @@ def test_unreadable_curation_falls_back_to_defaults(world, stored):
     assert world.curation() == CurationSettings()
 
 
-def test_real_being_tie_is_near(world):
-    """A real being's tie links it to its sphere; a believed being's tie
-    is kept but hidden, so it links nothing. A later existence change
-    follows the view's date."""
+def test_being_filing_is_near_whatever_its_existence(world):
+    """A being's filing links it like any entry's: a believed god filed in
+    its faith is as near it as a real spirit (a tie, which counted only
+    while the being was real, is gone with ties)."""
 
     with world.revision(Source.manual()) as rev:
         order = _sphere(rev, "White Talon")
         spirit = rev.create_thing(
             "being",
-            fields={"name": "Spirit", "existence": "real", "ties": [_tie(order)]},
+            fields={"name": "Spirit", "existence": "real", "filings": _filed(order)},
         )
         light = rev.create_thing(
             "being",
-            fields={"name": "Light", "existence": "believed", "ties": [_tie(order)]},
+            fields={"name": "Light", "existence": "believed", "filings": _filed(order)},
         )
-        rev.set_field(light, "existence", "real", WorldDate.of(1100))
 
-    view = world.view(WorldDate.of(1050))
-    assert spirit in _ids(near(view, order, reach=1))
+    view = world.view()
+    assert {spirit, light} == set(_ids(near(view, order, reach=1)))
     assert order in _ids(near(view, spirit, reach=1))
-    assert light not in _ids(near(view, order, reach=1))
-    assert near(view, light, reach=1) == []
-    assert light in _ids(near(world.view(WorldDate.of(1200)), order, reach=1))
+    assert order in _ids(near(view, light, reach=1))
+
+
+def test_person_within_a_part_is_near_it(world):
+    """A person filed in the Tsar's Army within the White Talon is near
+    both; a `within` whose part has left the target, or whose part's
+    filing hasn't begun at the view's date, links only the target."""
+
+    with world.revision(Source.manual()) as rev:
+        army = _sphere(rev, "Tsar's Army")
+        talon = rev.create_thing(
+            "lore",
+            fields={
+                "name": "White Talon",
+                "filings": [_in(army, since=WorldDate.of(900))],
+            },
+        )
+        oleg = rev.create_thing(
+            "character",
+            fields={"name": "Oleg", "filings": [_in(army, within=talon)]},
+        )
+
+    view = world.view()
+    assert set(_ids(near(view, oleg, reach=1))) == {army, talon}
+    assert near(view, oleg, reach=1)[0].score == pytest.approx(WEIGHTS["filing"])
+    # before the Talon was in the Army, Oleg is in the Army alone
+    assert _ids(near(world.view(WorldDate.of(800)), oleg, reach=1)) == [army]
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(talon, "filings", [], None)
+    assert _ids(near(world.view(), oleg, reach=1)) == [army]
 
 
 def test_ties_break_by_steps_then_references_then_name(world):
@@ -323,10 +358,10 @@ def test_ties_break_by_steps_then_references_then_name(world):
     the two win over the name."""
 
     with world.revision(Source.manual()) as rev:
-        # three steps, 1.0 x 1.0 x 0.6: A - Aa (parent) - Ab (parent) - Alpha
+        # three steps, 1.0 x 1.0 x 0.6: A - Aa (filing) - Ab (filing) - Alpha
         aa = rev.create_thing("place", fields={"name": "Aa"})
-        a = rev.create_thing("place", fields={"name": "A", "parent": aa})
-        ab = rev.create_thing("place", fields={"name": "Ab", "parent": aa})
+        a = rev.create_thing("place", fields={"name": "A", "filings": _filed(aa)})
+        ab = rev.create_thing("place", fields={"name": "Ab", "filings": _filed(aa)})
         alpha = rev.create_thing("lore", fields={"name": "Alpha"})
         rev.add_fact(ab, "general", f"Near {ref(alpha)}.")
         # one step at 0.6 each: Zulu named once, Yankee twice
@@ -357,11 +392,11 @@ def test_siblings_capped_per_sphere(world):
     with world.revision(Source.manual()) as rev:
         church = _sphere(rev, "Church")
         doctrine = rev.create_thing(
-            "lore", fields={"name": "Doctrine", "part_of": _part_of(church)}
+            "lore", fields={"name": "Doctrine", "filings": _filed(church)}
         )
         siblings = [
             rev.create_thing(
-                "lore", fields={"name": f"Rite {n}", "part_of": _part_of(church)}
+                "lore", fields={"name": f"Rite {n}", "filings": _filed(church)}
             )
             for n in "ABCDE"
         ]
@@ -381,6 +416,35 @@ def test_siblings_capped_per_sphere(world):
     assert set(siblings) <= set(_ids(near(view, doctrine, reach=2, siblings=None)))
     # the sphere's own parts aren't siblings of it
     assert set(siblings) <= set(_ids(near(view, church, reach=1)))
+
+
+def test_siblings_capped_per_shared_target(world):
+    """An entry filed in two places has siblings in each: the cap is per
+    shared target, so a custom in Velikoye and in Vosgrad keeps up to
+    `SIBLINGS` from each."""
+
+    with world.revision(Source.manual()) as rev:
+        velikoye = rev.create_thing("place", fields={"name": "Velikoye"})
+        vosgrad = rev.create_thing("place", fields={"name": "Vosgrad"})
+        dance = rev.create_thing(
+            "lore",
+            fields={"name": "Feather Dance", "filings": _filed(velikoye, vosgrad)},
+        )
+        in_velikoye = [
+            rev.create_thing(
+                "lore", fields={"name": f"V{n}", "filings": _filed(velikoye)}
+            )
+            for n in range(5)
+        ]
+        in_vosgrad = [
+            rev.create_thing(
+                "lore", fields={"name": f"W{n}", "filings": _filed(vosgrad)}
+            )
+            for n in range(5)
+        ]
+
+    found = set(_ids(near(world.view(), dance, reach=2, limit=50)))
+    assert found == {velikoye, vosgrad, *in_velikoye[:3], *in_vosgrad[:3]}
 
 
 def _counting_graphs(monkeypatch):

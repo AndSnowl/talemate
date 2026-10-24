@@ -21,16 +21,14 @@ are the character's `ties` facts filed under the tie (origin `tie`, ruling
 P22). A tie can be `within` one part of its sphere: a thing filed in it,
 directly or through other parts (`within_sphere`).
 
-A sphere's summary (ruling P21) is its `about` fact whose origin marks it
-`summary`; its description prose is written from it first (`summary`).
+A sphere's summary, held-by and whether a being acts in the world are
+any entry's now (`entries`). A `being` whose `existence` is `real` acts in
+the world like a character (`entries.acts_in_world`): its ties count. Once
+it isn't, its ties are kept but hidden, as a tie to a deleted sphere is
+(ruling P12).
 
-A fact can be held by a sphere or a character: a belief, not world truth
-(`held_by`). Its origin names the holder (`with_held_by`); a statement in
-a beliefs drawer of a religion or culture is held by its sphere unmarked.
-
-A `being` whose `existence` is `real` acts in the world like a character
-(`acts_in_world`): its ties count. Once it isn't, its ties are kept but
-hidden, as a tie to a deleted sphere is (ruling P12).
+What's left here is the old structure (drawers, `part_of`, ties, branch
+parents), which the world's readers no longer use; it goes in Task 7.
 
 Every read goes through the given `WorldView`, so a dated part-of ending
 or tie follows the view's `(at, rev)`.
@@ -44,11 +42,10 @@ from pydantic import BaseModel, ValidationError
 
 from .calendar import Calendar
 from .dates import Precision, WorldDate
+from .entries import acts_in_world, summary, summary_fact
 from .heritage import overriders
 from .kinds import (
-    DEFAULT_EXISTENCE,
     ENTRY_DRAWER_TYPES,
-    EXISTENCE_VALUES,
     TEMPLATE_AGENT,
     UNSORTED_DRAWER_ID,
     WRITTEN_DRAWER_TYPES,
@@ -258,78 +255,6 @@ def _statement_drawer(fact: FactState) -> str:
     return drawer if isinstance(drawer, str) else UNSORTED.id
 
 
-# the templates whose beliefs-drawer statements are held by their sphere
-# unmarked: a nation's beliefs drawer is its Laws (true as laws), and a
-# field's theories stay plain claims
-HELD_TEMPLATES: tuple[str, ...] = ("religion", "culture")
-
-
-def with_held_by(
-    origin: dict[str, object] | None, holder_id: str | None
-) -> dict[str, object]:
-    """`origin` with its holder set to `holder_id`, its other keys (a
-    statement's drawer, an exception's tie) kept. `None` clears it: stored
-    as an explicit `"held_by": None`, so a beliefs-drawer statement can
-    read plain too."""
-
-    return {**(origin or {}), "held_by": holder_id}
-
-
-def held_by(view: WorldView, fact: FactState, owner: ThingState) -> str | None:
-    """The thing that holds `fact` (of `owner`) as a belief, or `None` for
-    world truth: its origin's `held_by`, when that's a live thing (a
-    deleted holder holds nothing, until undone); otherwise, unless the
-    origin clears it, a `statement` of a religion or culture sphere in one
-    of its beliefs drawers is held by that sphere. An entry filed in a
-    beliefs drawer (a doctrine) inherits nothing: its facts are marked one
-    by one."""
-
-    origin = fact.origin or {}
-    if "held_by" in origin:
-        holder = origin["held_by"]
-        if isinstance(holder, str) and view.thing(holder) is not None:
-            return holder
-        return None
-    if (
-        fact.category != "statement"
-        or not is_sphere(owner)
-        or owner.fields.get("template") not in HELD_TEMPLATES
-    ):
-        return None
-    types = {d.id: d.type for d in _drawers_of(_chain(view, owner.id))}
-    return owner.id if types.get(_statement_drawer(fact)) == "beliefs" else None
-
-
-def is_summary_fact(fact: FactState) -> bool:
-    """Whether the fact is a sphere's summary: an `about` fact whose origin
-    marks it so (ruling P21)."""
-
-    return fact.category == "about" and (fact.origin or {}).get("summary") is True
-
-
-def summary_fact(state: ThingState) -> FactState | None:
-    """The sphere's summary fact (`is_summary_fact`), else, for a sphere
-    written before there was one, its first written `about` fact; `None`
-    for neither."""
-
-    about = [fact for fact in _authored(state.facts) if fact.category == "about"]
-    return next((fact for fact in about if is_summary_fact(fact)), None) or (
-        about[0] if about else None
-    )
-
-
-def summary(view: WorldView, sphere_id: str, cached: str | None = None) -> str:
-    """The sphere's summary, rendered: `cached` (the caller's cached
-    `description` prose, the summary as last written) when it's not
-    empty, else its summary fact (`summary_fact`), else ""."""
-
-    if cached:
-        return view.render(cached)
-    state = view.thing(sphere_id)
-    fact = summary_fact(state) if state is not None else None
-    return view.render(fact.text) if fact is not None else ""
-
-
 # `summary`, for `key_facts`, whose parameter of that name hides it
 _summary_of = summary
 
@@ -493,24 +418,6 @@ def _date(value: object) -> WorldDate | None:
         return WorldDate.model_validate(value)
     except ValidationError:
         return None
-
-
-def existence(state: ThingState) -> str:
-    """A being's `existence`: real, believed or undecided (also for one
-    unset, or set to something else)."""
-
-    value = state.fields.get("existence")
-    return value if value in EXISTENCE_VALUES else DEFAULT_EXISTENCE
-
-
-def acts_in_world(state: ThingState) -> bool:
-    """Whether the thing acts in the world as a character does -- can be
-    cast in a scene and hold ties: a character, or a being whose
-    `existence` is real."""
-
-    return state.kind == "character" or (
-        state.kind == "being" and existence(state) == "real"
-    )
 
 
 def within_sphere(view: WorldView, thing_id: str, sphere_id: str) -> bool:

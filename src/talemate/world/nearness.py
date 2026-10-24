@@ -16,12 +16,15 @@ revision can still change or be rolled back.
 
 A step is one link, followed either way:
 - a fact reference: the fact's owner and each thing its text references;
-- `part_of`: a thing and the sphere it's part of;
-- `parent`: a place and the place it lies in, or a branch sphere and the
-  sphere it branches from;
-- a tie: a character and a sphere it's tied to;
+- a filing (`filing.py`): an entry and each entry it's filed in, and for
+  a person filed `within` a part of its target, that part too (while the
+  part sits in the target at the view's date); one weight for every
+  filing, whatever its role (the filing spec's "Nearness");
 - heritage: a character's `heritage`, a race's `species`, a mix's
   `parents`.
+
+The old structure (`part_of`, a place's or branch's `parent`, ties) is no
+longer read: a world's readers see only filings.
 
 Each link has a weight (`WEIGHTS`); a path scores the product of its
 links' weights and a thing keeps its best path within `reach` steps.
@@ -31,16 +34,17 @@ The ranking follows the curation probe's fix
 things tie on score (a three-step path of 1.0 x 1.0 x 0.6 ties a direct
 reference), so ties are broken by fewer steps, then by more direct
 references between the two (fact references either way), and only then by
-name. And a thing filed in the same sphere as the one asked about -- a
-sibling, reached only through that shared `part_of` parent, with no link
-of its own to it -- scores 1.0 x 1.0 and would crowd out everything its
-facts name, so at most `SIBLINGS` of them per sphere are kept (the rest
-are dropped, not moved down). The probe measured these two at 24 missed
+name. And a thing filed in the same entry as the one asked about -- a
+sibling, reached only through that shared target, with no link of its own
+to it -- scores 1.0 x 1.0 and would crowd out everything its facts name,
+so at most `SIBLINGS` of them per shared target are kept (the rest are
+dropped, not moved down). The probe measured these two at 24 missed
 targets down to 15.
 
 Everything is read as the view sees it: only things live at its revision,
 field values in force at its date (`WorldView._fetch_fields`' rule), facts
-true at its date and ties that hold then. A removed thing is never near,
+true at its date and filings that hold then (`filing.filing_live`, into a
+live target). A removed thing is never near,
 and never bridges two others.
 
 An ignored stub (the owner chose not to make it) is treated as removed,
@@ -54,42 +58,31 @@ from collections import OrderedDict
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from .curation import CurationSettings
-from .spheres import _part_of, _tie_live, _ties
+from .filing import Filing, filing_live
 from .view import ThingState, WorldView
 
 __all__ = ["SIBLINGS", "WEIGHTS", "CurationSettings", "Near", "near"]
 
-# the starting weights from the plan, kept: a thing's own structure
-# (part of, parent) is as near as it gets, a tie nearly so; a mention is
-# looser, and shared heritage looser still (every owl-folk character
-# shares a species, which says little about any one of them)
+# the starting weights: where an entry is filed is as near as it gets
+# (one weight for every filing, replacing part of, parent and tie); a
+# mention is looser, and shared heritage looser still (every owl-folk
+# character shares a species, which says little about any one of them)
 WEIGHTS: dict[str, float] = {
-    "part_of": 1.0,
-    "parent": 1.0,
-    "tie": 0.8,
+    "filing": 1.0,
     "reference": 0.6,
     "heritage": 0.5,
 }
 
-# the most siblings (things in the same sphere, reached only through it)
-# `near` keeps per sphere
+# the most siblings (things filed in the same entry, reached only through
+# it) `near` keeps per shared target
 SIBLINGS = 3
 
 # the thing-valued fields read as heritage links
 _HERITAGE_FIELDS = ("heritage", "species", "parents")
-# `existence` isn't a link: it's read first, so a real being's ties count
-_LINK_FIELDS = (
-    "name",
-    "stub",
-    "existence",
-    "part_of",
-    "parent",
-    "ties",
-    *_HERITAGE_FIELDS,
-)
+_LINK_FIELDS = ("name", "stub", "filings", *_HERITAGE_FIELDS)
 
 
 class Near(BaseModel):
@@ -104,16 +97,17 @@ Graph = dict[str, dict[str, float]]
 class _Links(BaseModel):
     """What `near` reads besides the graph: each live thing's name
     (casefolded, for ordering), how many references join each pair of
-    things (both orders), and the sphere each thing is part of."""
+    things (both orders), and the entries each thing is filed in (its
+    live filings' targets, for the sibling cap)."""
 
     names: dict[str, str]
     references: dict[tuple[str, str], int]
-    part_of: dict[str, str]
+    homes: dict[str, list[str]]
 
 
 def _state(thing_id: str, kind: str, fields: dict[str, object]) -> ThingState:
-    """A bare state holding `fields`, for the `spheres` readers of
-    `part_of` and `ties` (built without validation: it's only read)."""
+    """A bare state holding `fields`, for readers that take a state (built
+    without validation: it's only read)."""
 
     return ThingState.model_construct(
         id=thing_id, kind=kind, fields=fields, facts=[], created=0
@@ -207,47 +201,82 @@ def _references(view: WorldView) -> Iterable[tuple[str, str]]:
         yield owner, target
 
 
+def _filings(value: object) -> list[Filing]:
+    """A `filings` value's filings; one that doesn't parse is skipped."""
+
+    if not isinstance(value, list):
+        return []
+    found: list[Filing] = []
+    for raw in value:
+        try:
+            found.append(Filing.model_validate(raw))
+        except ValidationError:
+            continue
+    return found
+
+
+def _sits_in(start: str, target: str, filed: dict[str, list[Filing]]) -> bool:
+    """Whether `start` sits in `target` through the live filings `filed`,
+    each thing once (undo can bring a cycle back)."""
+
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        current = stack.pop()
+        if current == target:
+            return True
+        if current in seen:
+            continue
+        seen.add(current)
+        stack.extend(filing.target for filing in filed.get(current, []))
+    return False
+
+
 def _graph(view: WorldView) -> tuple[Graph, _Links]:
     """Every link at the view, and the `_Links` `near` orders by."""
 
     live = _live_things(view)
     graph: Graph = {}
     names: dict[str, str] = {}
-    part_of: dict[str, str] = {}
     references: dict[tuple[str, str], int] = {}
 
     values = list(_field_values(view, live))
-    existence: dict[str, object] = {}
     for thing_id, field, value in values:
         if field == "stub" and isinstance(value, dict) and value.get("ignored") is True:
             live.pop(thing_id, None)
-        elif field == "existence":
-            existence[thing_id] = value
+
+    # each thing's live filings: dates covering the view's, a live target
+    filed: dict[str, list[Filing]] = {}
+    for thing_id, field, value in values:
+        if field == "filings" and thing_id in live:
+            filed[thing_id] = [
+                filing
+                for filing in _filings(value)
+                if filing_live(filing, view.at)
+                and filing.target in live
+                and filing.target != thing_id
+            ]
+
+    homes: dict[str, list[str]] = {}
+    for thing_id, filings in filed.items():
+        for filing in filings:
+            _link(graph, thing_id, filing.target, WEIGHTS["filing"], live)
+            homes.setdefault(thing_id, []).append(filing.target)
+            within = filing.within
+            if (
+                within is not None
+                and within in live
+                and within not in (thing_id, filing.target)
+                and _sits_in(within, filing.target, filed)
+            ):
+                _link(graph, thing_id, within, WEIGHTS["filing"], live)
 
     for thing_id, field, value in values:
-        if thing_id not in live or field in ("stub", "existence"):
+        if thing_id not in live or field in ("stub", "filings"):
             continue
         if field == "name":
             if isinstance(value, str) and value.strip():
                 names[thing_id] = value.casefold()
-        elif field == "part_of":
-            state = _state(thing_id, live[thing_id], {field: value})
-            link = _part_of(state)
-            if link is not None:
-                _link(graph, thing_id, link[0], WEIGHTS["part_of"], live)
-                if link[0] in live and link[0] != thing_id:
-                    part_of[thing_id] = link[0]
-        elif field == "parent":
-            if isinstance(value, str):
-                _link(graph, thing_id, value, WEIGHTS["parent"], live)
-        elif field == "ties":
-            fields = {field: value}
-            if thing_id in existence:
-                fields["existence"] = existence[thing_id]
-            state = _state(thing_id, live[thing_id], fields)
-            for tie in _ties(state):
-                if _tie_live(tie, view.at):
-                    _link(graph, thing_id, tie.sphere_id, WEIGHTS["tie"], live)
         else:
             targets = value if isinstance(value, list) else [value]
             for target in targets:
@@ -260,7 +289,7 @@ def _graph(view: WorldView) -> tuple[Graph, _Links]:
             for pair in ((owner, target), (target, owner)):
                 references[pair] = references.get(pair, 0) + 1
 
-    return graph, _Links(names=names, references=references, part_of=part_of)
+    return graph, _Links(names=names, references=references, homes=homes)
 
 
 # the most graphs kept: a prompt's few views, and a world or two open
@@ -350,10 +379,11 @@ def near(
     `limit` of them, never `thing_id` itself. Best first is: score
     descending, then fewer steps, then more references joining the two
     (fact references either way), then name (unnamed things last), then
-    id. At most `siblings` things per sphere that are part of the same
-    sphere as `thing_id` and have no link of their own to it are kept
-    (`None`: no cap). A thing that isn't live at the view, or is an
-    ignored stub, has nothing near it."""
+    id. Of the things filed in an entry `thing_id` is filed in that have
+    no link of their own to it (its siblings), at most `siblings` per
+    shared target are kept (`None`: no cap); one filed in two of them
+    counts against the first with room. A thing that isn't live at the
+    view, or is an ignored stub, has nothing near it."""
 
     if limit <= 0 or reach <= 0:
         return []
@@ -374,21 +404,17 @@ def near(
             item[0],
         ),
     )
-    home = links.part_of.get(thing_id)
+    home = set(links.homes.get(thing_id, ()))
     direct = graph[thing_id]
     kept: list[Near] = []
-    per_sphere: dict[str, int] = {}
+    per_target: dict[str, int] = {}
     for other, (score, steps) in ranked:
-        sphere = links.part_of.get(other)
-        if (
-            siblings is not None
-            and home is not None
-            and sphere == home
-            and other not in direct
-        ):
-            if per_sphere.get(sphere, 0) >= siblings:
+        shared = [t for t in links.homes.get(other, ()) if t in home]
+        if siblings is not None and shared and other not in direct:
+            room = next((t for t in shared if per_target.get(t, 0) < siblings), None)
+            if room is None:
                 continue
-            per_sphere[sphere] = per_sphere.get(sphere, 0) + 1
+            per_target[room] = per_target.get(room, 0) + 1
         kept.append(Near(thing_id=other, score=score, steps=steps))
         if len(kept) == limit:
             break

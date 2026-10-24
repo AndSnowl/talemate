@@ -24,7 +24,7 @@ import structlog
 import talemate.emit.async_signals as async_signals
 from talemate.agents.base import DynamicInstruction
 from talemate.prompts import Prompt
-from talemate.world import heritage, spheres, timelines
+from talemate.world import entries, heritage, spheres, timelines
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS, SPHERE_CATEGORIES
@@ -209,12 +209,12 @@ def _touched_spheres(
 
 
 def _sphere_summary(world: World, view: WorldView, sphere_id: str) -> str:
-    """The sphere's summary (`spheres.summary`, rulings P1, P21): its
+    """The sphere's summary (`entries.summary`, rulings P1, P21): its
     cached description prose as of the view's date, else its summary
     fact, rendered."""
 
     cached = _cached_section(world, sphere_id, "description", view.at)
-    return spheres.summary(view, sphere_id, cached.text if cached else None)
+    return entries.summary(view, sphere_id, cached.text if cached else None)
 
 
 def _sphere_parent(view: WorldView, state: ThingState) -> str | None:
@@ -282,7 +282,7 @@ def _latest(
         threshold=settings.date_threshold,
         things=things,
     )
-    head = 1 if (summary or spheres.summary(view, sphere_id)) else 0
+    head = 1 if (summary or entries.summary(view, sphere_id)) else 0
     printed = {
         item.thing_id
         for item in spheres.key_items(
@@ -366,7 +366,7 @@ def _may_be_lore(state: ThingState) -> bool:
     isn't real (believed or undecided), which is only spoken of -- its
     facts reach the scene through whatever refers to it."""
 
-    return state.kind != "being" or spheres.acts_in_world(state)
+    return state.kind != "being" or entries.acts_in_world(state)
 
 
 def _lore_entry(

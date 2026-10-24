@@ -135,7 +135,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from talemate.prompts import Prompt
-from talemate.world import heritage, spheres
+from talemate.world import entries, heritage, spheres
 from talemate.world.calendar import Calendar, Era
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
@@ -166,6 +166,7 @@ from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.characters import DEPARTS_FROM, DEPARTS_FROM_TEACHING
 from talemate.worldplay.decide import Verdict, preview_label, same_thing
+from talemate.worldplay.filing_shadow import shadowed_revision
 from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
     FALLBACK_KIND,
@@ -313,7 +314,7 @@ class PreviewFact(BaseModel):
     since: WorldDate | None = None
     # the fact_ids of the inherited facts this one makes untrue
     overrides: list[str] = Field(default_factory=list)
-    # the thing that holds this fact as a belief (`spheres.held_by`), set
+    # the thing that holds this fact as a belief (`entries.held_by`), set
     # by the owner or mapped from the reply's per-fact `held_by` name
     held_by: str | None = None
     # the fact the world already holds that this one repeats (`Repeat`
@@ -1268,7 +1269,7 @@ def candidate_line(view: WorldView, state: ThingState) -> str:
     # nor the sphere's own drawer titles (ruling C30, completing C29)
     if state.is_stub:
         bits.append("stub")
-    fact = spheres.summary_fact(state) if is_sphere else None
+    fact = entries.summary_fact(state) if is_sphere else None
     if fact is None and state.facts:
         fact = min(state.facts, key=lambda f: f.created)
     # a held fact as belief (ruling C33), never as plain truth
@@ -1624,7 +1625,7 @@ def _broader_facts(state: ThingState) -> list[FactState]:
     sphere's own)."""
 
     return sorted(
-        (f for f in state.facts if not spheres.is_summary_fact(f)),
+        (f for f in state.facts if not entries.is_summary_fact(f)),
         key=lambda f: f.created,
     )
 
@@ -2084,7 +2085,7 @@ def write_elsewhere(
             category,
             text,
             valid_from=item.since,
-            origin=spheres.with_held_by(None, item.held_by) if held else None,
+            origin=entries.with_held_by(None, item.held_by) if held else None,
         )
     return linked
 
@@ -2294,7 +2295,7 @@ def _sphere_heading(view: WorldView, state: ThingState) -> str:
 
 def cached_summary(world: World, sphere_id: str) -> str | None:
     """The sphere's summary as last written: its cached `description`
-    prose now, or `None` (`spheres.summary` falls back to its summary
+    prose now, or `None` (`entries.summary` falls back to its summary
     fact)."""
 
     cached = world.prose().get(sphere_id, "description", None)
@@ -2308,7 +2309,7 @@ def spheres_block(
 ) -> tuple[list[tuple[str, str, list[tuple[str, str, str]]]], dict[str, _SphereItem]]:
     """The spheres block as the create prompt lists it -- `(heading,
     summary, [(label, drawer title, line)])` per sphere: its summary
-    (`spheres.summary`, from `cached`'s prose for it when given), then its
+    (`entries.summary`, from `cached`'s prose for it when given), then its
     first `SPHERE_BLOCK_ITEMS` items in `items` order, places left out
     before counting -- and what each label (S1... running across all the
     spheres, only for the items shown) stands for."""
@@ -2336,7 +2337,7 @@ def spheres_block(
         block.append(
             (
                 _sphere_heading(view, state),
-                spheres.summary(
+                entries.summary(
                     view, sphere_id, cached(sphere_id) if cached is not None else None
                 ),
                 lines,
@@ -3489,12 +3490,12 @@ async def _preview_prose(
 
 def _can_be_tied(preview: CreatePreview) -> bool:
     """Whether the previewed thing can hold ties: a character, or a being
-    whose `existence` is real (`spheres.acts_in_world`)."""
+    whose `existence` is real (`entries.acts_in_world`)."""
 
     state = ThingState(
         id="0" * 32, kind=preview.kind, fields=dict(preview.fields), facts=[]
     )
-    return spheres.acts_in_world(state)
+    return entries.acts_in_world(state)
 
 
 def accept_preview(
@@ -3742,7 +3743,7 @@ def _write_preview(
         else e
         for e in elsewhere
     ]
-    with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
+    with shadowed_revision(world, Source.manual(note=_CREATED_NOTE)) as rev:
         if fold is not None:
             # the kind first: the folded stub's facts are written for it
             if stub is not None and stub.kind != preview.kind:
@@ -3845,7 +3846,7 @@ def _write_preview(
                 text,
                 valid_from=fact.since,
                 overrides=fact.overrides,
-                origin=spheres.with_held_by(None, holder) if held else None,
+                origin=entries.with_held_by(None, holder) if held else None,
             )
         for tie in preview.ties:
             for exception in _live_exceptions(view, tie):
@@ -4193,7 +4194,7 @@ def _merge_entry(
     wanted += [_tie_value(tie, view) for tie in preview.ties]
     if not wanted:
         return []
-    if not spheres.acts_in_world(state):
+    if not entries.acts_in_world(state):
         notes.append(f"{name} can't be tied: the new entry's ties weren't written")
         return []
     ties = [t for t in state.fields.get("ties") or [] if isinstance(t, dict)]
@@ -4248,7 +4249,7 @@ def _write_same(
         if layer.thing_id != target_id
     }
     notes: list[str] = []
-    with world.revision(Source.manual(note=_SAME_NOTE)) as rev:
+    with shadowed_revision(world, Source.manual(note=_SAME_NOTE)) as rev:
         if plan is not None:
             plan.write(rev)
         _common_name(rev, world.view(), target_id, preview.name)
@@ -4311,7 +4312,7 @@ def _write_same(
                 linked_text(fact.text),
                 valid_from=fact.since,
                 overrides=[o for o in fact.overrides if o in inherited] or None,
-                origin=spheres.with_held_by(None, holder) if held else None,
+                origin=entries.with_held_by(None, holder) if held else None,
             )
         for tie in ties:
             for exception in _live_exceptions(view, tie):

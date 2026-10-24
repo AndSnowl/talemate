@@ -1,13 +1,14 @@
-"""Held by: a fact that's what a sphere (or a character) believes, not
-world truth. Stored as fact origin `{"held_by": <thing_id>}`, or implicit
-for a statement in a beliefs drawer of a religion or culture sphere
-(curation spec, goal 7)."""
+"""Entries (`talemate.world.entries`): held by, a fact that's what an
+entry (a religion, a character) believes, not world truth. Stored as fact
+origin `{"held_by": <thing_id>}`; a fact in the `belief` category is held
+by its owner unless its origin says otherwise. The old beliefs-drawer rule
+is gone with drawers (filing spec, "What stays as built")."""
 
 from dataclasses import dataclass
 
 import pytest
 
-from talemate.world.spheres import held_by, with_held_by
+from talemate.world.entries import held_by, with_held_by
 from talemate.world.store import Source
 
 DOCTRINES = "d0000001"
@@ -155,18 +156,51 @@ def test_held_by_deleted_holder_is_hidden(world, faiths):
     assert _held(world, faiths.light, faiths.blinded) == faiths.church
 
 
-def test_religion_beliefs_statement_is_held(world, faiths):
-    """A statement in a religion's or a culture's beliefs drawer is held by
-    that sphere, unmarked; one in its practices drawer is plain."""
+def _as_belief(world, thing_id, fact_id):
+    """The fact as the view reads it, recategorised `belief` (the category
+    the prompt hints add in Task 4; no kind here takes it yet), with its
+    owner."""
 
-    assert _held(world, faiths.church, faiths.eternal) == faiths.church
-    assert _held(world, faiths.folk, faiths.stars) == faiths.folk
+    view = world.view()
+    owner = view.thing(thing_id)
+    assert owner is not None
+    fact = next(f for f in owner.facts if f.fact_id == fact_id)
+    return view, fact.model_copy(update={"category": "belief"}), owner
+
+
+def test_belief_fact_is_held_by_owner(world, faiths):
+    """A fact in the `belief` category is held by its owner, unmarked."""
+
+    view, fact, owner = _as_belief(world, faiths.church, faiths.eternal)
+    assert fact.origin == {"drawer": DOCTRINES}
+    assert held_by(view, fact, owner) == faiths.church
+    view, fact, owner = _as_belief(world, faiths.doctrine, faiths.right)
+    assert fact.origin is None
+    assert held_by(view, fact, owner) == faiths.doctrine
+
+
+def test_held_by_explicit_still_wins(world, faiths):
+    """An explicit held-by on a belief fact beats the belief rule: another
+    holder holds it, and a cleared one (`None`) leaves it plain."""
+
+    view, fact, owner = _as_belief(world, faiths.church, faiths.eternal)
+    marked = fact.model_copy(update={"origin": with_held_by(fact.origin, faiths.folk)})
+    assert held_by(view, marked, owner) == faiths.folk
+    cleared = fact.model_copy(update={"origin": with_held_by(fact.origin, None)})
+    assert held_by(view, cleared, owner) is None
+    # a deleted explicit holder holds nothing, nor does the owner then
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(faiths.folk)
+    assert held_by(world.view(), marked, owner) is None
+
+
+def test_beliefs_drawer_statement_is_plain(world, faiths):
+    """Drawers no longer hold: a statement in a religion's or a culture's
+    beliefs drawer reads plain, as a nation's Laws always did."""
+
+    assert _held(world, faiths.church, faiths.eternal) is None
+    assert _held(world, faiths.folk, faiths.stars) is None
     assert _held(world, faiths.church, faiths.candles) is None
-
-
-def test_nation_laws_not_held(world, faiths):
-    """A nation's beliefs drawer is its Laws: true as laws, never held."""
-
     assert _held(world, faiths.tsardom, faiths.land) is None
 
 
@@ -219,8 +253,8 @@ def test_correct_keeps_held_by(world, faiths):
 
 def test_clear_held_by(world, faiths):
     """Clearing held-by makes the fact plain, and it stays plain through
-    an edit; a statement of a religion's beliefs drawer can be cleared
-    too, and set to another holder. Undo brings the holder back."""
+    an edit; a plain statement can be set to a holder. Undo brings the
+    holder back."""
 
     view = world.view()
     blinded = next(f for f in view.thing(faiths.light).facts)

@@ -88,7 +88,7 @@ import probe_heritage_play as harness  # noqa: E402
 
 import talemate.worldplay.create as create  # noqa: E402
 from talemate.prompts.base import PrependTemplateDirectories, Prompt  # noqa: E402
-from talemate.world import spheres  # noqa: E402
+from talemate.world import entries, spheres  # noqa: E402
 from talemate.world.names import everyday_name  # noqa: E402
 from talemate.world.store import World  # noqa: E402
 from talemate.world.view import WorldView  # noqa: E402
@@ -329,7 +329,7 @@ def one_line(view: WorldView, state) -> str:
     """An entry's one line: its summary fact (a sphere), else its first
     fact, cut; a stub with no fact says so."""
 
-    fact = spheres.summary_fact(state) if spheres.is_sphere(state) else None
+    fact = entries.summary_fact(state) if spheres.is_sphere(state) else None
     if fact is None and state.facts:
         fact = min(state.facts, key=lambda f: f.created)
     if fact is None:

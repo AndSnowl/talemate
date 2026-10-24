@@ -285,7 +285,7 @@ KINDS: dict[str, KindSpec] = {
         categories=["general"],
     ),
     # a god, a spirit, a legendary creature; `ties` count only while its
-    # `existence` is real (`spheres.acts_in_world`)
+    # `existence` is real (`entries.acts_in_world`)
     "being": KindSpec(
         name="being",
         fields=_fields(
@@ -312,12 +312,13 @@ LEGACY_KINDS: tuple[str, ...] = ("culture",)
 
 
 def kinds_can_be_one(a: str, b: str) -> bool:
-    """Whether a thing of kind `a` and one of kind `b` can be one entry: the
-    same kind, or a place and a sphere either way (a place sphere is a
-    place). A merge folds only these (ruling C17), and an entry's
-    same-thing candidates are only these (ruling C34)."""
+    """Whether a thing of kind `a` and one of kind `b` can be one entry:
+    only the same kind (a place and a sphere no longer can: a place
+    "sphere" is a place with things filed in it). A merge folds only these
+    (ruling C17), and an entry's same-thing candidates are only these
+    (ruling C34)."""
 
-    return a == b or {a, b} == {"place", "sphere"}
+    return a == b
 
 
 def get_kind(name: str) -> KindSpec:

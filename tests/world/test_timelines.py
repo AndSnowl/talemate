@@ -1,8 +1,9 @@
 """Entry timelines (`talemate.world.timelines`): every dated fact of an
-entry in date order, and for a sphere the dated facts it gathers from its
-parts and from facts that name it or a part (spec goal 6). The 947
-rediscovery lives on Ashenmere and shows on Runeweaving's timeline; the
-Codex's compiling, given as 217 and 312, is flagged."""
+entry in date order, and the dated facts it gathers from what is filed in
+it (its parts, down to the reach) and from facts that name it or a part
+(spec goal 6; filing spec, "What stays as built"). The 947 rediscovery
+lives on Ashenmere and shows on Runeweaving's timeline; the Codex's
+compiling, given as 217 and 312, is flagged."""
 
 from dataclasses import dataclass
 
@@ -11,7 +12,6 @@ from talemate.world.refs import ref
 from talemate.world.store import Source
 from talemate.world.timelines import TimelineLine, entry_timeline
 
-DRAWER = "d0000001"
 THRESHOLD = 0.4
 
 # the Codex's compiling, as the curation probe's world gave it twice
@@ -25,8 +25,21 @@ CODEX_312 = (
 )
 
 
-def _part_of(sphere):
-    return {"sphere": sphere, "drawer": DRAWER}
+def _in(target, role=None, since=None, until=None):
+    """One filing into `target`, as `filings` stores it."""
+
+    return {
+        "target": target,
+        "role": role,
+        "since": since.model_dump(mode="json") if since else None,
+        "until": until.model_dump(mode="json") if until else None,
+        "within": None,
+        "exceptions": [],
+    }
+
+
+def _filed(*targets):
+    return [_in(target) for target in targets]
 
 
 def _ids(lines):
@@ -55,18 +68,13 @@ def _runeweaving(world) -> Runeweaving:
 
     with world.revision(Source.manual()) as rev:
         sphere = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "Runeweaving",
-                "template": "field",
-                "drawers": [{"id": DRAWER, "type": "knowledge", "title": "Lore"}],
-            },
+            "sphere", fields={"name": "Runeweaving", "tag": "field"}
         )
         ashenmere = rev.create_thing(
-            "lore", fields={"name": "Ashenmere", "part_of": _part_of(sphere)}
+            "lore", fields={"name": "Ashenmere", "filings": _filed(sphere)}
         )
         glyphs = rev.create_thing(
-            "lore", fields={"name": "Ashenmere glyphs", "part_of": _part_of(ashenmere)}
+            "lore", fields={"name": "Ashenmere glyphs", "filings": _filed(ashenmere)}
         )
         kel = rev.create_thing("lore", fields={"name": "Kel"})
         codex = rev.create_thing("lore", fields={"name": "The Codex"})
@@ -149,22 +157,39 @@ def test_sphere_gathers_from_parts_947(world):
     assert rediscovery.text == "The Ashenmere dialect was rediscovered."
     assert rediscovery.date.to_datetime().year == 947
     # it lives on Ashenmere: Ashenmere's own timeline has it, as its own,
-    # and a lore entry gathers nothing from its parts
-    (own,) = _timeline(world, r.ashenmere)
+    # and gathers the glyphs filed in it, as any entry does
+    own, carved = _timeline(world, r.ashenmere)
     assert own.fact_id == r.rediscovered and own.here
+    assert carved.fact_id == r.carved and carved.owner_id == r.glyphs
 
 
-def test_place_sphere_gathers_its_places(world):
+def test_timeline_gathers_from_filed_entries(world):
+    """A place gathers the places and customs filed in it, and theirs, to
+    the reach; a custom filed in two places shows on both; an entry filed
+    only over some dates is gathered only while it's filed."""
+
     with world.revision(Source.manual()) as rev:
-        tsardom = rev.create_thing(
-            "place", fields={"name": "Tsardom", "template": "nation", "drawers": []}
+        tsardom = rev.create_thing("place", fields={"name": "Tsardom"})
+        moskov = rev.create_thing(
+            "place", fields={"name": "Moskov", "filings": _filed(tsardom)}
         )
-        moskov = rev.create_thing("place", fields={"name": "Moskov", "parent": tsardom})
         quarter = rev.create_thing(
-            "place", fields={"name": "Old Quarter", "parent": moskov}
+            "place", fields={"name": "Old Quarter", "filings": _filed(moskov)}
+        )
+        vosgrad = rev.create_thing("place", fields={"name": "Vosgrad"})
+        dance = rev.create_thing(
+            "lore",
+            fields={
+                "name": "Feather Dance",
+                "tag": "custom",
+                "filings": [
+                    _in(moskov),
+                    _in(vosgrad, since=WorldDate.of(900), until=WorldDate.of(1015)),
+                ],
+            },
         )
         crowned = rev.add_fact(
-            tsardom, "timeline", "The first Tsar crowned.", valid_from=WorldDate.of(700)
+            tsardom, "history", "The first Tsar crowned.", valid_from=WorldDate.of(700)
         )
         founded = rev.add_fact(
             moskov, "history", "Moskov founded.", valid_from=WorldDate.of(800)
@@ -172,10 +197,15 @@ def test_place_sphere_gathers_its_places(world):
         walled = rev.add_fact(
             quarter, "history", "The quarter walled.", valid_from=WorldDate.of(850)
         )
-    assert _ids(_timeline(world, tsardom)) == [crowned, founded, walled]
+        danced = rev.add_fact(
+            dance, "general", "First danced.", valid_from=WorldDate.of(950)
+        )
+    assert _ids(_timeline(world, tsardom)) == [crowned, founded, walled, danced]
     assert _ids(_timeline(world, tsardom, reach=1)) == [crowned, founded]
-    # a plain place gathers nothing from the places inside it
-    assert _ids(_timeline(world, moskov)) == [founded]
+    assert _ids(_timeline(world, moskov, reach=1)) == [founded, walled, danced]
+    # in Vosgrad from 900 to 1015: gathered then, not at the latest telling
+    assert _ids(_timeline(world, vosgrad, at=WorldDate.of(1000))) == [danced]
+    assert _ids(_timeline(world, vosgrad)) == []
 
 
 def test_reference_from_outside_counts(world):
@@ -224,14 +254,7 @@ def test_member_births_not_gathered(world):
             "character",
             fields={
                 "name": "Vasha",
-                "ties": [
-                    {
-                        "sphere": r.sphere,
-                        "role": "scholar",
-                        "since": None,
-                        "until": None,
-                    }
-                ],
+                "filings": [_in(r.sphere, role="scholar")],
             },
         )
         rev.add_fact(vasha, "background", "Born in Kel.", valid_from=WorldDate.of(990))
@@ -281,7 +304,7 @@ def test_reach_limits_depth(world):
 def test_codex_dates_disagree(world):
     r = _runeweaving(world)
     with world.revision(Source.manual()) as rev:
-        rev.set_field(r.codex, "part_of", _part_of(r.sphere), None)
+        rev.set_field(r.codex, "filings", _filed(r.sphere), None)
         compiled_217 = rev.add_fact(
             r.sphere, "timeline", CODEX_217, valid_from=WorldDate.of(217)
         )
@@ -301,27 +324,30 @@ def test_codex_dates_disagree(world):
     assert by_id[compiled_217].disagrees_with == []
 
 
-def test_branch_keeps_its_parents_earlier_timeline(world):
+def test_branch_is_filed_in_its_parent(world):
+    """A branch is an entry filed in its parent ("branch of"): the parent
+    gathers the branch's lines, and the branch keeps its own (the parent's
+    are one link away, no longer inherited)."""
+
     with world.revision(Source.manual()) as rev:
-        dawn = rev.create_thing(
-            "sphere", fields={"name": "White Dawn", "template": "religion"}
-        )
+        dawn = rev.create_thing("sphere", fields={"name": "White Dawn"})
         old = rev.add_fact(
             dawn, "timeline", "The Dawn first preached.", valid_from=WorldDate.of(900)
         )
         reformed = rev.create_thing(
-            "sphere", fields={"name": "Reformed Dawn", "template": "religion"}
-        )
-        rev.set_field(reformed, "parent", dawn, valid_from=WorldDate.of(1000))
-        rev.add_fact(
-            dawn, "timeline", "The Dawn built a spire.", valid_from=WorldDate.of(1007)
+            "sphere",
+            fields={
+                "name": "Reformed Dawn",
+                "filings": [_in(dawn, role="branch of", since=WorldDate.of(1000))],
+            },
         )
         split = rev.add_fact(
             reformed, "timeline", "The reformers split.", valid_from=WorldDate.of(1001)
         )
-    lines = _timeline(world, reformed)
+    assert _ids(_timeline(world, reformed)) == [split]
+    lines = _timeline(world, dawn)
     assert _ids(lines) == [old, split]
-    assert lines[0].owner_id == dawn and not lines[0].here
+    assert lines[1].owner_id == reformed and not lines[1].here
 
 
 def test_isolated_entry(world):
@@ -363,32 +389,27 @@ def test_ended_fact_shows_its_span(world):
     assert line.until is not None
 
 
-def test_non_place_sphere_never_gathers_the_place_tree(world):
-    """Only a place sphere gathers the places inside it: a religion with
-    Kremova filed under it has Kremova's lines, not its districts'."""
+def test_gathering_follows_filings_down_to_the_reach(world):
+    """A religion with Kremova filed in it, and a district filed in
+    Kremova, gathers Kremova's lines at reach 1 and the district's at 2,
+    whatever their kinds."""
 
     with world.revision(Source.manual()) as rev:
-        dawn = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "White Dawn",
-                "template": "religion",
-                "drawers": [{"id": DRAWER, "type": "places", "title": "Holy Sites"}],
-            },
-        )
+        dawn = rev.create_thing("sphere", fields={"name": "White Dawn"})
         kremova = rev.create_thing(
-            "place", fields={"name": "Kremova", "part_of": _part_of(dawn)}
+            "place", fields={"name": "Kremova", "filings": _filed(dawn)}
         )
         district = rev.create_thing(
-            "place", fields={"name": "Spire Quarter", "parent": kremova}
+            "place", fields={"name": "Spire Quarter", "filings": _filed(kremova)}
         )
         seated = rev.add_fact(
             kremova, "history", "The church seated here.", valid_from=WorldDate.of(900)
         )
-        rev.add_fact(
+        walled = rev.add_fact(
             district, "history", "The quarter walled.", valid_from=WorldDate.of(950)
         )
-    assert _ids(_timeline(world, dawn, reach=3)) == [seated]
+    assert _ids(_timeline(world, dawn, reach=1)) == [seated]
+    assert _ids(_timeline(world, dawn, reach=3)) == [seated, walled]
 
 
 def test_a_character_filed_in_a_sphere_gives_no_births(world):
@@ -400,11 +421,11 @@ def test_a_character_filed_in_a_sphere_gives_no_births(world):
             "sphere", fields={"name": "Order", "template": "order"}
         )
         vasha = rev.create_thing(
-            "character", fields={"name": "Vasha", "part_of": _part_of(order)}
+            "character", fields={"name": "Vasha", "filings": _filed(order)}
         )
         god = rev.create_thing(
             "being",
-            fields={"name": "Dawn", "existence": "real", "part_of": _part_of(order)},
+            fields={"name": "Dawn", "existence": "real", "filings": _filed(order)},
         )
         rev.add_fact(vasha, "background", "Born.", valid_from=WorldDate.of(990))
         rev.add_fact(god, "deeds", "Woke.", valid_from=WorldDate.of(10))
@@ -444,3 +465,36 @@ def test_prompt_timeline_skips_disagreements(world, monkeypatch):
         world.view(), r.sphere, reach=2, threshold=0.4, disagreements=False
     )
     assert all(line.disagrees_with == [] for line in lines)
+
+
+def test_timeline_and_near_survive_a_cycle(world):
+    """The store refuses a filing cycle, but undo restores rows unchecked
+    and can bring one back: a timeline and nearness over it still end,
+    each entry once."""
+
+    from talemate.world.nearness import near
+
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", fields={"name": "A"})
+        b = rev.create_thing("lore", fields={"name": "B", "filings": _filed(a)})
+        c = rev.create_thing("lore", fields={"name": "C", "filings": _filed(b)})
+        in_a = rev.add_fact(a, "general", "A began.", valid_from=WorldDate.of(1))
+        in_b = rev.add_fact(b, "general", "B began.", valid_from=WorldDate.of(2))
+        in_c = rev.add_fact(c, "general", "C began.", valid_from=WorldDate.of(3))
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(b, "filings", [], None)
+        unfiled = rev.rev
+    with world.revision(Source.manual()) as rev:
+        # A in C: fine while B is out of A
+        rev.set_field(a, "filings", _filed(c), None)
+    world.undo([unfiled])
+    view = world.view()
+    # the cycle is back: A in C in B in A
+    assert [f["target"] for f in view.thing(b).fields["filings"]] == [a]
+    assert [f["target"] for f in view.thing(a).fields["filings"]] == [c]
+
+    for start in (a, b, c):
+        lines = _timeline(world, start, reach=3)
+        assert sorted(_ids(lines)) == sorted([in_a, in_b, in_c])
+        assert len(lines) == 3
+        assert {n.thing_id for n in near(view, start, reach=3)} == {a, b, c} - {start}

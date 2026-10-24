@@ -35,9 +35,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   and `named_stubs` (`{id, name, kind}` of the stubs its facts link to).
 - Curation (curation spec): each own and inherited fact row, and each
   drawer item, carries `held_by`, `{id, name}` of the sphere, character
-  or being that holds it as a belief (`spheres.held_by`, the implicit
-  holder of a religion's or culture's beliefs statement included), or
-  `null`. Every kind's payload has `entry_timeline`
+  or being that holds it as a belief (`entries.held_by`: a marked holder,
+  or the owner of a `belief` fact), or `null`. Every kind's payload has `entry_timeline`
   (`world.timelines.entry_timeline` at the world's `timeline_reach`,
   disagreements worked out at its `date_threshold`, ruling C31): `[{fact_id, owner_id, owner_name, date,
   until, segments, here, disagrees_with}]` in date order -- its own
@@ -261,7 +260,7 @@ import structlog
 import talemate.instance as instance
 from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
-from talemate.world import heritage, spheres
+from talemate.world import entries, heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
@@ -284,6 +283,7 @@ from talemate.world.timeline import TimelineEntry
 from talemate.world.timelines import TimelineLine, entry_timeline
 from talemate.world.view import FactState, Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
+from talemate.worldplay.filing_shadow import shadowed_revision, statement_origin
 from talemate.worldplay import spheres as sphereplay
 from talemate.worldplay.bodies import OuterBody, add_outer_body
 from talemate.worldplay.characters import age_in_years
@@ -1114,12 +1114,12 @@ class _Links:
 def _held_out(
     view: WorldView, fact: FactState, owner: ThingState | None
 ) -> dict | None:
-    """Who holds `fact` (of `owner`) as a belief (`spheres.held_by`), as
+    """Who holds `fact` (of `owner`) as a belief (`entries.held_by`), as
     `{id, name}`, or `None` for world truth."""
 
     if owner is None:
         return None
-    holder = spheres.held_by(view, fact, owner)
+    holder = entries.held_by(view, fact, owner)
     if holder is None:
         return None
     return {"id": holder, "name": view.name_of(holder) or ""}
@@ -1155,7 +1155,7 @@ def _held_segments(
     if fact is None or owner is None:
         return [{"text": text, "ref": None, "stub": False}]
     plain = view.segments(fact.text)
-    holder = spheres.held_by(view, fact, owner)
+    holder = entries.held_by(view, fact, owner)
     if holder is None:
         return links._out(plain)
     held = held_text(view, fact, owner, text, holder_id=holder)
@@ -1379,7 +1379,7 @@ def _sphere_out(
         ),
         key=lambda other: other.created,
     )
-    summary = spheres.summary_fact(state)
+    summary = entries.summary_fact(state)
     # whose each undated timeline fact is: the sphere's, or a parent's
     owners = {
         fact.fact_id: other.id
@@ -1393,7 +1393,7 @@ def _sphere_out(
         # summary, not among the about facts
         "summary_fact_id": (
             summary.fact_id
-            if summary is not None and spheres.is_summary_fact(summary)
+            if summary is not None and entries.is_summary_fact(summary)
             else None
         ),
         "drawers": drawers,
@@ -1473,7 +1473,7 @@ def _ties_out(
     out, as on the character sheet, and so are a being's while it isn't
     real (kept, hidden)."""
 
-    if not spheres.acts_in_world(state):
+    if not entries.acts_in_world(state):
         return []
     found = []
     for tie in spheres.ties_of(view, state.id):
@@ -2154,7 +2154,7 @@ class WorldsPlugin(Plugin):
                 entry["template"] = template if isinstance(template, str) else None
             if state.kind == "being":
                 # only a real being is cast or played (the scene pickers)
-                entry["existence"] = spheres.existence(state)
+                entry["existence"] = entries.existence(state)
             things.append(entry)
         reply: dict[str, Any] = {"kind": payload.kind, "things": things}
         if payload.kind == "sphere":
@@ -2548,7 +2548,7 @@ class WorldsPlugin(Plugin):
                 raise ValueError(f"a {state.kind} doesn't go in a {drawer.type} drawer")
             value = {"sphere": payload.sphere_id, "drawer": payload.drawer_id}
         since = part_of_since(world, payload.thing_id, _date_in(payload.at))
-        with world.revision(Source.manual()) as rev:
+        with shadowed_revision(world, Source.manual()) as rev:
             rev.set_field(payload.thing_id, "part_of", value, since)
         self._edited("set_part_of", payload.thing_id, _date_in(payload.at), prose=False)
 
@@ -2566,7 +2566,7 @@ class WorldsPlugin(Plugin):
         view = world.view()
         state = view.thing(payload.character_id)
         if state is not None and state.kind == "being":
-            if not spheres.acts_in_world(state):
+            if not entries.acts_in_world(state):
                 raise ValueError("only a real being can be tied to a sphere")
         elif state is None or state.kind != "character":
             raise ValueError(f"not a character: {payload.character_id}")
@@ -2611,7 +2611,7 @@ class WorldsPlugin(Plugin):
             sphere = view.thing(sphere_id) if isinstance(sphere_id, str) else None
             if sphere is None or not spheres.is_sphere(sphere):
                 ties.append(raw)
-        with world.revision(Source.manual()) as rev:
+        with shadowed_revision(world, Source.manual()) as rev:
             rev.set_field(payload.character_id, "ties", ties, None)
         self._edited(
             "set_ties", payload.character_id, _date_in(payload.at), prose=False
@@ -2634,9 +2634,9 @@ class WorldsPlugin(Plugin):
         view = world.view()
         state = view.thing(payload.character_id)
         if state is not None and state.kind == "being":
-            if not spheres.acts_in_world(state):
+            if not entries.acts_in_world(state):
                 raise ValueError("only a real being can have exceptions to a tie")
-        elif state is None or not spheres.acts_in_world(state):
+        elif state is None or not entries.acts_in_world(state):
             raise ValueError(f"not a character: {payload.character_id}")
         self._require_sphere(world, payload.sphere_id)
         if all(
@@ -2722,7 +2722,11 @@ class WorldsPlugin(Plugin):
         )
         with world.revision(Source.manual()) as rev:
             rev.add_fact(
-                payload.sphere_id, "statement", text, origin={"drawer": drawer.id}
+                payload.sphere_id,
+                "statement",
+                text,
+                # F10: held when the old beliefs-drawer rule held it
+                origin=statement_origin(world.view(), payload.sphere_id, drawer.id),
             )
         # a statement is no input to the sphere's prose (rulings P18, P19)
         self._edited("add_statement", payload.sphere_id, at, prose=False)
@@ -3088,7 +3092,7 @@ class WorldsPlugin(Plugin):
 
     async def handle_set_held_by(self, data: dict):
         """Set or clear who holds one of a thing's own facts as a belief
-        (`spheres.with_held_by`): a sphere, a character or a being, or null
+        (`entries.with_held_by`): a sphere, a character or a being, or null
         for world truth (an explicit clear, so a beliefs drawer's statement
         can read plain too). One revision; nothing is written when the fact
         is already held so. Answers with the thing. Held-ness feeds
@@ -3114,12 +3118,12 @@ class WorldsPlugin(Plugin):
                 raise ValueError(
                     "only a sphere, a character or a being can hold a belief"
                 )
-        if spheres.held_by(view, fact, state) == holder_id:
+        if entries.held_by(view, fact, state) == holder_id:
             self._edited("set_held_by", payload.thing_id, at, prose=False)
             return
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
-                payload.fact_id, origin=spheres.with_held_by(fact.origin, holder_id)
+                payload.fact_id, origin=entries.with_held_by(fact.origin, holder_id)
             )
         self._edited(
             "set_held_by",
@@ -3232,7 +3236,7 @@ class WorldsPlugin(Plugin):
                 f"{payload.field!r} is set with {GUARDED_FIELDS[payload.field]}"
             )
         world = self._require_world()
-        with world.revision(Source.manual()) as rev:
+        with shadowed_revision(world, Source.manual()) as rev:
             rev.set_field(
                 payload.thing_id,
                 payload.field,

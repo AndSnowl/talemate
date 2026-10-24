@@ -100,6 +100,22 @@ def _tie(sphere, role, since=None, until=None):
     }
 
 
+def _in(target, role=None, since=None, until=None):
+    """One filing into `target`, as `filings` stores it: the world's
+    readers (nearness, timelines) read these, the old `part_of`, `parent`
+    and ties beside them only feeding what still reads those until Task
+    7."""
+
+    return {
+        "target": target,
+        "role": role,
+        "since": since.model_dump(mode="json") if since else None,
+        "until": until.model_dump(mode="json") if until else None,
+        "within": None,
+        "exceptions": [],
+    }
+
+
 @pytest.fixture
 def spheres_world(world):
     """The spheres probe's world, small: the Tsardom of Moscavia (a nation
@@ -110,7 +126,8 @@ def spheres_world(world):
     nested in the Dawn's Hierarchy; the Iron Guild, touched by nothing;
     Vasha, a practitioner of the Dawn since 1010 with two exceptions
     (worded as character creation writes them), and Brenna, an elder of
-    the Council."""
+    the Council. Each `part_of`, `parent` and tie has its matching filing;
+    the Dawn's beliefs statement is marked held by it."""
 
     from talemate.world.refs import ref
 
@@ -139,7 +156,8 @@ def spheres_world(world):
             tsardom, "timeline", "Crowned the first Tsar.", valid_from=WorldDate.of(990)
         )
         kremova = rev.create_thing(
-            "place", fields={"name": "Kremova", "parent": tsardom}
+            "place",
+            fields={"name": "Kremova", "parent": tsardom, "filings": [_in(tsardom)]},
         )
         rev.add_fact(kremova, "description", "The white city.")
         dawn_peak = rev.create_thing("place", fields={"name": "Dawn Peak"})
@@ -163,6 +181,7 @@ def spheres_world(world):
             fields={
                 "name": "The Doctrine of Separation",
                 "part_of": {"sphere": dawn, "drawer": "d0000001"},
+                "filings": [_in(dawn)],
             },
         )
         rev.add_fact(
@@ -174,11 +193,12 @@ def spheres_world(world):
             dawn,
             "statement",
             "Snowy owl-folk are the purest of the folk.",
-            origin={"drawer": "d0000001"},
+            origin={"drawer": "d0000001", "held_by": dawn},
         )
         rev.set_field(
             dawn_peak, "part_of", {"sphere": dawn, "drawer": "d0000004"}, None
         )
+        rev.set_field(dawn_peak, "filings", [_in(dawn)], None)
         rev.add_fact(
             dawn,
             "timeline",
@@ -199,6 +219,7 @@ def spheres_world(world):
                 "template": "order",
                 "drawers": [_drawer("d0000201", "structure", "Ranks")],
                 "part_of": {"sphere": dawn, "drawer": "d0000002"},
+                "filings": [_in(dawn)],
             },
         )
         rev.add_fact(council, "about", "Seven elders seated in Kremova.")
@@ -213,6 +234,7 @@ def spheres_world(world):
             fields={
                 "name": "Vasha",
                 "ties": [_tie(dawn, "practitioner", since=WorldDate.of(1010))],
+                "filings": [_in(dawn, "practitioner", since=WorldDate.of(1010))],
             },
         )
         rev.add_fact(
@@ -230,7 +252,11 @@ def spheres_world(world):
         )
         brenna = rev.create_thing(
             "character",
-            fields={"name": "Brenna", "ties": [_tie(council, "elder")]},
+            fields={
+                "name": "Brenna",
+                "ties": [_tie(council, "elder")],
+                "filings": [_in(council, "elder")],
+            },
         )
 
     world.prose().put(

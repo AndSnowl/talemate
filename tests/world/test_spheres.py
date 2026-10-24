@@ -8,6 +8,7 @@ import pytest
 
 from talemate.world.calendar import Calendar, Era
 from talemate.world.dates import WorldDate
+from talemate.world.entries import summary, summary_fact
 from talemate.world.kinds import DRAWER_TYPES, SPHERE_TEMPLATES
 from talemate.world.spheres import (
     TEMPLATE_DRAWERS,
@@ -24,8 +25,6 @@ from talemate.world.spheres import (
     key_facts,
     people,
     sits_in,
-    summary,
-    summary_fact,
     territory,
     ties_of,
     timeline,

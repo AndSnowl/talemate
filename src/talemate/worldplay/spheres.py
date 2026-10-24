@@ -78,7 +78,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from talemate.prompts import Prompt
-from talemate.world import spheres, timelines
+from talemate.world import entries, spheres, timelines
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import (
@@ -94,6 +94,7 @@ from talemate.world.store import Revision, Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import create, prose_gen
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.filing_shadow import shadowed_revision, statement_origin
 from talemate.worldplay.held import timeline_text
 from talemate.worldplay.create import (
     PART_OF_KINDS,
@@ -1190,7 +1191,8 @@ def _write_items(
                 sphere_id,
                 "statement",
                 linked_text(item["text"], sphere_id),
-                origin={"drawer": item["drawer_id"]},
+                # F10: held when the old beliefs-drawer rule held it
+                origin=statement_origin(world.view(), sphere_id, item["drawer_id"]),
                 overrides=item.get("overrides") or None,
             )
     return linked
@@ -1266,7 +1268,7 @@ def _write_sphere(
     notes: list[str],
 ) -> str:
     new_names = create.outer_first(new_names)
-    with world.revision(Source.manual(note=_CREATED_NOTE)) as rev:
+    with shadowed_revision(world, Source.manual(note=_CREATED_NOTE)) as rev:
         made = create._row_stubs(
             rev, world, world.view(), new_names, preview.treated_as_new, notes=notes
         )
@@ -1506,10 +1508,10 @@ def _item_line(view: WorldView, item: spheres.Item) -> str:
 
 
 def _summary(world: World, view: WorldView, state: ThingState) -> str:
-    """The sphere's summary (`spheres.summary`): its cached description,
+    """The sphere's summary (`entries.summary`): its cached description,
     else its summary fact."""
 
-    return spheres.summary(view, state.id, create.cached_summary(world, state.id))
+    return entries.summary(view, state.id, create.cached_summary(world, state.id))
 
 
 def _timeline_lines(
@@ -1806,7 +1808,7 @@ def accept_fill(
 
     while True:
         try:
-            with world.revision(Source.manual(note=_FILLED_NOTE)) as rev:
+            with shadowed_revision(world, Source.manual(note=_FILLED_NOTE)) as rev:
                 written: list[str] = []
                 chain = create.outer_first([*rows, *elsewhere_names])
                 made = create._row_stubs(
@@ -2140,7 +2142,7 @@ def end_item(
     if by is not None:
         note += f" by {ref(by, view.name_of(by) or '')}"
 
-    with world.revision(Source.manual(note=_ENDED_NOTE)) as rev:
+    with shadowed_revision(world, Source.manual(note=_ENDED_NOTE)) as rev:
         if item.thing_id is not None:
             state = view.thing(item.thing_id)
             link = state.fields.get("part_of") if state is not None else None

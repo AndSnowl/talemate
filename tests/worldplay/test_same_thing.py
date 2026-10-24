@@ -495,8 +495,9 @@ async def test_at_most_five_candidates(world):
 
 def test_entry_candidates_keep_to_its_kind(world):
     """Ruling C34, as merge's C17: an entry's same-thing candidates are of
-    its kind, or a place and a sphere either way -- but a stub of any kind
-    (ruling C35: a stub's kind is a guess). A stub row keeps every kind."""
+    its kind (a place and a sphere no longer count as one, Task 3) -- but
+    a stub of any kind (ruling C35: a stub's kind is a guess). A stub row
+    keeps every kind."""
 
     with world.revision(Source.manual(note="greyholm")) as rev:
         fen = rev.create_thing("place", {"name": "Greyholm Fen"})
@@ -515,8 +516,8 @@ def test_entry_candidates_keep_to_its_kind(world):
         }
 
     assert offered(None) == {fen, synod, tale, reeve, saga}
-    assert offered("place") == {fen, synod, saga}
-    assert offered("sphere") == {fen, synod, saga}
+    assert offered("place") == {fen, saga}
+    assert offered("sphere") == {synod, saga}
     assert offered("lore") == {tale, saga}
     assert offered("character") == {reeve, saga}
 

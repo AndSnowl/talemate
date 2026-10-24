@@ -72,7 +72,7 @@ from collections.abc import Callable, Mapping, Sequence
 import structlog
 from pydantic import BaseModel
 
-from talemate.world import spheres
+from talemate.world import entries, spheres
 from talemate.world.kinds import (
     HERITAGE_KINDS,
     PART_OF_KINDS,
@@ -90,6 +90,7 @@ from talemate.worldplay.create import (
     part_of_since,
     prose_reads,
 )
+from talemate.worldplay.filing_shadow import shadowed_revision
 from talemate.worldplay.links import name_key
 from talemate.worldplay.references import thing_references
 
@@ -495,9 +496,9 @@ def copy_facts(
 
     Each copy keeps its dates and origin; a category the target's kind
     lacks becomes `default_category`'s (`_moved_category`). Its holder
-    stays its holder, and one its old owner held implicitly (a beliefs
-    drawer's statement, `spheres.held_by`) is written into its origin, so
-    it stays a belief away from the drawer; a statement's drawer the target
+    stays its holder, and one its old owner held implicitly (a `belief`
+    fact, `entries.held_by`) is written into its origin, so it stays its
+    old owner's belief on the target; a statement's drawer the target
     has none of (by id) is dropped from its origin. Links to the target, and to
     `standing_for` (a stub being re-pointed onto it, whose holdings become
     the target's too), point at the target: as plain words, with
@@ -527,9 +528,9 @@ def copy_facts(
         origin = dict(fact.origin) if fact.origin is not None else None
         owner = view.thing(owner_id)
         if owner is not None and "held_by" not in (origin or {}):
-            holder = spheres.held_by(view, fact, owner)
+            holder = entries.held_by(view, fact, owner)
             if holder is not None:
-                origin = spheres.with_held_by(origin, holder)
+                origin = entries.with_held_by(origin, holder)
         if origin is not None and origin.get("held_by") in standing_for:
             origin["held_by"] = target_id
         if origin is not None and drawer_map and origin.get("drawer") in drawer_map:
@@ -776,9 +777,9 @@ def _merged_ties(job: _Job) -> list[dict] | None:
     can't be tied, is noted instead."""
 
     own = [t for t in job.stub.fields.get("ties") or [] if isinstance(t, dict)]
-    if not own or not spheres.acts_in_world(job.stub):
+    if not own or not entries.acts_in_world(job.stub):
         return None
-    if not spheres.acts_in_world(job.target):
+    if not entries.acts_in_world(job.target):
         job.notes.append(
             f"{job.stub_name}'s ties aren't carried over:"
             f" {job.target_name} can't be tied"
@@ -1130,7 +1131,7 @@ def _job(world: World, stub_id: str, target_id: str, *, merge: bool = False) -> 
     if merge and not kinds_can_be_one(stub.kind, target.kind):
         raise ValueError(
             f"{stub_name} is a {stub.kind} and {target_name} a {target.kind}:"
-            " only entries of one kind merge (or a place and a sphere)"
+            " only entries of one kind merge"
         )
     if merge and target.is_stub and not stub.is_stub:
         raise ValueError(
@@ -1441,7 +1442,7 @@ def repoint_stub(world: World, stub_id: str, target_id: str) -> RepointResult:
     writing nothing."""
 
     plan = plan_repoint(world, stub_id, target_id)
-    with world.revision(Source.manual(note=plan.note)) as rev:
+    with shadowed_revision(world, Source.manual(note=plan.note)) as rev:
         plan.write(rev)
     result = plan.result()
     log.info(
@@ -1482,7 +1483,7 @@ def move_fact(
     if found is None:
         raise ValueError(f"no such fact, or it was removed: {fact_id}")
     owner_id, fact = found
-    if spheres.is_summary_fact(fact):
+    if entries.is_summary_fact(fact):
         raise ValueError("a sphere's summary stays its own: it can't be moved")
     target = view.thing(target_id)
     if target is None or target.stub_ignored:
@@ -1500,7 +1501,7 @@ def move_fact(
             f" it's under {category} on {target_name}"
         )
     note = f"moved a fact from {owner_name} to {target_name}"
-    with world.revision(Source.manual(note=note)) as rev:
+    with shadowed_revision(world, Source.manual(note=note)) as rev:
         new_id = copy_facts(
             rev, world.view(), [fact_id], target_id, plain_self_links=True
         )[fact_id]

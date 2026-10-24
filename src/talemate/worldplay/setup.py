@@ -72,7 +72,8 @@ from talemate.world.kinds import HERITAGE_KINDS
 # `NameCandidate` and `NameMatch` are re-exported: they were scene setup's
 from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
-from talemate.world.spheres import acts_in_world, is_sphere
+from talemate.world.entries import acts_in_world
+from talemate.world.spheres import is_sphere
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen

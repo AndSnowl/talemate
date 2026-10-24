@@ -56,12 +56,13 @@ from typing import Literal
 import structlog
 from pydantic import BaseModel, Field
 
-from talemate.world import spheres
+from talemate.world import entries, spheres
 from talemate.world.dates import WorldDate
 from talemate.world.repeats import content_words
 from talemate.world.store import Revision, Source, World
 from talemate.world.view import WorldView
 from talemate.worldplay.create import current_date, repeat_flags
+from talemate.worldplay.filing_shadow import shadowed_revision
 from talemate.worldplay.decide import Pair, contradiction_pairs
 from talemate.worldplay.repoint import RepointResult, plan_merge
 
@@ -144,7 +145,7 @@ def preview_merge(world: World, from_id: str, into_id: str) -> MergePreview:
         ):
             row.repeat_of, row.ticked = repeat_of, False
             repeats.add(fact.fact_id)
-        if spheres.is_summary_fact(fact) and spheres.is_sphere(into):
+        if entries.is_summary_fact(fact) and spheres.is_sphere(into):
             # the into-side has a summary of its own
             row.ticked = False
         facts.append(row)
@@ -322,9 +323,9 @@ def accept_merge(
     summaries = [
         fact.fact_id
         for fact in world.live_facts(preview.from_id)
-        if fact.fact_id in copied and spheres.is_summary_fact(fact)
+        if fact.fact_id in copied and entries.is_summary_fact(fact)
     ]
-    with world.revision(Source.manual(note=plan.note)) as rev:
+    with shadowed_revision(world, Source.manual(note=plan.note)) as rev:
         plan.write(rev)
         copies = plan.copies
         inside = world.view()

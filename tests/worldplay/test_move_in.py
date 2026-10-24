@@ -105,7 +105,8 @@ def tsardom(world):
     timeline, held by the Church; the law code naming the Zakonnik, a lore
     stub in its Doctrines & Laws); Moskov, a city in its Lands & Sites, whose
     waiver overrides the law code; and the Church of the Eternal Light, a
-    religion whose Doctrines statement it holds unmarked."""
+    religion whose Doctrines statement it holds (marked: no drawer holds
+    a fact implicitly any more)."""
 
     world.set_present(WorldDate.of(1000))
     with world.revision(Source.manual(note="tsardom")) as rev:
@@ -172,7 +173,7 @@ def tsardom(world):
             church,
             "statement",
             f"The Light chose the Tsars of {ref(tsardom, 'Moscavia')} to rule.",
-            origin={"drawer": DOCTRINES},
+            origin={"drawer": DOCTRINES, "held_by": church},
         )
     return Tsardom(
         church=church,
@@ -899,7 +900,7 @@ def test_move_fact_single(world, tsardom):
         "a sphere has no description facts: it's under about on Tsardom of Moscavia"
     ]
 
-    # a belief its owner held unmarked stays held, away from its drawer
+    # a belief its owner holds stays held, away from its drawer
     prose = []
     new_id = move_fact(world, t.light, t.tsardom, prose=prose)
     moved = next(f for f in world.live_facts(t.tsardom) if f.fact_id == new_id)

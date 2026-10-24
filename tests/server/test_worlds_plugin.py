@@ -14,7 +14,7 @@ import talemate.instance as instance
 from talemate.server.worlds import WorldsPlugin
 from talemate.scene_message import NarratorMessage
 from talemate.tale_mate import Actor
-from talemate.world import spheres
+from talemate.world import entries, spheres
 from talemate.world.dates import WorldDate
 from talemate.world.refs import ref
 from talemate.world.scenes import MessageRecord
@@ -2700,7 +2700,21 @@ async def _open_sphere_world(plugin):
     Holy Sites, a statement in Doctrines, an `about` fact and a dated
     timeline fact naming the Peak. The Reformed Dawn, its branch. The
     Tsardom, a place that's a nation sphere. Vasha, a practitioner of the
-    Dawn since 1010 who skips the Vigil; Maren, tied to nothing."""
+    Dawn since 1010 who skips the Vigil; Maren, tied to nothing. Each
+    `part_of`, branch `parent` and tie has its matching filing (what the
+    world's readers read), and the Doctrines statement is marked held."""
+
+    def filed(target, role=None, since=None):
+        return [
+            {
+                "target": target,
+                "role": role,
+                "since": since.model_dump(mode="json") if since else None,
+                "until": None,
+                "within": None,
+                "exceptions": [],
+            }
+        ]
 
     await plugin.handle(
         {
@@ -2728,19 +2742,27 @@ async def _open_sphere_world(plugin):
         )
         s.vigil = rev.create_thing(
             "lore",
-            {"name": "Dawn Vigil", "part_of": {"sphere": s.dawn, "drawer": RITES}},
+            {
+                "name": "Dawn Vigil",
+                "part_of": {"sphere": s.dawn, "drawer": RITES},
+                "filings": filed(s.dawn),
+            },
         )
         rev.add_fact(s.vigil, "general", "A nightly prayer at first light.")
         s.peak = rev.create_thing(
             "place",
-            {"name": "Dawn Peak", "part_of": {"sphere": s.dawn, "drawer": SITES}},
+            {
+                "name": "Dawn Peak",
+                "part_of": {"sphere": s.dawn, "drawer": SITES},
+                "filings": filed(s.dawn),
+            },
         )
         rev.add_fact(s.peak, "description", "A white mountain.")
         s.unblessed = rev.add_fact(
             s.dawn,
             "statement",
             "The unchanged are unblessed.",
-            origin={"drawer": DOCTRINES},
+            origin={"drawer": DOCTRINES, "held_by": s.dawn},
         )
         rev.add_fact(s.dawn, "about", "The state church.")
         s.synod = rev.add_fact(
@@ -2751,7 +2773,12 @@ async def _open_sphere_world(plugin):
         )
         s.reformed = rev.create_thing(
             "sphere",
-            {"name": "The Reformed Dawn", "template": "religion", "parent": s.dawn},
+            {
+                "name": "The Reformed Dawn",
+                "template": "religion",
+                "parent": s.dawn,
+                "filings": filed(s.dawn, "branch of"),
+            },
         )
         s.tsardom = rev.create_thing(
             "place",
@@ -2775,6 +2802,7 @@ async def _open_sphere_world(plugin):
                         "until": None,
                     }
                 ],
+                "filings": filed(s.dawn, "practitioner", WorldDate.of(1010)),
             },
         )
         s.skips = rev.add_fact(
@@ -4108,7 +4136,8 @@ async def test_add_statement(plugin, client):
     """A statement written by hand into a drawer: a `statement` fact of
     the sphere with the drawer as its origin, linked like `add_fact`'s
     text, shown in that drawer. A statement feeds no prose (ruling P19):
-    none is scheduled."""
+    none is scheduled. One in a religion's beliefs drawer is marked held
+    by the sphere as it's written (F10: what the old drawer rule held)."""
 
     s = await _open_sphere_world(plugin)
     async with MockClientContext():
@@ -4132,9 +4161,10 @@ async def test_add_statement(plugin, client):
     )
     assert (fact.category, fact.origin, fact.valid_from) == (
         "statement",
-        {"drawer": DOCTRINES},
+        {"drawer": DOCTRINES, "held_by": s.dawn},
         None,
     )
+    assert item["held_by"] == {"id": s.dawn, "name": "The White Dawn"}
     assert any(
         i.fact_id == fact.fact_id and i.drawer_id == DOCTRINES
         for i in spheres.items(s.world.view(), s.dawn)
@@ -4817,8 +4847,9 @@ async def _timeline_world(plugin):
 
 
 async def test_payload_timeline_every_kind(plugin):
-    """Every kind's payload has `entry_timeline`: its dated facts and, for
-    a sphere, what it gathers, each line `{fact_id, owner_id, owner_name,
+    """Every kind's payload has `entry_timeline`: its dated facts and,
+    for any entry that doesn't act in the world, what it gathers (what's
+    filed in it, and facts naming it or those), each line `{fact_id, owner_id, owner_name,
     date, until, segments, here, disagrees_with}` -- an ended fact with its
     `until`, a held one worded as belief. The sphere page's
     `sphere.timeline` reads the same lines, keeping an undated timeline
@@ -4852,8 +4883,10 @@ async def test_payload_timeline_every_kind(plugin):
     assert chosen[0] == {"text": "The White Dawn", "ref": s.dawn, "stub": False}
 
     peak = await _get_thing(plugin, s.peak)
+    # the Dawn's Synod line names the Peak, so the Peak gathers it too
     assert [line["fact_id"] for line in peak["entry_timeline"]] == [
         s.climbed,
+        s.synod,
         s.met,
     ]
     vigil = await _get_thing(plugin, s.vigil)
@@ -4891,12 +4924,13 @@ async def test_payload_timeline_every_kind(plugin):
     assert page[0]["date"] is None and page[0]["here"]
     assert set(page[0]) == keys
 
-    # a branch keeps its parent's timeline (an undated parent link: all of it)
+    # a branch is filed in its parent now: the parent's dated lines are
+    # one link away, no longer inherited (the old sphere page still adds
+    # the parent's undated ones, until Task 7)
     reformed = await _get_thing(plugin, s.reformed)
     inherited = {line["fact_id"]: line for line in reformed["sphere"]["timeline"]}
-    assert s.synod in inherited and s.undated in inherited
-    assert inherited[s.synod]["owner_id"] == s.dawn
-    assert not inherited[s.synod]["here"]
+    assert s.synod not in inherited and s.undated in inherited
+    assert reformed["entry_timeline"] == []
 
     # the change history keeps its own key
     assert any(e["change"] == "fact_start" for e in vasha["timeline"])
@@ -4904,8 +4938,8 @@ async def test_payload_timeline_every_kind(plugin):
 
 async def test_fact_rows_carry_held_by(plugin):
     """Each fact row, and a statement item, carries `held_by: {id, name}`
-    or null: a fact's own holder, and the implicit holder of a statement
-    in a religion's beliefs drawer."""
+    or null: a fact's own holder (a statement in a beliefs drawer is held
+    only when marked, as the Doctrines statement is)."""
 
     s = await _timeline_world(plugin)
     vasha = await _get_thing(plugin, s.vasha)
@@ -5530,7 +5564,7 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
     view = s.world.view()
     keeper = view.thing(data["id"])
     by_text = {f.text: f for f in keeper.facts}
-    assert spheres.held_by(view, by_text["The keeper walks the peak."], keeper) == (
+    assert entries.held_by(view, by_text["The keeper walks the peak."], keeper) == (
         s.vasha
     )
     assert "The state church." in by_text

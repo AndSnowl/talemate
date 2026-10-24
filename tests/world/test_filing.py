@@ -413,3 +413,30 @@ def test_tag_heading_plurals():
     assert tag_heading("church") == "Churches"
     assert tag_heading("city") == "Cities"
     assert tag_heading("holy site") == "Holy sites"
+
+
+def test_within_listing_reads_dates(world):
+    """Parked M3 (fixed in Task 3): a person filed `within` a part is
+    listed under the part only while the part's own filing into the
+    target holds at the view's date."""
+
+    with world.revision(Source.manual()) as rev:
+        army = _thing(rev, "lore", "The Tsar's Army")
+        talon = _thing(
+            rev,
+            "lore",
+            "The White Talon",
+            filings=[_filing(army, since=WorldDate.of(900), until=WorldDate.of(1000))],
+        )
+        vasha = _thing(rev, "character", "Vasha", filings=[_filing(army, within=talon)])
+
+    def under_talon(year=None):
+        view = world.view(WorldDate.of(year) if year is not None else None)
+        return [state.id for state, _ in filed_in(view, talon)]
+
+    assert under_talon(950) == [vasha]
+    # before the Talon joined the Army, and after it left: in the Army alone
+    assert under_talon(850) == []
+    assert under_talon(1050) == []
+    assert under_talon() == []
+    assert [state.id for state, _ in filed_in(world.view(), army)] == [vasha]

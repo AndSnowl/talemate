@@ -12,7 +12,8 @@ from talemate.world.kinds import (
     get_kind,
     validate_field,
 )
-from talemate.world.spheres import acts_in_world, existence, people, ties_of
+from talemate.world.entries import acts_in_world, existence
+from talemate.world.spheres import people, ties_of
 from talemate.world.kinds import ENTRY_DRAWER_TYPES
 from talemate.world.store import Source
 from talemate.worldplay.characters import character_from_world
