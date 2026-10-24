@@ -218,6 +218,25 @@ async def test_open_world_made_before_filing_is_refused(plugin, tmp_path, rows):
     assert plugin.world is None
 
 
+async def test_open_world_with_a_kind_changed_stub_opens(plugin, tmp_path):
+    """A fresh world whose stub changed kind (a believed being made a
+    character) is no world before Filing: it opens."""
+
+    fresh = World.create("Fresh", root=tmp_path)
+    with fresh.revision(Source.manual(note="stub")) as rev:
+        god = rev.create_thing(
+            "being",
+            {"name": "Veles", "existence": "believed", "stub": {"ignored": False}},
+        )
+    with fresh.revision(Source.manual(note="rekind")) as rev:
+        rev.change_stub_kind(god, "character")
+    path = str(fresh.path)
+    fresh.close()
+
+    await plugin.handle({"type": "worlds", "action": "open_world", "path": path})
+    assert _last(plugin, "open_world")["data"]["name"] == "Fresh"
+
+
 async def test_open_world_outside_root_is_refused(plugin, tmp_path_factory):
     elsewhere = World.create("Elsewhere", root=tmp_path_factory.mktemp("elsewhere"))
     path = str(elsewhere.path)

@@ -835,27 +835,34 @@ class World:
         """The kinds and fields this world's rows use that no kind has any
         more -- a world made before Filing (its spheres, `part_of`,
         `ties`), which the views can't read. Empty for a world this
-        version made: every write is checked against its kind. One pass
-        over the distinct kinds and (kind, field) pairs, any revision."""
+        version made: every write is checked against its kind. A field
+        counts as known when any kind its thing has ever had includes it:
+        a stub whose kind changed keeps its retired row of the old kind
+        (`_rekind`), and its fields may be of either. One pass over the
+        distinct kinds and (thing, field) pairs, any revision."""
 
         found: builtins.list[str] = []
-        kinds = [
-            row[0]
-            for row in self._conn.execute(
-                "SELECT DISTINCT kind FROM things ORDER BY kind"
-            )
-        ]
-        found += [kind for kind in kinds if kind not in KINDS]
-        pairs = self._conn.execute(
-            "SELECT DISTINCT t.kind, fv.field FROM field_values fv"
-            " JOIN things t ON t.id = fv.thing_id ORDER BY fv.field"
-        ).fetchall()
-        for kind, field in pairs:
-            spec = KINDS.get(kind)
+        kinds_of: dict[str, set[str]] = {}
+        for thing_id, kind in self._conn.execute(
+            "SELECT DISTINCT id, kind FROM things"
+        ):
+            kinds_of.setdefault(thing_id, set()).add(kind)
+        found += sorted(
+            {kind for kinds in kinds_of.values() for kind in kinds} - set(KINDS)
+        )
+        known = {
+            kind: {spec.name for spec in kind_spec.fields}
+            for kind, kind_spec in KINDS.items()
+        }
+        for thing_id, field in self._conn.execute(
+            "SELECT DISTINCT thing_id, field FROM field_values ORDER BY field"
+        ):
+            kinds = kinds_of.get(thing_id, set())
             if (
-                spec is not None
-                and field not in found
-                and not any(f.name == field for f in spec.fields)
+                field not in found
+                and kinds
+                and kinds <= set(KINDS)
+                and not any(field in known[kind] for kind in kinds)
             ):
                 found.append(field)
         return found

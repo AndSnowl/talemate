@@ -430,3 +430,31 @@ def test_unknown_structure_names_what_a_world_made_before_filing_uses(world):
                 (field,),
             )
     assert world.unknown_structure() == ["sphere", "part_of", "ties"]
+
+
+def test_unknown_structure_is_empty_after_a_stub_changes_kind(world):
+    """A stub whose kind changed keeps its retired row of the old kind:
+    none of its fields reads as a world made before Filing (a being's
+    `existence` kept as a character, a character's `voice` set on a stub
+    that was a place)."""
+
+    with world.revision(Source.manual(note="stubs")) as rev:
+        god = rev.create_thing(
+            "being",
+            {"name": "Veles", "existence": "believed", "stub": {"ignored": False}},
+        )
+        inn = rev.create_thing("place", {"name": "Oskar", "stub": {"ignored": False}})
+    with world.revision(Source.manual(note="rekind")) as rev:
+        rev.change_stub_kind(god, "character")
+        rev.change_stub_kind(inn, "character")
+        rev.set_field(inn, "voice", {"provider": "x"}, None)
+    assert world.unknown_structure() == []
+
+    # an old world is still refused: a field no kind it ever had includes
+    with world._conn as conn:
+        conn.execute(
+            "INSERT INTO field_values (thing_id, field, value_json, rev_added)"
+            " VALUES (?, 'part_of', '[]', 1)",
+            (inn,),
+        )
+    assert world.unknown_structure() == ["part_of"]
