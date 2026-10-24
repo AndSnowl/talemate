@@ -77,6 +77,7 @@ import {
     filingDates,
     groupKey,
     groupView,
+    headerNames,
     kindList,
     normaliseTag,
     referenceFieldLabel,
@@ -2197,6 +2198,22 @@ check("a filing edit's reply: the open page takes it, another thing's refreshes 
     store.handleMessage(reply('remove_filing', { id: 'velikoye', kind: 'place', name: 'Velikoye', in: [], notes: ['Removed the "but..."'] }));
     assert.deepEqual(store.thing.in, []);
     assert.deepEqual(store.notes, { action: 'remove_filing', notes: ['Removed the "but..."'] });
+});
+
+check('header: the other names, the everyday one shown as "usually called" instead', () => {
+    // final review M8: the spec's header lists "the other names"
+    const aka = [
+        { name: 'Moscavia', tag: 'common', everyday: true },
+        { name: 'the Tsardom', tag: 'common', everyday: false },
+        { name: 'Muscovy', tag: 'proper', everyday: false },
+    ];
+    assert.deepEqual(headerNames(aka), [
+        { name: 'the Tsardom', index: 1 },
+        { name: 'Muscovy', index: 2 },
+    ]);
+    assert.deepEqual(headerNames([]), []);
+    assert.deepEqual(headerNames(undefined), []);
+    assert.deepEqual(headerNames([{ name: ' ', tag: 'common' }]), []);
 });
 
 check('delete dialog: a field reference reads in words, the retired fields gone', () => {

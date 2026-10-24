@@ -64,6 +64,21 @@
                 <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
                 <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
+                <!-- its other names (a draft's can be removed before accept) -->
+                <span v-if="otherNames.length" class="d-inline-flex align-center flex-wrap ga-1" data-testid="thing-other-names">
+                    <span class="text-caption text-muted">also</span>
+                    <v-chip
+                        v-for="other in otherNames"
+                        :key="other.index"
+                        size="x-small"
+                        label
+                        variant="outlined"
+                        :closable="draft"
+                        :close-label="'Remove other name ' + other.name"
+                        data-testid="thing-other-name"
+                        @click:close="removeDraftName(other.index)"
+                    >{{ other.name }}</v-chip>
+                </span>
                 <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
                 <v-spacer></v-spacer>
 
@@ -468,9 +483,10 @@
 </template>
 
 <script>
-import { countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
+import { akaRemoved, countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, STUB_KINDS, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
+import { headerNames } from './entryPage.js';
 import { formatNumber } from './worldNumbers.js';
 import { NEW_THING, factEditState, factLinkPayload, linkPayload, refOccurrence, repicks } from './nameHighlights.js';
 import {
@@ -823,6 +839,9 @@ export default {
         everydayName() {
             return (this.thing?.aka || []).find((entry) => entry.everyday)?.name || null;
         },
+        otherNames() {
+            return headerNames(this.thing?.aka);
+        },
         stubOfPage() {
             const thing = this.thing;
             return {
@@ -966,6 +985,11 @@ export default {
         // --- the draft mode: every change is the draft's own -------------
         edit(changes) {
             this.worlds.editDraft(changes);
+        },
+        // a draft's other name removed before accept (accepted, it'd be
+        // a link word)
+        removeDraftName(index) {
+            this.edit({ aka: akaRemoved(this.edited.aka || [], index) });
         },
         setDraftKind(kind) {
             if (kind && kind !== this.edited.kind) {

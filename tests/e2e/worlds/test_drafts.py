@@ -155,6 +155,37 @@ def _select(page, locator, words: str, nth: int = 0) -> None:
     assert found, f"{words!r} not found"
 
 
+def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_preview):
+    """Final review M8: the header lists the other names, on a draft and
+    on the accepted page; on the draft one can be removed before accept
+    (accepted, an other name becomes a link word)."""
+
+    _seeded(app, page, "Names")
+    fixed_preview(
+        _host(
+            "It flies at night.",
+            aka=[
+                {"name": "the Frostwings", "tag": "common", "everyday": False},
+                {"name": "the Winged", "tag": "common", "everyday": False},
+            ],
+        )
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    names = draft.get_by_test_id("thing-other-name")
+    expect(names).to_have_count(2)
+    expect(draft.get_by_test_id("thing-other-names")).to_contain_text("the Winged")
+    draft.get_by_role("button", name="Remove other name the Winged").click()
+    expect(names).to_have_count(1)
+    draft.get_by_role("button", name="Accept").click()
+    sent = _wait_sent(page, "accept_preview")
+    assert [entry["name"] for entry in sent["preview"]["aka"]] == ["the Frostwings"]
+    thing = page.get_by_test_id("thing-page")
+    thing.get_by_test_id("thing-name").filter(has_text="The Frostwing Host").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(thing.get_by_test_id("thing-other-name")).to_have_text(["the Frostwings"])
+
+
 def test_draft_versions_and_discard(app, page, fixed_preview):
     _seeded(app, page, "Versions")
     fixed_preview(_host("It flies at night."))

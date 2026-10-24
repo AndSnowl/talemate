@@ -163,7 +163,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   deleted since the preview); the prose of what else it changed is
   scheduled. For the browser
   tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
-  facts, prose, fields?, tag?, in?, file_into?, names?}`) that previews are
+  facts, prose, fields?, tag?, aka?, in?, file_into?, names?}`) that previews are
   answered from instead of the model (listing what the request's fields
   inherit, and for a `stub_id` its kind, name and mention context, as a
   real preview does). The file's facts may name a `held_by` holder, and
@@ -1111,6 +1111,7 @@ async def _fixed_preview(
         verdict=verdict,
         new_names=new_names,
         tag=clean_tag(fixed.get("tag")),
+        aka=list(fixed.get("aka") or []),
         hint=payload.hint,
         filings=filings,
         file_into=file_into,
