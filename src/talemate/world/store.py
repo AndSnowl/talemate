@@ -37,6 +37,7 @@ from .kinds import (
     get_kind,
     moved_category,
     normalise_field,
+    normalise_tag,
     validate_field,
 )
 from .curation import CurationSettings
@@ -343,6 +344,60 @@ class Revision:
             "VALUES (?, ?, ?, ?, ?, ?)",
             (thing_id, field, value_json, from_instant, from_precision, self.rev),
         )
+
+    @_require_open
+    def retag(self, old: str, new: str) -> list[str]:
+        """Make every `tag` value `old` (as normalised) `new`, at its own
+        date, and return the things changed, in id order. A live thing's
+        values are corrected as `set_field` corrects one. A removed
+        thing's values -- those its removal retired -- get a new value too,
+        so undoing the removal brings it back with the new tag (the undo
+        finds the slot written after the removal and leaves it alone)."""
+
+        old_tag, new_tag = normalise_tag(old), normalise_tag(new)
+        rows = self._conn.execute(
+            "SELECT fv.thing_id, fv.value_json, fv.valid_from, fv.from_precision, "
+            "fv.rev_removed, "
+            "(SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
+            " ORDER BY t.row_id DESC LIMIT 1) AS thing_removed "
+            "FROM field_values fv WHERE fv.field = 'tag' "
+            "AND (fv.rev_removed IS NULL OR fv.rev_removed = "
+            " (SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
+            "  ORDER BY t.row_id DESC LIMIT 1)) "
+            "ORDER BY fv.thing_id, fv.row_id",
+        ).fetchall()
+        changed: list[str] = []
+        for row in rows:
+            value = json.loads(row["value_json"])
+            if not isinstance(value, str) or normalise_tag(value) != old_tag:
+                continue
+            thing_id = cast(str, row["thing_id"])
+            kind_spec = get_kind(self._thing_kind(thing_id))
+            if row["thing_removed"] is None:
+                if row["rev_removed"] is not None:
+                    continue
+                self.set_field(
+                    thing_id,
+                    "tag",
+                    new_tag,
+                    _decode_date(row["valid_from"], row["from_precision"]),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO field_values (thing_id, field, value_json, "
+                    "valid_from, from_precision, rev_added) "
+                    "VALUES (?, 'tag', ?, ?, ?, ?)",
+                    (
+                        thing_id,
+                        _encode_value(kind_spec, "tag", new_tag),
+                        row["valid_from"],
+                        row["from_precision"],
+                        self.rev,
+                    ),
+                )
+            if thing_id not in changed:
+                changed.append(thing_id)
+        return sorted(changed)
 
     @_require_open
     def remove_field_value(

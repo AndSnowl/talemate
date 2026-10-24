@@ -130,10 +130,15 @@ def filing_live(filing: Filing, at: WorldDate | None) -> bool:
 
 
 def _live(
-    view: WorldView, state: ThingState, alive: dict[str, bool] | None = None
+    view: WorldView,
+    state: ThingState,
+    alive: dict[str, bool] | None = None,
+    include_ended: bool = False,
 ) -> list[Filing]:
     """The thing's filings whose dates cover the view's date and whose
-    target exists at it; `alive` caches which targets do, across calls."""
+    target exists at it; `alive` caches which targets do, across calls.
+    With `include_ended`, a filing counts whatever its dates (one that has
+    ended, or not begun)."""
 
     cache = {} if alive is None else alive
 
@@ -145,7 +150,7 @@ def _live(
     return [
         filing
         for filing in _stored_filings(state)
-        if filing_live(filing, view.at) and exists(filing.target)
+        if (include_ended or filing_live(filing, view.at)) and exists(filing.target)
     ]
 
 
@@ -214,10 +219,17 @@ def _sits_in_live(
 
 
 class _LiveOf:
-    """Each thing's live filings at one view (`_live`), read once."""
+    """Each thing's live filings at one view (`_live`), read once; with
+    `include_ended`, every filing into a live target."""
 
-    def __init__(self, view: WorldView, things: Sequence[ThingState]) -> None:
+    def __init__(
+        self,
+        view: WorldView,
+        things: Sequence[ThingState],
+        include_ended: bool = False,
+    ) -> None:
         self.view = view
+        self.include_ended = include_ended
         self.states = {state.id: state for state in things}
         self.alive: dict[str, bool] = {}
         self.found: dict[str, list[Filing]] = {}
@@ -226,7 +238,9 @@ class _LiveOf:
         if thing_id not in self.found:
             state = self.states.get(thing_id) or self.view.thing(thing_id)
             self.found[thing_id] = (
-                [] if state is None else _live(self.view, state, self.alive)
+                []
+                if state is None
+                else _live(self.view, state, self.alive, self.include_ended)
             )
         return self.found[thing_id]
 
@@ -246,14 +260,20 @@ def _within_live(view: WorldView, filing: Filing, live_of: _LiveOf) -> bool:
 
 
 def filed_index(
-    view: WorldView, *, things: Sequence[ThingState] | None = None
+    view: WorldView,
+    *,
+    things: Sequence[ThingState] | None = None,
+    include_ended: bool = False,
 ) -> dict[str, list[tuple[ThingState, Filing]]]:
     """`filed_in` for every target at once: `target id -> [(entry,
     filing)]`, each list in the order the entries were made, read in one
-    pass over `things` (all the view's things when not given)."""
+    pass over `things` (all the view's things when not given). With
+    `include_ended`, a filing counts whatever its dates: an entry page at
+    the latest telling lists what was filed in it and has ended too
+    ("in Velikoye from 900 to 1015")."""
 
     pool = view.things() if things is None else things
-    live_of = _LiveOf(view, pool)
+    live_of = _LiveOf(view, pool, include_ended)
     found: dict[str, list[tuple[ThingState, Filing]]] = {}
     for state in sorted(pool, key=lambda thing: thing.created):
         chosen: dict[str, Filing] = {}
@@ -276,16 +296,23 @@ def filed_index(
 
 
 def filed_in(
-    view: WorldView, target_id: str, *, things: Sequence[ThingState] | None = None
+    view: WorldView,
+    target_id: str,
+    *,
+    things: Sequence[ThingState] | None = None,
+    include_ended: bool = False,
 ) -> list[tuple[ThingState, Filing]]:
     """Every live `(entry, filing)` filed directly in the target, in the
     order the entries were made. A filing `within` the target (a person in
     the White Talon, filed in the Tsar's Army) lists the entry here too,
     while that part sits in its own target at the view's date. An entry is
     listed once, by its direct filing when it has both. `things` is the
-    snapshot to scan (all the view's things when not given)."""
+    snapshot to scan (all the view's things when not given);
+    `include_ended` as `filed_index` has it."""
 
-    return filed_index(view, things=things).get(target_id, [])
+    return filed_index(view, things=things, include_ended=include_ended).get(
+        target_id, []
+    )
 
 
 def tag_of(state: ThingState) -> str | None:
@@ -301,15 +328,21 @@ def _name(state: ThingState) -> str:
 
 
 def connected(
-    view: WorldView, target_id: str, *, things: Sequence[ThingState] | None = None
+    view: WorldView,
+    target_id: str,
+    *,
+    things: Sequence[ThingState] | None = None,
+    include_ended: bool = False,
 ) -> list[Group]:
-    """What is filed in the target (`filed_in`), grouped by each entry's
-    tag, an untagged entry under "Other". Groups run largest first, then
-    by heading; rows by role (a row without one last), then since (undated
-    first), then name."""
+    """What is filed in the target (`filed_in`, ended filings too with
+    `include_ended`), grouped by each entry's tag, an untagged entry under
+    "Other". Groups run largest first, then by heading; rows by role (a
+    row without one last), then since (undated first), then name."""
 
     by_tag: dict[str | None, list[tuple[ThingState, Filing]]] = {}
-    for state, filing in filed_in(view, target_id, things=things):
+    for state, filing in filed_in(
+        view, target_id, things=things, include_ended=include_ended
+    ):
         by_tag.setdefault(tag_of(state), []).append((state, filing))
 
     def row_key(
@@ -338,12 +371,17 @@ def connected(
     return groups
 
 
-def mentioned_in(view: WorldView, thing_id: str) -> list[str]:
+def mentioned_in(
+    view: WorldView, thing_id: str, *, include_ended: bool = False
+) -> list[str]:
     """The live entries, other than the thing, whose facts visible at the
-    view reference it and that aren't filed in it, in the order they were
-    made."""
+    view reference it and that aren't filed in it (`filed_in`, with
+    `include_ended` as Connected has it), in the order they were made."""
 
-    filed = {state.id for state, _ in filed_in(view, thing_id)}
+    filed = {
+        state.id
+        for state, _ in filed_in(view, thing_id, include_ended=include_ended)
+    }
     owners: dict[str, int] = {}
     for owner_id, _ in view.referencing(thing_id):
         if owner_id == thing_id or owner_id in filed or owner_id in owners:
@@ -356,10 +394,13 @@ def mentioned_in(view: WorldView, thing_id: str) -> list[str]:
 
 def tags_in_use(view: WorldView) -> list[tuple[str, int]]:
     """Every tag the view's entries carry, with how many carry it, most
-    used first, then by tag."""
+    used first, then by tag. An ignored stub doesn't count: ignoring a
+    stub hides it everywhere."""
 
     counts: dict[str, int] = {}
     for state in view.things():
+        if state.stub_ignored:
+            continue
         tag = tag_of(state)
         if tag is not None:
             counts[tag] = counts.get(tag, 0) + 1

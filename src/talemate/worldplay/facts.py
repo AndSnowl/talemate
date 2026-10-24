@@ -5,8 +5,9 @@
 from the owner's prompt (`world/add-facts.jinja2`, through
 `ai.world_ai_call`, read with `create.parse_create_reply`, which parses
 with `create.json_objects`), writing nothing. Given a `year` (an event),
-every fact is dated to it. Each fact a fact of the entry already says
-arrives as a repeat (`create.repeat_flags`: shown with its match, and
+every fact is dated to it. `draft_facts_for` does the same for an entry
+still in draft (a `CreatePreview`), for the router to add to the draft.
+Each fact a fact of the entry already says arrives as a repeat (`create.repeat_flags`: shown with its match, and
 unticked at the untick threshold).
 
 `accept_facts` writes the draft's ticked facts onto the entry in one
@@ -33,6 +34,7 @@ from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.create import (
+    CreatePreview,
     PreviewFact,
     create_categories,
     current_date,
@@ -43,7 +45,7 @@ from talemate.worldplay.create import (
 )
 from talemate.worldplay.links import link_text
 
-__all__ = ["FactDraft", "accept_facts", "draft_facts"]
+__all__ = ["FactDraft", "accept_facts", "draft_facts", "draft_facts_for"]
 
 log = structlog.get_logger("talemate.worldplay.facts")
 
@@ -68,6 +70,72 @@ class FactDraft(BaseModel):
     facts: list[PreviewFact] = Field(default_factory=list)
 
 
+async def _ask(
+    world: World,
+    *,
+    name: str,
+    kind: str,
+    tag: object,
+    hint: object,
+    summary: str,
+    known: list[str],
+    owners: list[str],
+    prompt: str,
+    client: Any,
+    year: int | None,
+    reply: str | None,
+) -> list[PreviewFact]:
+    """The facts the model writes about an entry (`name`, a `kind`, what
+    it says already, `known`), at most `DRAFT_FACTS`, each dated `year`
+    when given, each flagged as a repeat of what `owners` say."""
+
+    view = world.view()
+    if not prompt.strip():
+        raise ValueError("say what the facts are about")
+    calendar = world.calendar
+    now_year = current_date(world).to_datetime().year
+    categories = create_categories(kind, hint if isinstance(hint, str) else None)
+    if reply is None:
+        prose_gen.require_client(client)
+        with world_ai_call():
+            _response, extracted = await Prompt.request(
+                "world.add-facts",
+                client,
+                PROMPT_KIND,
+                vars={
+                    "name": name,
+                    "kind": kind,
+                    "tag": tag if isinstance(tag, str) else None,
+                    "summary": summary,
+                    "facts": known[:SHOWN_FACTS],
+                    "prompt": prompt.strip(),
+                    "categories": categories,
+                    "year": calendar.format(WorldDate.of(year)) if year else None,
+                    "now_year": now_year,
+                },
+            )
+        reply = extracted["response"]
+    _name, _age, facts = parse_create_reply(
+        reply,
+        kind,
+        calendar,
+        now_year,
+        holder=lambda held: holder_named(view, held),
+        categories=categories,
+    )
+    if not facts:
+        raise ValueError("the model's reply had no facts in it")
+    facts = facts[:DRAFT_FACTS]
+    if year is not None:
+        dated = WorldDate.of(year)
+        for fact in facts:
+            fact.since = dated
+    flags = repeat_flags(view, [f.text for f in facts], owners, world.curation())
+    for fact, (repeat_of, ticked) in zip(facts, flags):
+        fact.repeat_of, fact.ticked = repeat_of, ticked
+    return facts
+
+
 async def draft_facts(
     world: World,
     thing_id: str,
@@ -87,53 +155,22 @@ async def draft_facts(
     state = view.thing(thing_id)
     if state is None:
         raise KeyError(f"no such entry: {thing_id}")
-    if not prompt.strip():
-        raise ValueError("say what the facts are about")
-    calendar = world.calendar
-    now_year = current_date(world).to_datetime().year
-    hint = state.fields.get("hint")
-    categories = create_categories(state.kind, hint if isinstance(hint, str) else None)
-    name = view.name_of(thing_id) or ""
     summary = entries.summary_fact(state)
     known = sorted(state.facts, key=lambda fact: fact.created, reverse=True)
-    if reply is None:
-        prose_gen.require_client(client)
-        with world_ai_call():
-            _response, extracted = await Prompt.request(
-                "world.add-facts",
-                client,
-                PROMPT_KIND,
-                vars={
-                    "name": name,
-                    "kind": state.kind,
-                    "tag": state.fields.get("tag"),
-                    "summary": view.render(summary.text) if summary else "",
-                    "facts": [view.render(f.text) for f in known[:SHOWN_FACTS]],
-                    "prompt": prompt.strip(),
-                    "categories": categories,
-                    "year": calendar.format(WorldDate.of(year)) if year else None,
-                    "now_year": now_year,
-                },
-            )
-        reply = extracted["response"]
-    _name, _age, facts = parse_create_reply(
-        reply,
-        state.kind,
-        calendar,
-        now_year,
-        holder=lambda held: holder_named(view, held),
-        categories=categories,
+    facts = await _ask(
+        world,
+        name=view.name_of(thing_id) or "",
+        kind=state.kind,
+        tag=state.fields.get("tag"),
+        hint=state.fields.get("hint"),
+        summary=view.render(summary.text) if summary else "",
+        known=[view.render(f.text) for f in known],
+        owners=[thing_id],
+        prompt=prompt,
+        client=client,
+        year=year,
+        reply=reply,
     )
-    if not facts:
-        raise ValueError("the model's reply had no facts in it")
-    facts = facts[:DRAFT_FACTS]
-    if year is not None:
-        dated = WorldDate.of(year)
-        for fact in facts:
-            fact.since = dated
-    flags = repeat_flags(view, [f.text for f in facts], [thing_id], world.curation())
-    for fact, (repeat_of, ticked) in zip(facts, flags):
-        fact.repeat_of, fact.ticked = repeat_of, ticked
     log.info(
         "facts.draft",
         thing_id=thing_id,
@@ -142,6 +179,45 @@ async def draft_facts(
         repeats=sum(1 for f in facts if f.repeat_of is not None),
     )
     return FactDraft(thing_id=thing_id, prompt=prompt, year=year, facts=facts)
+
+
+async def draft_facts_for(
+    world: World,
+    preview: CreatePreview,
+    prompt: str,
+    client: Any,
+    *,
+    year: int | None = None,
+    reply: str | None = None,
+) -> list[PreviewFact]:
+    """`draft_facts` for an entry still in draft (a `CreatePreview`): the
+    facts to add to it, writing nothing. It's told the draft's own facts
+    (and a stub's), and a fact that repeats what the stub says, or one of
+    the draft's own, is left out or flagged."""
+
+    view = world.view()
+    stub = view.thing(preview.stub_id) if preview.stub_id else None
+    known = [fact.text for fact in preview.facts]
+    if stub is not None:
+        known += [view.render(fact.text) for fact in stub.facts]
+    facts = await _ask(
+        world,
+        name=preview.name,
+        kind=preview.kind,
+        tag=preview.tag,
+        hint=preview.hint,
+        summary="",
+        known=known,
+        owners=[stub.id] if stub is not None else [],
+        prompt=prompt,
+        client=client,
+        year=year,
+        reply=reply,
+    )
+    own = {" ".join(text.split()).casefold() for text in known}
+    kept = [f for f in facts if " ".join(f.text.split()).casefold() not in own]
+    log.info("facts.draft_for", name=preview.name, year=year, facts=len(kept))
+    return kept
 
 
 def accept_facts(world: World, draft: FactDraft) -> list[str]:

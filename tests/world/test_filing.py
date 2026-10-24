@@ -440,3 +440,60 @@ def test_within_listing_reads_dates(world):
     assert under_talon(1050) == []
     assert under_talon() == []
     assert [state.id for state, _ in filed_in(world.view(), army)] == [vasha]
+
+
+def test_include_ended_lists_what_has_ended(world):
+    with world.revision(Source.manual()) as rev:
+        velikoye = _thing(rev, "place", "Velikoye", tag="city")
+        dance = _thing(
+            rev,
+            "lore",
+            "The Feather Dance",
+            tag="custom",
+            filings=[
+                _filing(velikoye, since=WorldDate.of(900), until=WorldDate.of(1015))
+            ],
+        )
+        rev.add_fact(dance, "general", f"Danced in {ref(velikoye, 'Velikoye')}.")
+    view = world.view()
+    assert connected(view, velikoye) == []
+    assert mentioned_in(view, velikoye) == [dance]
+    (group,) = connected(view, velikoye, include_ended=True)
+    assert [row[0] for row in group.rows] == [dance]
+    assert group.rows[0][1].until == WorldDate.of(1015)
+    assert [s.id for s, _ in filed_in(view, velikoye, include_ended=True)] == [dance]
+    assert mentioned_in(view, velikoye, include_ended=True) == []
+
+
+def test_tags_in_use_leaves_out_ignored_stubs(world):
+    with world.revision(Source.manual()) as rev:
+        _thing(rev, "place", "Velikoye", tag="city")
+        rev.create_thing(
+            "place",
+            {"name": "Kerensky", "tag": "city", "stub": {"ignored": True}},
+        )
+        rev.create_thing(
+            "lore", {"name": "Hush", "tag": "secret", "stub": {"ignored": True}}
+        )
+    assert tags_in_use(world.view()) == [("city", 1)]
+
+
+def test_retag_reaches_removed_things_and_undoes_exactly(world):
+    with world.revision(Source.manual()) as rev:
+        kept = _thing(rev, "lore", "Rune School", tag="school")
+        gone = _thing(rev, "lore", "Old School", tag="school")
+        rev.set_field(kept, "tag", "School", WorldDate.of(900))
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    deleted = world.head_rev()
+    with world.revision(Source.manual()) as rev:
+        assert rev.retag("school", "Academy") == sorted([kept, gone])
+    retagged = world.head_rev()
+    assert world.view().thing(kept).fields["tag"] == "academy"
+    assert world.view(WorldDate.of(950)).thing(kept).fields["tag"] == "academy"
+    assert world.view().thing(gone) is None
+
+    world.undo([retagged])
+    assert world.view(WorldDate.of(950)).thing(kept).fields["tag"] == "school"
+    world.undo([deleted])
+    assert world.view().thing(gone).fields["tag"] == "school"

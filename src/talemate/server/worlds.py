@@ -137,10 +137,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `DRAFT_VERSIONS` (5) versions per draft key, in memory: `stub:<id>` for
   a stub's expansion, else `new:<kind>:<name key>`; Regenerate and Edit
   prompt send the draft's key back, so a new version joins it whatever
-  it's named. `use_version {draft_key, version}` answers that version as
-  `preview_thing` does; `discard_preview {draft_key}` drops every version,
-  writing nothing, and answers `{draft_key}`; opening another world drops
-  them all.
+  it's named. At most `DRAFTS_KEPT` (20) drafts are kept, the least
+  recently used forgotten first. `use_version {draft_key, version}`
+  answers that version as `preview_thing` does and makes it the current
+  one; `discard_preview {draft_key}` drops every version, writing
+  nothing, and answers `{draft_key}`; a regeneration whose draft is
+  discarded before its reply comes is dropped, unanswered. Opening
+  another world drops them all. The client must always send `draft_key`
+  with `accept_preview`, or the draft lingers until forgotten.
   `accept_preview {preview, into_stub, same_target_id, draft_key?}`
   writes it (into the stub `into_stub`, or onto the entry
   `same_target_id`, "Is this X?", if given), storing its `hint` on the
@@ -186,10 +190,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
   plain, and unknown phrases are never made stubs.
   `repoint_ref {thing_id, fact_id, occurrence, to_id, at}` points one
   reference of a fact (the `occurrence`-th in its text) at another thing,
-  keeping its words, and teaches the target the link's words and, for a
-  stub, the stub's names as other names (`repoint.learn_names`), in one
+  keeping its words, and teaches the target the link's words (unless
+  another entry goes by them) and, when it was a stub's last reference,
+  the stub's names, as other names (`repoint.learn_names`), in one
   revision; it answers like `correct_fact`, plus `aka_added`.
-- Selected words (`start`/`end` index a fact's `rendered` text):
+- Selected words (`start`/`end` index a fact's `rendered` text, in
+  UTF-16 code units, ruling F18; a held fact's "<Holder> holds that ..."
+  prefix isn't in `rendered`, and a link to an ignored stub shown plain
+  is still a link, so a selection over it is refused):
   `make_stub_from_text {fact_id, start, end, kind, tag?, filing?:
   {target_id, role}, at}` makes a stub of the words (or uses the entry
   of that name), filed as `filing` says, and links them, in one
@@ -213,8 +221,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
   until, within, at}`, `edit_filing {thing_id, target_id, role?, since?,
   until?, within?, at}` (an `until` ends it) and `remove_filing {thing_id,
-  target_id, at}` (its exceptions go with it) each write one revision and
-  answer with the thing; `add_exception {character_id, target_id, text,
+  target_id, at}` (its exceptions go with it, named in its `notes`) each
+  write one revision and answer with the thing; `add_exception {character_id, target_id, text,
   rejects, ...}` adds a "but..." to a filing. `set_tag {thing_id, tag}`
   answers with the thing; `list_tags` answers `{tags: [{tag, heading,
   count}]}`; `rename_tag {old, new}` and `merge_tag {from, into}` retag
@@ -256,6 +264,7 @@ formatted with the world's calendar; `label` is ignored on the way in.
 import asyncio
 import json
 import os
+from collections import OrderedDict
 from collections.abc import Collection, Coroutine
 from pathlib import Path
 from typing import Any, Literal
@@ -333,10 +342,16 @@ from talemate.worldplay.create import (
 )
 from talemate.worldplay.create import _new_names as listed_stub_names
 from talemate.worldplay.decide import Verdict
-from talemate.worldplay.facts import FactDraft, accept_facts, draft_facts
+from talemate.worldplay.facts import (
+    FactDraft,
+    accept_facts,
+    draft_facts,
+    draft_facts_for,
+)
 from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
     LinkSpan,
+    NameFiling,
     NewName,
     link_phrase,
     link_text,
@@ -414,6 +429,9 @@ FIXED_SETUP_ENV = "TALEMATE_TEST_FIXED_SETUP"
 # the versions a draft keeps for the session (Version n of m), the oldest
 # dropped first
 DRAFT_VERSIONS = 5
+
+# the drafts a session keeps, the least recently used forgotten first
+DRAFTS_KEPT = 20
 
 # browser tests only: a JSON file holding the model's reply `add_facts`
 # and `add_event` read through their real parsing instead of asking it
@@ -722,12 +740,23 @@ class GroupAddPayload(pydantic.BaseModel):
     prompt: str
 
 
-class AddFactsPayload(_ThingEdit):
+class AddFactsPayload(pydantic.BaseModel):
+    """ "+ Add facts...": onto an entry the world has (`thing_id`), or into
+    a draft (`draft_key`: its current version), exactly one of the two."""
+
+    thing_id: str | None = None
+    draft_key: str | None = None
     prompt: str
+    at: dict | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _one(self) -> "AddFactsPayload":
+        if (self.thing_id is None) == (self.draft_key is None):
+            raise ValueError("facts are added to a thing_id or a draft_key")
+        return self
 
 
-class AddEventPayload(_ThingEdit):
-    prompt: str
+class AddEventPayload(AddFactsPayload):
     # the year the event happened (a year of the world's calendar)
     year: int
 
@@ -739,13 +768,24 @@ class AcceptFactsPayload(pydantic.BaseModel):
 
 
 class _Selection(pydantic.BaseModel):
-    """Selected words of a fact: `start`/`end` index its `rendered` text
-    (code points), as the page shows it."""
+    """Selected words of a fact: an accepted one (`fact_id`) or a draft's
+    (`draft_key` and the fact's `index` in its current version);
+    `start`/`end` index its `rendered` text in UTF-16 code units (ruling
+    F18), as the page counts them."""
 
-    fact_id: str
+    fact_id: str | None = None
+    draft_key: str | None = None
+    index: int | None = None
     start: int
     end: int
     at: dict | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _one(self) -> "_Selection":
+        drafted = self.draft_key is not None and self.index is not None
+        if (self.fact_id is None) == (not drafted):
+            raise ValueError("a selection is in a fact_id, or a draft_key's index")
+        return self
 
 
 class SelectionFiling(pydantic.BaseModel):
@@ -1319,11 +1359,17 @@ def _connected_out(
     each group's tag (`None` for Other), heading and synopsis (none yet:
     Task 8 writes them), then one row per entry with its own line (its
     summary, as linked runs), whether it's a stub, and the filing's role
-    and dates. An ignored stub is hidden here as everywhere."""
+    and dates. At the latest telling an ended filing is listed too (its
+    `until` says so); at a date, only what holds then. An ignored stub is
+    hidden here as everywhere."""
 
     states = {state.id: state for state in things}
     groups = []
-    for group in connected(view, thing_id, things=things):
+    # at the latest telling, what has ended shows too, with its dates; at
+    # a date, only what holds then
+    for group in connected(
+        view, thing_id, things=things, include_ended=view.at is None
+    ):
         rows = []
         for row_id, filing in group.rows:
             state = states.get(row_id) or view.thing(row_id)
@@ -1358,7 +1404,7 @@ def _mentioned_out(view: WorldView, thing_id: str) -> list[dict]:
     (`filing.mentioned_in`), an ignored stub left out."""
 
     found = []
-    for owner_id in mentioned_in(view, thing_id):
+    for owner_id in mentioned_in(view, thing_id, include_ended=view.at is None):
         state = view.thing(owner_id)
         if state is None or state.stub_ignored:
             continue
@@ -1366,13 +1412,42 @@ def _mentioned_out(view: WorldView, thing_id: str) -> list[dict]:
     return found
 
 
+def _code_points(text: str, offset: int) -> int:
+    """A UTF-16 code-unit offset into `text` (the page's JavaScript
+    counts so: an emoji outside the Basic Multilingual Plane is two) as a
+    code-point offset; `ValueError` for one past the end or inside such a
+    character."""
+
+    units = 0
+    for index, char in enumerate(text):
+        if units == offset:
+            return index
+        units += 2 if ord(char) > 0xFFFF else 1
+        if units > offset:
+            raise ValueError(f"offset {offset} is inside a character")
+    if units == offset:
+        return len(text)
+    raise ValueError(f"no such selection in the fact: offset {offset}")
+
+
 def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[int, int]:
     """Where the selected `start:end` of a fact's rendered text (as
-    `view.render` shows it) lies in its stored `text`, links kept: a
-    selection may cover plain words only, never cut through or take in a
-    link (`ValueError`). Leading and trailing spaces are left out."""
+    `view.render` shows it, the payload's `rendered`) lies in its stored
+    `text`, links kept: a selection may cover plain words only, never cut
+    through or take in a link (`ValueError`). Leading and trailing spaces
+    are left out.
+
+    `start` and `end` are UTF-16 code units (ruling F18), the page's own
+    unit, converted here (`_code_points`). They index `rendered`, not the
+    runs the page shows: a held fact's segments read "<Holder> holds that
+    ..." (`_held_segments`), a prefix `rendered` doesn't have, so the page
+    takes it off first; and a link to an ignored stub shows as plain words
+    but is still a link, so a selection over it is refused."""
 
     rendered = view.render(text)
+    if not 0 <= start < end:
+        raise ValueError(f"no such selection in the fact: {start}-{end}")
+    start, end = _code_points(rendered, start), _code_points(rendered, end)
     if not 0 <= start < end <= len(rendered):
         raise ValueError(f"no such selection in the fact: {start}-{end}")
     while start < end and rendered[start].isspace():
@@ -1422,7 +1497,10 @@ class WorldsPlugin(Plugin):
         self._prose_locks: dict[str, asyncio.Lock] = {}
         # the drafts of this session: draft key -> its versions, oldest
         # first (at most `DRAFT_VERSIONS`), in memory only
-        self._drafts: dict[str, list[CreatePreview]] = {}
+        self._drafts: OrderedDict[str, list[CreatePreview]] = OrderedDict()
+        # each draft's current version (0-based): the newest, or the one
+        # `use_version` restored; what prompt additions and selections add to
+        self._current: dict[str, int] = {}
 
     def disconnect(self):
         self._set_world(None)
@@ -1448,6 +1526,7 @@ class WorldsPlugin(Plugin):
             old.close()
             # a draft belongs to the world it was made in
             self._drafts.clear()
+            self._current.clear()
         self.websocket_handler.world = world
 
     def _require_world(self) -> World:
@@ -2129,17 +2208,29 @@ class WorldsPlugin(Plugin):
                 new_names=payload.new_names,
                 hint=payload.hint,
             )
-        self._spawn(
-            preview,
-            self.create_task_done_callback(
-                "preview_thing",
-                "preview_failed",
-                "Error previewing a world thing",
-                success_data=lambda preview: self._new_version(
-                    world, payload.draft_key, preview
-                ),
-            ),
+        key = payload.draft_key
+        # a regeneration of a draft that's discarded (or forgotten) before
+        # its reply comes is dropped: the owner threw the draft away
+        known = key is not None and key in self._drafts
+        answer = self.create_task_done_callback(
+            "preview_thing",
+            "preview_failed",
+            "Error previewing a world thing",
+            success_data=lambda preview: self._new_version(world, key, preview),
         )
+
+        def on_done(task: asyncio.Task) -> None:
+            if (
+                known
+                and key not in self._drafts
+                and not task.cancelled()
+                and task.exception() is None
+            ):
+                log.info("worlds.preview_dropped", draft_key=key)
+                return
+            answer(task)
+
+        self._spawn(preview, on_done)
 
     # --- drafts -----------------------------------------------------------
 
@@ -2164,15 +2255,30 @@ class WorldsPlugin(Plugin):
         versions = self._drafts.setdefault(key, [])
         versions.append(preview)
         del versions[:-DRAFT_VERSIONS]
-        return self._draft_out(world, key, len(versions) - 1)
+        self._touch(key, len(versions) - 1)
+        return self._draft_out(world, key)
 
-    def _draft_out(self, world: World, key: str, index: int) -> dict:
+    def _touch(self, key: str, current: int) -> None:
+        """Make `current` the draft's current version and the draft the
+        most recently used, forgetting the least recently used past
+        `DRAFTS_KEPT`."""
+
+        self._current[key] = current
+        self._drafts.move_to_end(key)
+        while len(self._drafts) > DRAFTS_KEPT:
+            gone, _versions = self._drafts.popitem(last=False)
+            self._current.pop(gone, None)
+            log.info("worlds.draft_forgotten", draft_key=gone)
+
+    def _draft_out(self, world: World, key: str, index: int | None = None) -> dict:
         """A draft version for the wire: the draft as a page payload
         (`_draft_payload`), plus the data to accept (`preview`), its key,
         which version it is (1-based) and every version kept (`versions:
         [{version, name, prompt}]`)."""
 
         versions = self._drafts[key]
+        if index is None:
+            index = self._current.get(key, len(versions) - 1)
         preview = versions[index]
         return {
             **self._draft_payload(world, preview),
@@ -2201,10 +2307,8 @@ class WorldsPlugin(Plugin):
         versions = self._require_draft(payload.draft_key)
         if not 1 <= payload.version <= len(versions):
             raise ValueError(f"the draft has no version {payload.version}")
-        self._reply(
-            "use_version",
-            self._draft_out(world, payload.draft_key, payload.version - 1),
-        )
+        self._touch(payload.draft_key, payload.version - 1)
+        self._reply("use_version", self._draft_out(world, payload.draft_key))
 
     async def handle_discard_preview(self, data: dict):
         """Discard a draft: every version kept goes, and nothing is
@@ -2212,6 +2316,7 @@ class WorldsPlugin(Plugin):
 
         payload = DraftKeyPayload(**data)
         self._drafts.pop(payload.draft_key, None)
+        self._current.pop(payload.draft_key, None)
         self._reply("discard_preview", {"draft_key": payload.draft_key})
 
     def _draft_payload(self, world: World, preview: CreatePreview) -> dict:
@@ -2412,6 +2517,7 @@ class WorldsPlugin(Plugin):
         if payload.draft_key is not None:
             # written: the draft and its versions are done
             self._drafts.pop(payload.draft_key, None)
+            self._current.pop(payload.draft_key, None)
         self._reply(
             "accept_preview",
             {**self._thing_payload(world, thing_id, None), "notes": notes},
@@ -2560,8 +2666,9 @@ class WorldsPlugin(Plugin):
     async def handle_remove_filing(self, data: dict):
         """Take the thing out of `target_id`, in one revision: the filing
         goes, and with it the "but..." exceptions it held (its own facts,
-        which say nothing once it isn't filed there). The exceptions feed
-        its prose, so prose is refreshed when any went."""
+        which say nothing once it isn't filed there). Answers with the
+        thing and `notes`, naming each "but..." removed. The exceptions
+        feed its prose, so prose is refreshed when any went."""
 
         payload = RemoveFilingPayload(**data)
         world = self._require_world()
@@ -2584,12 +2691,20 @@ class WorldsPlugin(Plugin):
             )
             for fact_id in exceptions:
                 rev.remove_fact(fact_id)
-        self._edited(
+        target_name = view.name_of(payload.target_id) or payload.target_id
+        notes = [
+            f'Removed the "but..." "{view.render(found[1].text)}": it was an'
+            f" exception to {target_name}"
+            for fact_id in exceptions
+            if (found := view.fact(fact_id)) is not None
+        ]
+        at = _date_in(payload.at)
+        self._reply(
             "remove_filing",
-            payload.thing_id,
-            _date_in(payload.at),
-            prose=bool(exceptions) and not state.is_stub,
+            {**self._thing_payload(world, payload.thing_id, at), "notes": notes},
         )
+        if exceptions and not state.is_stub:
+            self._schedule_prose(payload.thing_id, at)
 
     async def handle_add_exception(self, data: dict):
         """Add a "but..." to a character's (or real being's) filing in
@@ -2705,22 +2820,28 @@ class WorldsPlugin(Plugin):
 
     def _retag(self, world: World, old: str, new: str, note: str) -> list[str]:
         """Every tag value `old`, at every date, made `new`, in one
-        revision; the entries changed, in id order."""
+        revision (`Revision.retag`: a deleted entry's too, so undoing its
+        delete brings it back retagged); the entries changed, in id
+        order."""
 
-        changed: list[str] = []
         with world.revision(Source.manual(note=note)) as rev:
-            for state in world.view().things():
-                for entry in world.timeline(state.id):
-                    if (
-                        entry.change == "field"
-                        and entry.field == "tag"
-                        and isinstance(entry.value, str)
-                        and normalise_tag(entry.value) == old
-                    ):
-                        rev.set_field(state.id, "tag", new, entry.date)
-                        if state.id not in changed:
-                            changed.append(state.id)
-        return changed
+            return rev.retag(old, new)
+
+    @staticmethod
+    def _tags_ever(world: World) -> set[str]:
+        """Every tag the world's entries carry at any date (a tag that
+        only holds in the past is in use too)."""
+
+        found: set[str] = set()
+        for state in world.view().things():
+            for entry in world.timeline(state.id):
+                if (
+                    entry.change == "field"
+                    and entry.field == "tag"
+                    and isinstance(entry.value, str)
+                ):
+                    found.add(normalise_tag(entry.value))
+        return found
 
     def _tag_reply(self, action: str, world: World, changed: list[str], **data) -> None:
         self._reply(
@@ -2730,15 +2851,16 @@ class WorldsPlugin(Plugin):
 
     async def handle_rename_tag(self, data: dict):
         """Rename a tag on every entry that carries it ("school" ->
-        "academy"), in one revision, at every date its values hold:
-        every page regroups. A tag already in use is refused: that's
+        "academy"), in one revision, at every date its values hold (a tag
+        that only holds in the past can be renamed) and on deleted entries
+        too: every page regroups. A tag already in use is refused: that's
         `merge_tag`. Answers `{old, new, changed, tags}` (`changed` the
         entries retagged, `tags` as `list_tags`)."""
 
         payload = RenameTagPayload(**data)
         world = self._require_world()
         old, new = normalise_tag(payload.old), normalise_tag(payload.new)
-        in_use = dict(tags_in_use(world.view()))
+        in_use = self._tags_ever(world)
         if not new:
             raise ValueError("a tag needs a name")
         if old not in in_use:
@@ -2759,7 +2881,7 @@ class WorldsPlugin(Plugin):
         payload = MergeTagPayload(**data)
         world = self._require_world()
         old, into = normalise_tag(payload.from_), normalise_tag(payload.into)
-        in_use = dict(tags_in_use(world.view()))
+        in_use = self._tags_ever(world)
         if old not in in_use:
             raise ValueError(f"no entry is tagged {old!r}")
         if into not in in_use:
@@ -2791,15 +2913,42 @@ class WorldsPlugin(Plugin):
 
     def _draft_facts(self, action: str, payload: Any, year: int | None) -> None:
         world = self._require_world()
-        self._require_entry(world.view(), payload.thing_id)
         fixed = _fixed_file(FIXED_FACTS_ENV)
+        client = self._client() if fixed is None else None
+        reply = fixed.read_text(encoding="utf-8") if fixed is not None else None
+        key = payload.draft_key
+        if key is not None:
+            # into the draft's current version, on the server's copy: the
+            # draft answers, updated (ruling F16)
+            preview = self._current_preview(key)
+            adding = draft_facts_for(
+                world, preview, payload.prompt, client, year=year, reply=reply
+            )
+            answer = self.create_task_done_callback(
+                action,
+                f"{action}_failed",
+                "Error drafting facts",
+                success_data=lambda facts: self._draft_added(
+                    world, key, preview, facts
+                ),
+                failure_data={"draft_key": key},
+            )
+
+            def on_done(task: asyncio.Task) -> None:
+                if (
+                    key not in self._drafts
+                    and not task.cancelled()
+                    and task.exception() is None
+                ):
+                    log.info("worlds.facts_dropped", draft_key=key)
+                    return
+                answer(task)
+
+            self._spawn(adding, on_done)
+            return
+        self._require_entry(world.view(), payload.thing_id)
         drafting = draft_facts(
-            world,
-            payload.thing_id,
-            payload.prompt,
-            self._client() if fixed is None else None,
-            year=year,
-            reply=fixed.read_text(encoding="utf-8") if fixed is not None else None,
+            world, payload.thing_id, payload.prompt, client, year=year, reply=reply
         )
         self._spawn(
             drafting,
@@ -2810,6 +2959,26 @@ class WorldsPlugin(Plugin):
                 success_data=lambda draft: self._fact_draft_out(world, draft),
                 failure_data={"thing_id": payload.thing_id},
             ),
+        )
+
+    def _current_preview(self, key: str) -> CreatePreview:
+        """The draft's current version (its server copy)."""
+
+        versions = self._require_draft(key)
+        return versions[self._current.get(key, len(versions) - 1)]
+
+    def _draft_added(
+        self, world: World, key: str, preview: CreatePreview, facts: list[PreviewFact]
+    ) -> dict:
+        preview.facts.extend(facts)
+        return self._draft_out(world, key)
+
+    def _stub_drafted(self, thing_id: str) -> bool:
+        """Whether a draft this session holds expands the stub `thing_id`."""
+
+        return any(
+            any(version.stub_id == thing_id for version in versions)
+            for versions in self._drafts.values()
         )
 
     def _fact_draft_out(self, world: World, draft: FactDraft) -> dict:
@@ -2845,14 +3014,18 @@ class WorldsPlugin(Plugin):
         prompt, in the background (`worldplay.facts.draft_facts`): answers
         `add_facts` (a fact draft, `_fact_draft_out`) or
         `add_facts_failed`. Writes nothing: `accept_facts` writes the
-        ticked ones."""
+        ticked ones. With `draft_key` (on a draft page, ruling F16), the
+        facts (`facts.draft_facts_for`) are appended to the draft's current
+        version on the server, and `add_facts` answers with the updated
+        draft, as `preview_thing` does; the draft's accept writes them."""
 
         self._draft_facts("add_facts", AddFactsPayload(**data), None)
 
     async def handle_add_event(self, data: dict):
         """ "+ Add event...": the entry's dated facts for what happened in
         `year`, from the owner's prompt, as `add_facts` (answers
-        `add_event` or `add_event_failed`); each fact dated `year`."""
+        `add_event` or `add_event_failed`); each fact dated `year`. With
+        `draft_key`, into the draft as `add_facts` does."""
 
         payload = AddEventPayload(**data)
         WorldDate.of(payload.year)
@@ -2862,11 +3035,18 @@ class WorldsPlugin(Plugin):
         """Write a fact draft's ticked facts onto its entry, linked as
         `add_fact` links (`worldplay.facts.accept_facts`), in one revision;
         answers `accept_facts` with the entry and `fact_ids`, and refreshes
-        its prose when it reads them."""
+        its prose when it reads them. A stub a draft of this session
+        expands is refused: its facts go into the draft, and nothing is
+        written before the draft is accepted."""
 
         payload = AcceptFactsPayload(**data)
         world = self._require_world()
         self._require_entry(world.view(), payload.draft.thing_id)
+        if self._stub_drafted(payload.draft.thing_id):
+            raise ValueError(
+                "that stub is being drafted: add the facts to its draft"
+                " (add_facts with its draft_key), or discard the draft first"
+            )
         fact_ids = accept_facts(world, payload.draft)
         at = _date_in(payload.at)
         self._reply(
@@ -2899,12 +3079,39 @@ class WorldsPlugin(Plugin):
         live or a selection that cuts through a link."""
 
         view = world.view(_date_in(payload.at))
-        found = world.view().fact(payload.fact_id)
+        found = world.view().fact(payload.fact_id or "")
         if found is None:
             raise KeyError(f"no such fact: {payload.fact_id}")
         owner_id, fact = found
         start, end = _raw_span(view, fact.text, payload.start, payload.end)
         return owner_id, fact, start, end, fact.text[start:end]
+
+    def _draft_selected(
+        self, world: World, payload: _Selection
+    ) -> tuple[str, CreatePreview, str]:
+        """`(draft key, current version, words)` for a selection in a
+        draft's fact (its `index`), refusing one that cuts through a link."""
+
+        key = payload.draft_key or ""
+        preview = self._current_preview(key)
+        index = payload.index if payload.index is not None else -1
+        if not 0 <= index < len(preview.facts):
+            raise ValueError(f"the draft has no fact {payload.index}")
+        text = preview.facts[index].text
+        start, end = _raw_span(world.view(), text, payload.start, payload.end)
+        return key, preview, " ".join(text[start:end].split())
+
+    @staticmethod
+    def _unnamed(preview: CreatePreview, words: str) -> None:
+        """Drop what the draft says the words are (a pick, a new name, a
+        name treated as new), before saying it anew."""
+
+        key = name_key(words)
+        preview.picks = {w: t for w, t in preview.picks.items() if name_key(w) != key}
+        preview.new_names = [n for n in preview.new_names if name_key(n.name) != key]
+        preview.treated_as_new = [
+            w for w in preview.treated_as_new if name_key(w) != key
+        ]
 
     async def handle_make_stub_from_text(self, data: dict):
         """Make a stub of selected words of a fact ("Make a stub"): a stub
@@ -2913,13 +3120,49 @@ class WorldsPlugin(Plugin):
         when given, and the words made a link to it, in one revision.
         A stub made here is filed as `filing` says; an entry the world has
         by that name keeps its own filings. Answers with the fact's entry
-        and `stub_id` (so "Make a stub and expand it now" can expand it). Refused, writing nothing: a
-        selection that cuts through a link, the entry's own name."""
+        and `stub_id` (so "Make a stub and expand it now" can expand it).
+        Refused, writing nothing: a selection that cuts through a link, the
+        entry's own name.
+
+        On a draft (`draft_key` and the fact's `index`, ruling F16) nothing
+        is written: the draft's current version gains a new name with the
+        kind, tag and filing given, keyed by name (accept makes the stub
+        and links the words wherever the draft writes them), and the
+        updated draft answers, with `stub_id: null` and `new_name`."""
 
         payload = MakeStubFromTextPayload(**data)
         world = self._require_world()
         if payload.kind not in KINDS:
             raise ValueError(f"no such kind: {payload.kind!r}")
+        if payload.draft_key is not None:
+            # a draft's fact (ruling F16): a new name, keyed by name, which
+            # accept makes a stub of and links wherever the draft writes it
+            key, preview, words = self._draft_selected(world, payload)
+            if name_key(words) == name_key(preview.name):
+                raise ValueError(f"{words!r} is this entry's own name")
+            if payload.filing is not None:
+                self._require_entry(world.view(), payload.filing.target_id)
+            self._unnamed(preview, words)
+            preview.new_names.append(
+                NewName(
+                    name=words,
+                    kind=payload.kind,
+                    tag=normalise_tag(payload.tag) if payload.tag else None,
+                    filing=(
+                        NameFiling(
+                            target_id=payload.filing.target_id,
+                            role=(payload.filing.role or "").strip() or None,
+                        )
+                        if payload.filing is not None
+                        else None
+                    ),
+                )
+            )
+            self._reply(
+                "make_stub_from_text",
+                {**self._draft_out(world, key), "stub_id": None, "new_name": words},
+            )
+            return
         owner_id, fact, start, end, words = self._selected(world, payload)
         name = " ".join(words.split())
         before = world.view()
@@ -2950,7 +3193,7 @@ class WorldsPlugin(Plugin):
                     ],
                 )
             rev.correct_fact(
-                payload.fact_id,
+                fact.fact_id,
                 text=fact.text[:start] + ref(stub_id, words) + fact.text[end:],
             )
         log.info("worlds.stub_from_text", id=stub_id, name=name, kind=payload.kind)
@@ -2966,17 +3209,31 @@ class WorldsPlugin(Plugin):
         """Link selected words of a fact to an entry ("Link to an
         entry..."), keeping the words, in one revision; answers with the
         fact's entry. Refused, writing nothing: a selection that cuts
-        through a link, a target that's gone, the fact's own entry."""
+        through a link, a target that's gone, the fact's own entry. On a
+        draft (`draft_key` and `index`, ruling F16), the draft's current
+        version gains a pick of the words for the target, keyed by name, so
+        accept links every occurrence of those words in the draft; the
+        updated draft answers."""
 
         payload = LinkTextPayload(**data)
         world = self._require_world()
         self._require_entry(world.view(), payload.target_id)
+        if payload.draft_key is not None:
+            # a draft's fact (ruling F16): a pick, keyed by name, so accept
+            # links every place the draft writes these words
+            key, preview, words = self._draft_selected(world, payload)
+            if payload.target_id == preview.stub_id:
+                raise ValueError("a fact can't link its own entry")
+            self._unnamed(preview, words)
+            preview.picks[words] = payload.target_id
+            self._reply("link_text", self._draft_out(world, key))
+            return
         owner_id, fact, start, end, words = self._selected(world, payload)
         if payload.target_id == owner_id:
             raise ValueError("a fact can't link its own entry")
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
-                payload.fact_id,
+                fact.fact_id,
                 text=fact.text[:start]
                 + ref(payload.target_id, words)
                 + fact.text[end:],
@@ -3335,21 +3592,32 @@ class WorldsPlugin(Plugin):
             "".join(seg.text for seg in view.segments(old.group(0))) if old else ""
         )
         new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
-        # the names the link went by: its words, and, for a stub, the
-        # stub's own names, which the target learns as other names (as
-        # `repoint_stub` teaches them), so a later mention links there
+        # the names the link went by, which the target learns as other
+        # names (as `repoint_stub` teaches them): its words, unless another
+        # entry goes by them; and a stub's own names only when this was its
+        # last reference (it names nothing else, so its names are free)
         from_id = old.group(1) if old else None
         names = [(old.group(2) or rendered) if old else ""]
+        skip: set[str] = set()
         source = view.thing(from_id) if from_id else None
-        if source is not None and source.is_stub:
-            names += [
-                view.name_of(from_id) or "",
-                *(
-                    entry["name"]
-                    for entry in source.fields.get("aka") or []
-                    if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-                ),
-            ]
+        if source is not None and source.is_stub and from_id is not None:
+            uses = sum(
+                1
+                for live in world.live_facts()
+                for found in REF_PATTERN.finditer(live.text)
+                if found.group(1) == from_id
+            )
+            if uses <= 1:
+                skip = {from_id}
+                names += [
+                    view.name_of(from_id) or "",
+                    *(
+                        entry["name"]
+                        for entry in source.fields.get("aka") or []
+                        if isinstance(entry, dict)
+                        and isinstance(entry.get("name"), str)
+                    ),
+                ]
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(payload.fact_id, text=new_text)
             added = learn_names(
@@ -3357,7 +3625,7 @@ class WorldsPlugin(Plugin):
                 world,
                 payload.to_id,
                 names,
-                skip={from_id} if from_id else set(),
+                skip=skip,
             )
         self._reply(
             "repoint_ref",

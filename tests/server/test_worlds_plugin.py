@@ -4596,7 +4596,7 @@ async def test_edit_filing(plugin):
     assert (row["role"], row["since"]["label"]) == ("patron", "960")
     assert [e["fact_id"] for e in row["exceptions"]] == [s.skips]
 
-    # "End this": an until ends it, and Velikoye no longer lists him
+    # "End this": an until ends it
     head = s.world.head_rev()
     await _act(
         plugin,
@@ -4612,8 +4612,11 @@ async def test_edit_filing(plugin):
         if r["target_id"] == s.velikoye
     )
     assert row["until"]["label"] == "1015"
+    # Velikoye lists him still, ended (Connected shows ended filings)
     velikoye = await _get_thing(plugin, s.velikoye)
-    assert "ruler" not in [group["tag"] for group in velikoye["connected"]]
+    assert _group(velikoye, "ruler")["rows"][0]["until"]["label"] == "1015"
+    later = await _get_thing(plugin, s.velikoye, WorldDate.of(1018))
+    assert "ruler" not in [group["tag"] for group in later["connected"]]
     # still there before it ended
     then = await _get_thing(plugin, s.velikoye, WorldDate.of(1010))
     assert _group(then, "ruler")["rows"][0]["id"] == s.dmitry
@@ -5396,3 +5399,438 @@ async def test_copy_of_a_summary_is_a_plain_fact(plugin):
     _owner, copy = s.world.view().fact(copy_id)
     assert not entries.is_summary_fact(copy)
     assert entries.is_summary_fact(s.world.view().fact(s.capital)[1])
+
+
+# --- Task 6 fix round 1 ---------------------------------------------------------
+
+
+async def test_connected_shows_ended_filings_with_their_dates(plugin):
+    """At the latest telling Connected lists what was filed in the entry
+    and has ended, with its dates ("in Velikoye from 900 to 1015"); at a
+    date, only what holds then. Mentioned in leaves out the same set."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        dance = rev.create_thing(
+            "lore",
+            {
+                "name": "The Feather Dance",
+                "tag": "custom",
+                "filings": [_filed(s.velikoye, since=900, until=1015)],
+            },
+        )
+        rev.add_fact(
+            dance, "general", f"Danced in winter in {ref(s.velikoye, 'Velikoye')}."
+        )
+
+    velikoye = await _get_thing(plugin, s.velikoye)
+    (row,) = _group(velikoye, "custom")["rows"]
+    assert (row["id"], row["since"]["label"], row["until"]["label"]) == (
+        dance,
+        "900",
+        "1015",
+    )
+    assert dance not in [m["id"] for m in velikoye["mentioned_in"]]
+    # a dated view: only what holds then
+    then = await _get_thing(plugin, s.velikoye, WorldDate.of(950))
+    assert [r["id"] for r in _group(then, "custom")["rows"]] == [dance]
+    later = await _get_thing(plugin, s.velikoye, WorldDate.of(1018))
+    assert "custom" not in [g["tag"] for g in later["connected"]]
+
+
+async def test_repoint_ref_between_full_entries_teaches_nothing(plugin):
+    """A link re-pointed from one full entry to another: the other names
+    a live entry goes by are never taught to the target."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        fact = rev.add_fact(
+            s.court, "general", f"It meets by {ref(s.khorol, 'Khorol River')}."
+        )
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=s.velikoye,
+    )
+    assert _last(plugin, "repoint_ref")["data"]["aka_added"] == []
+    assert "aka" not in s.world.view().thing(s.velikoye).fields
+
+
+async def test_repoint_ref_keeps_a_stub_still_named_its_names(plugin):
+    """A stub still referenced elsewhere keeps its names: only the link's
+    words, which no other entry goes by, are taught."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        tsar = rev.create_thing(
+            "character", {"name": "The Old Tsar", "stub": {"ignored": False}}
+        )
+        fact = rev.add_fact(s.court, "general", f"Founded by {ref(tsar, 'the Tsar')}.")
+        rev.add_fact(s.dawn, "general", f"Blessed by {ref(tsar, 'The Old Tsar')}.")
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=s.dmitry,
+    )
+    assert _last(plugin, "repoint_ref")["data"]["aka_added"] == ["the Tsar"]
+
+
+async def test_remove_filing_notes_the_exceptions_it_removed(plugin):
+    s = await _open_filing_world(plugin)
+    await _act(plugin, "remove_filing", thing_id=s.dmitry, target_id=s.dawn)
+    assert _last(plugin, "remove_filing")["data"]["notes"] == [
+        'Removed the "but..." "Keeps the Dawn Vigil only on feast days.":'
+        " it was an exception to The White Dawn"
+    ]
+    await _act(plugin, "remove_filing", thing_id=s.dmitry, target_id=s.court)
+    assert _last(plugin, "remove_filing")["data"]["notes"] == []
+
+
+async def test_add_exception_needs_a_real_being(plugin):
+    """Ruling C4: a being takes a "but..." only while it's real."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        light = rev.create_thing(
+            "being",
+            {
+                "name": "The Light",
+                "existence": "real",
+                "filings": [_filed(s.dawn, "patron")],
+            },
+        )
+        spirit = rev.create_thing(
+            "being",
+            {
+                "name": "The Spirit",
+                "existence": "believed",
+                "filings": [_filed(s.dawn, "patron")],
+            },
+        )
+    await _act(
+        plugin,
+        "add_exception",
+        character_id=light,
+        target_id=s.dawn,
+        text="Shines at night too.",
+    )
+    row = next(
+        r
+        for r in _last(plugin, "add_exception")["data"]["in"]
+        if r["target_id"] == s.dawn
+    )
+    assert len(row["exceptions"]) == 1
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(plugin, "add_exception", character_id=spirit, target_id=s.dawn, text="x")
+    assert len(_errors(plugin)) == before + 1
+    assert s.world.head_rev() == head
+
+
+async def test_retag_reaches_deleted_entries_and_past_tags(plugin):
+    """A rename reaches a deleted entry's tag, so undoing the delete
+    brings it back retagged, and a tag that only holds at a past date
+    can be renamed and merged. list_tags leaves ignored stubs out."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        school = rev.create_thing("lore", {"name": "Rune School", "tag": "school"})
+        old = rev.create_thing("lore", {"name": "Old School", "tag": "school"})
+        guild = rev.create_thing("lore", {"name": "Scribes", "tag": "guild"})
+        rev.set_field(guild, "tag", "order", WorldDate.of(1000))
+        rev.create_thing(
+            "lore", {"name": "Hush", "tag": "secret", "stub": {"ignored": True}}
+        )
+    with s.world.revision(Source.manual(note="deleted")) as rev:
+        rev.remove_thing(old)
+    deleted = s.world.head_rev()
+
+    await _act(plugin, "rename_tag", old="school", new="academy")
+    assert not _errors(plugin)
+    s.world.undo([deleted])
+    assert s.world.view().thing(old).fields["tag"] == "academy"
+    assert s.world.view().thing(school).fields["tag"] == "academy"
+
+    # "guild" holds only before 1000
+    await _act(plugin, "rename_tag", old="guild", new="brotherhood")
+    assert not _errors(plugin)
+    assert s.world.view(WorldDate.of(950)).thing(guild).fields["tag"] == "brotherhood"
+    await _act(plugin, "merge_tag", **{"from": "brotherhood", "into": "academy"})
+    assert not _errors(plugin)
+    assert s.world.view(WorldDate.of(950)).thing(guild).fields["tag"] == "academy"
+
+    await _act(plugin, "list_tags")
+    tags = [t["tag"] for t in _last(plugin, "list_tags")["data"]["tags"]]
+    assert "secret" not in tags
+
+
+async def test_accept_with_a_folded_stub_within_files_the_entry_whole(plugin):
+    """M7: an "In" row `within` the bare stub folded into the one being
+    filled ("Is this X?" onto a stub) is within the entry itself, so the
+    entry is filed in the target whole."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        watch = rev.create_thing(
+            "lore",
+            {
+                "name": "Night Watch",
+                "stub": {"ignored": False},
+                "filings": [_filed(s.court)],
+            },
+        )
+        captain = rev.create_thing(
+            "lore", {"name": "Watch Captaincy", "stub": {"ignored": False}}
+        )
+        rev.add_fact(s.dawn, "general", f"Guarded by {ref(captain, 'the Captaincy')}.")
+    preview = {
+        "kind": "lore",
+        "prompt": "the watch",
+        "name": "Watch Captaincy",
+        "stub_id": captain,
+        "facts": [{"category": "general", "text": "It keeps the night."}],
+        "prose": {},
+        "filings": [
+            {
+                "target_id": s.court,
+                "target_name": "The Night Court",
+                "within": watch,
+                "ticked": True,
+            }
+        ],
+    }
+    await _act(plugin, "accept_preview", preview=preview, same_target_id=watch)
+    assert not _errors(plugin)
+    page = _last(plugin, "accept_preview")["data"]
+    assert page["id"] == captain
+    (row,) = [r for r in page["in"] if r["target_id"] == s.court]
+    assert row["within_id"] is None
+    assert s.world.view().thing(watch) is None
+
+
+def _utf16(text: str) -> int:
+    return len(text.encode("utf-16-le")) // 2
+
+
+async def test_selection_offsets_are_utf16_code_units(plugin):
+    """Ruling F18: `start`/`end` count UTF-16 code units, as the page's
+    JavaScript does; an emoji is two. An offset inside one is refused."""
+
+    s = await _open_filing_world(plugin)
+    rendered = "🦉 Owls nest in the Hall of Dusk."
+    with s.world.revision(Source.manual()) as rev:
+        fact = rev.add_fact(s.court, "general", rendered)
+    start = _utf16(rendered[: rendered.index("Hall of Dusk")])
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + _utf16("Hall of Dusk"),
+        target_id=s.velikoye,
+    )
+    court = _last(plugin, "link_text")["data"]
+    text = next(f["text"] for f in court["facts"] if f["fact_id"] == fact)
+    assert text == f"🦉 Owls nest in the {ref(s.velikoye, 'Hall of Dusk')}."
+
+    before = len(_errors(plugin))
+    await _act(plugin, "link_text", fact_id=fact, start=1, end=6, target_id=s.velikoye)
+    assert len(_errors(plugin)) == before + 1
+
+
+async def test_drafts_are_bounded_and_a_late_result_after_discard_is_dropped(
+    plugin, client
+):
+    s = await _open_filing_world(plugin)
+    keys = []
+    for index in range(21):
+        draft = await _preview(
+            plugin, client, _draft_reply(f"Host {index}", "One."), prompt="a host"
+        )
+        keys.append(draft["draft_key"])
+    # the oldest draft is forgotten once there are more than 20
+    assert len(plugin._drafts) == 20
+    before = len(_errors(plugin))
+    await _act(plugin, "use_version", draft_key=keys[0], version=1)
+    assert len(_errors(plugin)) == before + 1
+    await _act(plugin, "use_version", draft_key=keys[1], version=1)
+    assert len(_errors(plugin)) == before + 1
+
+    # Regenerate, then Discard before the reply comes: it's dropped
+    replies = len(_replies(plugin, "preview_thing"))
+    async with MockClientContext():
+        client_responses.get().append(_draft_reply("Late Host", "Two."))
+        client_responses.get().append("Prose.")
+        await _act(
+            plugin,
+            "preview_thing",
+            kind="lore",
+            fields={},
+            prompt="again",
+            draft_key=keys[5],
+        )
+        await _act(plugin, "discard_preview", draft_key=keys[5])
+        await _drain(plugin)
+    assert len(_replies(plugin, "preview_thing")) == replies
+    assert keys[5] not in plugin._drafts
+    assert s.world.head_rev()
+
+
+async def test_add_facts_and_event_on_a_draft(plugin, client):
+    """Ruling F16: on a draft page, "+ Add facts..." and "+ Add event..."
+    append to the draft's current version on the server, writing nothing,
+    and answer with the updated draft; the accept writes them."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    head = s.world.head_rev()
+    key = draft["draft_key"]
+    async with MockClientContext():
+        client_responses.get().append(
+            json.dumps(
+                {"facts": [{"category": "general", "text": "It drills at dawn."}]}
+            )
+        )
+        await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
+        await _drain(plugin)
+    assert "Frostwing Host" in str(client.prompt_history[-1]["prompt"])
+    added = _last(plugin, "add_facts")["data"]
+    assert (added["draft_key"], added["version"]) == (key, 1)
+    assert [f["text"] for f in added["facts"]] == [
+        "It flies at night.",
+        "It drills at dawn.",
+    ]
+    assert [f["text"] for f in added["preview"]["facts"]] == [
+        "It flies at night.",
+        "It drills at dawn.",
+    ]
+    async with MockClientContext():
+        client_responses.get().append(
+            json.dumps({"facts": [{"category": "general", "text": "It was raised."}]})
+        )
+        await _act(plugin, "add_event", draft_key=key, prompt="its raising", year=990)
+        await _drain(plugin)
+    evented = _last(plugin, "add_event")["data"]
+    assert evented["preview"]["facts"][-1]["since"] == WorldDate.of(990).model_dump(
+        mode="json"
+    )
+    assert [line["date"]["label"] for line in evented["entry_timeline"]] == ["990"]
+    assert s.world.head_rev() == head
+
+    await _act(plugin, "accept_preview", preview=evented["preview"], draft_key=key)
+    host = _last(plugin, "accept_preview")["data"]
+    assert {"It drills at dawn.", "It was raised."} <= {
+        f["text"] for f in host["facts"]
+    }
+
+
+async def test_accept_facts_waits_for_a_stub_draft(plugin, client):
+    """A stub being drafted takes facts through its draft: `accept_facts`
+    on it is refused, writing nothing, until the draft is accepted or
+    discarded."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Wattle Row", "Wattlemakers work here."),
+        kind="place",
+        prompt="the street",
+        stub_id=s.wattle,
+    )
+    head = s.world.head_rev()
+    fact_draft = {
+        "thing_id": s.wattle,
+        "prompt": "x",
+        "facts": [{"category": "general", "text": "It floods."}],
+    }
+    before = len(_errors(plugin))
+    await _act(plugin, "accept_facts", draft=fact_draft)
+    assert "draft" in _errors(plugin)[-1]["error"]["message"]
+    assert len(_errors(plugin)) == before + 1
+    assert s.world.head_rev() == head
+    await _act(plugin, "discard_preview", draft_key=draft["draft_key"])
+    await _act(plugin, "accept_facts", draft=fact_draft)
+    assert s.world.head_rev() == head + 1
+
+
+async def test_selection_on_a_draft_names_and_links_by_name(plugin, client):
+    """Ruling F16: on a draft fact (by its `index`), "Make a stub" adds a
+    new name with its kind and tag, and "Link to..." a pick, both keyed by
+    name: every occurrence of the words is linked on accept."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply(
+            "Frostwing Host",
+            "It drills on the Frost Field by the Old Bridge.",
+            "The Old Bridge stands.",
+        ),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    head = s.world.head_rev()
+    text = "It drills on the Frost Field by the Old Bridge."
+    start = text.index("Frost Field")
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("Frost Field"),
+        kind="place",
+        tag="field",
+    )
+    named = _last(plugin, "make_stub_from_text")["data"]
+    (new,) = named["preview"]["new_names"]
+    assert (new["name"], new["kind"], new["tag"]) == ("Frost Field", "place", "field")
+    start = text.index("Old Bridge")
+    await _act(
+        plugin,
+        "link_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("Old Bridge"),
+        target_id=s.khorol,
+    )
+    linked = _last(plugin, "link_text")["data"]
+    assert linked["preview"]["picks"] == {"Old Bridge": s.khorol}
+    # both occurrences show linked on the draft page
+    refs = [
+        seg["ref"]
+        for fact in linked["facts"]
+        for seg in fact["segments"]
+        if seg["text"] == "Old Bridge"
+    ]
+    assert refs == [s.khorol, s.khorol]
+    assert s.world.head_rev() == head
+
+    await _act(plugin, "accept_preview", preview=linked["preview"], draft_key=key)
+    host = _last(plugin, "accept_preview")["data"]
+    texts = [f["text"] for f in host["facts"]]
+    field = next(
+        t.id
+        for t in s.world.view().things("place")
+        if t.fields["name"] == "Frost Field"
+    )
+    assert s.world.view().thing(field).fields["tag"] == "field"
+    assert (
+        f"It drills on the {ref(field, 'Frost Field')} by the"
+        f" {ref(s.khorol, 'Old Bridge')}."
+    ) in texts
+    assert f"The {ref(s.khorol, 'Old Bridge')} stands." in texts
