@@ -1816,7 +1816,7 @@ def accept_fill(
 
     while True:
         try:
-            with world.revision(Source.manual(note=_FILLED_NOTE)) as rev:
+            with shadowed_revision(world, Source.manual(note=_FILLED_NOTE)) as rev:
                 written: list[str] = []
                 chain = create.outer_first([*rows, *elsewhere_names])
                 made = create._row_stubs(
@@ -1838,10 +1838,6 @@ def accept_fill(
                 unlinked = _orphans(view, stubs, rows, linked)
                 if unlinked:
                     raise create._UnlinkedNames([n.name for n in unlinked])
-                # what the drawers' readers still read is `part_of`; the
-                # world's readers read filings, written here beside it
-                # (Filing, Task 4, ruling F11: no shim)
-                _file_what_was_filed(rev, world, view, written)
             break
         except create._UnlinkedNames as unlinked_names:
             rows = _without_unlinked(rows, unlinked_names)
@@ -1853,27 +1849,6 @@ def accept_fill(
         items=len(items),
         elsewhere=len(others),
     )
-
-
-def _file_what_was_filed(
-    rev: Any, world: World, before: WorldView, notes: list[str]
-) -> None:
-    """Each thing whose `part_of` this revision set to a sphere, filed in
-    that sphere too (`create.write_filings`, which adds the filing beside
-    any it has), so the world's readers, which read only filings, see the
-    drawer it was put in."""
-
-    live = world.view()
-    for state in live.things():
-        link = state.fields.get("part_of")
-        if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
-            continue
-        held = before.thing(state.id)
-        if held is not None and held.fields.get("part_of") == link:
-            continue
-        create.write_filings(
-            rev, world, state.id, [create.Filing(target=link["sphere"])], notes
-        )
 
 
 # --- branches ----------------------------------------------------------------

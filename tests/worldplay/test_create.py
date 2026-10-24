@@ -1995,7 +1995,8 @@ DAWN_BLOCK = (
     "S2...:\n"
     "The White Dawn (religion):\n"
     "- S1: The state church of the owl-folk.\n"
-    "- S2: Snowy owl-folk are the purest of the folk.\n"
+    # a belief is told as held (ruling C33)
+    "- S2: The White Dawn holds: Snowy owl-folk are the purest of the folk.\n"
     "- S3: The Doctrine of Separation (doctrine): The faithful may not marry "
     "humans.\n"
     "- S4: The Dawn Vigil (rite): The faithful watch the first light.\n"
@@ -2083,7 +2084,7 @@ async def test_character_preview_offers_in_rows_with_exceptions(at_1020, dawn_wo
         "May belong in: The White Dawn (religion)",
         [
             "S1: The state church of the owl-folk.",
-            "S2: Snowy owl-folk are the purest of the folk.",
+            "S2: The White Dawn holds: Snowy owl-folk are the purest of the folk.",
             "S3: The Doctrine of Separation (doctrine): The faithful may not "
             "marry humans.",
             "S4: The Dawn Vigil (rite): The faithful watch the first light.",
@@ -2302,7 +2303,8 @@ async def test_heritage_character_gets_the_in_wording(probe_world):
 
     prompt = str(client.prompt_history[0]["prompt"])
     assert (
-        "The White Dawn (religion):\n- S1: Snowy owl-folk are pure.\n"
+        "The White Dawn (religion):\n"
+        "- S1: The White Dawn holds that Snowy owl-folk are pure.\n"
         "\nEntries near this one in the world:" in prompt
     )
     assert '"overrides": []' in prompt

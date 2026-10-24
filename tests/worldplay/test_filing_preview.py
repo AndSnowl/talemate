@@ -360,8 +360,9 @@ async def test_names_get_tag_and_filing(world, moscavia):
 
 
 async def test_name_filed_in_the_entry_itself(world, moscavia):
-    """The church's clerical orders are filed in the church being written;
-    an unticked name filing is left unwritten."""
+    """The church's clerical orders are filed in the church being written
+    (`NameFiling.this_entry`, so renaming the draft keeps them there); an
+    unticked name filing is left unwritten."""
 
     client = MockClient("test")
     async with MockClientContext():
@@ -379,11 +380,14 @@ async def test_name_filed_in_the_entry_itself(world, moscavia):
     assert "High Bishop of the White Dawn" not in by_name
     assert by_name["Frostwalkers"].kind == "lore"
     assert by_name["Frostwalkers"].tag == "clerical order"
-    assert by_name["Frostwalkers"].filing.name == preview.name
+    assert by_name["Frostwalkers"].filing.this_entry is True
     by_name["Archivists"].filing.ticked = False
 
+    # the owner renames the draft: the names filed in it follow
+    preview.name = "Church of the Dawn Reborn"
     thing_id = accept_preview(world, preview)
     view = world.view()
+    assert view.name_of(thing_id) == "Church of the Dawn Reborn"
     made = {view.name_of(t.id): t.id for t in view.things() if t.is_stub}
     assert _targets(view, made["Frostwalkers"]) == [thing_id]
     assert filings_of(view, made["Archivists"]) == []
@@ -540,8 +544,10 @@ async def test_character_in_rows_carry_exceptions(world, moscavia):
 
     # the entries it may belong in, each with what it holds, labelled
     assert (
-        "- S1: The White Dawn will return in the fullness of time to finish "
-        "the transformation of the world." in prompt
+        # a belief is told as held (ruling C33)
+        "- S1: Church of the Eternal Light holds that the White Dawn will "
+        "return in the fullness of time to finish the transformation of the "
+        "world." in prompt
     )
     assert '"exceptions": [{"text": "One sentence.", "rejects": "S1"}]' in prompt
     church_row = next(f for f in preview.filings if f.target_id == moscavia.church)

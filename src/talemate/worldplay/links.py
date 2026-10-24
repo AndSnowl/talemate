@@ -87,11 +87,14 @@ class SameOffer(SameCandidate):
 
 class NameFiling(BaseModel):
     """Where a new name's stub is filed on accept (its reply's `"in"`): an
-    entry the world has (`target_id`), or, by `name`, the entry being
-    written or another new name of the same accept. Ticked: it's written
-    when the name itself becomes a stub (ruling F12)."""
+    entry the world has (`target_id`), the entry being written
+    (`this_entry`, resolved to its id on accept, whatever the owner
+    renamed it to), or, by `name`, another new name of the same accept.
+    Ticked: it's written when the name itself becomes a stub (ruling
+    F12)."""
 
     target_id: str | None = None
+    this_entry: bool = False
     name: str | None = None
     role: str | None = None
     ticked: bool = True

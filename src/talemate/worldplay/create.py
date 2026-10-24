@@ -88,9 +88,12 @@ holds (`entries.held_by`).
 
 Accept writes the tag, the ticked filings (`write_filings`, refusing a
 cycle with a note), the ticked "File into this" rows as filings of those
-entries, the ticked moves (`repoint.copy_facts`, ruling R1, each row
-checked again), and the stubs with their tags and filings, in one
-revision. It never writes `part_of`, `ties` or a place's `parent`: the
+entries, the ticked moves (`repoint.copy_facts`, ruling R1), and the
+stubs with their tags and filings, in one revision. A move row is checked
+again, never trusted (`move_here_sources`: from an entry near it, a fact
+still its own, no summary, naming it). "File into this" rows are the
+owner's edits (ruling F13): each is checked for a live entry and a cycle,
+but not recomputed, so an entry the owner ticks in is filed there. It never writes `part_of`, `ties` or a place's `parent`: the
 owner's own (a create box's) become ticked "In" rows (`owner_filings`).
 
 Curation (docs/superpowers/probes/2026-10-22-curation.md, probe 1, and
@@ -138,7 +141,7 @@ import json
 import re
 from collections.abc import Callable, Collection, Iterable, Sequence
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import structlog
 from pydantic import BaseModel, Field
@@ -204,6 +207,11 @@ from talemate.worldplay.mentions import (
     gather_mentions,
     mention_context,
 )
+
+if TYPE_CHECKING:
+    # the sphere preview the old move-in serves until Task 7; `spheres`
+    # imports this module
+    from talemate.worldplay.spheres import SpherePreview
 
 log = structlog.get_logger("talemate.worldplay.create")
 
@@ -1900,7 +1908,7 @@ def untick_moved_repeats(
         }
 
 
-def preview_broader(view: WorldView, preview: CreatePreview) -> str | None:
+def preview_broader(view: WorldView, preview: SpherePreview) -> str | None:
     """The broader entry of a preview (`broader_entry`): of the thing it
     fills or promotes as well -- a stub, or a sphere preview's promoted
     thing, falls back on its own filing or parent (ruling C32). A sphere's
@@ -1921,7 +1929,7 @@ def preview_broader(view: WorldView, preview: CreatePreview) -> str | None:
     )
 
 
-def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
+def offer_move_in(view: WorldView, preview: SpherePreview) -> None:
     """The preview's move-in rows, for the broader entry it has now.
 
     For an outer body the owner named (`bodies.add_outer_body`, ruling
@@ -1964,7 +1972,7 @@ def offer_move_in(view: WorldView, preview: CreatePreview) -> None:
         preview.move_in = move_in_rows(view, broader)
 
 
-def move_in_sources(view: WorldView, preview: CreatePreview) -> set[str]:
+def move_in_sources(view: WorldView, preview: SpherePreview) -> set[str]:
     """The entries a move-in may take facts from at `view`, worked out
     again from the preview's own filing rather than taken from its rows:
     the broader entry it has now (`broader_entry`) and, for an outer body
@@ -1999,7 +2007,7 @@ def _write_move_in(
     rev: Any,
     world: World,
     before: WorldView,
-    preview: CreatePreview,
+    preview: SpherePreview,
     thing_id: str,
     notes: list[str],
 ) -> None:
@@ -2040,7 +2048,7 @@ def _write_move_in(
         copy_facts(rev, live, fact_ids, thing_id, plain_self_links=True)
 
 
-def _move_in_prose(view: WorldView, preview: CreatePreview, skip: str) -> list[str]:
+def _move_in_prose(view: WorldView, preview: SpherePreview, skip: str) -> list[str]:
     """The entries a ticked move takes a fact from that their prose reads
     (the new entry's own prose is the preview's), at `view`, before the
     accept: only an entry the preview offers moves from
@@ -2581,14 +2589,13 @@ def name_filings(
     view: WorldView,
     listed: Sequence[ListedName],
     *,
-    own_name: str,
     own_keys: set[str],
     prefer: Sequence[str],
     lookup: dict[str, str],
 ) -> tuple[list[NewName], list[str]]:
     """The listed names with their `"in"` read: `(names, into_entry)`.
     Each name's `filing` (`NameFiling`, ticked, ruling F12) is the entry
-    it's in -- the entry being written (by `own_name`), one the world has,
+    it's in -- the entry being written (`this_entry`), one the world has,
     or another listed name -- or none. `into_entry` are the entries the
     world has, listed with this entry as their "in": "File into this"
     rows (ruling F7). Any other "in" of a name the world has is ignored
@@ -2606,7 +2613,7 @@ def name_filings(
                 into_entry.append(existing)
         if into and into != name_key(new.name):
             if into in own_keys:
-                new.filing = NameFiling(name=own_name)
+                new.filing = NameFiling(this_entry=True)
             elif (
                 target := entry_named(view, item.into or "", prefer, lookup)
             ) is not None:
@@ -2794,9 +2801,10 @@ def homes_block(
 ) -> tuple[list[tuple[str, str, list[tuple[str, str]]]], dict[str, _HomeItem]]:
     """The homes block as the create prompt lists it -- `(heading,
     summary, [(label, line)])` per entry: its summary, then its first
-    `HOME_ITEMS` items (its own facts in the order written, then what's
-    filed in it, places and people left out), labelled S1... across them
-    all -- and what each label stands for."""
+    `HOME_ITEMS` items (its own facts in the order written, a held one
+    as belief, `held.held_text`; then what's filed in it, places and
+    people left out), labelled S1... across them all -- and what each
+    label stands for."""
 
     index = filed_index(view)
     block: list[tuple[str, str, list[tuple[str, str]]]] = []
@@ -2815,7 +2823,8 @@ def homes_block(
                     home_id, _clip(view.render(fact.text), 60), None, fact.fact_id
                 )
             )
-            lines.append(("", view.render(fact.text)))
+            # a held fact as belief, never as plain truth (ruling C33)
+            lines.append(("", held_text(view, fact, state)))
         for filed, _filing in index.get(home_id, []):
             if filed.kind == "place" or entries.acts_in_world(filed):
                 continue
@@ -3927,7 +3936,6 @@ async def preview_thing(
     listed, names_into = name_filings(
         view,
         listed_names(raw_names),
-        own_name=name,
         own_keys=own_keys,
         prefer=near_ids,
         lookup=lookup,
@@ -4273,7 +4281,7 @@ def accept_preview(
 
 def _skip_moved_repeats(
     view: WorldView,
-    preview: CreatePreview,
+    preview: SpherePreview,
     settings: CurationSettings,
     notes: list[str] | None,
 ) -> None:
@@ -4541,9 +4549,7 @@ def _write_preview(
         _write_entry_filings(
             rev, world, view, preview, thing_id, redirect, linked_text, notes
         )
-        _file_new_names(
-            rev, world, view, rows, made, {name_key(preview.name): thing_id}, notes
-        )
+        _file_new_names(rev, world, view, rows, made, thing_id, notes)
         _write_file_into(rev, world, preview.file_into, thing_id, redirect, notes)
         # the facts that move here, after the entry's own (whose overrides
         # name them as they are)
@@ -4627,14 +4633,14 @@ def _file_new_names(
     before: WorldView,
     rows: Sequence[NewName],
     made: dict[str, str],
-    own: dict[str, str],
+    thing_id: str,
     notes: list[str],
 ) -> None:
     """Each stub this accept made with a ticked `filing` filed there, in
-    `rev`: an entry the world has, or by name the entry being written
-    (`own`) or another stub of the accept. A row marked the same as a
-    thing the world has files nothing (the filing is the stub's, ruling
-    F12), nor does a stub reused from the world."""
+    `rev`: an entry the world has, the entry being written (`this_entry`:
+    `thing_id`), or by name another stub of the accept. A row marked the
+    same as a thing the world has files nothing (the filing is the
+    stub's, ruling F12), nor does a stub reused from the world."""
 
     for row in rows:
         filing = row.filing
@@ -4643,9 +4649,9 @@ def _file_new_names(
         stub_id = _made_id(made, row.name)
         if stub_id is None or before.thing(stub_id) is not None:
             continue
-        target = filing.target_id
+        target = thing_id if filing.this_entry else filing.target_id
         if target is None and filing.name:
-            target = own.get(name_key(filing.name)) or _made_id(made, filing.name)
+            target = _made_id(made, filing.name)
         if target is None or target == stub_id:
             continue
         write_filings(
@@ -4680,6 +4686,23 @@ def _write_file_into(
         )
 
 
+def move_here_sources(view: WorldView, preview: CreatePreview) -> set[str]:
+    """The entries a "Could move here" row may take a fact from at `view`,
+    worked out again from the preview rather than taken from its rows:
+    the entries near it (`filing_candidates`) from its stub, its ticked
+    "In" rows and its picks -- the context the preview listed."""
+
+    stub = view.thing(preview.stub_id) if preview.stub_id else None
+    first: list[str] = []
+    if stub is not None:
+        first += _homes(view, stub.id)
+    first += [row.target_id for row in preview.filings if row.ticked]
+    first += list(preview.picks.values())
+    seeds = [*([stub.id] if stub is not None else []), *first]
+    exclude = {stub.id} if stub is not None else set()
+    return set(filing_candidates(view, seeds, first, exclude))
+
+
 def _write_move_here(
     rev: Any,
     world: World,
@@ -4691,25 +4714,42 @@ def _write_move_here(
     """Move each ticked "Could move here" row's fact onto `thing_id`, in
     `rev` (`repoint.copy_facts`, ruling R1): a new fact with its dates,
     origin and holder, the original removed; its links to the entry
-    itself become words. A row is checked again, never trusted: its fact
-    must still be its entry's (`before`, the world before the accept),
-    and its text must name this entry (`names_draft`); any other moves
-    nothing, with a note. Returns `(old owner, fact)` for each moved."""
+    itself become words. A row is checked again, never trusted: its entry
+    must be near this one (`move_here_sources`, worked out again), its
+    fact still that entry's (`before`, the world before the accept) and
+    no summary, and its text must name this entry (`names_draft`); any
+    other moves nothing, with a note. Returns `(old owner, fact)` for each
+    moved."""
 
     # imported here: `worldplay.repoint` imports this module
     from talemate.worldplay.repoint import copy_facts
 
     draft = drafted(preview.name, preview.aka, preview.kind, preview.stub_id)
+    sources: set[str] | None = None
     moved: list[tuple[str, FactState]] = []
     for row in preview.move_here:
         if not row.ticked or row.from_id == thing_id:
             continue
+        if sources is None:
+            sources = move_here_sources(before, preview)
         found = before.fact(row.fact_id)
         name = before.name_of(row.from_id) or row.from_id
+        if row.from_id not in sources:
+            notes.append(
+                f"{name}'s fact \"{_clip(row.text, 60)}\" isn't near "
+                f"{preview.name}, so it doesn't move here"
+            )
+            continue
         if found is None or found[0] != row.from_id:
             notes.append(
                 f'{name}\'s fact "{_clip(row.text, 60)}" was moved or removed '
                 "since the preview, so it doesn't move here"
+            )
+            continue
+        if entries.is_summary_fact(found[1]):
+            notes.append(
+                f'{name}\'s summary "{_clip(row.text, 60)}" is its own, so it '
+                "doesn't move here"
             )
             continue
         if not names_draft(before, found[1].text, draft):
@@ -4922,7 +4962,9 @@ def _carry_filings(
     """A stub re-pointed onto `to_id`, its filings carried over, in `rev`:
     what it's filed in files `to_id` too (`write_filings`), and every
     filing into it (or `within` it) points at `to_id` instead -- a thing
-    filed in both keeps the one it had in `to_id`."""
+    filed in both keeps the one it had in `to_id`. The stub's own filings
+    reach `to_id` without their `within` and exceptions (Task 5's repoint
+    carries those)."""
 
     live = world.view()
     stored = filings_of(live, from_id, live=False)
@@ -5121,9 +5163,7 @@ def _write_same(
         _write_entry_filings(
             rev, world, view, preview, target_id, redirect, linked_text, notes
         )
-        _file_new_names(
-            rev, world, view, rows, made, {name_key(preview.name): target_id}, notes
-        )
+        _file_new_names(rev, world, view, rows, made, target_id, notes)
         _write_file_into(rev, world, preview.file_into, target_id, redirect, notes)
         moved = _write_move_here(rev, world, view, preview, target_id, notes)
         linked |= write_elsewhere(

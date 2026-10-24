@@ -5666,29 +5666,48 @@ async def test_preview_merge_payload_and_akas(plugin, monkeypatch):
 
 
 async def test_forged_move_here_rows_are_dropped(plugin, monkeypatch):
-    """`accept_preview` moves here only a fact that's still its entry's and
-    names the entry being written, the rows checked again: a forged row
-    for another entry's fact is dropped with a note, and that fact stays;
+    """`accept_preview` moves here only a fact of an entry near the one
+    being written (worked out again from its ticked "In" rows, picks and
+    stub), still that entry's, no summary, and naming the entry: a forged
+    row for a fact that doesn't name it, one from an entry that isn't
+    near, and a summary are each dropped with a note, the fact staying;
     a real one moves."""
 
-    from talemate.worldplay.create import MoveHereFact
+    from talemate.worldplay.create import MoveHereFact, PreviewFiling
 
     s = await _open_sphere_world(plugin)
     _record_prose(plugin, monkeypatch)
     with s.world.revision(Source.manual(note="names it")) as rev:
         lore = rev.add_fact(s.dawn, "about", "The Dawn keeps the Ember Lore.")
-    forged = MoveHereFact(
-        fact_id=s.skips, from_id=s.vasha, text="Skips the vigil.", ticked=True
-    )
+        far = rev.add_fact(s.maren, "background", "Maren reads the Ember Lore.")
+    with s.world.revision(Source.manual(note="summary")) as rev:
+        own_summary = rev.add_fact(
+            s.dawn,
+            "about",
+            "The Ember Lore is the Dawn's creed.",
+            origin={"summary": True},
+        )
+
+    def row(fact_id, from_id):
+        return MoveHereFact(fact_id=fact_id, from_id=from_id, text="x", ticked=True)
+
     preview = CreatePreview(
         kind="lore",
         prompt="ember lore",
         name="Ember Lore",
         facts=[PreviewFact(category="general", text="Embers glow.")],
         prose={},
+        filings=[
+            PreviewFiling(target_id=s.dawn, target_name="The White Dawn", ticked=True)
+        ],
         move_here=[
-            MoveHereFact(fact_id=lore, from_id=s.dawn, text="x", ticked=True),
-            forged,
+            row(lore, s.dawn),
+            # Vasha is filed in the Dawn (near), but this doesn't name it
+            row(s.skips, s.vasha),
+            # Maren is near nothing
+            row(far, s.maren),
+            # a summary is its entry's own
+            row(own_summary, s.dawn),
         ],
     )
     await _act(plugin, "accept_preview", preview=preview.model_dump(mode="json"))
@@ -5698,7 +5717,12 @@ async def test_forged_move_here_rows_are_dropped(plugin, monkeypatch):
     assert lore not in [f.fact_id for f in view.thing(s.dawn).facts]
     assert "The Dawn keeps the Ember Lore." in [f["rendered"] for f in data["facts"]]
     assert s.skips in [f.fact_id for f in view.thing(s.vasha).facts]
-    assert any("Vasha" in note and "move here" in note for note in data["notes"])
+    assert far in [f.fact_id for f in view.thing(s.maren).facts]
+    assert own_summary in [f.fact_id for f in view.thing(s.dawn).facts]
+    notes = data["notes"]
+    assert any("Vasha" in note and "doesn't name" in note for note in notes)
+    assert any("Maren" in note and "isn't near" in note for note in notes)
+    assert any("summary" in note for note in notes)
 
 
 async def test_forged_refile_rows_are_refused(plugin, monkeypatch):

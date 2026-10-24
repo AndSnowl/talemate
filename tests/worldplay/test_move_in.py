@@ -356,8 +356,14 @@ async def test_move_here_owner_ticks_and_rows_checked_again(world, tsardom):
     assert t.law_code in _live_ids(world, t.tsardom)
 
     with world.revision(Source.manual(note="stub again")) as rev:
+        # filed in Moskov, so Moskov stays near it whatever its facts say
         zakonnik = rev.create_thing(
-            "lore", {"name": "Code of Roosts", "stub": {"ignored": False}}
+            "lore",
+            {
+                "name": "Code of Roosts",
+                "stub": {"ignored": False},
+                "filings": [{"target": t.moskov}],
+            },
         )
         named = rev.add_fact(
             t.moskov, "law", f"Moskov keeps {ref(zakonnik, 'the Code of Roosts')}."
