@@ -1,0 +1,1235 @@
+{
+ "date": "2026-10-23",
+ "note": "Hand labels for the filing probe, committed before any model call. 'world' is the hand-made presentation of the acceptance world as plain entries: one tag per entry (invented by hand, the obvious one) and its filings ('in', with roles), replacing part_of, drawers and ties. 'thin' entries (role and topic stubs, and duplicates) are left out of every list, as if the world had been made under the new rule. Scoring reading: 'expected' must be found (recall); 'either' may be offered or not ('either side', the owner's reading); anything else offered is false.",
+ "thin_left_out": [
+  "Diplomatic Relations",
+  "Extended Winter Sessions",
+  "Human Intermediary",
+  "Legislation and Trade",
+  "Military Deployment",
+  "Nocturnal Governance",
+  "Owl-folk Scribe",
+  "Senior Advisor",
+  "Tsarist Supremacy",
+  "Twilight Hours",
+  "Chief Scribe",
+  "Registered Scribe",
+  "Rune Pattern Approval",
+  "The Grand Chiseler",
+  "The Tsar",
+  "Grand Hall",
+  "The Velikoye Rune Academy",
+  "Eared owl forms",
+  "Deep-Cut Chiseling",
+  "The Scribing Decree"
+ ],
+ "thin_rule": "A name is a proper name when it names one particular thing with a name of its own (a person, place, people, named event, named body, named object, named law, named technique such as 'Frost-Tracing'). A role, rank or office ('Senior Advisor', 'Chief Scribe' on its own), a topic or area ('Military Deployment', 'Twilight Hours', 'Legislation and Trade'), or a practice described rather than named ('Nocturnal Governance') is thin. Judged by hand after the run against this rule.",
+ "world": {
+  "Anastasiya Koroleva": {
+   "tag": "official",
+   "in": [
+    {
+     "entry": "The Order of the Talon-Scribe",
+     "role": "Chief Scribe"
+    },
+    {
+     "entry": "The Night Court",
+     "role": "advisor"
+    },
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "Chief Scribe of the Order"
+    }
+   ]
+  },
+  "Dmitri Volkov": {
+   "tag": "official",
+   "in": [
+    {
+     "entry": "Northern Postal Authority",
+     "role": "heads it"
+    },
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "head of the postal service"
+    }
+   ]
+  },
+  "Tsar Dmitry IV": {
+   "tag": "ruler",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "sovereign"
+    },
+    {
+     "entry": "The Night Court",
+     "role": "presides"
+    },
+    {
+     "entry": "Velikoye",
+     "role": "rules from here"
+    }
+   ]
+  },
+  "Vasha": {
+   "tag": "courier",
+   "in": [
+    {
+     "entry": "Northern Postal Authority",
+     "role": "courier"
+    }
+   ]
+  },
+  "Yelena Volkova": {
+   "tag": "scribe",
+   "in": [
+    {
+     "entry": "The Academy of the Chiseled Moon",
+     "role": "former Chief Scribe"
+    }
+   ]
+  },
+  "Scribing Decree of 998": {
+   "tag": "decree",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "The Blinding": {
+   "tag": "cataclysm",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "struck the realm"
+    }
+   ]
+  },
+  "The Longest Night Festival": {
+   "tag": "festival",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "The Rune Census": {
+   "tag": "survey",
+   "in": [
+    {
+     "entry": "The Order of the Talon-Scribe",
+     "role": "held by"
+    }
+   ]
+  },
+  "The Winter Solstice Vigil": {
+   "tag": "festival",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    },
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Common Immigration Charter": {
+   "tag": "law",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Corrupted Rune Site Investigation": {
+   "tag": "branch",
+   "in": [
+    {
+     "entry": "The Order of the Talon-Scribe",
+     "role": "branch of"
+    }
+   ]
+  },
+  "Deep-Cutting": {
+   "tag": "technique",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "Frost-Tracing": {
+   "tag": "technique",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "Frostwing Host": {
+   "tag": "military",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "the realm's army"
+    },
+    {
+     "entry": "Velikoye",
+     "role": "garrisoned here"
+    }
+   ]
+  },
+  "Plumage Signaling": {
+   "tag": "custom",
+   "in": [
+    {
+     "entry": "Moscavian Owl-folk",
+     "role": null
+    },
+    {
+     "entry": "The Night Court",
+     "role": "used in debate"
+    }
+   ]
+  },
+  "Resonance Theory": {
+   "tag": "principle",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "Roosting Perch Mandate": {
+   "tag": "law",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Rurikovich dynasty": {
+   "tag": "dynasty",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Talon-Mold Method": {
+   "tag": "technique",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "The Bloodline Doctrine": {
+   "tag": "doctrine",
+   "in": [
+    {
+     "entry": "The Night Court",
+     "role": null
+    }
+   ]
+  },
+  "The Carving Covenant": {
+   "tag": "oath",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "The Doctrine of Silence": {
+   "tag": "doctrine",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "The Three Veins": {
+   "tag": "principle",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "Wattle removal before meals": {
+   "tag": "custom",
+   "in": [
+    {
+     "entry": "Wattles",
+     "role": null
+    }
+   ]
+  },
+  "Wattlemaking": {
+   "tag": "craft",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Wattles": {
+   "tag": "custom",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Ashenmere": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Dunwall": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Korrith": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Mirraval": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Port Solenne": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Thornhaven": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Velmara": {
+   "tag": "city",
+   "in": [
+    {
+     "entry": "Free Cities of the Southern Reach",
+     "role": null
+    }
+   ]
+  },
+  "Ashwood Marshes": {
+   "tag": "marsh",
+   "in": []
+  },
+  "Cathedral of the White Dawn": {
+   "tag": "cathedral",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Free Cities of the Southern Reach": {
+   "tag": "confederation",
+   "in": []
+  },
+  "Frostmere Glaciers": {
+   "tag": "glacier",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "northern border"
+    }
+   ]
+  },
+  "Frostmere Training Grounds": {
+   "tag": "training ground",
+   "in": [
+    {
+     "entry": "Frostwing Host",
+     "role": null
+    },
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Grand Hall of the Tsar's Palace": {
+   "tag": "hall",
+   "in": [
+    {
+     "entry": "The Tsar's Palace",
+     "role": null
+    }
+   ]
+  },
+  "Greensea Strait": {
+   "tag": "strait",
+   "in": []
+  },
+  "Greenwall Mountains": {
+   "tag": "mountains",
+   "in": []
+  },
+  "Kerensky Principality": {
+   "tag": "nation",
+   "in": []
+  },
+  "Kethara": {
+   "tag": "nation",
+   "in": []
+  },
+  "Khorol River": {
+   "tag": "river",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    },
+    {
+     "entry": "Velikoye",
+     "role": "runs through"
+    }
+   ]
+  },
+  "Khorol River Rune-Stone": {
+   "tag": "rune site",
+   "in": [
+    {
+     "entry": "The Order of the Talon-Scribe",
+     "role": null
+    },
+    {
+     "entry": "Khorol River",
+     "role": "at its mouth"
+    }
+   ]
+  },
+  "Murom": {
+   "tag": "town",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Nightmarket": {
+   "tag": "market",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Nocturnal Institute of Velikoye": {
+   "tag": "institution",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Stonehollow Shelter": {
+   "tag": "shelter",
+   "in": [
+    {
+     "entry": "The Frostmere Runic Array",
+     "role": null
+    }
+   ]
+  },
+  "The Academy of the Chiseled Moon": {
+   "tag": "institution",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    },
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    }
+   ]
+  },
+  "The Frostmere Runic Array": {
+   "tag": "rune site",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    },
+    {
+     "entry": "Frostmere Glaciers",
+     "role": null
+    }
+   ]
+  },
+  "The Khorol Mouth Stones": {
+   "tag": "rune site",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": null
+    },
+    {
+     "entry": "Khorol River",
+     "role": "at its mouth"
+    }
+   ]
+  },
+  "The Tsar's Palace": {
+   "tag": "palace",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Tsardom of Moscavia": {
+   "tag": "nation",
+   "in": []
+  },
+  "Valdren": {
+   "tag": "nation",
+   "in": []
+  },
+  "Velikoye": {
+   "tag": "capital",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Velikoye Public Squares": {
+   "tag": "square",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  },
+  "Wattle Row": {
+   "tag": "street",
+   "in": [
+    {
+     "entry": "Nightmarket",
+     "role": null
+    }
+   ]
+  },
+  "Eared Moscavian Owl-folk": {
+   "tag": "people",
+   "in": []
+  },
+  "Snowy Moscavian Owl-folk": {
+   "tag": "people",
+   "in": []
+  },
+  "Moscavian Owl-folk": {
+   "tag": "people",
+   "in": []
+  },
+  "Northern Postal Authority": {
+   "tag": "institution",
+   "kind": "lore",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    },
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Runic Magic of the Tsardom": {
+   "tag": "magic",
+   "kind": "lore",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "The Night Court": {
+   "tag": "council",
+   "kind": "lore",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": "governs"
+    },
+    {
+     "entry": "Grand Hall of the Tsar's Palace",
+     "role": "meets in"
+    }
+   ]
+  },
+  "The Order of the Talon-Scribe": {
+   "tag": "order",
+   "kind": "lore",
+   "in": [
+    {
+     "entry": "Runic Magic of the Tsardom",
+     "role": "practitioners"
+    },
+    {
+     "entry": "The Academy of the Chiseled Moon",
+     "role": "runs it"
+    },
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ]
+  },
+  "Velikoye Culture": {
+   "tag": "culture",
+   "kind": "lore",
+   "in": [
+    {
+     "entry": "Velikoye",
+     "role": null
+    }
+   ]
+  }
+ },
+ "seed_regiments": {
+  "The White Talon": {
+   "kind": "lore",
+   "tag": "regiment",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ],
+   "facts": [
+    "The White Talon is the Frostwing Host's heavy regiment, its ranks drawn only from pure-line Snowy Owl-folk.",
+    "The White Talon guards the Tsar's Palace and the walls of Velikoye, and flies at the head of the Frostwing Host's mass flight at the Winter Solstice Vigil."
+   ]
+  },
+  "The Frosted Wing": {
+   "kind": "lore",
+   "tag": "regiment",
+   "in": [
+    {
+     "entry": "Tsardom of Moscavia",
+     "role": null
+    }
+   ],
+   "facts": [
+    "The Frosted Wing is a scout regiment of Eared Owl-folk archers who patrol the edge of the Frostmere Glaciers.",
+    "The Frosted Wing was raised in 998 from the recruits of the Frostmere Training Grounds."
+   ]
+  }
+ },
+ "seed_links": {
+  "The White Talon": [
+   "Frostwing Host",
+   "Snowy Moscavian Owl-folk",
+   "The Tsar's Palace",
+   "Velikoye",
+   "The Winter Solstice Vigil"
+  ],
+  "The Frosted Wing": [
+   "Eared Moscavian Owl-folk",
+   "Frostmere Glaciers",
+   "Frostmere Training Grounds"
+  ]
+ },
+ "probe1": {
+  "kind": "creative_instruction_3072",
+  "cases": {
+   "khorol": {
+    "entry": "Khorol River",
+    "kind": "place",
+    "tag": {
+     "fits_in_use": [],
+     "acceptable_new": [
+      "river",
+      "waterway"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Tsardom of Moscavia",
+      "Velikoye"
+     ],
+     "either": [
+      "Frostmere Glaciers",
+      "Greensea Strait"
+     ]
+    },
+    "file_into": {
+     "expected": [],
+     "either": [
+      "Khorol River Rune-Stone",
+      "The Khorol Mouth Stones"
+     ]
+    }
+   },
+   "academy": {
+    "entry": "The Academy of the Chiseled Moon",
+    "kind": "place",
+    "tag": {
+     "fits_in_use": [
+      "institution"
+     ],
+     "acceptable_new": [
+      "academy",
+      "school"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Velikoye",
+      "Runic Magic of the Tsardom"
+     ],
+     "either": [
+      "The Order of the Talon-Scribe",
+      "Tsardom of Moscavia"
+     ]
+    },
+    "file_into": {
+     "expected": [],
+     "either": [
+      "The Order of the Talon-Scribe",
+      "Yelena Volkova",
+      "Anastasiya Koroleva",
+      "Corrupted Rune Site Investigation",
+      "The Rune Census"
+     ]
+    }
+   },
+   "plumage": {
+    "entry": "Plumage Signaling",
+    "kind": "lore",
+    "tag": {
+     "fits_in_use": [
+      "custom"
+     ],
+     "acceptable_new": [
+      "language",
+      "communication",
+      "practice",
+      "sign language"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Moscavian Owl-folk",
+      "The Night Court"
+     ],
+     "either": [
+      "Snowy Moscavian Owl-folk",
+      "Eared Moscavian Owl-folk",
+      "Velikoye",
+      "Velikoye Culture",
+      "Tsardom of Moscavia",
+      "Nocturnal Institute of Velikoye"
+     ],
+     "note": "a race of the Owl-folk counts for 'Moscavian Owl-folk'"
+    },
+    "file_into": {
+     "expected": [],
+     "either": []
+    }
+   },
+   "nightcourt": {
+    "entry": "The Night Court",
+    "kind": "lore",
+    "born": [
+     "Diplomatic Relations",
+     "Extended Winter Sessions",
+     "Human Intermediary",
+     "Legislation and Trade",
+     "Military Deployment",
+     "Nocturnal Governance",
+     "Owl-folk Scribe",
+     "Senior Advisor",
+     "Tsarist Supremacy",
+     "Twilight Hours",
+     "The Bloodline Doctrine",
+     "Grand Hall of the Tsar's Palace",
+     "Velikoye Public Squares"
+    ],
+    "tag": {
+     "fits_in_use": [],
+     "acceptable_new": [
+      "council",
+      "government",
+      "governing body",
+      "court"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Tsardom of Moscavia"
+     ],
+     "either": [
+      "Velikoye",
+      "The Tsar's Palace"
+     ]
+    },
+    "file_into": {
+     "expected": [],
+     "either": [
+      "Tsar Dmitry IV",
+      "Anastasiya Koroleva",
+      "Plumage Signaling",
+      "Frostwing Host",
+      "The Order of the Talon-Scribe",
+      "Snowy Moscavian Owl-folk",
+      "Roosting Perch Mandate"
+     ]
+    },
+    "thin_old": 12
+   },
+   "wattles": {
+    "entry": "Wattles",
+    "kind": "lore",
+    "tag": {
+     "fits_in_use": [
+      "custom"
+     ],
+     "acceptable_new": [
+      "fashion",
+      "adornment",
+      "jewellery",
+      "jewelry"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Velikoye"
+     ],
+     "either": [
+      "Velikoye Culture",
+      "Snowy Moscavian Owl-folk",
+      "Tsardom of Moscavia",
+      "Nightmarket",
+      "Moscavian Owl-folk"
+     ]
+    },
+    "file_into": {
+     "expected": [],
+     "either": [
+      "Wattle Row",
+      "Wattlemaking",
+      "Wattle removal before meals"
+     ]
+    }
+   },
+   "vasha": {
+    "entry": "Vasha",
+    "kind": "character",
+    "tag": {
+     "fits_in_use": [
+      "courier"
+     ],
+     "acceptable_new": [
+      "courier",
+      "messenger",
+      "postman"
+     ],
+     "note": "Vasha is the only courier: with him left out, 'courier' is not in use, so a new courier tag is right"
+    },
+    "in": {
+     "expected": [
+      "Northern Postal Authority"
+     ],
+     "either": [
+      "Tsardom of Moscavia",
+      "Velikoye",
+      "Murom",
+      "Snowy Moscavian Owl-folk"
+     ]
+    },
+    "file_into": {
+     "expected": [],
+     "either": []
+    }
+   },
+   "vigil": {
+    "entry": "The Winter Solstice Vigil",
+    "kind": "event",
+    "tag": {
+     "fits_in_use": [
+      "festival"
+     ],
+     "acceptable_new": []
+    },
+    "in": {
+     "expected_any": [
+      "Tsardom of Moscavia",
+      "Velikoye"
+     ],
+     "expected": [],
+     "either": [
+      "Tsardom of Moscavia",
+      "Velikoye",
+      "Khorol River",
+      "Velikoye Culture"
+     ],
+     "note": "at least one of the Tsardom and Velikoye; both is right"
+    },
+    "file_into": {
+     "expected": [],
+     "either": []
+    }
+   }
+  }
+ },
+ "probe2": {
+  "kind": "creative_instruction_3072",
+  "cases": {
+   "host": {
+    "entry": "Frostwing Host",
+    "kind": "lore",
+    "seed": true,
+    "file_into": {
+     "expected": [
+      "The White Talon",
+      "The Frosted Wing"
+     ],
+     "either": [
+      "Frostmere Training Grounds"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Tsardom of Moscavia"
+     ],
+     "either": [
+      "Velikoye",
+      "The Night Court",
+      "Tsar Dmitry IV"
+     ]
+    }
+   },
+   "army": {
+    "new": "The Tsar's Army",
+    "kind": "lore",
+    "seed": true,
+    "prompt": "The Tsar's Army: all of the Tsardom of Moscavia's armed forces under one command, the air host and the ground troops alike.",
+    "file_into": {
+     "expected": [
+      "Frostwing Host"
+     ],
+     "either": [
+      "The White Talon",
+      "The Frosted Wing",
+      "Frostmere Training Grounds"
+     ]
+    },
+    "in": {
+     "expected": [
+      "Tsardom of Moscavia"
+     ],
+     "either": [
+      "Velikoye",
+      "The Night Court",
+      "Tsar Dmitry IV"
+     ]
+    }
+   },
+   "pilots": {
+    "new": "The Ice-Road Pilots' Guild",
+    "kind": "lore",
+    "seed": true,
+    "control": true,
+    "prompt": "The Ice-Road Pilots' Guild: the guild of pilots who guide sledge caravans and barges along the Khorol River, frozen or thawed.",
+    "file_into": {
+     "expected": [],
+     "either": []
+    },
+    "in": {
+     "expected": [
+      "Khorol River"
+     ],
+     "either": [
+      "Velikoye",
+      "Tsardom of Moscavia",
+      "Greensea Strait"
+     ]
+    }
+   }
+  }
+ },
+ "probe3": {
+  "kind": "analyze",
+  "cases": {
+   "rulers": {
+    "page": "Tsardom of Moscavia",
+    "group": "rulers and officials",
+    "members": [
+     [
+      "Tsar Dmitry IV",
+      "sovereign"
+     ],
+     [
+      "Anastasiya Koroleva",
+      "Chief Scribe of the Order"
+     ],
+     [
+      "Dmitri Volkov",
+      "head of the postal service"
+     ]
+    ]
+   },
+   "institutions": {
+    "page": "Velikoye",
+    "group": "institutions",
+    "members": [
+     [
+      "The Academy of the Chiseled Moon",
+      null
+     ],
+     [
+      "Nocturnal Institute of Velikoye",
+      null
+     ],
+     [
+      "Northern Postal Authority",
+      null
+     ]
+    ]
+   },
+   "techniques": {
+    "page": "Runic Magic of the Tsardom",
+    "group": "techniques",
+    "members": [
+     [
+      "Deep-Cutting",
+      null
+     ],
+     [
+      "Frost-Tracing",
+      null
+     ],
+     [
+      "Talon-Mold Method",
+      null
+     ]
+    ]
+   }
+  },
+  "rubric": "Each claim of the synopsis is checked against the members' and the page's facts as given in the prompt: supported, or invented (a name, date, number or claim not given, or a wrong relation). A synopsis passes with no invented claim."
+ },
+ "probe4": {
+  "kind": "creative_instruction_3072",
+  "cases": {
+   "nation": {
+    "stub": "Valdren",
+    "kind": "place",
+    "hint": "nation",
+    "aspects": [
+     "rulers or government",
+     "laws",
+     "military",
+     "regions, cities or borders",
+     "history"
+    ]
+   },
+   "nation_none": {
+    "stub": "Valdren",
+    "kind": "place",
+    "hint": null,
+    "control_of": "nation",
+    "aspects": [
+     "rulers or government",
+     "laws",
+     "military",
+     "regions, cities or borders",
+     "history"
+    ]
+   },
+   "religion": {
+    "new": "The Church of the White Dawn",
+    "kind": "lore",
+    "hint": "religion",
+    "prompt": "The Church of the White Dawn: the state church of Moscavia, seated at the Cathedral of the White Dawn in Velikoye.",
+    "aspects": [
+     "doctrine or beliefs",
+     "rites or holy days",
+     "clergy or ranks",
+     "holy places",
+     "history"
+    ]
+   },
+   "religion_none": {
+    "new": "The Church of the White Dawn",
+    "kind": "lore",
+    "hint": null,
+    "control_of": "religion",
+    "prompt": "The Church of the White Dawn: the state church of Moscavia, seated at the Cathedral of the White Dawn in Velikoye.",
+    "aspects": [
+     "doctrine or beliefs",
+     "rites or holy days",
+     "clergy or ranks",
+     "holy places",
+     "history"
+    ]
+   },
+   "order": {
+    "stub": "Northern Postal Authority",
+    "kind": "lore",
+    "hint": "order",
+    "aspects": [
+     "purpose",
+     "ranks or leader",
+     "divisions",
+     "holdings or seat",
+     "rules or oaths",
+     "history"
+    ]
+   },
+   "culture": {
+    "new": "Reach culture",
+    "kind": "lore",
+    "hint": "culture",
+    "prompt": "Reach culture: the open, mixed, nocturnal way of life of the port cities of the Free Cities of the Southern Reach.",
+    "aspects": [
+     "customs or festivals",
+     "arts or crafts",
+     "dress or food",
+     "values or beliefs",
+     "where it is lived",
+     "change over time"
+    ]
+   },
+   "field": {
+    "new": "Blinding Studies",
+    "kind": "lore",
+    "hint": "field",
+    "prompt": "Blinding Studies: the scholarly field, centred on the Nocturnal Institute of Velikoye, that tries to explain what caused the Blinding.",
+    "aspects": [
+     "principles or theories",
+     "techniques or methods",
+     "practitioners",
+     "sites or schools",
+     "history"
+    ]
+   }
+  },
+  "belief_rubric": "Under the religion and culture hints the facts may use the 'belief' category. A belief-category fact is right when it states what the faith or culture believes or teaches (a creed, a legend held true by them, a value); a fact in another category that is such a belief is a missed belief; a belief-category fact that is plain truth of the world (a rite as practised, a building, a rank, history) is a false belief. Judged by hand after the run."
+ },
+ "probe5": {
+  "kind": "narrator (progress_story)",
+  "scene": "7ea8353361344ad8b841f51d83aa3ae9",
+  "touched_expected": [
+   "Velikoye",
+   "Runic Magic of the Tsardom",
+   "Tsardom of Moscavia",
+   "Northern Postal Authority",
+   "The Order of the Talon-Scribe"
+  ],
+  "touched_note": "place: the Academy (shown as the place); its filings Velikoye and Runic Magic, upward to the Tsardom (timeline reach 2); Vasha's filing: the Northern Postal Authority; named in the setup: the Talon-Scribe Order (goal) and the Northern Postal Authority (pulled in; the other pull-in, the Chief Scribe stub, is a thin stub left out)",
+  "directions": [
+   "Vasha is shown inside and led through the Academy toward the Chief Scribe's office; show what he sees and who he passes.",
+   "The Chief Scribe breaks the seal and reads the letter in front of Vasha; it concerns a rune-stone on the Khorol, and she tells him what it means."
+  ],
+  "rubric": "Per turn: the world details used from the block (listed); contradictions of the world (must be 0); flooding: passages that recite lore not called for by the direction (judged); the block's size in lines and tokens against today's block."
+ },
+ "probe6": {
+  "kind": "creative_instruction_1024",
+  "cases": {
+   "pilots": {
+    "page": "Khorol River",
+    "tag": "guild",
+    "prompt": "a guild of ice-road pilots",
+    "count": [
+     1,
+     3
+    ],
+    "false": "an entry that is not a guild of ice-road pilots, a re-made existing entry (the Frostwing Host, the Northern Postal Authority), or kind not lore"
+   },
+   "customs": {
+    "page": "Velikoye",
+    "tag": "custom",
+    "prompt": "two winter customs of the capital's humans",
+    "count": [
+     2,
+     2
+    ],
+    "false": "an Owl-folk custom, a re-made existing custom or festival (Wattles, the Longest Night Festival, the Winter Solstice Vigil), or not a custom"
+   },
+   "deputies": {
+    "page": "The Order of the Talon-Scribe",
+    "tag": "official",
+    "prompt": "the Chief Scribe's two deputies",
+    "count": [
+     2,
+     2
+    ],
+    "false": "Anastasiya Koroleva re-made, a non-character, or someone who is not a deputy of the Chief Scribe"
+   }
+  },
+  "rubric": "Each new entry: fits the prompt and group (right), or a false addition per the case. Also checked: the count asked for, the tag given back, and a proper name."
+ },
+ "hints_draft": {
+  "religion": "For a religion, consider what it worships, its doctrine and beliefs, its rites and holy days, its clergy and their ranks, its holy places, and its history.",
+  "nation": "For a nation, consider its rulers and how it is governed, its laws, its military, its regions, cities and borders, and its history.",
+  "order": "For an order, consider its purpose, who leads it and its ranks, its divisions or chapters, its seat and holdings, its rules or oaths, and its history.",
+  "culture": "For a culture, consider its customs and festivals, its arts and crafts, its dress and food, its values and beliefs, where it is lived, and how it has changed.",
+  "field": "For a field of knowledge or magic, consider its principles, its techniques, its practitioners and where they learn, its sites, its schools of thought, and its history."
+ }
+}
