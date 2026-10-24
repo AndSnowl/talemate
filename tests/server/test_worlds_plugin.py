@@ -4657,20 +4657,126 @@ async def test_list_tags(plugin):
     assert s.world.head_rev()
 
 
-async def test_group_synopsis_not_yet_available(plugin):
+async def test_group_synopsis(plugin, client):
     s = await _open_filing_world(plugin)
     head = s.world.head_rev()
-    await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
-    assert "not yet available" in _errors(plugin)[-1]["error"]["message"]
+    reply = json.dumps({"synopsis": "The Khorol River runs through Velikoye."})
+
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
+        await _drain(plugin)
+    assert s.world.head_rev() == head
+    out = _last(plugin, "group_synopsis")["data"]
+    assert out == {
+        "thing_id": s.velikoye,
+        "tag": "river",
+        "synopsis": "The Khorol River runs through Velikoye.",
+    }
+    prompt = str(client.prompt_history[-1]["prompt"])
+    assert "Khorol River" in prompt
+
+    # cached: a second ask queues no reply and still answers, no new call
+    async with MockClientContext():
+        await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="river")
+        await _drain(plugin)
+    assert len(client.prompt_history) == 1
+    assert _last(plugin, "group_synopsis")["data"]["synopsis"] == out["synopsis"]
+
+
+async def test_group_synopsis_unknown_entry_fails(plugin, client):
+    s = await _open_filing_world(plugin)
+    head = s.world.head_rev()
+    await _act(plugin, "group_synopsis", thing_id="f" * 32, tag="river")
+    assert "no such entry" in _errors(plugin)[-1]["error"]["message"]
     assert s.world.head_rev() == head
 
 
-async def test_group_add_not_yet_available(plugin):
+async def test_group_add_and_accept(plugin, client):
     s = await _open_filing_world(plugin)
     head = s.world.head_rev()
-    await _act(plugin, "group_add", thing_id=s.velikoye, tag=None, prompt="two markets")
-    assert "not yet available" in _errors(plugin)[-1]["error"]["message"]
+    reply = json.dumps(
+        {
+            "entries": [
+                {
+                    "name": "The Icewrights' Circle",
+                    "kind": "lore",
+                    "tag": "guild",
+                    "line": "A guild of ice-road pilots.",
+                }
+            ]
+        }
+    )
+
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(
+            plugin,
+            "group_add",
+            thing_id=s.velikoye,
+            tag="guild",
+            prompt="a guild of ice-road pilots",
+        )
+        await _drain(plugin)
     assert s.world.head_rev() == head
+    drafted = _last(plugin, "group_add")["data"]
+    assert drafted["thing_id"] == s.velikoye
+    assert drafted["tag"] == "guild"
+    assert drafted["rows"] == [
+        {
+            "name": "The Icewrights' Circle",
+            "kind": "lore",
+            "tag": "guild",
+            "line": "A guild of ice-road pilots.",
+            "ticked": True,
+        }
+    ]
+
+    await _act(plugin, "accept_group_add", thing_id=s.velikoye, rows=drafted["rows"])
+    accepted = _last(plugin, "accept_group_add")["data"]
+    assert s.world.head_rev() == head + 1
+    assert len(accepted["thing_ids"]) == 1
+    new_id = accepted["thing_ids"][0]
+    new_state = s.world.view().thing(new_id)
+    assert new_state.fields["name"] == "The Icewrights' Circle"
+    assert new_state.fields["tag"] == "guild"
+    assert filings_of(s.world.view(), new_id)[0].target == s.velikoye
+
+
+async def test_group_add_top_level_has_no_tag_preset(plugin, client):
+    s = await _open_filing_world(plugin)
+    reply = json.dumps(
+        {
+            "entries": [
+                {
+                    "name": "The Frozen Market",
+                    "kind": "lore",
+                    "tag": "custom",
+                    "line": "A winter market.",
+                }
+            ]
+        }
+    )
+
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(
+            plugin,
+            "group_add",
+            thing_id=s.velikoye,
+            tag=None,
+            prompt="a winter custom",
+        )
+        await _drain(plugin)
+    drafted = _last(plugin, "group_add")["data"]
+    assert drafted["tag"] is None
+    assert drafted["rows"][0]["tag"] == "custom"
+
+
+async def test_group_add_unknown_entry_fails(plugin, client):
+    await _open_filing_world(plugin)
+    await _act(plugin, "group_add", thing_id="f" * 32, tag="guild", prompt="anything")
+    assert "no such entry" in _errors(plugin)[-1]["error"]["message"]
 
 
 async def test_add_facts(plugin, client):

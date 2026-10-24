@@ -19,6 +19,7 @@ way, imports this module -- lazily, inside `World.prose()` -- the same way
 `store.py` avoids importing `index.py` at the top level).
 """
 
+import hashlib
 import json
 import sqlite3
 from collections.abc import Callable, Collection, Sequence
@@ -32,6 +33,20 @@ from .refs import REF_PATTERN
 from .timeline import TimelineEntry
 
 log = structlog.get_logger("talemate.world.prose")
+
+
+def content_key(*parts: object) -> str:
+    """A stable fingerprint of `parts` (JSON-encoded, in order), for a
+    section cached by its content rather than by story-time stretch --
+    a group's synopsis (`worldplay.groups.group_synopsis`) has no "as of"
+    date of its own, only "now", so staleness there is "the content that
+    made it has changed" rather than "something changed within this
+    stretch": equal input gives an equal key; two different ones, for any
+    practical purpose, never collide."""
+
+    blob = json.dumps(parts, sort_keys=False, default=str, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
 
 # an instant past the proleptic-Gregorian range (years 1-9999), used as
 # "+infinity" for at=None, mirroring view.py's _FAR_FUTURE

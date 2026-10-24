@@ -216,7 +216,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
   hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, stub,
   line_segments, role, since, until}]}]` (what's filed in it, grouped by
-  tag; `synopsis` null until Task 8) and `mentioned_in: [{id, name}]`.
+  tag; `synopsis` always null here -- it's asked for on demand, below, never
+  read off this payload) and `mentioned_in: [{id, name}]`.
   `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
   until, within, at}`, `edit_filing {thing_id, target_id, role?, since?,
   until?, within?, at}` (an `until` ends it) and `remove_filing {thing_id,
@@ -226,9 +227,22 @@ through `signal_operation_failed` (an `operation_done` envelope with
   answers with the thing; `list_tags` answers `{tags: [{tag, heading,
   count}]}`; `rename_tag {old, new}` and `merge_tag {from, into}` retag
   every entry in one revision and answer `{old, new | from, into,
-  changed, tags}`. `group_synopsis {thing_id, tag}` and `group_add
-  {thing_id, tag, prompt}` are refused as not yet available (ruling F2;
-  Task 8). Filings and tags are no prose input: none is scheduled.
+  changed, tags}`. Filings and tags are no prose input: none is
+  scheduled.
+- Groups (`talemate.worldplay.groups`): `group_synopsis {thing_id, tag}`
+  (`tag` null for the untagged "Other" group) asks the model for the
+  group's synopsis, cached, in the background, and answers
+  `group_synopsis {thing_id, tag, synopsis}` or `group_synopsis_failed`;
+  "" for an empty group, or with synopses off (a probe fallback).
+  `group_add {thing_id, tag, prompt}` (`tag` null is the page's own
+  top-level "+ Add", no tag preset) drafts up to 3 new entries from the
+  owner's prompt, in the background, writing nothing, and answers
+  `group_add {thing_id, tag, rows}` (each row `{name, kind, tag, line,
+  ticked}`) or `group_add_failed`. `accept_group_add {thing_id, rows}`
+  writes the ticked rows as stubs, filed in `thing_id` with each its own
+  tag, its line their first fact and summary, in one revision, checked
+  again rather than trusted from the client, and answers the thing plus
+  `thing_ids` (the new stubs' ids, in the order written).
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -345,6 +359,12 @@ from talemate.worldplay.facts import (
     accept_facts,
     draft_facts,
     draft_facts_for,
+)
+from talemate.worldplay.groups import (
+    GroupAddRow,
+    accept_group_add,
+    group_add,
+    group_synopsis,
 )
 from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
@@ -730,6 +750,11 @@ class GroupAddPayload(pydantic.BaseModel):
     thing_id: str
     tag: str | None = None
     prompt: str
+
+
+class AcceptGroupAddPayload(pydantic.BaseModel):
+    thing_id: str
+    rows: list[GroupAddRow]
 
 
 class AddFactsPayload(pydantic.BaseModel):
@@ -1348,12 +1373,13 @@ def _connected_out(
     things: list[ThingState],
 ) -> list[dict]:
     """What is filed in the thing, grouped by tag (`filing.connected`):
-    each group's tag (`None` for Other), heading and synopsis (none yet:
-    Task 8 writes them), then one row per entry with its own line (its
-    summary, as linked runs), whether it's a stub, and the filing's role
-    and dates. At the latest telling an ended filing is listed too (its
-    `until` says so); at a date, only what holds then. An ignored stub is
-    hidden here as everywhere."""
+    each group's tag (`None` for Other), heading and synopsis (always
+    `None` here: the owner asks for it with `group_synopsis`, which
+    caches it -- this payload never reads that cache), then one row per
+    entry with its own line (its summary, as linked runs), whether it's a
+    stub, and the filing's role and dates. At the latest telling an ended
+    filing is listed too (its `until` says so); at a date, only what
+    holds then. An ignored stub is hidden here as everywhere."""
 
     states = {state.id: state for state in things}
     groups = []
@@ -1934,10 +1960,12 @@ class WorldsPlugin(Plugin):
 
         view = world.view(at)
         kept = [
-            span
-            if span.ref is None
-            or (span.ref != thing_id and view.thing(span.ref) is not None)
-            else LinkSpan(start=span.start, end=span.end)
+            (
+                span
+                if span.ref is None
+                or (span.ref != thing_id and view.thing(span.ref) is not None)
+                else LinkSpan(start=span.start, end=span.end)
+            )
             for span in spans or []
         ]
         return link_text(
@@ -2856,20 +2884,76 @@ class WorldsPlugin(Plugin):
     # --- groups (Task 8) ----------------------------------------------------
 
     async def handle_group_synopsis(self, data: dict):
-        """A group's synopsis: not yet available (ruling F2, Task 8 writes
-        it). Refused, writing nothing."""
+        """A group's synopsis (`worldplay.groups.group_synopsis`), cached,
+        in the background: asks the model only when nothing fresh is
+        cached. Answers `group_synopsis {thing_id, tag, synopsis}` (""
+        for an empty group, or with synopses off) or
+        `group_synopsis_failed`. Writes nothing."""
 
-        GroupSynopsisPayload(**data)
-        self._require_world()
-        raise ValueError("group synopses are not yet available")
+        payload = GroupSynopsisPayload(**data)
+        world = self._require_world()
+        self._require_entry(world.view(), payload.thing_id)
+        client = self._client()
+        self._spawn(
+            group_synopsis(world, payload.thing_id, payload.tag, client),
+            self.create_task_done_callback(
+                "group_synopsis",
+                "group_synopsis_failed",
+                "Error writing a group synopsis",
+                success_data=lambda synopsis: {
+                    "thing_id": payload.thing_id,
+                    "tag": payload.tag,
+                    "synopsis": synopsis,
+                },
+                failure_data={"thing_id": payload.thing_id, "tag": payload.tag},
+            ),
+        )
 
     async def handle_group_add(self, data: dict):
-        """ "+ Add" in a group: not yet available (ruling F2, Task 8 writes
-        it). Refused, writing nothing."""
+        """ "+ Add" in a group, or (with no `tag`) the page's own
+        top-level "+ Add" (`worldplay.groups.group_add`), in the
+        background: at most 3 draft rows, each ticked, `{name, kind, tag,
+        line, ticked}`, for the owner to amend before
+        `accept_group_add`. Answers `group_add {thing_id, tag, rows}` or
+        `group_add_failed`. Writes nothing."""
 
-        GroupAddPayload(**data)
-        self._require_world()
-        raise ValueError("adding to a group is not yet available")
+        payload = GroupAddPayload(**data)
+        world = self._require_world()
+        self._require_entry(world.view(), payload.thing_id)
+        client = self._client()
+        self._spawn(
+            group_add(world, payload.thing_id, payload.tag, payload.prompt, client),
+            self.create_task_done_callback(
+                "group_add",
+                "group_add_failed",
+                "Error adding to a group",
+                success_data=lambda rows: {
+                    "thing_id": payload.thing_id,
+                    "tag": payload.tag,
+                    "rows": [row.model_dump(mode="json") for row in rows],
+                },
+                failure_data={"thing_id": payload.thing_id, "tag": payload.tag},
+            ),
+        )
+
+    async def handle_accept_group_add(self, data: dict):
+        """Write `group_add`'s ticked rows as stubs, filed in the page
+        with each its own tag, in one revision
+        (`worldplay.groups.accept_group_add`); checked again here, never
+        trusted from the client. Answers `accept_group_add {..., thing_ids}`
+        with the page's payload plus the new stubs' ids."""
+
+        payload = AcceptGroupAddPayload(**data)
+        world = self._require_world()
+        self._require_entry(world.view(), payload.thing_id)
+        thing_ids = accept_group_add(world, payload.thing_id, payload.rows)
+        self._reply(
+            "accept_group_add",
+            {
+                **self._thing_payload(world, payload.thing_id, None),
+                "thing_ids": thing_ids,
+            },
+        )
 
     # --- prompt additions ---------------------------------------------------
 
