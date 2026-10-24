@@ -32,6 +32,8 @@ the target itself), and no target may appear twice. What needs the world
 to check (a filing into itself, a `within` that doesn't sit in its target,
 a cycle) is `filing.check_filings`, which the store runs on every write.
 These sit beside `part_of`, `ties` and the place `parent` until those go.
+And its `hint` (text): the prompt hint it was written with, if any
+(`create.hint_names`), stored when its draft is accepted.
 
 A `being` (a god, a spirit, a legendary creature) has an `existence`:
 `real` (it acts in the world like a character: it can be cast in scenes
@@ -72,6 +74,7 @@ _SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (
     ("part_of", "json"),
     ("tag", "text"),
     ("filings", "json"),
+    ("hint", "text"),
 )
 
 AKA_TAGS: tuple[str, ...] = ("proper", "common")

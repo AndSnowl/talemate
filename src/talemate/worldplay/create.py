@@ -4550,6 +4550,9 @@ def _write_preview(
                 fields["aka"] = preview.aka
             if preview.tag:
                 fields["tag"] = preview.tag
+            if preview.hint:
+                # the prompt hint it was written with, shown on its page
+                fields["hint"] = preview.hint
             thing_id = rev.create_thing(preview.kind, fields)
         else:
             thing_id = stub.id
@@ -4573,6 +4576,8 @@ def _write_preview(
                     _common_name(rev, world.view(), thing_id, other)
             if preview.tag and preview.tag != tag_of(stub):
                 rev.set_field(thing_id, "tag", preview.tag, None)
+            if preview.hint:
+                rev.set_field(thing_id, "hint", preview.hint, None)
             rev.remove_field_value(thing_id, "stub", None)
 
         # the revision's own view: the stubs just made and the thing's own
@@ -4692,7 +4697,8 @@ def _write_entry_filings(
                 target=target,
                 role=row.role,
                 since=row.since,
-                within=row.within,
+                # a part that was the folded stub is the filled one
+                within=redirect.get(row.within, row.within) if row.within else None,
                 exceptions=exception_ids,
             )
         )

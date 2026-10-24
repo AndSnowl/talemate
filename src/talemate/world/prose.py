@@ -52,6 +52,10 @@ UNRENDERED_FIELDS: tuple[str, ...] = (
     "ties",
     # where an entry is filed links it, as part_of does
     "filings",
+    # what it is (its group on a page) and the hint it was written with:
+    # no prose reads either
+    "tag",
+    "hint",
     "agent",
     # a being's existence changes who it acts as, not what it is
     "existence",

@@ -1,0 +1,44 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+
+A few more facts for an entry the world has ("+ Add facts...", "+ Add
+event...", `worldplay.facts.draft_facts`). New wording, unprobed (Filing
+Task 12 measures it). `facts` are the entry's own facts, rendered; `year`
+is set for an event, and every fact is dated to it.
+-#}
+<|SECTION:TASK|>
+You add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.
+
+The entry: {{ name }} ({{ kind }}{% if tag %}, {{ tag }}{% endif %})
+{% if summary -%}
+{{ summary }}
+{% endif %}
+{% if facts -%}
+What the records already say about it (never repeat these):
+{% for text in facts -%}
+- {{ text }}
+{% endfor %}
+{% endif %}
+{% if year -%}
+What happened in {{ year }}, as the owner asks:
+{% else -%}
+The owner asks for:
+{% endif -%}
+{{ prompt }}
+
+Rules:
+- Write 1 to 5 facts, each one claim in a full sentence, about {{ name }}.
+- Keep them consistent with what the records already say.
+- Use only these categories: {{ categories | join(", ") }}.
+{% if not year -%}
+- "since" is optional: give it only when a fact started at a known time, as a bare year no later than {{ now_year }}.
+{% endif -%}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence."}]}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

@@ -69,6 +69,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 
 import structlog
 from pydantic import BaseModel
@@ -96,6 +97,7 @@ __all__ = [
     "RepointPlan",
     "RepointResult",
     "copy_facts",
+    "learn_names",
     "move_fact",
     "plan_merge",
     "plan_repoint",
@@ -349,6 +351,54 @@ def _other_name_keys(view: WorldView, skip: set[str]) -> set[str]:
     return keys
 
 
+def learn_names(
+    rev: Revision,
+    world: World,
+    target_id: str,
+    names: Sequence[str],
+    *,
+    skip: AbstractSet[str] = frozenset(),
+) -> list[str]:
+    """Teach `target_id` the other names `names`, in `rev`, as a re-point
+    teaches its target (`_names`, `RepointPlan._write_aka`): each a common
+    name, not everyday, unless the target already has it or another thing
+    (other than `skip`, the thing the names came from) goes by it, added
+    to every dated value of its other names too. Returns those added."""
+
+    view = world.view()
+    target = view.thing(target_id)
+    if target is None:
+        return []
+    aka = [e for e in target.fields.get("aka") or [] if isinstance(e, dict)]
+    held = {name_key(view.name_of(target_id) or "")} | {
+        name_key(str(entry.get("name", ""))) for entry in aka
+    }
+    taken = _other_name_keys(view, {target_id, *skip})
+    added: list[dict] = []
+    for name in names:
+        name = " ".join(name.split())
+        key = name_key(name)
+        if not key or key in held or key in taken:
+            continue
+        held.add(key)
+        added.append({"name": name, "tag": "common", "everyday": False})
+    if not added:
+        return []
+    latest = view.field_since(target_id, "aka")
+    for entry in world.timeline(target_id):
+        if entry.change != "field" or entry.field != "aka":
+            continue
+        if getattr(entry.date, "instant", None) == getattr(latest, "instant", None):
+            continue
+        value = [e for e in entry.value or [] if isinstance(e, dict)]
+        have = {name_key(str(e.get("name", ""))) for e in value}
+        extra = [e for e in added if name_key(str(e["name"])) not in have]
+        if extra:
+            rev.set_field(target_id, "aka", [*value, *extra], entry.date)
+    rev.set_field(target_id, "aka", [*aka, *added], latest)
+    return [str(entry["name"]) for entry in added]
+
+
 class _Job(BaseModel):
     """What one re-point reads and decides, before it writes."""
 
@@ -455,6 +505,7 @@ def copy_facts(
     plain_self_links: bool,
     standing_for: Sequence[str] = (),
     drawer_map: Mapping[str, str] | None = None,
+    keep: bool = False,
 ) -> dict[str, str]:
     """Move the facts `fact_ids` (of any owners) onto `target_id`, in `rev`,
     the way a fact changes thing (ruling R1): each is copied as a new fact
@@ -475,6 +526,11 @@ def copy_facts(
     does an exception's `rejects_fact` (its origin). With `drawer_map`
     (a sphere merged into a sphere: the old drawer id -> the target's), a
     statement's drawer is mapped first.
+
+    With `keep` ("Copy to..."), the originals stay: nothing that names
+    them (an override, an exception's `rejects_fact`) is re-pointed, and
+    each copy overrides what its original does; a copied summary is a
+    plain fact on the target.
 
     A `KeyError` for a fact or target that isn't live."""
 
@@ -510,6 +566,9 @@ def copy_facts(
             and origin["drawer"] not in {d.id for d in spheres.drawers(view, target_id)}
         ):
             del origin["drawer"]
+        if keep and origin is not None and "summary" in origin:
+            # a copy is never the target's summary
+            del origin["summary"]
         origins[fact.fact_id] = origin
         copies[fact.fact_id] = rev.add_fact(
             target_id,
@@ -518,8 +577,15 @@ def copy_facts(
             valid_from=fact.valid_from,
             valid_until=fact.valid_until,
             origin=origin,
-            overrides=[o for o in fact.overrides if o not in moving] or None,
+            overrides=(
+                list(fact.overrides)
+                if keep
+                else [o for o in fact.overrides if o not in moving]
+            )
+            or None,
         )
+    if keep:
+        return copies
     for _owner, fact in found:
         if any(o in moving for o in fact.overrides):
             rev.correct_fact(

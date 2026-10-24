@@ -33,20 +33,20 @@ through `signal_operation_failed` (an `operation_done` envelope with
   (`aka`), its `stub` marker (`null` or `{ignored}`; `fields` holds
   neither), its `mentions` (every other entry's fact that references it)
   and `named_stubs` (`{id, name, kind}` of the stubs its facts link to).
-- Curation (curation spec): each own and inherited fact row, and each
-  drawer item, carries `held_by`, `{id, name}` of the sphere, character
-  or being that holds it as a belief (`entries.held_by`: a marked holder,
-  or the owner of a `belief` fact), or `null`. Every kind's payload has `entry_timeline`
+- Curation (curation spec): each own and inherited fact row carries
+  `held_by`, `{id, name}` of the entry that holds it as a belief
+  (`entries.held_by`: a marked holder, or the owner of a `belief` fact),
+  or `null`. Every kind's payload has `entry_timeline`
   (`world.timelines.entry_timeline` at the world's `timeline_reach`,
   disagreements worked out at its `date_threshold`, ruling C31): `[{fact_id, owner_id, owner_name, date,
   until, segments, here, disagrees_with}]` in date order -- its own
-  dated facts and, for a sphere, the lines it gathers (`here` false,
+  dated facts and the lines it gathers from what's filed in it (`here` false,
   `owner_*` whose they are); `until` is set once the fact has ended (the
   screen shows "900–1010"), and a held line's `segments` read "<Holder>
   holds that ..." (`worldplay.held`), the holder linked.
   `set_held_by {thing_id, fact_id, holder_id|null, at}` sets or clears
-  one own fact's holder in one revision (null makes it world truth, also
-  for a beliefs statement) and answers with the thing; held-ness feeds
+  one own fact's holder (any live entry) in one revision (null makes it
+  world truth, also for a `belief` fact) and answers with the thing; held-ness feeds
   description prose (ruling C3), so prose is refreshed when the thing's
   prose reads the fact's category. `pick_date {keep_fact_id,
   drop_fact_id, mode: "end"|"remove", thing_id?, at?}` settles a
@@ -58,20 +58,21 @@ through `signal_operation_failed` (an `operation_done` envelope with
   prose as an edit would. `get_curation` and `set_curation {settings}`
   (a part of `CurationSettings`, the rest kept; unknown or out of range
   refused) answer `{settings, defaults}`.
-  Previews (`preview_thing`, `preview_sphere`, `preview_branch`,
-  `fill_drawer`, `add_outer_body`) are the preview's dump plus names for
+  A draft's `preview` (below) is the preview's dump plus names for
   display: `held_by_name` on each fact and elsewhere fact, `from_name`
-  on each `move_in` and `move_here` row, `name`, `from_name` and `to_name` on each
-  `refile` row. Everything curation adds is in the dump: facts' `ticked`,
-  `repeat_of`, `held_by`; `elsewhere` (`target_id`, `target_name`, `new`,
-  `category`, `text`, `since`, `held_by`, `ticked`, `repeat_of`);
-  `same_as` and `verdict` (with its `why`); `new_names` (with `part_of`,
-  `same_as`, `same_target_id`); `refile`; `move_in`. The accepts take the
-  owner's edits to all of it back, validated (`RefileRow`, `ItemIn`, the
-  preview models), and every accept answers `notes`. An accept schedules
-  prose for each entry the world has whose prose reads what it took (an
-  elsewhere fact, an item's text, a fact moved off it), never for a
-  sphere's statements or timeline (rulings P18, P19).
+  on each `move_here` row. Everything curation and filing add is in the
+  dump: facts' `ticked`, `repeat_of`, `held_by`; `elsewhere`
+  (`target_id`, `target_name`, `new`, `category`, `text`, `since`,
+  `held_by`, `ticked`, `repeat_of`); `same_as` and `verdict` (with its
+  `why`); `new_names` (with `tag`, `filing`, `same_as`,
+  `same_target_id`); `tag`, `hint`, `filings` ("In"), `file_into`,
+  `move_here`. `accept_preview` takes the owner's edits to all of it
+  back, validated by the preview models and checked again on the server
+  (ruling F13: "In" and "File into this" rows for a live target and no
+  cycle, a `within` that sits in its target, exceptions departing from
+  what the target holds; "Could move here" recomputed), and answers
+  `notes`. It schedules prose for each entry the world has whose prose
+  reads what it took (an elsewhere fact, a fact moved off it).
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
   ignored stub) and links that phrase in the fact (its first plain
@@ -80,6 +81,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `change_stub_kind {id, kind}` answer with the stub's payload.
   `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
   starting prompt for the stub and the mention context its expansion gets.
+  `change_stub_kind` adds `notes`, naming each field the new kind lacks
+  that was dropped with its value.
   `repoint_stub {stub_id, target_id, use_name?}` (`talemate.worldplay.repoint`)
   points everything naming the stub at the target (an entry, or another
   live stub) -- fact links, fields, filings, the stub's own facts and
@@ -94,6 +97,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
   shares naming it twice, its own). Prose is refreshed where its input
   changed: the target's for facts or rendered fields it took, another
   thing's for a rendered field rewritten.
+  `copy_fact {fact_id, target_id}` ("Copy to...", `repoint.copy_facts`
+  with `keep`) copies one fact onto another entry in one revision, the
+  original kept, and answers `{fact_id, target, notes}` like `move_fact`.
   `move_fact {fact_id, target_id}` (`repoint.move_fact`) moves one fact
   onto another entry in one revision (a new fact, the original removed,
   its overrides re-pointed) and answers `{fact_id, target, notes}` (the
@@ -117,22 +123,33 @@ through `signal_operation_failed` (an `operation_done` envelope with
   species_ids}]}`, every species, race and mix, for the heritage picker.
   `find_mix {parents: [a, b]}` answers `{parents, mix_id}`, the mix of
   those two parents in either order (`null` if there's none yet).
-- Create: `preview_thing {kind, prompt, fields, stub_id, picks,
-  new_names, hint}` runs in the background and answers `preview_thing
-  {preview}` or `preview_failed {message}`; it writes nothing. `stub_id`
-  expands that stub, `picks` maps a name written in the prompt to the
-  thing the owner matched it to, `new_names` are written names the owner
-  treats as new, and `hint` a prompt hint's name. A create preview carries
-  `tag`, `hint`, `filings` ("In"), `file_into` and `move_here` (Filing,
-  Task 4; the page payload for them is Task 6's), and no `part_of`,
-  `ties`, `move_in` or `refile`.
-  `accept_preview {preview, into_stub, same_target_id}` writes it (into
-  the stub `into_stub`, or onto the entry `same_target_id`, "Is this
-  X?", if given) and answers with the thing and `notes` (what was left
-  out, as an elsewhere fact whose target was deleted since the preview);
-  the prose of what else it changed is scheduled. For the browser
+- Create, as drafts: `preview_thing {kind, prompt, fields, stub_id,
+  picks, new_names, hint, draft_key?}` runs in the background and answers
+  `preview_thing` with the draft (or `preview_failed {message}`); it
+  writes nothing. `stub_id` expands that stub, `picks` maps a name
+  written in the prompt to the thing the owner matched it to,
+  `new_names` are written names the owner treats as new, and `hint` a
+  prompt hint's name. The draft is the page the entry will be (the thing
+  payload's shape, `draft: true`, `id` the stub's or null; its own facts
+  and "In" rows marked `draft: true` with their `ticked`), plus `preview`
+  (the data `accept_preview` takes), `draft_key`, `version` (1-based) and
+  `versions: [{version, name, prompt}]`. A session keeps up to
+  `DRAFT_VERSIONS` (5) versions per draft key, in memory: `stub:<id>` for
+  a stub's expansion, else `new:<kind>:<name key>`; Regenerate and Edit
+  prompt send the draft's key back, so a new version joins it whatever
+  it's named. `use_version {draft_key, version}` answers that version as
+  `preview_thing` does; `discard_preview {draft_key}` drops every version,
+  writing nothing, and answers `{draft_key}`; opening another world drops
+  them all.
+  `accept_preview {preview, into_stub, same_target_id, draft_key?}`
+  writes it (into the stub `into_stub`, or onto the entry
+  `same_target_id`, "Is this X?", if given), storing its `hint` on the
+  entry, drops the draft's versions, and answers with the thing and
+  `notes` (what was left out, as an elsewhere fact whose target was
+  deleted since the preview); the prose of what else it changed is
+  scheduled. For the browser
   tests only, `TALEMATE_TEST_FIXED_PREVIEW` names a JSON file (`{name,
-  facts, prose, fields?, tag?, in?, file_into?}`) that previews are
+  facts, prose, fields?, tag?, in?, file_into?, names?}`) that previews are
   answered from instead of the model (listing what the request's fields
   inherit, and for a `stub_id` its kind, name and mention context, as a
   real preview does). The file's facts may name a `held_by` holder, and
@@ -144,7 +161,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   and the file's `verdict` (`{verdict, why}`) stands in for the model's
   hint on the top candidate when both sides have facts.
 - Edits: `add_fact`, `correct_fact`, `end_fact`, `remove_fact` and
-  `set_field` each write one revision, answer with the thing, then start a
+  `set_field` (never filings, the old structure or the tag:
+  `GUARDED_FIELDS`) each write one revision, answer with the thing, then start a
   background `ensure_prose` that answers `prose_updated {id}` (or
   `prose_failed`); with no AI client the edit stands and the prose is left
   stale. `regenerate_prose {id, at, section?}` regenerates that one
@@ -168,50 +186,42 @@ through `signal_operation_failed` (an `operation_done` envelope with
   plain, and unknown phrases are never made stubs.
   `repoint_ref {thing_id, fact_id, occurrence, to_id, at}` points one
   reference of a fact (the `occurrence`-th in its text) at another thing,
-  keeping its words and changing nothing else; it answers like
-  `correct_fact`.
-- Spheres (`talemate.world.spheres`): the thing payload has `sphere`
-  (`null`, or `{template, agent, drawers: [{id, type, title, inherited,
-  items: [{thing_id, fact_id, name, segments, inherited, stub}]}], people:
-  [{character_id, name, role, since, until, within, within_name}],
-  territory: [{id, name}],
-  timeline, branches: [{id, name}], parent: {id, name} | null}`; an item
-  in no drawer the sphere has is in a last `unsorted` drawer; `timeline`
-  is the payload's `entry_timeline` lines after its undated `timeline`
-  facts, a branch's inherited ones included, each a line with a null
-  `date`), `part_of` (`null`, or `{sphere_id, sphere_name,
-  drawer_id, drawer_title}`, Unsorted's title for a drawer that's gone)
-  and, for a character, `ties` (`[{sphere_id, sphere_name, role, since,
-  until, within, within_name, exceptions: [{fact_id, segments}]}]`). `list_things {kind:
-  "sphere"}` lists place spheres too, each with its `template`, and adds
-  `groups: [{template, things}]`. `preview_sphere {template, prompt,
-  fields, stub_id, picks, new_names, promote_id}` and `preview_branch
-  {parent_id, prompt}` run in the background like `preview_thing`
-  (answering with `{preview}` data, or `preview_sphere_failed` /
-  `preview_branch_failed`); `accept_sphere {preview}` writes either,
-  answering with the sphere and `notes`.
-  `fill_drawer {sphere_id, drawer_id}` answers the `FillPreview`,
-  `{sphere_id, drawer_id, items, elsewhere, new_names, refile}` (or
-  `fill_failed`) and `accept_fill {sphere_id,
-  drawer_id, items, elsewhere, new_names, refile}` writes the ticked ones, answering with the
-  sphere and `notes` (an elsewhere fact whose target was deleted).
-  `add_outer_body {preview_type: "create" | "sphere" | "fill", preview,
-  row_name, outer: {name, template, part_of}, as_sphere}` puts the outer body the
-  owner named around a part of a preview (`worldplay.bodies`), with no
-  model call, and answers `{preview_type, preview}`; the preview's
-  `refile` rows are accepted with it (Fill's `accept_fill` takes
-  `new_names` and `refile`). `add_statement {sphere_id, drawer_id, text, picks,
-  new_names, spans, at}` writes a statement by hand into a drawer that
-  holds items (own or inherited; not Unsorted), linked like `add_fact`,
-  and answers with the sphere. `set_drawers {sphere_id, drawers}`, `set_part_of
-  {thing_id, sphere_id|null, drawer_id}`, `set_ties {character_id, ties:
-  [{sphere_id, role, since, until, within}]}` (`within`, a part of the
-  sphere the tie is in, kept when left out), `add_exception {character_id,
-  sphere_id, text, rejects: {thing_id}|{fact_id}|null}` and `end_item
-  {sphere_id, thing_id|fact_id, at, by}` answer with the thing edited (the
-  sphere, for `end_item`). Prose is refreshed only when rendered text
-  changed: drawers, part-of and ties are no prose's input, nor are a
-  sphere's statements and timeline (rulings P18, P19).
+  keeping its words, and teaches the target the link's words and, for a
+  stub, the stub's names as other names (`repoint.learn_names`), in one
+  revision; it answers like `correct_fact`, plus `aka_added`.
+- Selected words (`start`/`end` index a fact's `rendered` text):
+  `make_stub_from_text {fact_id, start, end, kind, tag?, filing?:
+  {target_id, role}, at}` makes a stub of the words (or uses the entry
+  of that name), filed as `filing` says, and links them, in one
+  revision, answering with the fact's entry plus `stub_id`;
+  `link_text {fact_id, start, end, target_id, at}` links them to an
+  entry. A selection that cuts through or takes in a link is refused.
+- Prompt additions: `add_facts {thing_id, prompt}` and `add_event
+  {thing_id, prompt, year}` (`worldplay.facts`) run in the background and
+  answer `{thing_id, draft, facts}` (or `add_facts_failed` /
+  `add_event_failed`), writing nothing; `accept_facts {draft, at}` writes
+  the ticked ones in one revision and answers with the entry plus
+  `fact_ids`. `TALEMATE_TEST_FIXED_FACTS` (browser tests) names a file
+  holding the model's reply.
+- Filing and tags (`talemate.world.filing`): the thing payload has
+  `tag`, `hint` (the prompt hint it was written with), `in: [{target_id,
+  target_name, role, since, until, within_id, within_name, exceptions:
+  [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
+  hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, stub,
+  line_segments, role, since, until}]}]` (what's filed in it, grouped by
+  tag; `synopsis` null until Task 8) and `mentioned_in: [{id, name}]`.
+  `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
+  until, within, at}`, `edit_filing {thing_id, target_id, role?, since?,
+  until?, within?, at}` (an `until` ends it) and `remove_filing {thing_id,
+  target_id, at}` (its exceptions go with it) each write one revision and
+  answer with the thing; `add_exception {character_id, target_id, text,
+  rejects, ...}` adds a "but..." to a filing. `set_tag {thing_id, tag}`
+  answers with the thing; `list_tags` answers `{tags: [{tag, heading,
+  count}]}`; `rename_tag {old, new}` and `merge_tag {from, into}` retag
+  every entry in one revision and answer `{old, new | from, into,
+  changed, tags}`. `group_synopsis {thing_id, tag}` and `group_add
+  {thing_id, tag, prompt}` are refused as not yet available (ruling F2;
+  Task 8). Filings and tags are no prose input: none is scheduled.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
   and `via`, plus the `unknown` capitalised phrases no name covers.
@@ -237,15 +247,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   instead of asking any model; `start_scene` then leaves the prose as it
   is. With `TALEMATE_TEST_FIXED_PREVIEW` set as well, each stub the setup
   uses gets the fixed preview; without it, stubs stay stubs.
-  Likewise `TALEMATE_TEST_FIXED_SPHERE` names a JSON file `{"sphere":
-  {...}, "fill": [...], "branch": {...}}` of model replies (the core's,
-  Fill's items, a branch's) that `preview_sphere`, `fill_drawer` and
-  `preview_branch` read through their real parsing instead of asking the
-  model; a missing file or key asks the model as usual. `fill` may also
-  be the whole reply object, `{new_items, elsewhere, names}`, so a fixed
-  Fill carries elsewhere facts (each with its `held_by`) through the real
-  parser. A core has no elsewhere and no move-in (ruling C1), and a merge
-  asks no model, so it has no fixed reply.
+  A merge asks no model, so it has no fixed reply.
 
 Dates go over the wire as `{"instant", "precision", "label"}`, the label
 formatted with the world's calendar; `label` is ignored on the way in.
@@ -254,7 +256,6 @@ formatted with the world's calendar; `label` is ignored on the way in.
 import asyncio
 import json
 import os
-import uuid
 from collections.abc import Collection, Coroutine
 from pathlib import Path
 from typing import Any, Literal
@@ -269,19 +270,27 @@ from talemate.world import entries, heritage, spheres
 from talemate.world.calendar import Calendar
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
-from talemate.world.filing import FIELD_ROLES
+from talemate.world.filing import (
+    FIELD_ROLES,
+    Filing,
+    connected,
+    filed_in,
+    filings_of,
+    mentioned_in,
+    tag_heading,
+    tag_of,
+    tags_in_use,
+)
 from talemate.world.kinds import (
-    DRAWER_TYPES,
     HERITAGE_KINDS,
     KINDS,
     SPHERE_TEMPLATES,
-    TEMPLATE_AGENT,
-    UNSORTED_DRAWER_ID,
-    WRITTEN_DRAWER_TYPES,
+    get_kind,
+    normalise_tag,
 )
 from talemate.world.names import find_names, unknown_proper_phrases
 from talemate.world.prose import UNRENDERED_FIELDS
-from talemate.world.refs import REF_PATTERN
+from talemate.world.refs import REF_PATTERN, ref
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
@@ -289,43 +298,42 @@ from talemate.world.timeline import TimelineEntry
 from talemate.world.timelines import TimelineLine, entry_timeline
 from talemate.world.view import FactState, Segment, ThingState, WorldView
 from talemate.worldplay import prose_gen
-from talemate.worldplay.filing_shadow import shadowed_revision, statement_origin
-from talemate.worldplay import spheres as sphereplay
-from talemate.worldplay.bodies import OuterBody, add_outer_body
 from talemate.worldplay.characters import age_in_years
 from talemate.worldplay.create import (
     CREATE_KINDS,
-    PART_OF_KINDS,
     CreatePreview,
     ElsewhereFact,
+    FileIntoRow,
     PreviewException,
     PreviewFact,
-    PreviewTie,
     accept_preview,
     clean_tag,
     current_date,
     drafted,
-    drawer_types_for,
     entry_names,
-    exception_fact,
     file_by_role,
+    filing_exception_fact,
+    filings_since,
     flag_elsewhere_repeats,
     holder_named,
+    listed_names,
     matching_stub,
     move_here_rows,
+    name_filings,
     naming_facts,
     offer_same,
     owner_filings,
     parse_elsewhere,
     parse_file_into,
     parse_in,
-    part_of_since,
     preview_inherited,
     preview_thing,
     prose_reads,
     same_offers,
 )
+from talemate.worldplay.create import _new_names as listed_stub_names
 from talemate.worldplay.decide import Verdict
+from talemate.worldplay.facts import FactDraft, accept_facts, draft_facts
 from talemate.worldplay.held import held_text
 from talemate.worldplay.links import (
     LinkSpan,
@@ -350,7 +358,7 @@ from talemate.worldplay.merge import (
     preview_merge,
     repoint_overrides,
 )
-from talemate.worldplay.repoint import move_fact, repoint_stub
+from talemate.worldplay.repoint import copy_facts, learn_names, move_fact, repoint_stub
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -403,10 +411,13 @@ FIXED_PREVIEW_ENV = "TALEMATE_TEST_FIXED_PREVIEW"
 # `plan_scene` and `continue_scene` use (see the module docstring)
 FIXED_SETUP_ENV = "TALEMATE_TEST_FIXED_SETUP"
 
-# browser tests only: a JSON file `{"sphere", "fill", "branch"}` of model
-# replies `preview_sphere`, `fill_drawer` and `preview_branch` read instead
-# of asking the model (see the module docstring)
-FIXED_SPHERE_ENV = "TALEMATE_TEST_FIXED_SPHERE"
+# the versions a draft keeps for the session (Version n of m), the oldest
+# dropped first
+DRAFT_VERSIONS = 5
+
+# browser tests only: a JSON file holding the model's reply `add_facts`
+# and `add_event` read through their real parsing instead of asking it
+FIXED_FACTS_ENV = "TALEMATE_TEST_FIXED_FACTS"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -454,61 +465,9 @@ class PreviewPayload(pydantic.BaseModel):
     new_names: list[str] = pydantic.Field(default_factory=list)
     # the prompt hint the owner picked (`create.hint_names`), if any
     hint: str | None = None
-
-
-class RefileRow(pydantic.BaseModel):
-    """A re-file row as `add_outer_body` makes it and the owner sends it
-    back: the entry, where it's filed now, where it goes, and the owner's
-    tick. Other keys (the names shown with it) pass through."""
-
-    model_config = pydantic.ConfigDict(extra="allow", populate_by_name=True)
-
-    thing_id: str
-    from_: dict[str, Any] | None = pydantic.Field(default=None, alias="from")
-    # always an outer body of the preview, by name: `{"name", "drawer"}`;
-    # a sphere the world has (`{"sphere"}`) is refused
-    to: dict[str, str]
-    ticked: bool = False
-
-    @pydantic.field_validator("to")
-    @classmethod
-    def _outer_body(cls, value: dict[str, str]) -> dict[str, str]:
-        if "sphere" in value or not value.get("name"):
-            raise ValueError("a re-file row moves a thing into an outer body, by name")
-        return value
-
-
-class ItemIn(pydantic.BaseModel):
-    """A sphere core's or Fill's item as the owner sends it back: its text,
-    and, for a named one, its name and kind; the owner's tick, and an
-    entry the world has it's the same as. Other keys pass through as they
-    came."""
-
-    model_config = pydantic.ConfigDict(extra="allow")
-
-    text: str
-    name: str | None = None
-    kind: str | None = None
-    drawer_id: str | None = None
-    thing_id: str | None = None
-    same_target_id: str | None = None
-    ticked: bool = True
-    repeat_of: dict[str, Any] | None = None
-    part_of: dict[str, str] | None = None
-
-
-def _refile_in(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Re-file rows validated (`RefileRow`), as dicts the accept reads."""
-
-    return [RefileRow.model_validate(row).model_dump(by_alias=True) for row in rows]
-
-
-def _items_in(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Items validated (`ItemIn`), each the dict it was sent as."""
-
-    return [
-        ItemIn.model_validate(item).model_dump(exclude_unset=True) for item in items
-    ]
+    # the draft this generation is a new version of (`_draft_key`): sent
+    # back from an earlier reply by Regenerate or Edit prompt
+    draft_key: str | None = None
 
 
 class AcceptPreviewPayload(pydantic.BaseModel):
@@ -517,6 +476,17 @@ class AcceptPreviewPayload(pydantic.BaseModel):
     into_stub: str | None = None
     # "Is this X?" -- yes: the entry the preview's material goes onto
     same_target_id: str | None = None
+    # the draft accepted: its versions are dropped once it's written
+    draft_key: str | None = None
+
+
+class DraftKeyPayload(pydantic.BaseModel):
+    draft_key: str
+
+
+class UseVersionPayload(DraftKeyPayload):
+    # 1-based, as the reply's `versions` number them
+    version: int
 
 
 class _ThingEdit(pydantic.BaseModel):
@@ -617,8 +587,8 @@ class RemoveFactPayload(_ThingEdit):
 
 class SetHeldByPayload(_ThingEdit):
     fact_id: str
-    # the sphere, character or being that holds the fact as a belief;
-    # null makes it world truth (also for a beliefs drawer's statement).
+    # the entry that holds the fact as a belief; null makes it world
+    # truth (also for a `belief` fact).
     # Required, so a client that leaves it out clears nothing.
     holder_id: str | None
 
@@ -672,114 +642,135 @@ class SetFieldPayload(_ThingEdit):
     valid_from: dict | None = None
 
 
-class PreviewSpherePayload(pydantic.BaseModel):
-    template: str
-    prompt: str = ""
-    fields: dict = pydantic.Field(default_factory=dict)
-    # the stub this preview expands, or the thing it promotes (not both)
-    stub_id: str | None = None
-    promote_id: str | None = None
-    picks: dict[str, str] = pydantic.Field(default_factory=dict)
-    new_names: list[str] = pydantic.Field(default_factory=list)
+# the fields `set_field` never writes, each with what does: filings go
+# through the filing actions alone (rulings F11, F14), and the old
+# structure isn't written at all any more
+_FILING_ACTIONS = "add_filing, edit_filing or remove_filing"
+GUARDED_FIELDS: dict[str, str] = {
+    "filings": _FILING_ACTIONS,
+    "part_of": _FILING_ACTIONS,
+    "ties": _FILING_ACTIONS,
+    "parent": _FILING_ACTIONS,
+    "drawers": "nothing: drawers are gone, entries are filed and tagged",
+    "tag": "set_tag",
+}
 
 
-class AcceptSpherePayload(pydantic.BaseModel):
-    preview: sphereplay.SpherePreview
+class AddFilingPayload(_ThingEdit):
+    """File a thing in an entry the world has (`target_id`) or in a new
+    stub named `new_name` (of `kind`, default lore, with `tag`), with a
+    role, dates and, for a person, a part of the target it's `within`."""
 
-    @pydantic.model_validator(mode="after")
-    def _rows(self) -> "AcceptSpherePayload":
-        self.preview.items = _items_in(self.preview.items)
-        self.preview.refile = _refile_in(self.preview.refile)
-        return self
-
-
-class FillDrawerPayload(pydantic.BaseModel):
-    sphere_id: str
-    drawer_id: str
-
-
-class AcceptFillPayload(FillDrawerPayload):
-    # `fill_drawer`'s items, less any the owner dropped
-    items: list[dict[str, Any]]
-    # `fill_drawer`'s facts about other entries, as the owner left them
-    elsewhere: list[ElsewhereFact] = pydantic.Field(default_factory=list)
-    # the outer bodies the owner named and the re-file rows
-    # (`add_outer_body`), as it left them
-    new_names: list[NewName] = pydantic.Field(default_factory=list)
-    refile: list[dict[str, Any]] = pydantic.Field(default_factory=list)
-
-    @pydantic.model_validator(mode="after")
-    def _rows(self) -> "AcceptFillPayload":
-        self.items = _items_in(self.items)
-        self.refile = _refile_in(self.refile)
-        return self
-
-
-class AddOuterBodyPayload(pydantic.BaseModel):
-    # which preview it is: `preview_thing`'s ("create"), `preview_sphere`'s
-    # or `preview_branch`'s ("sphere"), or Fill's ("fill": `{sphere_id,
-    # drawer_id, items, elsewhere, new_names, refile}`)
-    preview_type: str
-    preview: dict[str, Any]
-    row_name: str
-    outer: OuterBody
-    # a new name the preview lists of another kind may become the body
-    as_sphere: bool = False
-
-
-class DrawerIn(pydantic.BaseModel):
-    # left out for a new drawer: it's given an id
-    id: str | None = None
-    type: str
-    title: str
-
-    @pydantic.field_validator("type")
-    @classmethod
-    def _known_type(cls, value: str) -> str:
-        if value not in DRAWER_TYPES:
-            raise ValueError(f"no such drawer type: {value!r}")
-        return value
-
-    @pydantic.field_validator("title")
-    @classmethod
-    def _titled(cls, value: str) -> str:
-        title = " ".join(value.split())
-        if not title:
-            raise ValueError("a drawer needs a title")
-        return title
-
-
-class SetDrawersPayload(pydantic.BaseModel):
-    sphere_id: str
-    drawers: list[DrawerIn]
-    at: dict | None = None
-
-
-class SetPartOfPayload(_ThingEdit):
-    # `None` takes the thing out of every sphere
-    sphere_id: str | None = None
-    drawer_id: str = UNSORTED_DRAWER_ID
-
-
-class TieIn(pydantic.BaseModel):
-    sphere_id: str
-    role: str = ""
+    target_id: str | None = None
+    new_name: str | None = None
+    kind: str | None = None
+    tag: str | None = None
+    role: str | None = None
     since: dict | None = None
     until: dict | None = None
-    # the part of the sphere it's within (a thing filed in it); left out,
-    # a tie to the same sphere keeps the part it had
+    within: str | None = None
+
+    @pydantic.model_validator(mode="after")
+    def _one_target(self) -> "AddFilingPayload":
+        has_name = bool(self.new_name and self.new_name.strip())
+        if (self.target_id is None) == (not has_name):
+            raise ValueError("a filing goes into a target_id or a new_name")
+        return self
+
+
+class EditFilingPayload(_ThingEdit):
+    """Change one filing (the one into `target_id`): only the keys sent
+    change (`role`, `since`, `until`, `within`; null clears one). An
+    `until` ends it ("End this"). Its exceptions are kept."""
+
+    target_id: str
+    role: str | None = None
+    since: dict | None = None
+    until: dict | None = None
     within: str | None = None
 
 
-class SetTiesPayload(pydantic.BaseModel):
-    character_id: str
-    ties: list[TieIn]
+class RemoveFilingPayload(_ThingEdit):
+    target_id: str
+
+
+class SetTagPayload(_ThingEdit):
+    # null or blank clears it
+    tag: str | None
+
+
+class RenameTagPayload(pydantic.BaseModel):
+    old: str
+    new: str
+
+
+class MergeTagPayload(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
+    from_: str = pydantic.Field(alias="from")
+    into: str
+
+
+class GroupSynopsisPayload(pydantic.BaseModel):
+    thing_id: str
+    tag: str | None = None
+
+
+class GroupAddPayload(pydantic.BaseModel):
+    thing_id: str
+    tag: str | None = None
+    prompt: str
+
+
+class AddFactsPayload(_ThingEdit):
+    prompt: str
+
+
+class AddEventPayload(_ThingEdit):
+    prompt: str
+    # the year the event happened (a year of the world's calendar)
+    year: int
+
+
+class AcceptFactsPayload(pydantic.BaseModel):
+    # `add_facts`' or `add_event`'s draft, as the owner left it
+    draft: FactDraft
     at: dict | None = None
 
 
+class _Selection(pydantic.BaseModel):
+    """Selected words of a fact: `start`/`end` index its `rendered` text
+    (code points), as the page shows it."""
+
+    fact_id: str
+    start: int
+    end: int
+    at: dict | None = None
+
+
+class SelectionFiling(pydantic.BaseModel):
+    target_id: str
+    role: str | None = None
+
+
+class MakeStubFromTextPayload(_Selection):
+    kind: str
+    tag: str | None = None
+    filing: SelectionFiling | None = None
+
+
+class LinkTextPayload(_Selection):
+    target_id: str
+
+
+class CopyFactPayload(pydantic.BaseModel):
+    fact_id: str
+    target_id: str
+
+
 class ItemRef(pydantic.BaseModel):
-    """One item of a sphere: a thing part of it, or one of its statements
-    (exactly one of the two)."""
+    """What an exception departs from: an entry filed in the filing's
+    target, or one of the target's facts (exactly one of the two)."""
 
     thing_id: str | None = None
     fact_id: str | None = None
@@ -793,51 +784,15 @@ class ItemRef(pydantic.BaseModel):
 
 class AddExceptionPayload(pydantic.BaseModel):
     character_id: str
-    sphere_id: str
+    # the entry the character is filed in
+    target_id: str
     text: str
-    # the item it departs from; `None` departs from the sphere's teaching
-    # as a whole
+    # what it departs from; `None` departs from the entry as a whole
     rejects: ItemRef | None = None
     picks: dict[str, str] = pydantic.Field(default_factory=dict)
     new_names: list[str] = pydantic.Field(default_factory=list)
     spans: list[LinkSpan] = pydantic.Field(default_factory=list)
     at: dict | None = None
-
-
-class AddStatementPayload(pydantic.BaseModel):
-    sphere_id: str
-    drawer_id: str
-    text: str
-    picks: dict[str, str] = pydantic.Field(default_factory=dict)
-    new_names: list[str] = pydantic.Field(default_factory=list)
-    spans: list[LinkSpan] = pydantic.Field(default_factory=list)
-    at: dict | None = None
-
-
-# the fields set through an action of their own, which guards them:
-# `set_field` refuses them, naming that action
-GUARDED_FIELDS: dict[str, str] = {
-    "part_of": "set_part_of",
-    "ties": "set_ties",
-    "drawers": "set_drawers",
-    # F10: until Task 4's writer, filings are written only by the shim
-    # beside the old fields (`worldplay.filing_shadow`), which would wipe
-    # a raw write; Task 4 lifts this guard
-    "filings": "set_part_of or set_ties (until Task 4)",
-}
-
-
-class PreviewBranchPayload(pydantic.BaseModel):
-    parent_id: str
-    prompt: str
-
-
-class EndItemPayload(ItemRef):
-    sphere_id: str
-    # the date the item ends at
-    at: dict
-    # what ended it, if anything (a sphere gets a timeline fact)
-    by: str | None = None
 
 
 class RegenerateProsePayload(pydantic.BaseModel):
@@ -876,31 +831,6 @@ class RepositionScenePayload(pydantic.BaseModel):
     start: dict
 
 
-def _fixed_sphere_reply(key: str) -> str | None:
-    """The browser tests' fixed sphere reply for `key` (`sphere`, `fill`
-    or `branch`), as the model's reply text, so the real parsing reads it:
-    `None` when the setting is unset, its file isn't there, or the file has
-    no `key`. A `fill` list is wrapped as `{"new_items": [...]}`; a `fill`
-    object is the whole reply, so it can carry `elsewhere` (each with its
-    `held_by`) and `names`. A string is the reply's raw text, as it is (a
-    reply that doesn't parse whole, ruling C26)."""
-
-    path = _fixed_file(FIXED_SPHERE_ENV)
-    if path is None:
-        return None
-    fixed = json.loads(path.read_text(encoding="utf-8"))
-    reply = fixed.get(key)
-    if reply is None:
-        return None
-    # a list is Fill's items alone; an object (`{"new_items", "elsewhere",
-    # "names"}`) is the whole reply
-    if key == "fill" and isinstance(reply, list):
-        reply = {"new_items": reply}
-    if isinstance(reply, str):
-        return reply
-    return json.dumps(reply)
-
-
 def _fixed_file(env: str) -> Path | None:
     """The browser tests' fixed-reply file named by `env`, if it's set and
     a test has written the file; `None` otherwise, so a request with no
@@ -930,7 +860,11 @@ async def _fixed_preview(
     entry's row offered what it may be the same as); the file's `tag`
     (`create.clean_tag`), `in` and `file_into` (`[{entry, role}]`,
     `create.parse_in`, `parse_file_into`, unticked), after the owner's own
-    filings from the fields (ticked, `create.owner_filings`); "Could move
+    filings from the fields (ticked, `create.owner_filings`); its `names`
+    (`[{name, kind, tag, in}]`, `create.listed_names`, `name_filings`:
+    each new name with its tag and the ticked filing its "in" gives, an
+    existing entry whose "in" is this one offered under "File into
+    this"), kept only as the facts use them, as the real ones; "Could move
     here" found by code as the real one's (`naming_facts`,
     `move_here_rows`) among where it's filed, what mentions the stub and
     the picks; and the entry's `same_as` (`create.same_offers`), with the
@@ -1010,6 +944,24 @@ async def _fixed_preview(
     ):
         if not any(r.target_id == row.target_id for r in filings):
             filings.append(row)
+    # the file's names (`[{name, kind, tag, in}]`), read as the model's
+    # are: each with its tag, and the filing its "in" gives (ticked); an
+    # existing entry whose "in" is this one is a "File into this" row
+    listed, names_into = name_filings(
+        view,
+        listed_names(fixed.get("names") or []),
+        own_keys=own_keys,
+        prefer=[],
+        lookup=lookup,
+    )
+    new_names = listed_stub_names(
+        view,
+        listed,
+        [fact.text for fact in facts],
+        [name],
+        list(payload.picks),
+        payload.new_names,
+    )
     file_into = parse_file_into(
         fixed.get("file_into") or [],
         view,
@@ -1018,6 +970,13 @@ async def _fixed_preview(
         prefer=[],
         lookup=lookup,
     )
+    for thing_id in names_into:
+        if thing_id not in own_ids and not any(
+            row.thing_id == thing_id for row in file_into
+        ):
+            file_into.append(
+                FileIntoRow(thing_id=thing_id, name=view.name_of(thing_id) or "")
+            )
     # near it, as the real preview's context: where it's filed, what
     # mentions the stub, what the prompt picks
     near = [row.target_id for row in filings if row.ticked]
@@ -1056,6 +1015,7 @@ async def _fixed_preview(
         elsewhere=elsewhere,
         same_as=same_as,
         verdict=verdict,
+        new_names=new_names,
         tag=clean_tag(fixed.get("tag")),
         hint=payload.hint,
         filings=filings,
@@ -1257,31 +1217,11 @@ def _line_out(
     }
 
 
-def _undated_line(
-    view: WorldView, links: "_Links", owner_id: str, here: str, fact: FactState
-) -> dict:
-    """A sphere's undated `timeline` fact as a sphere page's timeline line
-    (it has no place on an entry timeline: `date` is null)."""
-
-    owner = view.thing(owner_id)
-    return {
-        "fact_id": fact.fact_id,
-        "owner_id": owner_id,
-        "owner_name": view.name_of(owner_id) or "",
-        "date": None,
-        "until": None,
-        "segments": _held_segments(view, links, fact, owner, view.render(fact.text)),
-        "here": owner_id == here,
-        "disagrees_with": [],
-    }
-
-
 def _preview_out(world: World, preview: pydantic.BaseModel) -> dict:
-    """A preview (create, sphere core or branch, Fill) for the wire: its
-    dump, sent back as it is on accept, with the names the screen shows
-    beside ids -- `held_by_name` on each fact and elsewhere fact,
-    `from_name` on each move-in row, and `name`, `from_name`, `to_name` on
-    each re-file row. The models ignore these on the way back in."""
+    """A create preview for the wire: its dump, sent back as it is on
+    accept, with the names the screen shows beside ids -- `held_by_name`
+    on each fact and elsewhere fact, `from_name` on each "Could move here"
+    row. The models ignore these on the way back in."""
 
     view = world.view()
     out = preview.model_dump(mode="json")
@@ -1289,21 +1229,10 @@ def _preview_out(world: World, preview: pydantic.BaseModel) -> dict:
     def name(thing_id: object) -> str | None:
         return (view.name_of(thing_id) or "") if isinstance(thing_id, str) else None
 
-    def home(link: object) -> str | None:
-        if not isinstance(link, dict):
-            return None
-        if isinstance(link.get("name"), str):
-            return link["name"]
-        return name(link.get("sphere"))
-
     for row in [*out.get("facts", []), *out.get("elsewhere", [])]:
         row["held_by_name"] = name(row.get("held_by"))
-    for row in [*out.get("move_in", []), *out.get("move_here", [])]:
+    for row in out.get("move_here", []):
         row["from_name"] = name(row.get("from_id"))
-    for row in out.get("refile", []):
-        row["name"] = name(row.get("thing_id"))
-        row["from_name"] = home(row.get("from"))
-        row["to_name"] = home(row.get("to"))
     return out
 
 
@@ -1314,7 +1243,7 @@ def _settings_out(settings: CurationSettings) -> dict:
     }
 
 
-# --- spheres ------------------------------------------------------------------
+# --- filing -------------------------------------------------------------------
 
 
 def _own_fact(state: ThingState | None, fact_id: str | None) -> FactState | None:
@@ -1323,260 +1252,158 @@ def _own_fact(state: ThingState | None, fact_id: str | None) -> FactState | None
     return next((fact for fact in state.facts if fact.fact_id == fact_id), None)
 
 
-def _item_out(view: WorldView, links: _Links, item: spheres.Item) -> dict:
-    """A drawer's item for the wire: a statement's text, or the thing's
-    fact `spheres.items` shows (`spheres.item_fact`: a nested sphere's
-    summary), as linked runs."""
+def _in_out(
+    view: WorldView, links: _Links, calendar: Calendar, state: ThingState
+) -> list[dict]:
+    """The thing's "In" rows: each filing it has, in stored order, ended
+    ones too (the dates say so), with its target, role, dates, the part of
+    the target it's `within` (while that's live) and its "but..."
+    exceptions (its own facts the filing names, as linked runs). A filing
+    into an entry that's gone is left out, hidden until it's back."""
 
-    if item.thing_id is not None:
-        owner = view.thing(item.thing_id)
-        fact = spheres.item_fact(owner) if owner is not None else None
-    else:
-        owner = view.thing(item.source_id)
-        fact = _own_fact(owner, item.fact_id)
-    return {
-        "thing_id": item.thing_id,
-        "fact_id": item.fact_id,
-        "name": item.name,
-        "segments": links.segments(fact.text) if fact is not None else [],
-        "inherited": item.inherited,
-        "stub": item.stub,
-        "held_by": _held_out(view, fact, owner) if fact is not None else None,
-    }
+    rows = []
+    for filing in filings_of(view, state.id, live=False):
+        if view.thing(filing.target) is None:
+            continue
+        within = (
+            filing.within
+            if filing.within is not None and view.thing(filing.within) is not None
+            else None
+        )
+        exceptions = []
+        for fact_id in filing.exceptions:
+            found = view.fact(fact_id)
+            if found is None or found[0] != state.id:
+                continue
+            exceptions.append(
+                {"fact_id": fact_id, "segments": links.segments(found[1].text)}
+            )
+        rows.append(
+            {
+                "target_id": filing.target,
+                "target_name": view.name_of(filing.target) or "",
+                "role": filing.role,
+                "since": _date_out(calendar, filing.since),
+                "until": _date_out(calendar, filing.until),
+                "within_id": within,
+                "within_name": view.name_of(within) if within else None,
+                "exceptions": exceptions,
+            }
+        )
+    return rows
 
 
-def _own_drawer_ids(state: ThingState) -> set[str]:
-    """The ids in the sphere's own `drawers` field (not a parent's)."""
-
-    raw = state.fields.get("drawers")
-    return {
-        drawer["id"]
-        for drawer in (raw if isinstance(raw, list) else [])
-        if isinstance(drawer, dict) and isinstance(drawer.get("id"), str)
-    }
+def _hint_of(state: ThingState) -> str | None:
+    hint = state.fields.get("hint")
+    return hint if isinstance(hint, str) and hint else None
 
 
-def _sphere_out(
+def _line_fact(state: ThingState) -> FactState | None:
+    """The fact an entry is shown by on one line (a Connected row): its
+    summary (`entries.summary_fact`), else its first own fact."""
+
+    summary = entries.summary_fact(state)
+    if summary is not None:
+        return summary
+    return min(state.facts, key=lambda fact: fact.created, default=None)
+
+
+def _connected_out(
     view: WorldView,
     links: _Links,
     calendar: Calendar,
-    state: ThingState,
-    timeline: list[dict],
-    things: list[ThingState] | None = None,
-) -> dict | None:
-    """A sphere's own part of the thing payload (`None` for a thing that's
-    no sphere): its template and agent flag; its drawers in order (a
-    branch's inherited ones after its own, each marked `inherited`), each
-    with its items, then `UNSORTED` when anything is in no drawer it has;
-    its people (from ties), territory, timeline, branches and the sphere
-    it branches from.
-
-    The timeline is the entry timeline the payload has (`timeline`, the
-    lines of `world.timelines.entry_timeline`: its own dated facts and
-    what it gathers), after its undated `timeline` facts and a branch's
-    inherited undated ones (`spheres.timeline`, which has no date to place
-    them by). `things`, a snapshot of the view's things, saves scans.
-    """
-
-    if not spheres.is_sphere(state):
-        return None
-    sphere_id = state.id
-    template = state.fields.get("template")
-    agent = state.fields.get("agent")
-    if not isinstance(agent, bool):
-        agent = (
-            TEMPLATE_AGENT.get(template, False) if isinstance(template, str) else False
-        )
-
-    own = _own_drawer_ids(state)
-    shelves = spheres.drawers(view, sphere_id)
-    held = spheres.items(view, sphere_id, things)
-    if any(item.drawer_id == spheres.UNSORTED.id for item in held):
-        shelves = [*shelves, spheres.UNSORTED]
-    drawers = [
-        {
-            "id": drawer.id,
-            "type": drawer.type,
-            "title": drawer.title,
-            "inherited": drawer.id not in own and drawer.id != spheres.UNSORTED.id,
-            "items": [
-                _item_out(view, links, item)
-                for item in held
-                if item.drawer_id == drawer.id
-            ],
-        }
-        for drawer in shelves
-    ]
-
-    parent_id = state.fields.get("parent") if state.kind == "sphere" else None
-    parent = view.thing(parent_id) if isinstance(parent_id, str) else None
-    branches = sorted(
-        (
-            other
-            for other in (
-                view.things("sphere")
-                if things is None
-                else [t for t in things if t.kind == "sphere"]
-            )
-            if other.fields.get("parent") == sphere_id and other.id != sphere_id
-        ),
-        key=lambda other: other.created,
-    )
-    summary = entries.summary_fact(state)
-    # whose each undated timeline fact is: the sphere's, or a parent's
-    owners = {
-        fact.fact_id: other.id
-        for other in spheres.sphere_chain(view, sphere_id)
-        for fact in other.facts
-    }
-    return {
-        "template": template if isinstance(template, str) else None,
-        "agent": agent,
-        # the summary's fact (ruling P21), shown and corrected as the
-        # summary, not among the about facts
-        "summary_fact_id": (
-            summary.fact_id
-            if summary is not None and entries.is_summary_fact(summary)
-            else None
-        ),
-        "drawers": drawers,
-        "people": [
-            {
-                "character_id": tie.character_id,
-                "name": view.name_of(tie.character_id) or "",
-                "role": tie.role,
-                "since": _date_out(calendar, tie.since),
-                "until": _date_out(calendar, tie.until),
-                "within": tie.within,
-                "within_name": view.name_of(tie.within) if tie.within else None,
-            }
-            for tie in spheres.people(view, sphere_id)
-        ],
-        "territory": [
-            {"id": place_id, "name": view.name_of(place_id) or ""}
-            for place_id in spheres.territory(view, sphere_id, things)
-        ],
-        "timeline": [
-            *(
-                _undated_line(
-                    view, links, owners.get(fact.fact_id, sphere_id), sphere_id, fact
-                )
-                for fact in spheres.timeline(view, sphere_id)
-                if fact.valid_from is None
-            ),
-            *timeline,
-        ],
-        "branches": [
-            {"id": other.id, "name": view.name_of(other.id) or ""} for other in branches
-        ],
-        "parent": (
-            {"id": parent.id, "name": view.name_of(parent.id) or ""}
-            if parent is not None and spheres.is_sphere(parent)
-            else None
-        ),
-    }
-
-
-def _drawer_title(view: WorldView, sphere_id: str, drawer_id: str) -> str:
-    """The title of the sphere's drawer `drawer_id`; `UNSORTED`'s for one
-    it doesn't have (dropped, or never there), where its items show."""
-
-    for drawer in spheres.drawers(view, sphere_id):
-        if drawer.id == drawer_id:
-            return drawer.title
-    return spheres.UNSORTED.title
-
-
-def _part_of_out(view: WorldView, state: ThingState) -> dict | None:
-    """The sphere drawer the thing is part of, or `None`: also for a
-    sphere that's since been deleted (or is no sphere any more), as
-    `spheres.items` never lists the thing there."""
-
-    link = state.fields.get("part_of")
-    if not isinstance(link, dict) or not isinstance(link.get("sphere"), str):
-        return None
-    sphere_id, drawer_id = link["sphere"], str(link.get("drawer") or "")
-    sphere = view.thing(sphere_id)
-    if sphere is None or not spheres.is_sphere(sphere):
-        return None
-    return {
-        "sphere_id": sphere_id,
-        "sphere_name": view.name_of(sphere_id) or "",
-        "drawer_id": drawer_id,
-        "drawer_title": _drawer_title(view, sphere_id, drawer_id),
-    }
-
-
-def _ties_out(
-    view: WorldView, links: _Links, calendar: Calendar, state: ThingState
+    thing_id: str,
+    things: list[ThingState],
 ) -> list[dict]:
-    """A character's (or real being's) ties, in its `ties` field's order,
-    ended ones too, each with its exceptions (`spheres.exceptions`, in
-    writing order). A tie to a sphere that's since been deleted is left
-    out, as on the character sheet, and so are a being's while it isn't
-    real (kept, hidden)."""
+    """What is filed in the thing, grouped by tag (`filing.connected`):
+    each group's tag (`None` for Other), heading and synopsis (none yet:
+    Task 8 writes them), then one row per entry with its own line (its
+    summary, as linked runs), whether it's a stub, and the filing's role
+    and dates. An ignored stub is hidden here as everywhere."""
 
-    if not entries.acts_in_world(state):
-        return []
+    states = {state.id: state for state in things}
+    groups = []
+    for group in connected(view, thing_id, things=things):
+        rows = []
+        for row_id, filing in group.rows:
+            state = states.get(row_id) or view.thing(row_id)
+            if state is None or state.stub_ignored:
+                continue
+            fact = _line_fact(state)
+            rows.append(
+                {
+                    "id": row_id,
+                    "name": view.name_of(row_id) or "",
+                    "stub": state.is_stub,
+                    "line_segments": links.segments(fact.text) if fact else [],
+                    "role": filing.role,
+                    "since": _date_out(calendar, filing.since),
+                    "until": _date_out(calendar, filing.until),
+                }
+            )
+        if rows:
+            groups.append(
+                {
+                    "tag": group.tag,
+                    "heading": group.heading,
+                    "synopsis": None,
+                    "rows": rows,
+                }
+            )
+    return groups
+
+
+def _mentioned_out(view: WorldView, thing_id: str) -> list[dict]:
+    """The entries whose facts name the thing without being filed in it
+    (`filing.mentioned_in`), an ignored stub left out."""
+
     found = []
-    for tie in spheres.ties_of(view, state.id):
-        sphere = view.thing(tie.sphere_id)
-        if sphere is None or not spheres.is_sphere(sphere):
+    for owner_id in mentioned_in(view, thing_id):
+        state = view.thing(owner_id)
+        if state is None or state.stub_ignored:
             continue
-        exceptions = sorted(
-            spheres.exceptions(view, state.id, tie.sphere_id),
-            key=lambda fact: fact.created,
-        )
-        found.append(
-            {
-                "sphere_id": tie.sphere_id,
-                "sphere_name": view.name_of(tie.sphere_id) or "",
-                "role": tie.role,
-                "since": _date_out(calendar, tie.since),
-                "until": _date_out(calendar, tie.until),
-                "within": tie.within,
-                "within_name": view.name_of(tie.within) if tie.within else None,
-                "exceptions": [
-                    {"fact_id": fact.fact_id, "segments": links.segments(fact.text)}
-                    for fact in exceptions
-                ],
-            }
-        )
+        found.append({"id": owner_id, "name": view.name_of(owner_id) or ""})
     return found
 
 
-def _kept_within(held: list[dict], value: dict[str, Any], position: int) -> str | None:
-    """The part a stored tie was `within`, for the same tie sent without
-    one: the stored tie of the same sphere, role and since, else the one
-    at the same place in the list when it's to the same sphere."""
+def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[int, int]:
+    """Where the selected `start:end` of a fact's rendered text (as
+    `view.render` shows it) lies in its stored `text`, links kept: a
+    selection may cover plain words only, never cut through or take in a
+    link (`ValueError`). Leading and trailing spaces are left out."""
 
-    key = (value["sphere"], value["role"], value["since"])
-    match = next(
-        (t for t in held if (t.get("sphere"), t.get("role"), t.get("since")) == key),
-        None,
-    )
-    if match is None and position < len(held):
-        if held[position].get("sphere") == value["sphere"]:
-            match = held[position]
-    within = match.get("within") if match is not None else None
-    return within if isinstance(within, str) else None
-
-
-def _new_drawer_ids(drawers: list[DrawerIn]) -> list[dict[str, str]]:
-    """`drawers` as the `drawers` field holds them, a new drawer given an
-    id no other has."""
-
-    taken = {drawer.id for drawer in drawers if drawer.id is not None}
-    out = []
-    for drawer in drawers:
-        drawer_id = drawer.id
-        while drawer_id is None:
-            drawer_id = uuid.uuid4().hex[:8]
-            if drawer_id in taken:
-                drawer_id = None
-        taken.add(drawer_id)
-        out.append({"id": drawer_id, "type": drawer.type, "title": drawer.title})
-    return out
+    rendered = view.render(text)
+    if not 0 <= start < end <= len(rendered):
+        raise ValueError(f"no such selection in the fact: {start}-{end}")
+    while start < end and rendered[start].isspace():
+        start += 1
+    while end > start and rendered[end - 1].isspace():
+        end -= 1
+    if start == end:
+        raise ValueError("the selection holds no words")
+    # rendered offset -> stored offset, run by run
+    shown = 0
+    stored = 0
+    raw_start = raw_end = None
+    for found in [*REF_PATTERN.finditer(text), None]:
+        plain_to = found.start() if found is not None else len(text)
+        length = plain_to - stored
+        if raw_start is None and shown <= start <= shown + length:
+            raw_start = stored + (start - shown)
+        if raw_end is None and shown <= end <= shown + length:
+            raw_end = stored + (end - shown)
+        shown += length
+        if found is None:
+            break
+        words = len(view.render(found.group(0)))
+        if start < shown + words and end > shown:
+            if raw_start is None or raw_end is None or raw_end > found.start():
+                raise ValueError("the selection cuts through a link")
+        shown += words
+        stored = found.end()
+    if raw_start is None or raw_end is None or raw_start > raw_end:
+        raise ValueError("the selection cuts through a link")
+    return raw_start, raw_end
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -1593,6 +1420,9 @@ class WorldsPlugin(Plugin):
         self.tasks: set[asyncio.Task] = set()
         # one lock per thing id, so its prose tasks run in order
         self._prose_locks: dict[str, asyncio.Lock] = {}
+        # the drafts of this session: draft key -> its versions, oldest
+        # first (at most `DRAFT_VERSIONS`), in memory only
+        self._drafts: dict[str, list[CreatePreview]] = {}
 
     def disconnect(self):
         self._set_world(None)
@@ -1616,6 +1446,8 @@ class WorldsPlugin(Plugin):
             for task in list(self.tasks):
                 task.cancel()
             old.close()
+            # a draft belongs to the world it was made in
+            self._drafts.clear()
         self.websocket_handler.world = world
 
     def _require_world(self) -> World:
@@ -1699,8 +1531,8 @@ class WorldsPlugin(Plugin):
             for item in heritage.inherited(view, thing_id)
         ]
         settings = world.curation()
-        # a sphere reads every thing (its items, what it gathers): once
-        things = view.things() if spheres.is_sphere(state) else None
+        # Connected and the timeline read every thing: once
+        things = view.things()
         entry_lines = [
             _line_out(view, links, calendar, line)
             for line in entry_timeline(
@@ -1771,12 +1603,17 @@ class WorldsPlugin(Plugin):
             "prose_segments": prose_segments,
             "mentions": [m.model_dump() for m in mentions(view, thing_id)],
             "named_stubs": links.named_stubs(state),
-            "sphere": _sphere_out(view, links, calendar, state, entry_lines, things),
-            "part_of": _part_of_out(view, state),
-            "ties": _ties_out(view, links, calendar, state),
+            # what it is, and the prompt hint it was written with
+            "tag": tag_of(state),
+            "hint": _hint_of(state),
+            # where it's filed, what's filed in it (by tag), and what names
+            # it without being filed in it
+            "in": _in_out(view, links, calendar, state),
+            "connected": _connected_out(view, links, calendar, thing_id, things),
+            "mentioned_in": _mentioned_out(view, thing_id),
             # every change made to the thing (`World.timeline`)
             "timeline": timeline,
-            # its dated facts, and what a sphere gathers (curation goal 6)
+            # its dated facts, and what it gathers from what's filed in it
             "entry_timeline": entry_lines,
             "appears_in": self._appears_in(world, [thing_id]),
             "referenced_in": {
@@ -2110,19 +1947,6 @@ class WorldsPlugin(Plugin):
                 found.append(target)
         return found
 
-    @staticmethod
-    def _item_targets(items: list[dict[str, Any]]) -> list[str]:
-        """The entries the world has that ticked items link (their text is
-        written onto them)."""
-
-        return [
-            target
-            for item in items
-            if item.get("ticked", True)
-            for target in (item.get("thing_id") or item.get("same_target_id"),)
-            if isinstance(target, str)
-        ]
-
     # --- worlds -----------------------------------------------------------
 
     async def handle_list_worlds(self, data: dict):
@@ -2311,9 +2135,265 @@ class WorldsPlugin(Plugin):
                 "preview_thing",
                 "preview_failed",
                 "Error previewing a world thing",
-                success_data=lambda preview: _preview_out(world, preview),
+                success_data=lambda preview: self._new_version(
+                    world, payload.draft_key, preview
+                ),
             ),
         )
+
+    # --- drafts -----------------------------------------------------------
+
+    @staticmethod
+    def _draft_key(preview: CreatePreview) -> str:
+        """A new draft's key: `stub:<id>` for a stub being expanded (one
+        draft per stub), else `new:<kind>:<name>` (the name as compared,
+        `links.name_key`). A regeneration sends its draft's key back, so
+        its versions stay together whatever the model names it."""
+
+        if preview.stub_id is not None:
+            return f"stub:{preview.stub_id}"
+        return f"new:{preview.kind}:{name_key(preview.name)}"
+
+    def _new_version(
+        self, world: World, key: str | None, preview: CreatePreview
+    ) -> dict:
+        """Keep `preview` as the newest version of its draft (at most
+        `DRAFT_VERSIONS`, the oldest dropped first) and answer with it."""
+
+        key = key or self._draft_key(preview)
+        versions = self._drafts.setdefault(key, [])
+        versions.append(preview)
+        del versions[:-DRAFT_VERSIONS]
+        return self._draft_out(world, key, len(versions) - 1)
+
+    def _draft_out(self, world: World, key: str, index: int) -> dict:
+        """A draft version for the wire: the draft as a page payload
+        (`_draft_payload`), plus the data to accept (`preview`), its key,
+        which version it is (1-based) and every version kept (`versions:
+        [{version, name, prompt}]`)."""
+
+        versions = self._drafts[key]
+        preview = versions[index]
+        return {
+            **self._draft_payload(world, preview),
+            "preview": _preview_out(world, preview),
+            "draft_key": key,
+            "version": index + 1,
+            "versions": [
+                {"version": number, "name": kept.name, "prompt": kept.prompt}
+                for number, kept in enumerate(versions, start=1)
+            ],
+        }
+
+    def _require_draft(self, key: str) -> list[CreatePreview]:
+        versions = self._drafts.get(key)
+        if not versions:
+            raise KeyError(f"no such draft: {key}")
+        return versions
+
+    async def handle_use_version(self, data: dict):
+        """Restore one kept version of a draft ("Version n of m"): answers
+        `use_version` as `preview_thing` does, for that version. Writes
+        nothing; the versions kept stay as they are."""
+
+        payload = UseVersionPayload(**data)
+        world = self._require_world()
+        versions = self._require_draft(payload.draft_key)
+        if not 1 <= payload.version <= len(versions):
+            raise ValueError(f"the draft has no version {payload.version}")
+        self._reply(
+            "use_version",
+            self._draft_out(world, payload.draft_key, payload.version - 1),
+        )
+
+    async def handle_discard_preview(self, data: dict):
+        """Discard a draft: every version kept goes, and nothing is
+        written (no stub, filing or fact). Answers `{draft_key}`."""
+
+        payload = DraftKeyPayload(**data)
+        self._drafts.pop(payload.draft_key, None)
+        self._reply("discard_preview", {"draft_key": payload.draft_key})
+
+    def _draft_payload(self, world: World, preview: CreatePreview) -> dict:
+        """The draft as the page the entry will be, from the data it would
+        write, writing nothing. A stub being expanded starts from its own
+        page (what's filed in it, what names it, its facts and filings so
+        far), a new entry from an empty one; the draft adds its name,
+        kind, tag, hint, other names, fields, prose, what it inherits, its
+        facts (`draft: true`, each linked as it would be, with its tick,
+        repeat and holder) and its "In" rows (`draft: true`, with their
+        tick), and its dated facts on the timeline. `id` is the stub's, or
+        `null`; `draft` is true."""
+
+        view = world.view()
+        calendar = world.calendar
+        links = _Links(view)
+        stub = view.thing(preview.stub_id) if preview.stub_id else None
+        if stub is not None and stub.is_stub:
+            page = self._thing_payload(world, stub.id, None)
+        else:
+            stub = None
+            page = {
+                "id": None,
+                "at": None,
+                "stub": None,
+                "facts": [],
+                "numbers": heritage.Numbers(
+                    lifespan=None, adult_age=None, measures={}
+                ).model_dump(),
+                "life_stage": None,
+                "races": [],
+                "mixes": [],
+                "mentions": [],
+                "named_stubs": [],
+                "in": [],
+                "connected": [],
+                "mentioned_in": [],
+                "timeline": [],
+                "entry_timeline": [],
+                "appears_in": [],
+                "referenced_in": {
+                    "facts": [],
+                    "fields": [],
+                    "scenes": [],
+                    "member_scenes": [],
+                },
+            }
+        owner = stub.id if stub is not None else None
+
+        def linked(text: str) -> list[dict]:
+            return links.segments(
+                link_text(
+                    view,
+                    text,
+                    picks=preview.picks,
+                    owner=owner,
+                    as_new=preview.treated_as_new,
+                )
+            )
+
+        def held(holder: str | None) -> dict | None:
+            if holder is None or view.thing(holder) is None:
+                return None
+            return {"id": holder, "name": view.name_of(holder) or ""}
+
+        facts = [
+            {
+                "fact_id": None,
+                "draft": True,
+                "index": index,
+                "category": fact.category,
+                "text": fact.text,
+                "rendered": fact.text,
+                "segments": linked(fact.text),
+                "valid_from": _date_out(calendar, fact.since),
+                "valid_until": None,
+                "source_rev": None,
+                "overrides": list(fact.overrides),
+                "held_by": held(fact.held_by),
+                "ticked": fact.ticked,
+                "repeat_of": fact.repeat_of,
+            }
+            for index, fact in enumerate(preview.facts)
+        ]
+        filed = {row["target_id"] for row in page["in"]}
+        drafted_in = [
+            {
+                "target_id": row.target_id,
+                "target_name": view.name_of(row.target_id) or row.target_name,
+                "role": row.role,
+                "since": _date_out(calendar, row.since),
+                "until": None,
+                "within_id": row.within,
+                "within_name": view.name_of(row.within) if row.within else None,
+                "exceptions": [
+                    {"fact_id": None, "segments": linked(exception.text)}
+                    for exception in row.exceptions
+                ],
+                "draft": True,
+                "ticked": row.ticked,
+            }
+            for row in preview.filings
+            if row.target_id not in filed
+        ]
+        lines = [
+            {
+                "fact_id": None,
+                "owner_id": owner,
+                "owner_name": preview.name,
+                "date": _date_out(calendar, fact.since),
+                "until": None,
+                "segments": linked(fact.text),
+                "here": True,
+                "disagrees_with": [],
+            }
+            for fact in preview.facts
+            if fact.since is not None
+        ]
+        timeline = sorted(
+            [*page["entry_timeline"], *lines],
+            key=lambda line: line["date"]["instant"] if line["date"] else -1,
+        )
+        sections = prose_gen.sections_for(preview.kind)
+        return {
+            **page,
+            "id": owner,
+            "draft": True,
+            "kind": preview.kind,
+            "name": preview.name,
+            "fields": {
+                field: _value_out(calendar, value)
+                for field, value in preview.fields.items()
+                if field not in ("aka", "stub")
+            },
+            "aka": preview.aka,
+            "tag": preview.tag,
+            "hint": preview.hint,
+            "facts": [*page["facts"], *facts],
+            "inherited": [
+                {
+                    "fact_id": row.fact_id,
+                    "category": row.category,
+                    "rendered": row.text,
+                    "segments": [{"text": row.text, "ref": None, "stub": False}],
+                    "source_id": row.source_id,
+                    "source_kind": (
+                        state.kind
+                        if (state := view.thing(row.source_id)) is not None
+                        else None
+                    ),
+                    "source_name": row.source,
+                    "overridden_by": next(
+                        (
+                            index
+                            for index, fact in enumerate(preview.facts)
+                            if row.fact_id in fact.overrides
+                        ),
+                        None,
+                    ),
+                    "held_by": None,
+                }
+                for row in preview.inherited
+            ],
+            "prose": {
+                section: {
+                    "text": preview.prose.get(section),
+                    "stale": False,
+                    "edited": False,
+                }
+                for section in sections
+            },
+            "prose_segments": {
+                section: (
+                    links.prose_segments(preview.prose[section], owner or "")
+                    if preview.prose.get(section)
+                    else []
+                )
+                for section in sections
+            },
+            "in": [*page["in"], *drafted_in],
+            "entry_timeline": timeline,
+        }
 
     async def handle_accept_preview(self, data: dict):
         payload = AcceptPreviewPayload(**data)
@@ -2329,6 +2409,9 @@ class WorldsPlugin(Plugin):
             notes=notes,
             prose=prose,
         )
+        if payload.draft_key is not None:
+            # written: the draft and its versions are done
+            self._drafts.pop(payload.draft_key, None)
         self._reply(
             "accept_preview",
             {**self._thing_payload(world, thing_id, None), "notes": notes},
@@ -2344,369 +2427,210 @@ class WorldsPlugin(Plugin):
         for changed in dict.fromkeys(prose):
             self._schedule_prose(changed, None)
 
-    # --- spheres ----------------------------------------------------------
+    # --- filing -----------------------------------------------------------
 
-    async def handle_preview_sphere(self, data: dict):
-        """A sphere's core (`worldplay.spheres.preview_sphere`), in the
-        background like `preview_thing`: answers `preview_sphere {preview}`
-        (a `SpherePreview` dump) or `preview_sphere_failed`; writes
-        nothing."""
+    @staticmethod
+    def _require_entry(view: WorldView, thing_id: str) -> ThingState:
+        """A live entry (or stub) to file in or to act on; an ignored stub
+        is no entry to use."""
 
-        payload = PreviewSpherePayload(**data)
-        world = self._require_world()
-        fixed = _fixed_sphere_reply("sphere")
-        preview = sphereplay.preview_sphere(
-            world,
-            payload.template,
-            payload.prompt,
-            payload.fields,
-            self._client() if fixed is None else None,
-            stub_id=payload.stub_id,
-            picks=payload.picks,
-            new_names=payload.new_names,
-            promote_id=payload.promote_id,
-            reply=fixed,
-        )
-        self._spawn(
-            preview,
-            self.create_task_done_callback(
-                "preview_sphere",
-                "preview_sphere_failed",
-                "Error previewing a sphere",
-                success_data=lambda preview: _preview_out(world, preview),
-            ),
-        )
-
-    async def handle_accept_sphere(self, data: dict):
-        """Write a `preview_sphere` or `preview_branch` preview and answer
-        with the sphere and `notes` (what was left out, and why). Its
-        summary is cached as its description, as `accept_preview` caches a
-        thing's prose; prose is scheduled only for an entry the world has
-        whose prose reads what the accept wrote onto it (an item linking
-        it, an elsewhere fact) or took from it (a fact moved in, ruling
-        C32)."""
-
-        payload = AcceptSpherePayload(**data)
-        world = self._require_world()
-        notes: list[str] = []
-        # the broader entries a ticked move-in took a fact from
-        moved_from: list[str] = []
-        thing_id = sphereplay.accept_sphere(
-            world, payload.preview, notes=notes, prose=moved_from
-        )
-        self._reply(
-            "accept_sphere",
-            {**self._thing_payload(world, thing_id, None), "notes": notes},
-        )
-        changed = self._wrote_prose_input(
-            world,
-            [
-                *self._item_targets(payload.preview.items),
-                *self._elsewhere_targets(payload.preview.elsewhere),
-            ],
-            skip={thing_id, *moved_from},
-        )
-        for entry_id in dict.fromkeys([*moved_from, *changed]):
-            self._schedule_prose(entry_id, None)
-
-    async def handle_fill_drawer(self, data: dict):
-        """New items for one drawer, in the background: answers
-        `fill_drawer` (the `FillPreview`: `{sphere_id, drawer_id, items,
-        elsewhere, new_names, refile}`) or `fill_failed`; writes nothing."""
-
-        payload = FillDrawerPayload(**data)
-        world = self._require_world()
-        fixed = _fixed_sphere_reply("fill")
-        filling = sphereplay.fill_drawer(
-            world,
-            payload.sphere_id,
-            payload.drawer_id,
-            self._client() if fixed is None else None,
-            reply=fixed,
-        )
-        self._spawn(
-            filling,
-            self.create_task_done_callback(
-                "fill_drawer",
-                "fill_failed",
-                "Error filling a sphere drawer",
-                # the whole Fill preview, sent back as it is on accept
-                success_data=lambda filled: _preview_out(world, filled),
-                failure_data={
-                    "sphere_id": payload.sphere_id,
-                    "drawer_id": payload.drawer_id,
-                },
-            ),
-        )
-
-    async def handle_accept_fill(self, data: dict):
-        """Write the Fill items the owner kept and answer with the sphere
-        and `notes`. The sphere's prose isn't scheduled: a statement is no
-        input to its description (ruling P18; P19: prose only when its
-        input changes), and named items are new stubs. An entry the world
-        has gets its prose scheduled when it took text its prose reads (an
-        item linking it, an elsewhere fact)."""
-
-        payload = AcceptFillPayload(**data)
-        world = self._require_world()
-        notes: list[str] = []
-        sphereplay.accept_fill(
-            world,
-            payload.sphere_id,
-            payload.drawer_id,
-            payload.items,
-            payload.elsewhere,
-            new_names=payload.new_names,
-            refile=payload.refile,
-            notes=notes,
-        )
-        self._reply(
-            "accept_fill",
-            {
-                **self._thing_payload(world, payload.sphere_id, None),
-                "notes": notes,
-            },
-        )
-        for changed in self._wrote_prose_input(
-            world,
-            [
-                *self._item_targets(payload.items),
-                *self._elsewhere_targets(payload.elsewhere),
-            ],
-            skip={payload.sphere_id},
-        ):
-            self._schedule_prose(changed, None)
-
-    async def handle_add_outer_body(self, data: dict):
-        """Put the outer body the owner named around a part of a preview
-        (`bodies.add_outer_body`): no model call, nothing written. Answers
-        `add_outer_body {preview_type, preview}`, the preview with the part
-        filed in the body, the body a new name and the entries filed where
-        it goes as unticked `refile` rows."""
-
-        payload = AddOuterBodyPayload(**data)
-        world = self._require_world()
-        preview: CreatePreview | sphereplay.FillPreview
-        if payload.preview_type == "create":
-            preview = CreatePreview.model_validate(payload.preview)
-        elif payload.preview_type == "sphere":
-            preview = sphereplay.SpherePreview.model_validate(payload.preview)
-        elif payload.preview_type == "fill":
-            preview = sphereplay.FillPreview.model_validate(payload.preview)
-        else:
-            raise ValueError(f"no such preview type: {payload.preview_type!r}")
-        preview = add_outer_body(
-            world,
-            preview,
-            payload.row_name,
-            payload.outer,
-            as_sphere=payload.as_sphere,
-        )
-        self._reply(
-            "add_outer_body",
-            {
-                "preview_type": payload.preview_type,
-                "preview": _preview_out(world, preview),
-            },
-        )
-
-    def _require_sphere(self, world: World, sphere_id: str) -> ThingState:
-        state = world.view().thing(sphere_id)
-        if state is None or not spheres.is_sphere(state):
-            raise ValueError(f"not a sphere: {sphere_id}")
+        state = view.thing(thing_id)
+        if state is None or state.stub_ignored:
+            raise KeyError(f"no such entry: {thing_id}")
         return state
 
-    async def handle_set_drawers(self, data: dict):
-        """Set a sphere's own drawers, in order: add (no `id`), retitle,
-        retype, reorder and drop. A dropped drawer's items aren't moved:
-        `spheres.items` shows an item whose drawer the sphere lacks under
-        `UNSORTED`, and that's where they show. Drawers change no rendered
-        text: no prose is scheduled.
+    @staticmethod
+    def _filing_dates(
+        since: WorldDate | None, until: WorldDate | None
+    ) -> tuple[WorldDate | None, WorldDate | None]:
+        if since is not None and until is not None and since.instant > until.instant:
+            raise ValueError("a filing can't end before it starts")
+        return since, until
 
-        A branch's inherited drawer sent back as it is (same id, type and
-        title) stays inherited, not copied into the branch's own; one sent
-        back changed is kept as the branch's own, overriding its
-        parent's."""
+    @staticmethod
+    def _write_filings(
+        rev: Any, world: World, thing_id: str, filings: list[Filing]
+    ) -> None:
+        """The thing's whole `filings` value, dated as any filings write
+        (`create.filings_since`). The store checks it
+        (`filing.check_filings`: no cycle, a live target, a `within` that
+        sits in its target) and refuses it whole, naming what's wrong."""
 
-        payload = SetDrawersPayload(**data)
-        world = self._require_world()
-        state = self._require_sphere(world, payload.sphere_id)
-        if any(d.id == UNSORTED_DRAWER_ID for d in payload.drawers):
-            raise ValueError("Unsorted isn't a drawer of its own")
-        own = _own_drawer_ids(state)
-        inherited = {
-            d.id: (d.type, d.title)
-            for d in spheres.drawers(world.view(), payload.sphere_id)
-            if d.id not in own
-        }
-        drawers = _new_drawer_ids(
-            [
-                d
-                for d in payload.drawers
-                if d.id is None or inherited.get(d.id) != (d.type, d.title)
-            ]
-        )
-        with world.revision(Source.manual(note="sphere drawers")) as rev:
-            rev.set_field(payload.sphere_id, "drawers", drawers, None)
-        self._edited(
-            "set_drawers", payload.sphere_id, _date_in(payload.at), prose=False
+        rev.set_field(
+            thing_id,
+            "filings",
+            [filing.model_dump(mode="json") for filing in filings],
+            filings_since(world, thing_id),
         )
 
-    async def handle_set_part_of(self, data: dict):
-        """File a thing in a sphere's drawer (or its `UNSORTED`), or, with
-        a null `sphere_id`, take it out of every sphere. A character never
-        is part of one (people come from ties); a place goes in a places
-        drawer and any other entry in one that holds entries
-        (`create.drawer_types_for`); nothing goes in a sphere that is,
-        through its `parent` and `part_of` links, inside it.
+    async def handle_add_filing(self, data: dict):
+        """File a thing in an entry ("+ in..."): `target_id`, or
+        `new_name`, a stub made on the spot (of `kind`, lore by default,
+        with `tag`; a name the world has already is that entry), in one
+        revision. Refused, writing nothing: a target it's filed in already
+        (`edit_filing` changes that one), a target that's gone, a cycle, a
+        `within` that isn't a part of the target, an end before the start.
+        Filings are no prose input: none is scheduled."""
 
-        The link is undated, unless the thing's `part_of` has dated values
-        (an item `end_item` ended): then it holds from `at` (the date
-        viewed, else the world's now), which can't be before the latest of
-        them -- that one would still win. Changes no rendered text."""
-
-        payload = SetPartOfPayload(**data)
+        payload = AddFilingPayload(**data)
         world = self._require_world()
         view = world.view()
-        state = view.thing(payload.thing_id)
-        if state is None:
-            raise KeyError(f"no such thing: {payload.thing_id}")
-        if state.kind not in PART_OF_KINDS:
-            raise ValueError(f"a {state.kind} can't be part of a sphere")
-        value: dict[str, str] | None = None
-        if payload.sphere_id is not None:
-            self._require_sphere(world, payload.sphere_id)
-            if spheres.sits_in(view, payload.sphere_id, payload.thing_id):
-                raise ValueError("a thing can't be part of a sphere inside it")
-            drawer = next(
-                (
-                    d
-                    for d in spheres.drawers(view, payload.sphere_id)
-                    if d.id == payload.drawer_id
-                ),
-                None,
+        state = self._require_entry(view, payload.thing_id)
+        since, until = self._filing_dates(
+            _date_in(payload.since), _date_in(payload.until)
+        )
+        if payload.kind is not None and payload.kind not in KINDS:
+            raise ValueError(f"no such kind: {payload.kind!r}")
+        if payload.target_id is not None:
+            self._require_entry(view, payload.target_id)
+        current = filings_of(view, state.id, live=False)
+        name = " ".join((payload.new_name or "").split())
+        with world.revision(Source.manual(note="filed")) as rev:
+            target_id = payload.target_id
+            if target_id is None:
+                made = make_stubs(
+                    rev,
+                    world.view(),
+                    [NewName(name=name, kind=payload.kind or "lore", tag=payload.tag)],
+                )
+                target_id = made[name]
+                reused = view.thing(target_id)
+                if reused is not None and reused.stub_ignored:
+                    # the owner asked for it by name: no longer ignored
+                    rev.set_field(target_id, "stub", {"ignored": False}, None)
+            if any(filing.target == target_id for filing in current):
+                raise ValueError(
+                    f"{view.name_of(payload.thing_id)} is filed in"
+                    f" {world.view().name_of(target_id)} already"
+                )
+            role = (payload.role or "").strip() or None
+            self._write_filings(
+                rev,
+                world,
+                payload.thing_id,
+                [
+                    *current,
+                    Filing(
+                        target=target_id,
+                        role=role,
+                        since=since,
+                        until=until,
+                        within=payload.within,
+                    ),
+                ],
             )
-            if drawer is None and payload.drawer_id != UNSORTED_DRAWER_ID:
-                raise ValueError(f"the sphere has no drawer {payload.drawer_id}")
-            if drawer is not None and drawer.type not in drawer_types_for(state.kind):
-                raise ValueError(f"a {state.kind} doesn't go in a {drawer.type} drawer")
-            value = {"sphere": payload.sphere_id, "drawer": payload.drawer_id}
-        since = part_of_since(world, payload.thing_id, _date_in(payload.at))
-        with shadowed_revision(world, Source.manual()) as rev:
-            rev.set_field(payload.thing_id, "part_of", value, since)
-        self._edited("set_part_of", payload.thing_id, _date_in(payload.at), prose=False)
+        self._edited("add_filing", payload.thing_id, _date_in(payload.at), prose=False)
 
-    async def handle_set_ties(self, data: dict):
-        """Replace a character's (or real being's) ties. Each names a
-        sphere in the world, and its `since` can't be after its `until`.
-        The stored ties the payload hides (to a sphere deleted since) are
-        kept, after the rest, so undoing the delete brings them back
-        (ruling P12). A being that isn't real (believed, undecided) can't
-        be tied: its ties stay as they were, hidden, until it's real. Ties
-        are on the character sheet, not in its prose: none is scheduled."""
+    async def handle_edit_filing(self, data: dict):
+        """Change the thing's filing into `target_id`: the keys sent
+        (`role`, `since`, `until`, `within`; null clears one), the rest
+        and its exceptions kept, in one revision. An `until` ends it
+        ("End this"), which is how an item leaves an entry now. Refused as
+        `add_filing` is, and for a filing the thing doesn't have."""
 
-        payload = SetTiesPayload(**data)
+        payload = EditFilingPayload(**data)
         world = self._require_world()
         view = world.view()
-        state = view.thing(payload.character_id)
-        if state is not None and state.kind == "being":
-            if not entries.acts_in_world(state):
-                raise ValueError("only a real being can be tied to a sphere")
-        elif state is None or state.kind != "character":
-            raise ValueError(f"not a character: {payload.character_id}")
-        stored = state.fields.get("ties")
-        held = (
-            [t for t in stored if isinstance(t, dict)]
-            if isinstance(stored, list)
-            else []
+        self._require_entry(view, payload.thing_id)
+        current = filings_of(view, payload.thing_id, live=False)
+        index = next(
+            (i for i, f in enumerate(current) if f.target == payload.target_id), None
         )
-        ties = []
-        for position, tie in enumerate(payload.ties):
-            self._require_sphere(world, tie.sphere_id)
-            since, until = _date_in(tie.since), _date_in(tie.until)
-            if (
-                since is not None
-                and until is not None
-                and since.instant > until.instant
-            ):
-                raise ValueError("a tie can't end before it starts")
-            value: dict[str, Any] = {
-                "sphere": tie.sphere_id,
-                "role": tie.role.strip(),
-                "since": since.model_dump(mode="json") if since else None,
-                "until": until.model_dump(mode="json") if until else None,
-            }
-            if "within" in tie.model_fields_set:
-                within = tie.within
-                if within is not None and not spheres.within_sphere(
-                    view, within, tie.sphere_id
-                ):
-                    raise ValueError(
-                        f"a tie can only be within a part of its sphere: {within}"
-                    )
-            else:
-                # a client that doesn't send it keeps the stored tie's
-                within = _kept_within(held, value, position)
-            if within is not None:
-                value["within"] = within
-            ties.append(value)
-        for raw in stored if isinstance(stored, list) else []:
-            sphere_id = raw.get("sphere") if isinstance(raw, dict) else None
-            sphere = view.thing(sphere_id) if isinstance(sphere_id, str) else None
-            if sphere is None or not spheres.is_sphere(sphere):
-                ties.append(raw)
-        with shadowed_revision(world, Source.manual()) as rev:
-            rev.set_field(payload.character_id, "ties", ties, None)
+        if index is None:
+            raise KeyError(
+                f"{view.name_of(payload.thing_id)} isn't filed in {payload.target_id}"
+            )
+        sent = payload.model_fields_set
+        update: dict[str, Any] = {}
+        if "role" in sent:
+            update["role"] = (payload.role or "").strip() or None
+        if "since" in sent:
+            update["since"] = _date_in(payload.since)
+        if "until" in sent:
+            update["until"] = _date_in(payload.until)
+        if "within" in sent:
+            update["within"] = payload.within
+        filing = current[index].model_copy(update=update)
+        self._filing_dates(filing.since, filing.until)
+        filings = [*current[:index], filing, *current[index + 1 :]]
+        with world.revision(Source.manual(note="filing changed")) as rev:
+            self._write_filings(rev, world, payload.thing_id, filings)
+        self._edited("edit_filing", payload.thing_id, _date_in(payload.at), prose=False)
+
+    async def handle_remove_filing(self, data: dict):
+        """Take the thing out of `target_id`, in one revision: the filing
+        goes, and with it the "but..." exceptions it held (its own facts,
+        which say nothing once it isn't filed there). The exceptions feed
+        its prose, so prose is refreshed when any went."""
+
+        payload = RemoveFilingPayload(**data)
+        world = self._require_world()
+        view = world.view()
+        state = self._require_entry(view, payload.thing_id)
+        current = filings_of(view, payload.thing_id, live=False)
+        gone = next((f for f in current if f.target == payload.target_id), None)
+        if gone is None:
+            raise KeyError(
+                f"{view.name_of(payload.thing_id)} isn't filed in {payload.target_id}"
+            )
+        own = {fact.fact_id for fact in world.live_facts(payload.thing_id)}
+        exceptions = [fact_id for fact_id in gone.exceptions if fact_id in own]
+        with world.revision(Source.manual(note="unfiled")) as rev:
+            rev.set_field(
+                payload.thing_id,
+                "filings",
+                [f.model_dump(mode="json") for f in current if f is not gone],
+                filings_since(world, payload.thing_id),
+            )
+            for fact_id in exceptions:
+                rev.remove_fact(fact_id)
         self._edited(
-            "set_ties", payload.character_id, _date_in(payload.at), prose=False
+            "remove_filing",
+            payload.thing_id,
+            _date_in(payload.at),
+            prose=bool(exceptions) and not state.is_stub,
         )
 
     async def handle_add_exception(self, data: dict):
-        """Add a "but..." to a character's tie: a `ties` fact written as
-        character creation writes one (`create.exception_fact`), so
-        `spheres.exceptions` finds it. `rejects` is the item it departs
-        from, `{thing_id}` (a thing part of the sphere: the fact links it)
-        or `{fact_id}` (one of its statements: the fact links the sphere
-        and its origin names the statement), a live item of the sphere,
-        inherited ones included; null departs from the sphere as a whole.
-        The text is linked like `add_fact`'s. The character needs a tie to
-        the sphere. A fact feeds its prose, which is refreshed."""
+        """Add a "but..." to a character's (or real being's) filing in
+        `target_id`: a `ties` fact written as creation writes one
+        (`create.filing_exception_fact`), its id added to the filing's
+        `exceptions`, in one revision. `rejects` is what it departs from:
+        `{thing_id}`, an entry filed in the target, or `{fact_id}`, one of
+        the target's own facts; null departs from the target as a whole.
+        The text is linked like `add_fact`'s. A fact feeds its prose,
+        which is refreshed."""
 
         payload = AddExceptionPayload(**data)
         world = self._require_world()
         at = _date_in(payload.at)
         view = world.view()
         state = view.thing(payload.character_id)
-        if state is not None and state.kind == "being":
-            if not entries.acts_in_world(state):
-                raise ValueError("only a real being can have exceptions to a tie")
-        elif state is None or not entries.acts_in_world(state):
-            raise ValueError(f"not a character: {payload.character_id}")
-        self._require_sphere(world, payload.sphere_id)
-        if all(
-            tie.sphere_id != payload.sphere_id
-            for tie in spheres.ties_of(view, payload.character_id)
-        ):
-            raise ValueError("the character has no tie to that sphere")
+        if state is None or not entries.acts_in_world(state):
+            raise ValueError(
+                "only a character or a real being has exceptions to a filing"
+            )
+        current = filings_of(view, payload.character_id, live=False)
+        index = next(
+            (i for i, f in enumerate(current) if f.target == payload.target_id), None
+        )
+        if index is None or view.thing(payload.target_id) is None:
+            raise ValueError("the character isn't filed in that entry")
         if not payload.text.strip():
             raise ValueError("an exception needs some text")
-
-        sphere_name = view.name_of(payload.sphere_id) or ""
+        target_name = view.name_of(payload.target_id) or ""
         rejects = payload.rejects
-        item_name = sphere_name
-        if rejects is not None:
-            item = next(
-                (
-                    item
-                    for item in spheres.items(view, payload.sphere_id)
-                    if (item.thing_id, item.fact_id)
-                    == (rejects.thing_id, rejects.fact_id)
-                ),
-                None,
-            )
-            if item is None:
-                raise ValueError("that's no item of the sphere")
-            item_name = item.name
+        item_name = target_name
+        if rejects is not None and rejects.thing_id is not None:
+            filed = {other.id for other, _filing in filed_in(view, payload.target_id)}
+            if rejects.thing_id not in filed:
+                raise ValueError(f"that isn't filed in {target_name}")
+            item_name = view.name_of(rejects.thing_id) or ""
+        elif rejects is not None:
+            found = view.fact(rejects.fact_id or "")
+            if found is None or found[0] != payload.target_id:
+                raise ValueError(f"that isn't one of {target_name}'s facts")
+            item_name = target_name
         text = self._linked(
             world,
             payload.character_id,
@@ -2716,126 +2640,348 @@ class WorldsPlugin(Plugin):
             payload.new_names,
             payload.spans,
         )
-        tie = PreviewTie(sphere_id=payload.sphere_id, sphere=sphere_name, role="")
         exception = PreviewException(
             text=payload.text,
             item=item_name,
             thing_id=rejects.thing_id if rejects is not None else None,
             fact_id=rejects.fact_id if rejects is not None else None,
         )
-        text, origin = exception_fact(text, tie, exception)
+        text, origin = filing_exception_fact(
+            text, payload.target_id, target_name, exception
+        )
         with world.revision(Source.manual()) as rev:
-            rev.add_fact(payload.character_id, "ties", text, origin=origin)
+            fact_id = rev.add_fact(payload.character_id, "ties", text, origin=origin)
+            filing = current[index]
+            filings = [
+                *current[:index],
+                filing.model_copy(update={"exceptions": [*filing.exceptions, fact_id]}),
+                *current[index + 1 :],
+            ]
+            rev.set_field(
+                payload.character_id,
+                "filings",
+                [f.model_dump(mode="json") for f in filings],
+                filings_since(world, payload.character_id),
+            )
         self._edited("add_exception", payload.character_id, at)
 
-    async def handle_add_statement(self, data: dict):
-        """Write a statement by hand into one of a sphere's drawers (its
-        own or inherited) that holds items: a `statement` fact of the
-        sphere, undated, its drawer as its origin, as Fill and creation
-        write one (`worldplay.spheres`). The text is linked like
-        `add_fact`'s. Not people, events, branches or Unsorted. A
-        statement feeds no prose (rulings P18, P19), so none is
-        scheduled."""
+    # --- tags -------------------------------------------------------------
 
-        payload = AddStatementPayload(**data)
-        world = self._require_world()
-        self._require_sphere(world, payload.sphere_id)
-        drawer = next(
-            (
-                d
-                for d in spheres.drawers(world.view(), payload.sphere_id)
-                if d.id == payload.drawer_id
-            ),
-            None,
-        )
-        if drawer is None:
-            raise ValueError(f"the sphere has no drawer {payload.drawer_id}")
-        if drawer.type not in WRITTEN_DRAWER_TYPES:
-            raise ValueError(f"a {drawer.type} drawer holds no statements")
-        if not payload.text.strip():
-            raise ValueError("a statement needs some text")
-        at = _date_in(payload.at)
-        text = self._linked(
-            world,
-            payload.sphere_id,
-            payload.text.strip(),
-            payload.picks,
-            at,
-            payload.new_names,
-            payload.spans,
-        )
-        with world.revision(Source.manual()) as rev:
-            rev.add_fact(
-                payload.sphere_id,
-                "statement",
-                text,
-                # F10: held when the old beliefs-drawer rule held it
-                origin=statement_origin(world.view(), payload.sphere_id, drawer.id),
-            )
-        # a statement is no input to the sphere's prose (rulings P18, P19)
-        self._edited("add_statement", payload.sphere_id, at, prose=False)
+    @staticmethod
+    def _tags_out(view: WorldView) -> list[dict]:
+        return [
+            {"tag": tag, "heading": tag_heading(tag), "count": count}
+            for tag, count in tags_in_use(view)
+        ]
 
-    async def handle_preview_branch(self, data: dict):
-        """A branch of a sphere, in the background: answers
-        `preview_branch {preview}` (a `SpherePreview` dump, accepted with
-        `accept_sphere`) or `preview_branch_failed`; writes nothing."""
+    async def handle_list_tags(self, data: dict):
+        """The tags in use (`filing.tags_in_use`), most used first, each
+        with its group heading and how many entries carry it: `{tags:
+        [{tag, heading, count}]}`, for the tag picker and the Tags tab."""
 
-        payload = PreviewBranchPayload(**data)
-        world = self._require_world()
-        fixed = _fixed_sphere_reply("branch")
-        preview = sphereplay.preview_branch(
-            world,
-            payload.parent_id,
-            payload.prompt,
-            self._client() if fixed is None else None,
-            reply=fixed,
-        )
-        self._spawn(
-            preview,
-            self.create_task_done_callback(
-                "preview_branch",
-                "preview_branch_failed",
-                "Error previewing a branch",
-                success_data=lambda preview: _preview_out(world, preview),
-            ),
-        )
+        self._reply("list_tags", {"tags": self._tags_out(self._require_world().view())})
 
-    async def handle_end_item(self, data: dict):
-        """End one of a sphere's own items at `at` (`thing_id` or
-        `fact_id`), noting `by` (`worldplay.spheres.end_item`), and answer
-        with the sphere. Prose is refreshed for the full entry whose input
-        it changed: the thing item (its note), or the sphere for a
-        statement (its `about` note). A `by` sphere's `timeline` fact feeds
-        no prose (rulings P18, P19)."""
+    async def handle_set_tag(self, data: dict):
+        """Give an entry its one tag (lowercased, its first comma part:
+        `kinds.normalise_tag`), or clear it with a null or blank one, in
+        one revision. Every page it's filed in regroups it (Connected
+        reads the tag). A tag is no prose input: none is scheduled."""
 
-        payload = EndItemPayload(**data)
+        payload = SetTagPayload(**data)
         world = self._require_world()
         view = world.view()
-        self._require_sphere(world, payload.sphere_id)
-        item = next(
-            (
-                item
-                for item in spheres.items(view, payload.sphere_id)
-                if (item.thing_id, item.fact_id) == (payload.thing_id, payload.fact_id)
-            ),
-            None,
+        state = self._require_entry(view, payload.thing_id)
+        tag = normalise_tag(payload.tag or "")
+        if tag == (tag_of(state) or ""):
+            self._edited("set_tag", payload.thing_id, _date_in(payload.at), prose=False)
+            return
+        since = view.field_since(payload.thing_id, "tag")
+        with world.revision(Source.manual(note="tagged")) as rev:
+            if tag:
+                rev.set_field(payload.thing_id, "tag", tag, since)
+            else:
+                rev.remove_field_value(payload.thing_id, "tag", since)
+        self._edited("set_tag", payload.thing_id, _date_in(payload.at), prose=False)
+
+    def _retag(self, world: World, old: str, new: str, note: str) -> list[str]:
+        """Every tag value `old`, at every date, made `new`, in one
+        revision; the entries changed, in id order."""
+
+        changed: list[str] = []
+        with world.revision(Source.manual(note=note)) as rev:
+            for state in world.view().things():
+                for entry in world.timeline(state.id):
+                    if (
+                        entry.change == "field"
+                        and entry.field == "tag"
+                        and isinstance(entry.value, str)
+                        and normalise_tag(entry.value) == old
+                    ):
+                        rev.set_field(state.id, "tag", new, entry.date)
+                        if state.id not in changed:
+                            changed.append(state.id)
+        return changed
+
+    def _tag_reply(self, action: str, world: World, changed: list[str], **data) -> None:
+        self._reply(
+            action,
+            {**data, "changed": changed, "tags": self._tags_out(world.view())},
         )
-        if item is None:
-            raise ValueError("that's no item of the sphere")
-        sphereplay.end_item(
+
+    async def handle_rename_tag(self, data: dict):
+        """Rename a tag on every entry that carries it ("school" ->
+        "academy"), in one revision, at every date its values hold:
+        every page regroups. A tag already in use is refused: that's
+        `merge_tag`. Answers `{old, new, changed, tags}` (`changed` the
+        entries retagged, `tags` as `list_tags`)."""
+
+        payload = RenameTagPayload(**data)
+        world = self._require_world()
+        old, new = normalise_tag(payload.old), normalise_tag(payload.new)
+        in_use = dict(tags_in_use(world.view()))
+        if not new:
+            raise ValueError("a tag needs a name")
+        if old not in in_use:
+            raise ValueError(f"no entry is tagged {old!r}")
+        if new == old:
+            self._tag_reply("rename_tag", world, [], old=old, new=new)
+            return
+        if new in in_use:
+            raise ValueError(f"{new!r} is in use already: merge {old!r} into it")
+        changed = self._retag(world, old, new, f"tag {old} renamed {new}")
+        self._tag_reply("rename_tag", world, changed, old=old, new=new)
+
+    async def handle_merge_tag(self, data: dict):
+        """Merge one tag into another in use ("school" into
+        "institution"): every entry tagged `from` takes `into`, in one
+        revision. Answers `{from, into, changed, tags}`."""
+
+        payload = MergeTagPayload(**data)
+        world = self._require_world()
+        old, into = normalise_tag(payload.from_), normalise_tag(payload.into)
+        in_use = dict(tags_in_use(world.view()))
+        if old not in in_use:
+            raise ValueError(f"no entry is tagged {old!r}")
+        if into not in in_use:
+            raise ValueError(f"no entry is tagged {into!r}: rename {old!r} instead")
+        if old == into:
+            raise ValueError("a tag can't be merged into itself")
+        changed = self._retag(world, old, into, f"tag {old} merged into {into}")
+        self._tag_reply("merge_tag", world, changed, **{"from": old, "into": into})
+
+    # --- groups (Task 8) ----------------------------------------------------
+
+    async def handle_group_synopsis(self, data: dict):
+        """A group's synopsis: not yet available (ruling F2, Task 8 writes
+        it). Refused, writing nothing."""
+
+        GroupSynopsisPayload(**data)
+        self._require_world()
+        raise ValueError("group synopses are not yet available")
+
+    async def handle_group_add(self, data: dict):
+        """ "+ Add" in a group: not yet available (ruling F2, Task 8 writes
+        it). Refused, writing nothing."""
+
+        GroupAddPayload(**data)
+        self._require_world()
+        raise ValueError("adding to a group is not yet available")
+
+    # --- prompt additions ---------------------------------------------------
+
+    def _draft_facts(self, action: str, payload: Any, year: int | None) -> None:
+        world = self._require_world()
+        self._require_entry(world.view(), payload.thing_id)
+        fixed = _fixed_file(FIXED_FACTS_ENV)
+        drafting = draft_facts(
             world,
-            payload.sphere_id,
-            item,
-            WorldDate.model_validate(payload.at),
-            payload.by,
+            payload.thing_id,
+            payload.prompt,
+            self._client() if fixed is None else None,
+            year=year,
+            reply=fixed.read_text(encoding="utf-8") if fixed is not None else None,
         )
-        self._edited("end_item", payload.sphere_id, None, prose=False)
-        # the item's note (an `about` or `general` fact) is prose input; a
-        # `by` sphere's timeline fact isn't (rulings P18, P19)
-        changed = item.thing_id or payload.sphere_id
-        state = world.view().thing(changed)
-        if state is not None and not state.is_stub:
-            self._schedule_prose(changed, None)
+        self._spawn(
+            drafting,
+            self.create_task_done_callback(
+                action,
+                f"{action}_failed",
+                "Error drafting facts",
+                success_data=lambda draft: self._fact_draft_out(world, draft),
+                failure_data={"thing_id": payload.thing_id},
+            ),
+        )
+
+    def _fact_draft_out(self, world: World, draft: FactDraft) -> dict:
+        """A fact draft for the wire: the draft itself (`draft`, sent back
+        to `accept_facts`) and each fact as the page shows it, linked as it
+        would be (`facts`: `{index, category, rendered, segments, since,
+        ticked, repeat_of}`)."""
+
+        view = world.view()
+        links = _Links(view)
+        calendar = world.calendar
+        return {
+            "thing_id": draft.thing_id,
+            "draft": draft.model_dump(mode="json"),
+            "facts": [
+                {
+                    "index": index,
+                    "category": fact.category,
+                    "rendered": fact.text,
+                    "segments": links.segments(
+                        link_text(view, fact.text, owner=draft.thing_id)
+                    ),
+                    "since": _date_out(calendar, fact.since),
+                    "ticked": fact.ticked,
+                    "repeat_of": fact.repeat_of,
+                }
+                for index, fact in enumerate(draft.facts)
+            ],
+        }
+
+    async def handle_add_facts(self, data: dict):
+        """ "+ Add facts...": a few facts for the entry from the owner's
+        prompt, in the background (`worldplay.facts.draft_facts`): answers
+        `add_facts` (a fact draft, `_fact_draft_out`) or
+        `add_facts_failed`. Writes nothing: `accept_facts` writes the
+        ticked ones."""
+
+        self._draft_facts("add_facts", AddFactsPayload(**data), None)
+
+    async def handle_add_event(self, data: dict):
+        """ "+ Add event...": the entry's dated facts for what happened in
+        `year`, from the owner's prompt, as `add_facts` (answers
+        `add_event` or `add_event_failed`); each fact dated `year`."""
+
+        payload = AddEventPayload(**data)
+        WorldDate.of(payload.year)
+        self._draft_facts("add_event", payload, payload.year)
+
+    async def handle_accept_facts(self, data: dict):
+        """Write a fact draft's ticked facts onto its entry, linked as
+        `add_fact` links (`worldplay.facts.accept_facts`), in one revision;
+        answers `accept_facts` with the entry and `fact_ids`, and refreshes
+        its prose when it reads them."""
+
+        payload = AcceptFactsPayload(**data)
+        world = self._require_world()
+        self._require_entry(world.view(), payload.draft.thing_id)
+        fact_ids = accept_facts(world, payload.draft)
+        at = _date_in(payload.at)
+        self._reply(
+            "accept_facts",
+            {
+                **self._thing_payload(world, payload.draft.thing_id, at),
+                "fact_ids": fact_ids,
+            },
+        )
+        state = world.view().thing(payload.draft.thing_id)
+        if (
+            fact_ids
+            and state is not None
+            and not state.is_stub
+            and any(
+                prose_reads(state.kind, fact.category)
+                for fact in payload.draft.facts
+                if fact.ticked
+            )
+        ):
+            self._schedule_prose(payload.draft.thing_id, at)
+
+    # --- selected words -----------------------------------------------------
+
+    def _selected(
+        self, world: World, payload: _Selection
+    ) -> tuple[str, FactState, int, int, str]:
+        """`(owner id, fact, start, end, words)`: where the selection lies
+        in the fact's stored text (`_raw_span`), refusing a fact that isn't
+        live or a selection that cuts through a link."""
+
+        view = world.view(_date_in(payload.at))
+        found = world.view().fact(payload.fact_id)
+        if found is None:
+            raise KeyError(f"no such fact: {payload.fact_id}")
+        owner_id, fact = found
+        start, end = _raw_span(view, fact.text, payload.start, payload.end)
+        return owner_id, fact, start, end, fact.text[start:end]
+
+    async def handle_make_stub_from_text(self, data: dict):
+        """Make a stub of selected words of a fact ("Make a stub"): a stub
+        of `kind` with `tag`, named the words (or the entry the world has
+        by that name, an ignored stub revived), filed where `filing` says
+        when given, and the words made a link to it, in one revision.
+        A stub made here is filed as `filing` says; an entry the world has
+        by that name keeps its own filings. Answers with the fact's entry
+        and `stub_id` (so "Make a stub and expand it now" can expand it). Refused, writing nothing: a
+        selection that cuts through a link, the entry's own name."""
+
+        payload = MakeStubFromTextPayload(**data)
+        world = self._require_world()
+        if payload.kind not in KINDS:
+            raise ValueError(f"no such kind: {payload.kind!r}")
+        owner_id, fact, start, end, words = self._selected(world, payload)
+        name = " ".join(words.split())
+        before = world.view()
+        if payload.filing is not None:
+            self._require_entry(before, payload.filing.target_id)
+        with world.revision(Source.manual(note=f"stub {name}")) as rev:
+            made = make_stubs(
+                rev,
+                world.view(),
+                [NewName(name=name, kind=payload.kind, tag=payload.tag)],
+            )
+            stub_id = made[name]
+            if stub_id == owner_id:
+                raise ValueError(f"{name!r} is this entry's own name")
+            reused = before.thing(stub_id)
+            if reused is not None and reused.stub_ignored:
+                rev.set_field(stub_id, "stub", {"ignored": False}, None)
+            if payload.filing is not None and reused is None:
+                self._write_filings(
+                    rev,
+                    world,
+                    stub_id,
+                    [
+                        Filing(
+                            target=payload.filing.target_id,
+                            role=(payload.filing.role or "").strip() or None,
+                        )
+                    ],
+                )
+            rev.correct_fact(
+                payload.fact_id,
+                text=fact.text[:start] + ref(stub_id, words) + fact.text[end:],
+            )
+        log.info("worlds.stub_from_text", id=stub_id, name=name, kind=payload.kind)
+        self._reply(
+            "make_stub_from_text",
+            {
+                **self._thing_payload(world, owner_id, _date_in(payload.at)),
+                "stub_id": stub_id,
+            },
+        )
+
+    async def handle_link_text(self, data: dict):
+        """Link selected words of a fact to an entry ("Link to an
+        entry..."), keeping the words, in one revision; answers with the
+        fact's entry. Refused, writing nothing: a selection that cuts
+        through a link, a target that's gone, the fact's own entry."""
+
+        payload = LinkTextPayload(**data)
+        world = self._require_world()
+        self._require_entry(world.view(), payload.target_id)
+        owner_id, fact, start, end, words = self._selected(world, payload)
+        if payload.target_id == owner_id:
+            raise ValueError("a fact can't link its own entry")
+        with world.revision(Source.manual()) as rev:
+            rev.correct_fact(
+                payload.fact_id,
+                text=fact.text[:start]
+                + ref(payload.target_id, words)
+                + fact.text[end:],
+            )
+        self._edited("link_text", owner_id, _date_in(payload.at), prose=False)
 
     # --- stubs ------------------------------------------------------------
 
@@ -2922,12 +3068,35 @@ class WorldsPlugin(Plugin):
         self._reply("ignore_stub", self._thing_payload(world, payload.id, None))
 
     async def handle_change_stub_kind(self, data: dict):
+        """Give a stub another kind (`Revision.change_stub_kind`), in one
+        revision. A field the new kind lacks (or has with another type) is
+        dropped by the store: the reply's `notes` names each one that had
+        a value, beside the stub's payload."""
+
         payload = ChangeStubKindPayload(**data)
         world = self._require_world()
-        self._require_stub(world, payload.id)
+        state = self._require_stub(world, payload.id)
+        if payload.kind not in KINDS:
+            raise ValueError(f"no such kind: {payload.kind!r}")
+        new_types = {spec.name: spec.type for spec in get_kind(payload.kind).fields}
+        old_types = {spec.name: spec.type for spec in get_kind(state.kind).fields}
+        dropped = [
+            field
+            for field, value in state.fields.items()
+            if value is not None
+            and payload.kind != state.kind
+            and new_types.get(field) != old_types.get(field)
+        ]
         with world.revision(Source.manual()) as rev:
             rev.change_stub_kind(payload.id, payload.kind)
-        self._reply("change_stub_kind", self._thing_payload(world, payload.id, None))
+        notes = [
+            f"a {payload.kind} has no {field.replace('_', ' ')}: it was dropped"
+            for field in dropped
+        ]
+        self._reply(
+            "change_stub_kind",
+            {**self._thing_payload(world, payload.id, None), "notes": notes},
+        )
 
     async def handle_stub_suggestion(self, data: dict):
         payload = ThingIdPayload(**data)
@@ -2995,6 +3164,57 @@ class WorldsPlugin(Plugin):
         )
         for thing_id in prose:
             self._schedule_prose(thing_id, None)
+
+    async def handle_copy_fact(self, data: dict):
+        """Copy one fact onto another entry ("Copy to..."), in one revision
+        (`repoint.copy_facts` with `keep`: a new fact with its dates,
+        origin and holder, the original kept); its links to the target
+        become words. Answers `{fact_id, target, notes}` (the copy's id and
+        the target's payload). Refused, writing nothing: a fact that isn't
+        live, a target that's gone, the fact's own entry. Prose is
+        refreshed for the target when it reads the copy's category."""
+
+        payload = CopyFactPayload(**data)
+        world = self._require_world()
+        view = world.view()
+        found = view.fact(payload.fact_id)
+        if found is None:
+            raise KeyError(f"no such fact: {payload.fact_id}")
+        owner_id = found[0]
+        target = self._require_entry(view, payload.target_id)
+        if owner_id == payload.target_id:
+            raise ValueError("the fact is that entry's already")
+        notes: list[str] = []
+        note = (
+            f"copied a fact from {view.name_of(owner_id)} to"
+            f" {view.name_of(payload.target_id)}"
+        )
+        with world.revision(Source.manual(note=note)) as rev:
+            new_id = copy_facts(
+                rev,
+                world.view(),
+                [payload.fact_id],
+                payload.target_id,
+                plain_self_links=True,
+                keep=True,
+            )[payload.fact_id]
+        copied = world.view().fact(new_id)
+        category = copied[1].category if copied is not None else found[1].category
+        if category != found[1].category:
+            notes.append(
+                f"a {target.kind} has no {found[1].category} facts:"
+                f" it's under {category} on {view.name_of(payload.target_id)}"
+            )
+        self._reply(
+            "copy_fact",
+            {
+                "fact_id": new_id,
+                "target": self._thing_payload(world, payload.target_id, None),
+                "notes": notes,
+            },
+        )
+        if not target.is_stub and prose_reads(target.kind, category):
+            self._schedule_prose(payload.target_id, None)
 
     async def handle_preview_merge(self, data: dict):
         """What merging one entry into another would do
@@ -3115,9 +3335,34 @@ class WorldsPlugin(Plugin):
             "".join(seg.text for seg in view.segments(old.group(0))) if old else ""
         )
         new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
+        # the names the link went by: its words, and, for a stub, the
+        # stub's own names, which the target learns as other names (as
+        # `repoint_stub` teaches them), so a later mention links there
+        from_id = old.group(1) if old else None
+        names = [(old.group(2) or rendered) if old else ""]
+        source = view.thing(from_id) if from_id else None
+        if source is not None and source.is_stub:
+            names += [
+                view.name_of(from_id) or "",
+                *(
+                    entry["name"]
+                    for entry in source.fields.get("aka") or []
+                    if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+                ),
+            ]
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(payload.fact_id, text=new_text)
-        self._edited("repoint_ref", payload.thing_id, at, prose=False)
+            added = learn_names(
+                rev,
+                world,
+                payload.to_id,
+                names,
+                skip={from_id} if from_id else set(),
+            )
+        self._reply(
+            "repoint_ref",
+            {**self._thing_payload(world, payload.thing_id, at), "aka_added": added},
+        )
 
     async def handle_end_fact(self, data: dict):
         payload = EndFactPayload(**data)
@@ -3138,9 +3383,9 @@ class WorldsPlugin(Plugin):
 
     async def handle_set_held_by(self, data: dict):
         """Set or clear who holds one of a thing's own facts as a belief
-        (`entries.with_held_by`): a sphere, a character or a being, or null
-        for world truth (an explicit clear, so a beliefs drawer's statement
-        can read plain too). One revision; nothing is written when the fact
+        (`entries.with_held_by`): any live entry (a faith, a culture, a
+        character), or null for world truth (an explicit clear, so a
+        `belief` fact can read plain too). One revision; nothing is written when the fact
         is already held so. Answers with the thing. Held-ness feeds
         description prose (ruling C3): prose is refreshed when the thing's
         prose reads the fact's category (not a sphere's statement or
@@ -3160,10 +3405,6 @@ class WorldsPlugin(Plugin):
             holder = view.thing(holder_id)
             if holder is None or holder.stub_ignored:
                 raise KeyError(f"no such thing: {holder_id}")
-            if not (spheres.is_sphere(holder) or holder.kind in ("character", "being")):
-                raise ValueError(
-                    "only a sphere, a character or a being can hold a belief"
-                )
         if entries.held_by(view, fact, state) == holder_id:
             self._edited("set_held_by", payload.thing_id, at, prose=False)
             return
@@ -3272,11 +3513,13 @@ class WorldsPlugin(Plugin):
         self._reply("set_curation", _settings_out(settings))
 
     async def handle_set_field(self, data: dict):
-        """Set one field. The fields with an action of their own, which
-        guards them, are refused here: `part_of` (`set_part_of`), `ties`
-        (`set_ties`) and `drawers` (`set_drawers`). An event's `place` and
-        an item's `owner` are filings (`filing.FIELD_ROLES`): set as the
-        thing's filing with that role (`create.file_by_role`)."""
+        """Set one field. Never filings or the old structure they replace
+        (`filings`, `part_of`, `ties`, a `parent`), which only the filing
+        actions write (`add_filing`, `edit_filing`, `remove_filing`), nor
+        the tag (`set_tag`): those are refused here, naming the action
+        (`GUARDED_FIELDS`). An event's `place` and an item's `owner` are
+        filings (`filing.FIELD_ROLES`): set as the thing's filing with that
+        role (`create.file_by_role`)."""
 
         payload = SetFieldPayload(**data)
         if payload.field in GUARDED_FIELDS:
@@ -3286,14 +3529,13 @@ class WorldsPlugin(Plugin):
         world = self._require_world()
         state = world.view().thing(payload.thing_id)
         role = FIELD_ROLES.get((state.kind, payload.field)) if state else None
-        if role is not None:
-            # an event's place, an item's owner: a filing, never the field
-            if payload.value is not None and not isinstance(payload.value, str):
-                raise ValueError(f"{payload.field!r} must be a thing id")
-            with world.revision(Source.manual()) as rev:
+        with world.revision(Source.manual()) as rev:
+            if role is not None:
+                # an event's place, an item's owner: a filing, never the field
+                if payload.value is not None and not isinstance(payload.value, str):
+                    raise ValueError(f"{payload.field!r} must be a thing id")
                 file_by_role(rev, world, payload.thing_id, role, payload.value)
-        else:
-            with shadowed_revision(world, Source.manual()) as rev:
+            else:
                 rev.set_field(
                     payload.thing_id,
                     payload.field,

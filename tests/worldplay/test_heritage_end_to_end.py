@@ -229,7 +229,8 @@ async def _create(plugin, kind, prompt, fields, *responses) -> dict:
         prompt=prompt,
         fields=fields,
     )
-    preview = _last(plugin, "preview_thing")
+    # the draft page's data to accept (Filing, Task 6)
+    preview = _last(plugin, "preview_thing")["preview"]
     await _send(plugin, "accept_preview", preview=preview)
     return _last(plugin, "accept_preview")
 
