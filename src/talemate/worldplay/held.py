@@ -1,4 +1,4 @@
-"""Held by, in words: a fact a sphere, a character or a being holds as a
+"""Held by, in words: a fact an entry, a character or a being holds as a
 belief reaches a scene or a prose prompt as "<Holder> holds that <text>",
 or "<Holder> holds: <Text>" when the text has no subject of its own
 (`held_text`, ruling C6), unless its text already says who holds it

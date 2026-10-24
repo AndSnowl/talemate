@@ -7,7 +7,7 @@ LLM; nothing here is a plugin system.
 already has. The wording and variables are the curation probe's
 (docs/superpowers/probes/2026-10-22-curation.md, "Same-thing verdict (a
 separate small call)"), at kind `analyze`: each side is labelled "Name
-(kind, sphere: template, part of X)" and shows up to 6 facts, each cut at
+(kind, part of X)" and shows up to 6 facts, each cut at
 260 characters. The probe fell back to "owner only" (it called 2 of 8
 not-same pairs "same"), so the verdict is a hint shown beside the
 question, never a default (ruling C2), and it's asked only when both
@@ -31,6 +31,7 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.prompts import Prompt
+from talemate.world.filing import filings_of
 from talemate.world.repeats import (
     content_words,
     disagreeing_dates,
@@ -89,31 +90,24 @@ def _clip(text: str, limit: int = SIDE_FACT_CHARS) -> str:
     return text[: limit - 1].rsplit(" ", 1)[0] + "…"
 
 
-def preview_label(
-    name: str, kind: str, template: str | None = None, part_of: str | None = None
-) -> str:
-    """A side as the prompt labels it: "Name (kind, sphere: template, part
-    of X)", the template and sphere only when there are any."""
+def preview_label(name: str, kind: str, filed_in: str | None = None) -> str:
+    """A side as the prompt labels it: "Name (kind, part of X)", X the
+    first entry it's filed in, only when there is one."""
 
     bits = [kind]
-    if template:
-        bits.append(f"sphere: {template}")
-    if part_of:
-        bits.append(f"part of {part_of}")
+    if filed_in:
+        bits.append(f"part of {filed_in}")
     return f"{name} ({', '.join(bits)})"
 
 
 def thing_label(view: WorldView, state: ThingState) -> str:
     """A thing in the world, labelled as `preview_label` labels a side."""
 
-    template = state.fields.get("template")
-    link = state.fields.get("part_of")
-    sphere = link.get("sphere") if isinstance(link, dict) else None
+    filings = filings_of(view, state.id)
     return preview_label(
         view.name_of(state.id) or "",
         state.kind,
-        template if isinstance(template, str) else None,
-        view.name_of(sphere) if isinstance(sphere, str) else None,
+        view.name_of(filings[0].target) if filings else None,
     )
 
 

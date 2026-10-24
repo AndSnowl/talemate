@@ -596,24 +596,6 @@ class Revision:
             is not None
         )
 
-    def _check_fields_fit(
-        self, thing_id: str, old_kind: str, new_spec: KindSpec
-    ) -> None:
-        """Raise `ValueError` when a live field of the thing has no field of
-        the same type on `new_spec`."""
-
-        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
-        new_types = {spec.name: spec.type for spec in new_spec.fields}
-        for (field,) in self._conn.execute(
-            "SELECT DISTINCT field FROM field_values "
-            "WHERE thing_id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ):
-            if new_types.get(field) != old_types[field]:
-                raise ValueError(
-                    f"{new_spec.name!r} has no {old_types[field]} field {field!r}"
-                )
-
     def _rekind(self, thing_id: str, kind: str) -> None:
         """Retire the thing's row and add one of `kind` with the same id, so
         undo reverses it like any other write."""
@@ -634,7 +616,7 @@ class Revision:
         any other write. Its facts are kept by id: one in a category `kind`
         lacks takes the category `kinds.moved_category` gives (a new
         version of the fact, as `correct_fact` writes: a lore `general`
-        fact is a character's `background`, a sphere's `about`). Its field
+        fact is a character's `background`). Its field
         values are kept, but those of a field `kind` lacks (or has with
         another type) are retired with it -- a stub's place `kind` text,
         say. Raises `ValueError` unless the thing is a stub (a live `stub`
@@ -676,38 +658,6 @@ class Revision:
                 self.correct_fact(
                     fact_id,
                     category=moved_category(kind, category, valid_from is not None),
-                )
-
-    @_require_open
-    def promote_to_sphere(self, thing_id: str) -> None:
-        """Make a lore entry, or a stub of any kind, a `sphere`, keeping its
-        id, so every link to it holds: its thing row is retired and a
-        `sphere` row with the same id added, as `change_stub_kind` does.
-        Its field values are kept, and so are its facts, by id: one in a
-        category a sphere doesn't have becomes a `timeline` fact when it's
-        dated and an `about` fact when it isn't (a new version of the fact,
-        as `correct_fact` writes). A stub stays a stub. Raises `ValueError`
-        for anything else (a place takes on a template as a place), for a
-        sphere already, and when a live field doesn't exist on `sphere`."""
-
-        new_spec = _kind_for("sphere")
-        old_kind = self._require_thing(thing_id)
-        if old_kind == "sphere":
-            raise ValueError(f"already a sphere: {thing_id}")
-        if old_kind != "lore" and not self._is_stub(thing_id):
-            raise ValueError(f"only lore or a stub becomes a sphere: {thing_id}")
-
-        self._check_fields_fit(thing_id, old_kind, new_spec)
-        self._rekind(thing_id, "sphere")
-        facts = self._conn.execute(
-            "SELECT fact_id, category, valid_from FROM facts "
-            "WHERE thing_id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ).fetchall()
-        for fact_id, category, valid_from in facts:
-            if category not in new_spec.categories:
-                self.correct_fact(
-                    fact_id, category="timeline" if valid_from is not None else "about"
                 )
 
 

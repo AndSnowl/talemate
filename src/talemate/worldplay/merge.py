@@ -43,7 +43,7 @@ Re-point uses), so one undo reverses it:
 - the preview is the client's: accept finds the pairs again and counts
   only those, and each repeat must restate a live into-side fact;
 - every reference, field and filing naming the from-side moves over
-  (filings rewritten, never `part_of`, ties or a parent: ruling F11), the
+  (filings rewritten), the
   into-side's empty fields are filled, and it keeps its own filings,
   taking the from-side's too;
 - the main name is set, the other becomes a common other name;
@@ -58,7 +58,7 @@ from typing import Literal
 import structlog
 from pydantic import BaseModel, Field
 
-from talemate.world import entries, spheres
+from talemate.world import entries
 from talemate.world.dates import WorldDate
 from talemate.world.repeats import content_words
 from talemate.world.store import Revision, Source, World
@@ -146,7 +146,7 @@ def preview_merge(world: World, from_id: str, into_id: str) -> MergePreview:
         ):
             row.repeat_of, row.ticked = repeat_of, False
             repeats.add(fact.fact_id)
-        if entries.is_summary_fact(fact) and spheres.is_sphere(into):
+        if entries.is_summary_fact(fact) and entries.summary_fact(into) is not None:
             # the into-side has a summary of its own
             row.ticked = False
         facts.append(row)
@@ -347,7 +347,7 @@ def accept_merge(
                     gone.add(copy)
                     replaced[copy] = replaced[fact_id]
         for fact_id in summaries:
-            # one summary per sphere: the into-side's
+            # one summary per entry: the into-side's
             hit = world.view().fact(copies[fact_id])
             if hit is not None and hit[1].origin is not None:
                 origin = {k: v for k, v in hit[1].origin.items() if k != "summary"}

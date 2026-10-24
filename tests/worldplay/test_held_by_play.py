@@ -262,12 +262,11 @@ async def test_preview_prose_tells_held_facts_as_belief(world, spheres_world):
     assert "- Every owl lost its sight." not in prose_prompt
 
 
-def test_candidate_and_move_in_lines_tell_held_facts_as_belief(world, spheres_world):
-    """Ruling C33: an "Entries near this one" line and a move-in label
-    tell a held fact as belief, never as plain truth; a fact nobody holds
-    reads as it is."""
+def test_candidate_lines_tell_held_facts_as_belief(world, spheres_world):
+    """Ruling C33: an "Entries near this one" line tells a held fact as
+    belief, never as plain truth."""
 
-    from talemate.worldplay.create import broader_lines, candidate_line
+    from talemate.worldplay.create import candidate_line
 
     s = spheres_world
     with world.revision(Source.manual()) as rev:
@@ -281,11 +280,6 @@ def test_candidate_and_move_in_lines_tell_held_facts_as_belief(world, spheres_wo
         "The Night of Feathers (lore): The White Dawn holds that every owl lost "
         "its sight."
     )
-    lines, _labels = broader_lines(view, world.calendar, night)
-    assert lines == [
-        ("M1", "The White Dawn holds that every owl lost its sight."),
-        ("M2", "It fell in 994."),
-    ]
 
 
 def test_repoint_carries_held_by(world, spheres_world):
@@ -298,22 +292,22 @@ def test_repoint_carries_held_by(world, spheres_world):
     s = spheres_world
     with world.revision(Source.manual()) as rev:
         stub = rev.create_thing(
-            "sphere", fields={"name": "The Dawn Faith", "stub": {"ignored": False}}
+            "lore", fields={"name": "The Dawn Faith", "stub": {"ignored": False}}
         )
         lore = rev.create_thing("lore", fields={"name": "The Vigil"})
         held = rev.add_fact(
             lore,
             "general",
             "Owls keep the vigil.",
-            origin={"held_by": stub, "drawer": "d0000001"},
+            origin={"held_by": stub, "tie": s.tsardom},
         )
-        rev.add_fact(stub, "about", "It sees all.", origin={"held_by": stub})
+        rev.add_fact(stub, "general", "It sees all.", origin={"held_by": stub})
 
     repoint_stub(world, stub, s.dawn)
 
     view = world.view()
     fact = next(f for f in view.thing(lore).facts if f.fact_id == held)
-    assert fact.origin == {"held_by": s.dawn, "drawer": "d0000001"}
+    assert fact.origin == {"held_by": s.dawn, "tie": s.tsardom}
     moved = next(f for f in view.thing(s.dawn).facts if f.text == "It sees all.")
     assert moved.origin == {"held_by": s.dawn}
 
@@ -448,8 +442,10 @@ def test_moved_belief_keeps_its_old_owner_as_holder(world):
     from talemate.worldplay.repoint import copy_facts
 
     with world.revision(Source.manual(note="clans")) as rev:
-        clans = rev.create_thing("culture", fields={"name": "The Hill Clans"})
-        tsardom = rev.create_thing("culture", fields={"name": "The Tsardom"})
+        clans = rev.create_thing(
+            "lore", fields={"name": "The Hill Clans", "hint": "culture"}
+        )
+        tsardom = rev.create_thing("lore", fields={"name": "The Tsardom"})
         stones = rev.add_fact(clans, "belief", "The standing stones hear oaths.")
     with world.revision(Source.manual(note="move")) as rev:
         copies = copy_facts(rev, world.view(), [stones], tsardom, plain_self_links=True)

@@ -40,20 +40,15 @@ _FAR_FUTURE = 10**15
 _FAR_PAST = -_FAR_FUTURE
 
 # fields no prose reads: other names and the stub marker change what links
-# and how a thing is found, never what its prose says; a sphere's drawers
-# and agent flag, what sphere drawer a thing is part of and a character's
-# ties file things and feed scene context, never prose (it reads facts,
-# name, born, kind, template)
+# and how a thing is found, never what its prose says (it reads facts,
+# name, born, kind)
 UNRENDERED_FIELDS: tuple[str, ...] = (
     "aka",
     "stub",
-    "drawers",
-    "part_of",
-    "ties",
-    # where an entry is filed links it, as part_of does
+    # where an entry is filed links it and feeds scene context, never prose
     "filings",
-    # what it is (its group on a page) and the hint it was written with:
-    # no prose reads either
+    # what it is (its group on a page), the hint it was written with and
+    # whether it acts as an agent: no prose reads them
     "tag",
     "hint",
     "agent",
@@ -472,7 +467,7 @@ class ProseCache:
         An `also` id that no longer exists counts as changed.
 
         `ignore_categories` are fact categories the section doesn't read
-        (a sphere's statements and timeline, for its description): a
+        (a place's statements and timeline, for its description): a
         change to one of `thing_id`'s own facts in them is no change. The
         `also` ids are checked in full."""
 

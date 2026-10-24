@@ -1351,7 +1351,7 @@ async def test_setup_carries_stub_previews_and_fills_them_on_start(
     """The setup payload carries a preview for each stub it uses
     (`stub_previews`); sent back on Start, they fill the stubs, keeping
     their ids. In the browser tests the fixed preview stands in for each;
-    a culture stub is left as it is."""
+    a race stub (no species to fill it from) is left as it is."""
 
     world, _maren, _harbour = await _open_world_with_maren(plugin)
     with world.revision(Source.manual(note="stubs")) as rev:
@@ -1359,7 +1359,7 @@ async def test_setup_carries_stub_previews_and_fills_them_on_start(
             "place", {"name": "The Weir", "stub": {"ignored": True}}
         )
         salt = rev.create_thing(
-            "culture", {"name": "Saltfolk", "stub": {"ignored": False}}
+            "race", {"name": "Saltfolk", "stub": {"ignored": False}}
         )
     setup_file = tmp_path / "fixed-setup.json"
     setup_file.write_text(
@@ -2365,9 +2365,9 @@ async def test_ignore_and_change_kind(plugin):
 
 async def test_stub_suggestion(plugin):
     s = await _open_stub_world(plugin)
-    with s.world.revision(Source.manual(note="culture")) as rev:
+    with s.world.revision(Source.manual(note="rite")) as rev:
         rite = rev.create_thing(
-            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
+            "lore", {"name": "Feather Rite", "stub": {"ignored": False}}
         )
         rev.add_fact(s.harbour, "general", f"Keeps the {ref(rite, 'Feather Rite')}.")
 
@@ -2395,7 +2395,7 @@ async def test_stub_suggestion(plugin):
         ],
     ]
 
-    # a culture stub can't be expanded yet, but it has a suggestion
+    # a stub only mentioned has a suggestion too
     await plugin.handle({"type": "worlds", "action": "stub_suggestion", "id": rite})
     assert _last(plugin, "stub_suggestion")["data"]["prompt"] == (
         "Feather Rite: Keeps the Feather Rite."
@@ -2471,26 +2471,6 @@ async def test_preview_with_stub_id_and_accept_into_stub(plugin, client):
     assert filled["id"] == s.hope
     assert filled["stub"] is None
     assert not world.view().thing(s.hope).is_stub
-
-    # a culture stub can't be expanded yet: the preview fails, saying so
-    with world.revision(Source.manual(note="culture")) as rev:
-        rite = rev.create_thing(
-            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
-        )
-    async with MockClientContext():
-        await plugin.handle(
-            {
-                "type": "worlds",
-                "action": "preview_thing",
-                # the stub's own kind decides, whatever is asked
-                "kind": "lore",
-                "prompt": "Feather Rite",
-                "fields": {},
-                "stub_id": rite,
-            }
-        )
-        await _drain(plugin)
-    assert "a culture stub can't be expanded" in str(_last(plugin, "preview_failed"))
 
 
 async def test_preview_names_treated_as_new(plugin, client):
@@ -2609,23 +2589,6 @@ async def test_fixed_preview_expands_and_offers_stubs(plugin, tmp_path, monkeypa
     offered = await preview()
     assert (offered["stub_id"], offered["matching_stub_id"]) == (None, s.tsardom)
 
-    # a culture stub can't be expanded, fixed preview or not
-    with s.world.revision(Source.manual(note="culture")) as rev:
-        rite = rev.create_thing(
-            "culture", {"name": "Feather Rite", "stub": {"ignored": False}}
-        )
-    await plugin.handle(
-        {
-            "type": "worlds",
-            "action": "preview_thing",
-            "kind": "lore",
-            "prompt": "a rite",
-            "fields": {},
-            "stub_id": rite,
-        }
-    )
-    await _drain(plugin)
-    assert "a culture stub can't be expanded" in str(_last(plugin, "preview_failed"))
     await plugin.handle(
         {
             "type": "worlds",
@@ -2671,13 +2634,7 @@ async def test_link_and_other_name_edits_schedule_no_prose(plugin, client):
         assert world.prose().stale(s.maren, section, None) is False
 
 
-# --- spheres -----------------------------------------------------------------
-
-DOCTRINES, RITES, SITES, LANDS = "d0c7a1e5", "a1e5d0c7", "5175e5ab", "1a4d5ab0"
-
-
-def _drawer(drawer_id, type_, title):
-    return {"id": drawer_id, "type": type_, "title": title}
+# --- a faith and what's filed in it -----------------------------------------
 
 
 def _text(segments):
@@ -2685,14 +2642,12 @@ def _text(segments):
 
 
 async def _open_sphere_world(plugin):
-    """Present 1020. The White Dawn, a religion with Doctrines, Rites and
-    Holy Sites: the Dawn Vigil (lore) in Rites, Dawn Peak (a place) in
-    Holy Sites, a statement in Doctrines, an `about` fact and a dated
-    timeline fact naming the Peak. The Reformed Dawn, its branch. The
-    Tsardom, a place that's a nation sphere. Vasha, a practitioner of the
-    Dawn since 1010 who skips the Vigil; Maren, tied to nothing. Each
-    `part_of`, branch `parent` and tie has its matching filing (what the
-    world's readers read), and the Doctrines statement is marked held."""
+    """Present 1020. The White Dawn, religion lore and an agent: the Dawn
+    Vigil (lore) and Dawn Peak (a place) filed in it, a belief it holds,
+    a plain fact and a dated one naming the Peak. The Reformed Dawn, filed
+    in it as a branch. The Tsardom, a place written with the nation hint.
+    Vasha, a practitioner of the Dawn since 1010 who skips the Vigil;
+    Maren, filed in nothing."""
 
     def filed(target, role=None, since=None):
         return [
@@ -2718,80 +2673,45 @@ async def _open_sphere_world(plugin):
     s = SimpleNamespace(world=world)
     with world.revision(Source.manual(note="seed")) as rev:
         s.dawn = rev.create_thing(
-            "sphere",
-            {
-                "name": "The White Dawn",
-                "template": "religion",
-                "agent": True,
-                "drawers": [
-                    _drawer(DOCTRINES, "beliefs", "Doctrines"),
-                    _drawer(RITES, "practices", "Rites"),
-                    _drawer(SITES, "places", "Holy Sites"),
-                ],
-            },
+            "lore", {"name": "The White Dawn", "hint": "religion", "agent": True}
         )
         s.vigil = rev.create_thing(
-            "lore",
-            {
-                "name": "Dawn Vigil",
-                "part_of": {"sphere": s.dawn, "drawer": RITES},
-                "filings": filed(s.dawn),
-            },
+            "lore", {"name": "Dawn Vigil", "filings": filed(s.dawn)}
         )
         rev.add_fact(s.vigil, "general", "A nightly prayer at first light.")
         s.peak = rev.create_thing(
-            "place",
-            {
-                "name": "Dawn Peak",
-                "part_of": {"sphere": s.dawn, "drawer": SITES},
-                "filings": filed(s.dawn),
-            },
+            "place", {"name": "Dawn Peak", "filings": filed(s.dawn)}
         )
         rev.add_fact(s.peak, "description", "A white mountain.")
         s.unblessed = rev.add_fact(
             s.dawn,
-            "statement",
+            "belief",
             "The unchanged are unblessed.",
-            origin={"drawer": DOCTRINES, "held_by": s.dawn},
+            origin={"held_by": s.dawn},
         )
-        rev.add_fact(s.dawn, "about", "The state church.")
+        rev.add_fact(s.dawn, "general", "The state church.")
         s.synod = rev.add_fact(
             s.dawn,
-            "timeline",
+            "general",
             f"The First Synod meets on {ref(s.peak, 'Dawn Peak')}.",
             valid_from=WorldDate.of(996),
         )
         s.reformed = rev.create_thing(
-            "sphere",
+            "lore",
             {
                 "name": "The Reformed Dawn",
-                "template": "religion",
-                "parent": s.dawn,
+                "hint": "religion",
                 "filings": filed(s.dawn, "branch of"),
             },
         )
         s.tsardom = rev.create_thing(
-            "place",
-            {
-                "name": "Tsardom",
-                "kind": "country",
-                "template": "nation",
-                "drawers": [_drawer(LANDS, "places", "Lands")],
-            },
+            "place", {"name": "Tsardom", "kind": "country", "hint": "nation"}
         )
         rev.add_fact(s.tsardom, "description", "A northern realm.")
         s.vasha = rev.create_thing(
             "character",
             {
                 "name": "Vasha",
-                "ties": [
-                    {
-                        "sphere": s.dawn,
-                        "role": "practitioner",
-                        "since": WorldDate.of(1010).model_dump(mode="json"),
-                        "until": None,
-                    }
-                ],
                 "filings": filed(s.dawn, "practitioner", WorldDate.of(1010)),
             },
         )
@@ -2810,22 +2730,6 @@ def _errors(plugin):
 
 async def _act(plugin, action, **data):
     await plugin.handle({"type": "worlds", "action": action, **data})
-
-
-async def test_list_things_spheres_by_template(plugin):
-    s = await _open_sphere_world(plugin)
-    await _act(plugin, "list_things", kind="sphere")
-    listed = _last(plugin, "list_things")["data"]
-    assert listed["kind"] == "sphere"
-    by_id = {t["id"]: t for t in listed["things"]}
-    # the place sphere is listed with the spheres, as its kind
-    assert set(by_id) == {s.dawn, s.reformed, s.tsardom}
-    assert by_id[s.tsardom]["kind"] == "place"
-    assert by_id[s.dawn]["template"] == "religion"
-    assert [
-        (group["template"], [t["id"] for t in group["things"]])
-        for group in listed["groups"]
-    ] == [("religion", [s.dawn, s.reformed]), ("nation", [s.tsardom])]
 
 
 async def _fresh_prose(world, thing_id):
@@ -2879,23 +2783,6 @@ async def test_accept_preview_carries_filings(plugin, client):
     assert view.render(view.fact(tithe)[1].text).startswith("Pays no tithe.")
 
 
-async def test_list_things_unknown_template_groups_as_other(plugin, monkeypatch):
-    from talemate.world import kinds
-
-    s = await _open_sphere_world(plugin)
-    # a template no longer offered, written when it still was
-    monkeypatch.setattr(kinds, "SPHERE_TEMPLATES", (*kinds.SPHERE_TEMPLATES, "cult"))
-    with s.world.revision(Source.manual(note="old")) as rev:
-        odd = rev.create_thing("sphere", {"name": "The Old Way", "template": "cult"})
-    monkeypatch.undo()
-    await _act(plugin, "list_things", kind="sphere")
-    groups = {
-        g["template"]: [t["id"] for t in g["things"]]
-        for g in _last(plugin, "list_things")["data"]["groups"]
-    }
-    assert groups["other"] == [odd]
-
-
 async def test_fixed_preview_carries_tag_in_and_file_into(
     plugin, tmp_path, monkeypatch
 ):
@@ -2946,17 +2833,15 @@ async def test_fixed_preview_carries_tag_in_and_file_into(
 @pytest.mark.parametrize(
     ("thing", "unread", "read"),
     [
-        # a religion: its summary reads its `about` facts, never its timeline
-        ("dawn", "timeline", "about"),
-        # a place sphere: described from its place facts
+        # a place: described from its place facts, never its timeline
         ("tsardom", "timeline", "description"),
     ],
 )
-async def test_unread_fact_leaves_sphere_prose_fresh(
+async def test_unread_fact_leaves_place_prose_fresh(
     plugin, client, thing, unread, read
 ):
     """Ruling P19 through the generic fact actions ("Add to the timeline",
-    editing a statement): a fact of a category the sphere's description
+    editing a statement): a fact of a category the place's description
     doesn't read (P18) leaves its prose fresh -- no regeneration, and the
     payload doesn't call it stale; one it reads makes it stale."""
 
@@ -3003,30 +2888,18 @@ async def test_unread_fact_leaves_sphere_prose_fresh(
 @pytest.mark.parametrize(
     "field, value, action",
     [
-        # filings, and the old structure they replace, are written only by
-        # the filing actions (rulings F11, F14)
+        # filings are written only by the filing actions (rulings F11,
+        # F14), the tag by its own
         ("filings", [], "add_filing, edit_filing or remove_filing"),
-        ("part_of", None, "add_filing"),
-        ("ties", [], "add_filing"),
-        ("parent", None, "add_filing"),
-        ("drawers", [], "drawers are gone"),
         ("tag", "river", "set_tag"),
     ],
 )
 async def test_set_field_refuses_guarded_fields(plugin, field, value, action):
-    """`set_field` never writes filings or the old structure, nor the tag:
-    it refuses them, naming what does, writing nothing."""
+    """`set_field` never writes filings nor the tag: it refuses them,
+    naming what does, writing nothing."""
 
     s = await _open_sphere_world(plugin)
-    thing_id = (
-        s.vasha
-        if field == "ties"
-        else s.dawn
-        if field == "drawers"
-        else s.reformed
-        if field == "parent"
-        else s.vigil
-    )
+    thing_id = s.vigil
     head = s.world.head_rev()
     await _act(plugin, "set_field", thing_id=thing_id, field=field, value=value)
     (error,) = _errors(plugin)
@@ -3162,9 +3035,9 @@ async def test_repoint_stub_never_makes_a_filing_cycle(plugin, monkeypatch):
 
 
 async def test_repoint_stub_more_refusals(plugin, client):
-    """Refused, naming the use: a filing that would loop, a mix whose two
-    parents would be one, and shares naming the target twice. Any entry
-    takes filings now: a lore target isn't refused for them."""
+    """Refused, naming the use: a filing that would loop and a mix whose
+    two parents would be one. Any entry takes filings now: a lore target
+    isn't refused for them."""
 
     s = await _open_sphere_world(plugin)
     world = s.world
@@ -3183,25 +3056,10 @@ async def test_repoint_stub_more_refusals(plugin, client):
         orc = rev.create_thing("species", {"name": "Orc"})
         elf = rev.create_thing("species", {"name": "Elf", "stub": {"ignored": False}})
         rev.create_thing("mix", {"name": "Half-elf", "parents": [orc, elf]})
-        culture = rev.create_thing(
-            "sphere",
-            {"name": "Old Ways", "template": "culture", "stub": {"ignored": False}},
-        )
-        rev.create_thing(
-            "place",
-            {
-                "name": "Borderland",
-                "cultures": [
-                    {"thing_id": culture, "share": 50},
-                    {"thing_id": s.dawn, "share": 50},
-                ],
-            },
-        )
     head = world.head_rev()
     for stub_id, target_id, words in (
         (faith, chapter, ("The Order's filings", "inside itself")),
         (elf, orc, ("Half-elf's parents",)),
-        (culture, s.dawn, ("Borderland's cultures",)),
     ):
         await _act(plugin, "repoint_stub", stub_id=stub_id, target_id=target_id)
         message = _last(plugin, "operation_done")["error"]["message"]
@@ -3214,36 +3072,18 @@ async def test_repoint_stub_more_refusals(plugin, client):
     assert _last(plugin, "repoint_stub")["data"]["stub_id"] == faith
 
 
-async def test_repoint_stub_sphere_fields_and_prose(plugin, monkeypatch):
-    """A sphere stub's template, agent and drawers stay off a target that
-    isn't a sphere (noted); an equal value carries no note. Prose is
-    refreshed for a thing whose rendered field was rewritten (a species'
-    origin), not for an unrendered one (a filing)."""
+async def test_repoint_stub_notes_and_prose(plugin, monkeypatch):
+    """A stub's field the target holds the same value of carries no note.
+    Prose is refreshed for a thing whose rendered field was rewritten (a
+    species' origin), not for an unrendered one (a filing)."""
 
     s = await _open_repoint_world(plugin, monkeypatch)
     world = s.world
-    with world.revision(Source.manual(note="faith")) as rev:
-        faith = rev.create_thing(
-            "sphere",
-            {
-                "name": "Old Faith",
-                "template": "religion",
-                "agent": True,
-                "stub": {"ignored": False},
-            },
-        )
-        shrine = rev.create_thing("place", {"name": "Shrine"})
+    with world.revision(Source.manual(note="uses")) as rev:
         owls = rev.create_thing("species", {"name": "Owl-folk", "origin": s.tsardom})
         rev.set_field(s.harbour, "filings", [{"target": s.tsardom}], None)
         rev.set_field(s.moscavy, "kind", "country", None)
         rev.set_field(s.tsardom, "kind", "country", None)
-
-    await _act(plugin, "repoint_stub", stub_id=faith, target_id=shrine)
-    assert not _errors(plugin)
-    shrine_state = world.view().thing(shrine)
-    assert "template" not in shrine_state.fields
-    notes = " ".join(_last(plugin, "repoint_stub")["data"]["notes"])
-    assert "template" in notes and "agent" in notes
 
     s.prose.clear()
     await _act(plugin, "repoint_stub", stub_id=s.tsardom, target_id=s.moscavy)
@@ -3482,7 +3322,7 @@ async def _timeline_world(plugin):
             "The Tsardom was founded by the first Tsar.",
             valid_from=WorldDate.of(900),
         )
-        s.undated = rev.add_fact(s.dawn, "timeline", "The Dawn keeps no calendar.")
+        s.undated = rev.add_fact(s.dawn, "general", "The Dawn keeps no calendar.")
     return s
 
 
@@ -3588,8 +3428,8 @@ async def test_fact_rows_carry_held_by(plugin):
 async def test_set_held_by(plugin, monkeypatch):
     """`set_held_by` sets or clears one fact's holder in one revision and
     answers with the thing. Held-ness feeds description prose (ruling
-    C3): a character's fact schedules its prose, a sphere's statement
-    doesn't (P18, P19). Any entry may hold one. Refused, writing nothing:
+    C3): a character's fact schedules its prose, and so does a faith's
+    belief. Any entry may hold one. Refused, writing nothing:
     a holder that isn't there, another thing's fact."""
 
     s = await _timeline_world(plugin)
@@ -3618,8 +3458,8 @@ async def test_set_held_by(plugin, monkeypatch):
     assert row["held_by"] is None
     assert scheduled == [s.vasha, s.vasha]
 
-    # the implicit holder of a beliefs statement can be cleared too; a
-    # statement feeds no prose
+    # the implicit holder of a belief can be cleared too; a belief feeds
+    # its faith's description
     await _act(
         plugin, "set_held_by", thing_id=s.dawn, fact_id=s.unblessed, holder_id=None
     )
@@ -3630,7 +3470,7 @@ async def test_set_held_by(plugin, monkeypatch):
         if f["fact_id"] == s.unblessed
     )
     assert row["held_by"] is None
-    assert scheduled == [s.vasha, s.vasha]
+    assert scheduled == [s.vasha, s.vasha, s.dawn]
 
     # any entry can hold a belief: a faith is lore now
     await _act(
@@ -3914,8 +3754,8 @@ def _ember_preview(s, **extra):
                 text="Vasha once carried the embers.",
             ),
             ElsewhereFact(
-                target_id=s.dawn,
-                target_name="The White Dawn",
+                target_id=s.tsardom,
+                target_name="Tsardom",
                 category="timeline",
                 text="The Ember Rite began.",
                 since=WorldDate.of(1001),
@@ -3934,8 +3774,9 @@ def _ember_preview(s, **extra):
 
 async def test_accepts_schedule_prose_for_elsewhere_targets(plugin, monkeypatch):
     """An accept schedules prose for each entry its elsewhere facts went
-    onto when its prose reads them: Vasha's background does, the Dawn's
-    timeline doesn't (P18, P19), and an unticked one isn't written."""
+    onto when its prose reads them: Vasha's background does, the
+    Tsardom's timeline doesn't (P18, P19), and an unticked one isn't
+    written."""
 
     s = await _open_sphere_world(plugin)
     scheduled = _record_prose(plugin, monkeypatch)
@@ -4016,13 +3857,13 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
         move_in=["M2"],
     )
     with s.world.revision(Source.manual(note="names it")) as rev:
-        tends = rev.add_fact(s.dawn, "about", "The Ember Keeper tends the coals.")
+        tends = rev.add_fact(s.dawn, "general", "The Ember Keeper tends the coals.")
     await _act(
         plugin,
         "preview_thing",
         kind="lore",
         prompt="a keeper of embers",
-        fields={"part_of": {"sphere": s.dawn, "drawer": RITES}},
+        fields={"filings": [{"target": s.dawn}]},
     )
     await _drain(plugin)
     assert not _replies(plugin, "preview_failed")
@@ -4044,7 +3885,7 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
     assert {"same_as", "same_target_id", "tag", "filing"} <= set(gate["new"])
     assert s.vigil in [offer["thing_id"] for offer in vigils["new"]["same_as"]]
 
-    # the owner's `part_of` is a ticked "In" row; the Dawn's fact naming it
+    # the owner's filing is a ticked "In" row; the Dawn's fact naming it
     # could move here, unticked (the file's `move_in` labels are ignored)
     assert [(f["target_id"], f["ticked"]) for f in preview["filings"]] == [
         (s.dawn, True)
@@ -4074,7 +3915,6 @@ async def test_preview_payload_curation_fields(plugin, tmp_path, monkeypatch):
     assert data["notes"] == []
     view = s.world.view()
     keeper = view.thing(data["id"])
-    assert "part_of" not in keeper.fields
     assert [f.target for f in filings_of(view, data["id"])] == [s.dawn]
     by_text = {f.text: f for f in keeper.facts}
     assert entries.held_by(view, by_text["The keeper walks the peak."], keeper) == (
@@ -4155,13 +3995,14 @@ async def test_forged_move_here_rows_are_dropped(plugin, monkeypatch):
     s = await _open_sphere_world(plugin)
     _record_prose(plugin, monkeypatch)
     with s.world.revision(Source.manual(note="names it")) as rev:
-        lore = rev.add_fact(s.dawn, "about", "The Dawn keeps the Ember Lore.")
+        lore = rev.add_fact(s.dawn, "general", "The Dawn keeps the Ember Lore.")
         far = rev.add_fact(s.maren, "background", "Maren reads the Ember Lore.")
     with s.world.revision(Source.manual(note="summary")) as rev:
+        # a place's summary, filed in the Dawn beside the new entry
         own_summary = rev.add_fact(
-            s.dawn,
+            s.peak,
             "about",
-            "The Ember Lore is the Dawn's creed.",
+            "The Ember Lore is kept on Dawn Peak.",
             origin={"summary": True},
         )
 
@@ -4184,7 +4025,7 @@ async def test_forged_move_here_rows_are_dropped(plugin, monkeypatch):
             # Maren is near nothing
             row(far, s.maren),
             # a summary is its entry's own
-            row(own_summary, s.dawn),
+            row(own_summary, s.peak),
         ],
     )
     await _act(plugin, "accept_preview", preview=preview.model_dump(mode="json"))
@@ -4195,7 +4036,7 @@ async def test_forged_move_here_rows_are_dropped(plugin, monkeypatch):
     assert "The Dawn keeps the Ember Lore." in [f["rendered"] for f in data["facts"]]
     assert s.skips in [f.fact_id for f in view.thing(s.vasha).facts]
     assert far in [f.fact_id for f in view.thing(s.maren).facts]
-    assert own_summary in [f.fact_id for f in view.thing(s.dawn).facts]
+    assert own_summary in [f.fact_id for f in view.thing(s.peak).facts]
     notes = data["notes"]
     assert any("Vasha" in note and "doesn't name" in note for note in notes)
     assert any("Maren" in note and "isn't near" in note for note in notes)

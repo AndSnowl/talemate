@@ -92,9 +92,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   facts_moved, notes}` (`target` the target's payload; `notes` what didn't
   carry over as the stub had it). Refused, writing nothing: the stub
   itself, a deleted thing or an ignored stub as the target, and a use the
-  target can't take (a scene's, a field of another kind, a filing or tie
-  when it isn't a sphere, a loop of parents or filings, a mix's parents or
-  shares naming it twice, its own). Prose is refreshed where its input
+  target can't take (a scene's, a field of another kind, a loop of
+  parents or filings, a mix's parents naming it twice, its own). Prose is refreshed where its input
   changed: the target's for facts or rendered fields it took, another
   thing's for a rendered field rewritten.
   `copy_fact {fact_id, target_id}` ("Copy to...", `repoint.copy_facts`
@@ -114,8 +113,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `from_id` into `into_id` in one revision (`keep`: each pair's key ->
   "a", "b" or "both"; `lose`: "remove" or "end") and answers `{from_id,
   into, main_name, links, aka_added, facts_moved, notes}`. Refused as
-  Re-point is, and for a thing into itself, a sphere with parts or ties
-  into a non-sphere, an entry into a stub, and a stale preview. Prose is
+  Re-point is, and for a thing into itself, a thing of another kind, an
+  entry into a stub, and a stale preview. Prose is
   refreshed for the into-side and each rendered field rewritten.
 - Heritage: `override_fact {thing_id, overridden_fact_id, text, category,
   at}` adds an own fact that overrides an inherited one and answers like
@@ -275,7 +274,7 @@ import structlog
 import talemate.instance as instance
 from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
-from talemate.world import entries, heritage, spheres
+from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
@@ -293,7 +292,6 @@ from talemate.world.filing import (
 from talemate.world.kinds import (
     HERITAGE_KINDS,
     KINDS,
-    SPHERE_TEMPLATES,
     get_kind,
     normalise_tag,
 )
@@ -661,15 +659,9 @@ class SetFieldPayload(_ThingEdit):
 
 
 # the fields `set_field` never writes, each with what does: filings go
-# through the filing actions alone (rulings F11, F14), and the old
-# structure isn't written at all any more
-_FILING_ACTIONS = "add_filing, edit_filing or remove_filing"
+# through the filing actions alone (rulings F11, F14)
 GUARDED_FIELDS: dict[str, str] = {
-    "filings": _FILING_ACTIONS,
-    "part_of": _FILING_ACTIONS,
-    "ties": _FILING_ACTIONS,
-    "parent": _FILING_ACTIONS,
-    "drawers": "nothing: drawers are gone, entries are filed and tagged",
+    "filings": "add_filing, edit_filing or remove_filing",
     "tag": "set_tag",
 }
 
@@ -969,7 +961,7 @@ async def _fixed_preview(
     own_keys = {name_key(name)}
     own_ids = {stub.id} if stub is not None else set()
     lookup = entry_names(view)
-    # the owner's own filings (a `part_of`, a place's `parent`...) are
+    # the owner's own filings (`filings`, an event's `place`...) are
     # ticked "In" rows, as the real preview makes them, then the file's
     filings = owner_filings(view, fields, kind)
     for row in parse_in(
@@ -1988,7 +1980,7 @@ class WorldsPlugin(Plugin):
         its elsewhere targets, the entries its items link), those whose
         prose input the accept's revision changed: a full entry (no stub)
         with a fact written in that revision in a category its prose reads
-        (`create.prose_reads`). A sphere's statements and timeline feed no
+        (`create.prose_reads`). A place's statements and timeline feed no
         prose (rulings P18, P19), so they schedule none."""
 
         rev = world.head_rev()
@@ -2070,22 +2062,13 @@ class WorldsPlugin(Plugin):
     # --- things -----------------------------------------------------------
 
     async def handle_list_things(self, data: dict):
-        """A kind's things. `sphere` lists every sphere -- places that have
-        taken on a template too, under their own kind -- each with its
-        `template`, and adds `groups`: `[{template, things}]` in template
-        order, a sphere with no template under `other`."""
+        """A kind's things, ignored stubs left out."""
 
         payload = ListThingsPayload(**data)
         world = self._require_world()
         view = world.view()
-        states = view.things(payload.kind)
-        if payload.kind == "sphere":
-            places = [
-                state for state in view.things("place") if spheres.is_sphere(state)
-            ]
-            states = sorted([*states, *places], key=lambda state: state.created)
         things = []
-        for state in states:
+        for state in view.things(payload.kind):
             if state.stub_ignored:
                 continue
             entry: dict[str, Any] = {
@@ -2095,32 +2078,11 @@ class WorldsPlugin(Plugin):
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
-            if payload.kind == "sphere":
-                template = state.fields.get("template")
-                entry["template"] = template if isinstance(template, str) else None
             if state.kind == "being":
                 # only a real being is cast or played (the scene pickers)
                 entry["existence"] = entries.existence(state)
             things.append(entry)
-        reply: dict[str, Any] = {"kind": payload.kind, "things": things}
-        if payload.kind == "sphere":
-            reply["groups"] = [
-                {"template": template, "things": grouped}
-                for template in SPHERE_TEMPLATES
-                if (
-                    grouped := [
-                        entry
-                        for entry in things
-                        if (
-                            entry["template"]
-                            if entry["template"] in SPHERE_TEMPLATES
-                            else "other"
-                        )
-                        == template
-                    ]
-                )
-            ]
-        self._reply("list_things", reply)
+        self._reply("list_things", {"kind": payload.kind, "things": things})
 
     async def handle_list_heritage(self, data: dict):
         view = self._require_world().view()
@@ -2522,8 +2484,8 @@ class WorldsPlugin(Plugin):
             "accept_preview",
             {**self._thing_payload(world, thing_id, None), "notes": notes},
         )
-        # the accept's own list (a re-pointed stub, a move-in's broader
-        # entry, a same-thing target), then the elsewhere targets whose
+        # the accept's own list (a re-pointed stub, a "Could move here"
+        # row's source, a same-thing target), then the elsewhere targets whose
         # prose reads what they took
         prose += self._wrote_prose_input(
             world,
@@ -3377,7 +3339,7 @@ class WorldsPlugin(Plugin):
         stub, in one revision (`worldplay.repoint.repoint_stub`). Prose
         is refreshed only where its input changed: the target's, for the
         stub's facts or rendered fields it took, and another thing's, for a
-        rendered field rewritten (a parent, a culture, a heritage)."""
+        rendered field rewritten (a heritage, a species)."""
 
         payload = RepointStubPayload(**data)
         world = self._require_world()
@@ -3656,7 +3618,7 @@ class WorldsPlugin(Plugin):
         `belief` fact can read plain too). One revision; nothing is written when the fact
         is already held so. Answers with the thing. Held-ness feeds
         description prose (ruling C3): prose is refreshed when the thing's
-        prose reads the fact's category (not a sphere's statement or
+        prose reads the fact's category (not a place's statement or
         timeline fact, rulings P18, P19)."""
 
         payload = SetHeldByPayload(**data)
@@ -3781,9 +3743,8 @@ class WorldsPlugin(Plugin):
         self._reply("set_curation", _settings_out(settings))
 
     async def handle_set_field(self, data: dict):
-        """Set one field. Never filings or the old structure they replace
-        (`filings`, `part_of`, `ties`, a `parent`), which only the filing
-        actions write (`add_filing`, `edit_filing`, `remove_filing`), nor
+        """Set one field. Never `filings`, which only the filing actions
+        write (`add_filing`, `edit_filing`, `remove_filing`), nor
         the tag (`set_tag`): those are refused here, naming the action
         (`GUARDED_FIELDS`). An event's `place` and an item's `owner` are
         filings (`filing.FIELD_ROLES`): set as the thing's filing with that

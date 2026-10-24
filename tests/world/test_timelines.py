@@ -52,7 +52,7 @@ def _timeline(world, thing_id, reach=2, at=None):
 
 @dataclass
 class Runeweaving:
-    sphere: str
+    field: str
     ashenmere: str
     glyphs: str
     kel: str
@@ -67,11 +67,11 @@ def _runeweaving(world) -> Runeweaving:
     glyphs filed in Ashenmere (a part of a part); Kel is only mentioned."""
 
     with world.revision(Source.manual()) as rev:
-        sphere = rev.create_thing(
-            "sphere", fields={"name": "Runeweaving", "tag": "field"}
+        field = rev.create_thing(
+            "lore", fields={"name": "Runeweaving", "tag": "field", "hint": "field"}
         )
         ashenmere = rev.create_thing(
-            "lore", fields={"name": "Ashenmere", "filings": _filed(sphere)}
+            "lore", fields={"name": "Ashenmere", "filings": _filed(field)}
         )
         glyphs = rev.create_thing(
             "lore", fields={"name": "Ashenmere glyphs", "filings": _filed(ashenmere)}
@@ -79,8 +79,8 @@ def _runeweaving(world) -> Runeweaving:
         kel = rev.create_thing("lore", fields={"name": "Kel"})
         codex = rev.create_thing("lore", fields={"name": "The Codex"})
         founded = rev.add_fact(
-            sphere,
-            "timeline",
+            field,
+            "general",
             f"First taught in {ref(kel)}.",
             valid_from=WorldDate.of(900),
         )
@@ -98,7 +98,7 @@ def _runeweaving(world) -> Runeweaving:
         # Kel's own history is Kel's, however near
         rev.add_fact(kel, "general", "Kel was founded.", valid_from=WorldDate.of(500))
     return Runeweaving(
-        sphere, ashenmere, glyphs, kel, codex, founded, rediscovered, carved
+        field, ashenmere, glyphs, kel, codex, founded, rediscovered, carved
     )
 
 
@@ -145,12 +145,12 @@ def test_own_dated_facts_in_order(world):
     assert _ids(_timeline(world, maren, at=WorldDate.of(315))) == [born, since]
 
 
-def test_sphere_gathers_from_parts_947(world):
+def test_field_gathers_from_parts_947(world):
     r = _runeweaving(world)
-    lines = _timeline(world, r.sphere)
+    lines = _timeline(world, r.field)
     assert _ids(lines) == [r.founded, r.rediscovered, r.carved]
     by_id = {line.fact_id: line for line in lines}
-    assert by_id[r.founded].here and by_id[r.founded].owner_id == r.sphere
+    assert by_id[r.founded].here and by_id[r.founded].owner_id == r.field
     rediscovery = by_id[r.rediscovered]
     assert not rediscovery.here
     assert rediscovery.owner_id == r.ashenmere
@@ -214,7 +214,7 @@ def test_reference_from_outside_counts(world):
         named = rev.add_fact(
             r.codex,
             "general",
-            f"Cites {ref(r.sphere)} at length.",
+            f"Cites {ref(r.field)} at length.",
             valid_from=WorldDate.of(1000),
         )
         part_named = rev.add_fact(
@@ -223,9 +223,9 @@ def test_reference_from_outside_counts(world):
             f"Scholars of Kel studied {ref(r.ashenmere)}.",
             valid_from=WorldDate.of(980),
         )
-        # undated: never a line, however it names the sphere
-        rev.add_fact(r.codex, "general", f"Mentions {ref(r.sphere)}.")
-    lines = _timeline(world, r.sphere)
+        # undated: never a line, however it names the field
+        rev.add_fact(r.codex, "general", f"Mentions {ref(r.field)}.")
+    lines = _timeline(world, r.field)
     assert _ids(lines) == [
         r.founded,
         r.rediscovered,
@@ -236,15 +236,15 @@ def test_reference_from_outside_counts(world):
     by_id = {line.fact_id: line for line in lines}
     assert by_id[named].owner_id == r.codex and not by_id[named].here
     assert by_id[named].text == "Cites Runeweaving at length."
-    # a part's fact that names the sphere shows once
+    # a part's fact that names the field shows once
     with world.revision(Source.manual()) as rev:
         both = rev.add_fact(
             r.ashenmere,
             "general",
-            f"Taught again in {ref(r.sphere)}.",
+            f"Taught again in {ref(r.field)}.",
             valid_from=WorldDate.of(990),
         )
-    assert _ids(_timeline(world, r.sphere)).count(both) == 1
+    assert _ids(_timeline(world, r.field)).count(both) == 1
 
 
 def test_member_births_not_gathered(world):
@@ -254,17 +254,17 @@ def test_member_births_not_gathered(world):
             "character",
             fields={
                 "name": "Vasha",
-                "filings": [_in(r.sphere, role="scholar")],
+                "filings": [_in(r.field, role="scholar")],
             },
         )
         rev.add_fact(vasha, "background", "Born in Kel.", valid_from=WorldDate.of(990))
         joined = rev.add_fact(
             vasha,
             "ties",
-            f"Joined the scholars of {ref(r.sphere)}.",
+            f"Joined the scholars of {ref(r.field)}.",
             valid_from=WorldDate.of(1010),
         )
-    assert _ids(_timeline(world, r.sphere)) == [
+    assert _ids(_timeline(world, r.field)) == [
         r.founded,
         r.rediscovered,
         r.carved,
@@ -276,19 +276,19 @@ def test_mention_only_neighbour_not_gathered(world):
     r = _runeweaving(world)
     # Runeweaving's own line names Kel, so Kel is near it; Kel's founding
     # is Kel's, never Runeweaving's
-    ids = _ids(_timeline(world, r.sphere, reach=3))
+    ids = _ids(_timeline(world, r.field, reach=3))
     assert ids == [r.founded, r.rediscovered, r.carved]
 
 
 def test_reach_limits_depth(world):
     r = _runeweaving(world)
-    assert _ids(_timeline(world, r.sphere, reach=2)) == [
+    assert _ids(_timeline(world, r.field, reach=2)) == [
         r.founded,
         r.rediscovered,
         r.carved,
     ]
-    assert _ids(_timeline(world, r.sphere, reach=1)) == [r.founded, r.rediscovered]
-    assert _ids(_timeline(world, r.sphere, reach=0)) == [r.founded]
+    assert _ids(_timeline(world, r.field, reach=1)) == [r.founded, r.rediscovered]
+    assert _ids(_timeline(world, r.field, reach=0)) == [r.founded]
     # a fact naming the part of a part only counts within reach too
     with world.revision(Source.manual()) as rev:
         deep = rev.add_fact(
@@ -297,21 +297,21 @@ def test_reach_limits_depth(world):
             f"Kel copied {ref(r.glyphs)}.",
             valid_from=WorldDate.of(970),
         )
-    assert deep in _ids(_timeline(world, r.sphere, reach=2))
-    assert deep not in _ids(_timeline(world, r.sphere, reach=1))
+    assert deep in _ids(_timeline(world, r.field, reach=2))
+    assert deep not in _ids(_timeline(world, r.field, reach=1))
 
 
 def test_codex_dates_disagree(world):
     r = _runeweaving(world)
     with world.revision(Source.manual()) as rev:
-        rev.set_field(r.codex, "filings", _filed(r.sphere), None)
+        rev.set_field(r.codex, "filings", _filed(r.field), None)
         compiled_217 = rev.add_fact(
-            r.sphere, "timeline", CODEX_217, valid_from=WorldDate.of(217)
+            r.field, "general", CODEX_217, valid_from=WorldDate.of(217)
         )
         compiled_312 = rev.add_fact(
             r.codex, "general", CODEX_312, valid_from=WorldDate.of(312)
         )
-    lines = _timeline(world, r.sphere)
+    lines = _timeline(world, r.field)
     by_id = {line.fact_id: line for line in lines}
     assert by_id[compiled_217].disagrees_with == [compiled_312]
     assert by_id[compiled_312].disagrees_with == [compiled_217]
@@ -319,7 +319,7 @@ def test_codex_dates_disagree(world):
     # computed on read: nothing is stored, so removing one clears the other
     with world.revision(Source.manual()) as rev:
         rev.remove_fact(compiled_312)
-    by_id = {line.fact_id: line for line in _timeline(world, r.sphere)}
+    by_id = {line.fact_id: line for line in _timeline(world, r.field)}
     assert compiled_312 not in by_id
     assert by_id[compiled_217].disagrees_with == []
 
@@ -330,23 +330,23 @@ def test_branch_is_filed_in_its_parent(world):
     are one link away, no longer inherited)."""
 
     with world.revision(Source.manual()) as rev:
-        dawn = rev.create_thing("sphere", fields={"name": "White Dawn"})
+        dawn = rev.create_thing("lore", fields={"name": "White Dawn"})
         old = rev.add_fact(
-            dawn, "timeline", "The Dawn first preached.", valid_from=WorldDate.of(900)
+            dawn, "general", "The Dawn first preached.", valid_from=WorldDate.of(900)
         )
         reformed = rev.create_thing(
-            "sphere",
+            "lore",
             fields={
                 "name": "Reformed Dawn",
                 "filings": [_in(dawn, role="branch of", since=WorldDate.of(1000))],
             },
         )
         split = rev.add_fact(
-            reformed, "timeline", "The reformers split.", valid_from=WorldDate.of(1001)
+            reformed, "general", "The reformers split.", valid_from=WorldDate.of(1001)
         )
         # the parent's line from after the split: never the branch's
         spire = rev.add_fact(
-            dawn, "timeline", "The Dawn built a spire.", valid_from=WorldDate.of(1007)
+            dawn, "general", "The Dawn built a spire.", valid_from=WorldDate.of(1007)
         )
     assert _ids(_timeline(world, reformed)) == [split]
     assert spire not in _ids(_timeline(world, reformed, reach=3))
@@ -359,9 +359,7 @@ def test_isolated_entry(world):
     with world.revision(Source.manual()) as rev:
         alone = rev.create_thing("lore", fields={"name": "Alone"})
         rev.add_fact(alone, "general", "Undated.")
-        empty = rev.create_thing(
-            "sphere", fields={"name": "Empty", "template": "order"}
-        )
+        empty = rev.create_thing("lore", fields={"name": "Empty", "hint": "order"})
     assert _timeline(world, alone) == []
     assert _timeline(world, empty, reach=3) == []
     assert _timeline(world, "0" * 32) == []
@@ -400,7 +398,7 @@ def test_gathering_follows_filings_down_to_the_reach(world):
     whatever their kinds."""
 
     with world.revision(Source.manual()) as rev:
-        dawn = rev.create_thing("sphere", fields={"name": "White Dawn"})
+        dawn = rev.create_thing("lore", fields={"name": "White Dawn"})
         kremova = rev.create_thing(
             "place", fields={"name": "Kremova", "filings": _filed(dawn)}
         )
@@ -417,14 +415,12 @@ def test_gathering_follows_filings_down_to_the_reach(world):
     assert _ids(_timeline(world, dawn, reach=3)) == [seated, walled]
 
 
-def test_a_character_filed_in_a_sphere_gives_no_births(world):
+def test_a_character_filed_in_an_order_gives_no_births(world):
     """A character (or a real being) filed as a part is a member, not a
     part: its own dated facts stay its own."""
 
     with world.revision(Source.manual()) as rev:
-        order = rev.create_thing(
-            "sphere", fields={"name": "Order", "template": "order"}
-        )
+        order = rev.create_thing("lore", fields={"name": "Order", "hint": "order"})
         vasha = rev.create_thing(
             "character", fields={"name": "Vasha", "filings": _filed(order)}
         )
@@ -445,7 +441,7 @@ def test_a_character_filed_in_a_sphere_gives_no_births(world):
 
 def test_timeline_line_dump_round_trips(world):
     r = _runeweaving(world)
-    for line in _timeline(world, r.sphere):
+    for line in _timeline(world, r.field):
         dumped = line.model_dump()
         assert "fact" not in dumped
         again = TimelineLine.model_validate(dumped)
@@ -463,11 +459,12 @@ def test_prompt_timeline_skips_disagreements(world, monkeypatch):
         raise AssertionError("disagreements computed for a prompt")
 
     monkeypatch.setattr(timelines, "disagreeing_dates", no_pairs)
+    # its own dated fact is no `timeline` fact: shown as itself, not here
     assert _ids(
-        timelines.prompt_timeline(world.view(), r.sphere, reach=2, threshold=0.4)
-    ) == [r.founded, r.rediscovered, r.carved]
+        timelines.prompt_timeline(world.view(), r.field, reach=2, threshold=0.4)
+    ) == [r.rediscovered, r.carved]
     lines = timelines.entry_timeline(
-        world.view(), r.sphere, reach=2, threshold=0.4, disagreements=False
+        world.view(), r.field, reach=2, threshold=0.4, disagreements=False
     )
     assert all(line.disagrees_with == [] for line in lines)
 

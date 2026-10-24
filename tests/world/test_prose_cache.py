@@ -287,12 +287,12 @@ def test_stale_ignores_categories_the_section_does_not_read(world):
     category is ignored; the `also` ids are checked in full."""
 
     with world.revision(Source.manual(note="setup")) as rev:
-        dawn = rev.create_thing("sphere", {"name": "The White Dawn"})
+        dawn = rev.create_thing("place", {"name": "The White Dawn"})
         rev.add_fact(dawn, "about", "The state church.")
         decree = rev.add_fact(
             dawn, "timeline", "Issued a decree.", valid_from=WorldDate.of(1001)
         )
-        elder = rev.create_thing("sphere", {"name": "The Elder Dawn"})
+        elder = rev.create_thing("place", {"name": "The Elder Dawn"})
     cache = world.prose()
     cache.put(dawn, "description", None, None, "The church of the dawn.")
     ignore = ("statement", "timeline")

@@ -374,3 +374,32 @@ def test_live_facts_lists_every_date(world):
         rev.add_fact(a, "general", "Later.", valid_from=WorldDate.of(500))
     assert sorted(f.text for f in world.live_facts(a)) == ["Later.", "Now.", "Then."]
     assert len(world.view(WorldDate.of(100)).thing(a).facts) == 1
+
+
+def test_fact_origin_read_back(world):
+    with world.revision(Source.manual(note="an order")) as rev:
+        order_id = rev.create_thing(
+            "lore", fields={"name": "The Order of Ash", "agent": True}
+        )
+        fact_id = rev.add_fact(
+            order_id,
+            "general",
+            "Founded in the ash of the old capital.",
+            origin={"tie": order_id},
+        )
+
+    view = world.view()
+    thing = view.thing(order_id)
+    fact = next(f for f in thing.facts if f.fact_id == fact_id)
+    assert fact.origin == {"tie": order_id}
+
+
+def test_fact_without_origin_is_none(world):
+    with world.revision(Source.manual(note="plain fact")) as rev:
+        lore_id = rev.create_thing("lore", fields={"name": "The Long Winter"})
+        fact_id = rev.add_fact(lore_id, "general", "It lasted three years.")
+
+    view = world.view()
+    thing = view.thing(lore_id)
+    fact = next(f for f in thing.facts if f.fact_id == fact_id)
+    assert fact.origin is None

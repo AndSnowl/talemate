@@ -15,7 +15,7 @@ trailing `'s` allowed and longer names tried first:
   only a *suggested* match, offered after any real one;
 - an adjective form of a one-word main or other name of four letters or
   more ("Moscavian" for Moscavia, "Kalmaran" for Kalmara) of a place,
-  sphere, species or race (`ADJECTIVE_KINDS`; "Julian" never means Julia):
+  species or race (`ADJECTIVE_KINDS`; "Julian" never means Julia):
   the name, or the name less a final vowel, with one of
   `ADJECTIVE_ENDINGS`. It ranks after the other names.
 
@@ -72,7 +72,7 @@ PARTIAL_MIN_LETTERS = 5
 ADJECTIVE_ENDINGS = ("n", "an", "ian", "ish", "ese")
 ADJECTIVE_MIN_LETTERS = 4
 # the kinds whose names have adjective forms
-ADJECTIVE_KINDS = frozenset({"place", "sphere", "species", "race"})
+ADJECTIVE_KINDS = frozenset({"place", "species", "race"})
 _VOWELS = "aeiou"
 
 # lowercase words an unknown phrase may run across ("Night of Feathers")

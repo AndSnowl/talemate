@@ -398,23 +398,20 @@ try:
                     if isinstance(names, list)
                     else ids[names]
                 )
-            # a sphere drawer it's part of: an earlier sphere, by name
-            if thing.get("part_of"):
-                part_of = thing["part_of"]
-                fields["part_of"] = {
-                    "sphere": ids[part_of["sphere"]],
-                    "drawer": part_of["drawer"],
-                }
-            # a character's ties to earlier spheres, by name
-            if thing.get("ties"):
-                fields["ties"] = [
+            # the entries it's filed in: earlier things, by name
+            if thing.get("filings"):
+                fields["filings"] = [
                     {
-                        "sphere": ids[tie["sphere"]],
-                        "role": tie.get("role", ""),
-                        "since": _dumped(tie.get("since")),
-                        "until": _dumped(tie.get("until")),
+                        "target": ids[filing["target"]],
+                        "role": filing.get("role"),
+                        "since": _dumped(filing.get("since")),
+                        "until": _dumped(filing.get("until")),
+                        "within": ids[filing["within"]]
+                        if filing.get("within")
+                        else None,
+                        "exceptions": [],
                     }
-                    for tie in thing["ties"]
+                    for filing in thing["filings"]
                 ]
             thing_id = rev.create_thing(thing["kind"], fields)
             ids[thing["name"]] = thing_id
@@ -425,7 +422,7 @@ try:
                     _refs(fact["text"], ids),
                     valid_from=_year(fact.get("since")),
                     valid_until=_year(fact.get("until")),
-                    # an exception's tie names its sphere, an earlier thing
+                    # an exception's tie names its entry, an earlier thing
                     origin=(
                         {**fact["origin"], "tie": ids[fact["origin"]["tie"]]}
                         if "tie" in (fact.get("origin") or {})
@@ -466,12 +463,12 @@ def seed_fm_world(
 
     ``things`` items are ``{"kind", "name", "born": year|None, "fields":
     {field: value}|None, "links": {field: name | [names]}|None, "stub":
-    "live"|"ignored"|None, "part_of": {"sphere": name, "drawer":
-    <8-hex>}|None, "ties": [{"sphere": name, "role", "since": year|None,
-    "until": year|None}]|None, "facts": [{"category", "text", "since":
-    year|None, "until": year|None, "origin": dict|None}]}``, written in one
-    revision, in order. An origin's ``"tie"`` (an exception's) names its
-    sphere, written as its id.
+    "live"|"ignored"|None, "filings": [{"target": name, "role", "since":
+    year|None, "until": year|None, "within": name|None}]|None, "facts":
+    [{"category", "text", "since": year|None, "until": year|None,
+    "origin": dict|None}]}``, written in one revision, in order. An
+    origin's ``"tie"`` (an exception's) names the entry it's filed under,
+    written as its id.
     A link names things listed before it (e.g. a race's ``{"species":
     "Owl-folk"}``) and is written as their ids; so does a reference in a
     fact's text, written ``[[@Name|shown text]]``. ``stub`` makes the thing
@@ -519,20 +516,6 @@ def set_fixed_setup(root: Path, reply: dict) -> None:
     "place": name | {"name", "facts"}, "goal", "intro", "extras"?}``. Its
     names are resolved against the world as a model's would be."""
     (Path(root) / FIXED_SETUP_FILE).write_text(json.dumps(reply))
-
-
-# The app's `worlds` router answers `preview_sphere`, `fill_drawer` and
-# `preview_branch` from this file (in the app root) instead of asking a
-# model; the `app` fixture points the backend's TALEMATE_TEST_FIXED_SPHERE
-# at it.
-FIXED_SPHERE_FILE = "e2e-fixed-sphere.json"
-
-
-def set_fixed_sphere(root: Path, replies: dict) -> None:
-    """Make the app's next sphere replies ``replies``: ``{"sphere": core
-    reply, "fill": [items], "branch": branch reply}``, any of them, each
-    read through the real parsing as a model's reply would be."""
-    (Path(root) / FIXED_SPHERE_FILE).write_text(json.dumps(replies))
 
 
 # Installed by the ``page`` fixture (context.add_init_script) before the app's

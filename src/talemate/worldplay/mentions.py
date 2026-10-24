@@ -19,7 +19,7 @@ prompt that expands a stub and for what the create box shows the owner:
   mentioning entry. An entry with an everyday name is headed "Owl-folk
   (species, usually called Owls)", as the probe's recommendation (d) names
   things in create prompts;
-- `suggested_prompt`: the name, the stub's own facts and sphere, and its
+- `suggested_prompt`: the name, the stub's own facts and filings, and its
   mentioning facts, as the create box's starting prompt for a stub.
 """
 
@@ -268,12 +268,12 @@ def _home_line(view: WorldView, thing_id: str) -> str:
 
 def suggested_prompt(view: WorldView, stub_id: str) -> str:
     """The create box's starting prompt for a stub: "<name>: ", the stub's
-    own facts (an item a sphere's core made has its text), what it's filed
+    own facts, what it's filed
     in (`_home_line`), then its mentioning facts, rendered and joined
     (the most-mentioning entries first), cut at `PROMPT_MAX` characters on
     a sentence's end. Just the name when there's none of these.
 
-    Its own facts and sphere lead (the spheres Task 10 session): led by
+    Its own facts and filings lead (the spheres Task 10 session): led by
     a character's mention alone, a rite's prompt was written around her."""
 
     name = view.name_of(stub_id) or ""

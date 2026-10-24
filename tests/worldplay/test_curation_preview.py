@@ -1,4 +1,4 @@
-"""Curation in previews (Task 5): the create and Fill replies' "elsewhere"
+"""Curation in previews (Task 5): the create reply's "elsewhere"
 list -- facts about other entries, offered as additions to them and
 written on accept -- and repeats, facts the world already holds, flagged
 with their match.
@@ -12,7 +12,7 @@ from typing import NamedTuple
 
 import pytest
 
-from talemate.world import entries, spheres
+from talemate.world import entries
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import KINDS, get_kind
@@ -24,12 +24,6 @@ from talemate.worldplay.create import (
     accept_preview,
     default_category,
     preview_thing,
-)
-from talemate.worldplay.spheres import (
-    SUMMARY_ORIGIN,
-    FillPreview,
-    accept_fill,
-    fill_drawer,
 )
 
 from conftest import MockClient, MockClientContext, client_responses
@@ -50,15 +44,8 @@ CREATE_DIVINE_RIGHT_2 = '{ "name": "The Divine Right of the Tsar", "aka": [{"nam
 CREATE_CUT_OFF = '{ "name": "The Divine Right of the Tsar",  "aka": [],  "facts": [    {      "category": "general",      "text": "The Tsar of Moscavia rules as the earthly steward of the Eternal Light, his authority derived not from the consent of the governed but from a direct divine blessing bestowed by the Church of the Eternal Light.",      "since": null      },    {      "category": "general",      "text": "This doctrine holds that the Eternal Light, as the supreme creator and sustainer of all things, chose the house of Moscavia to govern its people and that this choice is irrevocable so long as the ruling dynasty remains faithful to the Light.",      "since": null      },    {      "category": "general",      "text": "The foundation of the doctrine rests on the original covenant established when the first Tsar of Moscavia declared the Eternal Light the patron deity of the realm in the early centuries before the current reckoning.",      "since": null      },    {      "category": "general",      "text": "The Church of the Eternal Light serves as the intermediary between the Tsar and the divine, confirming each successor\'s right to rule through ritual anointing and the blessing of the Patriarch.",      "since": null      },    {      "category": "general",      "text": "The Blinding Transformation of 994, which converted every person of Moscavian bloodline into an Owl-folk, was interpreted by the Church as the Eternal Light\'s ultimate validation of the Tsar\'s holy mandate, raising the entire nation to a higher state of being.",      "since": 994      },    {      "category": "general",      "text": "Under the doctrine, the Tsar\'s authority extends over all matters temporal and spiritual within the borders of Moscavia, including the administration of the Zakonnik, the regulation of roosting rights, and the oversight of nighttime commerce.",      "since": null      },    {      "category": "general",      "text": "The Tsar is considered answerable only to the Eternal Light itself and not to any earthly council, parliament, or assembly, though the Synod of Lanterns may advise on matters of doctrine that touch upon governance.",      "since": null      },    {      "category": "general",      "text": "Pure-line Moscavians—the snowy Owl-folk whose bloodline is unbroken for four generations—are considered the most faithful vessels of the Tsar\'s authority, their white plumage a visible sign of their close alignment with the divine Light.",      "since": 994      },    {      "category": "general",      "text": "The doctrine has been instrumental in maintaining the unity of Moscavia through periods of external threat, as neighboring realms like Valdmark and Keshra have found it difficult to challenge a ruler who claims to act under direct divine mandate.",      "since": null      },    {      "category": "general",      "text": "Critics and foreign diplomats have sometimes dismissed the Divine Right of the Tsar as a convenient fiction, but within Moscavia it is treated as an article of unquestionable faith, woven into every aspect of daily life from the candlelit baptisms of owlets to the grand processions through the streets of Moskov.",      "since": null      }  ],  "names": [    {      "name": "Tsar",      "kind": "lore",      "aka": [],      "part_of": {        "entry": "The Divine Right of the Tsar",        "drawer": null      }    },    {      "name": "Tsardom of Moscavia",      "kind": "place",      "aka": [        {          "name": "Moscavia",          "tag": "common",          "everyday": true        }      ]    },    {      "name": "Church of the Eternal Light",      "kind": "sphere",      "aka": [        {          "name": "The Church",          "tag": "common",          "everyday": true        }      ],      "template": "religion"    },    {      "name": "Eternal Light",      "kind": "lore",      "aka": [],      "part_of": {        "entry": "Church of the Eternal Light",        "drawer": "Doctrines"      }    },    {      "name": "Patriarch of Moscavia",      "kind": "lore",      "aka": [],      "part_of": {        "entry": "Church of the Eternal Light",        "drawer": "Hierarchy"      }    },    {      "name": "Synod of Lanterns",      "kind": "lore",      "aka": [],      "part_of": {        "entry": "Church of the Eternal Light",        "drawer": "Hierarchy"      }    },    {      "name": "Moskov",      "kind": "place",      "aka": [],      "part_of": {        "entry": "Tsardom of Moscavia",        "drawer": null      }    },    {      "name": "Volga River",      "kind": "place",      "aka": []    },    {      "name": "Moskva River",      "kind": "place",      "aka": []    },    {      "name": "Zakonnik",      "kind": "lore",      "aka": [],      "part_of": {        "entry": "Tsardom of Moscavia",        "drawer": null      }    },    {      "name": "Pure-line Moscavian",      "kind": "lore",      "aka": [],      "part_of": {        "entry": "Moscavian Owl-folk",        "drawer": null      }    },    {      "name": "Snowy Owl-folk",      "kind": "species",      "aka": [],      "part_of": {        "entry": "Moscavian Owl-folk",        "drawer": null      }    },    {      "name": "Valdmark",      "kind": "place",      "aka": []    },    {      "name": "Keshra",      "kind": "place",      "aka": []    },    {      "name": "Free Cities of the Southern Reach",      "kind": "place",      "aka": []    },    {      "name": "Owl-folk",      "kind": "species",      "aka": [],      "part_of": {        "entry": "Moscavian Owl-folk",        "drawer": null      }    }  ],  "elsewhere": [    {      "entry": "Church of the Eternal Light",      "text": "The Church of the Eternal Light formalized the Divine Right of the Tsar as a core doctrine during the Great Synod of Moskov, establishing that the Tsar\'s authority is divinely ordained and that the Church itself serves as the conduit of that divine will.",      "held_by": null    },    {      "entry": "The Illumination",      "text": "The Illumination of 994 is regarded by the Church as the Eternal Light\'s greatest act, and it is taught that the Owl-folk transformation was not a punishment but a blessed ascension—a raising up of the Moscavian people to better perceive the Light.",      "held_by": "Church of the Eternal Light"    },    {      "entry": "The Patriarch of Moscavia",      "text": "The Patriarch is appointed by the Tsar from among the senior clergy of the Church and serves as the chief ecclesiastical authority in matters pertaining to the Divine Right, including the coronation rites and the periodic reaffirmation of the Tsar\'s mandate.",      "held_by": null    },    {      "entry": "The Synod of Lanterns",      "text": "The Synod of Lanterns, composed of twelve senior bishops, has the authority to interpret how the Divine Right applies to specific governance questions, though its rulings are advisory rather than binding on the Tsar himself.",      "held_by": null    },    {      "entry": "Moscavian Owl-folk",      "text": "The transformation of 994 did not diminish the Tsardom but rather reaffirmed the Divine Right, as the Church taught that the Owl-folk form was the Eternal Light\'s chosen vessel for its stewards and subjects alike.",      "held_by": "Church of the Eternal Light"    },    {      "entry": "Moskov",      "text": "Moskov, the capital of Moscavia, serves as the seat of the Tsar\'s palace and the Cathedral of the Eternal Light, both of which have been redesigned with wider doorways, taller ceilings, and roosting platforms to accommodate the Owl-folk who now inhabit them.",      "held_by": null    },    {      "entry": "The Dawn Vigil",      "text": "The Dawn Vigil, held at first light in the cathedral chapels of every parish, includes prayers specifically devoted to the Eternal Light\'s continued blessing upon the Tsar and the Tsardom.",      "held_by": null    },    {      "entry": "The Festival of'
 
 # Fill, the Church's Hierarchy, r1 run 0
-FILL_HIERARCHY = '{ "new_items": [    {"name": "The Diaconate", "text": "Deacons assist parish priests in liturgical duties and tend to the material needs of church properties.", "kind": "lore"},    {"name": "Provincial Archbishops", "text": "Archbishops oversee clusters of parishes within each of Moscavia\'s five administrative regions, bridging local and national Church governance.", "kind": "lore"},    {"name": "The Order of the Radiant Eye", "text": "An elite clerical order dedicated to scholarly study and the preservation of canonical texts, stationed at the Cathedral of the Eternal Light.", "kind": "lore"},    {"text": "Clergy candidates undergo a minimum of seven years of training, beginning with novitiate service and culminating in examination before the Synod of Lanterns."}  ],  "names": [    {"name": "The Diaconate", "kind": "order", "aka": []},    {"name": "Provincial Archbishops", "kind": "office", "aka": []},    {"name": "The Order of the Radiant Eye", "kind": "order", "aka": []}  ],  "elsewhere": [    {"entry": "The Patriarch of Moscavia", "text": "The Patriarch serves as the spiritual head of the Church and the senior member of the Synod of Lanterns by right of office.", "held_by": null},    {"entry": "The Synod of Lanterns", "text": "The Synod convenes at least twice annually in Moskov, with extraordinary sessions called by the Patriarch or Tsar as needed.", "held_by": null},    {"entry": "The Shrine of First Dawn", "text": "Pilgrimages to the Shrine of First Dawn are considered especially meritorious during the weeks leading up to the Festival of the Solstice Flame.", "held_by": "Church of the Eternal Light"}  ]}'
-
-# Fill, Runeweaving's Sites, r2 run 1
-FILL_SITES = '{ "new_items": [ { "name": "The Pale Root", "text": "A root system beneath Ashenmere that glows faintly and hums at a low frequency, believed to have been shaped by ancient cave-inscribers into a living rune lattice.", "kind": "place" }, { "name": "Keth\'s Workshop", "text": "A small stone building in Stonehold\'s outer ward where Master Weaver Keth of Ashenmere conducts private research into the third resonance law.", "kind": "place" }, { "name": "The Shattered Index", "text": "A fragmentary manuscript surviving from the Greyholm Archive, containing cross-referenced entries on rune combinations that no longer correspond to any known text.", "kind": "item" }, { "text": "The Conclave maintains a quarantine ward in Stonehold for materials that have absorbed corrupted runes, preventing their contamination of other inscriptions." } ], "names": [ { "name": "The Pale Root", "kind": "place", "aka": [] }, { "name": "Keth\'s Workshop", "kind": "place", "aka": [] }, { "name": "The Shattered Index", "kind": "item", "aka": [] }, { "name": "Master Weaver Keth", "kind": "character", "aka": [] } ], "elsewhere": [ { "entry": "The Ashenmere Caves", "text": "The Pale Root extends for at least two miles beneath the northern chambers of Ashenmere, and weavers believe it may connect to chambers that have never been mapped.", "held_by": null }, { "entry": "Stonehold", "text": "Keth\'s Workshop sits adjacent to the outer wall of Stonehold\'s inner citadel, accessible only through a rune-locked gate.", "held_by": null }, { "entry": "The Greyholm Archive", "text": "The Shattered Index is one of only three known documents that can be definitively traced to the Greyholm Archive\'s original collection.", "held_by": null }, { "entry": "Ashenmere rune dialect", "text": "Keth of Ashenmere is the foremost living scholar of the Ashenmere dialect and has published three treatises arguing that the third resonance law is not a contradiction of Aelberth but an expansion.", "held_by": null } ] }'
-
 
 # --- the world ---------------------------------------------------------------
-
-DOCTRINES, RITES, SITES, HIERARCHY = "d0c70001", "a17e0001", "5173e001", "41e7a001"
 
 # the Divine Right reply's sixth fact, word for word, already on the Tsardom
 THRONE = (
@@ -89,9 +76,7 @@ class Eternal(NamedTuple):
 
 
 def _filed(target):
-    """`filings` putting a thing in `target`: what the world's readers
-    (nearness) read; the `part_of` and `parent` beside them feed what
-    still reads those until Task 7."""
+    """`filings` putting a thing in `target`."""
 
     return [
         {
@@ -108,27 +93,20 @@ def _filed(target):
 @pytest.fixture
 def eternal(world):
     """The probe's world, small, present year 1000: the Church of the
-    Eternal Light (a religion sphere, everyday "The Church") with its
-    four drawers; the Tsardom of Moscavia, whose law names the Divine
-    Right; Moskov, its capital, named in the Church's summary; the Divine
-    Right of the Tsar, a lore stub in the Church's Doctrines; the
-    Patriarch and the Shrine of First Dawn, stubs in the Hierarchy and
-    Holy Sites; and the Iron Guild, linked to nothing."""
+    Eternal Light (religion lore, everyday "The Church"); the Tsardom of
+    Moscavia, whose law names the Divine Right; Moskov, its capital, filed
+    in it and named in the Church's first fact; the Divine Right of the
+    Tsar, the Patriarch and the Shrine of First Dawn, stubs filed in the
+    Church; and the Iron Guild, linked to nothing."""
 
     world.set_present(WorldDate.of(1000))
     with world.revision(Source.manual(note="eternal")) as rev:
         church = rev.create_thing(
-            "sphere",
+            "lore",
             {
                 "name": "Church of the Eternal Light",
-                "template": "religion",
+                "hint": "religion",
                 "aka": [{"name": "The Church", "tag": "common", "everyday": True}],
-                "drawers": [
-                    {"id": DOCTRINES, "type": "beliefs", "title": "Doctrines"},
-                    {"id": RITES, "type": "practices", "title": "Rites and Ceremonies"},
-                    {"id": SITES, "type": "places", "title": "Holy Sites"},
-                    {"id": HIERARCHY, "type": "structure", "title": "Hierarchy"},
-                ],
             },
         )
         tsardom = rev.create_thing(
@@ -144,7 +122,6 @@ def eternal(world):
             {
                 "name": "Moskov",
                 "kind": "city",
-                "parent": tsardom,
                 "filings": _filed(tsardom),
             },
         )
@@ -153,7 +130,6 @@ def eternal(world):
             {
                 "name": "The Divine Right of the Tsar",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": church, "drawer": DOCTRINES},
                 "filings": _filed(church),
             },
         )
@@ -162,7 +138,6 @@ def eternal(world):
             {
                 "name": "The Patriarch of Moscavia",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": church, "drawer": HIERARCHY},
                 "filings": _filed(church),
             },
         )
@@ -177,7 +152,6 @@ def eternal(world):
             {
                 "name": "The Shrine of First Dawn",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": church, "drawer": SITES},
                 "filings": _filed(church),
             },
         )
@@ -185,11 +159,10 @@ def eternal(world):
         rev.add_fact(guild, "general", "The Iron Guild forges the Tsardom's bells.")
         rev.add_fact(
             church,
-            "about",
+            "general",
             f"The Church of the Eternal Light is the state religion of "
             f"{ref(tsardom, 'the Tsardom of Moscavia')}, claiming divine right for "
             f"the Tsar and Tsarina; its cathedral stands in {ref(moskov, 'Moskov')}.",
-            origin=SUMMARY_ORIGIN,
         )
         rev.add_fact(
             tsardom,
@@ -275,7 +248,7 @@ async def test_elsewhere_facts_parsed_and_grouped(world, eternal):
     assert isinstance(tsardom, ElsewhereFact)
     assert tsardom.target_id == eternal.tsardom and tsardom.new is None
     assert tsardom.category == "general"
-    assert church.target_id == eternal.church and church.category == "about"
+    assert church.target_id == eternal.church and church.category == "general"
     # run 1's Church item names who holds it
     assert church_held.held_by == eternal.church
     assert church.held_by is None
@@ -320,7 +293,7 @@ async def test_accept_writes_elsewhere_to_targets_one_revision(world, eternal):
     written = {view.render(f.text): f for f in church.facts}
     for item in preview.elsewhere:
         if item.target_id == eternal.church:
-            assert written[item.text].category == "about"
+            assert written[item.text].category == "general"
             # not there before the accept's revision
             assert item.text not in _texts(world.view(rev=head), eternal.church)
     held = next(e for e in preview.elsewhere if e.held_by is not None)
@@ -392,16 +365,14 @@ async def test_ticked_repeat_is_written(world, eternal):
 
 
 def test_default_category_never_heritage():
-    assert default_category("sphere", False) == "about"
-    assert default_category("sphere", True) == "timeline"
     assert default_category("place", False) == "general"
     assert default_category("place", True) == "history"
     for kind in ("lore", "event", "item", "being", "species", "race", "mix"):
         assert default_category(kind, False) == "general"
         assert default_category(kind, True) == "general"
     # what heritage passes down to members a section at a time (a
-    # species' physical facts, a culture's dress), and a sphere's
-    # statements, which its members hold: never given by default
+    # species' physical facts), and a place's statements: never given by
+    # default
     passed: set[str] = {"statement"}
     for section in prose_gen.sections_for("character"):
         for categories in prose_gen.inherited_categories(section).values():
@@ -445,7 +416,7 @@ async def test_candidates_come_from_filing_nearness(world, eternal):
     block = block.split("Tags in use", 1)[0].split("The world's calendar", 1)[0]
     lines = [line[2:] for line in block.strip().splitlines()]
     assert lines[0].startswith(
-        "Church of the Eternal Light (sphere; usually called The Church): "
+        "Church of the Eternal Light (lore; usually called The Church): "
         "The Church of the Eternal Light is the state religion"
     )
     assert not [line for line in lines if "drawer" in line.split("):", 1)[0]]
@@ -510,131 +481,6 @@ async def test_undo_then_redo_elsewhere_accept(world, eternal):
     assert len(_named(view, "Tsar")) == 1
 
 
-# --- Fill --------------------------------------------------------------------
-
-
-async def _fill(world, sphere_id, drawer_id, reply):
-    client = MockClient("test")
-    async with MockClientContext():
-        _queue(reply)
-        filled = await fill_drawer(world, sphere_id, drawer_id, client)
-    return filled, client
-
-
-async def test_fill_elsewhere_and_repeats(world, eternal):
-    filled, client = await _fill(world, eternal.church, HIERARCHY, FILL_HIERARCHY)
-
-    assert isinstance(filled, FillPreview)
-    prompt = str(client.prompt_history[0]["prompt"])
-    assert "Entries near this one in the world:" in prompt
-    assert '"elsewhere": [{"entry"' in prompt
-    assert client.prompt_history[0]["kind"] == "creative_instruction_1024"
-
-    items = {item["name"] or item["text"][:20]: item for item in filled.items}
-    # the training statement is a copy of a line on Moskov: unticked
-    training = items[TRAINING[:20]]
-    assert training["repeat_of"]["owner_id"] == eternal.moskov
-    assert training["ticked"] is False
-    fresh = items["The Diaconate"]
-    assert fresh["repeat_of"] is None and fresh["ticked"] is True
-
-    targets = [(e.target_name, e.target_id) for e in filled.elsewhere]
-    assert targets[0] == ("The Patriarch of Moscavia", eternal.patriarch)
-    assert targets[1][0] == "The Synod of Lanterns" and targets[1][1] is None
-    assert targets[2] == ("The Shrine of First Dawn", eternal.shrine)
-    shrine = filled.elsewhere[2]
-    assert shrine.held_by == eternal.church
-    assert shrine.category == "general"
-
-    head = world.head_rev()
-    notes: list[str] = []
-    accept_fill(
-        world,
-        eternal.church,
-        HIERARCHY,
-        filled.items,
-        filled.elsewhere,
-        notes=notes,
-    )
-    assert world.head_rev() == head + 1
-    assert notes == []
-    view = world.view()
-    held = spheres.items(view, eternal.church)
-    texts = {item.text for item in held} | {item.name for item in held}
-    assert "The Diaconate" in texts
-    assert TRAINING not in texts
-    assert filled.elsewhere[0].text in _texts(view, eternal.patriarch)
-    synod = _named(view, "Synod of Lanterns") or _named(view, "The Synod of Lanterns")
-    assert len(synod) == 1 and synod[0].is_stub
-    assert filled.elsewhere[1].text in _texts(view, synod[0].id)
-    shrine_state = view.thing(eternal.shrine)
-    fact = next(f for f in shrine_state.facts if view.render(f.text) == shrine.text)
-    assert entries.held_by(view, fact, shrine_state) == eternal.church
-
-
-class Runes(NamedTuple):
-    runeweaving: str
-    caves: str
-    stonehold: str
-    greyholm: str
-
-
-@pytest.fixture
-def runes(world):
-    """Runeweaving, a field sphere, with the Ashenmere Caves, Stonehold and
-    the Greyholm Archive in its Sites drawer."""
-
-    with world.revision(Source.manual(note="runes")) as rev:
-        runeweaving = rev.create_thing(
-            "sphere",
-            {
-                "name": "Runeweaving",
-                "template": "field",
-                "drawers": [{"id": SITES, "type": "places", "title": "Sites"}],
-            },
-        )
-        rev.add_fact(
-            runeweaving,
-            "about",
-            "Runeweaving is the art of inscribing runes of power.",
-            origin=SUMMARY_ORIGIN,
-        )
-        part_of = {"sphere": runeweaving, "drawer": SITES}
-        caves = rev.create_thing(
-            "place", {"name": "The Ashenmere Caves", "part_of": part_of}
-        )
-        rev.add_fact(
-            caves,
-            "description",
-            "Cave system containing the oldest known runic inscriptions.",
-        )
-        stonehold = rev.create_thing(
-            "place",
-            {"name": "Stonehold", "stub": {"ignored": False}, "part_of": part_of},
-        )
-        greyholm = rev.create_thing(
-            "place",
-            {
-                "name": "The Greyholm Archive",
-                "stub": {"ignored": False},
-                "part_of": part_of,
-            },
-        )
-    return Runes(runeweaving, caves, stonehold, greyholm)
-
-
-async def test_fill_drops_elsewhere_about_its_new_items(world, runes):
-    """Ruling C1's Fill filter: an elsewhere item whose text opens with the
-    name of one of the reply's new items is about that item, so it's
-    dropped (three of this run's four); the fourth names no new item."""
-
-    filled, _client = await _fill(world, runes.runeweaving, SITES, FILL_SITES)
-    assert [e.text[:20] for e in filled.elsewhere] == ["Keth of Ashenmere is"]
-    dialect = filled.elsewhere[0]
-    assert dialect.target_id is None
-    assert dialect.new is not None and dialect.new.name == "Ashenmere rune dialect"
-
-
 # --- fix round 1 ---------------------------------------------------------------
 
 
@@ -660,7 +506,7 @@ async def test_unticked_fact_leaves_the_prose_stale(world, eternal):
             {
                 "name": "The Divine Right of the Tsarina",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": eternal.church, "drawer": DOCTRINES},
+                "filings": _filed(eternal.church),
             },
         )
     preview, _client = await _divine_preview(world, eternal._replace(divine=stub))
@@ -671,59 +517,7 @@ async def test_unticked_fact_leaves_the_prose_stale(world, eternal):
     assert world.prose().stale(thing_id, "description", None) is False
 
 
-async def test_unticked_core_item_leaves_the_summary_stale(world, eternal):
-    from talemate.worldplay.spheres import accept_sphere, preview_sphere
-
-    core = json.dumps(
-        {
-            "name": "The Iron Order",
-            "summary": "An order of smiths.",
-            "aka": [],
-            "timeline": [{"year": 990, "text": "The order is founded."}],
-            "drawers": [{"type": "practices", "title": "Rites"}],
-            "items": [
-                {"drawer": "Rites", "name": "", "text": "Smiths sing at the forge."},
-                {"drawer": "Rites", "name": "", "text": "Bells are rung at dawn."},
-            ],
-            "names": [],
-        }
-    )
-    preview = await preview_sphere(
-        world, "order", "an order of smiths", {}, None, reply=core
-    )
-    preview.items[0]["ticked"] = False
-    sphere_id = accept_sphere(world, preview)
-    view = world.view()
-    texts = [view.render(f.text) for f in view.thing(sphere_id).facts]
-    assert "Smiths sing at the forge." not in texts
-    assert world.prose().stale(sphere_id, "description", None) is True
-
-
-async def test_fill_flags_repeats_of_the_drawers_items(world, eternal):
-    """Goal 3: nothing is dropped silently. A Fill item repeating one the
-    sphere holds arrives unticked, pointing at the item it repeats."""
-
-    with world.revision(Source.manual(note="deacons")) as rev:
-        deacons = rev.add_fact(
-            eternal.church,
-            "statement",
-            "Deacons assist parish priests in liturgical duties and tend to the "
-            "material needs of church properties.",
-            origin={"drawer": HIERARCHY},
-        )
-    filled, _client = await _fill(world, eternal.church, HIERARCHY, FILL_HIERARCHY)
-    diaconate = next(i for i in filled.items if i["name"] == "The Diaconate")
-    assert diaconate["ticked"] is False
-    assert diaconate["repeat_of"]["fact_id"] == deacons
-    assert diaconate["repeat_of"]["owner_id"] == eternal.church
-    assert diaconate["repeat_of"]["score"] >= 0.75
-
-    accept_fill(world, eternal.church, HIERARCHY, filled.items)
-    names = {item.name for item in spheres.items(world.view(), eternal.church)}
-    assert "The Diaconate" not in names
-
-
-async def test_ignored_stub_gets_candidates_from_its_sphere(world, eternal):
+async def test_ignored_stub_gets_candidates_from_its_filing(world, eternal):
     with world.revision(Source.manual(note="ignore")) as rev:
         rev.set_field(eternal.divine, "stub", {"ignored": True}, None)
     _preview, client = await _divine_preview(world, eternal)
@@ -732,7 +526,7 @@ async def test_ignored_stub_gets_candidates_from_its_sphere(world, eternal):
     block = block.split("The world's calendar", 1)[0]
     names = [line[2:].split(" (", 1)[0] for line in block.strip().splitlines()]
     assert names[0] == "Church of the Eternal Light"
-    # what's near the sphere: its parts
+    # what's near what it's filed in: the other entries filed there
     assert "The Patriarch of Moscavia" in names
     assert "The Divine Right of the Tsar" not in names
 

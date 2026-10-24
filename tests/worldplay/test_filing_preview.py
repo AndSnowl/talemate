@@ -636,24 +636,6 @@ def test_candidates_reach_siblings_and_parts_within(world, moscavia):
     assert create.filing_candidates(view, [ivan], [], {ivan}, limit=2) == found[:2]
 
 
-def test_accept_files_the_old_fields_a_client_sends(world, moscavia):
-    """A preview sent back with a place's `parent` (or `part_of`, `ties`)
-    in its fields is filed there: the old fields are never written."""
-
-    preview = CreatePreview(
-        kind="place",
-        prompt="a weir",
-        name="The Weir",
-        fields={"parent": moscavia.khorol},
-        facts=[PreviewFact(category="description", text="A weir on the river.")],
-        prose={},
-    )
-    thing_id = accept_preview(world, preview)
-    view = world.view()
-    assert "parent" not in view.thing(thing_id).fields
-    assert _targets(view, thing_id) == [moscavia.khorol]
-
-
 def test_home_exceptions_follow_a_fold(world):
     """Task 4 review, M4: an "In" row's exceptions are checked against the
     entry the filing goes to, as the revision has it. Under a fold (the

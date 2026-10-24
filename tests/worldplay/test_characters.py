@@ -779,19 +779,15 @@ def test_exception_text_without_departs_suffix():
 
 
 def test_exception_text_strips_what_creation_appends():
-    """Round trip: the link sentence `create.exception_fact` appends to
-    an exception (for a thing item, and for a statement, whose item name
-    is a whole sentence) is exactly what `exception_text` takes off."""
+    """Round trip: the link sentence `create.filing_exception_fact`
+    appends to an exception (for an entry filed in the target, and for a
+    fact of it, whose item name is a whole sentence) is exactly what
+    `exception_text` takes off."""
 
     from talemate.worldplay.characters import exception_text
-    from talemate.worldplay.create import (
-        PreviewException,
-        PreviewTie,
-        exception_fact,
-    )
+    from talemate.worldplay.create import PreviewException, filing_exception_fact
 
     dawn, item = "a" * 32, "b" * 32
-    tie = PreviewTie(sphere_id=dawn, sphere="The White Dawn", role="priest")
     for exception in (
         PreviewException(
             text="Means to marry a human", item="The Doctrine", thing_id=item
@@ -802,7 +798,9 @@ def test_exception_text_strips_what_creation_appends():
             fact_id="c" * 32,
         ),
     ):
-        text, _origin = exception_fact(exception.text, tie, exception)
+        text, _origin = filing_exception_fact(
+            exception.text, dawn, "The White Dawn", exception
+        )
         assert "Departs from" in text
         assert exception_text(text) == exception.text.rstrip(".") + "."
 

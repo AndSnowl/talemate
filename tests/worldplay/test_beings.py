@@ -1,7 +1,7 @@
 """The `being` kind: gods, spirits and legendary creatures, with an
 existence setting. Only a `real` being acts in the world like a
-character: it can be cast in a scene and hold ties (curation spec, goal
-8)."""
+character: it can be cast in a scene and is a person on what it's filed
+in (curation spec, goal 8)."""
 
 import pytest
 
@@ -14,8 +14,6 @@ from talemate.world.kinds import (
 )
 from talemate.world.entries import acts_in_world, existence
 from talemate.world.filing import filings_of
-from talemate.world.spheres import people, ties_of
-from talemate.world.kinds import ENTRY_DRAWER_TYPES
 from talemate.world.store import Source
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.context import world_context_block
@@ -34,19 +32,16 @@ from talemate.worldplay.setup import SceneSetup, SetupRef, plan_scene, start_sce
 START = WorldDate.of(1020)
 
 
-def _tie(sphere, role):
-    return {"sphere": sphere, "role": role, "since": None, "until": None}
-
-
 @pytest.fixture
 def beings(world):
-    """The Church (a religion), Maren (a character), and three beings: the
-    Eternal Light (believed), the River Spirit (real, tied to the Church),
+    """The Church (religion lore), Maren (a character), and three beings:
+    the Eternal Light (believed), the River Spirit (real, filed in the
+    Church),
     and the Grey Wolf (no existence set: undecided)."""
 
     with world.revision(Source.manual(note="beings")) as rev:
         church = rev.create_thing(
-            "sphere", fields={"name": "The Church", "template": "religion"}
+            "lore", fields={"name": "The Church", "hint": "religion"}
         )
         maren = rev.create_thing("character", fields={"name": "Maren"})
         light = rev.create_thing(
@@ -63,7 +58,6 @@ def beings(world):
             fields={
                 "name": "The River Spirit",
                 "existence": "real",
-                "ties": [_tie(church, "protector")],
                 "filings": [{"target": church, "role": "protector"}],
             },
         )
@@ -101,18 +95,16 @@ def test_being_existence_values(world, beings):
     assert existence(view.thing(beings["light"])) == "believed"
     assert existence(view.thing(beings["spirit"])) == "real"
 
-    # filed as a doctrine, a custom or a rank, never as a place
-    assert ENTRY_DRAWER_TYPES["being"] == ("beliefs", "practices", "structure")
     assert "being" in CREATE_KINDS
     assert "being" in NAME_KINDS
     for guess in ("god", "spirit", "deity", "being", "God"):
-        assert name_guess(guess, None) == ("being", None)
+        assert name_guess(guess) == "being"
 
 
-def test_only_real_beings_act_and_hold_ties(world, beings):
-    """A real being acts in the world: its ties count (the Church's
-    people). Once it's believed, its tie is kept but hidden, as a tie to a
-    deleted sphere is, and comes back when it's real again."""
+def test_only_real_beings_act(world, beings):
+    """A real being acts in the world, as a character does; a believed or
+    undecided one, and an entry, don't. Its filing is kept whatever its
+    existence, and it acts again once it's real again."""
 
     view = world.view()
     assert acts_in_world(view.thing(beings["maren"]))
@@ -120,24 +112,17 @@ def test_only_real_beings_act_and_hold_ties(world, beings):
     assert not acts_in_world(view.thing(beings["light"]))
     assert not acts_in_world(view.thing(beings["wolf"]))
     assert not acts_in_world(view.thing(beings["church"]))
-    assert [t.character_id for t in people(view, beings["church"])] == [
-        beings["spirit"]
-    ]
-    assert [t.role for t in ties_of(view, beings["spirit"])] == ["protector"]
 
     with world.revision(Source.manual()) as rev:
         rev.set_field(beings["spirit"], "existence", "believed", None)
     view = world.view()
-    assert people(view, beings["church"]) == []
-    assert ties_of(view, beings["spirit"]) == []
+    assert not acts_in_world(view.thing(beings["spirit"]))
     # kept, not dropped
-    assert view.thing(beings["spirit"]).fields["ties"] == [
-        _tie(beings["church"], "protector")
-    ]
+    assert [f.role for f in filings_of(view, beings["spirit"])] == ["protector"]
 
     with world.revision(Source.manual()) as rev:
         rev.set_field(beings["spirit"], "existence", "real", None)
-    assert [t.role for t in ties_of(world.view(), beings["spirit"])] == ["protector"]
+    assert acts_in_world(world.view().thing(beings["spirit"]))
 
 
 async def test_believed_being_never_cast(world, beings):

@@ -6,9 +6,7 @@ it, found by code with no model call, offered unticked; accept moves the
 ticked ones (ruling R1: a copy with a new id, the original removed,
 overrides re-pointed) in its one revision, checking each row again.
 
-A sphere preview's move-in (curation Task 8, spec goal 2) stays until the
-spheres go (Task 7): the broader entry's facts, every one unticked, the
-picks marked. `move_fact` moves one fact by hand ("Move to...").
+`move_fact` moves one fact by hand ("Move to...").
 
 The Zakonnik and Architecture replies are raw Skyfall output from the
 curation probe (docs/superpowers/probes/raw/2026-10-22-curation.json,
@@ -22,27 +20,15 @@ from typing import NamedTuple
 import pytest
 
 from talemate.world.dates import WorldDate
-from talemate.world.curation import CurationSettings
 from talemate.world.refs import parse_refs, ref
 from talemate.world.store import Source
 from talemate.worldplay import prose_gen
-from talemate.worldplay.bodies import OuterBody, add_outer_body
 from talemate.worldplay.create import (
     MoveHereFact,
-    MoveInFact,
-    PreviewFact,
     accept_preview,
     preview_thing,
-    untick_moved_repeats,
 )
-from talemate.worldplay.create import move_in_sources
 from talemate.worldplay.repoint import move_fact, repoint_stub
-from talemate.worldplay.spheres import (
-    SUMMARY_ORIGIN,
-    SpherePreview,
-    accept_sphere,
-    preview_sphere,
-)
 
 from conftest import MockClient, MockClientContext, client_responses
 
@@ -50,7 +36,8 @@ from conftest import MockClient, MockClientContext, client_responses
 # again as its second fact (overlap 0.78)
 ZAKONNIK_REPLY = '{ "name": "Zakonnik", "aka": [], "facts": [ { "category": "general", "text": "The Zakonnik is the comprehensive legal code of the Tsardom of Moscavia, revised in the years following the Illumination of 994 to address the practical and legal needs of a society of Owl-folk.", "since": "994" }, { "category": "general", "text": "The revised Zakonnik governs matters of roosting rights, territorial disputes over nesting spaces, and the regulation of nighttime commerce—the economic norm in a kingdom of nocturnal beings.", "since": "996" }, { "category": "general", "text": "The code establishes clear legal frameworks for property disputes involving elevated nesting platforms, which Owl-folk instinctively seek out and fiercely defend as territory.", "since": "996" }, { "category": "general", "text": "Nighttime trade is regulated under the Zakonnik to ensure fair commerce, with markets mandated to remain open from dusk to dawn across all towns and cities within the Tsardom.", "since": "996" }, { "category": "general", "text": "The Zakonnik includes provisions for the construction and legal recognition of roosting platforms in public buildings, workplaces, and residential structures, with minimum size requirements based on the occupant\'s wingspan.", "since": "997" }, { "category": "general", "text": "Disputes over nesting rights are adjudicated by local magistrates appointed under the Zakonnik, with appeals available to regional courts presided over by Owl-folk judges.", "since": "996" }, { "category": "general", "text": "The code addresses the unique legal challenges of Owl-folk society, including noise regulations during daylight hours when the majority of the population sleeps, and liability for disturbances to roosting neighbors.", "since": "996" }, { "category": "general", "text": "The Zakonnik was drafted by a council of legal scholars convened by the Tsar in the years immediately following the Illumination, drawing upon pre-994 Moscavian law while adapting it for the transformed population.", "since": "995" }, { "category": "general", "text": "Public buildings constructed before the Illumination have been retrofitted under Zakonnik mandates to include wider doorways, taller ceilings, and structural reinforcements to support roosting platforms weighing several hundred pounds.", "since": "996" }, { "category": "general", "text": "The Zakonnik also regulates the trade of materials essential to Owl-folk life, including furs, timber for nesting, and candles—staples of the nocturnal economy.", "since": "997" }, { "category": "general", "text": "Copies of the revised Zakonnik are maintained in every parish church in Moscavia, where they are read aloud in the dim, candlelit interiors that suit Owl-folk eyes, ensuring the code is accessible to all citizens.", "since": "998" } ], "names": [ { "name": "Tsardom of Moscavia", "kind": "place", "aka": [] }, { "name": "Owl-folk", "kind": "species", "aka": [] }, { "name": "Moscavian Owl-folk", "kind": "species", "aka": [] }, { "name": "Snowy Owl-folk", "kind": "race", "aka": [] } ], "elsewhere": [ { "entry": "Tsardom of Moscavia", "text": "The Zakonnik serves as the legal backbone of the Tsardom of Moscavia, ensuring that the vast northern kingdom\'s governance adapts seamlessly to the transformed Owl-folk population.", "held_by": null } ], "part_of": { "entry": "Tsardom of Moscavia", "drawer": "Doctrines & Laws" }, "move_in": ["M11"] }'
 
-LAWS, LANDS, DOCTRINES = "1a5a0001", "1a4d0001", "d0c70001"
+# a summary fact's origin (`entries.is_summary_fact`)
+SUMMARY_ORIGIN = {"summary": True}
 
 # the probe's Tsardom lines (M2, M4, M11, M8), verbatim
 CAPITAL = (
@@ -97,50 +84,30 @@ class Tsardom(NamedTuple):
 
 @pytest.fixture
 def tsardom(world):
-    """Present 1000. The Tsardom of Moscavia, a nation sphere with its
-    summary and four of the probe's lines (the 994 transformation on its
-    timeline, held by the Church; the law code naming the Zakonnik, a lore
-    stub in its Doctrines & Laws); Moskov, a city in its Lands & Sites, whose
-    waiver overrides the law code; and the Church of the Eternal Light, a
-    religion whose Doctrines statement it holds (marked: no drawer holds
-    a fact implicitly any more)."""
+    """Present 1000. The Tsardom of Moscavia, a place with its summary and
+    four of the probe's lines (the 994 transformation on its timeline,
+    held by the Church; the law code naming the Zakonnik, a lore stub
+    filed in it); Moskov, a city filed in it, whose waiver overrides the
+    law code; and the Church of the Eternal Light, lore whose belief it
+    holds (marked: nothing holds a fact implicitly but its own belief)."""
 
     world.set_present(WorldDate.of(1000))
     with world.revision(Source.manual(note="tsardom")) as rev:
         church = rev.create_thing(
-            "sphere",
-            {
-                "name": "Church of the Eternal Light",
-                "template": "religion",
-                "drawers": [{"id": DOCTRINES, "type": "beliefs", "title": "Doctrines"}],
-            },
+            "lore", {"name": "Church of the Eternal Light", "hint": "religion"}
         )
-        tsardom = rev.create_thing(
-            "sphere",
-            {
-                "name": "Tsardom of Moscavia",
-                "template": "nation",
-                "drawers": [
-                    {"id": LAWS, "type": "beliefs", "title": "Doctrines & Laws"},
-                    {"id": LANDS, "type": "places", "title": "Lands & Sites"},
-                ],
-            },
-        )
+        tsardom = rev.create_thing("place", {"name": "Tsardom of Moscavia"})
         zakonnik = rev.create_thing(
             "lore",
             {
                 "name": "Zakonnik",
                 "stub": {"ignored": False},
-                "part_of": {"sphere": tsardom, "drawer": LAWS},
+                "filings": [{"target": tsardom}],
             },
         )
         moskov = rev.create_thing(
             "place",
-            {
-                "name": "Moskov",
-                "kind": "city",
-                "part_of": {"sphere": tsardom, "drawer": LANDS},
-            },
+            {"name": "Moskov", "tag": "city", "filings": [{"target": tsardom}]},
         )
         summary = rev.add_fact(tsardom, "about", SUMMARY, origin=SUMMARY_ORIGIN)
         capital = rev.add_fact(tsardom, "about", CAPITAL)
@@ -168,9 +135,9 @@ def tsardom(world):
         )
         light = rev.add_fact(
             church,
-            "statement",
+            "belief",
             f"The Light chose the Tsars of {ref(tsardom, 'Moscavia')} to rule.",
-            origin={"drawer": DOCTRINES, "held_by": church},
+            origin={"held_by": church},
         )
     return Tsardom(
         church=church,
@@ -400,7 +367,7 @@ async def test_moved_source_prose_goes_stale(world, tsardom):
     t = tsardom
     cache = world.prose()
     start, end = prose_gen.stretch_containing(world, t.tsardom, None)
-    for section in prose_gen.sections_for("sphere"):
+    for section in prose_gen.sections_for("place"):
         cache.put(t.tsardom, section, start, end, "Old prose.")
 
     def stale() -> bool:
@@ -409,7 +376,7 @@ async def test_moved_source_prose_goes_stale(world, tsardom):
             "description",
             None,
             prose_gen.staleness_also(world, t.tsardom, "description", None),
-            prose_gen.unread_categories("sphere", "description"),
+            prose_gen.unread_categories("place", "description"),
         )
 
     assert stale() is False
@@ -487,215 +454,6 @@ async def test_undo_redo_move_here(world, tsardom):
     assert waiver.overrides == [moved]
 
 
-# --- the sphere move-in, still used by a sphere preview until Task 7 -------
-
-
-def test_untick_moved_repeats(world, tsardom):
-    """The duplicate rule on its own: an own fact nearly the same as a
-    ticked move is unticked (at the world's untick threshold, with enough
-    words); one like an unticked move, or a short one, isn't; one like a
-    pick the owner hasn't ticked is flagged but stays ticked."""
-
-    t = tsardom
-    view = world.view()
-    facts = [
-        PreviewFact(category="general", text=CAPITAL.replace("Its", "The Tsardom's")),
-        PreviewFact(category="general", text=ARCHITECTURE),
-        PreviewFact(category="general", text="Moskov."),
-    ]
-    moves = [
-        MoveInFact(fact_id=t.capital, from_id=t.tsardom, text=CAPITAL, ticked=True),
-        MoveInFact(
-            fact_id=t.architecture,
-            from_id=t.tsardom,
-            text=ARCHITECTURE,
-            ticked=False,
-        ),
-        MoveInFact(fact_id=t.law_code, from_id=t.tsardom, text="Moskov.", ticked=True),
-    ]
-    untick_moved_repeats(view, facts, moves, CurationSettings())
-    assert [f.ticked for f in facts] == [False, True, True]
-    assert facts[0].repeat_of["fact_id"] == t.capital
-    assert facts[0].repeat_of["owner_name"] == "Tsardom of Moscavia"
-    assert facts[1].repeat_of is None
-
-    # a pick the owner hasn't ticked (ruling C24): the copy is flagged as
-    # repeating it, and stays ticked
-    facts = [PreviewFact(category="general", text=ARCHITECTURE)]
-    picked = MoveInFact(
-        fact_id=t.architecture,
-        from_id=t.tsardom,
-        text=ARCHITECTURE,
-        ticked=False,
-        picked=True,
-    )
-    untick_moved_repeats(view, facts, [picked], CurationSettings())
-    assert facts[0].ticked is True
-    assert facts[0].repeat_of["fact_id"] == t.architecture
-
-    # the world's threshold: every word of it is in the move, or it stays
-    facts = [PreviewFact(category="general", text=CAPITAL.replace("Its", "The"))]
-    untick_moved_repeats(
-        view, facts, moves[:1], CurationSettings(repeat_untick_threshold=1.0)
-    )
-    assert facts[0].ticked is False
-    facts = [PreviewFact(category="general", text=CAPITAL + " Owls nest there.")]
-    untick_moved_repeats(
-        view, facts, moves[:1], CurationSettings(repeat_untick_threshold=1.0)
-    )
-    assert facts[0].ticked is True
-
-
-# --- sphere expansions (ruling C32) ------------------------------------------------
-
-# the army's core, as the sphere-core prompt answers (no "move_in": the
-# core prompt has no move-in block)
-HOST_CORE = json.dumps(
-    {
-        "name": "The Tsar's Host",
-        "summary": "The Tsar's Host is the standing army of Owl-folk regiments.",
-        "aka": [],
-        "timeline": [
-            {"year": 995, "text": "The Host was raised from the first regiments."}
-        ],
-        "drawers": [{"type": "structure", "title": "Regiments"}],
-        "items": [
-            {
-                "drawer": "Regiments",
-                "name": "",
-                "text": "Every regiment flies under a white banner.",
-                "kind": "lore",
-            }
-        ],
-        "names": [],
-    }
-)
-
-
-def _army_stub(world, t):
-    with world.revision(Source.manual(note="army")) as rev:
-        return rev.create_thing(
-            "sphere",
-            {
-                "name": "The Tsar's Host",
-                "stub": {"ignored": False},
-                "part_of": {"sphere": t.tsardom, "drawer": LAWS},
-            },
-        )
-
-
-async def _host(world, stub_id):
-    return await preview_sphere(
-        world, "order", "", {}, None, stub_id=stub_id, reply=HOST_CORE
-    )
-
-
-async def test_sphere_stub_expansion_offers_its_spheres_facts(world, tsardom):
-    """Expanding a sphere stub filed in the Tsardom offers every Tsardom
-    fact but its summary, unticked and never picked (the core prompt asks
-    for no picks)."""
-
-    t = tsardom
-    host = _army_stub(world, t)
-    preview = await _host(world, host)
-    rows = [(m.fact_id, m.from_id, m.ticked, m.picked) for m in preview.move_in]
-    assert rows == [
-        (fact_id, t.tsardom, False, False)
-        for fact_id in (t.capital, t.transformation, t.law_code, t.architecture)
-    ]
-    assert move_in_sources(world.view(), preview) == {t.tsardom}
-
-
-async def test_sphere_accept_moves_ticked_facts(world, tsardom):
-    """A ticked row moves onto the sphere in the accept's one revision
-    (`copy_facts`, the same mover as a create's); the Tsardom goes in
-    `prose`, and the sphere's summary is cached reading stale. A forged
-    row naming an entry the preview offers nothing from moves nothing,
-    with a note."""
-
-    t = tsardom
-    host = _army_stub(world, t)
-    preview = await _host(world, host)
-    for row in preview.move_in:
-        row.ticked = row.fact_id == t.architecture
-    preview.move_in.append(
-        MoveInFact(fact_id=t.cathedral, from_id=t.moskov, text="x", ticked=True)
-    )
-    head = world.head_rev()
-    notes: list[str] = []
-    prose: list[str] = []
-    thing_id = accept_sphere(world, preview, notes=notes, prose=prose)
-    assert thing_id == host
-    assert world.head_rev() == head + 1
-    assert t.architecture not in _live_ids(world, t.tsardom)
-    moved = _fact(world, host, ARCHITECTURE)
-    assert moved.fact_id != t.architecture
-    assert t.cathedral in _live_ids(world, t.moskov)
-    assert any("isn't offered to move in" in note for note in notes)
-    assert prose == [t.tsardom]
-    assert world.prose().stale(
-        host,
-        "description",
-        None,
-        prose_gen.staleness_also(world, host, "description", None),
-        prose_gen.unread_categories("sphere", "description"),
-    )
-
-
-async def test_sphere_accept_skips_an_own_fact_repeating_a_move(world, tsardom):
-    t = tsardom
-    host = _army_stub(world, t)
-    preview = await _host(world, host)
-    for row in preview.move_in:
-        row.ticked = row.fact_id == t.architecture
-    preview.facts.append(PreviewFact(category="about", text=ARCHITECTURE))
-    notes: list[str] = []
-    accept_sphere(world, preview, notes=notes)
-    _fact(world, host, ARCHITECTURE)
-    assert any("moved in" in note for note in notes)
-
-
-async def test_new_sphere_in_an_outer_body_offers_its_facts(world, tsardom):
-    """A new sphere put into a body the world has (ruling C11's name form)
-    is offered that body's facts, unticked."""
-
-    t = tsardom
-    preview = await preview_sphere(
-        world, "order", "the Host", {}, None, reply=HOST_CORE
-    )
-    assert preview.move_in == []
-    add_outer_body(
-        world,
-        preview,
-        "The Tsar's Host",
-        OuterBody(name="Church of the Eternal Light", template="religion"),
-        as_sphere=True,
-    )
-    rows = [(m.fact_id, m.from_id, m.ticked) for m in preview.move_in]
-    assert rows == [(t.light, t.church, False)]
-
-
-def test_a_branchs_parent_is_no_broader_entry(world, tsardom):
-    """A sphere's `parent` is the sphere it branches from, never a source
-    of move-ins; a place sphere's parent is."""
-
-    t = tsardom
-    view = world.view()
-    branch = SpherePreview(
-        kind="sphere",
-        prompt="",
-        fields={"parent": t.tsardom},
-        name="The Reformed Tsardom",
-        facts=[],
-        prose={},
-        template="nation",
-        agent=True,
-    )
-    assert move_in_sources(view, branch) == set()
-    place = branch.model_copy(update={"kind": "place", "name": "Upper Moskov"})
-    assert move_in_sources(view, place) == {t.tsardom}
-
-
 # --- one fact, by hand -------------------------------------------------------------
 
 
@@ -725,26 +483,23 @@ def test_move_fact_single(world, tsardom):
     new_id = move_fact(world, t.cathedral, t.tsardom, notes=notes)
     moved = next(f for f in world.live_facts(t.tsardom) if f.fact_id == new_id)
     assert parse_refs(moved.text) == [t.church]
-    assert moved.category == "about"
-    assert notes == [
-        "a sphere has no description facts: it's under about on Tsardom of Moscavia"
-    ]
+    assert moved.category == "description"
+    assert notes == []
 
-    # a belief its owner holds stays held, away from its drawer
-    prose = []
-    new_id = move_fact(world, t.light, t.tsardom, prose=prose)
+    # a belief its owner holds stays held, away from its owner
+    notes, prose = [], []
+    new_id = move_fact(world, t.light, t.tsardom, notes=notes, prose=prose)
     moved = next(f for f in world.live_facts(t.tsardom) if f.fact_id == new_id)
-    assert moved.category == "statement"
-    # the Tsardom has no such drawer: the statement is in none there
+    assert moved.category == "general"
+    assert len(notes) == 1 and "general" in notes[0]
     assert moved.origin == {"held_by": t.church}
     assert moved.text == "The Light chose the Tsars of Moscavia to rule."
-    # a statement is no input to either sphere's prose
-    assert prose == []
+    assert prose == [t.church, t.tsardom]
 
     # an ended fact keeps its end
     with world.revision(Source.manual(note="ended")) as rev:
         ended = rev.add_fact(
-            t.church,
+            t.tsardom,
             "timeline",
             f"The cathedral of {ref(t.moskov, 'Moskov')} burned.",
             valid_from=WorldDate.of(950),
@@ -782,39 +537,19 @@ def test_move_fact_refusals_write_nothing(world, tsardom):
     assert world.head_rev() == head
 
 
-def test_move_fact_keeps_a_drawer_the_target_has(world, tsardom):
-    """A statement moved onto a sphere with a drawer of the same id stays
-    in it."""
-
-    t = tsardom
-    with world.revision(Source.manual(note="chapel")) as rev:
-        chapel = rev.create_thing(
-            "sphere",
-            {
-                "name": "The Chapel",
-                "template": "religion",
-                "drawers": [{"id": DOCTRINES, "type": "beliefs", "title": "Creed"}],
-            },
-        )
-    new_id = move_fact(world, t.light, chapel)
-    moved = next(f for f in world.live_facts(chapel) if f.fact_id == new_id)
-    assert moved.origin == {"drawer": DOCTRINES, "held_by": t.church}
-
-
 # --- repoint's fallback, shared with moving --------------------------------------
 
 
 @pytest.mark.parametrize(
-    ("kind", "category"), [("place", "history"), ("sphere", "timeline")]
+    ("kind", "category"), [("place", "history"), ("character", "background")]
 )
 def test_repoint_dated_fact_lands_in_default_category(world, kind, category):
     """A stub's dated fact in a category the target lacks goes where
-    `default_category` puts a dated fact: a place's history, a sphere's
-    timeline (not their plain general or about)."""
+    `default_category` puts a dated fact: a place's history (not its plain
+    general), a character's background."""
 
-    fields = {"name": "Target"} | ({"template": "nation"} if kind == "sphere" else {})
     with world.revision(Source.manual(note="stub")) as rev:
-        target = rev.create_thing(kind, fields)
+        target = rev.create_thing(kind, {"name": "Target"})
         stub = rev.create_thing(
             "event", {"name": "The Thaw", "stub": {"ignored": False}}
         )

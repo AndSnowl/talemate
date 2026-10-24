@@ -31,22 +31,13 @@ from e2e.worlds.test_world_tab import (
     _world_tab,
 )
 
-DOCTRINES = "d0c71e5a"
-MILITARY = "a11ed0ff"
-KEY_TEXTS = "4e7a1e57"
-RUNE_TIMELINE = "71e11e5a"
-DIVISIONS = "d1015105"
-
 CHURCH = {
-    "kind": "sphere",
+    "kind": "lore",
     "name": "Church of the Eternal Light",
-    "fields": {
-        "template": "religion",
-        "drawers": [{"id": DOCTRINES, "type": "beliefs", "title": "Doctrines"}],
-    },
+    "fields": {"hint": "religion"},
     "facts": [
         {
-            "category": "timeline",
+            "category": "general",
             "text": "The Church was founded by the first Tsar, who declared the"
             " Eternal Light patron of the realm.",
             "since": 412,
@@ -55,13 +46,10 @@ CHURCH = {
 }
 
 TSARDOM = {
-    "kind": "sphere",
+    "kind": "place",
     "name": "Tsardom of Moscavia",
-    "fields": {
-        "template": "nation",
-        "drawers": [{"id": MILITARY, "type": "structure", "title": "Military"}],
-    },
-    "facts": [{"category": "about", "text": "A cold realm of the north."}],
+    "fields": {"hint": "nation"},
+    "facts": [{"category": "description", "text": "A cold realm of the north."}],
 }
 
 MOSKOV = {
@@ -128,10 +116,7 @@ def test_preview_sections_and_accept_counts(app, page, fixed_preview):
     world = seed_fm_world(
         app.root, name, present_year=1026, things=[CHURCH, TSARDOM, MOSKOV]
     )
-    church, tsardom = (
-        world.things["Church of the Eternal Light"],
-        world.things["Tsardom of Moscavia"],
-    )
+    church = world.things["Church of the Eternal Light"]
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
@@ -210,25 +195,6 @@ def test_preview_sections_and_accept_counts(app, page, fixed_preview):
     founded.get_by_role("checkbox").check()
     expect(counts).to_have_text("writes 3 facts here, 3 elsewhere, 1 new stub")
 
-    # the inner part gets a body around it, named for it to start with
-    talon.get_by_role("button", name="Part of a body not yet made…").click()
-    outer = preview.get_by_test_id("outer-body-form")
-    expect(outer.get_by_label("Name of the body")).to_have_value("White Talon's parent")
-    outer.get_by_label("Name of the body").fill("The Tsar's Army")
-    _pick(page, outer.get_by_test_id("outer-template"), "Order")
-    _pick(page, outer.get_by_test_id("outer-sphere"), "Tsardom of Moscavia")
-    outer.get_by_role("button", name="Add the body").click()
-    sent = _wait_sent(page, "add_outer_body")
-    assert (sent["preview_type"], sent["row_name"]) == ("create", "White Talon")
-    assert sent["outer"]["name"] == "The Tsar's Army"
-    assert sent["outer"]["template"] == "order"
-    assert sent["outer"]["part_of"]["sphere"] == tsardom
-    stubs = preview.get_by_test_id("preview-stubs")
-    stubs.filter(has_text="The Tsar's Army").wait_for(
-        state="visible", timeout=TIMEOUT_MS
-    )
-    expect(counts).to_have_text("writes 3 facts here, 3 elsewhere, 2 new stubs")
-
     preview.get_by_role("button", name="Accept").click()
     _opened(page, "The Divine Right of the Tsar")
     accepted = _sent(page, "accept_preview")[-1]["preview"]
@@ -243,7 +209,7 @@ def test_preview_sections_and_accept_counts(app, page, fixed_preview):
     assert accepted["elsewhere"][0]["target_id"] == world.things["Moskov"]
 
     # written onto the Tsardom, and not onto Moskov
-    page.get_by_test_id("kind-sphere").click()
+    page.get_by_test_id("kind-place").click()
     tsardom_page = _open_thing(page, "Tsardom of Moscavia")
     tsardom_page.get_by_text(ZAKONNIK).first.wait_for(
         state="visible", timeout=TIMEOUT_MS
@@ -337,155 +303,6 @@ def test_same_thing_fill_existing(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     expect(thing.get_by_test_id("aka-editor")).to_contain_text("The Ashenmere Caves")
-    assert page.console_errors == []
-
-
-def test_move_in_on_part_of_entry(app, page, fixed_preview):
-    name = _world_name("Domes")
-    world = seed_fm_world(app.root, name, present_year=1026, things=[MOSKOV])
-    moskov = world.things["Moskov"]
-    page.evaluate(SEND_SPY_JS)
-    _open_world(page, name)
-    _world_tab(page)
-    box = _create(page, "place", "The domes and spires of Moskov.")
-    _pick(page, box.get_by_test_id("place-parent"), "Moskov")
-    fixed_preview(
-        {
-            "name": "The Architecture of Moskov",
-            "facts": [
-                {
-                    "category": "description",
-                    "text": "Builders widen every doorway for roosting.",
-                }
-            ],
-            "prose": {"description": "How Moskov is built."},
-            "move_in": ["M1", "M2"],
-        }
-    )
-    preview = _preview_of(page, box)
-
-    # the broader entry's facts, all unticked (ruling C24), its picks first
-    # and marked suggested, moved not copied
-    move_in = preview.get_by_test_id("move-in")
-    move_in.wait_for(state="visible", timeout=TIMEOUT_MS)
-    assert "from Moskov" in move_in.inner_text()
-    assert "Moved, not copied" in move_in.inner_text()
-    rows = move_in.get_by_test_id("move-in-row")
-    expect(rows).to_have_count(3)
-    assert [row.get_by_role("checkbox").is_checked() for row in rows.all()] == [
-        False,
-        False,
-        False,
-    ]
-    assert [row.get_by_test_id("move-in-suggested").count() for row in rows.all()] == [
-        1,
-        1,
-        0,
-    ]
-    assert "winter fair" in rows.nth(2).inner_text()
-    counts = preview.get_by_test_id("accept-counts")
-    expect(counts).to_have_text("writes 1 fact here")
-
-    # the owner moves the domes in and keeps the spires where they are
-    rows.filter(has_text="onion domes").get_by_role("checkbox").check()
-    expect(counts).to_have_text("writes 1 fact here, moves 1 in")
-    preview.get_by_role("button", name="Accept").click()
-    thing = _opened(page, "The Architecture of Moskov")
-    sent = _sent(page, "accept_preview")[-1]["preview"]["move_in"]
-    assert [(row["from_id"], row["ticked"]) for row in sent] == [
-        (moskov, True),
-        (moskov, False),
-        (moskov, False),
-    ]
-    _fact(thing, "onion domes").wait_for(state="visible", timeout=TIMEOUT_MS)
-
-    # gone from Moskov, the spires kept
-    page.get_by_test_id("kind-place").click()
-    moskov_page = _open_exactly(page, "Moskov")
-    _fact(moskov_page, "spires").wait_for(state="visible", timeout=TIMEOUT_MS)
-    expect(_fact(moskov_page, "onion domes")).to_have_count(0)
-    assert page.console_errors == []
-
-
-RAISED = "The Tsar raised a standing army of owl-folk regiments."
-
-
-def test_sphere_stub_expansion_moves_in(app, page, fixed_sphere):
-    """Ruling C32: a sphere stub filed in the Tsardom's Military, expanded,
-    is offered the Tsardom's facts to move in, unticked and never
-    suggested; the one the owner ticks moves onto the new sphere."""
-
-    name = _world_name("Host")
-    tsardom = {
-        **TSARDOM,
-        "facts": [
-            *TSARDOM["facts"],
-            {"category": "timeline", "text": RAISED, "since": 996},
-        ],
-    }
-    army = {
-        "kind": "sphere",
-        "name": "The Tsar's Army",
-        "stub": "live",
-        "fields": {"template": "order"},
-        "part_of": {"sphere": "Tsardom of Moscavia", "drawer": MILITARY},
-    }
-    world = seed_fm_world(app.root, name, present_year=1026, things=[tsardom, army])
-    page.evaluate(SEND_SPY_JS)
-    _open_world(page, name)
-    _world_tab(page)
-    page.get_by_test_id("kind-sphere").click()
-    page.get_by_test_id("stub-item").filter(has_text="The Tsar's Army").click()
-    stub_page = _opened(page, "The Tsar's Army")
-    stub_page.get_by_test_id("stub-panel").get_by_role("button", name="Expand").click()
-    box = page.get_by_test_id("create-box")
-    box.get_by_test_id("from-stub").wait_for(state="visible", timeout=TIMEOUT_MS)
-    fixed_sphere(
-        {
-            "sphere": {
-                "name": "The Tsar's Army",
-                "summary": "The Tsardom's standing host.",
-                "aka": [],
-                "timeline": [],
-                "drawers": [{"type": "structure", "title": "Regiments"}],
-                "items": [
-                    {"drawer": "Regiments", "text": "Every regiment flies white."}
-                ],
-                "names": [],
-            }
-        }
-    )
-    box.get_by_role("button", name="Create").click()
-    preview = page.get_by_test_id("sphere-preview")
-    preview.wait_for(state="visible", timeout=TIMEOUT_MS)
-
-    move_in = preview.get_by_test_id("move-in")
-    move_in.wait_for(state="visible", timeout=TIMEOUT_MS)
-    assert "from Tsardom of Moscavia" in move_in.inner_text()
-    rows = move_in.get_by_test_id("move-in-row")
-    expect(rows).to_have_count(2)
-    assert not any(row.get_by_role("checkbox").is_checked() for row in rows.all())
-    expect(move_in.get_by_test_id("move-in-suggested")).to_have_count(0)
-    rows.filter(has_text="standing army").get_by_role("checkbox").check()
-    expect(preview.get_by_test_id("accept-counts")).to_contain_text("moves 1 in")
-    preview.get_by_role("button", name="Accept").click()
-    sphere = _opened(page, "The Tsar's Army")
-    sent = _sent(page, "accept_sphere")[-1]["preview"]["move_in"]
-    tsardom_id = world.things["Tsardom of Moscavia"]
-    assert sorted((row["from_id"], row["ticked"]) for row in sent) == [
-        (tsardom_id, False),
-        (tsardom_id, True),
-    ]
-    sphere.get_by_text(RAISED).first.wait_for(state="visible", timeout=TIMEOUT_MS)
-
-    # gone from the Tsardom: its Timeline still gathers it, from the army
-    page.get_by_test_id("kind-sphere").click()
-    tsardom_page = _open_exactly(page, "Tsardom of Moscavia")
-    tsardom_page.get_by_text("A cold realm of the north.").first.wait_for(
-        state="visible", timeout=TIMEOUT_MS
-    )
-    line = tsardom_page.get_by_test_id("entry-timeline").get_by_test_id("timeline-row")
-    expect(line.filter(has_text=RAISED)).to_contain_text("from The Tsar's Army")
     assert page.console_errors == []
 
 
@@ -587,26 +404,14 @@ def test_merge_dialog_names_pairs(app, page):
 
 
 RUNEWEAVING = {
-    "kind": "sphere",
+    "kind": "lore",
     "name": "Runeweaving",
-    "fields": {
-        "template": "field",
-        "drawers": [
-            {"id": KEY_TEXTS, "type": "knowledge", "title": "Key Texts"},
-            {"id": RUNE_TIMELINE, "type": "events", "title": "Timeline"},
-        ],
-    },
+    "fields": {"hint": "field"},
     "facts": [
         {
-            "category": "timeline",
+            "category": "general",
             "text": "The First Codex of Aelberth is compiled.",
             "since": 217,
-        },
-        {
-            "category": "statement",
-            "text": "The Conclave keeps the oldest runes.",
-            "since": 642,
-            "origin": {"drawer": KEY_TEXTS},
         },
     ],
 }
@@ -614,7 +419,7 @@ RUNEWEAVING = {
 CODEX = {
     "kind": "lore",
     "name": "First Codex of Aelberth",
-    "part_of": {"sphere": "Runeweaving", "drawer": KEY_TEXTS},
+    "filings": [{"target": "Runeweaving"}],
     "facts": [
         {
             "category": "general",
@@ -634,27 +439,18 @@ def test_timeline_gathers_and_flags(app, page):
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
-    page.get_by_test_id("kind-sphere").click()
+    page.get_by_test_id("kind-lore").click()
     thing = _open_thing(page, "Runeweaving")
 
     # gathered from its part, in date order, each saying where it's from
     timeline = thing.get_by_test_id("entry-timeline")
     lines = timeline.get_by_test_id("timeline-row")
-    expect(lines).to_have_count(3)
+    expect(lines).to_have_count(2)
     text = timeline.inner_text()
-    assert text.index("217") < text.index("312") < text.index("642")
+    assert text.index("217") < text.index("312")
     codex_line = lines.filter(has_text="Stonehold")
     assert "from First Codex of Aelberth" in codex_line.inner_text()
     assert "here" in lines.filter(has_text="is compiled.").inner_text()
-
-    # a statement filed in a drawer is edited there: read only here,
-    # pointing at the drawer (ruling C21)
-    statement = lines.filter(has_text="oldest runes")
-    assert "in Key Texts" in statement.inner_text()
-    expect(statement.get_by_test_id("sphere-fact-edit")).to_have_count(0)
-    expect(
-        lines.filter(has_text="is compiled.").get_by_test_id("sphere-fact-edit")
-    ).to_have_count(1)
 
     # the two years for the Codex are flagged; the owner keeps 217
     flag = codex_line.get_by_test_id("line-disagrees")
@@ -741,22 +537,6 @@ def test_move_fact_and_held_by(app, page):
     assert page.console_errors == []
 
 
-ARMY_SPHERE = {
-    "kind": "sphere",
-    "name": "The Tsar's Army",
-    "fields": {
-        "template": "order",
-        "drawers": [{"id": DIVISIONS, "type": "structure", "title": "Divisions"}],
-    },
-}
-
-WHITE_TALON = {
-    "kind": "lore",
-    "name": "The White Talon",
-    "part_of": {"sphere": "The Tsar's Army", "drawer": DIVISIONS},
-    "facts": [{"category": "general", "text": "Trains in aerial combat."}],
-}
-
 LIGHT = {
     "kind": "being",
     "name": "The Eternal Light",
@@ -765,15 +545,6 @@ LIGHT = {
 
 MAREN = {"kind": "character", "name": "Maren", "born": 1000}
 
-DAWN_ORDER = {
-    "kind": "sphere",
-    "name": "Order of the Dawn",
-    "fields": {
-        "template": "order",
-        "drawers": [{"id": "9e0b1e5a", "type": "people", "title": "Members"}],
-    },
-}
-
 
 def _player_field(dialog):
     return dialog.locator(".v-select").filter(has_text="You play").locator(".v-field")
@@ -781,13 +552,7 @@ def _player_field(dialog):
 
 def test_being_existence(app, page):
     name = _world_name("Light")
-    world = seed_fm_world(
-        app.root,
-        name,
-        present_year=1026,
-        things=[ARMY_SPHERE, WHITE_TALON, LIGHT, MAREN, DAWN_ORDER],
-    )
-    talon = world.things["The White Talon"]
+    seed_fm_world(app.root, name, present_year=1026, things=[LIGHT, MAREN])
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
 
@@ -809,35 +574,11 @@ def test_being_existence(app, page):
     assert "v-btn--active" in existence.get_by_role(
         "button", name="undecided"
     ).get_attribute("class")
-    expect(thing.get_by_test_id("ties-section")).to_have_count(0)
 
-    # made real: it can hold ties, within a part of the sphere
+    # made real
     existence.get_by_role("button", name="real").click()
     sent = _wait_sent(page, "set_field")
     assert (sent["field"], sent["value"]) == ("existence", "real")
-    ties = thing.get_by_test_id("ties-section")
-    ties.wait_for(state="visible", timeout=TIMEOUT_MS)
-    ties.get_by_role("button", name="Add tie").click()
-    form = ties.get_by_test_id("tie-form")
-    _pick(page, form.get_by_test_id("tie-sphere"), "The Tsar's Army")
-    form.get_by_label("Role").fill("patron")
-    _pick(page, form.get_by_test_id("tie-within"), "The White Talon")
-    form.get_by_role("button", name="Save").click()
-    tie = ties.get_by_test_id("tie").filter(has_text="The Tsar's Army")
-    tie.wait_for(state="visible", timeout=TIMEOUT_MS)
-    expect(tie).to_contain_text("within The White Talon")
-    saved = _sent(page, "set_ties")[-1]["ties"]
-    assert saved[0]["within"] == talon
-
-    # a sphere's People "+ Add" offers it now, as a character
-    page.get_by_test_id("kind-sphere").click()
-    order = _open_thing(page, "Order of the Dawn")
-    order.get_by_test_id("drawer-add").click()
-    _pick(
-        page,
-        order.get_by_test_id("drawer-add-form").locator(".v-autocomplete"),
-        "The Eternal Light",
-    )
 
     # real: now a player can be it
     page.get_by_role("tab", name="Worlds", exact=True).click()

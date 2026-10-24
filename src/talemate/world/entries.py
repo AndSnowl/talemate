@@ -6,7 +6,7 @@
   (`with_held_by`), or clears it (`"held_by": None`); unmarked, a fact in
   the `belief` category is held by its owner (ruling F9: the religion,
   culture and order prompt hints add that category). Nothing else holds a
-  fact implicitly: the old beliefs-drawer rule went with drawers.
+  fact implicitly.
 - **Acting in the world.** A character, or a `being` whose `existence` is
   `real`, acts in the world (`acts_in_world`): it can be cast in a scene,
   and on a timeline it's a member of what it's filed in, never a part.

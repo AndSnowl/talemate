@@ -20,6 +20,8 @@ from talemate.worldplay.create import (
     CreatePreview,
     PreviewFact,
     accept_preview,
+    cached_summary,
+    homes_block,
     parse_create_reply,
     preview_inherited,
     preview_thing,
@@ -1542,9 +1544,9 @@ def test_parse_names_recovers_lists_from_a_cut_off_reply():
         {"name": "Porty", "tag": "proper", "everyday": False},
         {"name": "Old Port", "tag": "proper", "everyday": False},
     ]
+    # a title is no name (ruling F5)
     assert [(n.name, n.kind, n.aka) for n in names] == [
         ("Vesna", "place", [_aka("the River", tag="proper")]),
-        ("Tsar", "title", []),
     ]
     _name, _age, facts = parse_create_reply(reply, "place", Calendar(), 313)
     assert [f.text for f in facts] == ["The Vesna runs past it."]
@@ -1881,15 +1883,18 @@ def test_adjective_form_name_is_still_stubbed(at_1020):
     the Magi) isn't known: it's stubbed, and its stub, once made, is what
     the text links."""
 
-    from talemate.worldplay.create import _new_names, name_entries
+    from talemate.worldplay.create import _new_names, listed_names
     from talemate.worldplay.links import link_text
     from talemate.world.refs import parse_refs
 
     world = at_1020
     with world.revision(Source.manual(note="setup")) as rev:
-        magi = rev.create_thing("sphere", fields={"name": "Magi"})
+        magi = rev.create_thing("place", fields={"name": "Magi"})
     view = world.view()
-    listed = name_entries([{"name": "Magian", "kind": "character", "aka": []}])
+    listed = [
+        found.name
+        for found in listed_names([{"name": "Magian", "kind": "character", "aka": []}])
+    ]
 
     kept = _new_names(view, listed, ["Magian the seer came to the Magi."], [])
 
@@ -1910,7 +1915,6 @@ def test_adjective_form_name_is_still_stubbed(at_1020):
 # items, written on accept as `ties` facts the filing's `exceptions` hold.
 
 from talemate.world.filing import filings_of  # noqa: E402
-from talemate.world.spheres import exceptions as sphere_exceptions  # noqa: E402
 
 
 class DawnWorld(NamedTuple):
@@ -2207,9 +2211,8 @@ async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
     """On accept a ticked row is written as a filing, and each exception
     becomes a `ties` fact whose id the filing's `exceptions` hold: one
     departing from a filed entry ends with a reference to it, one from a
-    fact references the entry and records the fact in its origin;
-    `spheres.exceptions` still finds both (ruling P3). No `ties` field is
-    written."""
+    fact references the entry and records the fact in its origin (ruling
+    P3). No `ties` field is written."""
 
     d = dawn_world
     preview, _prompt = await _preview_priestess(
@@ -2252,8 +2255,6 @@ async def test_accepted_exceptions_round_trip(at_1020, dawn_world):
     assert by_fact.origin == {"tie": d.dawn, "rejects_fact": d.purity}
     assert by_thing.origin == {"tie": d.dawn}
     assert d.dawn in by_fact.refs
-    found = sphere_exceptions(view, thing_id, d.dawn)
-    assert {f.fact_id for f in found} == set(ties_facts)
     # no fact of the facts list went to the ties category
     assert all(f.category != "ties" for f in preview.facts)
 
@@ -2471,3 +2472,207 @@ async def test_accept_skips_blank_exceptions(at_1020, dawn_world):
     assert [f for f in state.facts if f.category == "ties"] == []
     [filing] = filings_of(view, thing_id)
     assert filing.exceptions == []
+
+
+# --- what the spheres' create tests held for live behaviour (Filing, Task 7)
+
+
+@pytest.fixture
+def church_world(world):
+    """Present 1020: the Tsardom of Moscavia (a place), Kremova filed in
+    it, and the White Dawn, a lore stub the Tsardom's law names."""
+
+    world.set_present(WorldDate.of(1020))
+    with world.revision(Source.manual(note="moscavia")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            {
+                "name": "Tsardom of Moscavia",
+                "aka": [{"name": "Moscavia", "tag": "common", "everyday": True}],
+            },
+        )
+        rev.create_thing("place", {"name": "Kremova", "filings": [{"target": tsardom}]})
+        dawn = rev.create_thing(
+            "lore", {"name": "The White Dawn", "stub": {"ignored": False}}
+        )
+        rev.add_fact(
+            tsardom,
+            "law",
+            f"{ref(dawn, 'The White Dawn')} is the Tsardom's state church.",
+        )
+    return dawn
+
+
+async def test_place_create_prompt_hides_unprompted_categories(church_world, world):
+    """A place may hold timeline, summary and statement facts, but its
+    create prompt never offers them (`kinds.UNPROMPTED_CATEGORIES`)."""
+
+    reply = json.dumps(
+        {
+            "name": "Vesnagrad",
+            "facts": [
+                {"category": "description", "text": "A river town."},
+                {"category": "timeline", "text": "Founded long ago."},
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A river town.")
+        preview = await preview_thing(world, "place", "a river town", {}, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "description, history, law, general." in prompt
+    assert "timeline" not in prompt.split("FORMAT")[-1]
+    assert [f.category for f in preview.facts] == ["description", "general"]
+
+
+async def test_create_prompt_names_faiths_and_orders_as_lore(church_world, world):
+    """A thing's create prompt names a faith, order or culture as lore (the
+    filing probe's names rule), so a reply that still gives one the old
+    sphere kind makes a lore stub."""
+
+    reply = json.dumps(
+        {
+            "name": "Vesnagrad",
+            "facts": [
+                {
+                    "category": "description",
+                    "text": "A river town where the Church of the Vesna keeps "
+                    "its oldest shrine.",
+                }
+            ],
+            "names": [
+                {
+                    "name": "Church of the Vesna",
+                    "kind": "sphere",
+                    "template": "religion",
+                    "aka": [],
+                }
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "A river town.")
+        preview = await preview_thing(world, "place", "a river town", {}, client)
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert (
+        '"kind" one of character, place, species, race, event, item, lore (a '
+        "country, realm or city is a place; a faith, order, council, guild, "
+        "culture, field of knowledge or magic, law, script or language is "
+        "lore)" in prompt
+    )
+    assert '"sphere"' not in prompt
+    assert [(n.name, n.kind) for n in preview.new_names] == [
+        ("Church of the Vesna", "lore")
+    ]
+
+
+async def test_culture_and_order_guesses_become_lore(church_world, world):
+    """A culture, an order or a sphere the reply names is lore: there is no
+    sphere or culture kind."""
+
+    reply = json.dumps(
+        {
+            "name": "Vesnagrad",
+            "facts": [
+                {
+                    "category": "description",
+                    "text": "Vesnagrad keeps the Moscavian Way and the Rite "
+                    "of Amber, and hosts the Guild of Rafters.",
+                }
+            ],
+            "names": [
+                {"name": "Moscavian Way", "kind": "culture", "aka": []},
+                {"name": "Guild of Rafters", "kind": "order"},
+                {"name": "Rite of Amber", "kind": "sphere", "template": "rite"},
+            ],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Vesnagrad on the river.")
+        preview = await preview_thing(world, "place", "a river town", {}, client)
+
+    assert {n.name: n.kind for n in preview.new_names} == {
+        "Moscavian Way": "lore",
+        "Guild of Rafters": "lore",
+        "Rite of Amber": "lore",
+    }
+
+    accept_preview(world, preview)
+    view = world.view()
+    (way,) = [t for t in view.things() if view.name_of(t.id) == "Moscavian Way"]
+    assert way.kind == "lore"
+    assert way.is_stub
+
+
+async def test_homes_block_carries_a_cached_summary(church_world, world):
+    """An entry with no fact but a cached summary (its description prose):
+    the character prompt's block of entries it may belong in carries that
+    summary line."""
+
+    dawn = church_world
+    summary = "The White Dawn is the Tsardom's state church."
+    world.prose().put(dawn, "description", None, None, summary, rev=world.head_rev())
+    view = world.view()
+
+    (block,), _labels = homes_block(
+        view, [dawn], lambda thing_id: cached_summary(world, thing_id)
+    )
+    assert block[1] == summary
+
+    client = MockClient("test")
+    async with MockClientContext():
+        reply = {
+            "name": "Vasha",
+            "facts": [{"category": "background", "text": "Carries letters."}],
+            "names": [],
+        }
+        _queue(json.dumps(reply), "Vasha.", "Dry.")
+        await preview_thing(
+            world,
+            "character",
+            "Vasha, a courier of the White Dawn",
+            {},
+            client,
+            picks={"White Dawn": dawn},
+        )
+        # the queue is shared by the process's tests: nothing left over
+        client_responses.get().clear()
+    assert summary in str(client.prompt_history[0]["prompt"])
+
+
+async def test_a_hint_sets_the_agent_default(church_world, world):
+    """Accept writes the agent default its prompt hint gives (`kinds.
+    HINT_AGENT`): a religion acts, a field doesn't; the owner's own
+    `agent` wins, and no hint writes none."""
+
+    def preview(name, hint, fields=None):
+        return CreatePreview(
+            kind="lore",
+            prompt=name,
+            name=name,
+            facts=[PreviewFact(category="general", text=f"{name} is old.")],
+            prose={},
+            hint=hint,
+            fields=fields or {},
+        )
+
+    church = accept_preview(world, preview("Church of Amber", "religion"))
+    runes = accept_preview(world, preview("Runeweaving", "field"))
+    cult = accept_preview(world, preview("Quiet Cult", "religion", {"agent": False}))
+    plain = accept_preview(world, preview("Old Saying", None))
+    view = world.view()
+    assert view.thing(church).fields["agent"] is True
+    assert view.thing(runes).fields["agent"] is False
+    assert view.thing(cult).fields["agent"] is False
+    assert "agent" not in view.thing(plain).fields
+
+    # filling a stub with a hint sets it too
+    filled = accept_preview(
+        world,
+        preview("The White Dawn", "order").model_copy(update={"stub_id": church_world}),
+    )
+    assert filled == church_world
+    assert world.view().thing(church_world).fields["agent"] is True

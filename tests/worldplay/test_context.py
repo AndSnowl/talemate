@@ -68,7 +68,8 @@ def test_world_context_block_lists_heritage_bodies(world, heritage_world):
     instincts, resolved in code as of the scene's date -- a world
     character's with its own overrides applied, an invented one's from
     the heritage it was given. A character with no heritage isn't listed,
-    and neither is a culture's lore."""
+    and a culture is no heritage: the one Vasha is filed in is touched,
+    in the block on its own, never in her heritage line."""
 
     h = heritage_world
     with world.revision(Source.manual(note="later")) as rev:
@@ -115,7 +116,7 @@ def test_world_context_block_lists_heritage_bodies(world, heritage_world):
     assert "Wings in place of arms." in vasha
     assert "Yellow eyes." not in vasha
     assert "Hunts at dusk." in vasha
-    assert "Name their boats." not in block
+    assert "Name their boats." not in vasha
     assert "winter ruff" not in block
 
     assert rill.startswith("- Rill (Snowy, a race of Owl-folk)")
@@ -818,7 +819,7 @@ async def test_no_extra_model_calls_on_turn(world, spheres_world):
     [instruction] = [i for i in emission.dynamic_instructions if i.title == "World"]
     assert _headings(instruction.content) == [
         "Tsardom of Moscavia (place, usually called Moscavia)",
-        "The White Dawn (sphere)",
+        "The White Dawn (lore)",
     ]
 
     world_state = instance.get_agent("world_state")

@@ -890,8 +890,8 @@ async def test_continue_setup_drops_carried_thing_that_was_deleted(world):
 
 def _stubs(world, *, ignored: bool = False):
     """Stubs a scene can use: Aldric (a character), Frosthollow (a place),
-    the Order of the Heron (lore) and the Saltfolk (a culture, which
-    can't be expanded yet). Returns their ids by short name."""
+    the Order of the Heron (lore) and the Saltfolk (a race, which has no
+    species to fill it from). Returns their ids by short name."""
 
     marker = {"ignored": ignored}
     with world.revision(Source.manual(note="stubs")) as rev:
@@ -905,7 +905,7 @@ def _stubs(world, *, ignored: bool = False):
             "lore", fields={"name": "Order of the Heron", "stub": dict(marker)}
         )
         salt = rev.create_thing(
-            "culture", fields={"name": "Saltfolk", "stub": dict(marker)}
+            "race", fields={"name": "Saltfolk", "stub": dict(marker)}
         )
     return {"aldric": aldric, "frost": frost, "order": order, "salt": salt}
 
@@ -959,7 +959,7 @@ async def _plan_with_stubs(world, ids, stubs, client):
 async def test_plan_scene_previews_named_stub(world):
     """Each stub the setup uses -- a character (picked and named by the
     model), the place and picked lore -- gets one preview, made from its
-    own kind and name; a culture stub is left alone; nothing is written."""
+    own kind and name; a race stub is left alone; nothing is written."""
 
     ids = _river_world(world)
     stubs = _stubs(world)
@@ -987,7 +987,7 @@ async def test_plan_scene_previews_named_stub(world):
         "A snowbound village on the weir."
     )
     assert previews[stubs["order"]].kind == "lore"
-    # the culture stub can't be expanded yet: no preview, and no failure
+    # the race stub has no species to fill it from: no preview, no failure
     assert stubs["salt"] not in previews
 
     # planning wrote nothing: the stubs are still stubs
@@ -1016,7 +1016,7 @@ async def test_start_scene_fills_stub_and_keeps_id(world):
     assert view.thing(stubs["frost"]).facts[0].text == (
         "A snowbound village on the weir."
     )
-    # the culture stub stays as it was
+    # the race stub stays as it was
     assert view.thing(stubs["salt"]).is_stub
 
     record = world.scenes().get(scene_id)
@@ -1352,10 +1352,9 @@ async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
     ]
     assert [f.target for f in filings_of(view, frost)] == [weir]
     assert filings_of(view, inn) == []
-    assert view.thing(weir).fields.get("part_of") is None
 
 
-# --- spheres ------------------------------------------------------------------
+# --- filed entries -------------------------------------------------------------
 
 VIGIL_REPLY = {
     "player": "Vasha",
@@ -1368,19 +1367,14 @@ VIGIL_REPLY = {
 async def test_plan_scene_pulls_in_a_named_place(world, spheres_world):
     """A place the prompt names (the Tsardom, the Marches, Kremova; the
     scene at Dawn Peak) is pulled in, so the scene touches it (filing
-    spec: what the prompt names is touched; ruling P10 had only place
-    spheres), but never the scene's own place, and a named place stub
+    spec: what the prompt names is touched), but never the scene's own place, and a named place stub
     isn't previewed (places only ever are as the scene's place)."""
 
     s = spheres_world
     with world.revision(Source.manual(note="stub")) as rev:
         marches = rev.create_thing(
             "place",
-            fields={
-                "name": "The Marches",
-                "template": "nation",
-                "stub": {"ignored": False},
-            },
+            fields={"name": "The Marches", "stub": {"ignored": False}},
         )
     setup = await plan_scene(
         world,

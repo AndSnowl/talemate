@@ -8,7 +8,7 @@ revision, so one undo restores it all:
   facts becomes those words, plain: a thing never links to itself); with
   `use_name` (the "hard re-point"), one of the target's own names in
   place of the words;
-- every field that points at it (`thing`, `things`, `shares`), at each
+- every field that points at it (`thing`, `things`), at each
   story date the field holds it, and every filing into it or `within` it
   (`filings`): filed in the target instead, a thing filed in both keeping
   the one it had in the target (the stub's exceptions joining it), a
@@ -25,21 +25,17 @@ revision, so one undo restores it all:
   filing), or can't be (it would sit inside itself: a note says so); a
   `within` that doesn't hold under the target is dropped, with a note;
 - the stub's other own fields the target has none of (never one naming
-  the target or a thing inside it, nor a sphere's template, agent or
-  drawers onto a target that isn't a sphere);
+  the target or a thing inside it);
 - its names: the stub's name, its other names and each distinct shown
   text become the target's common other names, unless the target or
   another thing already has that name. A hard re-point adds none: the
   words are gone from the world.
 
-The old structure (`part_of`, `ties`, a place's or branch's `parent`) is
-never written: filings stand for it (Filing plan, ruling F11).
-
 Then the stub is removed. Refused before anything is written (a
 `ValueError` naming every use that blocks it): a use by a scene, a field
 whose kind of thing the target isn't (a race's species can't be lore), a
-filing that would put a thing inside itself, a mix's parents or shares
-that would name the target twice, and a use by the target itself. Prose
+filing that would put a thing inside itself, a mix's parents that
+would name the target twice, and a use by the target itself. Prose
 is refreshed only where its input changed (`RepointResult.prose`).
 
 `plan_repoint` reads and decides it all without writing, and its
@@ -68,13 +64,13 @@ earlier one shows. It differs from a re-point in what the owner picks:
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from collections.abc import Set as AbstractSet
 
 import structlog
 from pydantic import BaseModel
 
-from talemate.world import entries, spheres
+from talemate.world import entries
 from talemate.world.filing import Filing, check_filings, filings_of, sits_in
 from talemate.world.kinds import (
     HERITAGE_KINDS,
@@ -93,7 +89,6 @@ from talemate.worldplay.references import thing_references
 log = structlog.get_logger("talemate.worldplay.repoint")
 
 __all__ = [
-    "OLD_STRUCTURE",
     "RepointPlan",
     "RepointResult",
     "copy_facts",
@@ -109,19 +104,10 @@ FIELD_TARGET_KINDS: dict[str, tuple[str, ...]] = {
     "heritage": HERITAGE_KINDS,
     "parents": HERITAGE_KINDS,
     "species": ("species",),
-    "culture": ("sphere", "culture"),
-    "cultures": ("sphere", "culture"),
 }
 
-# the old structure, which filings stand for: never read, carried or
-# written here (ruling F11)
-OLD_STRUCTURE = ("part_of", "ties", "parent", "drops")
-
 # the stub's own fields that aren't carried over as they are
-_OWN_HANDLED = ("name", "aka", "stub", "filings", *OLD_STRUCTURE)
-
-# a sphere's own fields, never carried onto a target that isn't one
-_SPHERE_FIELDS = ("template", "agent", "drawers")
+_OWN_HANDLED = ("name", "aka", "stub", "filings")
 
 
 class RepointResult(BaseModel):
@@ -213,8 +199,8 @@ def _field_uses(
     skip_target: bool = False,
 ) -> list[_FieldUse]:
     """Every field value of another thing naming the stub, rewritten to
-    name the target, at its date: a `thing`, `things` or `shares` field,
-    and `filings` (`_repointed_filings`). What can't be is added to
+    name the target, at its date: a `thing` or `things` field, and
+    `filings` (`_repointed_filings`). What can't be is added to
     `blocked`. With `skip_target`, the target's own values are left to the
     caller (a merge redirects them)."""
 
@@ -228,8 +214,6 @@ def _field_uses(
             if entry.change != "field" or entry.field is None:
                 continue
             field, value = entry.field, entry.value
-            if field in OLD_STRUCTURE:
-                continue
             label = f"{name}'s {field.replace('_', ' ')}"
             new: object = None
             if field == "filings":
@@ -263,28 +247,6 @@ def _field_uses(
                         swapped = target.id if thing_id == stub.id else thing_id
                         if swapped not in new:
                             new.append(swapped)
-                elif (
-                    kind == "shares"
-                    and isinstance(value, list)
-                    and any(
-                        isinstance(share, dict) and share.get("thing_id") == stub.id
-                        for share in value
-                    )
-                ):
-                    if any(
-                        isinstance(share, dict) and share.get("thing_id") == target.id
-                        for share in value
-                    ):
-                        blocked.append(
-                            f"{label} would name {view.name_of(target.id)} twice"
-                        )
-                        continue
-                    new = [
-                        {**share, "thing_id": target.id}
-                        if isinstance(share, dict) and share.get("thing_id") == stub.id
-                        else share
-                        for share in value
-                    ]
                 else:
                     continue
                 allowed = FIELD_TARGET_KINDS.get(field, (stub.kind,))
@@ -490,8 +452,8 @@ def _relinked(
 
 def _moved_category(kind: str, category: str, dated: bool) -> str:
     """`category`, if a `kind` thing has it; else the kind's fallback
-    (`kinds.moved_category`, as `default_category` picks for a sphere, a
-    place or a character), a catch-all one, or its kind's first."""
+    (`kinds.moved_category`, as `default_category` picks for a place or a
+    character), a catch-all one, or its kind's first."""
 
     return moved_category(kind, category, dated)
 
@@ -504,7 +466,6 @@ def copy_facts(
     *,
     plain_self_links: bool,
     standing_for: Sequence[str] = (),
-    drawer_map: Mapping[str, str] | None = None,
     keep: bool = False,
 ) -> dict[str, str]:
     """Move the facts `fact_ids` (of any owners) onto `target_id`, in `rev`,
@@ -517,15 +478,12 @@ def copy_facts(
     lacks becomes `default_category`'s (`_moved_category`). Its holder
     stays its holder, and one its old owner held implicitly (a `belief`
     fact, `entries.held_by`) is written into its origin, so it stays its
-    old owner's belief on the target; a statement's drawer the target
-    has none of (by id) is dropped from its origin. Links to the target, and to
+    old owner's belief on the target. Links to the target, and to
     `standing_for` (a stub being re-pointed onto it, whose holdings become
     the target's too), point at the target: as plain words, with
     `plain_self_links`. An override among the moved facts points at its
     copy, the copies' own and every other live fact's, on any date; so
-    does an exception's `rejects_fact` (its origin). With `drawer_map`
-    (a sphere merged into a sphere: the old drawer id -> the target's), a
-    statement's drawer is mapped first.
+    does an exception's `rejects_fact` (its origin).
 
     With `keep` ("Copy to..."), the originals stay: nothing that names
     them (an override, an exception's `rejects_fact`) is re-pointed, and
@@ -557,15 +515,6 @@ def copy_facts(
                 origin = entries.with_held_by(origin, holder)
         if origin is not None and origin.get("held_by") in standing_for:
             origin["held_by"] = target_id
-        if origin is not None and drawer_map and origin.get("drawer") in drawer_map:
-            origin["drawer"] = drawer_map[str(origin["drawer"])]
-        # a statement's drawer, when the target has none of that id
-        if (
-            origin is not None
-            and "drawer" in origin
-            and origin["drawer"] not in {d.id for d in spheres.drawers(view, target_id)}
-        ):
-            del origin["drawer"]
         if keep and origin is not None and "summary" in origin:
             # a copy is never the target's summary
             del origin["summary"]
@@ -631,13 +580,11 @@ def _names_target(job: _Job, value: object) -> bool:
 def _carried_fields(job: _Job) -> dict[str, object]:
     """The stub's other own fields the target takes: those its kind has
     and it has no value for, never one naming the target (or a thing
-    inside it), nor a sphere's template, agent or drawers onto a target
-    that isn't a sphere, nor the old structure. The rest are noted, unless
+    inside it). The rest are noted, unless
     the target holds the same value."""
 
     target = job.target
     types = {spec.name: spec.type for spec in get_kind(target.kind).fields}
-    is_sphere = spheres.is_sphere(target)
     carried: dict[str, object] = {}
     for field, value in job.stub.fields.items():
         if field in _OWN_HANDLED or value is None:
@@ -649,12 +596,7 @@ def _carried_fields(job: _Job) -> dict[str, object]:
         held = target.fields.get(field)
         if held == value:
             continue
-        if field in _SPHERE_FIELDS and not is_sphere:
-            job.notes.append(
-                f"{job.stub_name}'s {field} isn't carried over:"
-                f" {job.target_name} isn't a sphere"
-            )
-        elif types.get(field) in ("thing", "things") and _names_target(job, value):
+        if types.get(field) in ("thing", "things") and _names_target(job, value):
             job.notes.append(
                 f"{job.stub_name}'s {field} isn't carried over:"
                 f" it names {job.target_name}, or a place inside it"
@@ -840,8 +782,6 @@ def _self_uses(job: _Job) -> list[_FieldUse]:
         if entry.change != "field" or entry.field is None:
             continue
         field, value = entry.field, entry.value
-        if field in OLD_STRUCTURE:
-            continue
         kind = types.get(field)
         new: object = None
         label = field.replace("_", " ")
@@ -890,21 +830,6 @@ def _self_uses(job: _Job) -> list[_FieldUse]:
                     new = other.id
             elif kind == "things" and isinstance(value, list) and stub.id in value:
                 new = [thing_id for thing_id in value if thing_id != stub.id] or None
-            elif (
-                kind == "shares"
-                and isinstance(value, list)
-                and any(
-                    isinstance(share, dict) and share.get("thing_id") == stub.id
-                    for share in value
-                )
-            ):
-                new = [
-                    share
-                    for share in value
-                    if not (
-                        isinstance(share, dict) and share.get("thing_id") == stub.id
-                    )
-                ] or None
             else:
                 continue
             if new is None:
@@ -1456,7 +1381,7 @@ def move_fact(
     the copy's id.
 
     Refused with `ValueError`, writing nothing: a fact that isn't live
-    (removed, or never was), a sphere's summary, a target that's gone or
+    (removed, or never was), an entry's summary, a target that's gone or
     an ignored stub, and the fact's own entry. A category the target's kind lacks becomes
     `default_category`'s, with a note in `notes`. `prose` gains each of
     the two entries whose prose is written from the fact's category (the
@@ -1468,7 +1393,7 @@ def move_fact(
         raise ValueError(f"no such fact, or it was removed: {fact_id}")
     owner_id, fact = found
     if entries.is_summary_fact(fact):
-        raise ValueError("a sphere's summary stays its own: it can't be moved")
+        raise ValueError("an entry's summary stays its own: it can't be moved")
     target = view.thing(target_id)
     if target is None or target.stub_ignored:
         raise ValueError(f"no such entry to move it to: {target_id}")

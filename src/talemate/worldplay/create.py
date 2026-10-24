@@ -55,10 +55,6 @@ suggestions. A stub is expanded under its own id, with what its mentions
 say as context, and the entries the owner matched in the prompt are shown
 as "Named in this prompt".
 
-Spheres (docs/superpowers/probes/2026-10-22-spheres.md) are made by
-`worldplay.spheres`, not here, until they go (Filing, Task 7). A create
-reply's names never make one: a faith, order or culture is lore.
-
 One writer that tags and files (Filing, docs/superpowers/probes/
 2026-10-23-filing.md and its spec). Every branch but the heritage kinds'
 lists the entries near the new one (`filing_candidates`, ruling F6: the
@@ -93,8 +89,9 @@ stubs with their tags and filings, in one revision. A move row is checked
 again, never trusted (`move_here_sources`: from an entry near it, a fact
 still its own, no summary, naming it). "File into this" rows are the
 owner's edits (ruling F13): each is checked for a live entry and a cycle,
-but not recomputed, so an entry the owner ticks in is filed there. It never writes `part_of`, `ties` or a place's `parent`: the
-owner's own (a create box's) become ticked "In" rows (`owner_filings`).
+but not recomputed, so an entry the owner ticks in is filed there. The
+owner's own filings (a create box's, and an event's `place` or an item's
+`owner`, `filing.FIELD_ROLES`) become ticked "In" rows (`owner_filings`).
 
 Curation (docs/superpowers/probes/2026-10-22-curation.md, probe 1, and
 the owner's rulings on it). The generic branch's reply also gives its
@@ -122,12 +119,6 @@ new material onto that entry instead (`accept_preview`); a stub row the
 owner marks as some thing (`NewName.same_target_id`) links its name there
 and makes no stub.
 
-The old structure's helpers -- a sphere preview's move-in
-(`offer_move_in`), bodies within bodies (`file_chain`), child-first
-filing (`child_part_of`), the candidate list by nearness (`nearby_ids`,
-`candidate_line`) -- stay for `worldplay.spheres` and `worldplay.bodies`
-until the spheres go (Task 7); a create preview uses none of them.
-
 `json_objects` decodes with `strict=False`: a model sometimes puts a real
 line break inside a string (a paragraph break in an "intro") instead of
 escaping it, and a strict decoder rejects the whole object over that one
@@ -141,13 +132,13 @@ import json
 import re
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import Any, NamedTuple
 
 import structlog
 from pydantic import BaseModel, Field
 
 from talemate.prompts import Prompt
-from talemate.world import entries, heritage, spheres
+from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar, Era
 from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
@@ -162,19 +153,16 @@ from talemate.world.filing import (
 )
 from talemate.world.kinds import (
     AKA_TAGS,
-    ENTRY_DRAWER_TYPES,
+    HINT_AGENT,
     HERITAGE_KINDS,
     KINDS,
-    PART_OF_KINDS,
-    SPHERE_CATEGORIES,
-    UNSORTED_DRAWER_ID,
+    UNPROMPTED_CATEGORIES,
     get_kind,
     kinds_can_be_one,
     validate_field,
 )
-from talemate.world.nearness import near
 from talemate.world.refs import parse_refs, ref
-from talemate.world.repeats import content_words, find_repeats, overlap
+from talemate.world.repeats import content_words, find_repeats
 from talemate.world.sameness import NameIndex, name_index, same_candidates
 from talemate.world.names import (
     ARTICLES,
@@ -209,15 +197,9 @@ from talemate.worldplay.mentions import (
     mention_context,
 )
 
-if TYPE_CHECKING:
-    # the sphere preview the old move-in serves until Task 7; `spheres`
-    # imports this module
-    from talemate.worldplay.spheres import SpherePreview
-
 log = structlog.get_logger("talemate.worldplay.create")
 
-# the kinds the create box offers in the slice (a sphere is made by
-# `worldplay.spheres`, from a template; the legacy `culture` kind isn't)
+# the kinds the create box offers
 CREATE_KINDS: tuple[str, ...] = (
     "character",
     "place",
@@ -227,38 +209,33 @@ CREATE_KINDS: tuple[str, ...] = (
     "mix",
     "event",
     "item",
-    "sphere",
     "being",
 )
 
 # the kinds the reply's "names" may give a name (the prompt lists them);
 # an entry with any other kind ("title") is dropped, one with none is lore.
-# `name_guess` maps a few others first: "culture" (the legacy kind) and
-# "order" to a sphere, "office" to lore
+# `name_guess` maps a few others first: "culture", "order" and "office"
+# to lore, a god, spirit or deity to a being
 NAME_KINDS: tuple[str, ...] = (
     "character",
     "place",
     "species",
     "race",
-    "sphere",
     "event",
     "item",
     "lore",
     "being",
 )
 
-# the templates a sphere name guess may carry (the spheres probe's names
-# rule lists them; a country is a place), and the ones it maps
-GUESS_TEMPLATES: tuple[str, ...] = ("religion", "nation", "order", "culture", "field")
-_TEMPLATE_GUESSES = {"council": "order", "guild": "order"}
-# kinds a reply gives a name that are really another kind (and template)
-_KIND_GUESSES: dict[str, tuple[str, str | None]] = {
-    "culture": ("sphere", "culture"),
-    "order": ("sphere", "order"),
-    "office": ("lore", None),
-    "god": ("being", None),
-    "spirit": ("being", None),
-    "deity": ("being", None),
+# kinds a reply gives a name that are really another kind
+_KIND_GUESSES: dict[str, str] = {
+    "culture": "lore",
+    "order": "lore",
+    "sphere": "lore",
+    "office": "lore",
+    "god": "being",
+    "spirit": "being",
+    "deity": "being",
 }
 
 # how many facts the prompt asks for, and the most a preview keeps
@@ -298,7 +275,6 @@ _NOT_CATEGORY_KEYS = {
     "aka",
     "names",
     "ties",
-    "sphere",
     "role",
     "exceptions",
     "rejects",
@@ -309,8 +285,8 @@ _NOT_CATEGORY_KEYS = {
 # keys only an `aka` entry or a "names" entry has: an object with one is
 # never a fact, even when a cut-off reply's fallback finds it on its own
 _NAME_ENTRY_KEYS = {"tag", "everyday", "kind"}
-# keys only a tie or an exception has, likewise
-_TIE_KEYS = {"sphere", "rejects", "exceptions"}
+# keys only an "in" row or an exception has, likewise
+_TIE_KEYS = {"rejects", "exceptions"}
 # the key only an elsewhere item has, likewise
 _ELSEWHERE_KEYS = {"entry"}
 
@@ -326,8 +302,6 @@ _NAME_RE = re.compile(r'"name"\s*:\s*"((?:[^"\\]|\\.)*)"')
 _AKA_LIST_RE = re.compile(r'"aka"\s*:\s*\[')
 _NAMES_LIST_RE = re.compile(r'"names"\s*:\s*\[')
 _ELSEWHERE_LIST_RE = re.compile(r'"elsewhere"\s*:\s*\[')
-# the format example's placeholder, copied as is
-_PLACEHOLDER = "..."
 _AGE_RE = re.compile(r'"age"\s*:\s*"?(\d{1,4})')
 _YEAR_RE = re.compile(r"^\s*(\d{1,4})\s*([^\d\s][^\d]*)?\s*$")
 
@@ -372,23 +346,6 @@ class ElsewhereFact(BaseModel):
     repeat_of: dict | None = None
 
 
-class MoveInFact(BaseModel):
-    """A fact of the broader entry the new one is part of (`from_id`: the
-    sphere it's filed in, a place's parent, the outer body the owner
-    named), offered to move onto it (spec goal 2). Every one of its facts
-    is offered (ruling C2), unticked (ruling C24: in the curation flow
-    probe the picks were right 2 times of 20): the reply's picks are
-    `picked` and first, a hint the owner ticks or not. `text` is the fact
-    as it reads."""
-
-    fact_id: str
-    from_id: str
-    text: str
-    ticked: bool = False
-    # the model chose it to move in (a hint, never a tick: ruling C24)
-    picked: bool = False
-
-
 class PreviewInherited(BaseModel):
     """One inherited fact the preview was made with, as the model was
     shown it, so the owner can mark it overridden before accepting."""
@@ -402,28 +359,15 @@ class PreviewInherited(BaseModel):
 
 
 class PreviewException(BaseModel):
-    """A "but..." of a proposed tie: what the character does differently,
-    and the sphere item it departs from -- a thing (`thing_id`) or a
-    statement (`fact_id`), named `item` as the prompt showed it."""
+    """A "but..." of a person's filing: what the character does
+    differently, and what it departs from -- an entry filed in the target
+    (`thing_id`) or a fact of the target (`fact_id`), named `item` as the
+    prompt showed it."""
 
     text: str
     item: str
     thing_id: str | None = None
     fact_id: str | None = None
-
-
-class PreviewTie(BaseModel):
-    """A tie the reply proposes to a sphere already in the world."""
-
-    sphere_id: str
-    # the sphere's name, for the owner
-    sphere: str
-    role: str
-    since: WorldDate | None = None
-    exceptions: list[PreviewException] = Field(default_factory=list)
-    # the part of the sphere the tie is within (a thing filed in it), or
-    # None for the sphere as a whole
-    within: str | None = None
 
 
 class PreviewFiling(BaseModel):
@@ -718,15 +662,15 @@ def parse_no_longer_true(reply: str, labels: dict[str, str]) -> list[str]:
     return _mapped_labels(wrapper["no_longer_true"], labels)
 
 
-# categories a create reply's facts never take: a sphere's (a place's
-# timeline, about and statement facts come from `worldplay.spheres`), and
-# a character's `ties`, which are exceptions written from its ties alone
-_NOT_CREATED_CATEGORIES = (*SPHERE_CATEGORIES, "ties")
+# categories a create reply's facts never take: a place's timeline,
+# summary and statements (`kinds.UNPROMPTED_CATEGORIES`), and a
+# character's `ties`, which are exceptions written from its "in" rows alone
+_NOT_CREATED_CATEGORIES = (*UNPROMPTED_CATEGORIES, "ties")
 
 
 def create_categories(kind: str, hint: str | None = None) -> list[str]:
     """The fact categories a `kind` thing is written from a prompt: its
-    kind's, less the ones only a sphere uses and `ties` (exceptions come
+    kind's, less `kinds.UNPROMPTED_CATEGORIES` and `ties` (exceptions come
     from the reply's "in" rows, never its facts). `belief` only under the
     religion, culture or order hint, and first (the probe's v2: then the
     example's first fact is a belief), when the kind has it (ruling F9)."""
@@ -776,7 +720,7 @@ def parse_create_reply(
                 age = int(obj["age"])
             fact_objects.extend(f for f in obj["facts"] if isinstance(f, dict))
         elif not (_NAME_ENTRY_KEYS | _TIE_KEYS | _ELSEWHERE_KEYS) & obj.keys():
-            # an `aka`, "names", "ties" or "elsewhere" entry a broken
+            # an `aka`, "names", "in" or "elsewhere" entry a broken
             # wrapper left on its own (the connections probe read one as a
             # fact "common") isn't one
             fact_objects.append(obj)
@@ -868,14 +812,14 @@ def _list_at(text: str, match: re.Match[str] | None) -> list[Any] | None:
 def parse_names(reply: str) -> tuple[list[dict[str, Any]], list[NewName]]:
     """`(aka, names)` from a `world/create-thing` reply: the thing's own
     other names, and the proper names its facts use, as the reply gives
-    them (`name_entries`; `_new_names` decides which count).
+    them (`listed_names`; `_new_names` decides which count).
 
     Both lists are decoded on their own when the wrapper object broke, so
     a cut-off reply keeps them: the thing's `aka` from before the facts,
     and every complete entry of the last `"names"` list."""
 
     raw_aka, raw_names = _raw_aka_and_names(reply)
-    return _aka_entries(raw_aka), name_entries(raw_names)
+    return _aka_entries(raw_aka), [listed.name for listed in listed_names(raw_names)]
 
 
 def _raw_aka_and_names(reply: str) -> tuple[object, object]:
@@ -894,55 +838,13 @@ def _raw_aka_and_names(reply: str) -> tuple[object, object]:
     return raw_aka, _list_at(reply, last)
 
 
-def name_guess(kind: str, template: object) -> tuple[str, str | None]:
-    """A listed name's `(kind, template)` as a stub guess, from the kind and
-    template a reply gave it (the spheres probe's guards): the legacy
-    "culture" kind is a culture sphere and an "order" an order sphere; an
-    "office" is lore; a sphere's "council" or "guild" template is an order,
-    and a template outside `GUESS_TEMPLATES` is dropped. Only a sphere
-    keeps a template."""
+def name_guess(kind: str) -> str:
+    """A listed name's kind as a stub guess, from the kind a reply gave it:
+    a "culture", "order" or "sphere" (a faith, order or culture) and an
+    "office" are lore, a god, spirit or deity a being."""
 
     kind = kind.strip().lower()
-    if kind in _KIND_GUESSES:
-        return _KIND_GUESSES[kind]
-    if kind != "sphere":
-        return kind, None
-    guess = template.strip().lower() if isinstance(template, str) else ""
-    guess = _TEMPLATE_GUESSES.get(guess, guess)
-    return kind, guess if guess in GUESS_TEMPLATES else None
-
-
-def name_entries(raw_names: object) -> list[NewName]:
-    """A reply's "names" list as `NewName`s, kind as `name_guess` reads it
-    (`_new_names` decides which count). An entry with no name, the format
-    example's placeholder, and an `aka` object a cut-off reply left on its
-    own are skipped. A sphere reply's names (`worldplay.spheres`); a
-    create reply's are `listed_names`'."""
-
-    names: list[NewName] = []
-    for item in raw_names if isinstance(raw_names, list) else []:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
-            continue
-        if "tag" in item or "everyday" in item:
-            # an `aka` object of an entry that was cut off, which the
-            # fallback found on its own: no name of its own
-            continue
-        name = " ".join(item["name"].split())
-        if not name.strip(" ."):
-            continue
-        raw_kind = item.get("kind")
-        kind, template = name_guess(
-            raw_kind if isinstance(raw_kind, str) else "", item.get("template")
-        )
-        names.append(
-            NewName(
-                name=name,
-                kind=kind,
-                aka=_aka_entries(item.get("aka")),
-                template=template,
-            )
-        )
-    return names
+    return _KIND_GUESSES.get(kind, kind)
 
 
 # a name whose kind or tag is one of these is a title, never an entry
@@ -979,8 +881,7 @@ class ListedName(NamedTuple):
 
 def listed_names(raw_names: object) -> list[ListedName]:
     """A create reply's "names" list (`ListedName`s). The kind is read as
-    `name_guess` reads it, less the sphere kind (a faith, order or culture
-    is lore now: the create prompt offers no sphere); a name whose kind or
+    `name_guess` reads it (a faith, order or culture is lore); a name whose kind or
     tag is a title word (`TITLE_WORDS`) is dropped (ruling F5); the tag
     goes through `clean_tag`. An entry with no name, the placeholder, and
     an `aka` object a cut-off reply left on its own are skipped."""
@@ -1002,9 +903,7 @@ def listed_names(raw_names: object) -> list[ListedName]:
         if raw_kind in TITLE_WORDS or raw_tag in TITLE_WORDS:
             log.debug("create.title_name_dropped", name=name)
             continue
-        kind, _template = name_guess(raw_kind, None)
-        if kind == "sphere":
-            kind = "lore"
+        kind = name_guess(raw_kind)
         into = item.get("in")
         found.append(
             ListedName(
@@ -1158,7 +1057,6 @@ def _new_names(
                 kind=kind,
                 aka=item.aka,
                 written=forms,
-                template=item.template,
                 tag=item.tag,
                 filing=item.filing,
             )
@@ -1366,18 +1264,15 @@ CANDIDATE_LINE_CHARS = 130
 _ELSEWHERE_PLACEHOLDER = "A claim mainly about that entry, in a full sentence."
 
 # a target kind's plain category and dated one, where they differ from the
-# kind's fallback; never one heritage passes down section by section, nor
-# a sphere's `statement`, which its members hold (spec, "Categories")
+# kind's fallback; never one heritage passes down section by section
 _DEFAULT_CATEGORIES: dict[str, tuple[str, str]] = {
-    "sphere": ("about", "timeline"),
     "place": ("general", "history"),
 }
 
 
 def default_category(kind: str, dated: bool) -> str:
     """The category an elsewhere fact goes in on a `kind` target until the
-    owner picks another: a sphere's `about`, or `timeline` when dated (a
-    drawer statement is the owner's to file); a place's `general`, or
+    owner picks another: a place's `general`, or
     `history` when dated; any other kind's `general` -- a character's
     `background`, since it has no `general`."""
 
@@ -1394,45 +1289,20 @@ def _clip(text: str, limit: int = CANDIDATE_LINE_CHARS) -> str:
     return text[: limit - 1].rsplit(" ", 1)[0] + "\u2026"
 
 
-def _part_of_link(state: ThingState) -> tuple[str, str | None] | None:
-    link = state.fields.get("part_of")
-    if isinstance(link, dict) and isinstance(link.get("sphere"), str):
-        drawer = link.get("drawer")
-        return link["sphere"], drawer if isinstance(drawer, str) else None
-    return None
-
-
 def candidate_line(view: WorldView, state: ThingState) -> str:
     """One entry of the "Entries near this one" list, as the curation probe
-    wrote it, less every drawer title (rulings C29, C30: the curation flow
-    probe's facts took them up): "Name (kind; usually called X; part of Y;
-    stub): its summary or first fact", the text cut at
-    `CANDIDATE_LINE_CHARS`. A sphere's kind reads "sphere: <template>"
-    ("place, sphere: nation" for a place sphere); a held fact reads as
+    wrote it: "Name (kind; usually called X; stub): its summary or first
+    fact", the text cut at `CANDIDATE_LINE_CHARS`; a held fact reads as
     belief (`held.held_text`, ruling C33)."""
 
-    is_sphere = spheres.is_sphere(state)
-    template = state.fields.get("template")
-    if is_sphere:
-        bits = [
-            f"sphere: {template}"
-            if state.kind == "sphere"
-            else f"{state.kind}, sphere: {template}"
-        ]
-    else:
-        bits = [state.kind]
+    bits = [state.kind]
     everyday = everyday_name(state)
     if everyday:
         bits.append(f"usually called {everyday}")
-    link = _part_of_link(state)
-    if link is not None:
-        # no drawer title (ruling C29: the curation flow probe's facts took
-        # it up, "the Techniques drawer of Runeweaving")
-        bits.append(f"part of {view.name_of(link[0])}")
-    # nor the sphere's own drawer titles (ruling C30, completing C29)
     if state.is_stub:
         bits.append("stub")
-    fact = entries.summary_fact(state) if is_sphere else None
+    # its summary fact, if it has one (`entries.is_summary_fact`)
+    fact = next((f for f in state.facts if entries.is_summary_fact(f)), None)
     if fact is None and state.facts:
         fact = min(state.facts, key=lambda f: f.created)
     # a held fact as belief (ruling C33), never as plain truth
@@ -1442,47 +1312,6 @@ def candidate_line(view: WorldView, state: ThingState) -> str:
         else "(nothing written yet)"
     )
     return f"{view.name_of(state.id)} ({'; '.join(bits)}): {line}"
-
-
-def nearby_ids(
-    view: WorldView,
-    focus: Sequence[str],
-    first: Sequence[str],
-    settings: CurationSettings,
-    exclude: set[str],
-) -> list[str]:
-    """The entries a prompt lists as near, at most `settings.entries`:
-    today's context (`first`: the sphere a stub is part of, what mentions
-    it, what the prompt names) first, then `nearness.near` of each `focus`
-    thing at `settings.reach` (a thing near two keeps its better rank),
-    never one in `exclude`, a removed thing or an ignored stub."""
-
-    best: dict[str, tuple[float, int, int]] = {}
-    room = settings.entries + len(first) + len(exclude)
-    for thing_id in dict.fromkeys(focus):
-        hits = near(view, thing_id, reach=settings.reach, limit=room)
-        for position, hit in enumerate(hits):
-            key = (-hit.score, hit.steps, position)
-            if hit.thing_id not in best or key < best[hit.thing_id]:
-                best[hit.thing_id] = key
-    ranked = sorted(best, key=lambda thing_id: best[thing_id])
-    order: list[str] = []
-    for thing_id in [*first, *ranked]:
-        if thing_id in order or thing_id in exclude:
-            continue
-        state = view.thing(thing_id)
-        if state is None or state.stub_ignored:
-            continue
-        order.append(thing_id)
-    return order[: settings.entries]
-
-
-def _nearby_lines(view: WorldView, ids: Sequence[str]) -> list[str]:
-    return [
-        candidate_line(view, state)
-        for thing_id in ids
-        if (state := view.thing(thing_id)) is not None
-    ]
 
 
 def entry_names(view: WorldView, prefer: Sequence[str] = ()) -> dict[str, str]:
@@ -1588,25 +1417,19 @@ def parse_elsewhere(
     now_year: int,
     prefer: Sequence[str] = (),
     holder: Callable[[str], str | None] | None = None,
-    new_items: Sequence[str] = (),
 ) -> list[ElsewhereFact]:
     """The reply's elsewhere items, `{"entry", "text", "held_by"}`, as
     additions to other entries, grouped by entry (`_grouped`):
 
     - `entry` is matched by name or other name (`entry_named`, the listed
-      entries first); an unmatched one is a new stub, its kind (and
-      template) as the reply's `"names"` lists it, else lore;
+      entries first); an unmatched one is a new stub, its kind as the
+      reply's `"names"` lists it, else lore;
     - one about the thing itself (`own_keys`, its names; `own_ids`) is
       dropped, as is a copy of the format example's placeholder, an empty
       one, and a repeat of an item already kept;
-    - with `new_items` (Fill's new items' names, ruling C1's filter), one
-      naming a new item, or whose text opens with one's name, is about that
-      item and dropped (the probe: 10 of 11 false moves, no right item);
     - `since` is read as a fact's, `held_by` through `holder`, and the
       category is `default_category`'s for the target's kind."""
 
-    item_names = [name for name in new_items if name.strip()]
-    item_keys = {name_key(name) for name in item_names}
     by_key = {name_key(n.name): n for n in listed}
     # the world's names, read once for every item (final review minor 10)
     lookup: dict[str, str] | None = None
@@ -1621,11 +1444,8 @@ def parse_elsewhere(
         if text == _ELSEWHERE_PLACEHOLDER:
             continue
         key = name_key(entry)
-        if key in own_keys or key in item_keys:
+        if key in own_keys:
             log.debug("create.elsewhere_own", entry=entry)
-            continue
-        if item_names and _opens_with(text, item_names):
-            log.debug("create.elsewhere_about_new_item", entry=entry)
             continue
         if lookup is None:
             lookup = entry_names(view, prefer)
@@ -1648,7 +1468,6 @@ def parse_elsewhere(
                 name=entry,
                 kind=kind,
                 aka=guess.aka if guess is not None else [],
-                template=guess.template if guess is not None else None,
             )
             name = entry
         slot = (target or "new:" + key, text)
@@ -1732,267 +1551,6 @@ def flag_elsewhere_repeats(
 
 # --- moving in (spec goal 2) --------------------------------------------------
 
-# the most of a broader entry's facts a create prompt labels: the probe's
-# biggest case, the Tsardom's 22, took the prompt to 4644 tokens; past
-# these, a fact is still offered (unticked), only not shown to the model
-MOVE_IN_SHOWN = 30
-
-_MOVE_IN_LIST_RE = re.compile(r'"move_in"\s*:\s*\[')
-
-
-def broader_entry(
-    view: WorldView,
-    *,
-    part_of: object,
-    fields: dict[str, Any],
-    stub: ThingState | None = None,
-    new_names: Sequence[NewName] = (),
-) -> str | None:
-    """The broader entry a new one is part of, whose facts may move onto
-    it: the sphere its `part_of` names (the preview's, else the owner's
-    field, else the stub's own filing), else its `parent` (a place's).
-    A `part_of` naming an outer body (`{"name", "drawer"}`, ruling C11) is
-    the sphere the world has by that name (or the one the owner marked
-    its row the same as); a new one has no facts yet: `None`. Never the
-    stub itself, a thing the view lacks, or one with no facts."""
-
-    link = part_of if part_of is not None else fields.get("part_of")
-    if link is None and stub is not None:
-        link = stub.fields.get("part_of")
-    found: object = None
-    if isinstance(link, dict) and isinstance(link.get("sphere"), str):
-        found = link["sphere"]
-    elif isinstance(link, dict) and isinstance(link.get("name"), str):
-        key = name_key(link["name"])
-        row = next((r for r in new_names if name_key(r.name) == key), None)
-        found = (row.same_target_id if row is not None else None) or existing_id(
-            view, link["name"], "sphere"
-        )
-        if found is None:
-            return None
-    else:
-        found = fields.get("parent")
-        if found is None and stub is not None:
-            found = stub.fields.get("parent")
-    if not isinstance(found, str) or (stub is not None and found == stub.id):
-        return None
-    state = view.thing(found)
-    if state is None or not _broader_facts(state):
-        return None
-    return found
-
-
-def _broader_facts(state: ThingState) -> list[FactState]:
-    """The broader entry's own facts, as the move-in probe listed them: in
-    the order they were written, never a sphere's summary (it's the
-    sphere's own)."""
-
-    return sorted(
-        (f for f in state.facts if not entries.is_summary_fact(f)),
-        key=lambda f: f.created,
-    )
-
-
-def broader_lines(
-    view: WorldView, calendar: Calendar, broader_id: str
-) -> tuple[list[tuple[str, str]], dict[str, str]]:
-    """`(lines, labels)`: the broader entry's first `MOVE_IN_SHOWN` facts
-    as the create prompt shows them, `(label, text)` labelled M1..., a
-    dated one led "(In 994)" on a timeline and "(Since 994)" otherwise, a
-    held one as belief (ruling C33); and `label -> fact id`."""
-
-    state = view.thing(broader_id)
-    facts = _broader_facts(state)[:MOVE_IN_SHOWN] if state is not None else []
-    lines: list[tuple[str, str]] = []
-    labels: dict[str, str] = {}
-    for number, fact in enumerate(facts, 1):
-        # a held fact as belief (ruling C33)
-        text = held_text(view, fact, state) if state is not None else ""
-        if fact.valid_from is not None:
-            lead = "In" if fact.category == "timeline" else "Since"
-            year = _shown_year(calendar, fact.valid_from.to_datetime().year)
-            text = f"({lead} {year}) {text}"
-        label = f"M{number}"
-        lines.append((label, text))
-        labels[label] = fact.fact_id
-    return lines, labels
-
-
-def parse_move_in(
-    reply: str, wrapper: dict[str, Any] | None, labels: dict[str, str]
-) -> list[str]:
-    """The fact ids the reply's `"move_in"` labels pick, in order: the
-    wrapper's list, or, when the reply was cut off, the last one written.
-    An unknown label is dropped."""
-
-    if wrapper is not None:
-        value = wrapper.get("move_in")
-    else:
-        last = None
-        for last in _MOVE_IN_LIST_RE.finditer(reply):
-            pass
-        value = _list_at(reply, last)
-    return _mapped_labels(value, labels) if value is not None else []
-
-
-def move_in_rows(
-    view: WorldView, broader_id: str, picked: Sequence[str] = ()
-) -> list[MoveInFact]:
-    """Every one of the broader entry's facts as a move-in row, unticked
-    (rulings C2, C24): the `picked` ones marked and first, then the rest,
-    each group in the order they were written."""
-
-    state = view.thing(broader_id)
-    if state is None:
-        return []
-    rows = [
-        MoveInFact(
-            fact_id=fact.fact_id,
-            from_id=broader_id,
-            text=view.render(fact.text),
-            picked=fact.fact_id in picked,
-        )
-        for fact in _broader_facts(state)
-    ]
-    return sorted(rows, key=lambda row: not row.picked)
-
-
-def _moved_repeats(
-    view: WorldView,
-    facts: Sequence[PreviewFact],
-    moves: Sequence[MoveInFact],
-    settings: CurationSettings,
-) -> list[tuple[PreviewFact, MoveInFact, float]]:
-    """The move-overlap rule, for the preview and the accept alike: each
-    of `facts` that says again what one of `moves` says -- at the world's
-    `repeat_untick_threshold`, with at least `UNTICK_MIN_WORDS` content
-    words -- with the move it repeats most and the overlap."""
-
-    found: list[tuple[PreviewFact, MoveInFact, float]] = []
-    if not moves:
-        return found
-    for fact in facts:
-        text = view.render(fact.text)
-        if len(content_words(text)) < UNTICK_MIN_WORDS:
-            continue
-        score, row = max(
-            ((overlap(text, row.text), row) for row in moves), key=lambda p: p[0]
-        )
-        if score >= settings.repeat_untick_threshold:
-            found.append((fact, row, score))
-    return found
-
-
-def untick_moved_repeats(
-    view: WorldView,
-    facts: Sequence[PreviewFact],
-    move_in: Sequence[MoveInFact],
-    settings: CurationSettings,
-) -> None:
-    """A fact of the new entry's own that says again what a ticked or
-    picked move says (the probe's Zakonnik wrote the law code it moved in
-    again) is flagged a repeat of that move, at the world's
-    `repeat_untick_threshold` with at least `UNTICK_MIN_WORDS` content
-    words. It starts unticked only when the move is ticked; a pick the
-    owner hasn't ticked (ruling C24) leaves it ticked, or the claim would
-    be lost from the new entry. The move stays as it is."""
-
-    moves = [row for row in move_in if row.ticked or row.picked]
-    for fact, row, score in _moved_repeats(view, facts, moves, settings):
-        fact.ticked = fact.ticked and not row.ticked
-        fact.repeat_of = {
-            "fact_id": row.fact_id,
-            "owner_id": row.from_id,
-            "owner_name": view.name_of(row.from_id) or "",
-            "text": row.text,
-            "score": score,
-        }
-
-
-def preview_broader(view: WorldView, preview: SpherePreview) -> str | None:
-    """The broader entry of a preview (`broader_entry`): of the thing it
-    fills or promotes as well -- a stub, or a sphere preview's promoted
-    thing, falls back on its own filing or parent (ruling C32). A sphere's
-    `parent` is the sphere it branches from, which is no broader entry:
-    only a place's parent is."""
-
-    home_id = preview.stub_id or getattr(preview, "promote_id", None)
-    home = view.thing(home_id) if home_id is not None else None
-    fields = preview.fields
-    if preview.kind != "place" and "parent" in fields:
-        fields = {k: v for k, v in fields.items() if k != "parent"}
-    return broader_entry(
-        view,
-        part_of=preview.part_of,
-        fields=fields,
-        stub=home,
-        new_names=preview.new_names,
-    )
-
-
-def offer_move_in(view: WorldView, preview: SpherePreview) -> None:
-    """The preview's move-in rows, for the broader entry it has now.
-
-    For an outer body the owner named (`bodies.add_outer_body`, ruling
-    C13), the entry still sits in its home through the body: the rows
-    from an entry the body sits in (its home sphere, as its row files it,
-    or, for a body the world has, where that one sits) stay, the model's
-    picks marked; they go only when the owner files the body somewhere
-    else. A body the world has adds its own facts after them, every one
-    unticked and never picked, since the model never saw them; a new one
-    has none.
-
-    Otherwise the rows are kept while it's the same broader entry, else
-    replaced by that entry's facts, unticked."""
-
-    if not _generic_branch(
-        preview.kind, _lineage_sources(preview.kind, preview.fields)
-    ):
-        return
-    broader = preview_broader(view, preview)
-    link = preview.part_of
-    if isinstance(link, dict) and isinstance(link.get("name"), str):
-        key = name_key(link["name"])
-        row = next((r for r in preview.new_names if name_key(r.name) == key), None)
-        home = row.part_of.get("sphere") if row is not None and row.part_of else None
-
-        def still_in(from_id: str) -> bool:
-            if isinstance(home, str) and spheres.sits_in(view, home, from_id):
-                return True
-            return broader is not None and spheres.sits_in(view, broader, from_id)
-
-        kept = [
-            r for r in preview.move_in if r.from_id != broader and still_in(r.from_id)
-        ]
-        if broader is not None:
-            kept += move_in_rows(view, broader)
-        preview.move_in = kept
-    elif broader is None:
-        preview.move_in = []
-    elif not any(row.from_id == broader for row in preview.move_in):
-        preview.move_in = move_in_rows(view, broader)
-
-
-def move_in_sources(view: WorldView, preview: SpherePreview) -> set[str]:
-    """The entries a move-in may take facts from at `view`, worked out
-    again from the preview's own filing rather than taken from its rows:
-    the broader entry it has now (`broader_entry`) and, for an outer body
-    the owner named (ruling C13), the entries it still sits in -- the
-    sources `offer_move_in` keeps. None when it's no generic thing."""
-
-    if not _generic_branch(
-        preview.kind, _lineage_sources(preview.kind, preview.fields)
-    ):
-        return set()
-    copy = preview.model_copy(deep=True)
-    offer_move_in(view, copy)
-    broader = preview_broader(view, preview)
-    sources = {broader} if broader is not None else set()
-    link = preview.part_of
-    if isinstance(link, dict) and isinstance(link.get("name"), str):
-        sources |= {row.from_id for row in copy.move_in}
-    return sources
-
 
 def prose_reads(kind: str, category: str) -> bool:
     """Whether some section of a `kind` thing's prose is written from its
@@ -2002,74 +1560,6 @@ def prose_reads(kind: str, category: str) -> bool:
         category not in prose_gen.unread_categories(kind, section)
         for section in prose_gen.sections_for(kind)
     )
-
-
-def _write_move_in(
-    rev: Any,
-    world: World,
-    before: WorldView,
-    preview: SpherePreview,
-    thing_id: str,
-    notes: list[str],
-) -> None:
-    """Move each ticked row's fact onto `thing_id`, in `rev`
-    (`repoint.copy_facts`, ruling R1): a new fact with its dates, origin
-    and holder, the original removed, its overrides re-pointed; its links
-    to the entry itself become words. A row from an entry the preview
-    offers no move-in from (`move_in_sources`, worked out again: a row is
-    never trusted to name its source), or whose fact is gone from its
-    entry since the preview, moves nothing, with a note."""
-
-    # imported here: `worldplay.repoint` imports this module
-    from talemate.worldplay.repoint import copy_facts
-
-    live = world.view()
-    sources = move_in_sources(before, preview)
-    fact_ids: list[str] = []
-    for row in preview.move_in:
-        if not row.ticked or row.from_id == thing_id:
-            continue
-        if row.from_id not in sources:
-            name = before.name_of(row.from_id) or row.from_id
-            notes.append(
-                f"{name}'s fact \"{_clip(row.text, 60)}\" isn't offered to move "
-                "in here, so it doesn't move in"
-            )
-            continue
-        found = live.fact(row.fact_id)
-        if found is None or found[0] != row.from_id:
-            name = before.name_of(row.from_id) or row.from_id
-            notes.append(
-                f'{name}\'s fact "{_clip(row.text, 60)}" was moved or removed '
-                "since the preview, so it doesn't move in"
-            )
-            continue
-        fact_ids.append(row.fact_id)
-    if fact_ids:
-        copy_facts(rev, live, fact_ids, thing_id, plain_self_links=True)
-
-
-def _move_in_prose(view: WorldView, preview: SpherePreview, skip: str) -> list[str]:
-    """The entries a ticked move takes a fact from that their prose reads
-    (the new entry's own prose is the preview's), at `view`, before the
-    accept: only an entry the preview offers moves from
-    (`move_in_sources`), as `_write_move_in` has it."""
-
-    sources = move_in_sources(view, preview)
-    changed: list[str] = []
-    for row in preview.move_in:
-        state = view.thing(row.from_id)
-        if (
-            not row.ticked
-            or state is None
-            or row.from_id not in sources
-            or row.from_id in (skip, *changed)
-        ):
-            continue
-        fact = next((f for f in state.facts if f.fact_id == row.fact_id), None)
-        if fact is not None and prose_reads(state.kind, fact.category):
-            changed.append(row.from_id)
-    return changed
 
 
 # the most same-thing candidates a preview shows (the spec's cap)
@@ -2143,8 +1633,8 @@ def offer_same(
 ) -> None:
     """Set each row's same-thing candidates (`same_offers`), from one read
     of the world's names (`index`, read here when not given): a new name's
-    `NewName.same_as`, and a named sphere item's `"same_as"` (dumps) when
-    it links no thing yet. A name the owner treats as new (`as_new`) gets
+    `NewName.same_as`, and a dumped row's `"same_as"` when it links no
+    thing yet. A name the owner treats as new (`as_new`) gets
     none."""
 
     if index is None:
@@ -2393,7 +1883,8 @@ def filing_line(view: WorldView, state: ThingState) -> str:
         bits.append("in " + ", ".join(homes))
     if state.is_stub:
         bits.append("stub")
-    fact = entries.summary_fact(state)
+    # its summary fact, if it has one (`entries.is_summary_fact`)
+    fact = next((f for f in state.facts if entries.is_summary_fact(f)), None)
     if fact is None and state.facts:
         fact = min(state.facts, key=lambda f: f.created)
     line = (
@@ -2629,9 +2120,7 @@ def owner_filings(
     view: WorldView, fields: dict[str, Any], kind: str | None = None
 ) -> list[PreviewFiling]:
     """The filings the owner's fields give, taken out of `fields`, ticked:
-    its `filings`, a place's `parent`, a `part_of` and `ties` (the old
-    fields, which the writer no longer writes), and for a `kind` thing
-    the fields that are filings (`filing.FIELD_ROLES`: an event's
+    its `filings`, and for a `kind` thing the fields that are filings (`filing.FIELD_ROLES`: an event's
     `place`, "took place in"; an item's `owner`, "owned by"), each live
     target once."""
 
@@ -2647,25 +2136,6 @@ def owner_filings(
         value = fields.pop(field, None)
         if isinstance(value, str):
             found.append(Filing(target=value, role=role))
-    parent = fields.pop("parent", None)
-    if isinstance(parent, str):
-        found.append(Filing(target=parent))
-    part_of = fields.pop("part_of", None)
-    if isinstance(part_of, dict) and isinstance(part_of.get("sphere"), str):
-        found.append(Filing(target=part_of["sphere"]))
-    for tie in fields.pop("ties", None) or []:
-        if not isinstance(tie, dict) or not isinstance(tie.get("sphere"), str):
-            continue
-        since = tie.get("since")
-        within = tie.get("within")
-        found.append(
-            Filing(
-                target=tie["sphere"],
-                role=tie.get("role") if isinstance(tie.get("role"), str) else None,
-                since=WorldDate.model_validate(since) if since else None,
-                within=within if isinstance(within, str) else None,
-            )
-        )
     rows: list[PreviewFiling] = []
     for filing in found:
         if view.thing(filing.target) is None or any(
@@ -2780,13 +2250,12 @@ def home_entries(
     "in" rows can carry exceptions, each once: the lore picked or found
     in the prompt and the lore mentioning the stub being expanded (a
     faith, order, culture or field is lore, as the names rule has it),
-    then what a picked place is filed in, lore or place (the old spheres'
-    territory: the Tsardom a named city is in)."""
+    then what a picked place is filed in, lore or place (the Tsardom a
+    named city is in)."""
 
     found: list[str] = []
 
-    # a sphere, until they go (Task 7), is a faith, order, culture or field
-    def add(thing_id: str, kinds: tuple[str, ...] = ("lore", "sphere")) -> None:
+    def add(thing_id: str, kinds: tuple[str, ...] = ("lore",)) -> None:
         state = view.thing(thing_id)
         if state is not None and thing_id not in found and state.kind in kinds:
             found.append(thing_id)
@@ -2802,7 +2271,7 @@ def home_entries(
         state = view.thing(thing_id)
         if state is not None and state.kind == "place":
             for home in _homes(view, thing_id):
-                add(home, ("lore", "sphere", "place"))
+                add(home, ("lore", "place"))
     return found
 
 
@@ -2949,14 +2418,30 @@ def _live_home_exceptions(
 def filing_exception_fact(
     text: str, target_id: str, target_name: str, exception: PreviewException
 ) -> tuple[str, dict[str, object]]:
-    """An exception's `ties` fact, `(text, origin)`, as `exception_fact`
-    writes a tie's: filed under its entry (origin `tie`), one departing
-    from a filed entry ends with a reference to it, one departing from a
-    fact references the entry and records the fact (`rejects_fact`)."""
+    """An exception's `ties` fact, `(text, origin)`: filed under its entry
+    (origin `tie`, ruling P22). One departing from an entry filed in the
+    target ends with a reference to it; one departing from the target, or
+    a fact of it, references the target, and records the fact
+    (`rejects_fact`, ruling P3). Text that references its target already
+    is kept as it is."""
 
-    return exception_fact(
-        text, PreviewTie(sphere_id=target_id, sphere=target_name, role=""), exception
-    )
+    origin: dict[str, object] = {"tie": target_id}
+    if exception.thing_id is not None:
+        target, shown, lead = exception.thing_id, exception.item, DEPARTS_FROM
+    else:
+        target, shown, lead = target_id, target_name, DEPARTS_FROM_TEACHING
+        if exception.fact_id is not None:
+            origin["rejects_fact"] = exception.fact_id
+    if target in parse_refs(text):
+        return text, origin
+    body = text.rstrip()
+    if body[-1:] not in (".", "!", "?"):
+        body += "."
+    try:
+        token = ref(target, shown)
+    except ValueError:
+        token = ref(target)
+    return f"{body} {lead} {token}", origin
 
 
 def filings_since(world: World, thing_id: str) -> WorldDate | None:
@@ -2966,7 +2451,23 @@ def filings_since(world: World, thing_id: str) -> WorldDate | None:
     or the latest dated value's date when that's later (a value before it
     would stay hidden behind it)."""
 
-    return part_of_since(world, thing_id, strict=False, field="filings")
+    try:
+        timeline = world.timeline(thing_id)
+    except KeyError:
+        # made in this revision: no history yet
+        return None
+    dated = [
+        entry.date
+        for entry in timeline
+        if entry.change == "field"
+        and entry.field == "filings"
+        and entry.date is not None
+    ]
+    if not dated:
+        return None
+    since = current_date(world)
+    latest = max(dated, key=lambda date: date.instant)
+    return latest if since.instant < latest.instant else since
 
 
 def write_filings(
@@ -3074,11 +2575,9 @@ def _known_fields(
         elif field in ("when", "until"):
             date = value if isinstance(value, WorldDate) else WorldDate(**value)
             lines.append((field, calendar.format(date)))
-        elif field in ("parent", "culture", "owner", "place"):
-            lines.append((field, view.name_of(value) or str(value)))
-        elif field == "cultures":
-            names = [view.name_of(share["thing_id"]) or "" for share in value]
-            lines.append((field, ", ".join(name for name in names if name)))
+        elif field == "origin":
+            # a species' origin, a place: named, never its id
+            lines.append((field, view.name_of(value) or ""))
         elif field in ("heritage", "species", "parents"):
             # the lineage is named in the prompt's own heritage lines
             continue
@@ -3177,27 +2676,28 @@ def _found_in_prompt(
 # --- holders and exceptions ----------------------------------------------------
 
 
-def cached_summary(world: World, sphere_id: str) -> str | None:
-    """The sphere's summary as last written: its cached `description`
+def cached_summary(world: World, thing_id: str) -> str | None:
+    """The entry's summary as last written: its cached `description`
     prose now, or `None` (`entries.summary` falls back to its summary
     fact)."""
 
-    cached = world.prose().get(sphere_id, "description", None)
+    cached = world.prose().get(thing_id, "description", None)
     return cached.text if cached is not None else None
 
 
 def holder_named(view: WorldView, name: str) -> str | None:
     """The thing that can hold a belief -- a faith, order or culture
-    (lore, or a sphere until they go), a character or a being -- whose
-    name or other name is `name` (ignoring case and a leading article),
-    the first made; `None` for none."""
+    (lore), a character, a being, or any entry written with a prompt hint
+    (a nation, which is a place) -- whose name or other name is `name`
+    (ignoring case and a leading article), the first made; `None` for
+    none."""
 
     key = name_key(name)
     if not key:
         return None
     for state in sorted(view.things(), key=lambda thing: thing.created):
-        if not (
-            spheres.is_sphere(state) or state.kind in ("character", "being", "lore")
+        if state.kind not in ("character", "being", "lore") and not (
+            state.fields.get("hint")
         ):
             continue
         names = [view.name_of(state.id) or ""]
@@ -3207,248 +2707,8 @@ def holder_named(view: WorldView, name: str) -> str | None:
     return None
 
 
-def exception_fact(
-    text: str, tie: PreviewTie, exception: PreviewException
-) -> tuple[str, dict[str, object]]:
-    """An exception's `ties` fact, `(text, origin)`: filed under its tie
-    (origin `tie`, the sphere: ruling P22), one rejecting a thing item ends
-    with a reference to it; one rejecting a statement references the
-    sphere and records the statement in its origin too (ruling P3). Text
-    that references its target already is kept as it is."""
-
-    origin: dict[str, object] = {"tie": tie.sphere_id}
-    if exception.thing_id is not None:
-        target, shown, lead = exception.thing_id, exception.item, DEPARTS_FROM
-    else:
-        target, shown, lead = tie.sphere_id, tie.sphere, DEPARTS_FROM_TEACHING
-        if exception.fact_id is not None:
-            origin["rejects_fact"] = exception.fact_id
-    if target in parse_refs(text):
-        return text, origin
-    body = text.rstrip()
-    if body[-1:] not in (".", "!", "?"):
-        body += "."
-    try:
-        token = ref(target, shown)
-    except ValueError:
-        token = ref(target)
-    return f"{body} {lead} {token}", origin
-
-
-def part_of_since(
-    world: World,
-    thing_id: str,
-    at: WorldDate | None = None,
-    *,
-    strict: bool = True,
-    field: str = "part_of",
-) -> WorldDate | None:
-    """The date a new `part_of` value for `thing_id` holds from: `None`
-    (undated) when the field has no dated values; else `at`, or the
-    world's now (`current_date`), since an undated value would stay hidden
-    behind a dated one (an `end_item` end). A date before the latest dated
-    value is refused (`ValueError`) -- that value would still win -- or,
-    with `strict=False` (a writer the owner didn't date), moved up to it."""
-
-    try:
-        entries = world.timeline(thing_id)
-    except KeyError:
-        # made in this revision: no history yet
-        return None
-    dated = [
-        entry.date
-        for entry in entries
-        if entry.change == "field" and entry.field == field and entry.date is not None
-    ]
-    if not dated:
-        return None
-    since = at or current_date(world)
-    latest = max(dated, key=lambda date: date.instant)
-    if since.instant < latest.instant:
-        if not strict:
-            return latest
-        raise ValueError(
-            f"it changed spheres in {world.calendar.format(latest)}: "
-            "file it from then on"
-        )
-    return since
-
-
-def drawer_types_for(kind: str) -> tuple[str, ...]:
-    """The drawer types a `kind` thing may be filed in, as creation files
-    them (`kinds.ENTRY_DRAWER_TYPES`): a place in a places drawer, any
-    other entry in one that holds entries; none for a kind outside
-    `PART_OF_KINDS`. Never people (ties), events (the timeline) or
-    branches; any thing may sit in `UNSORTED`."""
-
-    return ENTRY_DRAWER_TYPES.get(kind, ())
-
-
-def _item_home(view: WorldView, owner_id: str, fact: Any) -> tuple[str, str] | None:
-    """`(sphere id, drawer id)` when a fact mentioning a thing is inside a
-    sphere's items: a sphere's `statement` (in the drawer its origin
-    names), or a fact of a thing part of a sphere (in that thing's
-    drawer). `None` for any other fact."""
-
-    owner = view.thing(owner_id)
-    if owner is None:
-        return None
-    if spheres.is_sphere(owner) and fact.category == "statement":
-        drawer = (fact.origin or {}).get("drawer")
-        return owner.id, drawer if isinstance(drawer, str) else UNSORTED_DRAWER_ID
-    link = owner.fields.get("part_of")
-    if isinstance(link, dict) and isinstance(link.get("sphere"), str):
-        home = view.thing(link["sphere"])
-        if home is not None and spheres.is_sphere(home):
-            drawer = link.get("drawer")
-            return home.id, drawer if isinstance(drawer, str) else UNSORTED_DRAWER_ID
-    return None
-
-
-def _guessed_drawer(
-    view: WorldView, sphere_id: str, kind: str, mentioned_in: list[str]
-) -> str:
-    """The drawer a `kind` child of the sphere goes in: a place in the
-    sphere's first places drawer; anything else in the first drawer its
-    mentions are in that holds entries; else unsorted."""
-
-    drawers = spheres.drawers(view, sphere_id)
-    if kind == "place":
-        wanted = [d.id for d in drawers if d.type == "places"]
-    else:
-        holding = {d.id for d in drawers if d.type in drawer_types_for(kind)}
-        wanted = [drawer for drawer in mentioned_in if drawer in holding]
-    return wanted[0] if wanted else UNSORTED_DRAWER_ID
-
-
-def child_part_of(
-    view: WorldView, stub: Any, prompt: str, picks: dict[str, str]
-) -> dict[str, str] | None:
-    """The sphere drawer an expanded stub joins (child first, as the
-    spheres spec has it), or `None`:
-
-    - every fact mentioning it is inside one sphere's items (its
-      statements, or facts of things part of it): that sphere, in
-      `_guessed_drawer`;
-    - else its prompt names a sphere stub (picked, or matched in full):
-      that stub, unsorted -- the stub has no drawers yet, and expanding it
-      later files its children (`worldplay.spheres` adoption).
-
-    A stub that's part of a sphere already stays where it is, and one of a
-    kind outside `PART_OF_KINDS` (a character) joins none; nor does a
-    sphere stub join a sphere that sits inside it (`spheres.sits_in`). The parent
-    is never written to: expanding a child never creates its sphere."""
-
-    if stub.kind not in PART_OF_KINDS or stub.fields.get("part_of") is not None:
-        return None
-    mentioning = [
-        (owner_id, fact)
-        for owner_id, fact in view.referencing(stub.id, any_date=True)
-        if owner_id != stub.id
-    ]
-    homes = [
-        home
-        for owner_id, fact in mentioning
-        if (home := _item_home(view, owner_id, fact)) is not None
-    ]
-    if mentioning and len(homes) == len(mentioning):
-        sphere_ids = {sphere_id for sphere_id, _drawer in homes}
-        if len(sphere_ids) == 1 and not spheres.sits_in(
-            view, next(iter(sphere_ids)), stub.id
-        ):
-            sphere_id = sphere_ids.pop()
-            drawers = [drawer for _sphere, drawer in homes]
-            return {
-                "sphere": sphere_id,
-                "drawer": _guessed_drawer(view, sphere_id, stub.kind, drawers),
-            }
-
-    named = [*picks.values()]
-    named += [
-        match.candidates[0].id
-        for match in find_names(view, prompt)
-        if not match.suggested
-    ]
-    for thing_id in named:
-        state = view.thing(thing_id)
-        if (
-            thing_id != stub.id
-            and state is not None
-            and state.kind == "sphere"
-            and state.is_stub
-            and not spheres.sits_in(view, thing_id, stub.id)
-        ):
-            return {"sphere": thing_id, "drawer": UNSORTED_DRAWER_ID}
-    return None
-
-
-# --- bodies within bodies ------------------------------------------------------
-
-
 def _tidy_name(name: str) -> str:
     return " ".join(name.split())
-
-
-def home_name(part_of: object) -> str | None:
-    """The new thing a `NewName.part_of` (or an item's, or a re-file row's
-    `to`) names, as a `name_key`, or None for a sphere the world has."""
-
-    if isinstance(part_of, dict) and isinstance(part_of.get("name"), str):
-        return name_key(part_of["name"]) or None
-    return None
-
-
-def outer_first(rows: Sequence[NewName]) -> list[NewName]:
-    """`rows` with each one another row is part of (by name) before it, so
-    a chain is made outer first: the army, then the White Talon in it."""
-
-    by_key = {name_key(row.name): row for row in rows}
-    ordered: list[NewName] = []
-    done: set[str] = set()
-
-    def visit(row: NewName, path: set[str]) -> None:
-        key = name_key(row.name)
-        if key in done or key in path:
-            return
-        path.add(key)
-        outer = home_name(row.part_of)
-        if outer is not None and outer in by_key:
-            visit(by_key[outer], path)
-        done.add(key)
-        ordered.append(row)
-
-    for row in rows:
-        visit(row, set())
-    return ordered
-
-
-def _refiled(row: NewName, refile: Sequence[dict[str, Any]]) -> bool:
-    """Whether the row is a thing the world has (the owner marked it the
-    same as one) that a re-file row moves, ticked or not: that row, not
-    the new name's `part_of`, says whether it goes in."""
-
-    return row.same_target_id is not None and any(
-        r.get("thing_id") == row.same_target_id for r in refile
-    )
-
-
-def held_outers(
-    rows: Sequence[NewName],
-    items: Sequence[dict[str, Any]] = (),
-    refile: Sequence[dict[str, Any]] = (),
-    homes: Sequence[object] = (),
-) -> set[str]:
-    """The `name_key`s of the new names something this accept writes is
-    filed in: a row's (unless a re-file row moves it, `_refiled`), an
-    item's, a ticked re-file row's, or one of `homes` (the entry's own
-    `part_of`). Such a stub is kept although no text links it (it holds
-    its parts)."""
-
-    held = {home_name(row.part_of) for row in rows if not _refiled(row, refile)}
-    held |= {home_name(item.get("part_of")) for item in items}
-    held |= {home_name(home) for home in homes}
-    held |= {home_name(row.get("to")) for row in refile if row.get("ticked")}
-    return {key for key in held if key is not None}
 
 
 def _made_id(made: dict[str, str], name: str) -> str | None:
@@ -3460,209 +2720,6 @@ def _made_id(made: dict[str, str], name: str) -> str | None:
         return found
     key = name_key(name)
     return next((i for form, i in made.items() if name_key(form) == key), None)
-
-
-def resolve_home(
-    part_of: object, made: dict[str, str], own: dict[str, str] | None = None
-) -> tuple[str, str] | None:
-    """`(sphere id, drawer id)` for a `part_of` naming a sphere the world has
-    or a new thing of this accept: `own` (name key -> id, the sphere or
-    entry being written), else `made`. None when it names nothing made."""
-
-    if not isinstance(part_of, dict):
-        return None
-    drawer = part_of.get("drawer")
-    drawer = drawer if isinstance(drawer, str) else UNSORTED_DRAWER_ID
-    sphere = part_of.get("sphere")
-    if isinstance(sphere, str):
-        return sphere, drawer
-    name = part_of.get("name")
-    if not isinstance(name, str):
-        return None
-    found = (own or {}).get(name_key(name)) or _made_id(made, name)
-    return (found, drawer) if found is not None else None
-
-
-def file_in(
-    rev: Any,
-    world: World,
-    before: WorldView,
-    thing_id: str,
-    home: tuple[str, str],
-    notes: list[str] | None = None,
-    *,
-    refiling: bool = False,
-) -> bool:
-    """File `thing_id` in `home` (a sphere and drawer), in `rev`, dated as
-    `set_part_of` dates a filing (`part_of_since`). The drawer is kept when
-    the sphere has it and the thing goes in it (`spheres.entry_drawer`),
-    else it's guessed: a new stub sphere has no drawers yet, so its parts
-    sit in Unsorted until it's expanded. A thing that `before` (the world
-    before the accept) has filed already stays where it is, unless
-    `refiling`; one the sphere sits in is refused (`ValueError`, so the
-    whole accept is); a kind no drawer holds, or a home that isn't a
-    sphere, is left unfiled with a note. Whether it was filed."""
-
-    live = world.view()
-    state = live.thing(thing_id)
-    sphere = live.thing(home[0])
-    if state is None:
-        return False
-    name = live.name_of(thing_id) or thing_id
-    where = live.name_of(home[0]) or home[0]
-    why: str | None = None
-    if sphere is None or not spheres.is_sphere(sphere):
-        why = f"{name} isn't filed in {where}: it isn't a sphere"
-    elif state.kind not in PART_OF_KINDS:
-        why = f"{name} isn't filed in {where}: a {state.kind} never is"
-    else:
-        held = before.thing(thing_id)
-        current = held.fields.get("part_of") if held is not None else None
-        if current is not None and not refiling:
-            if isinstance(current, dict) and current.get("sphere") == home[0]:
-                return False
-            why = f"{name} stays where it's filed, not in {where}"
-    if why is not None:
-        if notes is not None:
-            notes.append(why)
-        return False
-    if spheres.sits_in(live, home[0], thing_id):
-        raise ValueError(f"{name} can't be part of {where}: it would be inside itself")
-    drawer = spheres.entry_drawer(
-        spheres.drawers(live, home[0]), state.kind, home[1], name
-    )
-    rev.set_field(
-        thing_id,
-        "part_of",
-        {"sphere": home[0], "drawer": drawer},
-        part_of_since(world, thing_id, strict=False),
-    )
-    return True
-
-
-def file_chain(
-    rev: Any,
-    world: World,
-    before: WorldView,
-    rows: Sequence[NewName],
-    made: dict[str, str],
-    *,
-    own: dict[str, str] | None = None,
-    refile: Sequence[dict[str, Any]] = (),
-    notes: list[str] | None = None,
-    adopted: Collection[str] = (),
-) -> None:
-    """File the stubs of `rows` that carry a `part_of`, outer first, then
-    move each ticked `refile` row's thing into its outer body (`file_in`),
-    all in `rev`. A row a re-file row moves (`_refiled`) is left to it. A
-    re-filed thing that's gone, or filed elsewhere since the preview (or
-    by this revision), stays as it is, with a note.
-
-    A re-file row is never trusted to say what may move
-    (`_refile_refused`): it moves a thing only into an outer body `rows`
-    names (or the entry, `own`), and only one filed where that body goes
-    (the drawer `bodies.add_outer_body` drew its rows from), a thing a row
-    is marked the same as, or one a core adopts (`adopted`). Any other is
-    dropped, with a note."""
-
-    for row in outer_first(rows):
-        if row.part_of is None or _refiled(row, refile):
-            continue
-        thing_id = _made_id(made, row.name)
-        home = resolve_home(row.part_of, made, own)
-        if thing_id is not None and home is not None:
-            file_in(rev, world, before, thing_id, home, notes)
-    for row in refile:
-        if not row.get("ticked"):
-            continue
-        thing_id = row.get("thing_id")
-        live = world.view()
-        state = live.thing(thing_id) if isinstance(thing_id, str) else None
-        name = live.name_of(state.id) if state is not None else None
-        refused = (
-            _refile_refused(live, row, rows, own, adopted, name or "")
-            if state is not None
-            else None
-        )
-        if refused is not None:
-            if notes is not None:
-                notes.append(refused)
-            continue
-        home = resolve_home(row.get("to"), made, own)
-        if state is None or home is None:
-            continue
-        if state.fields.get("part_of") != row.get("from"):
-            if notes is not None:
-                notes.append(
-                    f"{live.name_of(state.id) or state.id} was filed "
-                    "elsewhere since, so it stays where it is"
-                )
-            continue
-        file_in(rev, world, before, state.id, home, notes, refiling=True)
-
-
-def _refile_refused(
-    view: WorldView,
-    row: dict[str, Any],
-    rows: Sequence[NewName],
-    own: dict[str, str] | None,
-    adopted: Collection[str],
-    name: str,
-) -> str | None:
-    """Why the re-file row may not move its thing (a note), or `None`: its
-    `to` must name an outer body among `rows` (`{"name", "drawer"}`) or
-    the entry (`own`), and its thing must be one a row is marked the same
-    as, one the core adopts, or filed (`from`) where that body goes: in
-    its sphere, in its drawer as `view`'s sphere places it (a drawer it
-    has since dropped counts as Unsorted)."""
-
-    to = row.get("to")
-    target = to.get("name") if isinstance(to, dict) and "sphere" not in to else None
-    key = name_key(target) if isinstance(target, str) else ""
-    outer = next((r for r in rows if name_key(r.name) == key), None) if key else None
-    if outer is None and not (key and key in (own or {})):
-        return f"{name} isn't moved: it names no outer body this preview makes"
-    thing_id = row.get("thing_id")
-    if thing_id in adopted or any(r.same_target_id == thing_id for r in rows):
-        return None
-    home = outer.part_of if outer is not None else None
-    if not isinstance(home, dict) or "sphere" not in home:
-        return f"{name} isn't moved into {target}: it isn't offered to"
-    held = row.get("from")
-    if not isinstance(held, dict) or held.get("sphere") != home["sphere"]:
-        return f"{name} isn't moved into {target}: it isn't filed where {target} goes"
-    # where `spheres.items` places it, as `bodies._refile_rows` drew it: a
-    # drawer the sphere no longer has is its Unsorted
-    have = {drawer.id for drawer in spheres.drawers(view, home["sphere"])}
-    placed = held.get("drawer")
-    if placed not in have:
-        placed = UNSORTED_DRAWER_ID
-    if placed != home.get("drawer"):
-        return f"{name} isn't moved into {target}: it isn't filed where {target} goes"
-    return None
-
-
-def file_entry(
-    rev: Any,
-    world: World,
-    before: WorldView,
-    thing_id: str,
-    part_of: dict[str, str] | None,
-    made: dict[str, str],
-    notes: list[str] | None = None,
-    *,
-    refiling: bool = True,
-) -> None:
-    """File the entry a preview writes in the outer body its `part_of`
-    names (`{"name", "drawer"}`, ruling C11), in `rev`: moved out of where
-    its stub was filed (`refiling`), else only when it's filed nowhere. A
-    `part_of` naming a sphere the world has is written by the caller."""
-
-    if part_of is None or "name" not in part_of:
-        return
-    home = resolve_home(part_of, made)
-    if home is not None:
-        file_in(rev, world, before, thing_id, home, notes, refiling=refiling)
 
 
 def matching_stub(view: WorldView, kind: str, name: str) -> str | None:
@@ -3699,9 +2756,8 @@ async def preview_thing(
     sees it). `fields` are the owner's picks (`name`, `born`, a race's
     `species`, ...), kept as given; an `aka` among them is the preview's
     other names, a `tag` its tag, and a `stub` marker is dropped. Where
-    the owner files it (`filings`, and the old fields a create box may
-    still send: a place's `parent`, a `part_of`, `ties`) become ticked
-    "In" rows (`owner_filings`), never written as those fields.
+    the owner files it (`filings`, an event's `place`, an item's
+    `owner`) become ticked "In" rows (`owner_filings`).
 
     `hint` names a prompt hint (`hint_names`): its text goes into the
     prompt, and under the religion, culture or order hint the `belief`
@@ -3747,9 +2803,6 @@ async def preview_thing(
     (`move_here_rows`) is found by code: facts near it that name it. The
     generic branch's reply also gives its "elsewhere" list.
 
-    A sphere isn't made here: `worldplay.spheres.preview_sphere` makes one
-    from a template.
-
     The reply's `aka` becomes the preview's other names and its `names`
     the `new_names` accept makes stubs for (`_new_names`). Without a
     `stub_id`, a live stub of the same kind and name is offered as
@@ -3759,22 +2812,20 @@ async def preview_thing(
     stub = _live_stub(view, stub_id) if stub_id is not None else None
     if stub is not None:
         kind = stub.kind
-        if kind not in CREATE_KINDS:
-            raise ValueError(f"a {kind} stub can't be expanded yet")
     if kind not in CREATE_KINDS:
         raise ValueError(f"can't create a {kind!r} from a prompt")
-    if kind == "sphere":
-        raise ValueError("a sphere is made from a template: preview_sphere")
     hint_body = hint_text(hint) if hint is not None else None
     prose_gen.require_client(client)
     kind_spec = get_kind(kind)
     fields = dict(fields or {})
+    # the owner's filings first: an event's `place` and an item's `owner`
+    # are filings, no field of their own
+    owned = owner_filings(view, fields, kind)
     for field, value in fields.items():
         validate_field(kind_spec, field, value)
     owner_aka = fields.pop("aka", None)
     fields.pop("stub", None)
     owner_tag = clean_tag(fields.pop("tag", None))
-    owned = owner_filings(view, fields, kind)
     if stub is not None and not fields.get("name"):
         fields["name"] = view.name_of(stub.id) or ""
     treated_as_new = [name for name in new_names if name.strip()]
@@ -4105,7 +3156,7 @@ async def preview_thing(
         home = homes[0] if homes else None
         found = await same_thing(
             world,
-            preview_label(name, kind, None, view.name_of(home) if home else None),
+            preview_label(name, kind, view.name_of(home) if home else None),
             [fact.text for fact in facts],
             same_as[0].thing_id,
             client,
@@ -4204,8 +3255,7 @@ async def _preview_prose(
 
     `personality`'s background also leaves out whatever
     `prose_gen.inherited_categories("description")` maps as inherited (a
-    species', race's or mix's `physical` and `variation`, a culture's
-    `dress`) -- the same rule `prose_gen._section_facts` applies for a
+    species', race's or mix's `physical` and `variation`) -- the same rule `prose_gen._section_facts` applies for a
     thing already in the world, and `prose_gen.background_for_section`'s
     own exclusion of the character's own `appearance` facts applies here
     too -- so a fresh preview agrees with a later regeneration (acceptance
@@ -4280,8 +3330,7 @@ def accept_preview(
     should know (what was left out, and why); `prose` the other things
     whose prose input changed, for the caller to regenerate.
 
-    One writer that tags and files (Filing, Task 4); it never writes
-    `part_of`, `ties` or a place's `parent`:
+    One writer that tags and files (Filing, Task 4):
 
     - Only its ticked facts are written (a repeat starts unticked at the
       untick threshold), and each ticked elsewhere fact goes onto its
@@ -4337,31 +3386,6 @@ def accept_preview(
             raise ValueError("a preview goes into a stub or onto an entry, not both")
         return _accept_same(world, preview, same_target_id, notes, prose)
     return _accept_new(world, preview, into_stub, notes, prose)
-
-
-def _skip_moved_repeats(
-    view: WorldView,
-    preview: SpherePreview,
-    settings: CurationSettings,
-    notes: list[str] | None,
-) -> None:
-    """The accept's safety net (ruling C24): a ticked own fact that says
-    again what a ticked move brings in -- at the world's
-    `repeat_untick_threshold`, with at least `UNTICK_MIN_WORDS` content
-    words -- isn't written; the move brings the claim, and a note says
-    so. The preview unticks it when the owner ticks the move; this is for
-    a client that didn't. Only moves from an entry the preview offers them
-    from count (`move_in_sources`)."""
-
-    sources = move_in_sources(view, preview) or set()
-    moves = [row for row in preview.move_in if row.ticked and row.from_id in sources]
-    ticked = [fact for fact in preview.facts if fact.ticked]
-    for fact, _row, _score in _moved_repeats(view, ticked, moves, settings):
-        text = view.render(fact.text)
-        fact.ticked = False
-        log.info("create.own_repeat_of_move_skipped", text=text[:60])
-        if notes is not None:
-            notes.append(f"Not written twice: {text!r} is moved in already")
 
 
 def _accept_new(
@@ -4489,6 +3513,18 @@ def name_thing(
         rev.set_field(thing_id, "aka", aka, None)
 
 
+def _hint_agent(preview: CreatePreview) -> dict[str, bool]:
+    """`{"agent": <bool>}`, the default its prompt hint gives an entry
+    (`kinds.HINT_AGENT`: a religion, nation or order acts; a culture or
+    field doesn't), unless the owner's fields set it; nothing for no hint
+    or one the table doesn't list."""
+
+    agent = HINT_AGENT.get(preview.hint or "")
+    if "agent" in preview.fields or agent is None:
+        return {}
+    return {"agent": agent}
+
+
 class _UnlinkedNames(Exception):
     """New names whose stubs no fact linked to: the write is rolled back
     and made again without them."""
@@ -4553,6 +3589,7 @@ def _write_preview(
             if preview.hint:
                 # the prompt hint it was written with, shown on its page
                 fields["hint"] = preview.hint
+            fields.update(_hint_agent(preview))
             thing_id = rev.create_thing(preview.kind, fields)
         else:
             thing_id = stub.id
@@ -4578,6 +3615,8 @@ def _write_preview(
                 rev.set_field(thing_id, "tag", preview.tag, None)
             if preview.hint:
                 rev.set_field(thing_id, "hint", preview.hint, None)
+            for field, value in _hint_agent(preview).items():
+                rev.set_field(thing_id, field, value, None)
             rev.remove_field_value(thing_id, "stub", None)
 
         # the revision's own view: the stubs just made and the thing's own
@@ -5073,7 +4112,7 @@ def _merge_entry(
     types = {spec.name: spec.type for spec in get_kind(state.kind).fields}
     skipped: list[str] = []
     for field, value in preview.fields.items():
-        if field in ("ties", "part_of", "filings", "tag"):
+        if field in ("filings", "tag"):
             continue
         if types.get(field) == "thing" and isinstance(value, str):
             value = moved.get(value, value)

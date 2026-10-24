@@ -23,15 +23,14 @@ A thing's heritage (`talemate.world.heritage`) feeds in too, with
 overrides applied. A character's sections add the inherited facts
 `inherited_categories` maps to them -- a species', race's or mix's
 `physical` and `variation` facts to `description`, `instinct` to
-`personality`, and a culture's dress, customs and beliefs -- and every
-other inherited fact goes to the background. A race or mix gets all its
+`personality` -- and every other inherited fact goes to the background. A race or mix gets all its
 inherited facts as background. Since an ancestor's change changes the
 prose, stretches and staleness follow the thing's lineage (`lineage_ids`).
 
 `personality`'s background leaves the body out: the character's own
 `appearance` facts, and whatever `inherited_categories("description")`
 maps as inherited (a species', race's or mix's `physical` and
-`variation`, a culture's `dress`), are left out of it entirely. Giving
+`variation`), are left out of it entirely. Giving
 the model appearance in view, even "for consistency only", made it
 restate the body instead of writing personality; `description`'s own
 background is unaffected (acceptance probe:
@@ -50,7 +49,7 @@ from typing import Any
 import structlog
 
 from talemate.prompts import Prompt
-from talemate.world import entries, heritage, spheres
+from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
@@ -71,18 +70,12 @@ _SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
     "personality": ("personality",),
 }
 
-# the inherited fact categories a character's section adds to its own, by
-# the source layer's kind: a heritage layer's (species, race or mix) ...
+# the inherited fact categories a character's section adds to its own,
+# from a heritage layer (species, race or mix)
 _HERITAGE_SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
     "description": ("physical", "variation"),
     "personality": ("instinct",),
 }
-# ... and a culture's -- customs shape behaviour, so they're personality
-_CULTURE_SECTION_CATEGORIES: dict[str, tuple[str, ...]] = {
-    "description": ("dress",),
-    "personality": ("customs", "belief"),
-}
-
 # an instant past the proleptic-Gregorian range, mirroring view.py's and
 # prose.py's own "+infinity" for at=None
 _FAR_FUTURE = 10**15
@@ -121,17 +114,15 @@ def sections_for(kind: str) -> tuple[str, ...]:
     return ("description",)
 
 
-# the sphere categories no description is written from (ruling P18): a
-# sphere's summary (ruling P1) stays its own, never a retelling of its
-# drawers' statements or its timeline, and a place sphere is described
-# from its place facts; nor a real being's exceptions to its ties, which
-# are on its sheet, as a character's are
+# the categories no description is written from (ruling P18): a place's
+# statements and timeline, which its timeline shows; nor a real being's
+# exceptions to its filings, which are on its sheet, as a character's are
 _NOT_DESCRIBED: tuple[str, ...] = ("statement", "timeline", "ties")
 
 
 def section_categories(kind: str, section: str) -> tuple[str, ...]:
     """The fact categories `section` of a `kind` thing is generated from:
-    for `description`, never a sphere's statements or timeline
+    for `description`, never a place's statements or timeline
     (`_NOT_DESCRIBED`)."""
 
     if kind == "character":
@@ -158,11 +149,7 @@ def inherited_categories(section: str) -> dict[str, tuple[str, ...]]:
     """The inherited fact categories a character's `section` adds to its
     own, by the kind of layer they're inherited from."""
 
-    categories = {
-        kind: _HERITAGE_SECTION_CATEGORIES[section] for kind in HERITAGE_KINDS
-    }
-    categories["culture"] = _CULTURE_SECTION_CATEGORIES[section]
-    return categories
+    return {kind: _HERITAGE_SECTION_CATEGORIES[section] for kind in HERITAGE_KINDS}
 
 
 def lineage_ids(
@@ -190,10 +177,10 @@ def _section_facts(
 
     `personality`'s background also drops whatever `description` maps as
     inherited (a species', race's or mix's `physical` and `variation`
-    facts, and a culture's `dress`) -- giving the model appearance in view
+    facts) -- giving the model appearance in view
     made it narrate the body instead of writing personality (acceptance
     probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md).
-    `description`'s own background is unaffected. A sphere's summary fact
+    `description`'s own background is unaffected. An entry's summary fact
     (`entries.is_summary_fact`) comes first."""
 
     own_categories = section_categories(state.kind, section)
@@ -205,7 +192,7 @@ def _section_facts(
     facts: list[str] = []
     inherited_background: list[str] = []
     found = heritage.effective_facts(view, state.id)
-    # a sphere's summary fact leads its description (ruling P21): the
+    # a summary fact leads its description (ruling P21): the
     # other about facts add to it, never replace it
     found.sort(key=lambda pair: not entries.is_summary_fact(pair[0]))
     owners: dict[str, ThingState | None] = {}
@@ -266,9 +253,8 @@ def background_for_section(
 
     `personality` also drops the thing's own `appearance` facts, for the
     same reason `_section_facts` drops the inherited physical/variation
-    ones; `description` drops a sphere's statements and timeline
-    (`_NOT_DESCRIBED`, ruling P18), so they don't come back as background.
-    A sphere's `template` is a core field too ("A religion sphere.")."""
+    ones; `description` drops a place's statements and timeline
+    (`_NOT_DESCRIBED`, ruling P18), so they don't come back as background."""
 
     categories = set(section_categories(kind, section))
     if section == "personality":
@@ -289,9 +275,6 @@ def background_for_section(
             background.append(f"A {value}.")
         elif field == "name":
             background.append(f"Named {value}.")
-    template = fields.get("template")
-    if isinstance(template, str) and template:
-        background.append(f"A {template} sphere.")
 
     return background
 
@@ -365,9 +348,7 @@ async def generate_section(
 ) -> str:
     """Generate `section`'s prose from the thing's facts at `at` and what
     it inherits then, cache it for the stretch containing `at`, and return
-    the text. A sphere with no fact the section reads (a core's summary,
-    ruling P18) keeps the prose it has: no call, nothing cached; with no
-    prose yet, it's written from its core fields (name, template)."""
+    the text."""
 
     view = world.view(at)
     state = view.thing(thing_id)
@@ -376,16 +357,6 @@ async def generate_section(
 
     name = view.name_of(thing_id) or ""
     facts, inherited_background = _section_facts(view, state, section)
-    kept = (
-        world.prose().get(thing_id, section, at)
-        if not facts and spheres.is_sphere(state)
-        else None
-    )
-    if kept is not None and kept.text:
-        # a sphere's summary from its core reads no fact (P18): nothing new
-        # to write from, so the summary it has stays, uncached anew (an
-        # empty one, an accepted preview's "", is no summary)
-        return kept.text
     background = background_for_section(
         world.calendar,
         state.kind,
@@ -394,10 +365,6 @@ async def generate_section(
         state.fields,
         _heritage_line(view, thing_id) + inherited_background,
     )
-    if not facts and spheres.is_sphere(state):
-        # no summary at all (the core gave none, or an empty one): written from what it is,
-        # its name and template
-        facts, background = background, []
     text = await render_section(state.kind, name, section, facts, client, background)
 
     # cached at the revision the facts were read at (`view.rev`), not the

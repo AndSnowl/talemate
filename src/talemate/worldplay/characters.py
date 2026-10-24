@@ -53,7 +53,8 @@ _DESCRIPTION_CATEGORIES = ("appearance", "background")
 _FAR_FUTURE = 10**15
 
 # how character creation ends an exception's `ties` fact, linking what it
-# departs from: a thing item, or (for a statement item) the sphere
+# departs from: an entry filed in the target, or (for one of the target's
+# facts, or the target as a whole) the target
 DEPARTS_FROM = "Departs from"
 DEPARTS_FROM_TEACHING = "Departs from a teaching of"
 
@@ -286,7 +287,7 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
 
     The description facts the thing inherits as of `at`
     (`prose_gen.inherited_categories`: a species', race's or mix's
-    `physical` and `variation` facts, a culture's dress) get lines too,
+    `physical` and `variation` facts) get lines too,
     worded the same and prefixed with their source's name, e.g. `"Since
     500: Owl-folk: live to about 60 years."`. Overridden ones get none.
     Own lines come before inherited ones of the same date. A layer that

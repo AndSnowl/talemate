@@ -11,32 +11,28 @@ def test_kinds_table():
     assert [f.name for f in character.fields] == [
         "name",
         "born",
-        "culture",
         "voice",
         "color",
         "heritage",
-        "ties",
         "aka",
         "stub",
-        "part_of",
         "tag",
         "filings",
         "hint",
+        "agent",
     ]
     assert [f.type for f in character.fields] == [
         "text",
         "date",
-        "thing",
         "json",
         "text",
         "thing",
         "json",
         "json",
-        "json",
-        "json",
         "text",
         "json",
         "text",
+        "json",
     ]
     assert character.categories == [
         "appearance",
@@ -57,7 +53,7 @@ def test_every_kind_has_aka_and_stub():
         types = {f.name: f.type for f in kind.fields}
         assert types["aka"] == "json", kind.name
         assert types["stub"] == "json", kind.name
-        assert types["part_of"] == "json", kind.name
+        assert types["agent"] == "json", kind.name
         assert types["tag"] == "text", kind.name
         assert types["filings"] == "json", kind.name
         assert types["hint"] == "text", kind.name
@@ -128,10 +124,10 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
-        "part_of",
         "tag",
         "filings",
         "hint",
+        "agent",
     ]
     assert [f.type for f in species.fields] == [
         "text",
@@ -141,10 +137,10 @@ def test_species_race_mix_kinds():
         "json",
         "json",
         "json",
-        "json",
         "text",
         "json",
         "text",
+        "json",
     ]
     assert species.categories == _HERITAGE_CATEGORIES
 
@@ -157,10 +153,10 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
-        "part_of",
         "tag",
         "filings",
         "hint",
+        "agent",
     ]
     assert [f.type for f in race.fields] == [
         "text",
@@ -170,10 +166,10 @@ def test_species_race_mix_kinds():
         "json",
         "json",
         "json",
-        "json",
         "text",
         "json",
         "text",
+        "json",
     ]
     assert race.categories == _HERITAGE_CATEGORIES
 
@@ -186,10 +182,10 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
-        "part_of",
         "tag",
         "filings",
         "hint",
+        "agent",
     ]
     assert [f.type for f in mix.fields] == [
         "text",
@@ -199,10 +195,10 @@ def test_species_race_mix_kinds():
         "json",
         "json",
         "json",
-        "json",
         "text",
         "json",
         "text",
+        "json",
     ]
     assert mix.categories == _HERITAGE_CATEGORIES
 
@@ -250,40 +246,32 @@ def test_measures_shape():
         )
 
 
-def test_drawer_type_constants():
-    """One set of drawer-type constants, mirrored in the frontend's
-    worldKinds.js (pinned there by checks/worlds.check.mjs)."""
-
-    from talemate.world.kinds import (
-        DRAWER_TYPES,
-        ENTRY_DRAWER_TYPES,
-        PART_OF_KINDS,
-        WRITTEN_DRAWER_TYPES,
-    )
-
-    assert WRITTEN_DRAWER_TYPES == (
-        "places",
-        "practices",
-        "beliefs",
-        "knowledge",
-        "structure",
-    )
-    entries = ("practices", "beliefs", "knowledge", "structure")
-    assert ENTRY_DRAWER_TYPES == {
-        "lore": entries,
-        "place": ("places",),
-        "item": entries,
-        "event": entries,
-        "sphere": entries,
-        "being": ("beliefs", "practices", "structure"),
-    }
-    assert PART_OF_KINDS == ("lore", "place", "item", "event", "sphere", "being")
-    assert set(WRITTEN_DRAWER_TYPES) < set(DRAWER_TYPES)
-
-
 def test_agent_is_unrendered():
-    """A sphere's agent flag is no input to its prose (ruling P21)."""
+    """An entry's agent flag is no input to its prose (ruling P21)."""
 
     from talemate.world.prose import UNRENDERED_FIELDS
 
     assert "agent" in UNRENDERED_FIELDS
+
+
+def test_agent_is_a_bool_field_on_every_kind():
+    """`agent` is a plain field any entry can have (Filing): a bool."""
+
+    for kind in KINDS.values():
+        validate_field(kind, "agent", True)
+        validate_field(kind, "agent", False)
+        with pytest.raises(ValueError):
+            validate_field(kind, "agent", "true")
+        with pytest.raises(ValueError):
+            validate_field(kind, "agent", 1)
+
+
+def test_the_old_structure_is_gone():
+    """No sphere or culture kind, and none of the fields filing replaced."""
+
+    assert "sphere" not in KINDS
+    assert "culture" not in KINDS
+    gone = {"part_of", "ties", "parent", "cultures", "culture", "language"}
+    gone |= {"template", "drawers", "owner", "place", "drops"}
+    for kind in KINDS.values():
+        assert not gone & {f.name for f in kind.fields}, kind.name

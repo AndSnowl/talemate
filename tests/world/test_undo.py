@@ -391,12 +391,9 @@ def _referencing_write(kind):
         rev.add_fact(oskar, "relationship", f"Owes {ref(new)} a debt.")
 
     def thing_field(rev, oskar, home, new):
-        rev.set_field(oskar, "culture", new, None)
+        rev.set_field(oskar, "heritage", new, None)
 
-    def shares_field(rev, oskar, home, new):
-        rev.set_field(home, "cultures", [{"thing_id": new, "share": 1.0}], None)
-
-    return {"fact": fact, "thing": thing_field, "shares": shares_field}[kind]
+    return {"fact": fact, "thing": thing_field}[kind]
 
 
 @pytest.fixture
@@ -407,7 +404,7 @@ def oskar_and_home(world):
     return oskar, home
 
 
-@pytest.mark.parametrize("kind", ["fact", "thing", "shares"])
+@pytest.mark.parametrize("kind", ["fact", "thing"])
 def test_undo_creation_conflicts_with_later_reference(world, oskar_and_home, kind):
     oskar, home = oskar_and_home
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
@@ -454,7 +451,7 @@ def test_undo_creation_reports_one_conflict_for_several_references(
         created = rev.rev
     with world.revision(Source.scene("s1", "F", "m1")) as rev:
         rev.add_fact(oskar, "relationship", f"Owes {ref(maren)} a debt.")
-        rev.set_field(oskar, "culture", maren, None)
+        rev.set_field(oskar, "heritage", maren, None)
         referenced = rev.rev
 
     report = world.undo([created])
@@ -472,7 +469,7 @@ def test_undo_creation_with_reference_inside_targets(world, oskar_and_home):
         maren = rev.create_thing("character", fields={"name": "Maren"})
     with world.revision(Source.scene("s1", "E", "m2")) as rev:
         rev.add_fact(oskar, "relationship", f"Owes {ref(maren)} a debt.")
-        rev.set_field(oskar, "culture", maren, None)
+        rev.set_field(oskar, "heritage", maren, None)
 
     report = world.undo(_branch_revs(world, "E"))
 
@@ -480,7 +477,7 @@ def test_undo_creation_with_reference_inside_targets(world, oskar_and_home):
     assert world.view().thing(maren) is None
     state = world.view().thing(oskar)
     assert state.facts == []
-    assert "culture" not in state.fields
+    assert "heritage" not in state.fields
 
 
 def test_undo_creation_ignores_retired_reference(world, oskar_and_home):
@@ -787,7 +784,7 @@ def test_undo_records_its_conflicts(world, maren):
 def test_undo_after_redone_removal_lists_the_removal(world, oskar_and_home):
     oskar, home = oskar_and_home
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
-        rev.set_field(oskar, "culture", home, None)
+        rev.set_field(oskar, "heritage", home, None)
         target = rev.rev
     with world.revision(Source.manual()) as rev:
         rev.remove_thing(oskar)
@@ -862,7 +859,7 @@ def test_reundo_after_redo_of_a_later_removal_is_noop(world, oskar_and_home):
 def test_undoing_a_redo_keeps_a_change_undone_since(world, oskar_and_home):
     oskar, home = oskar_and_home
     with world.revision(Source.scene("s1", "E", "m1")) as rev:
-        rev.set_field(oskar, "culture", home, None)
+        rev.set_field(oskar, "heritage", home, None)
         target = rev.rev
     with world.revision(Source.manual()) as rev:
         rev.remove_thing(oskar)
@@ -873,16 +870,16 @@ def test_undoing_a_redo_keeps_a_change_undone_since(world, oskar_and_home):
     with world.revision(Source.manual()) as rev:
         rev.remove_thing(oskar)
         removed_again = rev.rev
-    # brings Oskar back without the culture: the target's write and the
+    # brings Oskar back without the heritage: the target's write and the
     # removal of it cancel out
     world.undo([target, removed_again])
-    assert "culture" not in world.view().thing(oskar).fields
+    assert "heritage" not in world.view().thing(oskar).fields
 
-    # undoing the redo would restore the first undo's copy of the culture,
+    # undoing the redo would restore the first undo's copy of the heritage,
     # but the target has been undone since
     world.undo([redo.undo_rev])
 
-    assert "culture" not in world.view().thing(oskar).fields
+    assert "heritage" not in world.view().thing(oskar).fields
 
 
 def test_redo_restores_a_fact_its_undo_never_wrote(world):

@@ -118,7 +118,7 @@ def test_stub_links_tab_and_aka(app, page):
 
 
 YELENA = {"kind": "character", "name": "Yelena", "stub": "live"}
-OLD_RITE = {"kind": "culture", "name": "Old Rite", "stub": "live"}
+OLD_RITE = {"kind": "lore", "name": "Old Rite", "stub": "live"}
 VASHA = {
     "kind": "character",
     "name": "Vasha",
@@ -168,21 +168,13 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     assert "Vasha" in mention.inner_text()
     assert "Raised by her mother Yelena" in mention.inner_text()
 
-    # Vasha's page: a culture stub (a legacy kind) is made a sphere
+    # Vasha's page
     mention.get_by_text("Vasha").click()
     vasha = page.get_by_test_id("thing-page")
     vasha.get_by_test_id("thing-name").filter(has_text="Vasha").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
     fact = _fact(vasha, "Raised by her mother")
-    card = _stub_card(
-        page, fact.get_by_test_id("linked-stub").filter(has_text="Old Rite")
-    )
-    assert card.get_by_role("button", name="Make it a sphere…").is_enabled()
-    assert card.get_by_role("button", name="Expand").count() == 0
-    assert card.get_by_test_id("expand-later").count() == 0
-    page.mouse.move(0, 0)
-    card.wait_for(state="hidden", timeout=TIMEOUT_MS)
 
     # expanding Yelena: her kind's create box, from the stub
     card = _stub_card(

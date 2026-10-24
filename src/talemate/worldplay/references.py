@@ -5,13 +5,13 @@ human-readable entries for the delete dialog:
 
 - other things' facts that reference it (`[[thing:<id>]]`), on any story
   date;
-- other things' `thing`, `things` and `shares` fields that point at it
+- other things' `thing` and `things` fields that point at it
   (a character's `heritage`, a race's `species`, a mix's `parents`, ...),
   and their `filings` into it or `within` it, on any story date (a value
   set once and since replaced still renders as unknown on the dates it
   held);
 - scenes that use it as the player, a character, the place, pulled-in
-  lore or a pulled-in sphere.
+  lore.
 """
 
 from __future__ import annotations
@@ -19,7 +19,6 @@ from __future__ import annotations
 import structlog
 
 from talemate.world.kinds import get_kind
-from talemate.world.spheres import is_sphere
 from talemate.world.store import World
 
 log = structlog.get_logger("talemate.worldplay.references")
@@ -39,11 +38,6 @@ def _points_at(field_type: str, value: object, thing_id: str, field: str = "") -
         return value == thing_id
     if field_type == "things" and isinstance(value, list):
         return thing_id in value
-    if field_type == "shares" and isinstance(value, list):
-        return any(
-            isinstance(share, dict) and share.get("thing_id") == thing_id
-            for share in value
-        )
     return False
 
 
@@ -87,9 +81,7 @@ def _field_entries(world: World, thing_id: str) -> list[dict]:
     return entries
 
 
-def _scene_roles(
-    record_state: dict, player: str | None, thing_id: str, sphere: bool = False
-) -> list[str]:
+def _scene_roles(record_state: dict, player: str | None, thing_id: str) -> list[str]:
     roles = []
     if player == thing_id:
         roles.append("player")
@@ -102,17 +94,15 @@ def _scene_roles(
     if record_state.get("place_thing_id") == thing_id:
         roles.append("place")
     if thing_id in (record_state.get("pulled_in") or []):
-        roles.append("sphere" if sphere else "lore")
+        roles.append("lore")
     return roles
 
 
 def _scene_entries(world: World, thing_id: str) -> list[dict]:
-    state = world.view().thing(thing_id)
-    sphere = state is not None and is_sphere(state)
     return [
         {"scene_id": record.id, "name": record.name, "role": role}
         for record in world.scenes().list()
-        for role in _scene_roles(record.state, record.player_thing_id, thing_id, sphere)
+        for role in _scene_roles(record.state, record.player_thing_id, thing_id)
     ]
 
 
@@ -121,7 +111,7 @@ def thing_references(world: World, thing_id: str) -> dict[str, list[dict]]:
     `{"facts": [{thing_id, thing_name, text}], "fields": [{thing_id,
     thing_name, field}], "scenes": [{scene_id, name, role}]}`. A fact's
     text is rendered with names; a scene's role is `player`, `character`,
-    `place`, `lore` or `sphere`."""
+    `place` or `lore`."""
 
     return {
         "facts": _fact_entries(world, thing_id),

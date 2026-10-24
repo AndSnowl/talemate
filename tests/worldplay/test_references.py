@@ -58,10 +58,7 @@ def test_fields_that_point_at_it(world):
         quay = rev.create_thing(
             "place", {"name": "The Quay", "filings": [_in(harbour)]}
         )
-        old_town = rev.create_thing(
-            "place",
-            {"name": "Old Town", "cultures": [{"thing_id": harbour, "share": 1}]},
-        )
+        old_town = rev.create_thing("place", {"name": "Old Town"})
         rev.set_field(harbour, "filings", [_in(old_town)], None)
         lantern = rev.create_thing(
             "item", {"name": "Lantern", "filings": [_in(harbour, "owned by")]}
@@ -75,7 +72,6 @@ def test_fields_that_point_at_it(world):
 
     assert sorted(found, key=lambda entry: entry["thing_name"]) == [
         {"thing_id": lantern, "thing_name": "Lantern", "field": "filings"},
-        {"thing_id": old_town, "thing_name": "Old Town", "field": "cultures"},
         {"thing_id": quay, "thing_name": "The Quay", "field": "filings"},
         {"thing_id": vasha, "thing_name": "Vasha", "field": "filings"},
     ]
@@ -132,10 +128,9 @@ def test_references_count_parents_and_heritage(world):
     ]
 
 
-def test_scene_role_of_a_pulled_in_sphere(world, spheres_world):
-    """A sphere a scene pulled in (a sphere thing, or a place sphere named
-    in the prompt) is labelled "sphere", not "lore"; the scene's place
-    stays "place"."""
+def test_scene_role_of_pulled_in_entries(world, spheres_world):
+    """An entry a scene pulled in (a faith, or a place named in the
+    prompt) is labelled "lore"; the scene's place stays "place"."""
 
     s = spheres_world
     scene_id = world.scenes().create(
@@ -144,8 +139,8 @@ def test_scene_role_of_a_pulled_in_sphere(world, spheres_world):
         state={"place_thing_id": s.dawn_peak, "pulled_in": [s.tsardom, s.dawn]},
     )
     entry = {"scene_id": scene_id, "name": "Vigil"}
-    assert thing_references(world, s.tsardom)["scenes"] == [{**entry, "role": "sphere"}]
-    assert thing_references(world, s.dawn)["scenes"] == [{**entry, "role": "sphere"}]
+    assert thing_references(world, s.tsardom)["scenes"] == [{**entry, "role": "lore"}]
+    assert thing_references(world, s.dawn)["scenes"] == [{**entry, "role": "lore"}]
     assert thing_references(world, s.dawn_peak)["scenes"] == [
         {**entry, "role": "place"}
     ]

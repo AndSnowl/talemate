@@ -11,15 +11,6 @@ import pytest
 from talemate.world.entries import held_by, with_held_by
 from talemate.world.store import Source
 
-DOCTRINES = "d0000001"
-RITES = "d0000002"
-LEGENDS = "d0000003"
-LAWS = "d0000004"
-
-
-def _drawer(drawer_id, type_, title):
-    return {"id": drawer_id, "type": type_, "title": title}
-
 
 @dataclass
 class Faiths:
@@ -38,63 +29,26 @@ class Faiths:
 
 @pytest.fixture
 def faiths(world):
-    """The Church (a religion: Doctrines, Rites), the Riverfolk (a culture:
-    Beliefs and Legends), the Tsardom (a nation: Laws), the Eternal Light
-    (a lore entry, its one fact held by the Church by hand) and the Divine
-    Right, a doctrine entry filed in the Church's Doctrines."""
+    """The Church (religion lore), the Riverfolk (culture lore), the
+    Tsardom (a place), each with a plain fact; the Eternal Light (a lore
+    entry, its one fact held by the Church by hand) and the Divine Right,
+    a doctrine entry filed in the Church."""
 
     with world.revision(Source.manual(note="faiths")) as rev:
         church = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "The Church of the Eternal Light",
-                "template": "religion",
-                "drawers": [
-                    _drawer(DOCTRINES, "beliefs", "Doctrines"),
-                    _drawer(RITES, "practices", "Rites and Ceremonies"),
-                ],
-            },
+            "lore",
+            fields={"name": "The Church of the Eternal Light", "hint": "religion"},
         )
         eternal = rev.add_fact(
-            church,
-            "statement",
-            "The Light watches over the faithful.",
-            origin={"drawer": DOCTRINES},
+            church, "general", "The Light watches over the faithful."
         )
-        candles = rev.add_fact(
-            church,
-            "statement",
-            "Candles are lit at every baptism.",
-            origin={"drawer": RITES},
-        )
+        candles = rev.add_fact(church, "general", "Candles are lit at every baptism.")
         folk = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "The Riverfolk",
-                "template": "culture",
-                "drawers": [_drawer(LEGENDS, "beliefs", "Beliefs and Legends")],
-            },
+            "lore", fields={"name": "The Riverfolk", "hint": "culture"}
         )
-        stars = rev.add_fact(
-            folk,
-            "statement",
-            "The dead are reborn as stars.",
-            origin={"drawer": LEGENDS},
-        )
-        tsardom = rev.create_thing(
-            "sphere",
-            fields={
-                "name": "The Tsardom",
-                "template": "nation",
-                "drawers": [_drawer(LAWS, "beliefs", "Laws")],
-            },
-        )
-        land = rev.add_fact(
-            tsardom,
-            "statement",
-            "Only the faithful may hold land.",
-            origin={"drawer": LAWS},
-        )
+        stars = rev.add_fact(folk, "general", "The dead are reborn as stars.")
+        tsardom = rev.create_thing("place", fields={"name": "The Tsardom"})
+        land = rev.add_fact(tsardom, "law", "Only the faithful may hold land.")
         light = rev.create_thing("lore", fields={"name": "The Eternal Light"})
         blinded = rev.add_fact(
             light,
@@ -104,10 +58,7 @@ def faiths(world):
         )
         doctrine = rev.create_thing(
             "lore",
-            fields={
-                "name": "The Divine Right",
-                "part_of": {"sphere": church, "drawer": DOCTRINES},
-            },
+            fields={"name": "The Divine Right", "filings": [{"target": church}]},
         )
         right = rev.add_fact(
             doctrine, "general", "The Tsar rules by the grace of the Light."
@@ -147,7 +98,8 @@ def test_held_by_origin(world, faiths):
 
 def test_held_by_deleted_holder_is_hidden(world, faiths):
     """A holder that's been deleted holds nothing (the fact reads plain);
-    undoing the delete brings it back, as ties to a deleted sphere do."""
+    undoing the delete brings it back, as a filing into a deleted entry
+    does."""
 
     with world.revision(Source.manual()) as rev:
         rev.remove_thing(faiths.church)
@@ -157,11 +109,13 @@ def test_held_by_deleted_holder_is_hidden(world, faiths):
 
 
 def _hill_clans(world):
-    """The Hill Clans, a culture entry (its kind takes `belief` facts),
+    """The Hill Clans, a culture (lore, whose kind takes `belief` facts),
     with one belief unmarked and one marked held by the Church."""
 
     with world.revision(Source.manual(note="clans")) as rev:
-        clans = rev.create_thing("culture", fields={"name": "The Hill Clans"})
+        clans = rev.create_thing(
+            "lore", fields={"name": "The Hill Clans", "hint": "culture"}
+        )
         stones = rev.add_fact(clans, "belief", "The standing stones hear oaths.")
         light = rev.add_fact(clans, "general", "They keep sheep on the high fells.")
     return clans, stones, light
@@ -200,9 +154,9 @@ def test_held_by_explicit_still_wins(world, faiths):
     assert _held(world, clans, stones) == clans
 
 
-def test_beliefs_drawer_statement_is_plain(world, faiths):
-    """Drawers no longer hold: a statement in a religion's or a culture's
-    beliefs drawer reads plain, as a nation's Laws always did."""
+def test_other_facts_of_a_faith_are_plain(world, faiths):
+    """Only a `belief` fact is held implicitly: a religion's, a culture's
+    or a nation's other facts read plain."""
 
     assert _held(world, faiths.church, faiths.eternal) is None
     assert _held(world, faiths.folk, faiths.stars) is None
@@ -211,8 +165,8 @@ def test_beliefs_drawer_statement_is_plain(world, faiths):
 
 
 def test_doctrine_entry_not_held_implicitly(world, faiths):
-    """An entry filed in a beliefs drawer doesn't inherit held-by: its own
-    facts are marked one by one."""
+    """An entry filed in a religion doesn't inherit held-by: its own facts
+    are marked one by one."""
 
     assert _held(world, faiths.doctrine, faiths.right) is None
 
@@ -223,14 +177,14 @@ def test_with_held_by_merges_origin():
 
     holder = "a" * 32
     assert with_held_by(None, holder) == {"held_by": holder}
-    assert with_held_by({"drawer": DOCTRINES, "tie": "b" * 32}, holder) == {
-        "drawer": DOCTRINES,
+    assert with_held_by({"rejects_fact": "c" * 32, "tie": "b" * 32}, holder) == {
+        "rejects_fact": "c" * 32,
         "tie": "b" * 32,
         "held_by": holder,
     }
     # cleared: kept as an explicit "held by nobody"
-    assert with_held_by({"drawer": DOCTRINES, "held_by": holder}, None) == {
-        "drawer": DOCTRINES,
+    assert with_held_by({"tie": "b" * 32, "held_by": holder}, None) == {
+        "tie": "b" * 32,
         "held_by": None,
     }
 
@@ -242,7 +196,7 @@ def test_correct_keeps_held_by(world, faiths):
     with world.revision(Source.manual()) as rev:
         rev.correct_fact(
             faiths.candles,
-            origin=with_held_by({"drawer": RITES}, faiths.folk),
+            origin=with_held_by({"tie": faiths.tsardom}, faiths.folk),
         )
     with world.revision(Source.manual()) as rev:
         rev.correct_fact(faiths.candles, text="Candles burn at every baptism.")
@@ -252,7 +206,7 @@ def test_correct_keeps_held_by(world, faiths):
     church = view.thing(faiths.church)
     candles = next(f for f in church.facts if f.fact_id == faiths.candles)
     assert candles.text == "Candles burn at every baptism."
-    assert candles.origin == {"drawer": RITES, "held_by": faiths.folk}
+    assert candles.origin == {"tie": faiths.tsardom, "held_by": faiths.folk}
     assert held_by(view, candles, church) == faiths.folk
     assert _held(world, faiths.light, faiths.blinded) == faiths.church
 
@@ -281,7 +235,7 @@ def test_clear_held_by(world, faiths):
 
     church = world.view().thing(faiths.church)
     eternal = next(f for f in church.facts if f.fact_id == faiths.eternal)
-    assert eternal.origin == {"drawer": DOCTRINES, "held_by": None}
+    assert eternal.origin == {"held_by": None}
     with world.revision(Source.manual()) as rev:
         rev.correct_fact(
             faiths.eternal, origin=with_held_by(eternal.origin, faiths.folk)
@@ -290,3 +244,32 @@ def test_clear_held_by(world, faiths):
 
     world.undo([cleared_rev])
     assert _held(world, faiths.light, faiths.blinded) == faiths.church
+
+
+def test_summary_prefers_cached_then_the_summary_fact(world):
+    """Ruling P21: the summary is the cached prose when there is some,
+    else the `about` fact marked `summary`, else the first `about` fact;
+    "" for an entry with neither, or none at all."""
+
+    from talemate.world.entries import summary, summary_fact
+
+    with world.revision(Source.manual()) as rev:
+        realm = rev.create_thing("place", fields={"name": "The Realm"})
+        rev.add_fact(realm, "description", "Pine and bog.")
+        rev.add_fact(realm, "about", "A northern realm.")
+        plain = rev.create_thing("lore", fields={"name": "Plain"})
+        rev.add_fact(plain, "general", "Nothing about it.")
+    view = world.view()
+    assert summary(view, realm) == "A northern realm."
+    assert summary(view, realm, "") == "A northern realm."
+    assert summary(view, realm, "The realm of pines.") == "The realm of pines."
+    assert summary(view, plain) == ""
+    assert summary(view, "f" * 32) == ""
+
+    with world.revision(Source.manual()) as rev:
+        marked = rev.add_fact(
+            realm, "about", "The realm of the Tsar.", origin={"summary": True}
+        )
+    view = world.view()
+    assert summary_fact(view.thing(realm)).fact_id == marked
+    assert summary(view, realm) == "The realm of the Tsar."

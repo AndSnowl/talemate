@@ -506,7 +506,7 @@ class WorldView:
     def rejecting(self, fact_ids: list[str]) -> list[tuple[str, FactState]]:
         """`(owner id, fact)` for every fact live at `rev` (of a live owner,
         on any story date) whose origin's `rejects_fact` is one of
-        `fact_ids` (an exception to a sphere's statement), in creation
+        `fact_ids` (an exception to an entry's fact), in creation
         order, with its overrides."""
 
         if not fact_ids:

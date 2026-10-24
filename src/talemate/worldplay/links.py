@@ -73,7 +73,7 @@ FALLBACK_KIND = "lore"
 class SameOffer(SameCandidate):
     """A thing a new name could be the same as (`world.sameness`), as the
     preview shows it: its name and kind, its line in the "Entries near this
-    one" list (`create.candidate_line`: kind, other name, sphere, stub, its
+    one" list (`create.candidate_line`: kind, other name, stub, its
     summary or first fact), so two of one name can be told apart, whether
     it has facts of its own (only then is a verdict asked), and whether
     it's a stub."""
@@ -106,12 +106,7 @@ class NewName(BaseModel):
     holds the other ways the text writes it that aren't other names: the
     name without its article ("Night of Feathers" for "The Night of
     Feathers"), or the part of it the text uses ("Vladislav I" for "Tsar
-    Vladislav I"). A `sphere` guess carries its `template` guess, if any.
-
-    `part_of` is where its stub is filed on accept (bodies within bodies):
-    `{"sphere": <id>, "drawer": <id>}`, a sphere the world has, or
-    `{"name": <name>, "drawer": <id>}`, a thing the same accept makes (an
-    outer body, or the sphere being made); None files it nowhere.
+    Vladislav I").
 
     `tag` is the stub's tag (what it is: "fortification"), and `filing`
     the one filing its stub is given (`NameFiling`), when ticked."""
@@ -120,12 +115,10 @@ class NewName(BaseModel):
     kind: str
     aka: list[dict] = []
     written: list[str] = []
-    template: str | None = None
     # the things it could be the same as, best first; and the owner's
     # answer: None (the default) is "new", a stub on accept
     same_as: list[SameOffer] = []
     same_target_id: str | None = None
-    part_of: dict[str, str] | None = None
     tag: str | None = None
     filing: NameFiling | None = None
 
@@ -533,8 +526,8 @@ def make_stubs(
     of another species, race or mix, or held whole by just one's name
     ("Owl-folk" for the Owl-folk of Moscavia). Any other name becomes a
     thing of its kind (`lore` for a kind we don't know) with its name,
-    other names and `stub={"ignored": False}` (and a `sphere` guess's
-    `template`); a lowercase leading "the" isn't part of a new stub's name
+    other names, its tag and `stub={"ignored": False}`; a lowercase
+    leading "the" isn't part of a new stub's name
     ("the Kremlin" makes "Kremlin"), though it still maps as written.
 
     A name the owner treats as new (`fresh`, by `is_new`) never reuses a
@@ -570,8 +563,6 @@ def make_stubs(
             "aka": aka,
             "stub": {"ignored": False},
         }
-        if kind == "sphere" and new.template:
-            fields["template"] = new.template
         if new.tag:
             fields["tag"] = new.tag
         thing_id = rev.create_thing(kind, fields=fields)

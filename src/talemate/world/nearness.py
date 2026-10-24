@@ -23,9 +23,6 @@ A step is one link, followed either way:
 - heritage: a character's `heritage`, a race's `species`, a mix's
   `parents`.
 
-The old structure (`part_of`, a place's or branch's `parent`, ties) is no
-longer read: a world's readers see only filings.
-
 Each link has a weight (`WEIGHTS`); a path scores the product of its
 links' weights and a thing keeps its best path within `reach` steps.
 

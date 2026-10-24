@@ -27,7 +27,7 @@ uncovered (undoing T1 and T2 of T1, N, T2 leaves N's value, quietly). A
 value or fact that can't come back because its thing was removed later
 counts as removed later. A thing whose creation is being undone is kept,
 with its rows, when a later revision outside the targets added rows to it
-or referenced it (from a fact, a `thing` field or a `shares` field). A
+or referenced it (from a fact, a `thing` field or a `things` field). A
 stub's kind change is kept the same way when a later revision outside the
 targets gave it a value or fact the other kind has no room for.
 
@@ -57,15 +57,15 @@ CHANGED_LATER = "changed again in a later revision"
 REMOVED_LATER = "removed in a later revision"
 REFERENCED_LATER = "referenced in a later revision"
 
-# the names of fields that can hold a thing id (`thing`, `things` or
-# `shares`) on some kind; each row's own kind decides whether its field
+# the names of fields that can hold a thing id (`thing` or `things`) on
+# some kind; each row's own kind decides whether its field
 # really does
 _REF_FIELD_NAMES = sorted(
     {
         spec.name
         for kind in KINDS.values()
         for spec in kind.fields
-        if spec.type in ("thing", "things", "shares")
+        if spec.type in ("thing", "things")
     }
 )
 
@@ -194,8 +194,8 @@ class _Planner:
     def _later_reference(self, thing_id: str, since: int) -> int | None:
         """The earliest later change after `since` (see `_later_write`)
         behind a live reference to `thing_id`: a fact mentioning it, a
-        `thing` field holding its id, a `things` field listing it, or a
-        `shares` field naming it. A reference an undo restored counts by its
+        `thing` field holding its id, or a `things` field listing it. A
+        reference an undo restored counts by its
         origin, so a redo brings back its power to keep the thing."""
 
         revs = [
@@ -221,13 +221,8 @@ class _Planner:
         for row in rows:
             spec = next(f for f in KINDS[row["kind"]].fields if f.name == row["field"])
             value = json.loads(row["value_json"])
-            if (
-                (spec.type == "thing" and value == thing_id)
-                or (spec.type == "things" and thing_id in value)
-                or (
-                    spec.type == "shares"
-                    and any(share["thing_id"] == thing_id for share in value)
-                )
+            if (spec.type == "thing" and value == thing_id) or (
+                spec.type == "things" and thing_id in value
             ):
                 revs.append(self._later_write("field_values", row, since))
 
@@ -269,7 +264,7 @@ class _Planner:
         """For a stub whose kind change is being undone (`live` and `want`
         differ in kind): report it if a later revision outside the targets
         added a live value or fact that `want`'s kind has no room for, such
-        as a place's `parent` on what would go back to being lore."""
+        as a character's `born` on what would go back to being lore."""
 
         if live["kind"] == want["kind"]:
             return False

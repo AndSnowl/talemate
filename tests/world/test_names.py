@@ -317,7 +317,7 @@ def test_adjective_forms_only_for_peoples_and_places(world):
         rev.create_thing("character", fields={"name": "Julia"})
         rev.create_thing("item", fields={"name": "Drago"})
         rev.create_thing("lore", fields={"name": "Vesta"})
-        magi = rev.create_thing("sphere", fields={"name": "Magi"})
+        magi = rev.create_thing("place", fields={"name": "Magi"})
         owls = rev.create_thing("species", fields={"name": "Strix"})
     view = world.view(None)
 
