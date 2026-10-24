@@ -149,6 +149,7 @@ from talemate.world.filing import (
     check_filings,
     filed_index,
     filings_of,
+    sits_in,
     tag_of,
     tags_in_use,
 )
@@ -2201,6 +2202,27 @@ def move_here_rows(
     ]
 
 
+def code_file_into(
+    view: WorldView, owners: Sequence[str], homes: Sequence[str]
+) -> list[str]:
+    """ "File into this"'s code source (ruling F7): the near entries whose
+    facts name the draft (`owners`), each once -- never one the draft
+    would itself sit in (ruling F32): one of `homes` (its "In" targets,
+    and a stub's own id, whose filings it keeps) or what one of those sits
+    in (`filing.sits_in`): filing it there would make the draft hold its
+    own container. In the Task 12 session's stored replies this guard
+    removed none of the 5 false code rows (each a sibling or an unrelated
+    entry: the capital beside its council in the realm, a people in its
+    realm) and kept the 3 right ones
+    (docs/superpowers/probes/2026-10-24-filing-flow.md, fix round 1)."""
+
+    return [
+        owner
+        for owner in dict.fromkeys(owners)
+        if not any(sits_in(view, home, owner) for home in homes)
+    ]
+
+
 def file_into_rows(
     view: WorldView,
     *rows: Iterable[FileIntoRow | str],
@@ -3114,7 +3136,14 @@ async def preview_thing(
                 lookup=lookup,
             ),
             names_into,
-            dict.fromkeys(owner for owner, _fact in naming),
+            code_file_into(
+                view,
+                [owner for owner, _fact in naming],
+                [
+                    *(row.target_id for row in filings if row.target_id),
+                    *([stub.id] if stub is not None else []),
+                ],
+            ),
             skip={*own_ids, *(row.target_id for row in filings)},
             draft_id=stub_id,
         )

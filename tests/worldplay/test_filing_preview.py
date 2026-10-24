@@ -499,13 +499,96 @@ async def test_no_hint_no_belief_category(world, moscavia):
     assert {f.category for f in preview.facts} == {"general"}
 
 
+def _wardens_world(world):
+    """The Tsardom; Velikoye filed in it; the Khorol filed in Velikoye;
+    the Tsardom's and the Khorol's facts both name the Lantern Wardens;
+    and the Wardens' stub, filed in the Old Gate, whose fact names it too."""
+
+    world.set_present(WorldDate.of(1000))
+    with world.revision(Source.manual(note="wardens")) as rev:
+        tsardom = rev.create_thing("place", {"name": "Tsardom of Moscavia"})
+        rev.add_fact(
+            tsardom, "general", "The Lantern Wardens patrol the realm's roads."
+        )
+        velikoye = rev.create_thing(
+            "place", {"name": "Velikoye", "filings": _filed(tsardom)}
+        )
+        rev.add_fact(velikoye, "general", "The capital on the Khorol.")
+        khorol = rev.create_thing(
+            "place", {"name": "Khorol River", "filings": _filed(velikoye)}
+        )
+        rev.add_fact(khorol, "general", "The Lantern Wardens light the Khorol's fords.")
+    return tsardom, velikoye, khorol
+
+
+WARDENS_REPLY = json.dumps(
+    {
+        "name": "The Lantern Wardens",
+        "tag": "guild",
+        "facts": [{"category": "general", "text": "They keep the lanterns lit."}],
+        "names": [],
+        "in": [{"entry": "Velikoye", "role": "based in"}],
+        "file_into": [],
+    }
+)
+
+
+async def test_file_into_code_never_offers_where_the_draft_sits(world):
+    """Ruling F32: "File into this"'s code source (near entries whose facts
+    name the draft) never offers an entry the draft would itself sit in --
+    an "In" target or what that sits in (the Tsardom, above Velikoye). A
+    near entry that sits under it stays offered (the Khorol, as the Host
+    draft's own regiments did in the Task 12 session)."""
+
+    tsardom, velikoye, khorol = _wardens_world(world)
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(WARDENS_REPLY)
+        preview = await preview_thing(
+            world,
+            "lore",
+            "The Lantern Wardens of Velikoye",
+            {},
+            client,
+            picks={"Velikoye": velikoye},
+        )
+    assert [f.target_id for f in preview.filings] == [velikoye]
+    assert [r.thing_id for r in preview.file_into] == [khorol]
+
+
+async def test_file_into_code_never_offers_the_stubs_own_home(world):
+    """Ruling F32, for a stub: what the stub is filed in (and above) is
+    never offered into it, though its facts name the stub."""
+
+    tsardom, velikoye, khorol = _wardens_world(world)
+    with world.revision(Source.manual(note="stub")) as rev:
+        stub = rev.create_thing(
+            "lore",
+            {
+                "name": "The Lantern Wardens",
+                "stub": {"ignored": False},
+                "filings": _filed(khorol),
+            },
+        )
+    reply = json.loads(WARDENS_REPLY)
+    reply["in"] = []
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps(reply))
+        preview = await preview_thing(
+            world, "lore", "The Lantern Wardens", {}, client, stub_id=stub
+        )
+    offered = [r.thing_id for r in preview.file_into]
+    assert khorol not in offered and tsardom not in offered
+
+
 async def test_tag_rule_without_entries_near(world):
     """The reply's tag is asked of every entry the generic branch writes,
     with or without "Entries near this one": the Skyfall session (Task 12,
     docs/superpowers/probes/2026-10-24-filing-flow.md) wrote Runic Magic
     and the Order from prompts that named no entry in full, so their
-    prompts had no near list, hence no tag rule, and the model wrote
-    "lore" (a kind, no tag) 4 times of 4."""
+    prompts had no near list, hence no tag rule, and none of their 6
+    replies wrote a fitting tag ("lore", a kind, for Runic Magic 2 of 2)."""
 
     client = MockClient("test")
     async with MockClientContext():
