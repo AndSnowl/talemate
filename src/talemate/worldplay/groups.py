@@ -67,11 +67,11 @@ from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.create import (
-    CANDIDATE_LINE_CHARS,
     TITLE_WORDS,
     clean_tag,
     current_date,
     default_category,
+    filing_line,
     json_objects,
     write_filings,
 )
@@ -405,43 +405,20 @@ def _parse_add_entries(reply: str) -> list[dict[str, Any]]:
     return []
 
 
-def _clip(text: str, limit: int = CANDIDATE_LINE_CHARS) -> str:
-    text = " ".join(text.split())
-    if len(text) <= limit:
-        return text
-    return text[: limit - 1].rsplit(" ", 1)[0] + "…"
-
-
-def _member_line(view: WorldView, state: ThingState) -> str:
-    """Ruling I5: one existing member, "Name (kind, tag): clipped
-    summary", as probe 6's own raw inputs showed the model ("Wattles
-    (lore, custom): They are popular primarily..."). Its summary fact if
-    it has one (`entries.is_summary_fact`), else its first written fact,
-    else "(nothing written yet)"."""
-
-    tag = tag_of(state)
-    bits = f"{state.kind}, {tag}" if tag else state.kind
-    fact = next((f for f in state.facts if entries.is_summary_fact(f)), None)
-    if fact is None and state.facts:
-        fact = min(state.facts, key=lambda f: f.created)
-    summary = (
-        _clip(held_text(view, fact, state))
-        if fact is not None
-        else "(nothing written yet)"
-    )
-    return f"{view.name_of(state.id) or ''} ({bits}): {summary}"
-
-
 def _group_and_filed(
     view: WorldView, thing_id: str, tag: str | None
 ) -> tuple[list[str], list[str]]:
     """`(members, filed)` for the group-add prompt: the group's existing
-    members (`_member_line`), and, as "Name (tag)", what else is filed in
-    the page, an ignored stub left out of both. Ruling M2: with no tag
-    preset (`tag=None`, the page's own top-level "+ Add"), there's no
-    group of "members" to speak of -- every filed entry, tagged or not,
-    goes in `filed` instead, so it's still deduped against (the template
-    never shows `members` without a tag anyway)."""
+    members, each as `create.filing_line` reads it (ruling I5, round 2:
+    "Name (kind, tag; usually called X; in A (role), B; stub): its
+    summary or first fact" -- matching probe 6's own raw inputs, which
+    carry the same "usually called"/"in ... (role)"/stub parts the
+    "Entries near this one" list does), and, as "Name (tag)", what else
+    is filed in the page, an ignored stub left out of both. Ruling M2:
+    with no tag preset (`tag=None`, the page's own top-level "+ Add"),
+    there's no group of "members" to speak of -- every filed entry,
+    tagged or not, goes in `filed` instead, so it's still deduped
+    against (the template never shows `members` without a tag anyway)."""
 
     members: list[str] = []
     filed: list[str] = []
@@ -452,7 +429,7 @@ def _group_and_filed(
                 continue
             name = view.name_of(row_id) or ""
             if tag is not None and group.tag == tag:
-                members.append(_member_line(view, state))
+                members.append(filing_line(view, state))
             elif group.tag is not None:
                 filed.append(f"{name} ({group.tag})")
             else:
@@ -537,7 +514,13 @@ async def group_add(
     return rows
 
 
-def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> list[str]:
+def accept_group_add(
+    world: World,
+    thing_id: str,
+    rows: list[GroupAddRow],
+    *,
+    notes: list[str] | None = None,
+) -> list[str]:
     """Write `rows`' ticked ones, in one revision, each filed in
     `thing_id` with its own `tag`, its `line` its first fact, its text
     linked as a hand-written fact's. Checked again here, never trusted
@@ -549,7 +532,15 @@ def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> li
     genuinely new name becomes a stub (`stub={"ignored": False}`, ruling
     I1). Either way, the line becomes a fact, marked its summary (ruling
     F22: `entries.SUMMARY_ORIGIN`) only when the entry didn't already have
-    one -- a reused entry's own summary is never displaced.
+    one -- a reused entry's own summary is never displaced, and (round 2,
+    item 2) when two rows resolve to the same new stub (a repeated name),
+    only the first of them marks it, tracked within this call rather than
+    re-read from the pre-revision `view`.
+
+    Round 2, item 3: filing the entry in `thing_id` can be refused by the
+    store (a cycle, or a target gone since) -- `notes`, when given, gains
+    one line for each row that happens to; the fact is written regardless,
+    since it's the owner's row, just left unfiled.
 
     Returns each kept row's resolved entry id (new or reused), in order.
     `thing_id` must be live (`KeyError`)."""
@@ -577,6 +568,7 @@ def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> li
         return written
 
     names = [NewName(name=name, kind=kind, tag=tag) for name, kind, tag, _line in kept]
+    marked_summary: set[str] = set()
     with world.revision(Source.manual(note="added from a group prompt")) as rev:
         made = make_stubs(rev, view, names)
         for name, kind, tag, line in kept:
@@ -586,9 +578,9 @@ def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> li
             before = view.thing(entry_id)
             actual_kind = before.kind if before is not None else kind
             write_filings(
-                rev, world, entry_id, [Filing(target=thing_id, role=None)], None
+                rev, world, entry_id, [Filing(target=thing_id, role=None)], notes
             )
-            has_summary = (
+            has_summary = entry_id in marked_summary or (
                 before is not None and entries.summary_fact(before) is not None
             )
             rev.add_fact(
@@ -597,6 +589,8 @@ def accept_group_add(world: World, thing_id: str, rows: list[GroupAddRow]) -> li
                 link_text(view, line, owner=entry_id),
                 origin=None if has_summary else entries.SUMMARY_ORIGIN,
             )
+            if not has_summary:
+                marked_summary.add(entry_id)
             written.append(entry_id)
     log.info("groups.accept_add", thing_id=thing_id, written=len(written))
     return written

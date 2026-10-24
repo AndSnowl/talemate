@@ -248,7 +248,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
   has reuses that entry rather than duplicating it, and only a
   genuinely new one becomes a stub -- and answers the thing plus
   `thing_ids` (each kept row's resolved entry id, new or reused, in
-  order). `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`/`TALEMATE_TEST_FIXED_GROUP_ADD`
+  order) and `notes` (a row whose filing the store refused -- a cycle, a
+  target gone since -- noted rather than silently dropped; its fact is
+  still written). `TALEMATE_TEST_FIXED_GROUP_SYNOPSIS`/`TALEMATE_TEST_FIXED_GROUP_ADD`
   (browser tests) each name a file holding the model's reply.
 - Scenes: `match_names {text, at}` finds world thing names in a storyline
   prompt (the reply echoes `text` and `at`), each candidate marked `stub`
@@ -2983,19 +2985,24 @@ class WorldsPlugin(Plugin):
         its own tag, in one revision (`worldplay.groups.accept_group_add`);
         checked again here, never trusted from the client. A row whose
         name the world already has reuses that entry instead of
-        duplicating it; only a genuinely new one becomes a stub. Answers
-        `accept_group_add {..., thing_ids}` with the page's payload plus
-        each kept row's resolved entry id (new or reused)."""
+        duplicating it; only a genuinely new one becomes a stub. A row's
+        filing the store refuses (a cycle, a target gone since) is noted
+        rather than silently dropped -- its fact is still written, since
+        it's the owner's row. Answers `accept_group_add {..., thing_ids,
+        notes}` with the page's payload plus each kept row's resolved
+        entry id (new or reused)."""
 
         payload = AcceptGroupAddPayload(**data)
         world = self._require_world()
         self._require_entry(world.view(), payload.thing_id)
-        thing_ids = accept_group_add(world, payload.thing_id, payload.rows)
+        notes: list[str] = []
+        thing_ids = accept_group_add(world, payload.thing_id, payload.rows, notes=notes)
         self._reply(
             "accept_group_add",
             {
                 **self._thing_payload(world, payload.thing_id, None),
                 "thing_ids": thing_ids,
+                "notes": notes,
             },
         )
 

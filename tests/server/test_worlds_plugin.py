@@ -4741,6 +4741,64 @@ async def test_group_add_and_accept(plugin, client):
     assert new_state.fields["name"] == "The Icewrights' Circle"
     assert new_state.fields["tag"] == "guild"
     assert filings_of(s.world.view(), new_id)[0].target == s.velikoye
+    assert accepted["notes"] == []
+
+
+async def test_accept_group_add_notes_a_refused_filing(plugin, client):
+    """Round 2 item 3: a row reusing a name whose filing the store
+    refuses (a cycle here) is noted in the reply, not silently dropped."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="cycle setup")) as rev:
+        parent = rev.create_thing("lore", {"name": "The Greater Vault"})
+        rev.set_field(
+            s.khorol,
+            "filings",
+            [
+                {
+                    "target": s.tsardom,
+                    "role": None,
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.velikoye,
+                    "role": "runs through",
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": parent,
+                    "role": None,
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+            ],
+            None,
+        )
+
+    rows = [
+        {
+            "name": "The Greater Vault",
+            "kind": "lore",
+            "tag": "guild",
+            "line": "Would cycle back to the Khorol.",
+            "ticked": True,
+        }
+    ]
+    await _act(plugin, "accept_group_add", thing_id=s.khorol, rows=rows)
+    accepted = _last(plugin, "accept_group_add")["data"]
+    assert accepted["thing_ids"] == [parent]
+    assert accepted["notes"] and "inside itself" in accepted["notes"][0]
+
+    state = s.world.view().thing(parent)
+    assert any(f.text == "Would cycle back to the Khorol." for f in state.facts)
 
 
 async def test_group_add_top_level_has_no_tag_preset(plugin, client):

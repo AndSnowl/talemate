@@ -614,8 +614,10 @@ async def test_group_add_page_facts_capped_at_seven(world):
 
 
 async def test_group_add_members_use_filing_line_format(world):
-    """I5: group-add's `members` read "Name (kind, tag): clipped
-    summary", as probe 6's own raw inputs show them."""
+    """I5 (round 2): group-add's `members` reuse `create.filing_line`, as
+    the probe's own raw p6v2 lines show them -- "usually called", "in
+    <target> (role)" for every filing, and the stub marker, each only
+    when it applies."""
 
     velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
     with world.revision(Source.manual(note="existing guild")) as rev:
@@ -624,7 +626,9 @@ async def test_group_add_members_use_filing_line_format(world):
             {
                 "name": "The Icewrights",
                 "tag": "guild",
-                "filings": [{"target": khorol, "role": None}],
+                "stub": {"ignored": False},
+                "aka": [{"name": "Icers", "tag": "common", "everyday": True}],
+                "filings": [{"target": khorol, "role": "guides pilots"}],
             },
         )
         rev.add_fact(guild, "general", "Guides sledges across the frozen river.")
@@ -638,8 +642,8 @@ async def test_group_add_members_use_filing_line_format(world):
 
     prompt = str(client.prompt_history[0]["prompt"])
     assert (
-        "The Icewrights (lore, guild): Guides sledges across the frozen river."
-        in prompt
+        "The Icewrights (lore, guild; usually called Icers; in Khorol River "
+        "(guides pilots); stub): Guides sledges across the frozen river." in prompt
     )
 
 
@@ -695,3 +699,83 @@ async def test_group_add_reply_override_skips_client(world):
         world, khorol, "guild", "something", None, reply=reply
     )
     assert rows[0].name == "X"
+
+
+# --- review round 2 fixes -----------------------------------------------------
+
+
+async def test_group_add_accept_duplicate_name_marks_only_first_as_summary(world):
+    """Round 2 item 2: two rows that resolve to the same new stub (a
+    repeated name) don't both become its summary."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    rows = [
+        GroupAddRow(
+            name="Twinned", kind="lore", tag="guild", line="First line.", ticked=True
+        ),
+        GroupAddRow(
+            name="Twinned", kind="lore", tag="guild", line="Second line.", ticked=True
+        ),
+    ]
+
+    ids = groups.accept_group_add(world, khorol, rows)
+
+    assert ids[0] == ids[1]  # the same new stub, reused within the call
+    view = world.view()
+    state = view.thing(ids[0])
+    assert len(state.facts) == 2
+    summary_facts = [f for f in state.facts if is_summary_fact(f)]
+    assert len(summary_facts) == 1
+    assert summary_facts[0].text == "First line."
+
+
+async def test_group_add_accept_collects_filing_notes(world):
+    """Round 2 item 3: a filing `write_filings` refuses (a cycle here) is
+    returned in `notes`, not silently dropped -- and the fact is still
+    written, since it's the owner's row."""
+
+    velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    with world.revision(Source.manual(note="cycle setup")) as rev:
+        parent = rev.create_thing("lore", {"name": "The Greater Basin"})
+        rev.set_field(
+            khorol,
+            "filings",
+            [
+                {
+                    "target": velikoye,
+                    "role": None,
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": parent,
+                    "role": None,
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+            ],
+            None,
+        )
+
+    rows = [
+        GroupAddRow(
+            name="The Greater Basin",
+            kind="lore",
+            tag="guild",
+            line="A reused name that would cycle.",
+            ticked=True,
+        ),
+    ]
+    notes: list[str] = []
+    ids = groups.accept_group_add(world, khorol, rows, notes=notes)
+
+    assert ids == [parent]  # reused, not duplicated
+    assert notes and "inside itself" in notes[0]
+
+    view = world.view()
+    state = view.thing(parent)
+    assert any(f.text == "A reused name that would cycle." for f in state.facts)
