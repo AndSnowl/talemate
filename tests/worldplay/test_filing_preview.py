@@ -499,6 +499,37 @@ async def test_no_hint_no_belief_category(world, moscavia):
     assert {f.category for f in preview.facts} == {"general"}
 
 
+async def test_tag_rule_without_entries_near(world):
+    """The reply's tag is asked of every entry the generic branch writes,
+    with or without "Entries near this one": the Skyfall session (Task 12,
+    docs/superpowers/probes/2026-10-24-filing-flow.md) wrote Runic Magic
+    and the Order from prompts that named no entry in full, so their
+    prompts had no near list, hence no tag rule, and the model wrote
+    "lore" (a kind, no tag) 4 times of 4."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            json.dumps(
+                {
+                    "name": "Wattles",
+                    "tag": "custom",
+                    "facts": [{"category": "general", "text": "Wattles are woven."}],
+                    "names": [],
+                }
+            )
+        )
+        preview = await preview_thing(
+            world, "lore", "Wattles, a custom of the owl-folk", {}, client
+        )
+    prompt = _create_prompt(client)
+    assert "Entries near this one" not in prompt
+    assert '- "tag": one or two words for what the lore is' in prompt
+    # "in" and "file_into" still need a list to pick from
+    assert '- "in": the entries listed above' not in prompt
+    assert preview.tag == "custom"
+
+
 async def test_unknown_hint_refused(world, moscavia):
     with pytest.raises(ValueError, match="no such prompt hint"):
         await preview_thing(
