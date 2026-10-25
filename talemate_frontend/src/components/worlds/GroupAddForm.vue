@@ -44,6 +44,7 @@
                 ></v-text-field>
                 <v-chip size="x-small" label variant="tonal" color="muted">{{ row.kind }}</v-chip>
                 <v-chip v-if="row.tag" size="x-small" label variant="outlined" color="foreign">{{ row.tag }}</v-chip>
+                <span v-if="row.show_under" class="text-caption text-muted" data-testid="group-add-row-show-under">shows under {{ heading }}</span>
                 <span class="text-body-2 flex-grow-1" :class="{ dropped: row.ticked === false }">{{ row.line }}</span>
             </div>
             <div v-if="!found.rows.length" class="text-caption text-muted">Nothing to add from that.</div>
@@ -64,12 +65,16 @@ import { groupKey, tagHeading } from './entryPage.js';
 // come back as draft rows in the group, each ticked, its name editable,
 // with its kind, tag and one line. Accept writes the ticked ones as stubs
 // filed in the page (`accept_group_add`); Discard drops them. Nothing is
-// written before Accept.
+// written before Accept. In a group that exists through its rows'
+// `show_under` (`showUnder`, ruling H5: a town's Natives), each row keeps
+// its own tag and is filed showing under the group.
 export default {
     name: 'GroupAddForm',
     props: {
         thingId: { type: String, required: true },
         tag: { type: String, default: null },
+        // the group exists through `show_under` (`via_show_under`)
+        showUnder: { type: Boolean, default: false },
     },
     emits: ['close'],
     setup() {
@@ -92,7 +97,7 @@ export default {
     methods: {
         draft() {
             if (this.prompt.trim()) {
-                this.worlds.groupAdd(this.thingId, this.tag, this.prompt.trim());
+                this.worlds.groupAdd(this.thingId, this.tag, this.prompt.trim(), { showUnder: this.showUnder });
             }
         },
         change(index, changes) {

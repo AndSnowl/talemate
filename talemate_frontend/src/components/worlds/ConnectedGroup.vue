@@ -51,7 +51,7 @@
                 <template v-if="synopsis">{{ synopsis }}</template>
                 <span v-else class="text-caption text-muted">{{ synopsisState.error }}</span>
             </div>
-            <GroupAddForm v-if="group.tag && (adding || drafting)" :thing-id="thingId" :tag="group.tag" @close="adding = false" />
+            <GroupAddForm v-if="group.tag && (adding || drafting)" :thing-id="thingId" :tag="group.tag" :show-under="!!group.via_show_under" @close="adding = false" />
             <div
                 v-for="row in view.rows"
                 :key="row.id"
@@ -86,7 +86,7 @@
                             :key="other.tag ?? ''"
                             :title="other.heading"
                             data-testid="connected-move-option"
-                            @click="moveTo(row, other.tag)"
+                            @click="moveTo(row, other)"
                         ></v-list-item>
                     </v-list>
                 </v-menu>
@@ -118,8 +118,10 @@ const DRAG_TYPE = 'application/x-fantasymate-row';
 // there is one); "+ Add" drafts new entries for it (`GroupAddForm`).
 // A row dragged onto another group takes that group's tag (`set_tag`),
 // so it moves there on every page it's filed in; one whose filing names
-// the group it shows under (`show_under`) has only that filing changed
-// (`edit_filing`), on this page alone (`rowMove`). Its "▾" menu does the
+// the group it shows under (`show_under`), or one dragged onto a group
+// that exists only through `show_under` (`via_show_under`, ruling H5),
+// has only that filing changed (`edit_filing`), on this page alone
+// (`rowMove`). Its "▾" menu does the
 // same from the keyboard. A believed (or undecided) being is marked
 // "believed" (ruling F24). On a draft (`readonly`) the group only shows
 // (no synopsis, "+ Add", drag or move: each writes or asks before the
@@ -174,8 +176,8 @@ export default {
         askSynopsis() {
             this.worlds.groupSynopsis(this.thingId, this.group.tag, !!this.synopsis);
         },
-        moveTo(row, tag) {
-            this.move(row, rowMove(row, this.group.tag, tag));
+        moveTo(row, other) {
+            this.move(row, rowMove(row, this.group.tag, other.tag, !!other.via_show_under));
         },
         move(row, change) {
             if (!change) {
@@ -207,7 +209,7 @@ export default {
             }
             event.preventDefault();
             const dragged = JSON.parse(raw);
-            this.move(dragged, rowMove(dragged, dragged.tag, this.group.tag));
+            this.move(dragged, rowMove(dragged, dragged.tag, this.group.tag, !!this.group.via_show_under));
         },
     },
 };

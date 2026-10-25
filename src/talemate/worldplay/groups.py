@@ -56,6 +56,7 @@ from talemate.world.filing import (
     OTHER_HEADING,
     Filing,
     connected,
+    filings_of,
     mentioned_in,
     tag_heading,
     tag_of,
@@ -73,6 +74,7 @@ from talemate.worldplay.create import (
     current_date,
     default_category,
     filing_line,
+    filings_since,
     json_objects,
     write_filings,
 )
@@ -130,14 +132,18 @@ ALLOWED_KINDS: tuple[str, ...] = (
 class GroupAddRow(BaseModel):
     """One of `group_add`'s draft rows: a new entry's `name`, `kind` and
     `line` (its first fact and summary on accept), and its `tag` (the
-    group's, or, with no tag preset, its own); `ticked` for the owner to
-    amend before `accept_group_add`."""
+    group's, or, with no tag preset or in a `show_under` group, its own);
+    `show_under`, the group it shows under on the page when that group
+    exists through `show_under` (ruling H5: filed showing under it, never
+    tagged with it); `ticked` for the owner to amend before
+    `accept_group_add`."""
 
     name: str
     kind: str
     tag: str | None = None
     line: str
     ticked: bool = True
+    show_under: str | None = None
 
 
 # --- synopsis ---------------------------------------------------------------
@@ -446,10 +452,13 @@ def _group_and_filed(
             if state is None or state.stub_ignored:
                 continue
             name = view.name_of(row_id) or ""
+            # by its own tag: a group it shows under (`show_under`) is no
+            # tag it carries (I3)
+            own = tag_of(state)
             if tag is not None and group.tag == tag:
                 members.append(filing_line(view, state))
-            elif group.tag is not None:
-                filed.append(f"{name} ({group.tag})")
+            elif own is not None:
+                filed.append(f"{name} ({own})")
             else:
                 filed.append(name)
     return members, filed
@@ -463,10 +472,14 @@ async def group_add(
     client: Any,
     *,
     reply: str | None = None,
+    show_under: bool = False,
 ) -> list[GroupAddRow]:
     """New entries for one tag group, or (`tag=None`) the page's own
     top-level "+ Add", from the owner's `prompt` (probe 6's wording, the
-    `creative_instruction_1024` kind), writing nothing. At most
+    `creative_instruction_1024` kind), writing nothing. With `show_under`
+    (the group exists through its rows' `show_under`, ruling H5: the
+    Natives of a town), it's asked as the page's own "+ Add" is, each row
+    keeping the model's own tag (or none) and showing under `tag`. At most
     `MAX_ADD_ROWS` ticked rows, each dropped if its name is blank or its
     kind or tag is a title word (ruling F5) -- `accept_group_add` checks
     again, never trusting this draft back from the client. `reply` stands
@@ -481,6 +494,10 @@ async def group_add(
     state = view.thing(thing_id)
     if state is None:
         raise KeyError(f"no such entry: {thing_id}")
+    # the group rows show under, and the tag the prompt presets (none for
+    # a group that isn't a tag its rows carry)
+    under = tag if show_under else None
+    asked = None if under is not None else tag
 
     if reply is None:
         prose_gen.require_client(client)
@@ -488,7 +505,7 @@ async def group_add(
         now = current_date(world)
         page_name = view.name_of(thing_id) or ""
         page_facts = _own_facts(view, state, PAGE_FACTS_SHOWN)
-        members, filed = _group_and_filed(view, thing_id, tag)
+        members, filed = _group_and_filed(view, thing_id, asked)
         nearby = [
             view.name_of(owner_id) or ""
             for owner_id in mentioned_in(view, thing_id, include_ended=True)
@@ -500,7 +517,7 @@ async def group_add(
                 client,
                 ADD_PROMPT_KIND,
                 vars={
-                    "tag": tag,
+                    "tag": asked,
                     "page": page_name,
                     "prompt": prompt.strip(),
                     "page_kind": state.kind,
@@ -522,11 +539,18 @@ async def group_add(
         if not name or not line:
             continue
         kind = _clean_kind(raw.get("kind"))
-        row_tag = tag if tag is not None else clean_tag(raw.get("tag"), kind)
+        row_tag = asked if asked is not None else clean_tag(raw.get("tag"), kind)
         if _is_title(kind, row_tag):
             continue
         rows.append(
-            GroupAddRow(name=name, kind=kind, tag=row_tag, line=line, ticked=True)
+            GroupAddRow(
+                name=name,
+                kind=kind,
+                tag=row_tag,
+                line=line,
+                ticked=True,
+                show_under=under,
+            )
         )
     log.info("groups.add", thing_id=thing_id, tag=tag, rows=len(rows))
     return rows
@@ -548,6 +572,27 @@ def _kept_tag_note(name: str, own: str | None, row: str | None) -> list[str]:
         f"{name} was in the world already: it {kept}, so it's listed "
         f"under {heading(own)}, not {heading(row)}"
     ]
+
+
+def _show_under(
+    rev: Any, world: World, entry_id: str, thing_id: str, under: str
+) -> None:
+    """The entry's filing in `thing_id` shows under `under` (H5): one it
+    had already is given it, in `rev`; nothing when it has it."""
+
+    current = filings_of(world.view(), entry_id, live=False)
+    if all(f.target != thing_id or f.show_under == under for f in current):
+        return
+    value = [
+        (f.model_copy(update={"show_under": under}) if f.target == thing_id else f)
+        for f in current
+    ]
+    rev.set_field(
+        entry_id,
+        "filings",
+        [f.model_dump(mode="json") for f in value],
+        filings_since(world, entry_id),
+    )
 
 
 def accept_group_add(
@@ -582,6 +627,11 @@ def accept_group_add(
     quietly), so it may be listed under another group than the row's;
     `notes` gains a line saying so (`_kept_tag_note`).
 
+    Ruling H5: a row with `show_under` (a group that exists through it)
+    is filed showing under that group, a reused entry filed there
+    already given it on that filing; its own tag is the row's, never the
+    group's, and it shows under the group, so there's no note.
+
     Returns each kept row's resolved entry id (new or reused), in order.
     `thing_id` must be live (`KeyError`)."""
 
@@ -589,7 +639,7 @@ def accept_group_add(
     if view.thing(thing_id) is None:
         raise KeyError(f"no such entry: {thing_id}")
 
-    kept: list[tuple[str, str, str | None, str]] = []
+    kept: list[tuple[str, str, str | None, str, str | None]] = []
     for row in rows:
         if not row.ticked:
             continue
@@ -603,17 +653,18 @@ def accept_group_add(
             continue
         if _is_title(kind, tag):
             continue
-        kept.append((name, kind, tag, line))
+        under = normalise_tag(row.show_under) if row.show_under else None
+        kept.append((name, kind, tag, line, under or None))
 
     written: list[str] = []
     if not kept:
         return written
 
-    names = [NewName(name=name, kind=kind, tag=tag) for name, kind, tag, _line in kept]
+    names = [NewName(name=name, kind=kind, tag=tag) for name, kind, tag, _l, _u in kept]
     marked_summary: set[str] = set()
     with world.revision(Source.manual(note="added from a group prompt")) as rev:
         made = make_stubs(rev, view, names)
-        for name, kind, tag, line in kept:
+        for name, kind, tag, line, under in kept:
             entry_id = made.get(name)
             if entry_id is None:
                 continue
@@ -621,12 +672,18 @@ def accept_group_add(
             actual_kind = before.kind if before is not None else kind
             refused: list[str] = []
             write_filings(
-                rev, world, entry_id, [Filing(target=thing_id, role=None)], refused
+                rev,
+                world,
+                entry_id,
+                [Filing(target=thing_id, role=None, show_under=under)],
+                refused,
             )
+            if under is not None and not refused:
+                _show_under(rev, world, entry_id, thing_id, under)
             if notes is not None:
                 notes.extend(refused)
                 # filed, a reused entry shows under its own tag's group
-                if before is not None and not refused:
+                if before is not None and not refused and under is None:
                     notes.extend(_kept_tag_note(name, tag_of(before), tag))
             has_summary = entry_id in marked_summary or (
                 before is not None and entries.summary_fact(before) is not None

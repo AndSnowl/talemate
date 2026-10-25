@@ -119,15 +119,17 @@ export function dropTag(fromTag, toTag) {
 
 // What a Connected row moved from the group `fromTag` to `toTag` changes,
 // or null when it's dropped where it is: a row whose filing shows under a
-// group (`show_under`) changes only that (`{showUnder}`, null: back under
-// the entry's own tag); any other row, the entry's tag (`{tag}`, as
+// group (`show_under`), or one moved into a group that exists through
+// `show_under` (`toViaShowUnder`, the group's `via_show_under`: ruling
+// H5), changes only that filing (`{showUnder}`, null: back under the
+// entry's own tag); any other row, the entry's tag (`{tag}`, as
 // `dropTag`), which moves it on every page it's filed in.
-export function rowMove(row, fromTag, toTag) {
+export function rowMove(row, fromTag, toTag, toViaShowUnder = false) {
     const to = dropTag(fromTag, toTag);
     if (to === undefined) {
         return null;
     }
-    return row?.show_under ? { showUnder: to } : { tag: to };
+    return row?.show_under || (toViaShowUnder && to !== null) ? { showUnder: to } : { tag: to };
 }
 
 // the words a role can end with and take no "of" (`held.ROLE_PREPOSITIONS`)

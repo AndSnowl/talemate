@@ -11,7 +11,7 @@ import json
 
 from talemate.world.dates import WorldDate
 from talemate.world.entries import is_summary_fact
-from talemate.world.filing import filed_in
+from talemate.world.filing import connected, filed_in, filings_of
 from talemate.world.refs import ref
 from talemate.world.store import Source
 from talemate.worldplay import groups
@@ -803,3 +803,138 @@ async def test_group_add_accept_collects_filing_notes(world):
     view = world.view()
     state = view.thing(parent)
     assert any(f.text == "A reused name that would cycle." for f in state.facts)
+
+
+# --- hubs round 1, final review I3 (ruling H5) --------------------------------
+
+
+def _seed_natives(world):
+    """Velikiy Ustyug, with Vasha (a postal worker) filed in it showing
+    under "native": the Natives group exists only through `show_under`."""
+
+    with world.revision(Source.manual(note="seed")) as rev:
+        ustyug = rev.create_thing("place", {"name": "Velikiy Ustyug", "tag": "town"})
+        vasha = rev.create_thing(
+            "character",
+            {
+                "name": "Vasha",
+                "tag": "postal worker",
+                "filings": [{"target": ustyug, "role": None, "show_under": "native"}],
+            },
+        )
+        rev.add_fact(vasha, "background", "Carries the winter post.")
+    return ustyug, vasha
+
+
+def _filing_into(view, thing_id, target):
+    (filing,) = [
+        f for f in filings_of(view, thing_id, live=False) if f.target == target
+    ]
+    return filing
+
+
+async def test_group_add_into_a_show_under_group_keeps_the_models_tag(world):
+    """H5: "+ Add" on a group that exists through `show_under` (Natives)
+    asks as the page's own "+ Add" does, so the model gives each entry its
+    own tag, and each row shows under the group instead of being tagged
+    with it. The prompt never names "native" as a tag: what's filed in
+    the page is listed by its own tag."""
+
+    ustyug, _vasha = _seed_natives(world)
+    client = MockClient("test")
+    reply = json.dumps(
+        {
+            "entries": [
+                {
+                    "name": "Old Fyodor",
+                    "kind": "character",
+                    "tag": "ferryman",
+                    "line": "Born in Velikiy Ustyug, he ferries the Sukhona.",
+                },
+                {
+                    "name": "Marfa",
+                    "kind": "character",
+                    "line": "A baker born in the town.",
+                },
+            ]
+        }
+    )
+    async with MockClientContext():
+        _queue(reply)
+        rows = await groups.group_add(
+            world, ustyug, "native", "two natives", client, show_under=True
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert '"native" group' not in prompt
+    assert "Vasha (postal worker)" in prompt
+    assert "native" not in prompt.replace("two natives", "")
+    assert [(row.name, row.tag, row.show_under) for row in rows] == [
+        ("Old Fyodor", "ferryman", "native"),
+        ("Marfa", None, "native"),
+    ]
+
+
+async def test_group_add_accept_files_rows_with_show_under(world):
+    """H5 on accept: each new row is filed in the page showing under the
+    group, its own tag the model's (or none), never the group's; a reused
+    entry, filed there already or not, gets the `show_under` on its
+    filing and keeps its tag, with no "keeps its tag" note."""
+
+    ustyug, vasha = _seed_natives(world)
+    with world.revision(Source.manual(note="existing")) as rev:
+        lena = rev.create_thing("character", {"name": "Lena", "tag": "teacher"})
+        petr = rev.create_thing(
+            "character",
+            {
+                "name": "Petr",
+                "tag": "smith",
+                "filings": [{"target": ustyug, "role": None}],
+            },
+        )
+    rows = [
+        GroupAddRow(
+            name="Old Fyodor",
+            kind="character",
+            tag="ferryman",
+            show_under="native",
+            line="He ferries the Sukhona.",
+        ),
+        GroupAddRow(
+            name="Marfa", kind="character", show_under="native", line="A baker."
+        ),
+        GroupAddRow(
+            name="Lena", kind="character", show_under="native", line="She teaches."
+        ),
+        GroupAddRow(
+            name="Petr", kind="character", show_under="native", line="He forges."
+        ),
+    ]
+    head = world.head_rev()
+    notes: list[str] = []
+    ids = groups.accept_group_add(world, ustyug, rows, notes=notes)
+    assert world.head_rev() == head + 1
+    assert notes == []
+    view = world.view()
+    fyodor, marfa = ids[0], ids[1]
+    assert ids[2:] == [lena, petr]
+    assert view.thing(fyodor).fields.get("tag") == "ferryman"
+    assert view.thing(marfa).fields.get("tag") is None
+    assert view.thing(lena).fields["tag"] == "teacher"
+    assert view.thing(petr).fields["tag"] == "smith"
+    for entry in ids:
+        assert _filing_into(view, entry, ustyug).show_under == "native"
+    (natives,) = [g for g in connected(view, ustyug) if g.tag == "native"]
+    assert {row_id for row_id, _f in natives.rows} == {vasha, *ids}
+    assert all(g.tag != "ferryman" for g in connected(view, ustyug))
+
+
+async def test_group_add_in_a_plain_group_still_tags(world):
+    """A plain-tag group behaves as before: its rows take the group's tag
+    and show under it by that tag."""
+
+    _velikoye, khorol, _lesnaya, _court = _seed_rivers(world)
+    rows = [GroupAddRow(name="Ice Guild", kind="lore", tag="guild", line="A guild.")]
+    (guild,) = groups.accept_group_add(world, khorol, rows)
+    view = world.view()
+    assert view.thing(guild).fields["tag"] == "guild"
+    assert _filing_into(view, guild, khorol).show_under is None

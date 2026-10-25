@@ -278,11 +278,15 @@ through `signal_operation_failed` (an `operation_done` envelope with
   cache with `force`), and answers `group_synopsis {thing_id, tag,
   synopsis}` or `group_synopsis_failed` (an unusable reply, never an
   empty synopsis cached as a real one); "" for an empty group, or with
-  synopses off (a probe fallback). `group_add {thing_id, tag, prompt}`
-  (`tag` null is the page's own top-level "+ Add", no tag preset) drafts
+  synopses off (a probe fallback). `group_add {thing_id, tag, prompt,
+  show_under?}` (`tag` null is the page's own top-level "+ Add", no tag
+  preset; `show_under` true for a Connected group that is
+  `via_show_under`, ruling H5: each row keeps its own tag and shows
+  under `tag`) drafts
   up to 3 new entries from the owner's prompt, in the background,
   writing nothing, and answers `group_add {thing_id, tag, rows}` (each
-  row `{name, kind, tag, line, ticked}`) or `group_add_failed`.
+  row `{name, kind, tag, line, ticked, show_under}`) or
+  `group_add_failed`.
   `accept_group_add {thing_id, rows}` writes the ticked rows, each filed
   in `thing_id` with its own tag, its line its first fact and (unless it
   already has one) its summary, in one revision, checked again rather
@@ -865,6 +869,9 @@ class GroupAddPayload(pydantic.BaseModel):
     thing_id: str
     tag: str | None = None
     prompt: str
+    # the group exists through its rows' `show_under` (Connected's
+    # `via_show_under`, ruling H5)
+    show_under: bool = False
 
 
 class AcceptGroupAddPayload(pydantic.BaseModel):
@@ -1666,6 +1673,12 @@ def _connected_out(
                         else None
                     ),
                     "rows": rows,
+                    # the group exists only through its rows' `show_under`
+                    # (no row carries it as its own tag): adding or
+                    # dragging into it files with that `show_under`,
+                    # never retags (ruling H5)
+                    "via_show_under": group.tag is not None
+                    and all(filing.show_under == group.tag for _s, filing in members),
                 }
             )
     return groups
@@ -3543,6 +3556,7 @@ class WorldsPlugin(Plugin):
                 payload.prompt,
                 client,
                 reply=reply,
+                show_under=payload.show_under,
             ),
             self.create_task_done_callback(
                 "group_add",

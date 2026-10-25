@@ -1407,11 +1407,13 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('group_synopsis', { thing_id: thingId, tag: tag ?? null, force });
         },
 
-        // "+ Add" in a group (tag null: the page's own)
-        groupAdd(thingId, tag, prompt) {
+        // "+ Add" in a group (tag null: the page's own); `showUnder`: the
+        // group exists through its rows' `show_under` (`via_show_under`,
+        // ruling H5), so each new row shows under it, keeping its own tag
+        groupAdd(thingId, tag, prompt, { showUnder = false } = {}) {
             const key = groupKey(thingId, tag);
             this.groupAdds = { ...this.groupAdds, [key]: { prompt, pending: true, rows: null, error: null } };
-            this.request('group_add', { thing_id: thingId, tag: tag ?? null, prompt });
+            this.request('group_add', { thing_id: thingId, tag: tag ?? null, prompt, ...(showUnder ? { show_under: true } : {}) });
         },
 
         // the owner's edits to a group's drafted rows (ticks, names)

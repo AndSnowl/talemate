@@ -70,7 +70,7 @@ export default {
     methods: {
         // the groups a row of `group` can move to
         othersOf(group) {
-            return this.groups.filter((other) => (other.tag ?? null) !== (group.tag ?? null)).map(({ tag, heading }) => ({ tag, heading }));
+            return this.groups.filter((other) => (other.tag ?? null) !== (group.tag ?? null)).map(({ tag, heading, via_show_under }) => ({ tag, heading, via_show_under: !!via_show_under }));
         },
     },
 };

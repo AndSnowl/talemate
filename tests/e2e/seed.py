@@ -412,6 +412,7 @@ try:
                         if filing.get("within")
                         else None,
                         "exceptions": [],
+                        "show_under": filing.get("show_under"),
                     }
                     for filing in thing["filings"]
                 ]

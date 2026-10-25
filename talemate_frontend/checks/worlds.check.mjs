@@ -2944,6 +2944,24 @@ check('a Connected row moved: its tag, or the group its filing shows under', () 
     assert.equal(rowMove({ id: 'vasha' }, 'river', 'river'), null);
 });
 
+check('H5: a row moved into a group that exists through show_under shows under it, never retagged', () => {
+    // a plain row dropped on the Natives group: its filing shows under it
+    assert.deepEqual(rowMove({ id: 'petr', show_under: null }, 'smith', 'native', true), { showUnder: 'native' });
+    assert.deepEqual(rowMove({ id: 'vasha', show_under: 'resident' }, 'resident', 'native', true), { showUnder: 'native' });
+    // a plain-tag group still retags a plain row
+    assert.deepEqual(rowMove({ id: 'petr' }, 'smith', 'ruler', false), { tag: 'ruler' });
+    assert.equal(rowMove({ id: 'petr' }, 'native', 'native', true), null);
+});
+
+check('H5: "+ Add" in a group that exists through show_under says so', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.groupAdd('v', 'native', 'two natives', { showUnder: true });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'native', prompt: 'two natives', show_under: true });
+    store.groupAdd('v', 'institution', 'two guilds');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'institution', prompt: 'two guilds' });
+});
+
 check('roles in use: listed for the picker; a filing shows under a group', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));

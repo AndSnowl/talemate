@@ -524,6 +524,90 @@ def test_file_with_show_under_and_role_picker(app, page):
     assert page.console_errors == []
 
 
+NATIVES = [
+    {"kind": "place", "name": "Velikiy Ustyug", "fields": {"tag": "city"}},
+    _entry(
+        "character",
+        "Vasha",
+        "postal worker",
+        [{**_in("Velikiy Ustyug"), "show_under": "native"}],
+        "A young carrier owl.",
+    ),
+    _entry("character", "Mikhail", "smith", [_in("Velikiy Ustyug")], "A smith."),
+    {
+        "kind": "lore",
+        "name": "The Bell Fair",
+        "filings": [_in("Velikiy Ustyug")],
+        "facts": [{"category": "general", "text": "A summer fair."}],
+    },
+]
+
+
+def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
+    """H5: the town's Natives exist only through Vasha's `show_under`.
+    "+ Add" there drafts natives that keep their own tag and show under
+    Natives; dragging Mikhail the smith onto it changes only his filing
+    here, never his tag."""
+
+    name = _world_name("Natives")
+    world = seed_fm_world(app.root, name, present_year=1020, things=NATIVES)
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    town = _open_thing(page, "Velikiy Ustyug")
+    natives = _group(town, "Natives")
+    expect(_row(natives, "Vasha")).to_be_visible()
+
+    fixed_group_add(
+        {
+            "entries": [
+                {
+                    "name": "Old Fyodor",
+                    "kind": "character",
+                    "tag": "ferryman",
+                    "line": "Ferries the Sukhona.",
+                }
+            ]
+        }
+    )
+    natives.get_by_test_id("group-add-button").click()
+    form = natives.get_by_test_id("group-add")
+    form.get_by_test_id("group-add-prompt").locator("input").fill("a native")
+    form.get_by_test_id("group-add-draft").click()
+    sent = _wait_sent(page, "group_add")
+    assert (sent["tag"], sent["show_under"]) == ("native", True)
+    row = form.get_by_test_id("group-add-row")
+    expect(row).to_have_count(1)
+    expect(row).to_contain_text("ferryman")
+    expect(row.get_by_test_id("group-add-row-show-under")).to_have_text(
+        "shows under Natives"
+    )
+    form.get_by_test_id("group-add-accept").click()
+    sent = _wait_sent(page, "accept_group_add")
+    assert [(r["tag"], r["show_under"]) for r in sent["rows"]] == [
+        ("ferryman", "native")
+    ]
+    expect(_row(_group(town, "Natives"), "Old Fyodor")).to_be_visible()
+    assert "Ferrymen" not in _headings(town)
+
+    # Mikhail dragged onto Natives: his filing shows under it, his tag
+    # stays "smith"
+    _row(_group(town, "Smiths"), "Mikhail").drag_to(
+        _group(town, "Natives").get_by_test_id("group-heading")
+    )
+    sent = _wait_sent(page, "edit_filing")
+    assert (sent["thing_id"], sent["target_id"], sent["show_under"]) == (
+        world.things["Mikhail"],
+        world.things["Velikiy Ustyug"],
+        "native",
+    )
+    expect(_row(_group(town, "Natives"), "Mikhail")).to_be_visible()
+    assert "Smiths" not in _headings(town)
+    assert _sent(page, "set_tag") == []
+
+    assert page.console_errors == []
+
+
 def test_change_tag_moves_group(app, page):
     world, thing = _open_velikoye(page, app, _world_name("Retag"))
     expect(_row(_group(thing, "Rivers"), "Khorol River")).to_be_visible()

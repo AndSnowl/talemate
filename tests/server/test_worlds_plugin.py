@@ -4940,6 +4940,7 @@ async def test_group_add_and_accept(plugin, client):
             "tag": "guild",
             "line": "A guild of ice-road pilots.",
             "ticked": True,
+            "show_under": None,
         }
     ]
 
@@ -4953,6 +4954,59 @@ async def test_group_add_and_accept(plugin, client):
     assert new_state.fields["tag"] == "guild"
     assert filings_of(s.world.view(), new_id)[0].target == s.velikoye
     assert accepted["notes"] == []
+
+
+async def test_group_add_into_a_show_under_group(plugin, client):
+    """H5: a Connected group that exists only through `show_under` says
+    so (`via_show_under`); "+ Add" there, sent with `show_under`, drafts
+    rows that keep their own tag and show under the group, and accept
+    files them so. A group some row carries as its own tag isn't one."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        vasha = rev.create_thing(
+            "character",
+            {
+                "name": "Vasha",
+                "tag": "postal worker",
+                "filings": [{**_filed(s.velikoye), "show_under": "native"}],
+            },
+        )
+    page = await _get_thing(plugin, s.velikoye)
+    assert _group(page, "native")["via_show_under"] is True
+    assert _group(page, "institution")["via_show_under"] is False
+    reply = json.dumps(
+        {
+            "entries": [
+                {
+                    "name": "Old Fyodor",
+                    "kind": "character",
+                    "tag": "ferryman",
+                    "line": "Born in Velikoye, he ferries the Khorol.",
+                }
+            ]
+        }
+    )
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(
+            plugin,
+            "group_add",
+            thing_id=s.velikoye,
+            tag="native",
+            prompt="a native",
+            show_under=True,
+        )
+        await _drain(plugin)
+    (row,) = _last(plugin, "group_add")["data"]["rows"]
+    assert (row["tag"], row["show_under"]) == ("ferryman", "native")
+    await _act(plugin, "accept_group_add", thing_id=s.velikoye, rows=[row])
+    accepted = _last(plugin, "accept_group_add")["data"]
+    (fyodor,) = accepted["thing_ids"]
+    assert s.world.view().thing(fyodor).fields["tag"] == "ferryman"
+    natives = _group(accepted, "native")
+    assert {r["id"] for r in natives["rows"]} == {vasha, fyodor}
+    assert natives["via_show_under"] is True
 
 
 async def test_accept_group_add_notes_a_refused_filing(plugin, client):
@@ -5149,6 +5203,7 @@ async def test_fixed_group_add_answer_without_a_model(plugin, tmp_path, monkeypa
             "tag": "guild",
             "line": "A guild of ice-road pilots.",
             "ticked": True,
+            "show_under": None,
         }
     ]
 
