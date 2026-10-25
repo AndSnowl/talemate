@@ -5341,12 +5341,13 @@ async def test_link_text(plugin):
 
 
 async def test_link_text_adds_other_name(plugin):
-    """P4: plain words linked to an entry ("Pure-line Moscavians" to the
-    Snowy Moscavian Owls) become one of its other names by default, in the
-    link's revision, the words' spaces normalised; never a name the entry
-    has already or another thing goes by. "Rename to..." (`use_name`, one
-    of the target's names) writes that name in the words' place instead,
-    teaching nothing."""
+    """P4, "Add as another name" (`mode: "name"`): plain words linked to an
+    entry ("Pure-line Moscavians" to the Snowy Moscavian Owls) become one
+    of its other names, in the link's revision, the words' spaces
+    normalised; never a name the entry has already or another thing goes
+    by. "Rename to..." (`mode: "rename"`, `use_name` one of the target's
+    names) writes that name in the words' place instead, teaching
+    nothing."""
 
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
@@ -5365,7 +5366,13 @@ async def test_link_text_adds_other_name(plugin):
 
     words = "Pure-line  Moscavians"
     await _act(
-        plugin, "link_text", fact_id=pure, start=0, end=len(words), target_id=owls
+        plugin,
+        "link_text",
+        fact_id=pure,
+        start=0,
+        end=len(words),
+        target_id=owls,
+        mode="name",
     )
     reply = _last(plugin, "link_text")["data"]
     assert s.world.head_rev() == head + 1
@@ -5382,7 +5389,13 @@ async def test_link_text_adds_other_name(plugin):
     ]
     assert s.world.view().fact(pure)[1].text == rendered
     await _act(
-        plugin, "link_text", fact_id=pure, start=0, end=len(words), target_id=owls
+        plugin,
+        "link_text",
+        fact_id=pure,
+        start=0,
+        end=len(words),
+        target_id=owls,
+        mode="name",
     )
 
     # the same words again: no duplicate
@@ -5393,6 +5406,7 @@ async def test_link_text_adds_other_name(plugin):
         start=0,
         end=len("Pure-line Moscavians"),
         target_id=owls,
+        mode="name",
     )
     assert _last(plugin, "link_text")["data"]["aka_added"] == []
     # words another entry goes by: never taught
@@ -5404,6 +5418,7 @@ async def test_link_text_adds_other_name(plugin):
         start=start,
         end=start + len("Khorol River"),
         target_id=owls,
+        mode="name",
     )
     assert _last(plugin, "link_text")["data"]["aka_added"] == []
     assert len(s.world.view().thing(owls).fields["aka"]) == 2
@@ -5418,6 +5433,7 @@ async def test_link_text_adds_other_name(plugin):
         start=start,
         end=start + len("snowy owls"),
         target_id=owls,
+        mode="rename",
         use_name="snowy owls",
     )
     reply = _last(plugin, "link_text")["data"]
@@ -5435,18 +5451,83 @@ async def test_link_text_adds_other_name(plugin):
         start=0,
         end=4,
         target_id=s.court,
+        mode="rename",
         use_name="The Black Dusk",
     )
     assert len(_errors(plugin)) == before + 1
     assert s.world.head_rev() == head + 1
 
 
+async def test_link_text_link_only(plugin):
+    """Ruling H2, "Link only": the words are linked as written and no name
+    is taught -- the server's default when the client sends no mode, so
+    generic words ("the north road") never pile up as other names. A
+    rename without a name, or a name without "rename", is refused."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        fact = rev.add_fact(s.court, "general", "It meets on the north road.")
+        other = rev.add_fact(s.dawn, "general", "Pilgrims walk the north road.")
+    rendered = "It meets on the north road."
+    start = rendered.index("the north road")
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("the north road"),
+        target_id=s.tsardom,
+    )
+    reply = _last(plugin, "link_text")["data"]
+    assert s.world.head_rev() == head + 1
+    assert reply["aka_added"] == []
+    assert s.world.view().fact(fact)[1].text == (
+        f"It meets on {ref(s.tsardom, 'the north road')}."
+    )
+    assert "aka" not in s.world.view().thing(s.tsardom).fields
+
+    start = "Pilgrims walk the north road.".index("north road")
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=other,
+        start=start,
+        end=start + len("north road"),
+        target_id=s.tsardom,
+        mode="link",
+    )
+    assert _last(plugin, "link_text")["data"]["aka_added"] == []
+    assert "aka" not in s.world.view().thing(s.tsardom).fields
+
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    for extra in (
+        {"mode": "rename"},
+        {"mode": "link", "use_name": "Tsardom of Moscavia"},
+        {"mode": "name", "use_name": "Tsardom of Moscavia"},
+    ):
+        await _act(
+            plugin,
+            "link_text",
+            fact_id=other,
+            start=0,
+            end=len("Pilgrims"),
+            target_id=s.tsardom,
+            **extra,
+        )
+    assert len(_errors(plugin)) == before + 3
+    assert s.world.head_rev() == head
+
+
 async def test_repoint_modes(plugin):
-    """P4: a link's "Re-point..." adds its words as one of the target's
-    other names (the default), or, "Rename to..." (`use_name`), writes one
+    """P4 and ruling H2: a link's "Re-point..." adds its words as one of
+    the target's other names (`mode: "name"`, the default), keeps them and
+    teaches nothing ("link"), or, "Rename to..." (`use_name`), writes one
     of the target's names in the words' place, its article fitted, and
     teaches only the stub's own names when this was the stub's last link.
-    A name the target doesn't have is refused."""
+    A name the target doesn't have is refused. A stub's re-point has the
+    same three."""
 
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
@@ -5459,6 +5540,9 @@ async def test_repoint_modes(plugin):
         )
         other = rev.add_fact(
             s.dawn, "general", f"Its bells ring in {ref(s.khorol, 'the town')}."
+        )
+        plain = rev.add_fact(
+            s.dawn, "general", f"Its monks walk to {ref(s.khorol, 'the old ford')}."
         )
     head = s.world.head_rev()
 
@@ -5494,6 +5578,26 @@ async def test_repoint_modes(plugin):
         f"Its bells ring in {ref(s.velikoye, 'the town')}."
     )
 
+    # link only: the words kept, nothing taught
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.dawn,
+        fact_id=plain,
+        occurrence=0,
+        to_id=s.velikoye,
+        mode="link",
+    )
+    assert _last(plugin, "repoint_ref")["data"]["aka_added"] == []
+    assert s.world.view().fact(plain)[1].text == (
+        f"Its monks walk to {ref(s.velikoye, 'the old ford')}."
+    )
+    assert [e["name"] for e in s.world.view().thing(s.velikoye).fields["aka"]] == [
+        "the Great Burg",
+        "Old Capital",
+        "the town",
+    ]
+
     # a name the target hasn't: refused, writing nothing
     head = s.world.head_rev()
     before = len(_errors(plugin))
@@ -5509,7 +5613,15 @@ async def test_repoint_modes(plugin):
     assert len(_errors(plugin)) == before + 1
     assert s.world.head_rev() == head
 
-    # the stub's own re-point keeps its two modes
+    # the stub's own re-point has them too: link only teaches nothing
+    with s.world.revision(Source.manual()) as rev:
+        weir = rev.create_thing("place", {"name": "Weir", "stub": {"ignored": False}})
+        rev.add_fact(s.court, "general", f"Fish leap at {ref(weir, 'the weir')}.")
+    await _act(plugin, "repoint_stub", stub_id=weir, target_id=s.khorol, mode="link")
+    assert _last(plugin, "repoint_stub")["data"]["aka_added"] == []
+    assert "aka" not in s.world.view().thing(s.khorol).fields
+    texts = [f.text for f in s.world.view().thing(s.court).facts]
+    assert f"Fish leap at {ref(s.khorol, 'the weir')}." in texts
     with s.world.revision(Source.manual()) as rev:
         ford = rev.create_thing("place", {"name": "Ford", "stub": {"ignored": False}})
         rev.add_fact(s.court, "general", f"It crosses at {ref(ford, 'the ford')}.")
@@ -5558,6 +5670,20 @@ async def test_draft_link_adds_other_name_on_accept(plugin, client):
         start=start,
         end=start + len("the north pass"),
         target_id=s.khorol,
+    )
+    # link only on a draft: a pick, no name to teach
+    linked = _last(plugin, "link_text")["data"]
+    assert linked["preview"]["picks"] == {"the north pass": s.khorol}
+    assert linked["preview"]["pick_names"] == []
+    await _act(
+        plugin,
+        "link_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("the north pass"),
+        target_id=s.khorol,
+        mode="name",
     )
     linked = _last(plugin, "link_text")["data"]
     assert linked["preview"]["pick_names"] == ["the north pass"]

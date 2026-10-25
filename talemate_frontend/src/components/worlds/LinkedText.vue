@@ -66,6 +66,7 @@
         v-model="choosing"
         :target="repointTarget"
         :words="repointing === null ? '' : shown[repointing]?.text || ''"
+        :before="repointing === null ? '' : shown.slice(0, repointing).map((segment) => segment.text).join('')"
         :thing="chosen"
         @choose="repointAs"
     /></span>
@@ -90,12 +91,13 @@ import StubCard from './StubCard.vue';
 // hover card too, and both cards offer "Re-point…": a search
 // (`ReferenceMenu`) for the thing the link should mean, then how it takes
 // the words (`NameModeMenu`, P4: another name of it, or renamed to one of
-// its names), emitted as `repoint {index, to, useName}` (`index` into
-// `segments`; `useName` null to keep the words); the page rewrites the
-// fact. `exclude` are ids never offered.
+// its names, or only linked, ruling H2), emitted as `repoint {index, to,
+// mode, useName}` (`index` into `segments`); the page rewrites the fact.
+// `exclude` are ids never offered.
 //
 // With `selectable` (a fact's words), right-clicking selected words inside
-// it emits `select {start, end, words, x, y}` instead of the browser's
+// it emits `select {start, end, words, before, x, y}` (`before`: the text
+// shown before the words) instead of the browser's
 // menu: `start`/`end` count UTF-16 code units (the browser's own measure,
 // ruling F18) from the start of the text shown, which is the fact's
 // `rendered` text. A right-click with no selection in it goes on to the
@@ -184,7 +186,7 @@ export default {
             }
             event.preventDefault();
             event.stopPropagation();
-            this.$emit('select', { start, end: start + words.length, words, x: event.clientX, y: event.clientY });
+            this.$emit('select', { start, end: start + words.length, words, before: before.toString(), x: event.clientX, y: event.clientY });
         },
         startRepoint(index, event) {
             this.openCard = null;
@@ -198,9 +200,9 @@ export default {
                 this.choosing = true;
             }
         },
-        repointAs({ useName }) {
+        repointAs({ mode, useName }) {
             if (this.repointing !== null && this.chosen) {
-                this.$emit('repoint', { index: this.repointing, to: this.chosen.id, useName });
+                this.$emit('repoint', { index: this.repointing, to: this.chosen.id, mode, useName });
             }
             this.repointing = null;
             this.chosen = null;

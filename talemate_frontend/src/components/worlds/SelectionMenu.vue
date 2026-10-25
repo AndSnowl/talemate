@@ -80,7 +80,7 @@
         :exclude="exclude"
         @pick="picked"
     />
-    <NameModeMenu v-model="choosing" :target="target" :words="words" :thing="chosen" :draft="draft" @choose="chose" />
+    <NameModeMenu v-model="choosing" :target="target" :words="words" :before="before" :thing="chosen" :draft="draft" @choose="chose" />
 </template>
 
 <script>
@@ -93,8 +93,8 @@ import ReferenceMenu from './ReferenceMenu.vue';
 // everywhere"): "Make a stub" with a kind and a tag (`stub {kind, tag}`),
 // "Make a stub and expand now…" (`expand {kind, tag}`: its kind's create
 // box opens from it), "Link to an entry… 🔎" (a search, then the mode
-// chooser, `NameModeMenu`, P4: `link {target, useName}`, `useName` null to
-// keep the words as another name of the entry) and "Ask about this…", shown greyed out for the later
+// chooser, `NameModeMenu`, P4 and ruling H2: `link {target, mode,
+// useName}`) and "Ask about this…", shown greyed out for the later
 // "dynamic questions" feature. On a draft (ruling F16) nothing is written:
 // the stub is a new name and the link a pick, both keyed by the words, so
 // they apply wherever the draft writes them, which the menu says; a stub
@@ -107,6 +107,8 @@ export default {
         modelValue: { type: Boolean, default: false },
         target: { type: [Array, Object], default: null },
         words: { type: String, default: '' },
+        // the fact's text before the words (the mode chooser's default)
+        before: { type: String, default: '' },
         draft: { type: Boolean, default: false },
         blocked: { type: String, default: '' },
         exclude: { type: Array, default: () => [] },
@@ -147,8 +149,8 @@ export default {
             this.chosen = target;
             this.choosing = true;
         },
-        chose({ useName }) {
-            this.$emit('link', { target: this.chosen, useName });
+        chose({ mode, useName }) {
+            this.$emit('link', { target: this.chosen, mode, useName });
         },
     },
 };

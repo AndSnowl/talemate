@@ -468,6 +468,7 @@
             v-model="selecting"
             :target="selection?.target"
             :words="selection?.words || ''"
+            :before="selection?.before || ''"
             :draft="draft"
             :blocked="selection?.blocked || ''"
             :exclude="thing && thing.id ? [thing.id] : []"
@@ -1289,25 +1290,26 @@ export default {
         },
         // `segments[index]` of the own fact `fact` now links `to`, its
         // words kept
-        repointLink(fact, { index, to, useName = null }) {
+        repointLink(fact, { index, to, mode = null, useName = null }) {
             const occurrence = refOccurrence(fact.text, fact.segments, index);
             if (occurrence !== null && (to !== fact.segments[index].ref || useName)) {
-                this.worlds.repointRef(fact.fact_id, occurrence, to, useName);
+                this.worlds.repointRef(fact.fact_id, occurrence, to, { mode, useName });
             }
         },
         // words selected in the fact `fact` (`LinkedText`'s `select`)
-        selected(fact, { start, end, words, x, y }) {
-            this.selection = { factId: fact.fact_id, start, end, words, target: [x, y] };
+        selected(fact, { start, end, words, before = '', x, y }) {
+            this.selection = { factId: fact.fact_id, start, end, words, before, target: [x, y] };
             this.selecting = true;
         },
         // words selected in a drafted fact: the server's copy is what a
         // selection names, so a fact written or rewritten here has none
-        selectedDraft(row, { start, end, words, x, y }) {
+        selectedDraft(row, { start, end, words, before = '', x, y }) {
             this.selection = {
                 index: row.serverIndex,
                 start,
                 end,
                 words,
+                before,
                 target: [x, y],
                 blocked: row.serverIndex === null ? 'This fact was written or changed here: its words can be linked once it\'s accepted.' : '',
             };
@@ -1326,18 +1328,18 @@ export default {
                 this.worlds.makeStubFromText(found.factId, found.start, found.end, kind, tag, { expand, words });
             }
         },
-        // `useName`: "Rename to…" one of the target's names (P4), else
-        // the words are kept and taught as another name
-        linkWords({ target, useName = null }) {
+        // `mode` (P4, ruling H2): 'link' as written, 'name' taught as
+        // another name too, 'rename' to `useName`, one of the target's names
+        linkWords({ target, mode = 'link', useName = null }) {
             const found = this.selection;
             if (found && this.draft) {
-                if (found.index !== null && !useName) {
-                    this.worlds.draftSelection('link_text', found.index, found.start, found.end, { target_id: target.id });
+                if (found.index !== null && mode !== 'rename') {
+                    this.worlds.draftSelection('link_text', found.index, found.start, found.end, { target_id: target.id, mode });
                 }
                 return;
             }
             if (found) {
-                this.worlds.linkText(found.factId, found.start, found.end, target.id, useName);
+                this.worlds.linkText(found.factId, found.start, found.end, target.id, { mode, useName });
             }
         },
         removeFact(fact) {

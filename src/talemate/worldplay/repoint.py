@@ -30,6 +30,7 @@ revision, so one undo restores it all:
   text become the target's common other names, unless the target or
   another thing already has that name. A hard re-point adds the stub's
   name and other names only: the links' words are gone from the world.
+  "Link only" (`teach_names` false, ruling H2) adds none.
 
 Then the stub is removed. Refused before anything is written (a
 `ValueError` naming every use that blocks it): a use by a scene, a field
@@ -437,6 +438,9 @@ class _Job(BaseModel):
     link_akas: list[str] | None = None
     # a hard re-point's name for the links: one of the target's own
     use_name: str | None = None
+    # whether the target learns names at all (ruling H2: "link only"
+    # teaches none)
+    teach_names: bool = True
     # the target's own fields that named the stub, redirected
     redirected: set[str] = set()
     # a merge's other names added from the links' words
@@ -672,6 +676,8 @@ def _names(job: _Job, shown_texts: list[str]) -> tuple[list[dict], list[str]]:
 
     view, target = job.view, job.target
     aka = list(target.fields.get("aka") or [])
+    if not job.teach_names:
+        return aka, []
     if job.use_name is not None:
         shown_texts = []
     held = {name_key(job.target_name)} | {
@@ -1301,6 +1307,7 @@ def plan_repoint(
     *,
     as_kind: str | None = None,
     use_name: str | None = None,
+    teach_names: bool = True,
 ) -> RepointPlan:
     """Read and decide a re-point of the stub `stub_id` onto `target_id`
     (see the module docstring), writing nothing. Raises `KeyError` for a
@@ -1310,9 +1317,11 @@ def plan_repoint(
     facts' categories are decided for it. With `use_name` (the "hard
     re-point"), every link's words become that name, which must be one of
     the target's own (its name or an other name; any case, written as the
-    target has it): anything else is refused."""
+    target has it): anything else is refused. With `teach_names` false
+    ("link only", ruling H2) the target learns no names at all."""
 
     job = _job(world, stub_id, target_id)
+    job.teach_names = teach_names
     if use_name is not None:
         job.use_name = target_name(job.view, target_id, use_name)
     if as_kind is not None and as_kind != job.target.kind:
@@ -1388,15 +1397,22 @@ def plan_merge(
 
 
 def repoint_stub(
-    world: World, stub_id: str, target_id: str, *, use_name: str | None = None
+    world: World,
+    stub_id: str,
+    target_id: str,
+    *,
+    use_name: str | None = None,
+    teach_names: bool = True,
 ) -> RepointResult:
     """Point everything that names the stub `stub_id` at `target_id`, and
     remove the stub, in one revision (see the module docstring); with
-    `use_name`, the hard re-point (`plan_repoint`). Raises `KeyError` for
-    a missing thing and `ValueError` for what's refused, writing
-    nothing."""
+    `use_name`, the hard re-point, and without `teach_names`, no names
+    taught (`plan_repoint`). Raises `KeyError` for a missing thing and
+    `ValueError` for what's refused, writing nothing."""
 
-    plan = plan_repoint(world, stub_id, target_id, use_name=use_name)
+    plan = plan_repoint(
+        world, stub_id, target_id, use_name=use_name, teach_names=teach_names
+    )
     with world.revision(Source.manual(note=plan.note)) as rev:
         plan.write(rev)
     result = plan.result()

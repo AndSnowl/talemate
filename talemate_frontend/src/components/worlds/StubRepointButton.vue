@@ -17,7 +17,7 @@
         :exclude="[stub.id]"
         @pick="pick"
     />
-    <NameModeMenu v-model="choosing" :target="target" :words="stub.name" :thing="chosen" @choose="repoint" />
+    <NameModeMenu v-model="choosing" :target="target" :words="stub.name" :thing="chosen" name-default @choose="repoint" />
 </template>
 
 <script>
@@ -27,11 +27,13 @@ import ReferenceMenu from './ReferenceMenu.vue';
 
 // "Re-point…" for a whole stub (the Stubs page, the stub's own page): a
 // search (`ReferenceMenu`) for the entry the stub means, then the mode
-// chooser (`NameModeMenu`, P4): "add as another name" (`repoint_stub`
-// moves every link to the stub there, keeping its words, teaches that
-// entry the stub's names and the words, and removes the stub) or "Rename
-// to…" one of that entry's names, which every link's words become (the
-// hard re-point, `use_name`).
+// chooser (`NameModeMenu`, P4, ruling H2; a stub's words are a name, so
+// "add as another name" is its default): `repoint_stub` moves every link
+// to the stub there and removes the stub, keeping the links' words and
+// teaching that entry the stub's names and the words ("add as another
+// name"), teaching nothing ("Link only", `mode: 'link'`), or writing one
+// of that entry's names in every link's words ("Rename to…", the hard
+// re-point, `use_name`).
 export default {
     name: 'StubRepointButton',
     components: { NameModeMenu, ReferenceMenu },
@@ -63,9 +65,9 @@ export default {
             this.chosen = { id: target.id, name: target.name };
             this.choosing = true;
         },
-        repoint({ useName }) {
+        repoint({ mode, useName }) {
             this.sent = true;
-            this.worlds.repointStub(this.stub.id, this.chosen.id, useName);
+            this.worlds.repointStub(this.stub.id, this.chosen.id, useName, mode === 'link' ? 'link' : null);
         },
     },
 };

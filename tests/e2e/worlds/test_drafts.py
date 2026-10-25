@@ -510,13 +510,21 @@ def test_selection_make_stub_and_link(app, page, fixed_preview):
     _select(page, _fact(vel, "north road"), "north road")
     page.get_by_test_id("selection-menu").get_by_test_id("selection-link").click()
     _search_and_pick(page, "tsar", "Tsardom of Moscavia")
-    _choose_mode(page)
+    # ruling H2: plain words aren't a name, so they link only
+    _choose_mode(page, default="link")
     sent = _wait_sent(page, "link_text")
     assert (sent["start"], sent["end"]) == (29, 39)
     assert sent["target_id"] == world.things["Tsardom of Moscavia"]
+    assert sent["mode"] == "link"
     _fact(vel, "north road").get_by_test_id("linked-ref").filter(
         has_text="north road"
     ).wait_for(state="visible", timeout=TIMEOUT_MS)
+    # and the Tsardom doesn't go by "north road"
+    page.get_by_test_id("kind-place").click()
+    tsardom = _open_thing(page, "Tsardom of Moscavia")
+    expect(tsardom.get_by_test_id("thing-other-names")).to_have_count(0)
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
 
     # Make a stub and expand now: its kind's box opens from the new stub
     _select(page, _fact(vel, BELLS), "bells")
@@ -556,8 +564,9 @@ def test_selection_make_stub_and_link(app, page, fixed_preview):
     chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
     expect(chooser.get_by_test_id("mode-rename-later")).to_have_count(1)
     expect(chooser.get_by_test_id("mode-rename-option")).to_have_count(0)
-    _choose_mode(page)
+    _choose_mode(page, default="link")
     sent = _wait_sent(page, "link_text")
+    assert sent["mode"] == "link"
     assert sent["draft_key"] == "new:lore:frostwing host"
     assert sent["target_id"] == velikoye
     patrol.get_by_test_id("linked-ref").filter(has_text="the north pass").wait_for(
@@ -712,7 +721,7 @@ def test_hard_repoint(app, page):
     chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
     options = chooser.get_by_test_id("mode-rename-option")
     expect(options).to_have_text(["Velikoye", "the capital"])
-    _choose_mode(page, "the capital")
+    _choose_mode(page, rename_to="the capital", default="name")
     sent = _wait_sent(page, "repoint_stub")
     assert sent == {
         "type": "worlds",
@@ -939,18 +948,19 @@ def test_repoint_mode_picker(app, page):
     _search_and_pick(page, "tsar", "Tsardom of Moscavia")
     chooser = page.get_by_test_id("name-mode")
     chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
-    expect(chooser.get_by_test_id("mode-add-name")).to_have_class(
-        re.compile(r"v-list-item--active")
-    )
     expect(chooser.get_by_test_id("mode-add-name")).to_contain_text(
         "Add “Pure-line Moscavians” as another name"
     )
+    expect(chooser.get_by_test_id("mode-link-only")).to_have_count(1)
     expect(chooser.get_by_test_id("mode-rename-option")).to_have_text(
         ["Tsardom of Moscavia"]
     )
-    _choose_mode(page)
+    # a proper name ("Moscavians" isn't capitalised for the sentence):
+    # "Add as another name" is the default
+    _choose_mode(page, default="name")
     sent = _wait_sent(page, "link_text")
     assert sent["target_id"] == world.things["Tsardom of Moscavia"]
+    assert sent["mode"] == "name"
     assert "use_name" not in sent
     expect(page.get_by_test_id("accept-notes")).to_contain_text(
         "Added as another name: Pure-line Moscavians"
@@ -970,7 +980,7 @@ def test_repoint_mode_picker(app, page):
     card.wait_for(state="visible", timeout=TIMEOUT_MS)
     card.get_by_role("button", name="Re-point…").click()
     _search_and_pick(page, "veli", "Velikoye")
-    _choose_mode(page, "the capital")
+    _choose_mode(page, rename_to="the capital", default="link")
     sent = _wait_sent(page, "repoint_ref")
     assert (sent["to_id"], sent["use_name"]) == (
         world.things["Velikoye"],

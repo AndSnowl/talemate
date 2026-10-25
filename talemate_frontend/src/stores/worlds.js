@@ -81,9 +81,10 @@
 // menu) are `makeStubFromText` ("Make a stub", and "… and expand now":
 // `stubExpandAfter` opens its box once it's made) and `linkText`, by
 // their UTF-16 offsets in its rendered text (ruling F18). `linkText` and
-// `repointRef` take the owner's mode (P4, `NameModeMenu`): the words kept
-// and taught as another name (the reply's `aka_added`, shown as a note),
-// or `useName`, one of the target's names in their place. `referenceTargets` is what Add reference searches: every entry and
+// `repointRef` take the owner's mode (P4, ruling H2, `NameModeMenu`): the
+// words linked as written, kept and taught as another name (the reply's
+// `aka_added`, shown as a note), or `useName`, one of the target's names
+// in their place. `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
 // Filing and tags (the entry page, mockup v3): `addFiling`, `editFiling`
@@ -1182,10 +1183,11 @@ export const useWorldsStore = defineStore('worlds', {
         // names become the target's other names and the stub goes
         // `useName` (the hard re-point): one of the target's names, which
         // every link's words become
-        repointStub(stubId, targetId, useName = null) {
+        // `mode` 'link' ("Link only", ruling H2): no names taught
+        repointStub(stubId, targetId, useName = null, mode = null) {
             this.stubRepointed = null;
             this.pending = { ...this.pending, repoint_stub: true };
-            this.request('repoint_stub', { stub_id: stubId, target_id: targetId, ...(useName ? { use_name: useName } : {}) });
+            this.request('repoint_stub', { stub_id: stubId, target_id: targetId, ...(mode ? { mode } : {}), ...(useName ? { use_name: useName } : {}) });
         },
 
         // thing `id`'s names (`namesOf[id]`: its name, then its other
@@ -1525,11 +1527,12 @@ export const useWorldsStore = defineStore('worlds', {
             this.edit('make_stub_from_text', { fact_id: factId, start, end, kind, ...(tag ? { tag } : {}) });
         },
 
-        // selected words of the open page's fact linked to `targetId`:
-        // kept and taught as another name, or (`useName`, "Rename to…")
-        // one of its names in their place
-        linkText(factId, start, end, targetId, useName = null) {
-            this.edit('link_text', { fact_id: factId, start, end, target_id: targetId, ...(useName ? { use_name: useName } : {}) });
+        // selected words of the open page's fact linked to `targetId`, in
+        // the owner's `mode`: 'link' as written (the default), 'name'
+        // taught as another name too, 'rename' with `useName`, one of its
+        // names, in their place
+        linkText(factId, start, end, targetId, { mode = 'link', useName = null } = {}) {
+            this.edit('link_text', { fact_id: factId, start, end, target_id: targetId, mode, ...(useName ? { use_name: useName } : {}) });
         },
 
         // who holds the open page's fact `factId` as a belief (null: world
@@ -1601,10 +1604,11 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // point the `occurrence`-th reference of the open thing's fact
-        // `factId` at `toId`: its words kept and taught as another name,
-        // or (`useName`, "Rename to…") one of `toId`'s names in their place
-        repointRef(factId, occurrence, toId, useName = null) {
-            this.edit('repoint_ref', { fact_id: factId, occurrence, to_id: toId, ...(useName ? { use_name: useName } : {}) });
+        // `factId` at `toId`, in the owner's `mode` (`NameModeMenu`): 'link'
+        // keeps its words, 'name' teaches them too (the server's default),
+        // 'rename' writes `useName`, one of `toId`'s names, in their place
+        repointRef(factId, occurrence, toId, { mode = null, useName = null } = {}) {
+            this.edit('repoint_ref', { fact_id: factId, occurrence, to_id: toId, ...(mode ? { mode } : {}), ...(useName ? { use_name: useName } : {}) });
         },
 
         // make `text`, a phrase in the open thing's fact `factId`, a stub

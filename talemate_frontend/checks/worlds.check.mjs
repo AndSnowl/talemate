@@ -113,6 +113,7 @@ import {
     tickFileInto,
     tickMoveHere,
     versionRows,
+    wordsAreAName,
 } from '../src/components/worlds/draftPage.js';
 
 let passed = 0;
@@ -2616,7 +2617,7 @@ check('selected words: on a draft a stub or a link by its index; on a page by th
     assert.deepEqual(page.store.expanding, { id: 'g1', kind: 'place', name: 'Ashen Gate' });
     page.store.openThing('vel');
     page.store.linkText('f1', 29, 39, 'ts');
-    assert.deepEqual(page.sent.at(-1), { type: 'worlds', action: 'link_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 29, end: 39, target_id: 'ts' });
+    assert.deepEqual(page.sent.at(-1), { type: 'worlds', action: 'link_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 29, end: 39, target_id: 'ts', mode: 'link' });
     page.store.handleMessage(reply('link_text', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [] }));
     assert.equal(page.store.thing.name, 'Velikoye');
 });
@@ -2639,22 +2640,43 @@ check('Copy to… keeps the fact; the hard re-point sends the name; names fetche
     assert.equal('use_name' in sent.at(-1), false);
 });
 
+check('ruling H2: words are a name when a capital is not only the sentence\'s', () => {
+    assert.equal(wordsAreAName('Pure-line Moscavians', '', []), true);
+    assert.equal(wordsAreAName('The Ashen Gate', '', []), true);
+    assert.equal(wordsAreAName('Ashen Gate', '🦉 The ', []), true);
+    assert.equal(wordsAreAName('north road', 'The Ashen Gate guards the ', []), false);
+    assert.equal(wordsAreAName('the north road', 'It guards ', []), false);
+    // a capital only because the sentence starts there
+    assert.equal(wordsAreAName('Bells', '', []), false);
+    assert.equal(wordsAreAName('Bells ring', 'It is late. ', []), false);
+    assert.equal(wordsAreAName('Bells', 'It rings the ', []), true);
+    // already one of the target's names
+    assert.equal(wordsAreAName('snowy owls', 'by the ', ['Snowy Moscavian Owls', 'Snowy Owls']), false);
+    assert.equal(wordsAreAName('Snowy Owls', 'by the ', ['Snowy Moscavian Owls']), true);
+});
+
 check('P4: link and re-point send the mode; a name taught shows as a note', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('vel');
-    store.linkText('f1', 0, 20, 'owls', 'Snowy Owls');
+    store.linkText('f1', 0, 20, 'owls', { mode: 'rename', useName: 'Snowy Owls' });
     assert.deepEqual(sent.at(-1), {
-        type: 'worlds', action: 'link_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 0, end: 20, target_id: 'owls', use_name: 'Snowy Owls',
+        type: 'worlds', action: 'link_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 0, end: 20, target_id: 'owls', mode: 'rename', use_name: 'Snowy Owls',
     });
-    store.linkText('f1', 0, 20, 'owls');
+    store.linkText('f1', 0, 20, 'owls', { mode: 'name' });
     assert.equal('use_name' in sent.at(-1), false);
+    assert.equal(sent.at(-1).mode, 'name');
+    store.linkText('f1', 0, 20, 'owls');
+    assert.equal(sent.at(-1).mode, 'link');
+    store.repointStub('s1', 'owls', null, 'link');
+    assert.equal(sent.at(-1).mode, 'link');
     store.handleMessage(reply('link_text', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['Pure-line Moscavians'] }));
     assert.deepEqual(store.notes, { action: 'link_text', notes: ['Added as another name: Pure-line Moscavians'] });
-    store.repointRef('f1', 0, 'holt', 'Maren Holt');
+    store.repointRef('f1', 0, 'holt', { mode: 'rename', useName: 'Maren Holt' });
     assert.equal(sent.at(-1).use_name, 'Maren Holt');
-    store.repointRef('f1', 0, 'holt');
+    store.repointRef('f1', 0, 'holt', { mode: 'link' });
     assert.equal('use_name' in sent.at(-1), false);
+    assert.equal(sent.at(-1).mode, 'link');
     store.handleMessage(reply('repoint_ref', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['the town'] }));
     assert.deepEqual(store.notes, { action: 'repoint_ref', notes: ['Added as another name: the town'] });
     assert.equal(otherNamesNote(['a', 'b']), 'Added as another name: a, b');

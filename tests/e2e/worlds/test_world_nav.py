@@ -136,7 +136,8 @@ def test_stubs_page_repoints_a_stub_onto_an_entry(app, page):
     row.wait_for(state="visible", timeout=TIMEOUT_MS)
     row.get_by_test_id("stub-repoint").click()
     _search_and_pick(page, "mosc", "Moscavy")
-    _choose_mode(page)
+    # a stub's words are a name: "Add as another name" is its default
+    _choose_mode(page, default="name")
 
     # the stub is gone; a note says where its links went and what names
     # Moscavy took

@@ -34,6 +34,27 @@ export function nameKey(name) {
     return words.join(' ');
 }
 
+// Whether selected `words` (the rendered text `before` them, in the fact)
+// look like a proper name, so a link's mode chooser defaults to "Add as
+// another name" (ruling H2) rather than "Link only": a word with a capital
+// that isn't there only because the sentence starts with it (the backend's
+// capital rule, `links._capitalised`, past a leading article), and words
+// that aren't already one of the target's `names`.
+export function wordsAreAName(words, before = '', names = []) {
+    const key = nameKey(words);
+    if (!key || (names || []).some((name) => nameKey(name) === key)) {
+        return false;
+    }
+    let tokens = (words || '').trim().split(/\s+/).filter(Boolean);
+    const sentenceStart = !/[\p{L}\p{N}]/u.test(before || '') || /[.!?:;]["'”’)\]]*\s*$/u.test(before || '');
+    if (tokens.length > 1 && ARTICLES.includes(tokens[0].toLowerCase())) {
+        tokens = tokens.slice(1);
+    } else if (sentenceStart) {
+        tokens = tokens.slice(1);
+    }
+    return tokens.some((token) => /^[^\p{L}]*\p{Lu}/u.test(token));
+}
+
 function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

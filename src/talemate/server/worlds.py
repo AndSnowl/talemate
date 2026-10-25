@@ -93,7 +93,8 @@ through `signal_operation_failed` (an `operation_done` envelope with
   starting prompt for the stub and the mention context its expansion gets.
   `change_stub_kind` adds `notes`, naming each field the new kind lacks
   that was dropped with its value.
-  `repoint_stub {stub_id, target_id, use_name?}` (`talemate.worldplay.repoint`)
+  `repoint_stub {stub_id, target_id, mode?, use_name?}` (`talemate.worldplay.repoint`;
+  `mode` "link" teaches the target no names, ruling H2)
   points everything naming the stub at the target (an entry, or another
   live stub) -- fact links, fields, filings, the stub's own facts and
   filings -- teaches the target its names (`use_name`, one of the
@@ -198,7 +199,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
   entries and stubs, and the picks, in the rest, keeping the words
   written; the thing's own names, and names the owner treats as new, stay
   plain, and unknown phrases are never made stubs.
-  `repoint_ref {thing_id, fact_id, occurrence, to_id, use_name?, at}`
+  `repoint_ref {thing_id, fact_id, occurrence, to_id, mode?, use_name?,
+  at}` (`mode`, `LinkMode`: "name" by default; "link" keeps the words and
+  teaches nothing, ruling H2)
   points one reference of a fact (the `occurrence`-th in its text) at
   another thing, keeping its words, and teaches the target the link's
   words (unless another entry goes by them) and, when it was a stub's last
@@ -217,9 +220,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   {target_id, role}, at}` makes a stub of the words (or uses the entry
   of that name), filed as `filing` says, and links them, in one
   revision, answering with the fact's entry plus `stub_id`;
-  `link_text {fact_id, start, end, target_id, use_name?, at}` links them
-  to an entry, teaching it the words as another name (P4), or, with
-  `use_name`, writing one of its names in their place; it answers with
+  `link_text {fact_id, start, end, target_id, mode?, use_name?, at}`
+  links them to an entry: as written ("link", the default, ruling H2),
+  teaching it the words as another name too ("name", P4), or writing one
+  of its names, `use_name`, in their place ("rename"); it answers with
   the fact's entry plus `aka_added`. A selection that cuts through or
   takes in a link is refused. On a draft, the words are recorded in its
   `selected_names` (ruling F26): only those link where they're written
@@ -612,13 +616,36 @@ class CorrectFactPayload(_ThingEdit):
     spans: list[LinkSpan] = pydantic.Field(default_factory=list)
 
 
+# how a link takes its words (P4, ruling H2): "link" keeps them and teaches
+# nothing, "name" keeps them and teaches them as another name, "rename"
+# writes one of the target's names (`use_name`) in their place
+LinkMode = Literal["link", "name", "rename"]
+
+
+def _link_mode(
+    mode: LinkMode | None, use_name: str | None, default: LinkMode
+) -> LinkMode:
+    """The mode a link payload asks for: `mode`, else "rename" when it
+    names a `use_name`, else `default`; a rename needs a name and only a
+    rename takes one (`ValueError`)."""
+
+    chosen: LinkMode = mode or ("rename" if use_name is not None else default)
+    if chosen == "rename" and use_name is None:
+        raise ValueError("a rename needs one of the target's names")
+    if chosen != "rename" and use_name is not None:
+        raise ValueError(f"only a rename writes a name, not {chosen!r}")
+    return chosen
+
+
 class RepointRefPayload(_ThingEdit):
     fact_id: str
     # which reference of the fact's text, 0-based, in order
     occurrence: int
     to_id: str
-    # "Rename to..." (P4): one of the target's names for the link's words;
-    # unset, "add as another name" (the words kept, and taught)
+    # how the link takes its words (`LinkMode`); unset, "name" (or
+    # "rename" with a `use_name`)
+    mode: LinkMode | None = None
+    # "Rename to...": one of the target's names for the link's words
     use_name: str | None = None
 
 
@@ -641,6 +668,9 @@ class IgnoreStubPayload(pydantic.BaseModel):
 class RepointStubPayload(pydantic.BaseModel):
     stub_id: str
     target_id: str
+    # how the links take their words (`LinkMode`); unset, "name" (or
+    # "rename" with a `use_name`): a stub's words are a name
+    mode: LinkMode | None = None
     # the hard re-point: one of the target's names for every link's words
     use_name: str | None = None
 
@@ -882,8 +912,10 @@ class MakeStubFromTextPayload(_Selection):
 
 class LinkTextPayload(_Selection):
     target_id: str
-    # "Rename to..." (P4): one of the target's names in the words' place;
-    # unset, "add as another name" (the words kept, and taught)
+    # how the link takes the words (`LinkMode`); unset, "link" (or
+    # "rename" with a `use_name`): plain words never become a name unasked
+    mode: LinkMode | None = None
+    # "Rename to...": one of the target's names in the words' place
     use_name: str | None = None
 
 
@@ -3553,9 +3585,10 @@ class WorldsPlugin(Plugin):
 
     async def handle_link_text(self, data: dict):
         """Link selected words of a fact to an entry ("Link to an
-        entry..."), in one revision, in one of two modes (P4): "add as
-        another name" (the default) keeps the words and teaches the target
-        them, spaces normalised, as a common other name
+        entry..."), in one revision, in one of three modes (`LinkMode`):
+        "link only" (the default, ruling H2) keeps the words and teaches
+        nothing; "add as another name" (P4) keeps the words and teaches
+        the target them, spaces normalised, as a common other name
         (`repoint.learn_names`: never one it has or another thing goes
         by); "Rename to..." (`use_name`, one of the target's names) writes
         that name in the words' place, its article fitted
@@ -3566,16 +3599,17 @@ class WorldsPlugin(Plugin):
         and `index`, ruling F16), the draft's current version gains a pick
         of the words for the target, keyed by name, so accept links every
         occurrence of those words in the draft, and the words join its
-        `pick_names`, which accept teaches the target; "Rename to..."
+        `pick_names` ("name" only), which accept teaches the target; "Rename to..."
         waits for the accept (refused). The updated draft answers."""
 
         payload = LinkTextPayload(**data)
         world = self._require_world()
+        mode = _link_mode(payload.mode, payload.use_name, "link")
         self._require_entry(world.view(), payload.target_id)
         if payload.draft_key is not None:
             # a draft's fact (ruling F16): a pick, keyed by name, so accept
             # links every place the draft writes these words
-            if payload.use_name is not None:
+            if mode == "rename":
                 raise ValueError(
                     "on a draft the words can't be renamed yet: rename them"
                     " once it's accepted"
@@ -3586,7 +3620,8 @@ class WorldsPlugin(Plugin):
             self._unnamed(preview, words)
             self._selected_name(preview, words)
             preview.picks[words] = payload.target_id
-            preview.pick_names.append(words)
+            if mode == "name":
+                preview.pick_names.append(words)
             self._reply("link_text", self._draft_out(world, key))
             return
         owner_id, fact, text, start, end, words = self._selected(world, payload)
@@ -3603,7 +3638,7 @@ class WorldsPlugin(Plugin):
             )
             added = (
                 learn_names(rev, world, payload.target_id, [words])
-                if payload.use_name is None
+                if mode == "name"
                 else []
             )
         at = _date_in(payload.at)
@@ -3757,8 +3792,13 @@ class WorldsPlugin(Plugin):
 
         payload = RepointStubPayload(**data)
         world = self._require_world()
+        mode = _link_mode(payload.mode, payload.use_name, "name")
         done = repoint_stub(
-            world, payload.stub_id, payload.target_id, use_name=payload.use_name
+            world,
+            payload.stub_id,
+            payload.target_id,
+            use_name=payload.use_name,
+            teach_names=mode != "link",
         )
         self._reply(
             "repoint_stub",
@@ -3943,15 +3983,17 @@ class WorldsPlugin(Plugin):
 
     async def handle_repoint_ref(self, data: dict):
         """Point one reference of an own fact (its `occurrence`-th, in the
-        raw text) at `to_id`; nothing else in the fact changes. Two modes
-        (P4): "add as another name" (the default) keeps its words and
-        teaches the target them; "Rename to..." (`use_name`, one of the
+        raw text) at `to_id`; nothing else in the fact changes. Three modes
+        (`LinkMode`): "add as another name" (the default, P4) keeps its
+        words and teaches the target them; "link only" (ruling H2) keeps
+        them and teaches nothing; "Rename to..." (`use_name`, one of the
         target's names) writes that name in their place, its article
         fitted (`repoint.renamed_words`), teaching only a stub's own names.
         Answers like `correct_fact`, plus `aka_added`."""
 
         payload = RepointRefPayload(**data)
         world = self._require_world()
+        mode = _link_mode(payload.mode, payload.use_name, "name")
         at = _date_in(payload.at)
         fact = self._require_fact_of(world, payload.thing_id, payload.fact_id)
         view = world.view(at)
@@ -3987,14 +4029,15 @@ class WorldsPlugin(Plugin):
         # only when this was its last reference (it names nothing else, so
         # its names are free)
         from_id = old.group(1) if old else None
-        names = (
-            [(old.group(2) or rendered) if old else ""]
-            if payload.use_name is None
-            else []
-        )
+        names = [(old.group(2) or rendered) if old else ""] if mode == "name" else []
         skip: set[str] = set()
         source = view.thing(from_id) if from_id else None
-        if source is not None and source.is_stub and from_id is not None:
+        if (
+            mode != "link"
+            and source is not None
+            and source.is_stub
+            and from_id is not None
+        ):
             uses = sum(
                 1
                 for live in world.live_facts()

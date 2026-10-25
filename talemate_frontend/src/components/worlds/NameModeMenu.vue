@@ -10,13 +10,23 @@
             <div class="text-caption text-muted px-2 pb-1">“{{ shownWords }}” → {{ thing?.name }}</div>
             <v-list density="compact" role="menu">
                 <v-list-item
+                    prepend-icon="mdi-link-variant"
+                    title="Link only"
+                    :subtitle="`“${shownWords}” stays as written`"
+                    role="menuitem"
+                    :active="defaultMode === 'link'"
+                    color="accent"
+                    data-testid="mode-link-only"
+                    @click="choose('link')"
+                ></v-list-item>
+                <v-list-item
                     prepend-icon="mdi-tag-plus-outline"
                     :title="`Add “${shownWords}” as another name`"
                     role="menuitem"
-                    active
+                    :active="defaultMode === 'name'"
                     color="accent"
                     data-testid="mode-add-name"
-                    @click="choose(null)"
+                    @click="choose('name')"
                 ></v-list-item>
                 <v-list-subheader>Rename to…</v-list-subheader>
                 <div v-if="draft" class="px-4 pb-2 text-caption text-muted" data-testid="mode-rename-later">On a draft: rename the words once it's accepted.</div>
@@ -31,7 +41,7 @@
                         :title="name"
                         role="menuitem"
                         data-testid="mode-rename-option"
-                        @click="choose(name)"
+                        @click="choose('rename', name)"
                     ></v-list-item>
                 </template>
             </v-list>
@@ -41,23 +51,31 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import { wordsAreAName } from './draftPage.js';
 
-// The two ways a link takes its words (P4), once its target is picked: the
-// one mode chooser of the link card's "Re-point…", a stub's "Re-point…" and
-// the selection's "Link to an entry…". "Add “words” as another name" (the
-// default, first and marked) keeps the words and teaches the target them;
-// "Rename to…" lists the target's names (its name, then its other names,
-// `fetchNames`), one of which takes the words' place. `choose` emits
-// `{useName}`: null for another name, else the name. On a draft (ruling
-// F16) the words are a pick keyed by name: renaming waits for the accept.
-// If the target's names can't be had (it's gone), the chooser closes.
+// The three ways a link takes its words (P4, ruling H2), once its target
+// is picked: the one mode chooser of the link card's "Re-point…", a stub's
+// "Re-point…" and the selection's "Link to an entry…". "Link only" keeps
+// the words as written and teaches nothing; "Add “words” as another name"
+// keeps them and teaches the target them; "Rename to…" lists the target's
+// names (its name, then its other names, `fetchNames`), one of which takes
+// the words' place. The default (marked) is "Add as another name" when the
+// words look like a proper name (`wordsAreAName`, from the text `before`
+// them; always for a stub's words, `nameDefault`), else "Link only".
+// `choose` emits `{mode, useName}` (`mode` 'link', 'name' or 'rename').
+// On a draft (ruling F16) the words are a pick keyed by name: renaming
+// waits for the accept. If the target's names can't be had (it's gone),
+// the chooser closes.
 export default {
     name: 'NameModeMenu',
     props: {
         modelValue: { type: Boolean, default: false },
         target: { type: [Array, Object], default: null },
-        // the words the link shows now
+        // the words the link shows now, and the fact's text before them
         words: { type: String, default: '' },
+        before: { type: String, default: '' },
+        // the words are a name whatever they look like (a stub's)
+        nameDefault: { type: Boolean, default: false },
         // the thing the link will mean, `{id, name}`
         thing: { type: Object, default: null },
         draft: { type: Boolean, default: false },
@@ -73,10 +91,13 @@ export default {
         names() {
             return this.thing ? this.worlds.namesOf[this.thing.id] || null : null;
         },
+        defaultMode() {
+            return this.nameDefault || wordsAreAName(this.words, this.before, this.names || []) ? 'name' : 'link';
+        },
     },
     watch: {
         modelValue(open) {
-            if (open && this.thing && !this.draft) {
+            if (open && this.thing) {
                 this.worlds.fetchNames(this.thing.id);
             }
         },
@@ -90,8 +111,8 @@ export default {
         close() {
             this.$emit('update:modelValue', false);
         },
-        choose(name) {
-            this.$emit('choose', { useName: name });
+        choose(mode, name = null) {
+            this.$emit('choose', { mode, useName: name });
             this.close();
         },
     },

@@ -104,18 +104,34 @@ def _search_and_pick(page, query: str, name: str):
     return text
 
 
-def _choose_mode(page, rename_to: str | None = None):
-    """The mode chooser after a link's target is picked (P4): "Add as
-    another name" (the default), or "Rename to…" one of its names."""
+MODE_IDS = {"link": "mode-link-only", "name": "mode-add-name"}
+
+
+def _choose_mode(
+    page,
+    mode: str | None = None,
+    *,
+    rename_to: str | None = None,
+    default: str | None = None,
+):
+    """The mode chooser after a link's target is picked (P4, ruling H2):
+    `default` ("link" or "name") is the one marked; then "Rename to…"
+    `rename_to`, else `mode`, else the marked one is chosen."""
 
     chooser = page.get_by_test_id("name-mode")
     chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
-    if rename_to is None:
-        chooser.get_by_test_id("mode-add-name").click()
-    else:
+    if default is not None:
+        expect(chooser.get_by_test_id(MODE_IDS[default])).to_have_class(
+            re.compile(r"v-list-item--active")
+        )
+    if rename_to is not None:
         chooser.get_by_test_id("mode-rename-option").filter(
             has_text=re.compile(f"^{re.escape(rename_to)}$")
         ).click()
+    elif mode is not None:
+        chooser.get_by_test_id(MODE_IDS[mode]).click()
+    else:
+        chooser.locator(".v-list-item--active").click()
     chooser.wait_for(state="hidden", timeout=TIMEOUT_MS)
 
 
