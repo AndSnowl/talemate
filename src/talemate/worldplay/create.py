@@ -4258,18 +4258,35 @@ def write_elsewhere_repeats(
     """Settle each ticked elsewhere row's "Keep new" (`replaces_repeat`),
     once `write_elsewhere` has already put every row's fact onto its
     target: one `write_repeat_choices` call per target (grouping `rows`
-    by `target_id`; a new name's row can carry no `repeat_of`, since
-    `flag_elsewhere_repeats` only flags one with a live target), each
-    with no `move_here` (an elsewhere row never carries a "Move existing
-    here" move). Calling this after every target's own elsewhere facts
-    are written means a target always ends with its new fact and
-    without the one it replaced, never a moment with neither. Returns
-    the facts removed, each `(old owner, fact)` as it was."""
+    by `target_id`), each with no `move_here` (an elsewhere row never
+    carries a "Move existing here" move). A row's `repeat_of` is only
+    ever its own target's fact (`flag_elsewhere_repeats` flags one
+    against the target alone, never another entry's); its `owner_id`
+    must match this row's `target_id`, checked again here rather than
+    trusted, since the router's vouching (`_check_page_repeats`) is
+    only that some held version flagged that fact repeated somewhere,
+    not that it was this row's own target. One retargeted (the owner's
+    "retarget" clears `repeat_of`; only a forged one keeps it) or with
+    no target at all (a new name: it can own no fact) replaces nothing,
+    with a note, same wording as a row no held version flagged.
+    Calling this after every target's own elsewhere facts are written
+    means a target always ends with its new fact and without the one it
+    replaced, never a moment with neither, and never some other
+    entry's fact removed instead. Returns the facts removed, each `(old
+    owner, fact)` as it was."""
 
     by_target: dict[str, list[ElsewhereFact]] = {}
     for item in elsewhere:
-        if item.target_id is not None:
-            by_target.setdefault(item.target_id, []).append(item)
+        if not (item.ticked and item.replaces_repeat and item.repeat_of):
+            continue
+        owner_id = str(item.repeat_of.get("owner_id") or "")
+        if item.target_id is None or owner_id != item.target_id:
+            shown = _clip(str(item.repeat_of.get("text") or ""), 60)
+            notes.append(
+                f"\"{shown}\" isn't a fact this draft repeats, so it isn't removed"
+            )
+            continue
+        by_target.setdefault(item.target_id, []).append(item)
     removed: list[tuple[str, FactState]] = []
     for target_id, rows in by_target.items():
         _moved, target_removed = write_repeat_choices(

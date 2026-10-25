@@ -4017,6 +4017,134 @@ async def test_elsewhere_keep_new_forged_is_refused(plugin):
     assert "Vasha once carried the embers." in texts
 
 
+async def test_elsewhere_keep_new_retargeted_row_is_refused(plugin):
+    """A "For other pages" row retargeted to another entry, kept with a
+    `repeat_of` a held version genuinely flagged -- for its *old*
+    target -- replaces nothing: the router's vouching only checks that
+    some held version flagged that fact repeated somewhere, not that it
+    was this row's own target, so the write itself must still refuse a
+    repeat whose owner isn't the row's target. Writing the new fact
+    onto the retargeted entry still goes ahead."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        heard = rev.add_fact(s.vasha, "background", "Vasha once heard of the embers.")
+    repeat = _elsewhere_repeat(
+        heard, s.vasha, "Vasha", "Vasha once heard of the embers."
+    )
+
+    # held genuinely: the row's own target (Vasha) is this fact's owner
+    held = _ember_preview(s)
+    held.elsewhere[0].repeat_of = repeat
+    plugin._drafts["draft-ember"] = [held]
+
+    # retargeted to the Tsardom, but the owner's "retarget" (which clears
+    # `repeat_of`) is bypassed: the client keeps Vasha's flagged repeat
+    preview = _ember_preview(s)
+    preview.elsewhere[0].target_id = s.tsardom
+    preview.elsewhere[0].target_name = "Tsardom"
+    preview.elsewhere[0].repeat_of = repeat
+    preview.elsewhere[0].replaces_repeat = True
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=preview.model_dump(mode="json"),
+        draft_key="draft-ember",
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "accept_preview")["data"]
+    assert any(
+        "isn't a fact this draft repeats" in note and "heard" in note
+        for note in reply["notes"]
+    )
+    vasha_texts = {f.text for f in s.world.view().thing(s.vasha).facts}
+    assert "Vasha once heard of the embers." in vasha_texts
+    tsardom_texts = {f.text for f in s.world.view().thing(s.tsardom).facts}
+    assert any("once carried the embers." in text for text in tsardom_texts)
+
+
+async def test_elsewhere_keep_new_on_a_new_name_row_is_noted(plugin):
+    """A "For other pages" row for a brand new name (no live target, so
+    no fact it could own) carries a vouched `repeat_of` from a held
+    version's *other*, real-target row: it replaces nothing, with a
+    note -- never silently ignored."""
+
+    from talemate.worldplay.create import ElsewhereFact
+    from talemate.worldplay.links import NewName
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        heard = rev.add_fact(s.vasha, "background", "Vasha once heard of the embers.")
+    repeat = _elsewhere_repeat(
+        heard, s.vasha, "Vasha", "Vasha once heard of the embers."
+    )
+
+    held = _ember_preview(s)
+    held.elsewhere[0].repeat_of = repeat
+    plugin._drafts["draft-ember"] = [held]
+
+    preview = _ember_preview(s)
+    preview.elsewhere = [
+        ElsewhereFact(
+            new=NewName(name="Ashen Gate", kind="place"),
+            target_name="Ashen Gate",
+            category="general",
+            text="The Ashen Gate opens at dawn.",
+            repeat_of=repeat,
+            replaces_repeat=True,
+        )
+    ]
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=preview.model_dump(mode="json"),
+        draft_key="draft-ember",
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "accept_preview")["data"]
+    assert any(
+        "isn't a fact this draft repeats" in note and "heard" in note
+        for note in reply["notes"]
+    )
+    vasha_texts = {f.text for f in s.world.view().thing(s.vasha).facts}
+    assert "Vasha once heard of the embers." in vasha_texts
+
+
+async def test_elsewhere_keep_new_replaces_targets_fact_on_same_target(plugin):
+    """ "Keep new" on a "For other pages" row settles the same way when
+    the draft is accepted onto an existing entry ("Is this X?",
+    `_write_same`), not only a freshly made one."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        heard = rev.add_fact(s.vasha, "background", "Vasha once heard of the embers.")
+    repeat = _elsewhere_repeat(
+        heard, s.vasha, "Vasha", "Vasha once heard of the embers."
+    )
+
+    held = _ember_preview(s)
+    held.elsewhere[0].repeat_of = repeat
+    plugin._drafts["draft-ember"] = [held]
+
+    preview = _ember_preview(s)
+    preview.elsewhere[0].repeat_of = repeat
+    preview.elsewhere[0].replaces_repeat = True
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=preview.model_dump(mode="json"),
+        draft_key="draft-ember",
+        same_target_id=s.vigil,
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "accept_preview")["data"]
+    assert reply["notes"] == []
+    assert reply["id"] == s.vigil
+    texts = {f.text for f in s.world.view().thing(s.vasha).facts}
+    assert "Vasha once carried the embers." in texts
+    assert "Vasha once heard of the embers." not in texts
+
+
 async def test_accept_payloads_validate_shapes(plugin):
     """The accepts validate the rows the owner sends back: an "In" row
     names its entry and its tick is a tick. A bad shape is refused,
