@@ -252,6 +252,24 @@ through `signal_operation_failed` (an `operation_done` envelope with
   `add_facts_failed`/`add_event_failed` with `{draft_key, stale: true}`.
   `TALEMATE_TEST_FIXED_FACTS` (browser tests) names a file
   holding the model's reply.
+- Small drafts (`server.world_drafts`): a fact or event draft (key
+  `facts:<thing_id>`) and a group-add draft (key `group:<thing_id>:<tag
+  or "">`) are held on the server, up to `DRAFT_VERSIONS` versions each,
+  at most `SMALL_DRAFTS_KEPT` slots (the least recently used forgotten
+  first). `add_facts`/`add_event` with `thing_id` and `group_add` start a
+  fresh slot (its versions gone), or, with `regenerate: true`, add a
+  version to the slot; their replies gain `draft_key`, `version`
+  (1-based) and `versions` (`[{version, prompt, year}]` for facts,
+  `[{version, prompt}]` for a group). Only the latest ask for a key
+  answers: one whose slot was discarded, replaced or asked again while
+  it was out is dropped, unanswered (failures too).
+  `use_small_version {draft_key, version}` answers `use_small_version`
+  with that version as the slot's own reply would have it (a fact draft
+  linked against the world as it is now), plus `kind` ("facts",
+  "group", "nested"); `discard_small_draft {draft_key}` drops the slot,
+  writing nothing, and answers `{draft_key}`. `accept_facts` and
+  `accept_group_add` take an optional `draft_key`, the slot they drop
+  once written. Opening another world drops them all.
 - Filing and tags (`talemate.world.filing`): the thing payload has
   `tag`, `hint` (the prompt hint it was written with), `in: [{target_id,
   target_name, role, show_under, since, until, within_id, within_name,
@@ -339,7 +357,7 @@ import hashlib
 import json
 import os
 from collections import OrderedDict
-from collections.abc import Collection, Coroutine
+from collections.abc import Callable, Collection, Coroutine
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -349,7 +367,12 @@ import structlog
 import talemate.instance as instance
 from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
-from talemate.server.world_drafts import DRAFT_VERSIONS
+from talemate.server.world_drafts import (
+    DRAFT_VERSIONS,
+    SmallDrafts,
+    facts_key,
+    group_key,
+)
 from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar
 from talemate.world.curation import CurationSettings
@@ -433,6 +456,7 @@ from talemate.worldplay.facts import (
     draft_facts_for,
 )
 from talemate.worldplay.groups import (
+    GroupAddDraft,
     GroupAddRow,
     accept_group_add,
     cached_synopsis,
@@ -876,11 +900,15 @@ class GroupAddPayload(pydantic.BaseModel):
     # the group exists through its rows' `show_under` (Connected's
     # `via_show_under`, ruling H5)
     show_under: bool = False
+    # add a version to the held draft rather than start it afresh
+    regenerate: bool = False
 
 
 class AcceptGroupAddPayload(pydantic.BaseModel):
     thing_id: str
     rows: list[GroupAddRow]
+    # the small draft accepted: dropped once it's written
+    draft_key: str | None = None
 
 
 class AddFactsPayload(pydantic.BaseModel):
@@ -891,6 +919,9 @@ class AddFactsPayload(pydantic.BaseModel):
     draft_key: str | None = None
     prompt: str
     at: dict | None = None
+    # with `thing_id`: add a version to the held fact draft rather than
+    # start it afresh
+    regenerate: bool = False
 
     @pydantic.model_validator(mode="after")
     def _one(self) -> "AddFactsPayload":
@@ -908,6 +939,8 @@ class AcceptFactsPayload(pydantic.BaseModel):
     # `add_facts`' or `add_event`'s draft, as the owner left it
     draft: FactDraft
     at: dict | None = None
+    # the small draft accepted: dropped once it's written
+    draft_key: str | None = None
 
 
 class _Selection(pydantic.BaseModel):
@@ -1883,6 +1916,9 @@ class WorldsPlugin(Plugin):
         # each draft's current version (0-based): the newest, or the one
         # `use_version` restored; what prompt additions and selections add to
         self._current: dict[str, int] = {}
+        # the small drafts of this session (fact, event and group-add
+        # drafts), versioned, in memory only
+        self._small = SmallDrafts()
 
     def disconnect(self):
         self._set_world(None)
@@ -1909,6 +1945,7 @@ class WorldsPlugin(Plugin):
             # a draft belongs to the world it was made in
             self._drafts.clear()
             self._current.clear()
+            self._small.clear()
         self.websocket_handler.world = world
 
     def _require_world(self) -> World:
@@ -3674,8 +3711,11 @@ class WorldsPlugin(Plugin):
         top-level "+ Add" (`worldplay.groups.group_add`), in the
         background: at most 3 draft rows, each ticked, `{name, kind, tag,
         line, ticked}`, for the owner to amend before
-        `accept_group_add`. Answers `group_add {thing_id, tag, rows}` or
-        `group_add_failed`. Writes nothing. `TALEMATE_TEST_FIXED_GROUP_ADD`
+        `accept_group_add`. Answers `group_add {thing_id, tag, rows,
+        draft_key, version, versions}` (held as a small draft, `group_key`:
+        a fresh one, or with `regenerate` a new version of the held one)
+        or `group_add_failed`; a reply no longer the latest ask for its key
+        is dropped (R2). Writes nothing. `TALEMATE_TEST_FIXED_GROUP_ADD`
         (browser tests) names a file holding the model's reply."""
 
         payload = GroupAddPayload(**data)
@@ -3684,6 +3724,19 @@ class WorldsPlugin(Plugin):
         fixed = _fixed_file(FIXED_GROUP_ADD_ENV)
         client = self._client() if fixed is None else None
         reply = fixed.read_text(encoding="utf-8") if fixed is not None else None
+        key = group_key(payload.thing_id, payload.tag)
+        seq = self._ask_small(key, payload.regenerate)
+
+        def drafted(rows: list[GroupAddRow]) -> dict:
+            draft = GroupAddDraft(
+                thing_id=payload.thing_id,
+                tag=payload.tag,
+                prompt=payload.prompt,
+                show_under=payload.show_under,
+                rows=rows,
+            )
+            return self._small_add(world, key, draft)
+
         self._spawn(
             group_add(
                 world,
@@ -3694,16 +3747,16 @@ class WorldsPlugin(Plugin):
                 reply=reply,
                 show_under=payload.show_under,
             ),
-            self.create_task_done_callback(
-                "group_add",
-                "group_add_failed",
-                "Error adding to a group",
-                success_data=lambda rows: {
-                    "thing_id": payload.thing_id,
-                    "tag": payload.tag,
-                    "rows": [row.model_dump(mode="json") for row in rows],
-                },
-                failure_data={"thing_id": payload.thing_id, "tag": payload.tag},
+            self._small_done(
+                key,
+                seq,
+                self.create_task_done_callback(
+                    "group_add",
+                    "group_add_failed",
+                    "Error adding to a group",
+                    success_data=drafted,
+                    failure_data={"thing_id": payload.thing_id, "tag": payload.tag},
+                ),
             ),
         )
 
@@ -3717,13 +3770,16 @@ class WorldsPlugin(Plugin):
         rather than silently dropped -- its fact is still written, since
         it's the owner's row. Answers `accept_group_add {..., thing_ids,
         notes}` with the page's payload plus each kept row's resolved
-        entry id (new or reused)."""
+        entry id (new or reused). With `draft_key`, that small draft is
+        dropped once written."""
 
         payload = AcceptGroupAddPayload(**data)
         world = self._require_world()
         self._require_entry(world.view(), payload.thing_id)
         notes: list[str] = []
         thing_ids = accept_group_add(world, payload.thing_id, payload.rows, notes=notes)
+        if payload.draft_key is not None:
+            self._small.discard(payload.draft_key)
         self._reply(
             "accept_group_add",
             {
@@ -3732,6 +3788,103 @@ class WorldsPlugin(Plugin):
                 "notes": notes,
             },
         )
+
+    # --- small drafts -------------------------------------------------------
+
+    def _ask_small(self, key: str, regenerate: bool) -> int:
+        """Start an ask for the small draft `key` (R2) and return its
+        number. A fresh ask drops the slot first, so no older reply still
+        out can land in its replacement; a Regenerate keeps it, and its
+        reply adds a version."""
+
+        if not regenerate:
+            self._small.discard(key)
+        return self._small.ask(key)
+
+    def _small_done(
+        self, key: str, seq: int, answer: Callable[[asyncio.Task], None]
+    ) -> Callable[[asyncio.Task], None]:
+        """`answer` a small draft's reply only while its ask is still the
+        latest for `key` (R2): once the slot was discarded, replaced,
+        asked again or forgotten, the reply (a failure too) is dropped,
+        adding no version and answering nothing."""
+
+        def on_done(task: asyncio.Task) -> None:
+            if not task.cancelled() and not self._small.is_latest(key, seq):
+                log.info("worlds.small_draft_dropped", draft_key=key)
+                return
+            answer(task)
+
+        return on_done
+
+    def _small_add(self, world: World, key: str, draft: pydantic.BaseModel) -> dict:
+        """Keep `draft` as the newest version of the small draft `key` and
+        answer with it."""
+
+        self._small.add(key, draft)
+        return self._small_out(world, key)
+
+    def _small_out(self, world: World, key: str) -> dict:
+        """A small draft's current version for the wire, as its own ask
+        answers it -- a fact draft `_fact_draft_out` (linked against the
+        world as it is now), a group-add draft `{thing_id, tag, rows}` --
+        plus its `draft_key`, which version it is (1-based) and every
+        version kept (`versions`: `[{version, prompt, year}]` for a fact
+        draft, `[{version, prompt}]` for a group-add one)."""
+
+        draft = self._small.current(key)
+        kept = self._small.versions(key)
+        if isinstance(draft, FactDraft):
+            out = self._fact_draft_out(world, draft)
+            versions = [
+                {"version": number, "prompt": version.prompt, "year": version.year}
+                for number, version in enumerate(kept, start=1)
+                if isinstance(version, FactDraft)
+            ]
+        elif isinstance(draft, GroupAddDraft):
+            out = {
+                "thing_id": draft.thing_id,
+                "tag": draft.tag,
+                "rows": [row.model_dump(mode="json") for row in draft.rows],
+            }
+            versions = [
+                {"version": number, "prompt": version.prompt}
+                for number, version in enumerate(kept, start=1)
+                if isinstance(version, GroupAddDraft)
+            ]
+        else:
+            raise TypeError(f"not a small draft: {type(draft).__name__}")
+        return {
+            **out,
+            "draft_key": key,
+            "version": self._small.index(key) + 1,
+            "versions": versions,
+        }
+
+    async def handle_use_small_version(self, data: dict):
+        """Restore one kept version of a small draft: answers
+        `use_small_version` with it as the slot's own ask would
+        (`_small_out`), plus `kind` (`facts`, `group` or `nested`, the
+        key's own prefix). Writes nothing."""
+
+        payload = UseVersionPayload(**data)
+        world = self._require_world()
+        self._small.use(payload.draft_key, payload.version)
+        self._reply(
+            "use_small_version",
+            {
+                **self._small_out(world, payload.draft_key),
+                "kind": payload.draft_key.split(":", 1)[0],
+            },
+        )
+
+    async def handle_discard_small_draft(self, data: dict):
+        """Drop a small draft, every version kept, and any reply still
+        out for it; writes nothing. Answers `{draft_key}`."""
+
+        payload = DraftKeyPayload(**data)
+        self._small.discard(payload.draft_key)
+        self._reply("discard_small_draft", {"draft_key": payload.draft_key})
 
     # --- prompt additions ---------------------------------------------------
 
@@ -3787,14 +3940,22 @@ class WorldsPlugin(Plugin):
         drafting = draft_facts(
             world, payload.thing_id, payload.prompt, client, year=year, reply=reply
         )
+        # held as the page's small draft (`facts_key`): a fresh one, or
+        # with `regenerate` a new version of the held one
+        small = facts_key(payload.thing_id)
+        seq = self._ask_small(small, payload.regenerate)
         self._spawn(
             drafting,
-            self.create_task_done_callback(
-                action,
-                f"{action}_failed",
-                "Error drafting facts",
-                success_data=lambda draft: self._fact_draft_out(world, draft),
-                failure_data={"thing_id": payload.thing_id},
+            self._small_done(
+                small,
+                seq,
+                self.create_task_done_callback(
+                    action,
+                    f"{action}_failed",
+                    "Error drafting facts",
+                    success_data=lambda draft: self._small_add(world, small, draft),
+                    failure_data={"thing_id": payload.thing_id},
+                ),
             ),
         )
 
@@ -3864,7 +4025,10 @@ class WorldsPlugin(Plugin):
         prompt, in the background (`worldplay.facts.draft_facts`): answers
         `add_facts` (a fact draft, `_fact_draft_out`) or
         `add_facts_failed`. Writes nothing: `accept_facts` writes the
-        ticked ones. With `draft_key` (on a draft page, ruling F16), the
+        ticked ones. The draft is held as the page's small draft
+        (`facts:<thing_id>`, with `draft_key`, `version` and `versions`
+        in the reply): a fresh one, or with `regenerate` a new version of
+        the held one. With `draft_key` (on a draft page, ruling F16), the
         facts (`facts.draft_facts_for`) are appended to the draft's current
         version on the server, and `add_facts` answers with the updated
         draft, as `preview_thing` does; the draft's accept writes them."""
@@ -3898,6 +4062,8 @@ class WorldsPlugin(Plugin):
                 " (add_facts with its draft_key), or discard the draft first"
             )
         fact_ids = accept_facts(world, payload.draft)
+        if payload.draft_key is not None:
+            self._small.discard(payload.draft_key)
         at = _date_in(payload.at)
         self._reply(
             "accept_facts",

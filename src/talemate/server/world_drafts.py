@@ -75,6 +75,10 @@ class SmallDrafts:
         # asked before it ever holds a draft, so this is independent of
         # `_drafts`
         self._asks: dict[str, int] = {}
+        # the last number issued, store-wide and never reused: a key
+        # discarded and asked again must not hand out a number an older
+        # reply still out already holds
+        self._seq = 0
 
     def add(self, key: str, value: pydantic.BaseModel) -> int:
         """Append `value` as the newest version of `key`'s draft (at most
@@ -143,11 +147,13 @@ class SmallDrafts:
         will come back later (a model call). Does not create a slot: a
         key with no draft yet can still be asked. Asking again for the
         same key (a regeneration, or a second request sent before the
-        first answers) makes the earlier ask no longer latest."""
+        first answers) makes the earlier ask no longer latest, and so
+        does asking again after a `.discard` (the numbers are never
+        reused)."""
 
-        seq = self._asks.get(key, 0) + 1
-        self._asks[key] = seq
-        return seq
+        self._seq += 1
+        self._asks[key] = self._seq
+        return self._seq
 
     def is_latest(self, key: str, seq: int) -> bool:
         """Whether `seq` (from an earlier `.ask(key)`) is still the

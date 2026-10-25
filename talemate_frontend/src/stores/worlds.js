@@ -1952,7 +1952,10 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'add_event':
                 case 'add_facts_failed':
                 case 'add_event_failed': {
-                    if (data?.draft_key) {
+                    // a page's own fact draft is held on the server as
+                    // `facts:<id>` (until the small-draft store, Task 6)
+                    const pageDraftKey = data?.draft_key?.startsWith('facts:') ? null : data?.draft_key;
+                    if (pageDraftKey) {
                         // a draft's own: the updated draft (for a draft
                         // since dropped, nothing)
                         if (this.draft?.key !== data.draft_key) {
@@ -1966,7 +1969,7 @@ export const useWorldsStore = defineStore('worlds', {
                         break;
                     }
                     const found = this.factDraft;
-                    if (!found?.pending || data?.draft_key || data?.thing_id !== found.thingId) {
+                    if (!found?.pending || data?.thing_id !== found.thingId) {
                         break;
                     }
                     this.factDraft = action.endsWith('_failed')

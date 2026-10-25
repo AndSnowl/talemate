@@ -131,6 +131,11 @@ def test_ask_sequence():
     seq3 = drafts.ask("other")
     drafts.discard("other")
     assert drafts.is_latest("other", seq3) is False
+    # ...and asking again after a discard never reissues its number, so
+    # a reply still out from before the discard stays stale
+    seq3b = drafts.ask("other")
+    assert drafts.is_latest("other", seq3) is False
+    assert drafts.is_latest("other", seq3b) is True
 
     # clear invalidates every outstanding ask
     seq4 = drafts.ask("k")

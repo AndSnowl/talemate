@@ -5273,6 +5273,200 @@ async def test_add_facts(plugin, client):
     assert "It meets after moonrise." not in texts
 
 
+def _facts_reply(*texts):
+    return json.dumps(
+        {"facts": [{"category": "general", "text": text} for text in texts]}
+    )
+
+
+async def _ask_facts(plugin, thing_id, prompt, reply, **extra):
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "add_facts", thing_id=thing_id, prompt=prompt, **extra)
+        await _drain(plugin)
+    return _last(plugin, "add_facts")["data"]
+
+
+async def test_add_facts_versions_and_use(plugin, client):
+    """A fact draft is held on the server (`facts:<id>`): Regenerate
+    adds a version, `use_small_version` restores one, nothing is
+    written."""
+
+    s = await _open_filing_world(plugin)
+    head = s.world.head_rev()
+    first = await _ask_facts(
+        plugin, s.court, "when it meets", _facts_reply("It meets after moonrise.")
+    )
+    key = f"facts:{s.court}"
+    assert (first["draft_key"], first["version"]) == (key, 1)
+    assert first["thing_id"] == s.court
+    assert first["versions"] == [
+        {"version": 1, "prompt": "when it meets", "year": None}
+    ]
+
+    second = await _ask_facts(
+        plugin,
+        s.court,
+        "where it meets",
+        _facts_reply("It meets in the Khorol River."),
+        regenerate=True,
+    )
+    assert (second["draft_key"], second["version"]) == (key, 2)
+    assert [v["prompt"] for v in second["versions"]] == [
+        "when it meets",
+        "where it meets",
+    ]
+    assert second["facts"][0]["segments"][1]["ref"] == s.khorol
+
+    await _act(plugin, "use_small_version", draft_key=key, version=1)
+    restored = _last(plugin, "use_small_version")["data"]
+    assert restored["kind"] == "facts"
+    assert (restored["draft_key"], restored["version"]) == (key, 1)
+    assert [f["rendered"] for f in restored["facts"]] == ["It meets after moonrise."]
+    assert restored["draft"]["prompt"] == "when it meets"
+    assert len(restored["versions"]) == 2
+    assert s.world.head_rev() == head
+
+
+async def test_add_facts_new_ask_replaces_slot(plugin, client):
+    s = await _open_filing_world(plugin)
+    await _ask_facts(plugin, s.court, "when", _facts_reply("It meets at night."))
+    again = await _ask_facts(plugin, s.court, "who", _facts_reply("Owls sit in it."))
+    assert again["version"] == 1
+    assert len(again["versions"]) == 1
+    assert again["versions"][0]["prompt"] == "who"
+
+
+async def test_add_event_versions_carry_the_year(plugin, client):
+    s = await _open_filing_world(plugin)
+    async with MockClientContext():
+        client_responses.get().append(_facts_reply("The Court burned."))
+        await _act(plugin, "add_event", thing_id=s.court, prompt="a fire", year=1001)
+        await _drain(plugin)
+    drafted = _last(plugin, "add_event")["data"]
+    assert drafted["draft_key"] == f"facts:{s.court}"
+    assert drafted["versions"] == [{"version": 1, "prompt": "a fire", "year": 1001}]
+
+
+async def test_accept_facts_drops_its_slot(plugin, client):
+    s = await _open_filing_world(plugin)
+    head = s.world.head_rev()
+    drafted = await _ask_facts(
+        plugin, s.court, "when", _facts_reply("It meets at night.")
+    )
+    await _act(
+        plugin, "accept_facts", draft=drafted["draft"], draft_key=drafted["draft_key"]
+    )
+    assert len(_last(plugin, "accept_facts")["data"]["fact_ids"]) == 1
+    assert s.world.head_rev() == head + 1
+    before = len(_errors(plugin))
+    await _act(plugin, "use_small_version", draft_key=drafted["draft_key"], version=1)
+    assert len(_errors(plugin)) == before + 1
+    assert "no such draft" in _errors(plugin)[-1]["error"]["message"]
+
+
+def _group_reply(name):
+    return json.dumps(
+        {
+            "entries": [
+                {"name": name, "kind": "lore", "tag": "guild", "line": f"{name}."}
+            ]
+        }
+    )
+
+
+async def test_group_add_versions(plugin, client):
+    s = await _open_filing_world(plugin)
+    head = s.world.head_rev()
+    async with MockClientContext():
+        client_responses.get().append(_group_reply("The Icewrights"))
+        await _act(
+            plugin, "group_add", thing_id=s.velikoye, tag="guild", prompt="pilots"
+        )
+        await _drain(plugin)
+    first = _last(plugin, "group_add")["data"]
+    key = f"group:{s.velikoye}:guild"
+    assert (first["draft_key"], first["version"]) == (key, 1)
+    assert (first["thing_id"], first["tag"]) == (s.velikoye, "guild")
+    assert first["versions"] == [{"version": 1, "prompt": "pilots"}]
+
+    async with MockClientContext():
+        client_responses.get().append(_group_reply("The Snowmasons"))
+        await _act(
+            plugin,
+            "group_add",
+            thing_id=s.velikoye,
+            tag="guild",
+            prompt="masons",
+            regenerate=True,
+        )
+        await _drain(plugin)
+    second = _last(plugin, "group_add")["data"]
+    assert (second["draft_key"], second["version"]) == (key, 2)
+    assert [v["prompt"] for v in second["versions"]] == ["pilots", "masons"]
+    assert [r["name"] for r in second["rows"]] == ["The Snowmasons"]
+
+    await _act(plugin, "use_small_version", draft_key=key, version=1)
+    restored = _last(plugin, "use_small_version")["data"]
+    assert restored["kind"] == "group"
+    assert restored["version"] == 1
+    assert (restored["thing_id"], restored["tag"]) == (s.velikoye, "guild")
+    assert [r["name"] for r in restored["rows"]] == ["The Icewrights"]
+    assert s.world.head_rev() == head
+
+    await _act(
+        plugin,
+        "accept_group_add",
+        thing_id=s.velikoye,
+        rows=restored["rows"],
+        draft_key=key,
+    )
+    assert len(_last(plugin, "accept_group_add")["data"]["thing_ids"]) == 1
+    before = len(_errors(plugin))
+    await _act(plugin, "use_small_version", draft_key=key, version=1)
+    assert len(_errors(plugin)) == before + 1
+    assert "no such draft" in _errors(plugin)[-1]["error"]["message"]
+
+
+async def test_small_draft_late_reply_after_discard_is_dropped(plugin, client):
+    """R2: a reply whose slot was discarded (or replaced by a newer ask)
+    while it was out adds nothing and answers nothing."""
+
+    s = await _open_filing_world(plugin)
+    key = f"facts:{s.court}"
+    async with MockClientContext():
+        client_responses.get().append(_facts_reply("It meets at night."))
+        await _act(plugin, "add_facts", thing_id=s.court, prompt="when")
+        await _act(plugin, "discard_small_draft", draft_key=key)
+        await _drain(plugin)
+    assert _last(plugin, "discard_small_draft")["data"] == {"draft_key": key}
+    assert _replies(plugin, "add_facts") == []
+    assert not plugin._small.held(key)
+
+    # a Regenerate replaced by a fresh ask: only the fresh one lands
+    async with MockClientContext():
+        client_responses.get().append(_group_reply("The Icewrights"))
+        client_responses.get().append(_group_reply("The Snowmasons"))
+        await _act(plugin, "group_add", thing_id=s.velikoye, tag="guild", prompt="one")
+        await _act(plugin, "group_add", thing_id=s.velikoye, tag="guild", prompt="two")
+        await _drain(plugin)
+    replies = _replies(plugin, "group_add")
+    assert len(replies) == 1
+    assert replies[0]["data"]["versions"] == [{"version": 1, "prompt": "two"}]
+
+
+async def test_small_drafts_cleared_on_world_switch(plugin, client):
+    s = await _open_filing_world(plugin)
+    drafted = await _ask_facts(
+        plugin, s.court, "when", _facts_reply("It meets at night.")
+    )
+    await _act(plugin, "create_world", name="Elsewhere")
+    before = len(_errors(plugin))
+    await _act(plugin, "use_small_version", draft_key=drafted["draft_key"], version=1)
+    assert len(_errors(plugin)) == before + 1
+    assert "no such draft" in _errors(plugin)[-1]["error"]["message"]
+
+
 async def test_added_facts_make_stubs_for_the_names_they_bring(plugin, client):
     """Ruling H8: "+ Add facts" lists the new names its facts use as
     ticked rows (kind, tag); accept makes their stubs and links them, in
