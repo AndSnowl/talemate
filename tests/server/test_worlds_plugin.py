@@ -7081,6 +7081,133 @@ async def test_accept_links_against_names_gathered_once(plugin, client, monkeypa
     assert counts[0] == counts[1], f"world loads by fact count: {counts}"
 
 
+async def test_draft_render_agrees_with_accept(plugin, client, tmp_path, monkeypatch):
+    """M3: the draft render writes what accept will. Its facts lose their
+    markdown emphasis; a new name the world already has (by name, a
+    leading article aside) links that entry rather than showing fresh, as
+    accept reuses it, and so does another name of a new one that another
+    entry already has; and a dated fact moved here ("Move existing here")
+    is on the draft's timeline."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        froze = rev.add_fact(
+            s.velikoye,
+            "history",
+            "The Khorol froze to the floor.",
+            valid_from=WorldDate.of(990),
+        )
+    repeat = {
+        "fact_id": froze,
+        "owner_id": s.velikoye,
+        "owner_name": "Velikoye",
+        "text": "The Khorol froze to the floor.",
+        "score": 0.9,
+    }
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Khorol Ice Road",
+                "facts": [
+                    {"category": "general", "text": "Carts cross it in winter."},
+                    {
+                        "category": "general",
+                        "text": "The Khorol froze hard.",
+                        "ticked": False,
+                        "repeat_of": repeat,
+                    },
+                ],
+                "prose": {"description": "An ice road."},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+    await _act(plugin, "preview_thing", kind="lore", prompt="the ice road", fields={})
+    await _drain(plugin)
+    draft = _last(plugin, "preview_thing")["data"]
+    preview = {
+        **draft["preview"],
+        "facts": [
+            {
+                **draft["preview"]["facts"][0],
+                "text": "Carts cross the *Frost Gate* for the Night Court.",
+            },
+            draft["preview"]["facts"][1],
+        ],
+        "new_names": [
+            {"name": "Night Court", "kind": "lore"},
+            {
+                "name": "Frost Gate",
+                "kind": "place",
+                "aka": [{"name": "Velikoye", "tag": "proper", "everyday": False}],
+            },
+        ],
+        "move_here": [
+            {
+                "fact_id": froze,
+                "from_id": s.velikoye,
+                "text": "The Khorol froze to the floor.",
+                "ticked": True,
+                "repeat": True,
+            }
+        ],
+    }
+    await _act(plugin, "draft_render", draft_key=draft["draft_key"], preview=preview)
+    rendered = _last(plugin, "draft_render")["data"]
+    row = rendered["facts"][0]
+    assert "".join(seg["text"] for seg in row["segments"]) == (
+        "Carts cross the Frost Gate for the Night Court."
+    )
+    assert _fresh_runs(row["segments"]) == ["Frost Gate"]
+    assert s.court in [seg["ref"] for seg in row["segments"]]
+    lines = rendered["entry_timeline"]
+    moved = [
+        line
+        for line in lines
+        if "".join(seg["text"] for seg in line["segments"])
+        == "The Khorol froze to the floor."
+    ]
+    assert [(line["date"]["label"], line["here"]) for line in moved] == [("990", True)]
+
+    # an "aka" another entry has already isn't the new one's: it links
+    # that entry, as accept drops it from the stub's other names
+    other = {
+        **preview,
+        "facts": [
+            {
+                **preview["facts"][0],
+                "text": "Carts cross the Frost Gate, called Velikoye.",
+            }
+        ],
+        "move_here": [],
+    }
+    await _act(plugin, "draft_render", draft_key=draft["draft_key"], preview=other)
+    (row,) = _last(plugin, "draft_render")["data"]["facts"]
+    assert _fresh_runs(row["segments"]) == ["Frost Gate"]
+    assert s.velikoye in [seg["ref"] for seg in row["segments"]]
+
+    # accepted, they link just as shown
+    await _act(plugin, "accept_preview", preview=preview, draft_key=draft["draft_key"])
+    road = _last(plugin, "accept_preview")["data"]
+    written = next(
+        f
+        for f in road["facts"]
+        if "Carts cross" in "".join(x["text"] for x in f["segments"])
+    )
+    assert "".join(seg["text"] for seg in written["segments"]) == (
+        "Carts cross the Frost Gate for the Night Court."
+    )
+    linked = {seg["text"]: seg for seg in written["segments"] if seg["ref"]}
+    assert s.court in [seg["ref"] for seg in linked.values()]
+    assert linked["Frost Gate"]["stub"] is True
+    assert any(
+        "".join(seg["text"] for seg in line["segments"])
+        == "The Khorol froze to the floor."
+        for line in road["entry_timeline"]
+    )
+
+
 async def test_draft_render_fails_quietly(plugin, client):
     """A render that can't be made (a draft the server no longer holds)
     answers `draft_render_failed`, not an error: nothing the page has

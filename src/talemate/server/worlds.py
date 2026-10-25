@@ -337,7 +337,7 @@ import os
 from collections import OrderedDict
 from collections.abc import Collection, Coroutine
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pydantic
 import structlog
@@ -378,7 +378,7 @@ from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
-from talemate.world.store import Source, World
+from talemate.world.store import Revision, Source, World
 from talemate.world.timeline import TimelineEntry
 from talemate.world.timelines import TimelineLine, entry_timeline
 from talemate.world.view import FactState, Segment, ThingState, WorldView
@@ -1358,43 +1358,59 @@ class _Links:
 _RUN_MARK = "\ue002"
 
 
+class _DryStubs:
+    """`make_stubs`' revision for a draft, writing nothing: each stub it
+    would make is a stand-in id (and its kind), so the draft maps its new
+    names exactly as accept will."""
+
+    def __init__(self) -> None:
+        self.kinds: dict[str, str] = {}
+
+    def create_thing(self, kind: str, fields: dict[str, object]) -> str:
+        key = name_key(str(fields.get("name") or ""))
+        stand_in = hashlib.sha256(
+            f"draft-new:{key}:{len(self.kinds)}".encode()
+        ).hexdigest()[:32]
+        self.kinds[stand_in] = kind
+        return stand_in
+
+
 def _draft_new_names(
-    view: WorldView, rows: Collection[NewName]
+    view: WorldView, rows: Collection[NewName], fresh: Collection[str] = ()
 ) -> tuple[dict[str, str], dict[str, str]]:
     """A draft's new names (`rows`: its own and its elsewhere rows') as
     `link_text`'s `new_names`, mapped the way accept maps them
-    (`links.make_stubs`, `create._row_stubs`), so the draft links them as
-    accept will: a name left new, with its name without a lowercase
-    leading "the", its other names and its written forms, maps to a
-    stand-in id for the stub it will be (the second mapping: stand-in to
-    kind, for `_Links.draft_segments`); a name marked the same as a live
-    entry maps, with its written forms, to that entry."""
+    (`create._row_stubs`: `links.make_stubs`, run without writing), so the
+    draft links them as accept will (M3): a name the world already has
+    (by name or other name, a leading article aside; a species, race or
+    mix by containment) maps to that entry; one left new, with its name
+    without a lowercase leading "the", its other names that no other
+    entry has and its written forms, maps to a stand-in id for the stub
+    it will be (the second mapping: stand-in to kind, for
+    `_Links.draft_segments`); a name marked the same as a live entry
+    maps, with its written forms, to that entry. `fresh`: the names the
+    owner treats as new (`treated_as_new`)."""
 
-    mapping: dict[str, str] = {}
-    fresh: dict[str, str] = {}
+    same: dict[str, str] = {}
     for row in rows:
-        written = " ".join(row.name.split())
-        key = name_key(written)
-        if not key:
-            continue
         target = row.same_target_id
         state = view.thing(target) if target else None
         if target is not None and state is not None and not state.stub_ignored:
-            for form in (written, *row.written):
-                mapping.setdefault(" ".join(form.split()), target)
+            same.setdefault(name_key(row.name), target)
+    dry = _DryStubs()
+    mapping = make_stubs(
+        cast(Revision, dry),
+        view,
+        [row for row in rows if name_key(row.name) not in same],
+        fresh=fresh,
+    )
+    for row in rows:
+        target = same.get(name_key(row.name))
+        if target is None:
             continue
-        stand_in = hashlib.sha256(f"draft-new:{key}".encode()).hexdigest()[:32]
-        fresh.setdefault(stand_in, row.kind or "lore")
-        parts = written.split()
-        name = " ".join(parts[1:]) if len(parts) > 1 and parts[0] == "the" else written
-        others = [
-            str(entry["name"])
-            for entry in row.aka
-            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-        ]
-        for form in (written, name, *others, *row.written):
-            mapping.setdefault(" ".join(form.split()), stand_in)
-    return mapping, fresh
+        for form in (row.name, *row.written):
+            mapping.setdefault(" ".join(form.split()), target)
+    return mapping, dict(dry.kinds)
 
 
 # --- curation -----------------------------------------------------------------
@@ -2668,6 +2684,9 @@ class WorldsPlugin(Plugin):
             held = self._current_preview(payload.draft_key)
             preview = payload.preview.model_copy(update={"stub_id": held.stub_id})
             self._check_selected_names(preview, payload.draft_key)
+            # only the repeat moves a version held here recorded, as at
+            # accept
+            self._check_repeat_moves(preview, payload.draft_key, [])
             page = self._draft_payload(world, preview)
         except Exception as exc:
             log.warning(
@@ -2762,13 +2781,15 @@ class WorldsPlugin(Plugin):
                 *preview.new_names,
                 *(row.new for row in preview.elsewhere if row.new is not None),
             ],
+            preview.treated_as_new,
         )
 
         def linked(text: str) -> list[dict]:
+            # emphasis scrubbed first, as accept's `linked_text` does (M3)
             return links.draft_segments(
                 link_text(
                     view,
-                    text,
+                    scrub_emphasis(text),
                     picks=preview.picks,
                     new_names=new_names,
                     owner=owner,
@@ -2811,7 +2832,7 @@ class WorldsPlugin(Plugin):
             return links.draft_segments(
                 link_text(
                     view,
-                    row.text,
+                    scrub_emphasis(row.text),
                     picks=preview.picks,
                     new_names={**own_names, **new_names},
                     owner=target,
@@ -2936,8 +2957,47 @@ class WorldsPlugin(Plugin):
             for index, fact in enumerate(preview.facts)
             if fact.since is not None and fact.ticked
         ]
+        # and the dated facts its ticked "Move existing here" and "Could
+        # move here" rows move onto it, as accept moves them (M3): still
+        # their entry's, no summary; their links to the entry, words
+        moved_ids: set[str] = set()
+        for row in preview.move_here:
+            found = view.fact(row.fact_id) if row.ticked else None
+            if (
+                found is None
+                or found[0] != row.from_id
+                or row.from_id == owner
+                or found[1].valid_from is None
+                or entries.is_summary_fact(found[1])
+            ):
+                continue
+            moved_ids.add(row.fact_id)
+            lines.append(
+                {
+                    "fact_id": None,
+                    "owner_id": owner,
+                    "owner_name": preview.name,
+                    "date": _date_out(calendar, found[1].valid_from),
+                    "until": _date_out(calendar, found[1].valid_until),
+                    "segments": [
+                        seg
+                        if seg["ref"] != owner or owner is None
+                        else {**seg, "ref": None, "stub": False}
+                        for seg in links.segments(found[1].text)
+                    ],
+                    "here": True,
+                    "disagrees_with": [],
+                }
+            )
         timeline = sorted(
-            [*page["entry_timeline"], *lines],
+            [
+                *(
+                    line
+                    for line in page["entry_timeline"]
+                    if line.get("fact_id") not in moved_ids
+                ),
+                *lines,
+            ],
             key=lambda line: line["date"]["instant"] if line["date"] else -1,
         )
         sections = prose_gen.sections_for(preview.kind)
