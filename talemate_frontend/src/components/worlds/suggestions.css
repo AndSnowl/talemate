@@ -1,0 +1,24 @@
+/* Shared look for every suggestion-to-tick list (plan "polish-1",
+   Task 7): a dropped (unticked) row's text, a section's heading ("For
+   other pages", "New names", "Could move here", …) and a repeat or move
+   note under a row. Imported unscoped from SuggestionRow.vue. The
+   per-component copies (FactRow, PreviewElsewhere, EntryAddFacts,
+   GroupAddForm, PreviewStubs, MoveHere) stay until Task 11 moves their
+   markup onto SuggestionRow. */
+
+.suggestion-dropped {
+    color: rgb(var(--v-theme-muted));
+    text-decoration: line-through;
+}
+
+.suggestion-heading {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgb(var(--v-theme-muted));
+}
+
+.suggestion-match {
+    margin-left: 34px;
+    color: rgb(var(--v-theme-muted));
+}
