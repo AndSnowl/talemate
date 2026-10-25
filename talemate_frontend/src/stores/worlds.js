@@ -95,12 +95,31 @@
 // (`list_tags`) for the picker and the Tags tab, whose `renameTag` and
 // `mergeTag` retag every entry (a filing's `show_under` too); `listRoles`
 // keeps `roles` (`list_roles`), the roles in use, for the role picker. A group's "✎ Synopsis" (`groupSynopsis`)
-// and "+ Add" (`groupAdd`, then `acceptGroupAdd` or `discardGroupAdd`)
-// are kept per page and tag (`groupKey`) in `synopses` and `groupAdds`.
-// "+ Add facts…" and "+ Add event…" (`addFacts`, `addEvent`) draft a few
-// facts into `factDraft`, with the new names they bring (ticked rows,
-// `changeFactDraftName`, ruling H8), which `acceptFacts` writes as the
-// owner left it.
+// is kept per page and tag (`groupKey`) in `synopses`; its "+ Add"
+// (`askGroupAdd`) is a small draft.
+//
+// Small drafts (smallDrafts.js): "+ Add facts…" and "+ Add event…"
+// (`askFacts`: a few facts, with the new names they bring, ticked rows,
+// ruling H8), a group's "+ Add" (`askGroupAdd`) and, on a draft page,
+// "+ Add facts…" as the page draft's own nested fact draft
+// (`askNestedFacts`), are each held and versioned on the server under its
+// key (`facts:<id>`, `group:<id>:<tag>`, `nested:<page draft key>`) and
+// here in `smallDrafts`, in one shape: the prompt (and an event's year),
+// `version` and `versions`, the server's copy (`base`), the owner's
+// (`edited`, `editSmall`) and the rows the server rendered. Replies are
+// routed by their key's prefix. `regenerateSmall` asks for another
+// version with the prompt as the owner left it (`setSmallPrompt`);
+// `useSmallVersion` restores one; the owner's edits are kept per version
+// for the session (`smallEdits`) and put back when it's used again, onto
+// the same server copy. `discardSmall` drops it on the server too;
+// `acceptSmall` writes it (`accept_facts`, `accept_group_add`) or, for a
+// nested draft, puts its ticked facts into a new version of the page
+// draft (`write_nested_facts`, the owner's edits on the open version
+// carried onto it, R8). A fresh ask that failed holds nothing on the
+// server: the draft stays with its error and prompt, and no version, so
+// it can be asked again. While a nested draft is out or held
+// (`nestedHeld`) the page draft waits for it; discarding or accepting the
+// page draft drops it. A world switch drops them all.
 //
 // History (the thing page's back arrow): `section` is the World tab's
 // open section (a kind's list, or 'stubs'), and a page is `{section,
@@ -132,10 +151,10 @@
 // its own copy, so what the owner left on each version is kept for the
 // session (`draftEdits`, key -> version -> `{base, edited}`) and rebased
 // onto it (draftPage.js `rebaseDraft`); when the server drops its oldest
-// version (five kept) the ones kept move down with it. "+ Add facts…",
-// "+ Add event…" (`addDraftFacts`, one at a time: `adding`) and a
-// selection (`draftSelection`) change the server's copy of the current
-// version; each reply is rebased the same way. A reply for another
+// version (five kept) the ones kept move down with it. A selection
+// (`draftSelection`) changes the server's copy of the current version;
+// its reply is rebased the same way, as is the new version a written
+// nested fact draft makes (see "Small drafts"). A reply for another
 // draft, or one the server says came too late (another version current
 // meanwhile), adds nothing. Discard (`discardPreview`) drops every
 // version on the server too.
@@ -161,7 +180,18 @@ import { toRaw } from 'vue';
 
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
-import { acceptable, changeNewName, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
+import { acceptable, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
+import {
+    factsKey,
+    groupDraftKey,
+    keepSmallEdits,
+    nestedKey,
+    pageKeyOf,
+    restoredEdited,
+    smallEditsDropped,
+    smallEditsShifted,
+    smallKind,
+} from '../components/worlds/smallDrafts.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
@@ -605,8 +635,8 @@ function worldState() {
         previewPending: false,
         previewError: null,
         // the open draft (see "Drafts" in the module comment): `{key,
-        // version, versions, page, base, edited, adding, accepting,
-        // selecting}`, or null
+        // version, versions, page, base, edited, accepting, selecting}`,
+        // or null
         draft: null,
         // whether the create box shows the draft (false after "Edit
         // prompt", until the next version or "Back to the draft")
@@ -675,12 +705,14 @@ function worldState() {
         // `groupKey(page, tag)` -> a group's synopsis asked for: `{pending,
         // text, error}`
         synopses: {},
-        // `groupKey(page, tag)` -> a group's "+ Add": `{prompt, pending,
-        // rows, error}` (the page's own "+ Add" under tag null)
-        groupAdds: {},
-        // "+ Add facts…"/"+ Add event…": `{thingId, mode: 'facts'|'event',
-        // prompt, year, pending, draft, facts, error}`
-        factDraft: null,
+        // small drafts (see "Small drafts" in the module comment), by key
+        // (smallDrafts.js): `{key, kind: 'facts'|'event'|'group'|'nested',
+        // thingId, tag, showUnder, prompt, year, version, versions, base,
+        // edited, rows, pending, accepting, error}`
+        smallDrafts: {},
+        // small draft key -> version -> `{base, edited}`: what the owner
+        // left on each version this session
+        smallEdits: {},
         // the last reply's notes to show: `{action, notes}`
         notes: null,
         // the merge dialog's: `{fromId, intoId, preview, pending}`
@@ -718,6 +750,15 @@ export const useWorldsStore = defineStore('worlds', {
         calendar: (state) => state.currentWorld?.calendar || null,
         // the open draft's preview as the owner left it (null: none)
         preview: (state) => state.draft?.edited || null,
+        // the open draft's nested fact draft, if any (null: none)
+        nestedDraft: (state) => (state.draft && state.smallDrafts[nestedKey(state.draft.key)]) || null,
+        // whether the open draft has a nested fact draft out or held: its
+        // Accept, Regenerate and version switch wait for it. One whose
+        // first ask failed holds nothing on the server, so it doesn't.
+        nestedHeld() {
+            const nested = this.nestedDraft;
+            return !!nested && (nested.pending || nested.versions.length > 0);
+        },
         // the `match_names` matches for exactly this text and date, if any
         matchesFor: (state) => (text, at) => {
             const found = state.nameMatches;
@@ -1076,6 +1117,8 @@ export const useWorldsStore = defineStore('worlds', {
                 this.request('discard_preview', { draft_key: draft.key });
                 const { [draft.key]: _gone, ...rest } = this.draftEdits;
                 this.draftEdits = rest;
+                // the server drops its nested draft with it
+                this.dropSmall(nestedKey(draft.key));
             }
             this.draft = null;
             this.draftShown = true;
@@ -1168,17 +1211,6 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('draft_render', { draft_key: draft.key, seq, preview: acceptable(draft.edited) });
         },
 
-        // "+ Add facts…" / "+ Add event…" on the draft: one at a time
-        addDraftFacts(prompt, year = null) {
-            const draft = this.draft;
-            if (!draft || draft.adding) {
-                return;
-            }
-            const action = year === null ? 'add_facts' : 'add_event';
-            this.draft = { ...draft, adding: action, addError: null };
-            this.request(action, { draft_key: draft.key, prompt, ...(year === null ? {} : { year }) });
-        },
-
         // a selection in the draft's fact `index` (the server's), as
         // "Make a stub" (`kind`, `tag`) or "Link to…" (`targetId`)
         draftSelection(action, index, start, end, data) {
@@ -1190,15 +1222,18 @@ export const useWorldsStore = defineStore('worlds', {
             this.request(action, { draft_key: draft.key, index, start, end, ...data });
         },
 
-        // a draft reply (`preview_thing`, `use_version`, a draft's
-        // additions and selections): the page, its server copy, and the
-        // owner's edits carried onto it (`how`: 'new' a new version,
-        // 'restore' a version used again, 'rebase' this version changed)
+        // a draft reply (`preview_thing`, `use_version`, a written nested
+        // draft, a selection): the page, its server copy, and the owner's
+        // edits carried onto it (`how`: 'new' a new version, 'written' a
+        // new version copied from the open one with the nested draft's
+        // facts added (R8: the owner's edits on the open one carried
+        // over), 'restore' a version used again, 'rebase' this version
+        // changed)
         draftTaken(data, how, { fresh = [], done = null } = {}) {
             const { preview, draft_key: key, version, versions, ...page } = data;
             const before = this.draft;
             let edited = preview;
-            if (how === 'new') {
+            if (how === 'new' || how === 'written') {
                 if (before && before.key === key) {
                     this.keepDraftEdits();
                     // the oldest version was dropped: the ones kept move down
@@ -1208,6 +1243,9 @@ export const useWorldsStore = defineStore('worlds', {
                             ...this.draftEdits,
                             [key]: Object.fromEntries(Object.entries(kept).filter(([n]) => Number(n) > 1).map(([n, value]) => [Number(n) - 1, value])),
                         };
+                    }
+                    if (how === 'written') {
+                        edited = rebaseDraft(before.base, before.edited, preview);
                     }
                 }
             } else if (how === 'restore') {
@@ -1226,9 +1264,7 @@ export const useWorldsStore = defineStore('worlds', {
                 page,
                 base: preview,
                 edited,
-                // a draft's addition or selection still out stays so
-                adding: done === 'adding' || !before ? null : before.adding,
-                addError: null,
+                // a selection still out stays so
                 accepting: false,
                 selecting: done === 'selecting' || !before ? null : before.selecting,
                 // the server's page is this copy's: rendered anew once
@@ -1423,97 +1459,221 @@ export const useWorldsStore = defineStore('worlds', {
         // "+ Add" in a group (tag null: the page's own); `showUnder`: the
         // group exists through its rows' `show_under` (`via_show_under`,
         // ruling H5), so each new row shows under it, keeping its own tag
-        groupAdd(thingId, tag, prompt, { showUnder = false } = {}) {
-            const key = groupKey(thingId, tag);
-            this.groupAdds = { ...this.groupAdds, [key]: { prompt, pending: true, rows: null, error: null } };
-            this.request('group_add', { thing_id: thingId, tag: tag ?? null, prompt, ...(showUnder ? { show_under: true } : {}) });
-        },
-
-        // the owner's edits to a group's drafted rows (ticks, names)
-        editGroupAdd(thingId, tag, rows) {
-            const key = groupKey(thingId, tag);
-            if (this.groupAdds[key]) {
-                this.groupAdds = { ...this.groupAdds, [key]: { ...this.groupAdds[key], rows } };
-            }
-        },
-
-        discardGroupAdd(thingId, tag) {
-            const { [groupKey(thingId, tag)]: _gone, ...rest } = this.groupAdds;
-            this.groupAdds = rest;
-        },
-
-        // the rows stay (`accepting`) until the server answers, so a
-        // refusal leaves them as the owner left them
-        acceptGroupAdd(thingId, tag) {
-            const key = groupKey(thingId, tag);
-            const found = this.groupAdds[key];
-            if (!found?.rows || found.accepting) {
-                return;
-            }
-            this.groupAdds = { ...this.groupAdds, [key]: { ...found, accepting: true } };
-            this.pending = { ...this.pending, accept_group_add: true };
-            this.request('accept_group_add', { thing_id: thingId, rows: found.rows });
+        askGroupAdd(thingId, tag, prompt, { showUnder = false } = {}) {
+            const key = groupDraftKey(thingId, tag);
+            this.smallAsked(key, { kind: 'group', thingId, tag: tag ?? null, showUnder, prompt, year: null });
+            this.sendSmallAsk(key, false);
         },
 
         // --- prompt additions ---------------------------------------------
 
-        // "+ Add facts…" on the open page
-        addFacts(prompt) {
-            this.askFacts('add_facts', { prompt });
-        },
-
-        // "+ Add event…": its facts all dated `year`
-        addEvent(prompt, year) {
-            this.askFacts('add_event', { prompt, year });
-        },
-
-        askFacts(action, data) {
-            if (!this.selectedThingId) {
+        // "+ Add facts…" (`mode` 'facts') or "+ Add event…" ('event', its
+        // facts all dated `year`) on the open page
+        askFacts(mode, prompt, year = null) {
+            const thingId = this.selectedThingId;
+            if (!thingId) {
                 return;
             }
-            const mode = action === 'add_event' ? 'event' : 'facts';
-            this.factDraft = { thingId: this.selectedThingId, mode, prompt: data.prompt, year: data.year ?? null, pending: true, draft: null, facts: null, error: null };
-            this.request(action, { thing_id: this.selectedThingId, at: this.thingAt, ...data });
+            const key = factsKey(thingId);
+            this.smallAsked(key, { kind: mode === 'event' ? 'event' : 'facts', thingId, tag: null, showUnder: false, prompt, year: mode === 'event' ? year : null });
+            this.sendSmallAsk(key, false);
         },
 
-        // tick (or untick) the drafted fact `index`
-        tickDraftFact(index, ticked) {
-            const found = this.factDraft;
-            if (!found?.draft) {
+        // "+ Add facts…" / "+ Add event…" (`year` not null) on the open
+        // draft: its own nested fact draft, one at a time
+        askNestedFacts(prompt, year = null) {
+            const draft = this.draft;
+            // (nor while a Regenerate of the draft is out: the server
+            // would refuse it, R7)
+            if (!draft || this.previewPending || this.nestedHeld || this.nestedDraft?.pending) {
                 return;
             }
-            const facts = found.draft.facts.map((fact, i) => (i === index ? { ...fact, ticked } : fact));
-            this.factDraft = {
-                ...found,
-                draft: { ...found.draft, facts },
-                facts: found.facts.map((row) => (row.index === index ? { ...row, ticked } : row)),
+            const key = nestedKey(draft.key);
+            this.smallAsked(key, { kind: 'nested', thingId: null, tag: null, showUnder: false, prompt, year });
+            this.sendSmallAsk(key, false);
+        },
+
+        // --- small drafts -------------------------------------------------
+
+        // a fresh small draft `key` asked for: no version yet, and none of
+        // an earlier one's kept (the server drops them too)
+        smallAsked(key, fields) {
+            this.smallDrafts = {
+                ...this.smallDrafts,
+                [key]: {
+                    key,
+                    ...fields,
+                    version: null,
+                    versions: [],
+                    base: null,
+                    edited: null,
+                    rows: null,
+                    pending: true,
+                    accepting: false,
+                    error: null,
+                },
+            };
+            this.smallEdits = smallEditsDropped(this.smallEdits, key);
+        },
+
+        // the ask for small draft `key` as it stands (its prompt and
+        // year): another version of it (`regenerate`), or afresh
+        sendSmallAsk(key, regenerate) {
+            const slot = this.smallDrafts[key];
+            const again = regenerate ? { regenerate: true } : {};
+            // an event (a nested one by its year) goes with its year
+            const event = slot.kind === 'event' || (slot.kind === 'nested' && slot.year != null);
+            const dated = event ? { year: slot.year } : {};
+            const action = event ? 'add_event' : 'add_facts';
+            if (slot.kind === 'group') {
+                this.request('group_add', {
+                    thing_id: slot.thingId,
+                    tag: slot.tag,
+                    prompt: slot.prompt,
+                    ...(slot.showUnder ? { show_under: true } : {}),
+                    ...again,
+                });
+            } else if (slot.kind === 'nested') {
+                this.request(action, { draft_key: pageKeyOf(key), prompt: slot.prompt, ...dated, ...again });
+            } else {
+                const at = slot.thingId === this.selectedThingId ? this.thingAt : null;
+                this.request(action, { thing_id: slot.thingId, at, prompt: slot.prompt, ...dated, ...again });
+            }
+        },
+
+        // "↻ Regenerate": another version from the draft's prompt (and
+        // year) as the owner left it. One whose first ask failed holds
+        // nothing on the server: it's asked afresh.
+        regenerateSmall(key) {
+            const slot = this.smallDrafts[key];
+            if (!slot || slot.pending || slot.accepting) {
+                return;
+            }
+            if (!slot.versions.length) {
+                this.smallAsked(key, { kind: slot.kind, thingId: slot.thingId, tag: slot.tag, showUnder: slot.showUnder, prompt: slot.prompt, year: slot.year });
+                this.sendSmallAsk(key, false);
+                return;
+            }
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: true, error: null } };
+            this.sendSmallAsk(key, true);
+        },
+
+        // the draft's prompt (and an event's year) as the owner edits it,
+        // for its next Regenerate
+        setSmallPrompt(key, prompt, year = undefined) {
+            const slot = this.smallDrafts[key];
+            if (slot) {
+                this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, prompt, ...(year === undefined ? {} : { year }) } };
+            }
+        },
+
+        // "Version n of m ▾": restore version `version`, the owner's
+        // edits on the open one kept first
+        useSmallVersion(key, version) {
+            const slot = this.smallDrafts[key];
+            if (!slot || slot.pending || slot.accepting || !slot.versions.length || version === slot.version) {
+                return;
+            }
+            this.smallEdits = keepSmallEdits(this.smallEdits, slot);
+            this.pending = { ...this.pending, use_small_version: true };
+            this.request('use_small_version', { draft_key: key, version });
+        },
+
+        // the owner's edits (`changes` merged into `edited`): ticks, new
+        // names, repeat choices, a group row's name
+        editSmall(key, changes) {
+            const slot = this.smallDrafts[key];
+            if (slot?.edited) {
+                this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, edited: { ...slot.edited, ...changes } } };
+            }
+        },
+
+        // forget small draft `key` here (the server's dropped, or asked to be)
+        dropSmall(key) {
+            if (key in this.smallDrafts) {
+                const { [key]: _gone, ...rest } = this.smallDrafts;
+                this.smallDrafts = rest;
+            }
+            this.smallEdits = smallEditsDropped(this.smallEdits, key);
+        },
+
+        // "Discard": every version goes, nothing written
+        discardSmall(key) {
+            this.dropSmall(key);
+            this.request('discard_small_draft', { draft_key: key });
+        },
+
+        // Write (a fact or event draft, `accept_facts`), Add (a group's,
+        // `accept_group_add`) or, for a nested draft, into its page draft
+        // (`write_nested_facts`), as the owner left it; it stays
+        // (`accepting`) until the server answers, so a refusal leaves it
+        acceptSmall(key) {
+            const slot = this.smallDrafts[key];
+            if (!slot?.edited || slot.accepting || slot.pending) {
+                return;
+            }
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true } };
+            if (slot.kind === 'group') {
+                this.pending = { ...this.pending, accept_group_add: true };
+                this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, draft_key: key });
+            } else if (slot.kind === 'nested') {
+                this.pending = { ...this.pending, write_nested_facts: true };
+                this.request('write_nested_facts', { draft_key: pageKeyOf(key), draft: slot.edited });
+            } else {
+                this.pending = { ...this.pending, accept_facts: true };
+                this.request('accept_facts', {
+                    draft: slot.edited,
+                    draft_key: key,
+                    at: slot.thingId === this.selectedThingId ? this.thingAt : null,
+                });
+            }
+        },
+
+        // a small draft's version as the server sent it (an ask's reply,
+        // `how` 'asked', or `use_small_version`'s, 'restore'): its server
+        // copy (`base`: the fact draft, or a group's `{thing_id, tag,
+        // rows}`), the rows as the page shows them, and the owner's edits
+        // kept for that version put back on it. A reply for a draft
+        // discarded since (or not waiting for one) adds nothing.
+        smallTaken(data, how) {
+            const key = data.draft_key;
+            const slot = this.smallDrafts[key];
+            if (!slot || (how === 'asked' && !slot.pending)) {
+                return;
+            }
+            const { version, versions } = data;
+            const base = smallKind(key) === 'group' ? { thing_id: data.thing_id, tag: data.tag, rows: data.rows } : data.draft;
+            if (how === 'asked' && slot.version != null) {
+                // the open version's edits kept; the oldest version
+                // dropped (five kept): the ones kept move down with it
+                this.smallEdits = keepSmallEdits(this.smallEdits, slot);
+                if (versions.length === slot.versions.length && version === versions.length) {
+                    this.smallEdits = smallEditsShifted(this.smallEdits, key);
+                }
+            }
+            this.smallDrafts = {
+                ...this.smallDrafts,
+                [key]: {
+                    ...slot,
+                    version,
+                    versions,
+                    base,
+                    edited: restoredEdited(this.smallEdits, key, version, base),
+                    rows: smallKind(key) === 'group' ? data.rows : data.facts,
+                    pending: how === 'asked' ? false : slot.pending,
+                    error: null,
+                },
             };
         },
 
-        // a fact draft's new name `name`: its tick, kind, tag, "same as…"
-        // or "in…" (`change`), sent back with the draft (ruling H8)
-        changeFactDraftName(name, change) {
-            const found = this.factDraft;
-            if (!found?.draft) {
-                return;
+        // an ask for a small draft that failed (`key`): it stays, with
+        // why, the versions it had (a failed Regenerate) or none (a failed
+        // first ask, which the server holds nothing of), and its prompt
+        smallFailed(key, message) {
+            const slot = this.smallDrafts[key];
+            if (slot?.pending) {
+                this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: false, error: message } };
             }
-            const draft = { ...found.draft, ...changeNewName(found.draft, name, change) };
-            this.factDraft = { ...found, draft };
-        },
-
-        discardFacts() {
-            this.factDraft = null;
-        },
-
-        // the draft stays (`accepting`) until the server answers
-        acceptFacts() {
-            const found = this.factDraft;
-            if (!found?.draft || found.accepting) {
-                return;
-            }
-            this.factDraft = { ...found, accepting: true };
-            this.pending = { ...this.pending, accept_facts: true };
-            this.request('accept_facts', { draft: found.draft, at: found.thingId === this.selectedThingId ? this.thingAt : null });
         },
 
         // the open thing's page asked for again, as of the date it's viewed at
@@ -1797,19 +1957,21 @@ export const useWorldsStore = defineStore('worlds', {
         // open page takes it, or is fetched again when it's another thing
         // (a Connected row retagged); new stubs and tags may come with it
         filingEdited(action, data) {
-            // an accepted draft is done with
-            if (action === 'accept_facts' && this.factDraft?.accepting) {
-                this.factDraft = null;
-            }
-            if (action === 'accept_group_add') {
-                this.groupAdds = Object.fromEntries(Object.entries(this.groupAdds).filter(([key, value]) => !(value.accepting && key.startsWith(`${data.id}|`))));
+            // an accepted small draft is done with (the server dropped it)
+            if (action === 'accept_facts' || action === 'accept_group_add') {
+                const kinds = action === 'accept_facts' ? ['facts', 'event'] : ['group'];
+                for (const slot of Object.values(this.smallDrafts)) {
+                    if (slot.accepting && slot.thingId === data.id && kinds.includes(slot.kind)) {
+                        this.dropSmall(slot.key);
+                    }
+                }
             }
             if (data.id === this.selectedThingId && !this.thingAt) {
                 this.pageTaken(data);
             } else {
                 this.refreshThing();
             }
-            if (action === 'remove_filing' || action === 'accept_group_add') {
+            if (action === 'remove_filing' || action === 'accept_group_add' || action === 'accept_facts') {
                 this.showNotes(action, data.notes);
             }
             this.listStubs();
@@ -1934,47 +2096,43 @@ export const useWorldsStore = defineStore('worlds', {
                     }
                     break;
                 }
+                // small drafts (smallDrafts.js), routed by their keys
                 case 'group_add':
-                case 'group_add_failed': {
-                    const key = groupKey(data?.thing_id, data?.tag);
-                    const found = this.groupAdds[key];
-                    if (found?.pending) {
-                        this.groupAdds = {
-                            ...this.groupAdds,
-                            [key]: action === 'group_add'
-                                ? { ...found, pending: false, rows: data.rows }
-                                : { ...found, pending: false, error: message.message },
-                        };
-                    }
-                    break;
-                }
                 case 'add_facts':
                 case 'add_event':
+                    if (smallKind(data?.draft_key)) {
+                        this.smallTaken(data, 'asked');
+                    }
+                    break;
+                case 'group_add_failed':
+                    this.smallFailed(groupDraftKey(data?.thing_id, data?.tag), message.message);
+                    break;
                 case 'add_facts_failed':
-                case 'add_event_failed': {
-                    // a page's own fact draft is held on the server as
-                    // `facts:<id>` (until the small-draft store, Task 6)
-                    const pageDraftKey = data?.draft_key?.startsWith('facts:') ? null : data?.draft_key;
-                    if (pageDraftKey) {
-                        // a draft's own: the updated draft (for a draft
-                        // since dropped, nothing)
-                        if (this.draft?.key !== data.draft_key) {
-                            break;
-                        }
-                        if (action.endsWith('_failed')) {
-                            this.draft = { ...this.draft, adding: null, addError: message.message };
-                        } else {
-                            this.draftTaken(data, 'rebase', { done: 'adding' });
-                        }
-                        break;
+                case 'add_event_failed':
+                    // a page's own (`thing_id`), or a page draft's nested
+                    // one (`draft_key`, the page draft's)
+                    if (data?.thing_id) {
+                        this.smallFailed(factsKey(data.thing_id), message.message);
+                    } else if (data?.draft_key) {
+                        this.smallFailed(smallKind(data.draft_key) ? data.draft_key : nestedKey(data.draft_key), message.message);
                     }
-                    const found = this.factDraft;
-                    if (!found?.pending || data?.thing_id !== found.thingId) {
-                        break;
+                    break;
+                case 'use_small_version':
+                    if (smallKind(data?.draft_key)) {
+                        this.smallTaken(data, 'restore');
                     }
-                    this.factDraft = action.endsWith('_failed')
-                        ? { ...found, pending: false, error: message.message }
-                        : { ...found, pending: false, draft: data.draft, facts: data.facts };
+                    break;
+                case 'discard_small_draft':
+                    break;
+                case 'write_nested_facts': {
+                    // the nested draft's facts are in a new version of its
+                    // page draft, the owner's edits on the open one kept
+                    const { notes, ...written } = data;
+                    this.dropSmall(nestedKey(written.draft_key));
+                    if (this.draft?.key === written.draft_key) {
+                        this.draftTaken(written, 'written');
+                    }
+                    this.showNotes(action, notes);
                     break;
                 }
                 case 'stub_suggestion':
@@ -2134,6 +2292,7 @@ export const useWorldsStore = defineStore('worlds', {
                     if (this.draft) {
                         const { [this.draft.key]: _done, ...rest } = this.draftEdits;
                         this.draftEdits = rest;
+                        this.dropSmall(nestedKey(this.draft.key));
                     }
                     this.draft = null;
                     this.draftShown = true;
@@ -2251,19 +2410,16 @@ export const useWorldsStore = defineStore('worlds', {
                         if (this.merge?.pending) {
                             this.merge = { ...this.merge, pending: false };
                         }
-                        // or a group's synopsis or "+ Add", or a fact draft
+                        // or a group's synopsis, or a small draft's ask (one
+                        // with no version yet goes; one with versions keeps
+                        // them) or accept
                         this.synopses = Object.fromEntries(Object.entries(this.synopses).map(([key, value]) => [key, { ...value, pending: false }]));
-                        this.groupAdds = Object.fromEntries(Object.entries(this.groupAdds)
-                            .filter(([, value]) => !value.pending)
-                            .map(([key, value]) => [key, { ...value, accepting: false }]));
-                        if (this.factDraft?.pending) {
-                            this.factDraft = null;
-                        } else if (this.factDraft?.accepting) {
-                            this.factDraft = { ...this.factDraft, accepting: false };
-                        }
-                        // or the draft's accept, addition or selection
+                        this.smallDrafts = Object.fromEntries(Object.entries(this.smallDrafts)
+                            .filter(([, value]) => !(value.pending && !value.versions.length))
+                            .map(([key, value]) => [key, { ...value, pending: false, accepting: false }]));
+                        // or the draft's accept or selection
                         if (this.draft) {
-                            this.draft = { ...this.draft, accepting: false, adding: null, selecting: null };
+                            this.draft = { ...this.draft, accepting: false, selecting: null };
                         }
                         this.stubExpandAfter = null;
                         if (this.namesWanted.length) {

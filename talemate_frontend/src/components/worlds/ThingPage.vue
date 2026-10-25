@@ -264,7 +264,7 @@
                     </div>
 
                     <template v-if="draft">
-                        <div v-if="worlds.draft.adding" class="d-flex align-center ga-2 text-caption text-muted mb-1" data-testid="draft-adding">
+                        <div v-if="worlds.nestedDraft?.pending" class="d-flex align-center ga-2 text-caption text-muted mb-1" data-testid="draft-adding">
                             <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
                             Drafting more facts…
                         </div>

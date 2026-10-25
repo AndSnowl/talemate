@@ -119,6 +119,14 @@ import {
     versionRows,
     wordsAreAName,
 } from '../src/components/worlds/draftPage.js';
+import {
+    factsKey,
+    groupDraftKey,
+    keepSmallEdits,
+    nestedKey,
+    restoredEdited,
+    smallVersionRows,
+} from '../src/components/worlds/smallDrafts.js';
 
 let passed = 0;
 const failures = [];
@@ -2366,78 +2374,94 @@ check('a group\'s "+ Add": drafted rows, edited, the ticked ones accepted', () =
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('v');
-    store.groupAdd('v', 'institution', 'two guilds');
+    store.askGroupAdd('v', 'institution', 'two guilds');
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'institution', prompt: 'two guilds' });
+    const key = 'group:v:institution';
+    assert.equal(store.smallDrafts[key].pending, true);
+    assert.equal(store.smallDrafts[key].kind, 'group');
     const rows = [
         { name: 'The Icewrights', kind: 'lore', tag: 'institution', line: 'Pilots.', ticked: true },
         { name: 'The Owl Post', kind: 'lore', tag: 'institution', line: 'Letters.', ticked: true },
     ];
-    store.handleMessage(reply('group_add', { thing_id: 'v', tag: 'institution', rows }));
-    assert.deepEqual(store.groupAdds['v|institution'].rows, rows);
-    store.editGroupAdd('v', 'institution', [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }]);
-    store.acceptGroupAdd('v', 'institution');
+    store.handleMessage(reply('group_add', { thing_id: 'v', tag: 'institution', rows, draft_key: key, version: 1, versions: [{ version: 1, prompt: 'two guilds' }] }));
+    assert.deepEqual(store.smallDrafts[key].edited.rows, rows);
+    assert.deepEqual(store.smallDrafts[key].rows, rows);
+    assert.equal(store.smallDrafts[key].pending, false);
+    store.editSmall(key, { rows: [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }] });
+    store.acceptSmall(key);
     const accept = {
         type: 'worlds',
         action: 'accept_group_add',
         thing_id: 'v',
         rows: [{ ...rows[0], name: 'The Ice Guild' }, { ...rows[1], ticked: false }],
+        draft_key: key,
     };
     assert.deepEqual(sent.at(-1), accept);
     // kept until the server answers: a failure leaves the rows as they were
-    assert.equal(store.groupAdds['v|institution'].accepting, true);
+    assert.equal(store.smallDrafts[key].accepting, true);
     store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'refused' } });
-    assert.equal(store.groupAdds['v|institution'].accepting, false);
-    assert.equal(store.groupAdds['v|institution'].rows[0].name, 'The Ice Guild');
-    store.acceptGroupAdd('v', 'institution');
+    assert.equal(store.smallDrafts[key].accepting, false);
+    assert.equal(store.smallDrafts[key].edited.rows[0].name, 'The Ice Guild');
+    store.acceptSmall(key);
     assert.deepEqual(sent.at(-1), accept);
     store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [] }));
-    assert.equal(store.groupAdds['v|institution'], undefined);
+    assert.equal(store.smallDrafts[key], undefined);
     assert.equal(store.thing.id, 'v');
     assert.equal(store.notes, null);
-    // the page's own "+ Add" (no tag), failed: the error shows, then it's discarded
-    store.groupAdd('v', null, 'a landmark');
+    // the page's own "+ Add" (no tag), failed: the error shows with the
+    // prompt kept, no version; then it's discarded
+    store.askGroupAdd('v', null, 'a landmark');
     assert.equal(sent.at(-1).tag, null);
     store.handleMessage({ type: 'worlds', action: 'group_add_failed', message: 'unusable', data: { thing_id: 'v', tag: null } });
-    assert.deepEqual(store.groupAdds['v|'], { prompt: 'a landmark', pending: false, rows: null, error: 'unusable' });
-    store.discardGroupAdd('v', null);
-    assert.deepEqual(store.groupAdds, {});
+    const failed = store.smallDrafts['group:v:'];
+    assert.deepEqual([failed.prompt, failed.pending, failed.versions, failed.edited, failed.error], ['a landmark', false, [], null, 'unusable']);
+    store.discardSmall('group:v:');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_small_draft', draft_key: 'group:v:' });
+    assert.deepEqual(store.smallDrafts, {});
 });
 
 check('"+ Add facts…" and "+ Add event…": a draft to tick, then written', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('v', dateOf(1000));
-    store.addFacts('its laws');
+    store.askFacts('facts', 'its laws');
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_facts', thing_id: 'v', at: dateOf(1000), prompt: 'its laws' });
-    assert.equal(store.factDraft.mode, 'facts');
+    assert.equal(store.smallDrafts['facts:v'].kind, 'facts');
     const draft = { thing_id: 'v', prompt: 'its laws', year: null, facts: [{ category: 'law', text: 'No flying.', ticked: true }, { category: 'general', text: 'Bells.', ticked: true }] };
     const facts = [{ index: 0, rendered: 'No flying.', ticked: true }, { index: 1, rendered: 'Bells.', ticked: true }];
-    // a draft page's own addition (Task 10) is not this one
+    const versions = [{ version: 1, prompt: 'its laws', year: null }];
+    // a page draft's key is no small draft's
     store.handleMessage(reply('add_facts', { draft_key: 'new:lore:x', facts: [] }));
-    assert.equal(store.factDraft.pending, true);
-    store.handleMessage(reply('add_facts', { thing_id: 'v', draft, facts }));
-    assert.equal(store.factDraft.pending, false);
-    store.tickDraftFact(1, false);
-    assert.deepEqual(store.factDraft.facts.map((f) => f.ticked), [true, false]);
-    store.acceptFacts();
+    assert.equal(store.smallDrafts['facts:v'].pending, true);
+    store.handleMessage(reply('add_facts', { thing_id: 'v', draft, facts, draft_key: 'facts:v', version: 1, versions }));
+    const found = () => store.smallDrafts['facts:v'];
+    assert.equal(found().pending, false);
+    assert.deepEqual(found().base, draft);
+    assert.deepEqual(found().rows, facts);
+    store.editSmall('facts:v', { facts: found().edited.facts.map((f, i) => (i === 1 ? { ...f, ticked: false } : f)) });
+    assert.deepEqual(found().edited.facts.map((f) => f.ticked), [true, false]);
+    store.acceptSmall('facts:v');
     assert.equal(sent.at(-1).action, 'accept_facts');
+    assert.equal(sent.at(-1).draft_key, 'facts:v');
     assert.deepEqual(sent.at(-1).draft.facts.map((f) => f.ticked), [true, false]);
     assert.deepEqual(sent.at(-1).at, dateOf(1000));
     // kept until the server answers: a failure leaves the ticks as they were
-    assert.equal(store.factDraft.accepting, true);
+    assert.equal(found().accepting, true);
     store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'refused' } });
-    assert.equal(store.factDraft.accepting, false);
-    assert.deepEqual(store.factDraft.facts.map((f) => f.ticked), [true, false]);
-    store.acceptFacts();
-    store.handleMessage(reply('accept_facts', { id: 'v', kind: 'place', name: 'Velikoye', fact_ids: ['f'] }));
-    assert.equal(store.factDraft, null);
-    // an event: its year goes along; a failure says why
-    store.addEvent('the bluff collapse', 1012);
+    assert.equal(found().accepting, false);
+    assert.deepEqual(found().edited.facts.map((f) => f.ticked), [true, false]);
+    store.acceptSmall('facts:v');
+    store.handleMessage(reply('accept_facts', { id: 'v', kind: 'place', name: 'Velikoye', fact_ids: ['f'], notes: ['kept the new one'] }));
+    assert.equal(found(), undefined);
+    assert.deepEqual(store.notes, { action: 'accept_facts', notes: ['kept the new one'] });
+    // an event: its year goes along; a failure says why, the prompt kept
+    store.askFacts('event', 'the bluff collapse', 1012);
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', thing_id: 'v', at: dateOf(1000), prompt: 'the bluff collapse', year: 1012 });
+    assert.equal(found().kind, 'event');
     store.handleMessage({ type: 'worlds', action: 'add_event_failed', message: 'no facts', data: { thing_id: 'v' } });
-    assert.equal(store.factDraft.error, 'no facts');
-    store.discardFacts();
-    assert.equal(store.factDraft, null);
+    assert.deepEqual([found().error, found().prompt, found().year, found().versions], ['no facts', 'the bluff collapse', 1012, []]);
+    store.discardSmall('facts:v');
+    assert.equal(found(), undefined);
 });
 
 check("a page's synopsis: the server's wins; the session's goes on a refetch", () => {
@@ -2702,9 +2726,9 @@ check('P6: draft renders are debounced, skipped for edits that link nothing, and
     store.flushDraftRender();
     assert.equal(renders().length, 1);
     // a failed render is dropped: no error, nothing else cleared
-    store.addDraftFacts('its drills');
+    store.askNestedFacts('its drills');
     store.handleMessage(reply('draft_render_failed', { draft_key: key, seq: renders()[0].seq }));
-    assert.equal(store.draft.adding, 'add_facts');
+    assert.equal(store.smallDrafts[`nested:${key}`].pending, true);
     assert.equal(store.draft.rendered, null);
     assert.equal(store.previewError, null);
 });
@@ -2793,31 +2817,53 @@ check("versions: the owner's edits kept per version for the session, restored wi
     assert.equal('draft_key' in other.sent.at(-1), false);
 });
 
-check("a draft's additions: one at a time, rebased; a stale one is said", () => {
+// a nested fact draft's reply: `facts` added to the page draft `key`
+function nestedReply(key, facts, { version = 1, count = null, prompt = 'its drills', year = null } = {}) {
+    return {
+        thing_id: null,
+        nested_in: key,
+        draft: { thing_id: null, prompt, year, facts, new_names: [], move_here: [] },
+        facts: facts.map((fact, index) => ({ index, category: fact.category, rendered: fact.text, segments: [{ text: fact.text, ref: null, stub: false }], ticked: fact.ticked !== false, repeat_of: null })),
+        draft_key: `nested:${key}`,
+        version,
+        versions: Array.from({ length: count || version }, (_, i) => ({ version: i + 1, prompt, year })),
+    };
+}
+
+check("a draft's additions: one nested draft at a time; a stale one is said", () => {
     const { store, sent } = hostDraft();
-    store.editDraft(tickFact(store.preview, 0, false));
-    store.addDraftFacts('its drills');
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_facts', draft_key: 'new:lore:frostwing host', prompt: 'its drills' });
-    assert.equal(store.draft.adding, 'add_facts');
+    const key = 'new:lore:frostwing host';
+    store.askNestedFacts('its drills');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_facts', draft_key: key, prompt: 'its drills' });
+    assert.equal(store.smallDrafts[`nested:${key}`].pending, true);
     // a second waits for the first
     sent.length = 0;
-    store.addDraftFacts('more', 990);
+    store.askNestedFacts('more', 990);
     assert.deepEqual(sent, []);
-    // another draft's reply is dropped; this one's is rebased
-    store.handleMessage(reply('add_facts', draftOf(HOST, { key: 'new:lore:other' })));
-    assert.equal(store.draft.adding, 'add_facts');
-    const added = { ...HOST, facts: [...HOST.facts, { category: 'general', text: 'It drills.', ticked: true }] };
-    store.handleMessage(reply('add_facts', draftOf(added)));
-    assert.equal(store.draft.adding, null);
-    assert.deepEqual(store.preview.facts.map((f) => f.ticked), [false, false, true]);
-    // an event, refused as stale (another version current meanwhile)
-    store.addDraftFacts('its raising', 990);
-    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', draft_key: 'new:lore:frostwing host', prompt: 'its raising', year: 990 });
-    store.handleMessage({ type: 'worlds', action: 'add_event_failed', message: 'ask again', data: { draft_key: 'new:lore:frostwing host', stale: true } });
-    assert.equal(store.draft.adding, null);
-    assert.equal(store.draft.addError, 'ask again');
-    // the entry page's own fact draft is left alone by a draft's reply
-    assert.equal(store.factDraft, null);
+    // another draft's reply is dropped; this one's is held as the nested draft
+    store.handleMessage(reply('add_facts', nestedReply('new:lore:other', [{ category: 'general', text: 'Other.' }])));
+    assert.equal(store.smallDrafts['nested:new:lore:other'], undefined);
+    store.handleMessage(reply('add_facts', nestedReply(key, [{ category: 'general', text: 'It drills.', ticked: true }])));
+    const nested = () => store.smallDrafts[`nested:${key}`];
+    assert.equal(nested().pending, false);
+    assert.equal(nested().kind, 'nested');
+    assert.deepEqual(nested().edited.facts.map((f) => f.text), ['It drills.']);
+    // the page draft itself is left as it was
+    assert.deepEqual(store.preview.facts.map((f) => f.text), HOST.facts.map((f) => f.text));
+    // discarded: asked again, as an event, refused as stale
+    store.discardSmall(`nested:${key}`);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_small_draft', draft_key: `nested:${key}` });
+    store.askNestedFacts('its raising', 990);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', draft_key: key, prompt: 'its raising', year: 990 });
+    store.handleMessage({ type: 'worlds', action: 'add_event_failed', message: 'ask again', data: { draft_key: key, stale: true } });
+    assert.equal(nested().pending, false);
+    assert.equal(nested().error, 'ask again');
+    // a failed fresh ask holds nothing: the page draft is free, and it can be asked again
+    assert.equal(store.nestedHeld, false);
+    store.askNestedFacts('its raising', 990);
+    assert.equal(sent.at(-1).action, 'add_event');
+    // only the nested draft: no page's own fact draft came of it
+    assert.deepEqual(Object.keys(store.smallDrafts), [`nested:${key}`]);
 });
 
 check('selected words: on a draft a stub or a link by its index; on a page by the fact', () => {
@@ -3020,7 +3066,7 @@ check('H8: a fact draft\'s new names: ticked rows, edited and sent back; only ti
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('v', dateOf(1000));
-    store.addFacts('the current Tsar');
+    store.askFacts('facts', 'the current Tsar');
     const names = [
         { name: 'Tsar Ivan III', kind: 'character', tag: 'ruler', written: [], aka: [], ticked: true },
         { name: 'Tsar Alexei II', kind: 'character', tag: 'ruler', written: [], aka: [], ticked: true },
@@ -3028,13 +3074,14 @@ check('H8: a fact draft\'s new names: ticked rows, edited and sent back; only ti
     const text = 'Tsar Ivan III succeeded Tsar Alexei II.';
     const draft = { thing_id: 'v', prompt: 'the current Tsar', year: null, facts: [{ category: 'general', text, ticked: true }], new_names: names };
     const facts = [{ index: 0, rendered: text, segments: [{ text, ref: null, stub: false }], ticked: true }];
-    store.handleMessage(reply('add_facts', { thing_id: 'v', draft, facts }));
-    store.changeFactDraftName('tsar alexei ii', { ticked: false });
-    store.changeFactDraftName('Tsar Ivan III', { tag: 'tsar', kind: 'character' });
-    assert.deepEqual(store.factDraft.draft.new_names.map((n) => [n.name, n.tag, n.ticked]), [['Tsar Ivan III', 'tsar', true], ['Tsar Alexei II', 'ruler', false]]);
-    const shown = factDraftSegments(store.factDraft.facts[0].segments, store.factDraft.draft.new_names);
+    store.handleMessage(reply('add_facts', { thing_id: 'v', draft, facts, draft_key: 'facts:v', version: 1, versions: [{ version: 1, prompt: 'the current Tsar', year: null }] }));
+    const found = () => store.smallDrafts['facts:v'];
+    store.editSmall('facts:v', changeNewName(found().edited, 'tsar alexei ii', { ticked: false }));
+    store.editSmall('facts:v', changeNewName(found().edited, 'Tsar Ivan III', { tag: 'tsar', kind: 'character' }));
+    assert.deepEqual(found().edited.new_names.map((n) => [n.name, n.tag, n.ticked]), [['Tsar Ivan III', 'tsar', true], ['Tsar Alexei II', 'ruler', false]]);
+    const shown = factDraftSegments(found().rows[0].segments, found().edited.new_names);
     assert.deepEqual(shown.filter((seg) => seg.fresh).map((seg) => seg.text), ['Tsar Ivan III']);
-    store.acceptFacts();
+    store.acceptSmall('facts:v');
     assert.deepEqual(sent.at(-1).draft.new_names.map((n) => [n.name, n.ticked]), [['Tsar Ivan III', true], ['Tsar Alexei II', false]]);
     // a draft with no names (an older reply) shows its facts as they are
     assert.deepEqual(factDraftSegments(facts[0].segments, undefined), facts[0].segments);
@@ -3052,10 +3099,14 @@ check('H5: a row moved into a group that exists through show_under shows under i
 check('H5: "+ Add" in a group that exists through show_under says so', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
-    store.groupAdd('v', 'native', 'two natives', { showUnder: true });
+    store.askGroupAdd('v', 'native', 'two natives', { showUnder: true });
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'native', prompt: 'two natives', show_under: true });
-    store.groupAdd('v', 'institution', 'two guilds');
+    store.askGroupAdd('v', 'institution', 'two guilds');
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'institution', prompt: 'two guilds' });
+    // regenerated, it still shows under the group
+    store.handleMessage(reply('group_add', { thing_id: 'v', tag: 'native', rows: [], draft_key: 'group:v:native', version: 1, versions: [{ version: 1, prompt: 'two natives' }] }));
+    store.regenerateSmall('group:v:native');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'group_add', thing_id: 'v', tag: 'native', prompt: 'two natives', show_under: true, regenerate: true });
 });
 
 check('roles in use: listed for the picker; a filing shows under a group', () => {
@@ -3077,6 +3128,188 @@ check('roles in use: listed for the picker; a filing shows under a group', () =>
     // another entry's filing (a Connected row moved): at the latest
     store.editFiling('ustyug', { show_under: 'ruler' }, 'olga');
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'edit_filing', thing_id: 'olga', at: null, target_id: 'ustyug', show_under: 'ruler' });
+});
+
+// --- small drafts -------------------------------------------------------------
+
+check('small draft keys match the server', () => {
+    // as talemate.server.world_drafts facts_key, group_key and nested_key
+    assert.equal(factsKey('v'), 'facts:v');
+    assert.equal(groupDraftKey('x', null), 'group:x:');
+    assert.equal(groupDraftKey('x', ''), 'group:x:');
+    assert.equal(groupDraftKey('x', 'native'), 'group:x:native');
+    assert.equal(nestedKey('stub:1'), 'nested:stub:1');
+    assert.equal(nestedKey('new:lore:frostwing host'), 'nested:new:lore:frostwing host');
+});
+
+check("small drafts' versions, newest first, labelled like a page draft's", () => {
+    const rows = smallVersionRows([{ version: 1, prompt: 'its laws', year: null }, { version: 2, prompt: 'its bells', year: 1012 }], 1);
+    assert.deepEqual(rows, [
+        { version: 2, label: 'v2 · its bells (1012)', prompt: 'its bells', current: false },
+        { version: 1, label: 'v1 · its laws', prompt: 'its laws', current: true },
+    ]);
+    assert.deepEqual(smallVersionRows(undefined, null), []);
+});
+
+check("a small draft's edits are kept per version, restored only onto the same copy", () => {
+    const base = { facts: [{ text: 'A', ticked: true }] };
+    const edited = { facts: [{ text: 'A', ticked: false }] };
+    const kept = keepSmallEdits({}, { key: 'facts:v', version: 2, base, edited });
+    assert.deepEqual(kept, { 'facts:v': { 2: { base, edited } } });
+    // a draft with no version yet (still drafting, or failed) keeps nothing
+    assert.equal(keepSmallEdits(kept, { key: 'facts:v', version: null, base: null, edited: null }), kept);
+    assert.deepEqual(restoredEdited(kept, 'facts:v', 2, { facts: [{ text: 'A', ticked: true }] }), edited);
+    // the server's copy changed since: its own
+    const other = { facts: [{ text: 'B', ticked: true }] };
+    assert.equal(restoredEdited(kept, 'facts:v', 2, other), other);
+    assert.equal(restoredEdited(kept, 'facts:v', 1, base), base);
+    assert.equal(restoredEdited({}, 'group:v:', 1, base), base);
+});
+
+// a fact draft's reply for the page `v`: `texts` its facts, version `version` of `count`
+function factsReply(texts, { version = 1, count = null, prompt = 'its laws', year = null } = {}) {
+    const draft = { thing_id: 'v', prompt, year, facts: texts.map((text) => ({ category: 'general', text, ticked: true })), new_names: [], move_here: [] };
+    return {
+        thing_id: 'v',
+        draft,
+        facts: texts.map((text, index) => ({ index, category: 'general', rendered: text, segments: [{ text, ref: null, stub: false }], since: null, ticked: true, repeat_of: null })),
+        draft_key: 'facts:v',
+        version,
+        versions: Array.from({ length: count || version }, (_, i) => ({ version: i + 1, prompt, year })),
+    };
+}
+
+function factsDraft() {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v');
+    store.askFacts('facts', 'its laws');
+    store.handleMessage(reply('add_facts', factsReply(['No flying.', 'Bells.'])));
+    return { store, sent };
+}
+
+const untick = (edited, index) => ({ facts: edited.facts.map((f, i) => (i === index ? { ...f, ticked: false } : f)) });
+
+check('use small version keeps and restores edits', () => {
+    const { store, sent } = factsDraft();
+    const found = () => store.smallDrafts['facts:v'];
+    store.regenerateSmall('facts:v');
+    store.handleMessage(reply('add_facts', factsReply(['Its walls.', 'Its gates.'], { version: 2 })));
+    assert.equal(found().version, 2);
+    assert.deepEqual(found().versions.map((v) => v.version), [1, 2]);
+    store.editSmall('facts:v', untick(found().edited, 1));
+    // version 1: the server's copy, nothing of version 2's untick on it
+    store.useSmallVersion('facts:v', 1);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'use_small_version', draft_key: 'facts:v', version: 1 });
+    store.handleMessage(reply('use_small_version', { ...factsReply(['No flying.', 'Bells.'], { version: 1, count: 2 }), kind: 'facts' }));
+    assert.equal(found().version, 1);
+    assert.deepEqual(found().edited.facts.map((f) => f.ticked), [true, true]);
+    // back to 2: the untick is back
+    store.useSmallVersion('facts:v', 2);
+    store.handleMessage(reply('use_small_version', { ...factsReply(['Its walls.', 'Its gates.'], { version: 2, count: 2 }), kind: 'facts' }));
+    assert.equal(found().version, 2);
+    assert.deepEqual(found().edited.facts.map((f) => f.ticked), [true, false]);
+    assert.deepEqual(found().rows.map((r) => r.rendered), ['Its walls.', 'Its gates.']);
+    // the same version again asks nothing
+    sent.length = 0;
+    store.useSmallVersion('facts:v', 2);
+    assert.deepEqual(sent, []);
+    // the oldest version dropped (five kept): the edits kept move down
+    store.smallDrafts = { ...store.smallDrafts, 'facts:v': { ...found(), versions: [1, 2, 3, 4, 5].map((n) => ({ version: n, prompt: 'p', year: null })), version: 5 } };
+    store.smallEdits = { 'facts:v': { 2: store.smallEdits['facts:v'][2], 5: store.smallEdits['facts:v'][2] } };
+    store.regenerateSmall('facts:v');
+    store.handleMessage(reply('add_facts', factsReply(['New.'], { version: 5, count: 5 })));
+    assert.deepEqual(Object.keys(store.smallEdits['facts:v']), ['1', '4']);
+    assert.deepEqual(found().edited.facts.map((f) => f.text), ['New.']);
+});
+
+check('regenerate sends regenerate:true with the edited prompt', () => {
+    const { store, sent } = factsDraft();
+    store.setSmallPrompt('facts:v', 'its laws, stricter');
+    store.regenerateSmall('facts:v');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_facts', thing_id: 'v', at: null, prompt: 'its laws, stricter', regenerate: true });
+    const found = () => store.smallDrafts['facts:v'];
+    // the draft stays as it was while the new version comes
+    assert.equal(found().pending, true);
+    assert.equal(found().version, 1);
+    // one at a time
+    sent.length = 0;
+    store.regenerateSmall('facts:v');
+    assert.deepEqual(sent, []);
+    // a failed Regenerate keeps the versions there were
+    store.handleMessage({ type: 'worlds', action: 'add_facts_failed', message: 'no reply', data: { thing_id: 'v' } });
+    assert.deepEqual([found().pending, found().error, found().version, found().versions.length], [false, 'no reply', 1, 1]);
+    // an event's year goes along, and may be edited too
+    store.askFacts('event', 'the bluff collapse', 1012);
+    store.setSmallPrompt('facts:v', 'the bluff fell', 1013);
+    // a fresh ask that failed holds nothing on the server: asked afresh
+    store.handleMessage({ type: 'worlds', action: 'add_event_failed', message: 'no facts', data: { thing_id: 'v' } });
+    store.regenerateSmall('facts:v');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', thing_id: 'v', at: null, prompt: 'the bluff fell', year: 1013 });
+    // a nested draft's Regenerate names its page draft
+    const host = hostDraft();
+    host.store.askNestedFacts('its drills');
+    host.store.handleMessage(reply('add_facts', nestedReply('new:lore:frostwing host', [{ category: 'general', text: 'It drills.' }])));
+    host.store.setSmallPrompt('nested:new:lore:frostwing host', 'its night drills');
+    host.store.regenerateSmall('nested:new:lore:frostwing host');
+    assert.deepEqual(host.sent.at(-1), { type: 'worlds', action: 'add_facts', draft_key: 'new:lore:frostwing host', prompt: 'its night drills', regenerate: true });
+});
+
+check('small drafts reset with the world', () => {
+    const { store } = factsDraft();
+    store.askGroupAdd('v', null, 'a landmark');
+    store.editSmall('facts:v', untick(store.smallDrafts['facts:v'].edited, 0));
+    store.useSmallVersion('facts:v', 1);
+    store.openWorld('/worlds/w2');
+    assert.deepEqual(store.smallDrafts, {});
+    assert.deepEqual(store.smallEdits, {});
+    // a late reply for the old world's draft brings nothing back
+    store.handleMessage(reply('add_facts', factsReply(['Late.'], { version: 2 })));
+    store.handleMessage(reply('group_add', { thing_id: 'v', tag: null, rows: [], draft_key: 'group:v:', version: 1, versions: [{ version: 1, prompt: 'a landmark' }] }));
+    store.handleMessage(reply('use_small_version', { ...factsReply(['No flying.'], { version: 1 }), kind: 'facts' }));
+    assert.deepEqual(store.smallDrafts, {});
+    // nothing to accept there
+    store.acceptSmall('facts:v');
+    assert.equal(store.pending.accept_facts, undefined);
+});
+
+check('nested draft gates the page draft', () => {
+    const { store, sent } = hostDraft();
+    const key = 'new:lore:frostwing host';
+    const nested = `nested:${key}`;
+    assert.equal(store.nestedHeld, false);
+    // the owner's untick on the page draft, before the facts are asked for
+    store.editDraft(tickFact(store.preview, 0, false));
+    store.askNestedFacts('its drills');
+    assert.equal(store.nestedHeld, true);
+    const added = [{ category: 'general', text: 'It drills.', ticked: true }, { category: 'general', text: 'It sings.', ticked: true }];
+    store.handleMessage(reply('add_facts', nestedReply(key, added)));
+    assert.equal(store.nestedHeld, true);
+    assert.equal(store.smallDrafts[nested].thingId, null);
+    // Write: the ticked ones go into a new version of the page draft
+    store.editSmall(nested, untick(store.smallDrafts[nested].edited, 1));
+    store.acceptSmall(nested);
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'write_nested_facts', draft_key: key, draft: { ...nestedReply(key, added).draft, facts: [added[0], { ...added[1], ticked: false }] },
+    });
+    assert.equal(store.smallDrafts[nested].accepting, true);
+    const written = { ...HOST, facts: [...HOST.facts, added[0]] };
+    store.handleMessage(reply('write_nested_facts', { ...draftOf(written, { version: 2 }), notes: [] }));
+    assert.equal(store.nestedHeld, false);
+    assert.equal(store.smallDrafts[nested], undefined);
+    assert.equal(store.draft.version, 2);
+    assert.deepEqual(store.preview.facts.map((f) => f.text), ['It flies at night.', 'The Khorol freezes.', 'It drills.']);
+    // R8: the owner's untick is still there on the new version
+    assert.equal(store.preview.facts[0].ticked, false);
+    // and version 1 keeps it too
+    assert.equal(store.draftEdits[key][1].edited.facts[0].ticked, false);
+    // discarding the page draft takes its nested draft with it
+    store.askNestedFacts('more');
+    store.handleMessage(reply('add_facts', nestedReply(key, added, { version: 1 })));
+    assert.equal(store.nestedHeld, true);
+    store.discardPreview();
+    assert.equal(store.smallDrafts[nested], undefined);
+    assert.equal(store.nestedHeld, false);
 });
 
 if (failures.length) {

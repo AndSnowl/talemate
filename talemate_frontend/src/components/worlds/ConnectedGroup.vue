@@ -105,6 +105,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { filingDates, groupKey, groupView, rowMove } from './entryPage.js';
 import GroupAddForm from './GroupAddForm.vue';
+import { groupDraftKey } from './smallDrafts.js';
 
 // the drag's data type: the row dragged and the group it's from
 const DRAG_TYPE = 'application/x-fantasymate-row';
@@ -167,7 +168,7 @@ export default {
         },
         // a draft for this group is out or waiting: its rows show
         drafting() {
-            return !!this.worlds.groupAdds[this.key];
+            return !!this.worlds.smallDrafts[groupDraftKey(this.thingId, this.group.tag)];
         },
     },
     methods: {
