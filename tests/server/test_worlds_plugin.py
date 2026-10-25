@@ -5340,6 +5340,137 @@ async def test_link_text(plugin):
     assert s.world.head_rev() == head
 
 
+async def test_selection_through_dead_link_allowed(plugin):
+    """P5: a link to a deleted entry reads as plain words, and a selection
+    over it, inside it or through its edge is as plain words are: the
+    dead link is replaced by its words, the selection linked, in one
+    revision that undo takes back exactly. A live link, or an ignored
+    stub's, still refuses."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        gone = rev.create_thing("place", {"name": "Old Tsardom"})
+        fact = rev.add_fact(
+            s.court,
+            "general",
+            f"Founded in {ref(gone, 'the Old Tsardom')} by {ref(s.dmitry)}.",
+        )
+    with s.world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    stored = s.world.view().fact(fact)[1].text
+    rendered = "Founded in the Old Tsardom by Tsar Dmitry IV."
+
+    # the dead link, exactly
+    start = rendered.index("the Old Tsardom")
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("the Old Tsardom"),
+        target_id=s.tsardom,
+    )
+    assert s.world.head_rev() == head + 1
+    assert s.world.view().fact(fact)[1].text == (
+        f"Founded in {ref(s.tsardom, 'the Old Tsardom')} by {ref(s.dmitry)}."
+    )
+    s.world.undo([s.world.head_rev()])
+    assert s.world.view().fact(fact)[1].text == stored
+
+    # part of it: the whole dead link goes, its words kept
+    start = rendered.index("Tsardom")
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("Tsardom"),
+        target_id=s.tsardom,
+    )
+    assert s.world.view().fact(fact)[1].text == (
+        f"Founded in the Old {ref(s.tsardom, 'Tsardom')} by {ref(s.dmitry)}."
+    )
+    s.world.undo([s.world.head_rev()])
+
+    # through its edge, plain words beside
+    start = rendered.index("in the Old")
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("in the Old"),
+        target_id=s.tsardom,
+    )
+    assert s.world.view().fact(fact)[1].text == (
+        f"Founded {ref(s.tsardom, 'in the Old')} Tsardom by {ref(s.dmitry)}."
+    )
+    s.world.undo([s.world.head_rev()])
+    assert s.world.view().fact(fact)[1].text == stored
+
+    # a live link still refuses, even beside a dead one
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    start = rendered.index("Tsardom by Tsar")
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("Tsardom by Tsar"),
+        target_id=s.tsardom,
+    )
+    assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
+    assert len(_errors(plugin)) == before + 1
+    assert s.world.head_rev() == head
+
+
+async def test_make_stub_over_dead_link_replaces_it(plugin):
+    """P5: "Make a stub" over text that linked a deleted entry makes a new
+    stub of the words and links them, the dead link replaced, in one
+    revision; another fact's dead link stays as it was, and undo restores
+    this one exactly."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        gone = rev.create_thing("place", {"name": "Moscavia Prime"})
+        fact = rev.add_fact(
+            s.court, "general", f"Its law is the {ref(gone, 'Moscavia Prime')} code."
+        )
+        kept = rev.add_fact(
+            s.dawn, "general", f"Born in {ref(gone, 'Moscavia Prime')}."
+        )
+    with s.world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    stored = s.world.view().fact(fact)[1].text
+    kept_text = s.world.view().fact(kept)[1].text
+    rendered = "Its law is the Moscavia Prime code."
+    start = rendered.index("Moscavia Prime")
+    head = s.world.head_rev()
+
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("Moscavia Prime"),
+        kind="place",
+    )
+    stub_id = _last(plugin, "make_stub_from_text")["data"]["stub_id"]
+    assert s.world.head_rev() == head + 1
+    assert stub_id != gone
+    assert s.world.view().thing(stub_id).is_stub
+    assert s.world.view().fact(fact)[1].text == (
+        f"Its law is the {ref(stub_id, 'Moscavia Prime')} code."
+    )
+    assert s.world.view().fact(kept)[1].text == kept_text
+
+    s.world.undo([s.world.head_rev()])
+    assert s.world.view().fact(fact)[1].text == stored
+    assert s.world.view().thing(stub_id) is None
+
+
 async def test_copy_fact(plugin):
     s = await _open_filing_world(plugin)
     original = next(

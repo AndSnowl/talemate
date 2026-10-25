@@ -207,7 +207,9 @@ through `signal_operation_failed` (an `operation_done` envelope with
 - Selected words (`start`/`end` index a fact's `rendered` text, in
   UTF-16 code units, ruling F18; a held fact's "<Holder> holds that ..."
   prefix isn't in `rendered`, and a link to an ignored stub shown plain
-  is still a link, so a selection over it is refused):
+  is still a link, so a selection over it is refused; a link to a deleted
+  thing counts as its words, P5, and is replaced by them where the
+  selection touches it, in the same revision):
   `make_stub_from_text {fact_id, start, end, kind, tag?, filing?:
   {target_id, role}, at}` makes a stub of the words (or uses the entry
   of that name), filed as `filing` says, and links them, in one
@@ -1531,12 +1533,17 @@ def _code_points(text: str, offset: int) -> int:
     raise ValueError(f"no such selection in the fact: offset {offset}")
 
 
-def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[int, int]:
-    """Where the selected `start:end` of a fact's rendered text (as
-    `view.render` shows it, the payload's `rendered`) lies in its stored
-    `text`, links kept: a selection may cover plain words only, never cut
-    through or take in a link (`ValueError`). Leading and trailing spaces
-    are left out.
+def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, int, int]:
+    """`(text, start, end)`: where the selected `start:end` of a fact's
+    rendered text (as `view.render` shows it, the payload's `rendered`)
+    lies in its stored `text`, links kept: a selection may cover plain
+    words only, never cut through or take in a link (`ValueError`).
+    Leading and trailing spaces are left out.
+
+    A link whose target is deleted (P5) shows as plain words and counts as
+    them: each one the selection touches, whole or in part, is replaced by
+    its words in the `text` returned (the rest of the fact as stored), so
+    the caller writes the selection's link over them.
 
     `start` and `end` are UTF-16 code units (ruling F18), the page's own
     unit, converted here (`_code_points`). They index `rendered`, not the
@@ -1557,6 +1564,7 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[int, in
         end -= 1
     if start == end:
         raise ValueError("the selection holds no words")
+    text = _dead_links_as_words(view, text, start, end)
     # rendered offset -> stored offset, run by run
     shown = 0
     stored = 0
@@ -1579,7 +1587,28 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[int, in
         stored = found.end()
     if raw_start is None or raw_end is None or raw_start > raw_end:
         raise ValueError("the selection cuts through a link")
-    return raw_start, raw_end
+    return text, raw_start, raw_end
+
+
+def _dead_links_as_words(view: WorldView, text: str, start: int, end: int) -> str:
+    """`text` with each link to a deleted thing that the rendered
+    `start:end` touches replaced by the words it renders as (P5); the
+    rendered text is the same either way."""
+
+    shown = 0
+    stored = 0
+    out: list[str] = []
+    for found in REF_PATTERN.finditer(text):
+        shown += found.start() - stored
+        words = view.render(found.group(0))
+        dead = view.thing(found.group(1)) is None
+        touched = start < shown + len(words) and end > shown
+        out.append(text[stored : found.start()])
+        out.append(words if dead and touched else found.group(0))
+        shown += len(words)
+        stored = found.end()
+    out.append(text[stored:])
+    return "".join(out)
 
 
 # --- the plugin ---------------------------------------------------------------
@@ -3347,18 +3376,19 @@ class WorldsPlugin(Plugin):
 
     def _selected(
         self, world: World, payload: _Selection
-    ) -> tuple[str, FactState, int, int, str]:
-        """`(owner id, fact, start, end, words)`: where the selection lies
-        in the fact's stored text (`_raw_span`), refusing a fact that isn't
-        live or a selection that cuts through a link."""
+    ) -> tuple[str, FactState, str, int, int, str]:
+        """`(owner id, fact, text, start, end, words)`: where the selection
+        lies in the fact's stored text (`_raw_span`; `text` is that, with
+        the dead links it touches as their words, P5), refusing a fact
+        that isn't live or a selection that cuts through a link."""
 
         view = world.view(_date_in(payload.at))
         found = world.view().fact(payload.fact_id or "")
         if found is None:
             raise KeyError(f"no such fact: {payload.fact_id}")
         owner_id, fact = found
-        start, end = _raw_span(view, fact.text, payload.start, payload.end)
-        return owner_id, fact, start, end, fact.text[start:end]
+        text, start, end = _raw_span(view, fact.text, payload.start, payload.end)
+        return owner_id, fact, text, start, end, text[start:end]
 
     def _draft_selected(
         self, world: World, payload: _Selection
@@ -3372,7 +3402,7 @@ class WorldsPlugin(Plugin):
         if not 0 <= index < len(preview.facts):
             raise ValueError(f"the draft has no fact {payload.index}")
         text = preview.facts[index].text
-        start, end = _raw_span(world.view(), text, payload.start, payload.end)
+        text, start, end = _raw_span(world.view(), text, payload.start, payload.end)
         return key, preview, " ".join(text[start:end].split())
 
     @staticmethod
@@ -3446,7 +3476,7 @@ class WorldsPlugin(Plugin):
                 {**self._draft_out(world, key), "stub_id": None, "new_name": words},
             )
             return
-        owner_id, fact, start, end, words = self._selected(world, payload)
+        owner_id, fact, text, start, end, words = self._selected(world, payload)
         name = " ".join(words.split())
         # stored as the draft path stores it; a blank tag is none
         tag = (normalise_tag(payload.tag) or None) if payload.tag else None
@@ -3479,7 +3509,7 @@ class WorldsPlugin(Plugin):
                 )
             rev.correct_fact(
                 fact.fact_id,
-                text=fact.text[:start] + ref(stub_id, words) + fact.text[end:],
+                text=text[:start] + ref(stub_id, words) + text[end:],
             )
         log.info("worlds.stub_from_text", id=stub_id, name=name, kind=payload.kind)
         self._reply(
@@ -3514,15 +3544,13 @@ class WorldsPlugin(Plugin):
             preview.picks[words] = payload.target_id
             self._reply("link_text", self._draft_out(world, key))
             return
-        owner_id, fact, start, end, words = self._selected(world, payload)
+        owner_id, fact, text, start, end, words = self._selected(world, payload)
         if payload.target_id == owner_id:
             raise ValueError("a fact can't link its own entry")
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
                 fact.fact_id,
-                text=fact.text[:start]
-                + ref(payload.target_id, words)
-                + fact.text[end:],
+                text=text[:start] + ref(payload.target_id, words) + text[end:],
             )
         self._edited("link_text", owner_id, _date_in(payload.at), prose=False)
 
