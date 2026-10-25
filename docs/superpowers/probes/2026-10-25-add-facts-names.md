@@ -42,3 +42,19 @@ A "new name" is a proper name a fact writes that the world doesn't have. It is c
 - **"same as…" offers:** the Tsar names were offered "Tsar's Council of Feathers", through the shared word "Tsar". This is create's existing offer rule. It is never the default.
 
 **The verdict.** The fix works on the owner's case. Before it, 0 of 8 names became stubs; after it, 11 of 12 did, with no false stubs and no titles. Three calls per run is too few to measure a rate. Long tags are the one thing left. Create-thing's own tag rule, copied as well, would likely fix them, but that is new add-facts wording and would need its own probe.
+
+## Follow-up: create's tag rule (ruling H9)
+
+Create-thing's `"tag"` rule is now copied verbatim into add-facts: "one or two words for what the {{ kind }} is…", with the kind-name line only for a lore or event entry. The Tsardom is a place, so it doesn't get that line. The same 3 calls were re-run as `after-h9` at ae76bd70. The long-tag label was committed before the calls, in f070fef5.
+
+| Call | New names in the facts | Stubs proposed | Covered | False stubs | Tags |
+|---|---|---|---|---|---|
+| after-h9 1 | Alexei III, Dmitri II (2) | 2 | 2 | 0 | ruler, ruler |
+| after-h9 2 | Tsar Aldric, House Vostok, Tsarina Yelena, Pale Light Cathedral (4) | 3 | 3 | 0 | ruler, dynasty, former ruler |
+| after-h9 3 | Tsar Aldric Winterborn, Transition Period, Transformation of 994 (3) | 3 | 3 | 0 | ruler, historical era, cataclysm |
+
+**Tags longer than 2 words:** 5 of 11 in `after` (H8), and 0 of 8 in `after-h9`.
+
+**False stubs:** still 0. 8 of the 9 new names were proposed; the one missed was "Pale Light Cathedral".
+
+**The verdict:** the tag rule fixes the long tags, and nothing else moved.
