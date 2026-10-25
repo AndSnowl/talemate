@@ -3312,6 +3312,104 @@ check('nested draft gates the page draft', () => {
     assert.equal(store.nestedHeld, false);
 });
 
+check('an unrelated error leaves a small ask drafting: its reply is still taken', () => {
+    const { store } = factsDraft();
+    const found = () => store.smallDrafts['facts:v'];
+    // a Regenerate out, then another request fails
+    store.regenerateSmall('facts:v');
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during set_tag: no' } });
+    assert.equal(found().pending, true);
+    store.handleMessage(reply('add_facts', factsReply(['Its walls.'], { version: 2 })));
+    assert.deepEqual([found().pending, found().version], [false, 2]);
+    // a first ask out: the same
+    store.askGroupAdd('v', null, 'a landmark');
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during set_tag: no' } });
+    assert.equal(store.smallDrafts['group:v:'].pending, true);
+    store.handleMessage(reply('group_add', { thing_id: 'v', tag: null, rows: [], draft_key: 'group:v:', version: 1, versions: [{ version: 1, prompt: 'a landmark' }] }));
+    assert.equal(store.smallDrafts['group:v:'].version, 1);
+    // a nested ask: the page draft stays waiting for it
+    const host = hostDraft();
+    host.store.askNestedFacts('its drills');
+    host.store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during set_tag: no' } });
+    assert.equal(host.store.nestedHeld, true);
+    host.store.handleMessage(reply('add_facts', nestedReply('new:lore:frostwing host', [{ category: 'general', text: 'It drills.' }])));
+    assert.equal(host.store.nestedDraft.version, 1);
+});
+
+check('an ask refused before it went out stays drafting, and can be discarded and asked again', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('gone');
+    store.askFacts('facts', 'its laws');
+    assert.equal(typeof store.smallDrafts['facts:gone'].askedAt, 'number');
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_facts: no such entry' } });
+    assert.equal(store.smallDrafts['facts:gone'].pending, true);
+    store.discardSmall('facts:gone');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_small_draft', draft_key: 'facts:gone' });
+    assert.equal(store.smallDrafts['facts:gone'], undefined);
+    store.askFacts('facts', 'its laws');
+    assert.equal(sent.at(-1).action, 'add_facts');
+});
+
+check('while a small version switch is out the draft takes no ask, edit or accept', () => {
+    const { store, sent } = factsDraft();
+    const found = () => store.smallDrafts['facts:v'];
+    store.regenerateSmall('facts:v');
+    store.handleMessage(reply('add_facts', factsReply(['Its walls.'], { version: 2 })));
+    store.useSmallVersion('facts:v', 1);
+    assert.equal(found().switching, true);
+    sent.length = 0;
+    store.editSmall('facts:v', untick(found().edited, 0));
+    store.regenerateSmall('facts:v');
+    store.askFacts('facts', 'something else');
+    store.acceptSmall('facts:v');
+    store.useSmallVersion('facts:v', 2);
+    assert.deepEqual(sent, []);
+    assert.equal(found().edited.facts[0].ticked, true);
+    store.handleMessage(reply('use_small_version', { ...factsReply(['No flying.', 'Bells.'], { version: 1, count: 2 }), kind: 'facts' }));
+    assert.deepEqual([found().switching, found().version], [false, 1]);
+    // a use_small_version reply nobody waits for is dropped
+    store.handleMessage(reply('use_small_version', { ...factsReply(['Its walls.'], { version: 2, count: 2 }), kind: 'facts' }));
+    assert.equal(found().version, 1);
+    // a failed switch ends it
+    store.useSmallVersion('facts:v', 2);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no such draft' } });
+    assert.equal(found().switching, false);
+});
+
+check("an accept's reply drops the draft accepted, the oldest one out", () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v');
+    for (const tag of ['institution', 'native']) {
+        store.askGroupAdd('v', tag, 'two');
+        store.handleMessage(reply('group_add', { thing_id: 'v', tag, rows: [{ name: 'X', kind: 'lore', tag, line: 'x', ticked: true }], draft_key: `group:v:${tag}`, version: 1, versions: [{ version: 1, prompt: 'two' }] }));
+    }
+    store.acceptSmall('group:v:native');
+    store.acceptSmall('group:v:institution');
+    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [] }));
+    assert.deepEqual(Object.keys(store.smallDrafts), ['group:v:institution']);
+    assert.equal(store.smallDrafts['group:v:institution'].accepting, true);
+    // a group that wasn't accepted stays as it is
+    store.askGroupAdd('v', 'ruler', 'one');
+    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['h'], notes: [] }));
+    assert.deepEqual(Object.keys(store.smallDrafts), ['group:v:ruler']);
+});
+
+check('a nested draft keeps its mode; a written one for another draft shows no notes', () => {
+    const { store, sent } = hostDraft();
+    const key = 'new:lore:frostwing host';
+    store.askNestedFacts('its raising', 990);
+    assert.equal(store.nestedDraft.mode, 'event');
+    store.handleMessage(reply('add_event', nestedReply(key, [{ category: 'history', text: 'Raised.' }], { year: 990 })));
+    store.setSmallPrompt(`nested:${key}`, 'its raising, again', 991);
+    store.regenerateSmall(`nested:${key}`);
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'add_event', draft_key: key, prompt: 'its raising, again', year: 991, regenerate: true });
+    store.handleMessage(reply('write_nested_facts', { ...draftOf(HOST, { key: 'new:lore:other', version: 2 }), notes: ['moved'] }));
+    assert.equal(store.notes, null);
+    assert.equal(store.draft.version, 1);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

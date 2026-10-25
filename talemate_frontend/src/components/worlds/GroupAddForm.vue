@@ -22,6 +22,7 @@
         <div v-else-if="found.pending" class="d-flex align-center ga-2 text-caption text-muted">
             <v-progress-circular indeterminate size="16" width="2" color="accent"></v-progress-circular>
             Drafting “{{ found.prompt }}”…
+            <v-btn variant="text" size="small" data-testid="group-add-discard" @click="discard">Discard</v-btn>
         </div>
         <template v-else>
             <div class="text-caption text-muted mb-1">Tick what to add: each becomes a stub filed here, its line its first fact.</div>

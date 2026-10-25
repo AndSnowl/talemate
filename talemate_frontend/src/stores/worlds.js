@@ -117,7 +117,11 @@
 // draft (`write_nested_facts`, the owner's edits on the open version
 // carried onto it, R8). A fresh ask that failed holds nothing on the
 // server: the draft stays with its error and prompt, and no version, so
-// it can be asked again. While a nested draft is out or held
+// it can be asked again. An ask ends only with its reply or `_failed`,
+// never with another request's error; one refused before it went out
+// stays drafting until the owner discards it. `useSmallVersion` is one
+// at a time (`switching`), and an accept's reply drops the oldest accept
+// out (the server answers them in turn, without their keys). While a nested draft is out or held
 // (`nestedHeld`) the page draft waits for it; discarding or accepting the
 // page draft drops it. A world switch drops them all.
 //
@@ -707,8 +711,9 @@ function worldState() {
         synopses: {},
         // small drafts (see "Small drafts" in the module comment), by key
         // (smallDrafts.js): `{key, kind: 'facts'|'event'|'group'|'nested',
-        // thingId, tag, showUnder, prompt, year, version, versions, base,
-        // edited, rows, pending, accepting, error}`
+        // mode: 'facts'|'event' (null for a group's), thingId, tag,
+        // showUnder, prompt, year, version, versions, base, edited, rows,
+        // pending, askedAt, accepting, acceptSeq, switching, error}`
         smallDrafts: {},
         // small draft key -> version -> `{base, edited}`: what the owner
         // left on each version this session
@@ -727,6 +732,8 @@ function worldState() {
 
 // the function actions send with; set by `connect`
 let send = null;
+// the last small-draft accept's number (`acceptSmall`)
+let acceptSeq = 0;
 
 // P6: the draft edits that change what the server renders of it (what's
 // linked, dated or ticked): the others ("In" rows, tags, ticks of other
@@ -1461,8 +1468,9 @@ export const useWorldsStore = defineStore('worlds', {
         // ruling H5), so each new row shows under it, keeping its own tag
         askGroupAdd(thingId, tag, prompt, { showUnder = false } = {}) {
             const key = groupDraftKey(thingId, tag);
-            this.smallAsked(key, { kind: 'group', thingId, tag: tag ?? null, showUnder, prompt, year: null });
-            this.sendSmallAsk(key, false);
+            if (this.smallAsked(key, { kind: 'group', mode: null, thingId, tag: tag ?? null, showUnder, prompt, year: null })) {
+                this.sendSmallAsk(key, false);
+            }
         },
 
         // --- prompt additions ---------------------------------------------
@@ -1475,8 +1483,10 @@ export const useWorldsStore = defineStore('worlds', {
                 return;
             }
             const key = factsKey(thingId);
-            this.smallAsked(key, { kind: mode === 'event' ? 'event' : 'facts', thingId, tag: null, showUnder: false, prompt, year: mode === 'event' ? year : null });
-            this.sendSmallAsk(key, false);
+            const event = mode === 'event';
+            if (this.smallAsked(key, { kind: event ? 'event' : 'facts', mode: event ? 'event' : 'facts', thingId, tag: null, showUnder: false, prompt, year: event ? year : null })) {
+                this.sendSmallAsk(key, false);
+            }
         },
 
         // "+ Add facts…" / "+ Add event…" (`year` not null) on the open
@@ -1485,19 +1495,27 @@ export const useWorldsStore = defineStore('worlds', {
             const draft = this.draft;
             // (nor while a Regenerate of the draft is out: the server
             // would refuse it, R7)
-            if (!draft || this.previewPending || this.nestedHeld || this.nestedDraft?.pending) {
+            if (!draft || this.previewPending || this.nestedHeld) {
                 return;
             }
             const key = nestedKey(draft.key);
-            this.smallAsked(key, { kind: 'nested', thingId: null, tag: null, showUnder: false, prompt, year });
-            this.sendSmallAsk(key, false);
+            const mode = year === null ? 'facts' : 'event';
+            if (this.smallAsked(key, { kind: 'nested', mode, thingId: null, tag: null, showUnder: false, prompt, year })) {
+                this.sendSmallAsk(key, false);
+            }
         },
 
         // --- small drafts -------------------------------------------------
 
         // a fresh small draft `key` asked for: no version yet, and none of
-        // an earlier one's kept (the server drops them too)
+        // an earlier one's kept (the server drops them too). Not while a
+        // version switch of it is out (false). `askedAt`: when it was
+        // asked, for a "still drafting" that may need a Discard (an
+        // unrelated error never ends an ask: its reply or `_failed` does)
         smallAsked(key, fields) {
+            if (this.smallDrafts[key]?.switching) {
+                return false;
+            }
             this.smallDrafts = {
                 ...this.smallDrafts,
                 [key]: {
@@ -1509,11 +1527,15 @@ export const useWorldsStore = defineStore('worlds', {
                     edited: null,
                     rows: null,
                     pending: true,
+                    askedAt: Date.now(),
                     accepting: false,
+                    acceptSeq: null,
+                    switching: false,
                     error: null,
                 },
             };
             this.smallEdits = smallEditsDropped(this.smallEdits, key);
+            return true;
         },
 
         // the ask for small draft `key` as it stands (its prompt and
@@ -1521,8 +1543,8 @@ export const useWorldsStore = defineStore('worlds', {
         sendSmallAsk(key, regenerate) {
             const slot = this.smallDrafts[key];
             const again = regenerate ? { regenerate: true } : {};
-            // an event (a nested one by its year) goes with its year
-            const event = slot.kind === 'event' || (slot.kind === 'nested' && slot.year != null);
+            // an event goes with its year
+            const event = slot.mode === 'event';
             const dated = event ? { year: slot.year } : {};
             const action = event ? 'add_event' : 'add_facts';
             if (slot.kind === 'group') {
@@ -1546,15 +1568,17 @@ export const useWorldsStore = defineStore('worlds', {
         // nothing on the server: it's asked afresh.
         regenerateSmall(key) {
             const slot = this.smallDrafts[key];
-            if (!slot || slot.pending || slot.accepting) {
+            if (!slot || slot.pending || slot.accepting || slot.switching) {
                 return;
             }
             if (!slot.versions.length) {
-                this.smallAsked(key, { kind: slot.kind, thingId: slot.thingId, tag: slot.tag, showUnder: slot.showUnder, prompt: slot.prompt, year: slot.year });
-                this.sendSmallAsk(key, false);
+                const { kind, mode, thingId, tag, showUnder, prompt, year } = slot;
+                if (this.smallAsked(key, { kind, mode, thingId, tag, showUnder, prompt, year })) {
+                    this.sendSmallAsk(key, false);
+                }
                 return;
             }
-            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: true, error: null } };
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: true, askedAt: Date.now(), error: null } };
             this.sendSmallAsk(key, true);
         },
 
@@ -1568,13 +1592,15 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // "Version n of m ▾": restore version `version`, the owner's
-        // edits on the open one kept first
+        // edits on the open one kept first; until it comes (`switching`)
+        // the draft takes no ask, edit or accept
         useSmallVersion(key, version) {
             const slot = this.smallDrafts[key];
-            if (!slot || slot.pending || slot.accepting || !slot.versions.length || version === slot.version) {
+            if (!slot || slot.pending || slot.accepting || slot.switching || !slot.versions.length || version === slot.version) {
                 return;
             }
             this.smallEdits = keepSmallEdits(this.smallEdits, slot);
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, switching: true } };
             this.pending = { ...this.pending, use_small_version: true };
             this.request('use_small_version', { draft_key: key, version });
         },
@@ -1583,7 +1609,7 @@ export const useWorldsStore = defineStore('worlds', {
         // names, repeat choices, a group row's name
         editSmall(key, changes) {
             const slot = this.smallDrafts[key];
-            if (slot?.edited) {
+            if (slot?.edited && !slot.switching) {
                 this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, edited: { ...slot.edited, ...changes } } };
             }
         },
@@ -1609,10 +1635,13 @@ export const useWorldsStore = defineStore('worlds', {
         // (`accepting`) until the server answers, so a refusal leaves it
         acceptSmall(key) {
             const slot = this.smallDrafts[key];
-            if (!slot?.edited || slot.accepting || slot.pending) {
+            if (!slot?.edited || slot.accepting || slot.pending || slot.switching) {
                 return;
             }
-            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true } };
+            // the server answers accepts in turn, without the key: the
+            // oldest one out is the one answered (`acceptedSmall`)
+            acceptSeq += 1;
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true, acceptSeq } };
             if (slot.kind === 'group') {
                 this.pending = { ...this.pending, accept_group_add: true };
                 this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, draft_key: key });
@@ -1638,7 +1667,7 @@ export const useWorldsStore = defineStore('worlds', {
         smallTaken(data, how) {
             const key = data.draft_key;
             const slot = this.smallDrafts[key];
-            if (!slot || (how === 'asked' && !slot.pending)) {
+            if (!slot || (how === 'asked' ? !slot.pending : !slot.switching)) {
                 return;
             }
             const { version, versions } = data;
@@ -1661,9 +1690,21 @@ export const useWorldsStore = defineStore('worlds', {
                     edited: restoredEdited(this.smallEdits, key, version, base),
                     rows: smallKind(key) === 'group' ? data.rows : data.facts,
                     pending: how === 'asked' ? false : slot.pending,
+                    switching: false,
                     error: null,
                 },
             };
+        },
+
+        // the accept (`kinds` of small draft) of the thing `thingId` the
+        // server answered: the oldest one out, dropped (the server did)
+        acceptedSmall(thingId, kinds) {
+            const out = Object.values(this.smallDrafts)
+                .filter((slot) => slot.accepting && slot.thingId === thingId && kinds.includes(slot.kind))
+                .sort((a, b) => a.acceptSeq - b.acceptSeq);
+            if (out.length) {
+                this.dropSmall(out[0].key);
+            }
         },
 
         // an ask for a small draft that failed (`key`): it stays, with
@@ -1959,12 +2000,7 @@ export const useWorldsStore = defineStore('worlds', {
         filingEdited(action, data) {
             // an accepted small draft is done with (the server dropped it)
             if (action === 'accept_facts' || action === 'accept_group_add') {
-                const kinds = action === 'accept_facts' ? ['facts', 'event'] : ['group'];
-                for (const slot of Object.values(this.smallDrafts)) {
-                    if (slot.accepting && slot.thingId === data.id && kinds.includes(slot.kind)) {
-                        this.dropSmall(slot.key);
-                    }
-                }
+                this.acceptedSmall(data.id, action === 'accept_facts' ? ['facts', 'event'] : ['group']);
             }
             if (data.id === this.selectedThingId && !this.thingAt) {
                 this.pageTaken(data);
@@ -2131,8 +2167,8 @@ export const useWorldsStore = defineStore('worlds', {
                     this.dropSmall(nestedKey(written.draft_key));
                     if (this.draft?.key === written.draft_key) {
                         this.draftTaken(written, 'written');
+                        this.showNotes(action, notes);
                     }
-                    this.showNotes(action, notes);
                     break;
                 }
                 case 'stub_suggestion':
@@ -2410,13 +2446,15 @@ export const useWorldsStore = defineStore('worlds', {
                         if (this.merge?.pending) {
                             this.merge = { ...this.merge, pending: false };
                         }
-                        // or a group's synopsis, or a small draft's ask (one
-                        // with no version yet goes; one with versions keeps
-                        // them) or accept
+                        // or a group's synopsis, or a small draft's accept or
+                        // version switch (both answered at once). A small
+                        // draft's ask is left drafting: it never fails this
+                        // way once it's out (its reply or `_failed` comes),
+                        // and one refused before it went out can be
+                        // discarded from its spinner.
                         this.synopses = Object.fromEntries(Object.entries(this.synopses).map(([key, value]) => [key, { ...value, pending: false }]));
                         this.smallDrafts = Object.fromEntries(Object.entries(this.smallDrafts)
-                            .filter(([, value]) => !(value.pending && !value.versions.length))
-                            .map(([key, value]) => [key, { ...value, pending: false, accepting: false }]));
+                            .map(([key, value]) => [key, { ...value, accepting: false, switching: false }]));
                         // or the draft's accept or selection
                         if (this.draft) {
                             this.draft = { ...this.draft, accepting: false, selecting: null };

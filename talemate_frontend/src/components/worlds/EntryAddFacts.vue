@@ -7,7 +7,7 @@
             color="accent"
             prepend-icon="mdi-creation"
             :data-testid="event ? 'add-event' : 'add-facts'"
-            :disabled="onDraft && !!worlds.nestedDraft"
+            :disabled="onDraft && worlds.nestedHeld"
             @click="start"
         >{{ event ? '+ Add event…' : '+ Add facts…' }}</v-btn>
 
@@ -47,6 +47,7 @@
             <div v-if="draft.pending" class="d-flex align-center ga-2 text-caption text-muted">
                 <v-progress-circular indeterminate size="16" width="2" color="accent"></v-progress-circular>
                 Drafting “{{ draft.prompt }}”…
+                <v-btn variant="text" size="small" data-testid="fact-draft-discard" @click="worlds.discardSmall(draft.key)">Discard</v-btn>
             </div>
             <template v-else-if="draft.error">
                 <div class="text-caption text-error" data-testid="fact-draft-error">{{ draft.error }}</div>
@@ -123,7 +124,7 @@ export default {
         draft() {
             if (this.onDraft) {
                 const nested = this.worlds.nestedDraft;
-                return nested && (nested.year != null) === this.event ? nested : null;
+                return nested && nested.mode === (this.event ? 'event' : 'facts') ? nested : null;
             }
             const found = this.worlds.smallDrafts[factsKey(this.thing.id)];
             return found && found.kind === (this.event ? 'event' : 'facts') ? found : null;

@@ -267,6 +267,7 @@
                         <div v-if="worlds.nestedDraft?.pending" class="d-flex align-center ga-2 text-caption text-muted mb-1" data-testid="draft-adding">
                             <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
                             Drafting more facts…
+                            <v-btn variant="text" size="small" data-testid="draft-adding-discard" @click="worlds.discardSmall(worlds.nestedDraft.key)">Discard</v-btn>
                         </div>
                         <!-- a stub's facts so far, written already -->
                         <div v-for="fact in thing.facts" :key="fact.fact_id" class="stub-fact text-muted" data-testid="draft-stub-fact">
