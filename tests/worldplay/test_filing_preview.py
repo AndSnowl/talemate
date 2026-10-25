@@ -738,10 +738,37 @@ async def test_tag_rule_says_never_the_kind_name(world):
             )
         )
         await preview_thing(world, "event", "The Blinding", {}, client)
-    assert (
+    line = (
         "The tag is never the kind's own name (lore, event, place, …): say what "
-        "sort of event it is, such as custom, law, battle, festival."
-    ) in _create_prompt(client)
+        "sort of {kind} it is, such as custom, law, battle, festival."
+    )
+    assert line.format(kind="event") in _create_prompt(client)
+
+    # ruling H6: only lore and event have the line (the probe covered just
+    # those; its examples fit neither people nor places)
+    for kind, name in (("lore", "The Feather Dance"), ("character", "Oskar")):
+        client = MockClient("test")
+        async with MockClientContext():
+            _queue(
+                json.dumps(
+                    {
+                        "name": name,
+                        "tag": "custom" if kind == "lore" else "smith",
+                        "facts": [{"category": "general", "text": "It is."}],
+                        "names": [],
+                    }
+                )
+            )
+            await preview_thing(world, kind, name, {}, client)
+        prompt = _create_prompt(client)
+        if kind == "lore":
+            assert line.format(kind="lore") in prompt
+        else:
+            assert "never the kind's own name" not in prompt
+            assert (
+                '- "tag": one or two words for what the character is, such as '
+                "river, ruler, custom, institution, regiment, capital or doctrine."
+            ) in prompt
 
 
 async def test_untagged_stub_expand_asks_tag(world):
