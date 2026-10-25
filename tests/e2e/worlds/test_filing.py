@@ -15,6 +15,8 @@ page sends is read back from a websocket spy.
 
 from __future__ import annotations
 
+import re
+
 from playwright.sync_api import expect
 
 from e2e.seed import seed_fm_world
@@ -547,7 +549,8 @@ def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
     """H5: the town's Natives exist only through Vasha's `show_under`.
     "+ Add" there drafts natives that keep their own tag and show under
     Natives; dragging Mikhail the smith onto it changes only his filing
-    here, never his tag."""
+    here, never his tag. "Other" says a row dropped there goes back under
+    its own tag."""
 
     name = _world_name("Natives")
     world = seed_fm_world(app.root, name, present_year=1020, things=NATIVES)
@@ -605,6 +608,10 @@ def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
     assert "Smiths" not in _headings(town)
     assert _sent(page, "set_tag") == []
 
+    # "Other": dropping a row there puts it back under its own tag
+    expect(_group(town, "Other")).to_have_attribute(
+        "title", re.compile("back under its own tag")
+    )
     assert page.console_errors == []
 
 

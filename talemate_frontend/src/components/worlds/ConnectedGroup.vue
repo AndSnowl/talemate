@@ -4,6 +4,7 @@
         :class="{ over: dragOver }"
         data-testid="connected-group"
         :data-tag="group.tag ?? ''"
+        :title="group.tag == null && !readonly ? OTHER_DROP_TIP : undefined"
         @dragover="dragOverRow"
         @dragleave="dragOver = false"
         @drop="drop"
@@ -108,6 +109,9 @@ import GroupAddForm from './GroupAddForm.vue';
 // the drag's data type: the row dragged and the group it's from
 const DRAG_TYPE = 'application/x-fantasymate-row';
 
+// what a row dropped on "Other" does (`rowMove` with no tag)
+const OTHER_DROP_TIP = 'Dropped here, a row shown under a group goes back under its own tag; any other row loses its tag';
+
 // One of Connected's groups (mockup v3, screen A): the entries filed in
 // the page that share a tag, under its heading ("Rivers") with how many,
 // one line each -- the entry's own summary, the filing's role and dates (an
@@ -141,7 +145,7 @@ export default {
         readonly: { type: Boolean, default: false },
     },
     setup() {
-        return { worlds: useWorldsStore() };
+        return { worlds: useWorldsStore(), OTHER_DROP_TIP };
     },
     data() {
         return { folded: false, filter: '', showAll: false, adding: false, dragOver: false };
