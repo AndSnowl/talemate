@@ -357,7 +357,7 @@ import hashlib
 import json
 import os
 from collections import OrderedDict
-from collections.abc import Callable, Collection, Coroutine
+from collections.abc import Callable, Collection, Coroutine, Sequence
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -419,6 +419,7 @@ from talemate.worldplay.create import (
     CreatePreview,
     ElsewhereFact,
     FileIntoRow,
+    MoveHereFact,
     PreviewException,
     PreviewFact,
     accept_preview,
@@ -2786,7 +2787,7 @@ class WorldsPlugin(Plugin):
             self._check_selected_names(preview, payload.draft_key)
             # only the repeat moves a version held here recorded, as at
             # accept
-            self._check_repeat_moves(preview, payload.draft_key, [])
+            self._check_page_repeats(preview, payload.draft_key, [])
             page = self._draft_payload(world, preview)
         except Exception as exc:
             log.warning(
@@ -3176,41 +3177,60 @@ class WorldsPlugin(Plugin):
         return drafted
 
     def _check_repeat_moves(
-        self, preview: CreatePreview, key: str | None, notes: list[str]
-    ) -> None:
+        self,
+        rows: Sequence[Any],
+        move_here: Sequence[MoveHereFact],
+        held_rows: Sequence[Any],
+        notes: list[str],
+    ) -> list[MoveHereFact]:
         """Keep only the "Move existing here" rows (`move_here` with
-        `repeat`) and the "Keep new" facts (`replaces_repeat`, P8) whose
-        repeat a version of the draft this session holds says one of its
-        facts repeats, checked against the server's copy rather than the
-        client's word; any other row is dropped, and any other fact keeps
-        the fact it repeats, with a note."""
+        `repeat`) and the "Keep new" rows (`replaces_repeat`, P8) whose
+        repeat one of `held_rows` (every row of every version of the draft
+        this session holds) says it repeats, checked against the server's
+        copy rather than the client's word; any other move row is dropped,
+        and any other row keeps the fact it repeats (its `replaces_repeat`
+        cleared), with a note. Returns the kept `move_here`."""
 
         held = {
-            (fact.repeat_of.get("fact_id"), fact.repeat_of.get("owner_id"))
-            for version in (self._drafts.get(key or "") or [])
-            for fact in version.facts
-            if fact.repeat_of
+            (row.repeat_of.get("fact_id"), row.repeat_of.get("owner_id"))
+            for row in held_rows
+            if row.repeat_of
         }
         kept = []
-        for row in preview.move_here:
-            if row.repeat and (row.fact_id, row.from_id) not in held:
+        for move in move_here:
+            if move.repeat and (move.fact_id, move.from_id) not in held:
                 notes.append(
-                    f'"{row.text[:60]}" isn\'t a fact this draft repeats, so it'
+                    f'"{move.text[:60]}" isn\'t a fact this draft repeats, so it'
                     " doesn't move here"
                 )
                 continue
-            kept.append(row)
-        preview.move_here = kept
-        for fact in preview.facts:
-            repeat = fact.repeat_of or {}
-            if not fact.replaces_repeat:
+            kept.append(move)
+        for row in rows:
+            repeat = row.repeat_of or {}
+            if not row.replaces_repeat:
                 continue
             if (repeat.get("fact_id"), repeat.get("owner_id")) not in held:
-                fact.replaces_repeat = False
+                row.replaces_repeat = False
                 shown = str(repeat.get("text") or "")[:60]
                 notes.append(
                     f"\"{shown}\" isn't a fact this draft repeats, so it isn't removed"
                 )
+        return kept
+
+    def _check_page_repeats(
+        self, preview: CreatePreview, key: str | None, notes: list[str]
+    ) -> None:
+        """`_check_repeat_moves` for a page draft: against the facts of
+        every version of the draft `key` this session holds."""
+
+        held = [
+            fact
+            for version in (self._drafts.get(key or "") or [])
+            for fact in version.facts
+        ]
+        preview.move_here = self._check_repeat_moves(
+            preview.facts, preview.move_here, held, notes
+        )
 
     def _prose_name(self, preview: CreatePreview, key: str | None) -> str | None:
         """The name the preview's prose was written under, from the
@@ -3253,7 +3273,7 @@ class WorldsPlugin(Plugin):
         payload = AcceptPreviewPayload(**data)
         world = self._require_world()
         notes: list[str] = []
-        self._check_repeat_moves(payload.preview, payload.draft_key, notes)
+        self._check_page_repeats(payload.preview, payload.draft_key, notes)
         self._check_selected_names(payload.preview, payload.draft_key)
         # the other things whose prose input the accept changed
         prose: list[str] = []
@@ -4045,11 +4065,30 @@ class WorldsPlugin(Plugin):
         WorldDate.of(payload.year)
         self._draft_facts("add_event", payload, payload.year)
 
+    def _held_fact_rows(self, payload: AcceptFactsPayload) -> list[PreviewFact]:
+        """The facts of every version of the fact draft `payload` names
+        (`draft_key`) this session holds for its entry: what its repeat
+        choices are checked against. None without a held draft, so no
+        repeat choice is trusted."""
+
+        key = payload.draft_key
+        if key is None or not self._small.held(key):
+            return []
+        return [
+            fact
+            for version in self._small.versions(key)
+            if getattr(version, "thing_id", None) == payload.draft.thing_id
+            for fact in getattr(version, "facts", [])
+        ]
+
     async def handle_accept_facts(self, data: dict):
         """Write a fact draft's ticked facts onto its entry, linked as
-        `add_fact` links (`worldplay.facts.accept_facts`), in one revision;
-        answers `accept_facts` with the entry and `fact_ids`, and refreshes
-        its prose when it reads them. A stub a draft of this session
+        `add_fact` links (`worldplay.facts.accept_facts`), in one revision,
+        with its repeat choices ("Keep new", "Move existing here") once
+        checked against the held versions of the draft (`draft_key`,
+        `_check_repeat_moves`); answers `accept_facts` with the entry,
+        `fact_ids` and `notes`, and refreshes the prose that reads what
+        changed. A stub a draft of this session
         expands is refused: its facts go into the draft, and nothing is
         written before the draft is accepted."""
 
@@ -4061,20 +4100,31 @@ class WorldsPlugin(Plugin):
                 "that stub is being drafted: add the facts to its draft"
                 " (add_facts with its draft_key), or discard the draft first"
             )
-        fact_ids = accept_facts(world, payload.draft)
+        notes: list[str] = []
+        draft = payload.draft
+        draft.move_here = self._check_repeat_moves(
+            draft.facts, draft.move_here, self._held_fact_rows(payload), notes
+        )
+        # the other entries whose prose read a fact moved or removed
+        prose: list[str] = []
+        fact_ids = accept_facts(world, draft, notes, prose)
         if payload.draft_key is not None:
             self._small.discard(payload.draft_key)
         at = _date_in(payload.at)
         self._reply(
             "accept_facts",
             {
-                **self._thing_payload(world, payload.draft.thing_id, at),
+                **self._thing_payload(world, draft.thing_id, at),
                 "fact_ids": fact_ids,
+                "notes": notes,
             },
         )
+        for changed in prose:
+            if changed != draft.thing_id:
+                self._schedule_prose(changed, None)
         state = world.view().thing(payload.draft.thing_id)
         if (
-            fact_ids
+            (fact_ids or payload.draft.thing_id in prose)
             and state is not None
             and not state.is_stub
             and any(

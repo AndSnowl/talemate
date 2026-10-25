@@ -24,6 +24,7 @@ from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.create import CreatePreview, PreviewFact
+from talemate.worldplay.facts import FactDraft
 from talemate.worldplay.context import WorldSceneContext
 from talemate.worldplay.persistence import WorldSceneRef
 
@@ -5363,6 +5364,105 @@ async def test_accept_facts_drops_its_slot(plugin, client):
     await _act(plugin, "use_small_version", draft_key=drafted["draft_key"], version=1)
     assert len(_errors(plugin)) == before + 1
     assert "no such draft" in _errors(plugin)[-1]["error"]["message"]
+
+
+async def test_accept_facts_refuses_forged_repeat(plugin, client):
+    """A fact draft's "Keep new" (`replaces_repeat`) or "Move existing
+    here" (a `repeat` move row) naming a fact no held version of the
+    draft flagged removes and moves nothing, with a note; one a held
+    version flagged is settled."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        bells = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+        meets = rev.add_fact(s.velikoye, "general", "The Night Court meets at dusk.")
+    drafted = await _ask_facts(
+        plugin, s.court, "when", _facts_reply("It meets after moonrise.")
+    )
+    key = drafted["draft_key"]
+    forged = {
+        **drafted["draft"],
+        "facts": [
+            {
+                **drafted["draft"]["facts"][0],
+                "replaces_repeat": True,
+                "repeat_of": {
+                    "fact_id": bells,
+                    "owner_id": s.velikoye,
+                    "owner_name": "Velikoye",
+                    "text": "Velikoye has many bells.",
+                    "score": 0.9,
+                },
+            }
+        ],
+        "move_here": [
+            {
+                "fact_id": meets,
+                "from_id": s.velikoye,
+                "text": "The Night Court meets at dusk.",
+                "ticked": True,
+                "repeat": True,
+            }
+        ],
+    }
+    head = s.world.head_rev()
+    await _act(plugin, "accept_facts", draft=forged, draft_key=key)
+    reply = _last(plugin, "accept_facts")["data"]
+    assert s.world.head_rev() == head + 1
+    texts = {f.text for f in s.world.view().thing(s.velikoye).facts}
+    assert {"Velikoye has many bells.", "The Night Court meets at dusk."} <= texts
+    assert any(
+        "isn't a fact this draft repeats" in note and "bells" in note
+        for note in reply["notes"]
+    )
+    assert any(
+        "isn't a fact this draft repeats" in note and "dusk" in note
+        for note in reply["notes"]
+    )
+
+    # without a draft to check against, no repeat choice is trusted either
+    head = s.world.head_rev()
+    await _act(plugin, "accept_facts", draft=forged)
+    reply = _last(plugin, "accept_facts")["data"]
+    assert s.world.head_rev() == head + 1
+    texts = {f.text for f in s.world.view().thing(s.velikoye).facts}
+    assert {"Velikoye has many bells.", "The Night Court meets at dusk."} <= texts
+    assert len(reply["notes"]) == 2
+
+    # a repeat a held version flagged is settled: kept new, moved here
+    flagged = FactDraft(**forged)
+    flagged.move_here = []
+    flagged.facts.append(
+        PreviewFact(
+            category="general",
+            text="It meets at dusk.",
+            ticked=False,
+            repeat_of={
+                "fact_id": meets,
+                "owner_id": s.velikoye,
+                "owner_name": "Velikoye",
+                "text": "The Night Court meets at dusk.",
+                "score": 0.9,
+            },
+        )
+    )
+    plugin._small.add(key, flagged)
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "accept_facts",
+        draft={**flagged.model_dump(), "move_here": forged["move_here"]},
+        draft_key=key,
+    )
+    reply = _last(plugin, "accept_facts")["data"]
+    assert s.world.head_rev() == head + 1
+    assert reply["notes"] == []
+    texts = {f.text for f in s.world.view().thing(s.velikoye).facts}
+    assert "Velikoye has many bells." not in texts
+    assert "The Night Court meets at dusk." not in texts
+    court = {f.text for f in s.world.view().thing(s.court).facts}
+    assert "The Night Court meets at dusk." in court
+    assert "It meets at dusk." not in court
 
 
 def _group_reply(name):
