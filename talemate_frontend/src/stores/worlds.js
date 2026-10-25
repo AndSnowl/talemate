@@ -770,12 +770,14 @@ export const useWorldsStore = defineStore('worlds', {
         // --- the connection -----------------------------------------------
 
         connect(sendFn) {
+            this.dropDraftRender();
             send = sendFn;
             this.connected = true;
             this.listWorlds();
         },
 
         disconnected() {
+            this.dropDraftRender();
             this.connected = false;
             this.currentWorld = null;
             Object.assign(this, worldState());
@@ -1066,6 +1068,7 @@ export const useWorldsStore = defineStore('worlds', {
         // "Discard": the draft's every version goes (`discard_preview`),
         // nothing written; the request stays, so the prompt can be edited
         discardPreview() {
+            this.dropDraftRender();
             const draft = this.draft;
             if (draft) {
                 this.request('discard_preview', { draft_key: draft.key });
@@ -1132,6 +1135,14 @@ export const useWorldsStore = defineStore('worlds', {
             const key = toRaw(this);
             clearTimeout(renderTimers.get(key));
             renderTimers.set(key, setTimeout(() => this.flushDraftRender(), RENDER_DELAY_MS));
+        },
+
+        // the render `renderDraft` has waiting, dropped unasked (M9): the
+        // draft is discarded or accepted, or the connection is new
+        dropDraftRender() {
+            const key = toRaw(this);
+            clearTimeout(renderTimers.get(key));
+            renderTimers.delete(key);
         },
 
         // the render `renderDraft` has waiting, asked for now
@@ -1519,6 +1530,7 @@ export const useWorldsStore = defineStore('worlds', {
             if (!draft || draft.accepting) {
                 return;
             }
+            this.dropDraftRender();
             this.acceptOpens = open;
             this.accepted = null;
             this.draft = { ...draft, accepting: true };

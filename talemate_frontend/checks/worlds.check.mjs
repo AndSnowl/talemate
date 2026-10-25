@@ -2632,6 +2632,47 @@ check('P6: a draft edit asks the server to render the draft; only the newest ans
     assert.equal(sent.filter((m) => m.action === 'draft_render').length, asked + 1);
 });
 
+check('M9: a waiting draft render is dropped on discard, accept and a new connection', () => {
+    const realSet = globalThis.setTimeout;
+    const realClear = globalThis.clearTimeout;
+    const waiting = new Map();
+    let next = 1;
+    globalThis.setTimeout = (fn) => {
+        const id = next++;
+        waiting.set(id, fn);
+        return id;
+    };
+    globalThis.clearTimeout = (id) => {
+        waiting.delete(id);
+    };
+    try {
+        const edit = (store) => store.editDraft({ facts: store.draft.edited.facts.map((f, i) => (i === 0 ? { ...f, text: `It flies ${next}.` } : f)) });
+        let { store } = hostDraft();
+        edit(store);
+        assert.equal(waiting.size, 1);
+        store.discardPreview();
+        assert.equal(waiting.size, 0, 'discard');
+
+        ({ store } = hostDraft());
+        edit(store);
+        store.acceptPreview();
+        assert.equal(waiting.size, 0, 'accept');
+
+        ({ store } = hostDraft());
+        edit(store);
+        store.disconnected();
+        assert.equal(waiting.size, 0, 'disconnect');
+
+        ({ store } = hostDraft());
+        edit(store);
+        store.connect(() => {});
+        assert.equal(waiting.size, 0, 'connect');
+    } finally {
+        globalThis.setTimeout = realSet;
+        globalThis.clearTimeout = realClear;
+    }
+});
+
 check('P6: draft renders are debounced, skipped for edits that link nothing, and fail quietly', () => {
     const { store, sent } = hostDraft();
     const key = store.draft.key;
