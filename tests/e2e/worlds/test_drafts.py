@@ -5,8 +5,10 @@ A new or expanded entry opens as its real page, marked as a draft, and
 nothing is written until Accept: the draft bar (Version n of m ▾,
 ↻ Regenerate, Edit prompt, Discard, Accept), its "In" rows and "File into
 this" (the model's unticked, ruling F7; the owner's own ticked), its
-facts with a repeat's "Move that one here", "For other pages" with a
-target to change and "+ also here", "Could move here", and New names. The
+facts (linked as accept will link them, P6) with a repeat's four choices
+(Keep new, Keep existing, Keep both, Move existing here, P8), "For other
+pages" with a target to change and "+ also here", "Could move here", and
+New names. The
 fact menu (⋯ or right-click: Move to…, Copy to…, Held by…, Edit, Change
 dates, End this, Remove) and the selection menu (Make a stub, Make a stub
 and expand now, Link to an entry…, "Ask about this" for later) work on
@@ -375,7 +377,7 @@ def test_repeat_move_that_one_here(app, page, fixed_preview):
     counts = draft.get_by_test_id("accept-counts")
     expect(counts).to_have_text("writes 1 fact here")
 
-    # a repeat shows its match, with three ways to settle it
+    # a repeat shows its match, with four ways to settle it
     freeze = _draft_fact(draft, "November to April")
     match = freeze.get_by_test_id("fact-match")
     assert "≈ already on Velikoye" in match.inner_text()
@@ -386,10 +388,10 @@ def test_repeat_move_that_one_here(app, page, fixed_preview):
     bells.get_by_role("button", name="Keep both").click()
     assert bells.get_by_role("checkbox").is_checked()
     expect(counts).to_have_text("writes 2 facts here")
-    bells.get_by_role("button", name="Drop this").click()
+    bells.get_by_role("button", name="Keep existing").click()
     assert not bells.get_by_role("checkbox").is_checked()
 
-    freeze.get_by_role("button", name="Move that one here").click()
+    freeze.get_by_role("button", name="Move existing here").click()
     expect(freeze.get_by_test_id("fact-match")).to_contain_text("moves here")
     assert not freeze.get_by_role("checkbox").is_checked()
     expect(counts).to_have_text("writes 1 fact here, moves 1 in")
@@ -1103,3 +1105,94 @@ def test_draft_edit_keeps_highlights(app, page, fixed_preview):
     assert page.console_errors == []
 
 
+def test_repeat_choices(app, page, fixed_preview):
+    """P8: a repeat offers four choices, each named by the fact it keeps,
+    under its fact as one pair (no separator between them): Keep new
+    (this one written, the existing one removed on accept), Keep
+    existing, Keep both and Move existing here."""
+
+    world = _seeded(app, page, "Choices")
+    velikoye = world.things["Velikoye"]
+
+    def repeat_of(text):
+        return {
+            "fact_id": world.facts[text],
+            "owner_id": velikoye,
+            "owner_name": "Velikoye",
+            "text": text,
+            "score": 0.8,
+        }
+
+    fixed_preview(
+        {
+            "name": "Khorol Ice Road",
+            "facts": [
+                {"category": "description", "text": "Carts cross the ice in winter."},
+                {
+                    "category": "description",
+                    "text": "The Khorol freezes from November to April.",
+                    "ticked": False,
+                    "repeat_of": repeat_of(FREEZES),
+                },
+                {
+                    "category": "description",
+                    "text": "Bells ring over the ice at dusk.",
+                    "ticked": False,
+                    "repeat_of": repeat_of(BELLS),
+                },
+            ],
+            "prose": {"description": "The winter road."},
+        }
+    )
+    draft = _draft(page, "place", "The road over the frozen river.")
+    counts = draft.get_by_test_id("accept-counts")
+    freeze = _draft_fact(draft, "November to April")
+    choices = freeze.get_by_test_id("repeat-choice")
+    expect(choices).to_have_text(
+        ["Keep new", "Keep existing", "Keep both", "Move existing here"]
+    )
+    # unticked at the threshold: it keeps the existing one
+    pressed = freeze.locator("[data-testid=repeat-choice][aria-pressed=true]")
+    expect(pressed).to_have_text("Keep existing")
+
+    # the pair is one row: the separator runs under the match, not
+    # between the fact and its match
+    borders = freeze.evaluate(
+        """host => [
+            getComputedStyle(host).borderBottomStyle,
+            getComputedStyle(host.querySelector('.fact')).borderBottomStyle,
+        ]"""
+    )
+    assert borders == ["dashed", "none"]
+
+    freeze.get_by_role("button", name="Keep new").click()
+    assert freeze.get_by_role("checkbox").is_checked()
+    expect(freeze.get_by_test_id("repeat-removing")).to_be_visible()
+    expect(counts).to_have_text("writes 2 facts here, replaces 1")
+
+    bells = _draft_fact(draft, "Bells ring")
+    bells.get_by_role("button", name="Keep both").click()
+    assert bells.get_by_role("checkbox").is_checked()
+    bells.get_by_role("button", name="Keep existing").click()
+    assert not bells.get_by_role("checkbox").is_checked()
+    bells.get_by_role("button", name="Move existing here").click()
+    expect(bells.get_by_test_id("repeat-moving")).to_be_visible()
+    expect(counts).to_have_text("writes 2 facts here, moves 1 in, replaces 1")
+
+    draft.get_by_role("button", name="Accept").click()
+    road = _opened(page, "Khorol Ice Road")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]
+    assert [f.get("replaces_repeat", False) for f in accepted["facts"]] == [
+        False,
+        True,
+        False,
+    ]
+    _fact(road, "November to April").wait_for(state="visible", timeout=TIMEOUT_MS)
+    _fact(road, BELLS).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(road, FREEZES)).to_have_count(0)
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
+    _fact(vel, GATE).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(vel, FREEZES)).to_have_count(0)
+    expect(_fact(vel, BELLS)).to_have_count(0)
+    assert page.console_errors == []

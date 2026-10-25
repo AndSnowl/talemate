@@ -26,7 +26,7 @@ import LinkedText from './LinkedText.vue';
 // that name the entry being drafted (`move_here`, found by code), each
 // with that name highlighted and where it is now. Every row comes
 // unticked (ruling F7); a ticked one is moved, not copied, on Accept. The
-// draft's own "Move that one here" rows (`repeat`) show with their fact
+// draft's own "Move existing here" rows (`repeat`) show with their fact
 // instead. A tick emits `tick(factId, ticked)`.
 export default {
     name: 'MoveHere',

@@ -329,6 +329,9 @@ class PreviewFact(BaseModel):
     # whether accept writes it: a repeat at the untick threshold starts
     # unticked
     ticked: bool = True
+    # "Keep new" (P8): ticked, it replaces the fact it repeats
+    # (`repeat_of`), which accept removes (`_write_keep_new`)
+    replaces_repeat: bool = False
 
 
 class ElsewhereFact(BaseModel):
@@ -420,7 +423,7 @@ class MoveHereFact(BaseModel):
     unticked. Accept moves a ticked one onto the entry (`copy_facts`,
     ruling R1).
 
-    `repeat`: the owner's "Move that one here" on one of the draft's own
+    `repeat`: the owner's "Move existing here" on one of the draft's own
     facts that repeats the world's (its `repeat_of`): the world's fact
     moves onto the entry instead of the draft writing a second copy. Such
     a row needn't be near or name the entry, but must be what one of the
@@ -3548,7 +3551,7 @@ def _accept_new(
     new_names = list(preview.new_names)
     while True:
         try:
-            thing_id, made, written_notes, moved = _write_preview(
+            thing_id, made, written_notes, moved, removed = _write_preview(
                 world, view, preview, stub, new_names, elsewhere, fold
             )
             break
@@ -3567,9 +3570,11 @@ def _accept_new(
     if prose is not None and fold is not None:
         prose.extend(t for t in fold.result().prose if t != thing_id)
     if prose is not None:
-        # what a fact moved here from has lost
+        # what a fact moved here from, or one this replaced, has lost
         prose.extend(
-            t for t in _moved_from_prose(view, moved, thing_id) if t not in prose
+            t
+            for t in _moved_from_prose(view, [*moved, *removed], thing_id)
+            if t not in prose
         )
 
     # the prose was written from every fact, which is how the thing reads
@@ -3687,15 +3692,22 @@ def _write_preview(
     new_names: list[NewName],
     elsewhere: Sequence[ElsewhereFact] = (),
     fold: Any = None,
-) -> tuple[str, dict[str, str], list[str], list[tuple[str, FactState]]]:
+) -> tuple[
+    str,
+    dict[str, str],
+    list[str],
+    list[tuple[str, FactState]],
+    list[tuple[str, FactState]],
+]:
     """`accept_preview`'s one revision, making stubs for `new_names` and
     the new names of `elsewhere` (`_row_stubs`), whose facts it writes
     onto their targets. With `fold` (a `repoint.RepointPlan` of another
     stub onto `stub`), that stub is re-pointed onto the one being filled
     first, in the same revision, and every pick, holder or row naming it
     means the filled one; its names stay other names of it.
-    Returns the thing's id, `make_stubs`' mapping, the notes and the facts
-    moved here (`(old owner, fact)`, as they were). A stub made here that
+    Returns the thing's id, `make_stubs`' mapping, the notes, the facts
+    moved here and the facts removed for "Keep new" (each `(old owner,
+    fact)`, as they were). A stub made here that
     no fact ends up linking to (the name was written in a way linking
     doesn't take, as "al-Qadir" in lowercase) would be an orphan:
     `_UnlinkedNames` rolls the revision back, naming them."""
@@ -3852,6 +3864,7 @@ def _write_preview(
         # the facts that move here, after the entry's own (whose overrides
         # name them as they are)
         moved = _write_move_here(rev, world, view, preview, thing_id, notes)
+        removed = _write_keep_new(rev, view, preview, moved, notes)
         linked |= write_elsewhere(
             rev,
             linking,
@@ -3876,7 +3889,7 @@ def _write_preview(
                     if made.get(" ".join(n.name.split())) in orphans
                 ]
             )
-    return thing_id, made, notes, moved
+    return thing_id, made, notes, moved, removed
 
 
 def _kind_fields(kind: str, fields: dict[str, Any], notes: list[str]) -> dict[str, Any]:
@@ -4109,6 +4122,43 @@ def _write_move_here(
     return moved
 
 
+def _write_keep_new(
+    rev: Any,
+    before: WorldView,
+    preview: CreatePreview,
+    moved: Sequence[tuple[str, FactState]],
+    notes: list[str],
+) -> list[tuple[str, FactState]]:
+    """ "Keep new" (P8): remove, in `rev`, the fact each ticked draft fact
+    marked `replaces_repeat` repeats (its `repeat_of`), as removing a
+    fact does (`remove_fact`). The router has checked the repeat against
+    the draft's own versions (`_check_repeat_moves`); here a fact that's
+    no longer its entry's (`before`, the world before the accept), or
+    one moved here already, isn't removed, with a note. Returns `(owner,
+    fact)` for each removed, as it was."""
+
+    removed: list[tuple[str, FactState]] = []
+    taken = {fact.fact_id for _owner, fact in moved}
+    for fact in preview.facts:
+        repeat = fact.repeat_of or {}
+        if not (fact.ticked and fact.replaces_repeat and repeat.get("fact_id")):
+            continue
+        fact_id, owner_id = str(repeat["fact_id"]), str(repeat.get("owner_id"))
+        if fact_id in taken or any(f.fact_id == fact_id for _o, f in removed):
+            continue
+        found = before.fact(fact_id)
+        if found is None or found[0] != owner_id:
+            name = before.name_of(owner_id) or owner_id
+            notes.append(
+                f'{name}\'s fact "{_clip(str(repeat.get("text") or ""), 60)}" '
+                "was moved or removed since the preview, so it isn't removed"
+            )
+            continue
+        rev.remove_fact(fact_id)
+        removed.append((owner_id, found[1]))
+    return removed
+
+
 # --- same thing: onto an entry the world has ---------------------------------
 
 _SAME_NOTE = "added to an entry from prompt"
@@ -4285,7 +4335,7 @@ def _accept_same(
     new_names = list(preview.new_names)
     while True:
         try:
-            made, written_notes, moved = _write_same(
+            made, written_notes, moved, removed = _write_same(
                 world, view, preview, target, plan, new_names, elsewhere
             )
             break
@@ -4305,7 +4355,7 @@ def _accept_same(
         changed = [
             target_id,
             *(plan.result().prose if plan is not None else []),
-            *_moved_from_prose(view, moved, target_id),
+            *_moved_from_prose(view, [*moved, *removed], target_id),
         ]
         prose.extend(t for t in dict.fromkeys(changed) if t not in prose)
     log.info(
@@ -4398,13 +4448,19 @@ def _write_same(
     plan: Any,
     new_names: list[NewName],
     elsewhere: Sequence[ElsewhereFact],
-) -> tuple[dict[str, str], list[str], list[tuple[str, FactState]]]:
+) -> tuple[
+    dict[str, str],
+    list[str],
+    list[tuple[str, FactState]],
+    list[tuple[str, FactState]],
+]:
     """`_accept_same`'s one revision: the re-point first (the stub's links,
     names, facts and filings go to the target),
     then the preview's name and entry material (`_merge_entry`), the
     stubs, the facts, the filings (with their exceptions), the entries
-    filed into it, the facts moved here and the elsewhere facts. Returns
-    the stubs' mapping, the notes and the facts moved; `_UnlinkedNames` as
+    filed into it, the facts moved here (and those "Keep new" replaces,
+    removed) and the elsewhere facts. Returns the stubs' mapping, the
+    notes, the facts moved and the facts removed; `_UnlinkedNames` as
     `_write_preview`'s."""
 
     target_id = target.id
@@ -4493,6 +4549,7 @@ def _write_same(
         _file_new_names(rev, world, view, rows, made, target_id, notes)
         _write_file_into(rev, world, preview.file_into, target_id, redirect, notes)
         moved = _write_move_here(rev, world, view, preview, target_id, notes)
+        removed = _write_keep_new(rev, view, preview, moved, notes)
         linked |= write_elsewhere(
             rev,
             linking,
@@ -4517,4 +4574,4 @@ def _write_same(
                     if made.get(" ".join(n.name.split())) in orphans
                 ]
             )
-    return made, notes, moved
+    return made, notes, moved, removed

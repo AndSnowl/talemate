@@ -139,7 +139,7 @@ A new or expanded entry opens as its real page, marked as a draft. Nothing is wr
 **The sections, in order**
 1. **In:** the suggested filings, ticked.
 2. **"Same thing?":** shown only when there are candidates. It has a search box, and leaving it empty means the entry is new.
-3. **Facts.** A fact that repeats one already in the world shows its match, with three actions: "Move that one here", "Keep both" or "Drop this".
+3. **Facts.** A fact that repeats one already in the world shows its match, with four choices, each named by the fact it keeps (hubs round 1, P8): "Keep new" (the existing fact is removed), "Keep existing", "Keep both" or "Move existing here".
 4. **For other pages:** each row shows a target that can be changed, plus "+ also here".
 5. **Could move here:** facts on *any nearby page* that name this entry, unticked, with the name highlighted. This replaces "every fact of the container".
 6. **New names:** each with a kind picker, a "same as…" search, an "in…" picker and rename. Rename re-roll is for later, with languages.

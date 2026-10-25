@@ -293,8 +293,7 @@
                             <PreviewRepeats
                                 v-if="row.fact.repeat_of"
                                 :repeat="row.fact.repeat_of"
-                                :ticked="row.fact.ticked !== false"
-                                :moving="!!row.fact.moveRepeat"
+                                :choice="repeatChoice(row.fact)"
                                 @settle="edit(settleRepeat(edited, row.index, $event))"
                             />
                             <div v-if="form && form.draft && form.index === row.index" class="my-2">
@@ -503,6 +502,7 @@ import {
     moveFactTo,
     removeFact as removeDraftFact,
     removeFiling,
+    repeatChoice,
     retarget,
     settleRepeat,
     tickFact,
@@ -628,7 +628,7 @@ function cut(text, length = 28) {
 // Timeline; every change goes to the draft (`worlds.editDraft` and
 // draftPage.js), nothing is written before Accept. It adds the draft bar
 // (`DraftBar`) and, in the spec's order around the shared sections,
-// "Same thing?" after In, the repeats' "Move that one here" on its facts
+// "Same thing?" after In, the repeats' "Move existing here" on its facts
 // (`PreviewRepeats`) and what it inherits, then For other pages
 // (`PreviewElsewhere`), Could move here (`MoveHere`), New names
 // (`PreviewStubs`) and File into this. What the page alone has (the as-of
@@ -983,6 +983,7 @@ export default {
         moveFactTo,
         removeDraftFact,
         removeFiling,
+        repeatChoice,
         retarget,
         settleRepeat,
         tickFact,

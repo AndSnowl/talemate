@@ -108,6 +108,7 @@ import {
     rebaseDraft,
     removeFact,
     retarget,
+    repeatChoice,
     settleRepeat,
     tickFact,
     tickFileInto,
@@ -714,7 +715,7 @@ check('the Accept line counts what an accept writes', () => {
         move_here: [{ ticked: true }, { ticked: false }],
     };
     const counts = previewCounts(preview);
-    assert.deepEqual(counts, { facts: 2, elsewhere: 4, stubs: 2, movedIn: 1 });
+    assert.deepEqual(counts, { facts: 2, elsewhere: 4, stubs: 2, movedIn: 1, replaced: 0 });
     assert.equal(countsLine(counts), 'writes 2 facts here, 4 elsewhere, 2 new stubs, moves 1 in');
     const one = { facts: 1, elsewhere: 0, stubs: 1, movedIn: 0 };
     assert.equal(countsLine(one, 'Ashenmere'), 'writes 1 fact onto Ashenmere, 1 new stub');
@@ -2477,18 +2478,31 @@ check('a draft fact rewritten here, or added, has no server index: its words sho
     assert.equal(freshSegments([{ text: 'Pale Wing', ref: null, stub: false }], [{ name: 'Pale Wing', same_target_id: 'pw' }])[0].fresh, undefined);
 });
 
-check('a repeat: Move that one here, Keep both or Drop this', () => {
+check('a repeat: Keep new, Keep existing, Keep both or Move existing here', () => {
     let edited = { ...HOST, ...settleRepeat(HOST, 1, 'move') };
     assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat], [false, true]);
     assert.deepEqual(edited.move_here.at(-1), {
         fact_id: 'f9', from_id: 'vel', from_name: 'Velikoye', text: 'The Khorol freezes solid.', ticked: true, repeat: true, local: true,
     });
     assert.equal(previewCounts(edited).movedIn, 1);
-    edited = { ...edited, ...settleRepeat(edited, 1, 'keep') };
-    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat], [true, false]);
+    assert.equal(repeatChoice(edited.facts[1]), 'move');
+    edited = { ...edited, ...settleRepeat(edited, 1, 'both') };
+    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat, edited.facts[1].replaces_repeat], [true, false, false]);
     assert.equal(edited.move_here.filter((row) => row.repeat).length, 0);
-    edited = { ...edited, ...settleRepeat(edited, 1, 'drop') };
-    assert.equal(edited.facts[1].ticked, false);
+    assert.equal(repeatChoice(edited.facts[1]), 'both');
+    // Keep new: this one written, the world's one removed on accept
+    edited = { ...edited, ...settleRepeat(edited, 1, 'move') };
+    edited = { ...edited, ...settleRepeat(edited, 1, 'new') };
+    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat, edited.facts[1].replaces_repeat], [true, false, true]);
+    assert.equal(edited.move_here.filter((row) => row.repeat).length, 0);
+    assert.equal(repeatChoice(edited.facts[1]), 'new');
+    assert.equal(previewCounts(edited).replaced, 1);
+    assert.equal(countsLine(previewCounts(edited)), 'writes 2 facts here, 1 elsewhere, 1 new stub, replaces 1');
+    // Keep existing: this one unticked
+    edited = { ...edited, ...settleRepeat(edited, 1, 'existing') };
+    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].replaces_repeat], [false, false]);
+    assert.equal(repeatChoice(edited.facts[1]), 'existing');
+    assert.equal(previewCounts(edited).replaced, 0);
     // a Could move here tick leaves a repeat row alone
     const moving = { ...HOST, ...settleRepeat(HOST, 1, 'move') };
     assert.deepEqual(tickMoveHere(moving, 'f9', false).move_here.map((r) => r.ticked), [false, true]);

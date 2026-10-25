@@ -429,6 +429,8 @@ export function previewCounts(preview) {
         elsewhere: elsewhere.length,
         stubs: stubs.size,
         movedIn: (preview?.move_here || []).filter((row) => row.ticked).length,
+        // "Keep new": the world's facts these replace, removed on accept
+        replaced: ticked(preview?.facts).filter((fact) => fact.replaces_repeat && fact.repeat_of).length,
     };
 }
 
@@ -445,6 +447,9 @@ export function countsLine(counts, onto = null) {
     }
     if (counts.movedIn) {
         parts.push(`moves ${counts.movedIn} in`);
+    }
+    if (counts.replaced) {
+        parts.push(`replaces ${counts.replaced}`);
     }
     return parts.join(', ');
 }

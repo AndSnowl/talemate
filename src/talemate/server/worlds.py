@@ -74,11 +74,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
   back, validated by the preview models and checked again on the server
   (ruling F13: "In" and "File into this" rows for a live target and no
   cycle, a `within` that sits in its target, exceptions departing from
-  what the target holds; "Could move here" recomputed; a "Move that one
-  here" row, `move_here` with `repeat`, kept only when a version of the
-  draft this session holds says one of its facts repeats that fact; the
-  `selected_names` kept only as the server's copy recorded them), and
-  answers `notes`. An "In" row may name a `new_name` instead of a
+  what the target holds; "Could move here" recomputed; a "Move existing
+  here" row, `move_here` with `repeat`, and a "Keep new" fact (P8: a
+  fact's `replaces_repeat`, the fact it repeats removed in the accept's
+  revision), kept only when a version of the draft this session holds
+  says one of its facts repeats that fact; the `selected_names` kept only
+  as the server's copy recorded them), and answers `notes`. Accepted
+  under another name than the one its prose was written under (the
+  owner renamed the draft, P7), its prose is cached stale. An "In" row may name a `new_name` instead of a
   `target_id` (the owner's "+ in..." on a name the world hasn't): accept
   makes that stub and files the entry in it, in the one revision. A
   fact's `until` (the owner's "End this") is written as its end. It schedules prose for each entry the world has whose prose
@@ -2882,10 +2885,12 @@ class WorldsPlugin(Plugin):
     def _check_repeat_moves(
         self, preview: CreatePreview, key: str | None, notes: list[str]
     ) -> None:
-        """Keep only the "Move that one here" rows (`move_here` with
-        `repeat`) that a version of the draft this session holds says one
-        of its facts repeats, checked against the server's copy rather
-        than the client's word; any other is dropped, with a note."""
+        """Keep only the "Move existing here" rows (`move_here` with
+        `repeat`) and the "Keep new" facts (`replaces_repeat`, P8) whose
+        repeat a version of the draft this session holds says one of its
+        facts repeats, checked against the server's copy rather than the
+        client's word; any other row is dropped, and any other fact keeps
+        the fact it repeats, with a note."""
 
         held = {
             (fact.repeat_of.get("fact_id"), fact.repeat_of.get("owner_id"))
@@ -2903,6 +2908,16 @@ class WorldsPlugin(Plugin):
                 continue
             kept.append(row)
         preview.move_here = kept
+        for fact in preview.facts:
+            repeat = fact.repeat_of or {}
+            if not fact.replaces_repeat:
+                continue
+            if (repeat.get("fact_id"), repeat.get("owner_id")) not in held:
+                fact.replaces_repeat = False
+                shown = str(repeat.get("text") or "")[:60]
+                notes.append(
+                    f"\"{shown}\" isn't a fact this draft repeats, so it isn't removed"
+                )
 
     def _prose_name(self, preview: CreatePreview, key: str | None) -> str | None:
         """The name the preview's prose was written under, from the

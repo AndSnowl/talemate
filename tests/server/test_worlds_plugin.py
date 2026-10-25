@@ -6965,6 +6965,112 @@ async def test_renamed_draft_prose_stale(plugin, client):
     assert s.world.head_rev() > 0
 
 
+async def test_keep_new_drops_existing_checked(plugin, tmp_path, monkeypatch):
+    """P8 "Keep new" on a draft fact repeating the world's: the draft's
+    fact is written and the world's one it repeats is removed, in the
+    accept's one revision (undone in one step). Checked as a repeat move
+    is: a fact no version of the draft held says it repeats isn't removed,
+    with a note, and nothing is removed without a draft to check."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        freeze = rev.add_fact(s.velikoye, "general", "The Khorol freezes solid.")
+        other = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+
+    def repeat_of(fact_id, text):
+        return {
+            "fact_id": fact_id,
+            "owner_id": s.velikoye,
+            "owner_name": "Velikoye",
+            "text": text,
+            "score": 0.9,
+        }
+
+    fixed = tmp_path / "fixed-preview.json"
+    fixed.write_text(
+        json.dumps(
+            {
+                "name": "Khorol Ice Road",
+                "facts": [
+                    {"category": "general", "text": "Carts cross it in winter."},
+                    {
+                        "category": "general",
+                        "text": "The Khorol freezes over.",
+                        "ticked": False,
+                        "repeat_of": repeat_of(freeze, "The Khorol freezes solid."),
+                    },
+                ],
+                "prose": {"description": "An ice road."},
+            }
+        )
+    )
+    monkeypatch.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(fixed))
+
+    async def draft():
+        await _act(
+            plugin, "preview_thing", kind="lore", prompt="the ice road", fields={}
+        )
+        await _drain(plugin)
+        return _last(plugin, "preview_thing")["data"]
+
+    def keeping_new(preview, repeat):
+        facts = [dict(fact) for fact in preview["facts"]]
+        facts[1].update(ticked=True, replaces_repeat=True, repeat_of=repeat)
+        return {**preview, "facts": facts}
+
+    def velikoye_texts():
+        return {fact.text for fact in s.world.view().thing(s.velikoye).facts}
+
+    # without the draft's key there's nothing to check against
+    first = await draft()
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=keeping_new(
+            first["preview"], repeat_of(freeze, "The Khorol freezes solid.")
+        ),
+    )
+    alone = _last(plugin, "accept_preview")["data"]
+    assert any("isn't removed" in note for note in alone["notes"])
+    assert "The Khorol freezes solid." in velikoye_texts()
+
+    # a repeat the draft never held (the client's word) removes nothing
+    forged = await draft()
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=keeping_new(
+            forged["preview"], repeat_of(other, "Velikoye has many bells.")
+        ),
+        draft_key=forged["draft_key"],
+    )
+    claimed = _last(plugin, "accept_preview")["data"]
+    assert any("Velikoye has many bells" in note for note in claimed["notes"])
+    assert "Velikoye has many bells." in velikoye_texts()
+
+    held = await draft()
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=keeping_new(
+            held["preview"], repeat_of(freeze, "The Khorol freezes solid.")
+        ),
+        draft_key=held["draft_key"],
+    )
+    road = _last(plugin, "accept_preview")["data"]
+    assert s.world.head_rev() == head + 1
+    assert sorted(f["rendered"] for f in road["facts"]) == [
+        "Carts cross it in winter.",
+        "The Khorol freezes over.",
+    ]
+    assert "The Khorol freezes solid." not in velikoye_texts()
+    assert "Velikoye has many bells." in velikoye_texts()
+
+    s.world.undo([s.world.head_rev()])
+    assert "The Khorol freezes solid." in velikoye_texts()
+
+
 async def test_accept_facts_waits_for_a_stub_draft(plugin, client):
     """A stub being drafted takes facts through its draft: `accept_facts`
     on it is refused, writing nothing, until the draft is accepted or

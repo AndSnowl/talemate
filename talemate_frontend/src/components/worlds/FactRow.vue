@@ -87,8 +87,13 @@ export default {
 </script>
 
 <style scoped>
-.fact {
+/* the separator goes under the whole row, so a fact and what's shown
+   under it (a repeat's match, its form) read as one */
+.fact-host {
     border-bottom: 1px dashed rgb(var(--v-theme-border));
+}
+
+.fact {
     padding: 2px 0;
 }
 

@@ -1,55 +1,59 @@
 <template>
-    <div class="repeat-match text-caption d-flex align-center flex-wrap ga-1" data-testid="fact-match">
-        <span class="match">≈ already on <b>{{ repeat.owner_name || 'an entry' }}</b>: “{{ repeat.text }}”</span>
-        <span v-if="moving" class="moving" data-testid="repeat-moving">· that one moves here</span>
-        <v-btn
-            v-for="choice in choices"
-            :key="choice.how"
-            :variant="choice.how === state ? 'flat' : 'outlined'"
-            :color="choice.how === state ? 'accent' : undefined"
-            size="x-small"
-            :aria-pressed="choice.how === state"
-            :disabled="disabled"
-            @click="$emit('settle', choice.how)"
-        >{{ choice.label }}</v-btn>
+    <div class="repeat-match text-caption" data-testid="fact-match">
+        <div class="match">
+            ≈ already on <b>{{ repeat.owner_name || 'an entry' }}</b>: “{{ repeat.text }}”
+            <span v-if="choice === 'move'" class="note" data-testid="repeat-moving">· the existing fact moves here</span>
+            <span v-else-if="choice === 'new'" class="note" data-testid="repeat-removing">· the existing fact is removed</span>
+        </div>
+        <div class="d-flex align-center flex-wrap ga-1 mt-1">
+            <v-btn
+                v-for="option in choices"
+                :key="option.how"
+                :variant="option.how === choice ? 'flat' : 'outlined'"
+                :color="option.how === choice ? 'accent' : undefined"
+                size="x-small"
+                :aria-pressed="option.how === choice"
+                :title="option.title"
+                :disabled="disabled || (option.needsFact && !repeat.fact_id)"
+                data-testid="repeat-choice"
+                @click="$emit('settle', option.how)"
+            >{{ option.label }}</v-btn>
+        </div>
     </div>
 </template>
 
 <script>
+// each named by the fact it keeps (P8)
 const CHOICES = [
-    { how: 'move', label: 'Move that one here' },
-    { how: 'keep', label: 'Keep both' },
-    { how: 'drop', label: 'Drop this' },
+    { how: 'new', label: 'Keep new', title: 'Write this fact and remove the existing one', needsFact: true },
+    { how: 'existing', label: 'Keep existing', title: "Keep the existing fact; this one isn't written" },
+    { how: 'both', label: 'Keep both', title: 'Write this fact and leave the existing one where it is' },
+    { how: 'move', label: 'Move existing here', title: "Move the existing fact onto this entry; this one isn't written", needsFact: true },
 ];
 
 // A draft fact that repeats one the world holds (curation goal 3, spec
-// "The draft page" 3): its match ("≈ already on <entry>: <text>"), and
-// three ways to settle it, emitted as `settle(how)`: "Move that one here"
-// ('move': the world's fact moves onto this entry on Accept and this one
-// isn't written), "Keep both" ('keep': this one ticked, the world's left
-// where it is) or "Drop this" ('drop': unticked). A repeat comes as the
-// server ticked it: unticked at or above the repeat threshold.
+// "The draft page" 3), shown under the fact as one pair with it: its match
+// ("≈ already on <entry>: <text>"), and four ways to settle it, each named
+// by the fact it keeps (P8), emitted as `settle(how)` (`settleRepeat`):
+// "Keep new" ('new': this one written, the existing one removed on
+// Accept), "Keep existing" ('existing': this one unticked), "Keep both"
+// ('both': this one ticked, the existing left where it is) or "Move
+// existing here" ('move': the existing fact moves onto this entry on
+// Accept and this one isn't written). `choice` is the way it's settled now
+// (`repeatChoice`): a repeat at or above the repeat threshold comes
+// unticked, as "Keep existing".
 export default {
     name: 'PreviewRepeats',
     props: {
         // the fact's `repeat_of`: `{fact_id, owner_id, owner_name, text}`
         repeat: { type: Object, required: true },
-        // whether the draft fact is ticked, and whether that one moves here
-        ticked: { type: Boolean, default: false },
-        moving: { type: Boolean, default: false },
+        // 'new', 'existing', 'both' or 'move'
+        choice: { type: String, default: 'existing' },
         disabled: { type: Boolean, default: false },
     },
     emits: ['settle'],
     data() {
         return { choices: CHOICES };
-    },
-    computed: {
-        state() {
-            if (this.moving) {
-                return 'move';
-            }
-            return this.ticked ? 'keep' : 'drop';
-        },
     },
 };
 </script>
@@ -57,10 +61,11 @@ export default {
 <style scoped>
 .repeat-match {
     margin-left: 34px;
+    padding-bottom: 4px;
     color: rgb(var(--v-theme-muted));
 }
 
-.moving {
+.note {
     color: rgb(var(--v-theme-accent));
 }
 </style>

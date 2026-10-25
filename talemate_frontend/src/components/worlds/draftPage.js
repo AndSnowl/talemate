@@ -14,7 +14,7 @@
 // session.
 //
 // Rows the owner adds (an "+ in…" filing, a fact "+ also here", a fact
-// moved onto another page, a "Move that one here") are `local`: kept
+// moved onto another page, a "Move existing here") are `local`: kept
 // after the server's own. A server fact the owner removes (or moves) stays
 // in its place, `removed` and unticked, so the server's indices (what a
 // selection names, `index`) hold.
@@ -295,15 +295,21 @@ export function holdFact(edited, index, holder) {
     return { facts: changedAt(edited.facts, index, { held_by: holder?.id || null, held_by_name: holder?.name || null }) };
 }
 
-// A repeat's three ways (`how`): 'move' ("Move that one here": the
-// world's fact it repeats moves here, a `repeat` "Could move here" row,
-// and this one isn't written), 'keep' ("Keep both": this one ticked) or
-// 'drop' ("Drop this": unticked).
+// A repeat's four ways (`how`, P8), each named by the fact it keeps:
+// 'new' ("Keep new": this one ticked, and the world's fact it repeats
+// removed on accept, `replaces_repeat`), 'existing' ("Keep existing": this
+// one unticked), 'both' ("Keep both": this one ticked, the world's left
+// where it is) or 'move' ("Move existing here": the world's fact moves
+// here, a `repeat` "Could move here" row, and this one isn't written).
 export function settleRepeat(edited, index, how) {
     const fact = edited.facts[index];
     const repeat = fact.repeat_of;
     const others = (edited.move_here || []).filter((row) => !(row.repeat && row.fact_id === repeat?.fact_id));
-    const facts = changedAt(edited.facts, index, { ticked: how === 'keep', moveRepeat: how === 'move' });
+    const facts = changedAt(edited.facts, index, {
+        ticked: how === 'new' || how === 'both',
+        moveRepeat: how === 'move',
+        replaces_repeat: how === 'new',
+    });
     if (how !== 'move' || !repeat?.fact_id) {
         return { facts, move_here: others };
     }
@@ -317,6 +323,18 @@ export function settleRepeat(edited, index, how) {
         local: true,
     };
     return { facts, move_here: [...others, row] };
+}
+
+// Which of `settleRepeat`'s ways a repeating draft fact is settled in now
+// (one at the untick threshold comes unticked: 'existing').
+export function repeatChoice(fact) {
+    if (fact?.moveRepeat) {
+        return 'move';
+    }
+    if (fact?.ticked === false) {
+        return 'existing';
+    }
+    return fact?.replaces_repeat ? 'new' : 'both';
 }
 
 // "+ also here": an "elsewhere" row's fact is one of this page's too
