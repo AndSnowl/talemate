@@ -349,6 +349,7 @@ import structlog
 import talemate.instance as instance
 from talemate.path import WORLDS_DIR
 from talemate.server.websocket_plugin import Plugin
+from talemate.server.world_drafts import DRAFT_VERSIONS
 from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar
 from talemate.world.curation import CurationSettings
@@ -522,10 +523,6 @@ FIXED_PREVIEW_ENV = "TALEMATE_TEST_FIXED_PREVIEW"
 # browser tests only: a JSON file holding the scene-setup model reply
 # `plan_scene` and `continue_scene` use (see the module docstring)
 FIXED_SETUP_ENV = "TALEMATE_TEST_FIXED_SETUP"
-
-# the versions a draft keeps for the session (Version n of m), the oldest
-# dropped first
-DRAFT_VERSIONS = 5
 
 # the drafts a session keeps, the least recently used forgotten first
 DRAFTS_KEPT = 20
