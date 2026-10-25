@@ -103,7 +103,12 @@ fact already holds (the world's `repeat_threshold`) is shown with that
 match, and arrives unticked only at `repeat_untick_threshold` or above.
 An elsewhere item repeating its target is shown the same way. Accept
 writes the ticked own facts, and each ticked elsewhere fact onto its
-target (a stub for a new name), in the same revision.
+target (a stub for a new name), in the same revision. "Keep new" (P8)
+on an elsewhere row works as it does for an own fact: its
+`replaces_repeat` ticked has the fact it repeats removed from its
+target (`write_repeat_choices`, called once per target after that
+target's elsewhere facts are written, since elsewhere rows never carry
+a `move_here` move).
 
 Same thing? (spec goal 4, the curation probe's same-thing verdict, ruling
 C2). The preview offers the things the world has that the entry could be
@@ -354,6 +359,9 @@ class ElsewhereFact(BaseModel):
     held_by: str | None = None
     ticked: bool = True
     repeat_of: dict | None = None
+    # "Keep new" (P8): ticked, it replaces the fact it repeats on its
+    # target (`repeat_of`), which accept removes (`write_repeat_choices`)
+    replaces_repeat: bool = False
 
 
 class PreviewInherited(BaseModel):
@@ -3714,12 +3722,15 @@ def _write_preview(
 ]:
     """`accept_preview`'s one revision, making stubs for `new_names` and
     the new names of `elsewhere` (`_row_stubs`), whose facts it writes
-    onto their targets. With `fold` (a `repoint.RepointPlan` of another
-    stub onto `stub`), that stub is re-pointed onto the one being filled
-    first, in the same revision, and every pick, holder or row naming it
-    means the filled one; its names stay other names of it.
+    onto their targets, each target's "Keep new" row then having the
+    fact it repeats removed (`write_elsewhere_repeats`). With `fold` (a
+    `repoint.RepointPlan` of another stub onto `stub`), that stub is
+    re-pointed onto the one being filled first, in the same revision,
+    and every pick, holder or row naming it means the filled one; its
+    names stay other names of it.
     Returns the thing's id, `make_stubs`' mapping, the notes, the facts
-    moved here and the facts removed for "Keep new" (each `(old owner,
+    moved here and the facts removed for "Keep new" (its own and its
+    elsewhere rows', each `(old owner,
     fact)`, as they were). A stub made here that
     no fact ends up linking to (the name was written in a way linking
     doesn't take, as "al-Qadir" in lowercase) would be an orphan:
@@ -3893,6 +3904,7 @@ def _write_preview(
             lowercase=preview.selected_names,
             aliases=alias_table(linking) if elsewhere else None,
         )
+        removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, thing_id)
         orphans = {
             stub_id
@@ -4236,6 +4248,37 @@ def write_repeat_choices(
     return moved, removed
 
 
+def write_elsewhere_repeats(
+    rev: Any,
+    world: World,
+    before: WorldView,
+    elsewhere: Sequence[ElsewhereFact],
+    notes: list[str],
+) -> list[tuple[str, FactState]]:
+    """Settle each ticked elsewhere row's "Keep new" (`replaces_repeat`),
+    once `write_elsewhere` has already put every row's fact onto its
+    target: one `write_repeat_choices` call per target (grouping `rows`
+    by `target_id`; a new name's row can carry no `repeat_of`, since
+    `flag_elsewhere_repeats` only flags one with a live target), each
+    with no `move_here` (an elsewhere row never carries a "Move existing
+    here" move). Calling this after every target's own elsewhere facts
+    are written means a target always ends with its new fact and
+    without the one it replaced, never a moment with neither. Returns
+    the facts removed, each `(old owner, fact)` as it was."""
+
+    by_target: dict[str, list[ElsewhereFact]] = {}
+    for item in elsewhere:
+        if item.target_id is not None:
+            by_target.setdefault(item.target_id, []).append(item)
+    removed: list[tuple[str, FactState]] = []
+    for target_id, rows in by_target.items():
+        _moved, target_removed = write_repeat_choices(
+            rev, world, before, rows, [], target_id, notes
+        )
+        removed.extend(target_removed)
+    return removed
+
+
 # --- same thing: onto an entry the world has ---------------------------------
 
 _SAME_NOTE = "added to an entry from prompt"
@@ -4536,9 +4579,10 @@ def _write_same(
     then the preview's name and entry material (`_merge_entry`), the
     stubs, the facts, the filings (with their exceptions), the entries
     filed into it, the facts moved here (and those "Keep new" replaces,
-    removed) and the elsewhere facts. Returns the stubs' mapping, the
-    notes, the facts moved and the facts removed; `_UnlinkedNames` as
-    `_write_preview`'s."""
+    removed) and the elsewhere facts, each elsewhere target's own "Keep
+    new" row then settled too (`write_elsewhere_repeats`). Returns the
+    stubs' mapping, the notes, the facts moved and the facts removed;
+    `_UnlinkedNames` as `_write_preview`'s."""
 
     target_id = target.id
     stub_id = plan.stub_id if plan is not None else None
@@ -4640,6 +4684,7 @@ def _write_same(
             lowercase=preview.selected_names,
             aliases=alias_table(linking) if elsewhere else None,
         )
+        removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, target_id)
         orphans = {
             thing_id

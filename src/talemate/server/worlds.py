@@ -67,19 +67,22 @@ through `signal_operation_failed` (an `operation_done` envelope with
   on each `move_here` row. Everything curation and filing add is in the
   dump: facts' `ticked`, `repeat_of`, `held_by`; `elsewhere`
   (`target_id`, `target_name`, `new`, `category`, `text`, `since`,
-  `held_by`, `ticked`, `repeat_of`); `same_as` and `verdict` (with its
-  `why`); `new_names` (with `tag`, `filing`, `same_as`,
-  `same_target_id`); `tag`, `hint`, `filings` ("In"), `file_into`,
-  `move_here`. `accept_preview` takes the owner's edits to all of it
-  back, validated by the preview models and checked again on the server
-  (ruling F13: "In" and "File into this" rows for a live target and no
-  cycle, a `within` that sits in its target, exceptions departing from
-  what the target holds; "Could move here" recomputed; a "Move existing
-  here" row, `move_here` with `repeat`, and a "Keep new" fact (P8: a
-  fact's `replaces_repeat`, the fact it repeats removed in the accept's
-  revision), kept only when a version of the draft this session holds
-  says one of its facts repeats that fact; the `selected_names` kept only
-  as the server's copy recorded them), and answers `notes`. Accepted
+  `held_by`, `ticked`, `repeat_of`, `replaces_repeat`); `same_as` and
+  `verdict` (with its `why`); `new_names` (with `tag`, `filing`,
+  `same_as`, `same_target_id`); `tag`, `hint`, `filings` ("In"),
+  `file_into`, `move_here`. `accept_preview` takes the owner's edits to
+  all of it back, validated by the preview models and checked again on
+  the server (ruling F13: "In" and "File into this" rows for a live
+  target and no cycle, a `within` that sits in its target, exceptions
+  departing from what the target holds; "Could move here" recomputed; a
+  "Move existing here" row, `move_here` with `repeat`, and a "Keep new"
+  fact or elsewhere fact (P8: a `replaces_repeat`, the fact it repeats
+  removed in the accept's revision, on its own page or, for an
+  elsewhere row, on its target), kept only when a version of the draft
+  this session holds says one of its matching rows (own facts for own
+  facts, elsewhere rows for elsewhere rows) repeats that fact; the
+  `selected_names` kept only as the server's copy recorded them), and
+  answers `notes`. Accepted
   under another name than the one its prose was written under (the
   owner renamed the draft, P7), its prose is cached stale. An "In" row
   may name a `new_name` instead of a `target_id` (the owner's "+ in..."
@@ -3251,7 +3254,11 @@ class WorldsPlugin(Plugin):
         this session holds) says it repeats, checked against the server's
         copy rather than the client's word; any other move row is dropped,
         and any other row keeps the fact it repeats (its `replaces_repeat`
-        cleared), with a note. Returns the kept `move_here`."""
+        cleared), with a note. Returns the kept `move_here`. `rows` and
+        `held_rows` are duck-typed (`replaces_repeat`, `repeat_of`):
+        `_check_page_repeats` calls this once for a page draft's own
+        facts (with its `move_here`) and again for its elsewhere rows
+        (with none), each against the matching rows of `held_rows`."""
 
         held = {
             (row.repeat_of.get("fact_id"), row.repeat_of.get("owner_id"))
@@ -3283,16 +3290,20 @@ class WorldsPlugin(Plugin):
         self, preview: CreatePreview, key: str | None, notes: list[str]
     ) -> None:
         """`_check_repeat_moves` for a page draft: against the facts of
-        every version of the draft `key` this session holds."""
+        every version of the draft `key` this session holds. Its
+        elsewhere rows' "Keep new" (`replaces_repeat`) is checked again,
+        separately, against those versions' own elsewhere rows'
+        `repeat_of` -- an elsewhere repeat is its target's fact, never
+        one of the draft's own, so it never vouches for or is vouched by
+        an own fact's repeat."""
 
-        held = [
-            fact
-            for version in (self._drafts.get(key or "") or [])
-            for fact in version.facts
-        ]
+        versions = self._drafts.get(key or "") or []
+        held = [fact for version in versions for fact in version.facts]
         preview.move_here = self._check_repeat_moves(
             preview.facts, preview.move_here, held, notes
         )
+        held_elsewhere = [row for version in versions for row in version.elsewhere]
+        self._check_repeat_moves(preview.elsewhere, [], held_elsewhere, notes)
 
     def _prose_name(self, preview: CreatePreview, key: str | None) -> str | None:
         """The name the preview's prose was written under, from the

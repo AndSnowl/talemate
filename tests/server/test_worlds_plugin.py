@@ -3936,6 +3936,87 @@ async def test_accepts_schedule_prose_for_elsewhere_targets(plugin, monkeypatch)
     assert scheduled == [s.vasha]
 
 
+def _elsewhere_repeat(fact_id, owner_id, owner_name, text):
+    return {
+        "fact_id": fact_id,
+        "owner_id": owner_id,
+        "owner_name": owner_name,
+        "text": text,
+        "score": 0.9,
+    }
+
+
+async def test_elsewhere_keep_new_replaces_targets_fact(plugin):
+    """ "Keep new" on a "For other pages" row (P8, elsewhere): ticked,
+    with `replaces_repeat` and a `repeat_of` a held version of the draft
+    flagged, the target ends up with the new text and without the fact
+    it repeated."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        heard = rev.add_fact(s.vasha, "background", "Vasha once heard of the embers.")
+    repeat = _elsewhere_repeat(
+        heard, s.vasha, "Vasha", "Vasha once heard of the embers."
+    )
+
+    held = _ember_preview(s)
+    held.elsewhere[0].repeat_of = repeat
+    plugin._drafts["draft-ember"] = [held]
+
+    preview = _ember_preview(s)
+    preview.elsewhere[0].repeat_of = repeat
+    preview.elsewhere[0].replaces_repeat = True
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=preview.model_dump(mode="json"),
+        draft_key="draft-ember",
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "accept_preview")["data"]
+    assert reply["notes"] == []
+    texts = {f.text for f in s.world.view().thing(s.vasha).facts}
+    assert "Vasha once carried the embers." in texts
+    assert "Vasha once heard of the embers." not in texts
+
+
+async def test_elsewhere_keep_new_forged_is_refused(plugin):
+    """A "For other pages" row's "Keep new" naming a `repeat_of` no held
+    version of the draft's own elsewhere rows flagged removes nothing,
+    with a note, and the target's fact stays."""
+
+    s = await _open_sphere_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        heard = rev.add_fact(s.vasha, "background", "Vasha once heard of the embers.")
+    repeat = _elsewhere_repeat(
+        heard, s.vasha, "Vasha", "Vasha once heard of the embers."
+    )
+
+    # the held draft's elsewhere row flags nothing: the client's
+    # `repeat_of` is its own word alone
+    held = _ember_preview(s)
+    plugin._drafts["draft-ember"] = [held]
+
+    preview = _ember_preview(s)
+    preview.elsewhere[0].repeat_of = repeat
+    preview.elsewhere[0].replaces_repeat = True
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=preview.model_dump(mode="json"),
+        draft_key="draft-ember",
+    )
+    assert not _errors(plugin)
+    reply = _last(plugin, "accept_preview")["data"]
+    assert any(
+        "isn't a fact this draft repeats" in note and "heard" in note
+        for note in reply["notes"]
+    )
+    texts = {f.text for f in s.world.view().thing(s.vasha).facts}
+    assert "Vasha once heard of the embers." in texts
+    assert "Vasha once carried the embers." in texts
+
+
 async def test_accept_payloads_validate_shapes(plugin):
     """The accepts validate the rows the owner sends back: an "In" row
     names its entry and its tick is a tick. A bad shape is refused,
