@@ -164,7 +164,7 @@ from talemate.world.kinds import (
     moved_category,
     validate_field,
 )
-from talemate.world.refs import parse_refs, ref
+from talemate.world.refs import parse_refs, ref, scrub_emphasis
 from talemate.world.repeats import content_words, find_repeats
 from talemate.world.sameness import NameIndex, name_index, same_candidates
 from talemate.world.names import (
@@ -772,7 +772,9 @@ def parse_create_reply(
             category = category.strip().lower()
             if category not in categories:
                 category = fallback
-            text = text.strip()
+            # the model's markdown emphasis goes before names are looked
+            # for (hubs round 1, P2: "*Boyar Council*" hid a stub)
+            text = scrub_emphasis(text).strip()
             if not text or (category, text) in seen:
                 continue
             seen.add((category, text))
@@ -792,7 +794,7 @@ def parse_create_reply(
     if len(facts) > MAX_FACTS:
         log.info("create.facts_capped", got=len(facts), kept=MAX_FACTS)
     # the format example's placeholder name, copied as is, is no name
-    name = name.strip() if name and name.strip(" .") else None
+    name = scrub_emphasis(name).strip() if name and name.strip(" .*_") else None
     return name, age, facts[:MAX_FACTS]
 
 
@@ -809,7 +811,7 @@ def _aka_entries(value: object) -> list[dict[str, Any]]:
         raw = item.get("name") if isinstance(item, dict) else item
         if not isinstance(raw, str):
             continue
-        name = " ".join(raw.split())
+        name = scrub_emphasis(" ".join(raw.split()))
         if not name.strip(" ."):
             continue
         tag = item.get("tag") if isinstance(item, dict) else None
@@ -923,7 +925,7 @@ def listed_names(raw_names: object) -> list[ListedName]:
         if "everyday" in item or ("tag" in item and "kind" not in item):
             # an `aka` object of an entry that was cut off
             continue
-        name = " ".join(item["name"].split())
+        name = scrub_emphasis(" ".join(item["name"].split()))
         if not name.strip(" ."):
             continue
         raw_kind = item.get("kind")
@@ -943,7 +945,7 @@ def listed_names(raw_names: object) -> list[ListedName]:
                     aka=_aka_entries(item.get("aka")),
                     tag=clean_tag(item.get("tag")),
                 ),
-                " ".join(into.split())
+                scrub_emphasis(" ".join(into.split()))
                 if isinstance(into, str) and into.strip()
                 else None,
             )
@@ -1443,7 +1445,8 @@ def parse_elsewhere(
     for item in raw if isinstance(raw, list) else []:
         if not isinstance(item, dict):
             continue
-        entry, text = _tidy(item.get("entry")), _tidy(item.get("text"))
+        entry = scrub_emphasis(_tidy(item.get("entry")))
+        text = scrub_emphasis(_tidy(item.get("text")))
         if not entry.strip(" .") or not text or entry.startswith("<"):
             continue
         if text == _ELSEWHERE_PLACEHOLDER:
@@ -1730,7 +1733,7 @@ def write_elsewhere(
             category = default_category(state.kind, item.since is not None)
         text = link_text(
             linking,
-            item.text,
+            scrub_emphasis(item.text),
             picks=picks,
             new_names=made,
             owner=target,
@@ -3162,8 +3165,8 @@ async def preview_thing(
     )
     raw_summary = wrapper.get("summary") if wrapper is not None else None
     summary = (
-        " ".join(raw_summary.split())
-        if isinstance(raw_summary, str) and raw_summary.strip(" .")
+        scrub_emphasis(" ".join(raw_summary.split()))
+        if isinstance(raw_summary, str) and raw_summary.strip(" .*_")
         else None
     )
     # "In": the owner's own, ticked, then the model's, unticked (F7)
@@ -3750,7 +3753,7 @@ def _write_preview(
         def linked_text(text: str) -> str:
             written = link_text(
                 linking,
-                text,
+                scrub_emphasis(text),
                 picks=picks,
                 new_names=made,
                 owner=thing_id,
@@ -4394,7 +4397,7 @@ def _write_same(
         def linked_text(text: str) -> str:
             written = link_text(
                 linking,
-                text,
+                scrub_emphasis(text),
                 picks=picks,
                 new_names=made,
                 owner=target_id,

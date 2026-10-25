@@ -395,6 +395,47 @@ async def test_regenerate_refuses_a_section_the_kind_lacks(plugin, client):
     assert not plugin.tasks
 
 
+async def test_hand_written_facts_lose_emphasis(plugin, client):
+    """Hubs round 1, P2: a hand-written fact (added or edited) is written
+    without markdown emphasis, its words kept; a span's link holds its
+    place, since the scrub comes after linking."""
+
+    world, maren, harbour = await _open_world_with_maren(plugin)
+    async with MockClientContext():
+        text = "She rows out of *The Harbour* at **dawn**."
+        start = text.index("The Harbour")
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "add_fact",
+                "thing_id": maren,
+                "category": "appearance",
+                "text": text,
+                "valid_from": None,
+                "spans": [
+                    {"start": start, "end": start + len("The Harbour"), "ref": harbour}
+                ],
+            }
+        )
+        texts = [f["text"] for f in _last(plugin, "add_fact")["data"]["facts"]]
+        assert f"She rows out of {ref(harbour, 'The Harbour')} at dawn." in texts
+        tall = next(
+            f.fact_id
+            for f in world.view().thing(maren).facts
+            if f.text.startswith("Tall")
+        )
+        await plugin.handle(
+            {
+                "type": "worlds",
+                "action": "correct_fact",
+                "thing_id": maren,
+                "fact_id": tall,
+                "text": "Tall and _grey-eyed_.",
+            }
+        )
+    assert "Tall and grey-eyed." in [f.text for f in world.view().thing(maren).facts]
+
+
 async def test_correct_end_and_set_field(plugin, client):
     world, maren, _ = await _open_world_with_maren(plugin)
     tall = next(

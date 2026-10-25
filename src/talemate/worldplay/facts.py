@@ -30,6 +30,7 @@ from talemate.prompts import Prompt
 from talemate.world import entries
 from talemate.world.dates import WorldDate
 from talemate.world.kinds import get_kind
+from talemate.world.refs import scrub_emphasis
 from talemate.world.store import Source, World
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
@@ -255,7 +256,7 @@ def accept_facts(world: World, draft: FactDraft) -> list[str]:
                     category,
                     link_text(
                         view,
-                        " ".join(fact.text.split()),
+                        scrub_emphasis(" ".join(fact.text.split())),
                         owner=draft.thing_id,
                     ),
                     valid_from=fact.since,

@@ -62,6 +62,7 @@ from talemate.world.filing import (
 )
 from talemate.world.kinds import normalise_tag
 from talemate.world.prose import content_key
+from talemate.world.refs import scrub_emphasis
 from talemate.world.store import Source, World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
@@ -516,8 +517,8 @@ async def group_add(
 
     rows: list[GroupAddRow] = []
     for raw in _parse_add_entries(reply)[:MAX_ADD_ROWS]:
-        name = " ".join(str(raw.get("name") or "").split())
-        line = " ".join(str(raw.get("line") or "").split())
+        name = scrub_emphasis(" ".join(str(raw.get("name") or "").split()))
+        line = scrub_emphasis(" ".join(str(raw.get("line") or "").split()))
         if not name or not line:
             continue
         kind = _clean_kind(raw.get("kind"))
@@ -592,8 +593,10 @@ def accept_group_add(
     for row in rows:
         if not row.ticked:
             continue
-        name = " ".join(row.name.split())
-        line = " ".join(row.line.split())
+        # the model's markdown emphasis goes before the name is matched
+        # (hubs round 1, P2)
+        name = scrub_emphasis(" ".join(row.name.split()))
+        line = scrub_emphasis(" ".join(row.line.split()))
         kind = row.kind.strip().lower()
         tag = clean_tag(row.tag) if row.tag else None
         if not name or not line or kind not in ALLOWED_KINDS:

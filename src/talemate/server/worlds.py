@@ -344,7 +344,7 @@ from talemate.world.kinds import (
 )
 from talemate.world.names import find_names, unknown_proper_phrases
 from talemate.world.prose import UNRENDERED_FIELDS
-from talemate.world.refs import REF_PATTERN, ref
+from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.world.store import Source, World
@@ -2051,7 +2051,9 @@ class WorldsPlugin(Plugin):
         then entries, stubs and the owner's `picks` in the rest, never
         `thing_id` itself, nor a name the owner treats as new
         (`new_names`). A span to `thing_id`, or to a thing that isn't
-        there, keeps its words plain. Unknown phrases stay as they are."""
+        there, keeps its words plain. Unknown phrases stay as they are.
+        Markdown emphasis is scrubbed (`refs.scrub_emphasis`), keeping its
+        words."""
 
         view = world.view(at)
         kept = [
@@ -2063,13 +2065,17 @@ class WorldsPlugin(Plugin):
             )
             for span in spans or []
         ]
-        return link_text(
-            view,
-            text,
-            picks=picks,
-            owner=thing_id,
-            as_new=new_names or (),
-            spans=kept,
+        # markdown emphasis goes after linking, so the spans' offsets hold;
+        # a reference's words are never touched (hubs round 1, P2)
+        return scrub_emphasis(
+            link_text(
+                view,
+                text,
+                picks=picks,
+                owner=thing_id,
+                as_new=new_names or (),
+                spans=kept,
+            )
         )
 
     @staticmethod
