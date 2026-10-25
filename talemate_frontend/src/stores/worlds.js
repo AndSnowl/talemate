@@ -148,10 +148,10 @@
 // edited}`): `page` the page it will be, `base` the server's copy of what
 // accept takes, `edited` that as the owner left it (the `preview`
 // getter). The owner's edits (`editDraft`, `editPreview`) stay here until
-// `acceptPreview` sends them with the draft's key. Regenerate, and Create
-// after "Edit prompt" (`editPrompt`: the box shows its form, the draft
-// kept), send the key back for a new version; "Version n of m ▾"
-// (`useVersion`) restores one with `use_version`. The server gives back
+// `acceptPreview` sends them with the draft's key. The bar holds the
+// draft's prompt (`setDraftPrompt`, which edits `previewRequest.prompt`
+// only); Regenerate sends the key back with it for a new version;
+// "Version n of m ▾" (`useVersion`) restores one with `use_version`. The server gives back
 // its own copy, so what the owner left on each version is kept for the
 // session (`draftEdits`, key -> version -> `{base, edited}`) and rebased
 // onto it (draftPage.js `rebaseDraft`); when the server drops its oldest
@@ -633,8 +633,9 @@ function worldState() {
         thingAt: null,
         scenes: [],
         // the create box: the request being drafted (`{kind, prompt,
-        // fields, stubId, picks, newNames, repicks}`), whether a version is
-        // being drafted, and why the last one failed
+        // fields, stubId, picks, newNames, repicks}`; its `prompt` is the
+        // open draft's own, edited in its bar: `setDraftPrompt`), whether a
+        // version is being drafted, and why the last one failed
         previewRequest: null,
         previewPending: false,
         previewError: null,
@@ -642,9 +643,6 @@ function worldState() {
         // version, versions, page, base, edited, accepting, selecting}`,
         // or null
         draft: null,
-        // whether the create box shows the draft (false after "Edit
-        // prompt", until the next version or "Back to the draft")
-        draftShown: true,
         // draft key -> version -> `{base, edited}`: what the owner left on
         // each version this session, restored when it's used again
         draftEdits: {},
@@ -1064,7 +1062,7 @@ export const useWorldsStore = defineStore('worlds', {
         // the owner left them; `repicks`: the owner's re-picks (`{id,
         // name}`), each thing taught its name once the draft is accepted.
         // A draft of the same kind (and stub) open already gets a new
-        // version (its `draft_key` sent back: Regenerate, Edit prompt).
+        // version (its `draft_key` sent back: Regenerate).
         previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [] } = {}, { discard = false } = {}) {
             const draft = this.draft;
             // the same box's request (its kind and stub; the draft's own
@@ -1094,7 +1092,8 @@ export const useWorldsStore = defineStore('worlds', {
             });
         },
 
-        // "↻ Regenerate": a new version from the same request
+        // "↻ Regenerate": a new version from the same request, the prompt
+        // as the owner left it in the bar (`setDraftPrompt`)
         regeneratePreview() {
             const req = this.previewRequest;
             if (req) {
@@ -1102,16 +1101,11 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
-        // "Edit prompt": back to the create box, the draft kept; the next
-        // Create is a new version of it
-        editPrompt() {
-            this.draftShown = false;
-        },
-
-        // back to the draft from the create box
-        showDraft() {
-            if (this.draft) {
-                this.draftShown = true;
+        // the bar's prompt, edited in place: the next Regenerate (or
+        // Create, once the draft is discarded) uses it
+        setDraftPrompt(prompt) {
+            if (this.previewRequest) {
+                this.previewRequest = { ...this.previewRequest, prompt };
             }
         },
 
@@ -1128,7 +1122,6 @@ export const useWorldsStore = defineStore('worlds', {
                 this.dropSmall(nestedKey(draft.key));
             }
             this.draft = null;
-            this.draftShown = true;
             this.previewError = null;
             this.previewPending = false;
         },
@@ -1279,9 +1272,6 @@ export const useWorldsStore = defineStore('worlds', {
                 rendered: null,
                 renderSeq: before?.renderSeq || 0,
             };
-            if (how === 'new') {
-                this.draftShown = true;
-            }
             if (edited !== preview) {
                 this.renderDraft();
             }
@@ -2331,7 +2321,6 @@ export const useWorldsStore = defineStore('worlds', {
                         this.dropSmall(nestedKey(this.draft.key));
                     }
                     this.draft = null;
-                    this.draftShown = true;
                     this.previewRequest = null;
                     this.expanding = null;
                     this.showNotes(action, data.notes);

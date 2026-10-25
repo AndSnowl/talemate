@@ -2,8 +2,9 @@
 every page shares.
 
 A new or expanded entry opens as its real page, marked as a draft, and
-nothing is written until Accept: the draft bar (Version n of m ▾,
-↻ Regenerate, Edit prompt, Discard, Accept), its "In" rows and "File into
+nothing is written until Accept: the draft bar (its prompt, always on
+screen and editable; Version n of m ▾, ↻ Regenerate, Discard, Accept),
+its "In" rows and "File into
 this" (the model's unticked, ruling F7; the owner's own ticked), its
 facts (linked as accept will link them, P6) with a repeat's four choices
 (Keep new, Keep existing, Keep both, Move existing here, P8), "For other
@@ -231,29 +232,59 @@ def test_draft_versions_and_discard(app, page, fixed_preview):
     assert not night.get_by_role("checkbox").is_checked()
     expect(draft.get_by_test_id("accept-counts")).to_have_text("writes 0 facts here")
 
-    # Edit prompt: back to the box, the prompt kept; Create makes version 3
-    bar.get_by_role("button", name="Edit prompt").click()
-    box = page.get_by_test_id("create-box")
-    prompt = box.get_by_label("Describe it")
+    # the bar holds the prompt, editable directly; Regenerate makes version 3
+    assert bar.get_by_role("button", name="Edit prompt").count() == 0
+    prompt = bar.get_by_test_id("draft-prompt").locator("textarea").first
     expect(prompt).to_have_value("The Tsar's winged army.")
     prompt.fill("The Tsar's winged army, at night.")
     fixed_preview(_host("It sleeps by day."))
-    box.get_by_role("button", name="Create").click()
+    bar.get_by_role("button", name="Regenerate").click()
     expect(versions).to_contain_text("Version 3 of 3")
     sent = _sent(page, "preview_thing")[-1]
     assert sent["draft_key"] == "new:lore:frostwing host"
     assert sent["prompt"] == "The Tsar's winged army, at night."
 
-    # Discard: the draft goes, nothing is written
+    # Discard: the draft goes, nothing is written; the create box's form
+    # comes back with the (edited) prompt as it was left in the bar
     bar.get_by_test_id("draft-discard").click()
     sent = _wait_sent(page, "discard_preview")
     assert sent["draft_key"] == "new:lore:frostwing host"
     expect(page.get_by_test_id("draft-page")).to_have_count(0)
-    page.get_by_test_id("create-box").wait_for(state="visible", timeout=TIMEOUT_MS)
+    box = page.get_by_test_id("create-box")
+    box.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(box.get_by_label("Describe it")).to_have_value(
+        "The Tsar's winged army, at night."
+    )
     expect(
         page.get_by_test_id("thing-card").filter(has_text="Frostwing")
     ).to_have_count(0)
     assert _sent(page, "accept_preview") == []
+    assert page.console_errors == []
+
+
+def test_draft_prompt_in_bar_regenerates(app, page, fixed_preview):
+    """The page draft's bar holds its prompt directly (no "Edit prompt",
+    no separate box to swap to): editing it there and clicking Regenerate
+    sends the edited prompt back with the draft's key."""
+
+    _seeded(app, page, "PromptInBar")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    bar = draft.get_by_test_id("draft-bar")
+    versions = bar.get_by_test_id("draft-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+
+    prompt = bar.get_by_test_id("draft-prompt").locator("textarea").first
+    expect(prompt).to_have_value("The Tsar's winged army.")
+    assert bar.get_by_role("button", name="Edit prompt").count() == 0
+
+    prompt.fill("The Tsar's winged army, at dusk.")
+    fixed_preview(_host("It hunts by moonlight."))
+    bar.get_by_role("button", name="Regenerate").click()
+    sent = _wait_sent(page, "preview_thing")
+    assert sent["draft_key"] == "new:lore:frostwing host"
+    assert sent["prompt"] == "The Tsar's winged army, at dusk."
+    expect(versions).to_contain_text("Version 2 of 2")
     assert page.console_errors == []
 
 

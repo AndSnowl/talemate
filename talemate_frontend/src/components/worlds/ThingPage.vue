@@ -2,7 +2,7 @@
     <div class="thing-page" :data-testid="draft ? 'draft-page' : 'thing-page'">
         <!-- a draft: its bar, and what it could be instead -->
         <template v-if="draft && thing">
-            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" @accept="acceptDraft()" />
+            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" :locked="draftLocked" @accept="acceptDraft()" />
             <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
                 <div class="d-flex align-center flex-wrap ga-2">
                     <span>There is a stub named “{{ matchingStub.name }}” already.</span>
@@ -795,6 +795,11 @@ export default {
                     || this.worlds.referenceTargets.find((target) => target.id === same)?.name
                 : null;
             return this.edited ? countsLine(previewCounts(this.edited), onto) : '';
+        },
+        // while the page draft's nested "+ Add facts" draft is open or
+        // held, its own Accept, Regenerate and version switch wait for it
+        draftLocked() {
+            return this.worlds.nestedHeld ? 'write or discard the added facts first' : null;
         },
         existence() {
             return existenceOf(this.thing);

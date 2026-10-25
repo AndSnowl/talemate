@@ -130,13 +130,6 @@
         <v-alert v-if="mine && previewError" type="error" variant="tonal" density="compact" class="mt-3">
             {{ previewError }}
         </v-alert>
-
-        <!-- a draft kept while its prompt is edited: Create makes its next
-             version; or back to it as it is -->
-        <div v-if="draft && !showingDraft" class="d-flex align-center ga-2 mt-2 text-caption text-muted" data-testid="draft-waiting">
-            <span>Editing the prompt of the draft “{{ draft.edited.name }}”: Create makes version {{ draft.versions.length + 1 }}.</span>
-            <v-btn variant="text" size="x-small" @click="worlds.showDraft()">Back to the draft</v-btn>
-        </div>
         </div>
     </v-card>
 </template>
@@ -171,11 +164,14 @@ function yearDate(year) {
 // optional core-field pickers (born for characters, the heritage picker for
 // characters and mixes). Create opens the draft: the page the entry will
 // be (the entry page's draft mode, `ThingPage draft`, standing in for the
-// form), with its bar to regenerate,
-// edit the prompt (back here, the draft kept: the next Create is its next
-// version), discard or accept it. Nothing is written before Accept.
+// form), with its bar (`DraftBar`) holding the prompt, to regenerate,
+// discard or accept it. Nothing is written before Accept. While the draft
+// is open, this box's own form is hidden: only one prompt box shows for a
+// given draft. Discard brings the form back, the (possibly edited) prompt
+// kept as the owner left it in the bar.
 //
-// The prompt is a `NameHighlightInput`: its names highlight as you type,
+// The box's own prompt, before a draft exists, is a `NameHighlightInput`:
+// its names highlight as you type,
 // each open to a re-pick or "treat as new", and right-click adds a
 // reference. The draft is asked for with those picks; a re-pick teaches
 // its thing the name as written once the draft is accepted. "Context the
@@ -276,7 +272,7 @@ export default {
             return this.mine ? this.worlds.draft : null;
         },
         showingDraft() {
-            return !!this.draft && this.worlds.draftShown;
+            return !!this.draft;
         },
         previewError() {
             return this.worlds.previewError;
@@ -380,6 +376,13 @@ export default {
                 this.linkedId = null;
                 this.parents = [...(this.preset.parents || [])];
                 this.pickTouched = false;
+            }
+        },
+        // Discard: the draft goes but the request (and its prompt, as the
+        // owner left it in the bar) stays, so the form comes back with it
+        draft(now, before) {
+            if (!now && before && this.mine) {
+                this.prompt = this.worlds.previewRequest?.prompt ?? this.prompt;
             }
         },
         matches(matches) {

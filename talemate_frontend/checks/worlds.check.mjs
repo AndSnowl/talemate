@@ -2798,13 +2798,14 @@ check("versions: the owner's edits kept per version for the session, restored wi
     store.regeneratePreview();
     store.handleMessage(reply('preview_thing', draftOf(HOST, { version: 5, count: 5 })));
     assert.deepEqual(Object.keys(store.draftEdits['new:lore:frostwing host']), ['1', '4']);
-    // Edit prompt: back to the box, the draft kept; Discard: every version goes
-    store.editPrompt();
-    assert.equal(store.draftShown, false);
-    store.previewThing('lore', 'a host, again');
+    // setDraftPrompt: the bar's prompt, edited directly; Regenerate uses
+    // it; Discard: every version goes
+    store.setDraftPrompt('a host, again');
+    assert.equal(store.previewRequest.prompt, 'a host, again');
+    store.regeneratePreview();
     assert.equal(sent.at(-1).draft_key, 'new:lore:frostwing host');
+    assert.equal(sent.at(-1).prompt, 'a host, again');
     store.handleMessage(reply('preview_thing', draftOf(HOST, { version: 5, count: 5 })));
-    assert.equal(store.draftShown, true);
     store.discardPreview();
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_preview', draft_key: 'new:lore:frostwing host' });
     assert.equal(store.draft, null);

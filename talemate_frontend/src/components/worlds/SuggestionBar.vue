@@ -8,9 +8,10 @@
             :loading="primaryLoading"
             :disabled="primaryDisabled"
             :title="lockedTitle"
+            :data-testid="testids.primary"
             @click="$emit('primary')"
         >{{ primaryLabel }}</v-btn>
-        <v-btn variant="outlined" size="small" :disabled="busy" @click="$emit('discard')">Discard</v-btn>
+        <v-btn variant="outlined" size="small" :disabled="busy" :data-testid="testids.discard" @click="$emit('discard')">Discard</v-btn>
     </div>
     <div v-else class="suggestion-bar pa-2 mb-3" :data-testid="testid">
         <div class="d-flex align-center flex-wrap ga-2">
@@ -24,6 +25,7 @@
                         append-icon="mdi-menu-down"
                         :disabled="menuDisabled"
                         :title="lockedTitle"
+                        :data-testid="testids.versions"
                     >Version {{ version }} of {{ versions.length }}</v-btn>
                 </template>
                 <v-list density="compact">
@@ -34,6 +36,7 @@
                         :title="row.label"
                         :subtitle="row.prompt"
                         :active="row.current"
+                        :data-testid="testids.version"
                         @click="$emit('use-version', row.version)"
                     ></v-list-item>
                 </v-list>
@@ -45,9 +48,10 @@
                 prepend-icon="mdi-refresh"
                 :disabled="menuDisabled"
                 :title="lockedTitle"
+                :data-testid="testids.regenerate"
                 @click="$emit('regenerate')"
             >Regenerate</v-btn>
-            <v-btn variant="outlined" size="small" color="danger" prepend-icon="mdi-close" :disabled="busy" @click="$emit('discard')">Discard</v-btn>
+            <v-btn variant="outlined" size="small" color="danger" prepend-icon="mdi-close" :disabled="busy" :data-testid="testids.discard" @click="$emit('discard')">Discard</v-btn>
             <v-btn
                 color="accent"
                 variant="flat"
@@ -56,6 +60,7 @@
                 :loading="primaryLoading"
                 :disabled="primaryDisabled"
                 :title="lockedTitle"
+                :data-testid="testids.primary"
                 @click="$emit('primary')"
             >{{ primaryLabel }}</v-btn>
         </div>
@@ -123,6 +128,11 @@ export default {
         testid: { type: String, default: null },
         // the prompt field's own data-testid ('add-prompt', 'group-add-prompt', …)
         promptTestid: { type: String, default: null },
+        // internal ids a call site needs to keep (e.g. DraftBar's
+        // existing `draft-versions`, `draft-version`, `draft-discard`):
+        // `{versions, version, regenerate, discard, primary}`, each
+        // optional
+        testids: { type: Object, default: () => ({}) },
         // only the primary and Discard buttons, for the end of a list
         foot: { type: Boolean, default: false },
     },
