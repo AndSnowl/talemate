@@ -72,7 +72,9 @@ class SmallDrafts:
     A reply isn't latest once a later ask for the same key replaced it,
     once `.discard` or `.clear` ran, or once the LRU cap forgot the key
     entirely (eviction forgets a key's ask along with its slot, the same
-    as a discard -- see the asking methods below)."""
+    as a discard -- see the asking methods below). `.asking(key)` tells
+    whether `key`'s latest ask is still out: asked, and neither
+    `.answered` nor forgotten since."""
 
     def __init__(self, limit: int = SMALL_DRAFTS_KEPT, versions: int = DRAFT_VERSIONS):
         self._limit = limit
@@ -87,6 +89,9 @@ class SmallDrafts:
         # discarded and asked again must not hand out a number an older
         # reply still out already holds
         self._seq = 0
+        # the asks still out per key: the latest number asked, until its
+        # reply (or failure) is `answered`
+        self._out: dict[str, int] = {}
 
     def add(self, key: str, value: pydantic.BaseModel) -> int:
         """Append `value` as the newest version of `key`'s draft (at most
@@ -141,6 +146,7 @@ class SmallDrafts:
         self._drafts.pop(key, None)
         self._current.pop(key, None)
         self._asks.pop(key, None)
+        self._out.pop(key, None)
 
     def clear(self) -> None:
         """Drop every draft and invalidate every outstanding ask (a
@@ -149,6 +155,7 @@ class SmallDrafts:
         self._drafts.clear()
         self._current.clear()
         self._asks.clear()
+        self._out.clear()
 
     def ask(self, key: str) -> int:
         """Bump and return `key`'s ask sequence number, for a reply that
@@ -161,7 +168,22 @@ class SmallDrafts:
 
         self._seq += 1
         self._asks[key] = self._seq
+        self._out[key] = self._seq
         return self._seq
+
+    def answered(self, key: str, seq: int) -> None:
+        """The reply (or failure) to ask `seq` for `key` came back: if it
+        is the one still out, `key` is no longer `.asking`. An older ask
+        answering leaves a newer one out."""
+
+        if self._out.get(key) == seq:
+            del self._out[key]
+
+    def asking(self, key: str) -> bool:
+        """Whether an ask for `key` is still out: asked, and neither
+        answered nor discarded, cleared or forgotten since."""
+
+        return key in self._out
 
     def is_latest(self, key: str, seq: int) -> bool:
         """Whether `seq` (from an earlier `.ask(key)`) is still the
@@ -188,3 +210,4 @@ class SmallDrafts:
             gone, _versions = self._drafts.popitem(last=False)
             self._current.pop(gone, None)
             self._asks.pop(gone, None)
+            self._out.pop(gone, None)

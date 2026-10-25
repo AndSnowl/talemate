@@ -162,6 +162,37 @@ def test_ask_sequence():
     assert drafts.is_latest("never-asked", 1) is False
 
 
+def test_asking_until_answered():
+    """`.asking(key)`: an ask is out for `key` until `.answered(key, seq)`
+    names that ask, or a discard, clear or eviction forgets it. Answering
+    an older ask leaves a newer one out."""
+
+    drafts = SmallDrafts()
+    assert drafts.asking("k") is False
+    first = drafts.ask("k")
+    assert drafts.asking("k") is True
+    second = drafts.ask("k")
+    drafts.answered("k", first)
+    assert drafts.asking("k") is True
+    drafts.answered("k", second)
+    assert drafts.asking("k") is False
+    # answered asks are still the latest: the reply that answered is taken
+    assert drafts.is_latest("k", second) is True
+
+    drafts.ask("k")
+    drafts.discard("k")
+    assert drafts.asking("k") is False
+    drafts.ask("k")
+    drafts.clear()
+    assert drafts.asking("k") is False
+
+    evicting = SmallDrafts(limit=1)
+    evicting.add("a", Stub(name="a"))
+    evicting.ask("a")
+    evicting.add("b", Stub(name="b"))
+    assert evicting.asking("a") is False
+
+
 def test_module_constants():
     assert DRAFT_VERSIONS == 5
     assert SMALL_DRAFTS_KEPT == 20

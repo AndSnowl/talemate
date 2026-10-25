@@ -7520,11 +7520,13 @@ async def test_added_facts_on_a_draft_join_its_new_names(plugin, client):
 
 
 async def test_draft_facts_for_a_version_left_join_none(plugin, client):
-    """A draft's "+ Add facts..." whose reply comes after the owner made
-    another version of the page draft current (here `use_version`) holds
-    no nested draft: the owner is told (`add_facts_failed`, `stale`, with
-    the page draft's key), and no version gains the facts, writing
-    nothing."""
+    """A draft's "+ Add facts..." whose reply comes after another version
+    of the page draft was made current holds no nested draft: the owner
+    is told (`add_facts_failed`, `stale`, with the page draft's key), and
+    no version gains the facts, writing nothing. `use_version` is refused
+    while the ask is out (`_refuse_while_nested`), so the switch is made
+    behind the handlers' back here: the stale check is the second line of
+    defence."""
 
     s = await _open_filing_world(plugin)
     first = await _preview(
@@ -7545,9 +7547,14 @@ async def test_draft_facts_for_a_version_left_join_none(plugin, client):
     head = s.world.head_rev()
     async with MockClientContext():
         client_responses.get().append(_facts_reply("It drills at dawn."))
-        # asked for on version 2, then version 1 restored before it comes
+        # asked for on version 2; `use_version` waits for the ask
         await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
+        before = len(_errors(plugin))
         await _act(plugin, "use_version", draft_key=key, version=1)
+        assert len(_errors(plugin)) == before + 1
+        assert plugin._current[key] == 1
+        # version 1 made current anyway before the reply comes
+        plugin._touch(key, 0)
         await _drain(plugin)
     assert _replies(plugin, "add_facts") == []
     failed = _last(plugin, "add_facts_failed")
@@ -7666,6 +7673,77 @@ async def test_page_draft_refuses_while_nested_held(plugin, client):
     assert len(plugin._drafts[key]) == versions
 
     await _act(plugin, "discard_small_draft", draft_key=f"nested:{key}")
+    await _act(plugin, "accept_preview", preview=draft["preview"], draft_key=key)
+    assert _last(plugin, "accept_preview")["data"]["name"] == "Frostwing Host"
+    assert s.world.head_rev() == head + 1
+
+
+async def test_page_draft_refuses_while_nested_ask_out(plugin, client):
+    """A nested ask still out (nothing held yet) gates the page draft as a
+    held one does: accept_preview, use_version and preview_thing with its
+    key are refused, writing nothing, so its reply is never dropped
+    behind an accept. Once it answers, the held draft keeps the gate;
+    once that's discarded, accept works."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    head = s.world.head_rev()
+    versions = len(plugin._drafts[key])
+    async with MockClientContext():
+        client_responses.get().append(_facts_reply("It drills at dawn."))
+        await _act(plugin, "add_facts", draft_key=key, prompt="more")
+        assert not plugin._small.held(f"nested:{key}")
+        for action, data in (
+            ("accept_preview", {"preview": draft["preview"]}),
+            ("use_version", {"version": 1}),
+            ("preview_thing", {"kind": "lore", "fields": {}, "prompt": "again"}),
+        ):
+            before = len(_errors(plugin))
+            await _act(plugin, action, draft_key=key, **data)
+            assert len(_errors(plugin)) == before + 1, action
+            assert (
+                "write or discard the added facts first"
+                in _errors(plugin)[-1]["error"]["message"]
+            )
+        await _drain(plugin)
+    assert s.world.head_rev() == head
+    assert len(plugin._drafts[key]) == versions
+    # the reply was taken, not dropped
+    assert plugin._small.held(f"nested:{key}")
+    assert not plugin._small.asking(f"nested:{key}")
+    assert _last(plugin, "add_facts")["data"]["draft_key"] == f"nested:{key}"
+
+    await _act(plugin, "discard_small_draft", draft_key=f"nested:{key}")
+    await _act(plugin, "accept_preview", preview=draft["preview"], draft_key=key)
+    assert _last(plugin, "accept_preview")["data"]["name"] == "Frostwing Host"
+    assert s.world.head_rev() == head + 1
+
+
+async def test_nested_ask_failed_or_stale_ends_the_gate(plugin, client):
+    """A nested ask that fails ends its ask: the page draft takes an
+    accept again."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    head = s.world.head_rev()
+    async with MockClientContext():
+        client_responses.get().append("no facts here at all")
+        await _act(plugin, "add_facts", draft_key=key, prompt="more")
+        await _drain(plugin)
+    assert not plugin._small.asking(f"nested:{key}")
+    assert not plugin._small.held(f"nested:{key}")
     await _act(plugin, "accept_preview", preview=draft["preview"], draft_key=key)
     assert _last(plugin, "accept_preview")["data"]["name"] == "Frostwing Host"
     assert s.world.head_rev() == head + 1

@@ -266,9 +266,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   (and kept "Move existing here" rows) into a copy of the page draft's
   current version, held as a new version, drops the nested draft and
   answers with the page draft plus `notes`, writing nothing to the
-  world. While a nested draft is held, `accept_preview`, `use_version`
-  and `preview_thing` with its page draft's key are refused ("write or
-  discard the added facts first"); `discard_preview` drops it too;
+  world. While a nested draft is held, or its ask is still out,
+  `accept_preview`, `use_version` and `preview_thing` with its page
+  draft's key are refused ("write or discard the added facts first");
+  `discard_preview` drops it too;
   `accept_facts` refuses a nested draft.
   `TALEMATE_TEST_FIXED_FACTS` (browser tests) names a file
   holding the model's reply.
@@ -2795,11 +2796,15 @@ class WorldsPlugin(Plugin):
 
     def _refuse_while_nested(self, key: str | None) -> None:
         """Refuse what would accept the page draft `key` or make another
-        of its versions current while its nested fact draft is held: the
-        nested draft is written into (or discarded from) the version it
-        was asked on first."""
+        of its versions current while its nested fact draft is held or
+        still being asked for: the nested draft is written into (or
+        discarded from) the version it was asked on first, and an accept
+        never leaves an ask's facts behind."""
 
-        if key is not None and self._small.held(nested_key(key)):
+        if key is None:
+            return
+        nested = nested_key(key)
+        if self._small.held(nested) or self._small.asking(nested):
             raise ValueError("write or discard the added facts first")
 
     async def handle_use_version(self, data: dict):
@@ -3909,6 +3914,7 @@ class WorldsPlugin(Plugin):
         adding no version and answering nothing."""
 
         def on_done(task: asyncio.Task) -> None:
+            self._small.answered(key, seq)
             if not task.cancelled() and not self._small.is_latest(key, seq):
                 log.info("worlds.small_draft_dropped", draft_key=key)
                 return
@@ -4046,6 +4052,8 @@ class WorldsPlugin(Plugin):
             )
 
             def on_done(task: asyncio.Task) -> None:
+                # its ask is no longer out, whatever becomes of the reply
+                self._small.answered(small, seq)
                 done = not task.cancelled() and task.exception() is None
                 if done and key not in self._drafts:
                     log.info("worlds.facts_dropped", draft_key=key)
