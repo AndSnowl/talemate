@@ -21,7 +21,11 @@
         @primary="$emit('accept')"
     >
         <template #status>
-            <span class="text-caption text-muted">Nothing is written until you accept.</span>
+            <template v-if="worlds.previewPending">
+                <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
+                <span class="text-caption text-muted" data-testid="draft-regenerating">Drafting another version…</span>
+            </template>
+            <span v-else class="text-caption text-muted">Nothing is written until you accept.</span>
             <v-spacer></v-spacer>
             <span class="text-caption" data-testid="accept-counts">{{ counts }}</span>
         </template>
@@ -41,9 +45,10 @@ import SuggestionBar from './SuggestionBar.vue';
 // ↻ Regenerate (a new version from the edited prompt), Discard (every
 // version goes, nothing written) and Accept (emitted: the page knows what
 // goes with it), with what Accept would write (`counts`) and that nothing
-// is written before. `locked` (from `worlds.nestedHeld`, via the page)
-// disables Regenerate, the version switch and Accept, with its reason;
-// Discard stays on.
+// is written before; while a Regenerate is out, "Drafting another
+// version…" with a spinner in its place. `locked` (from
+// `worlds.nestedHeld`, via the page) disables Regenerate, the version
+// switch and Accept, with its reason; Discard stays on.
 export default {
     name: 'DraftBar',
     components: { SuggestionBar },

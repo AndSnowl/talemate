@@ -7,7 +7,16 @@
                 <div class="d-flex align-center flex-wrap ga-2">
                     <span>There is a stub named “{{ matchingStub.name }}” already.</span>
                     <v-spacer></v-spacer>
-                    <v-btn color="accent" variant="flat" size="small" :loading="worlds.draft.accepting" :disabled="!edited.name.trim()" @click="acceptDraft(matchingStub.id)">Fill the stub “{{ matchingStub.name }}” instead</v-btn>
+                    <v-btn
+                        color="accent"
+                        variant="flat"
+                        size="small"
+                        :loading="worlds.draft.accepting"
+                        :disabled="!edited.name.trim() || !!draftLocked"
+                        :title="draftLocked"
+                        data-testid="fill-stub-instead"
+                        @click="acceptDraft(matchingStub.id)"
+                    >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
                 </div>
             </v-alert>
             <v-alert v-if="worlds.previewError" type="error" variant="tonal" density="compact" class="mb-2">{{ worlds.previewError }}</v-alert>
@@ -452,6 +461,20 @@
                         <span v-if="row.role" class="role ml-2">{{ row.role }}</span>
                     </SuggestionRow>
                 </div>
+                <!-- Accept again at the foot of the draft's lists -->
+                <SuggestionBar
+                    foot
+                    class="mt-3"
+                    :busy="draftBusy"
+                    :locked="draftLocked"
+                    primary-label="Accept"
+                    :can-primary="!!edited.name.trim()"
+                    :primary-loading="!!worlds.draft.accepting"
+                    testid="draft-foot"
+                    :testids="{ primary: 'draft-accept-foot', discard: 'draft-discard-foot' }"
+                    @discard="worlds.discardPreview()"
+                    @primary="acceptDraft()"
+                />
             </template>
 
             <!-- what's filed in it and what names it: a stub's draft shows
@@ -531,6 +554,7 @@ import PreviewStubs from './PreviewStubs.vue';
 import SameThingAsk from './SameThingAsk.vue';
 import SelectionMenu from './SelectionMenu.vue';
 import StubCard from './StubCard.vue';
+import SuggestionBar from './SuggestionBar.vue';
 import SuggestionRow from './SuggestionRow.vue';
 import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
@@ -636,7 +660,10 @@ function cut(text, length = 28) {
 // "Same thing?" after In, the repeats' "Move existing here" on its facts
 // (`PreviewRepeats`) and what it inherits, then For other pages
 // (`PreviewElsewhere`), Could move here (`MoveHere`), New names
-// (`PreviewStubs`) and File into this. What the page alone has (the as-of
+// (`PreviewStubs`) and File into this, with Accept and Discard again at
+// their foot. While a nested "+ Add facts" draft is out or held
+// (`draftLocked`), every way to accept it waits, "Fill the stub …
+// instead" too. What the page alone has (the as-of
 // date, the timeline strip, other names, numbers, prose regeneration,
 // merge and delete) is left out.
 export default {
@@ -658,6 +685,7 @@ export default {
         PreviewRepeats,
         PreviewStubs,
         SameThingAsk,
+        SuggestionBar,
         SuggestionRow,
         SelectionMenu,
         StubCard,
@@ -804,6 +832,11 @@ export default {
         // held, its own Accept, Regenerate and version switch wait for it
         draftLocked() {
             return this.worlds.nestedHeld ? 'write or discard the added facts first' : null;
+        },
+        // mid-request, as DraftBar's: a Regenerate, accept or version
+        // switch out
+        draftBusy() {
+            return this.worlds.previewPending || !!this.worlds.draft?.accepting || !!this.worlds.pending.use_version;
         },
         existence() {
             return existenceOf(this.thing);

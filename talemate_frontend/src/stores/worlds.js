@@ -117,10 +117,10 @@
 // draft (`write_nested_facts`, the owner's edits on the open version
 // carried onto it, R8). A fresh ask that failed holds nothing on the
 // server: the draft stays with its error and prompt, and no version, so
-// it can be asked again. An ask ends only with its reply or `_failed`,
-// never with another request's error; one refused before it went out
-// stays drafting until the owner discards it. `useSmallVersion` is one
-// at a time (`switching`), and an accept's reply drops the slot by its
+// it can be asked again. An ask ends only with its reply, `_failed`, or
+// its own request refused before it went out (an `operation_done` error
+// naming its action, `smallRefused`), never with another request's
+// error. `useSmallVersion` is one at a time (`switching`), and an accept's reply drops the slot by its
 // `draft_key`, echoed back. While a nested draft is out or held
 // (`nestedHeld`) the page draft waits for it; discarding or accepting the
 // page draft drops it. A world switch drops them all.
@@ -510,10 +510,9 @@ export function elsewhereGroups(rows) {
     return groups;
 }
 
-// `rows` with those at `indices` ticked (or not); the rest as they are.
-export function rowsTicked(rows, indices, ticked) {
-    const picked = new Set(indices);
-    return (rows || []).map((row, index) => (picked.has(index) ? { ...row, ticked } : row));
+// an event's year as an ask takes it: a whole number from 1 to 9999
+export function eventYearValid(year) {
+    return Number.isInteger(year) && year >= 1 && year <= 9999;
 }
 
 // The "Could move here" rows the owner set (`moveIn`, a draft's
@@ -711,8 +710,13 @@ function worldState() {
         // (smallDrafts.js): `{key, kind: 'facts'|'event'|'group'|'nested',
         // mode: 'facts'|'event' (null for a group's), thingId, tag,
         // showUnder, prompt, year, version, versions, base, edited, rows,
-        // pending, askedAt, accepting, switching, error}`
+        // pending, accepting, switching, error, refused}`
         smallDrafts: {},
+        // the ask action (`add_facts`, `add_event`, `group_add`) -> the
+        // small draft key it was last sent for: an `operation_done` error
+        // "Error during <action>: …" (refused before it went out) ends
+        // that draft's ask
+        smallSent: {},
         // small draft key -> version -> `{base, edited}`: what the owner
         // left on each version this session
         smallEdits: {},
@@ -1497,9 +1501,9 @@ export const useWorldsStore = defineStore('worlds', {
 
         // a fresh small draft `key` asked for: no version yet, and none of
         // an earlier one's kept (the server drops them too). Not while a
-        // version switch of it is out (false). `askedAt`: when it was
-        // asked, for a "still drafting" that may need a Discard (an
-        // unrelated error never ends an ask: its reply or `_failed` does)
+        // version switch of it is out (false). An unrelated error never
+        // ends an ask: its reply, `_failed`, or its own request's refusal
+        // does (`smallSent`)
         smallAsked(key, fields) {
             if (this.smallDrafts[key]?.switching) {
                 return false;
@@ -1515,10 +1519,10 @@ export const useWorldsStore = defineStore('worlds', {
                     edited: null,
                     rows: null,
                     pending: true,
-                    askedAt: Date.now(),
                     accepting: false,
                     switching: false,
                     error: null,
+                    refused: false,
                 },
             };
             this.smallEdits = smallEditsDropped(this.smallEdits, key);
@@ -1534,6 +1538,7 @@ export const useWorldsStore = defineStore('worlds', {
             const event = slot.mode === 'event';
             const dated = event ? { year: slot.year } : {};
             const action = event ? 'add_event' : 'add_facts';
+            this.smallSent = { ...this.smallSent, [slot.kind === 'group' ? 'group_add' : action]: key };
             if (slot.kind === 'group') {
                 this.request('group_add', {
                     thing_id: slot.thingId,
@@ -1552,10 +1557,14 @@ export const useWorldsStore = defineStore('worlds', {
 
         // "↻ Regenerate": another version from the draft's prompt (and
         // year) as the owner left it. One whose first ask failed holds
-        // nothing on the server: it's asked afresh.
+        // nothing on the server: it's asked afresh. Not with an event's
+        // year missing or out of range (the server would refuse the ask).
         regenerateSmall(key) {
             const slot = this.smallDrafts[key];
             if (!slot || slot.pending || slot.accepting || slot.switching) {
+                return;
+            }
+            if (slot.mode === 'event' && !eventYearValid(slot.year)) {
                 return;
             }
             if (!slot.versions.length) {
@@ -1565,7 +1574,7 @@ export const useWorldsStore = defineStore('worlds', {
                 }
                 return;
             }
-            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: true, askedAt: Date.now(), error: null } };
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: true, error: null, refused: false } };
             this.sendSmallAsk(key, true);
         },
 
@@ -1651,7 +1660,9 @@ export const useWorldsStore = defineStore('worlds', {
         smallTaken(data, how) {
             const key = data.draft_key;
             const slot = this.smallDrafts[key];
-            if (!slot || (how === 'asked' ? !slot.pending : !slot.switching)) {
+            // (an ask whose refusal was guessed from its action's error,
+            // `refused`, still takes a reply that comes after all)
+            if (!slot || (how === 'asked' ? !slot.pending && !slot.refused : !slot.switching)) {
                 return;
             }
             const { version, versions } = data;
@@ -1676,6 +1687,7 @@ export const useWorldsStore = defineStore('worlds', {
                     pending: how === 'asked' ? false : slot.pending,
                     switching: false,
                     error: null,
+                    refused: false,
                 },
             };
         },
@@ -1686,7 +1698,28 @@ export const useWorldsStore = defineStore('worlds', {
         smallFailed(key, message) {
             const slot = this.smallDrafts[key];
             if (slot?.pending) {
-                this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: false, error: message } };
+                this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: false, error: message, refused: false } };
+            }
+        },
+
+        // an `operation_done` error: if it names a small draft's ask action
+        // ("Error during add_event: …", the plugin's wording), the ask last
+        // sent with it was refused before it went out (a bad year, a page
+        // gone): that draft stops drafting, with the error and the
+        // versions it had, so Write, Regenerate and Version work again.
+        // `refused`: a reply that comes after all (the error was an
+        // earlier ask's of the same action) is still taken.
+        smallRefused(message) {
+            for (const [action, key] of Object.entries(this.smallSent)) {
+                if (message?.startsWith(`Error during ${action}:`)) {
+                    const slot = this.smallDrafts[key];
+                    if (slot?.pending) {
+                        this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, pending: false, error: message, refused: true } };
+                    }
+                    const { [action]: _done, ...rest } = this.smallSent;
+                    this.smallSent = rest;
+                    return;
+                }
             }
         },
 
@@ -1714,7 +1747,9 @@ export const useWorldsStore = defineStore('worlds', {
         // refusal leaves it as the owner left it.
         acceptPreview(changes = {}, { open = true, intoStub = null, sameTargetId = null } = {}) {
             const draft = this.draft;
-            if (!draft || draft.accepting) {
+            // nor while its nested fact draft is out or held: its facts
+            // would be left behind (the server refuses it too)
+            if (!draft || draft.accepting || this.nestedHeld) {
                 return;
             }
             this.dropDraftRender();
@@ -2423,8 +2458,9 @@ export const useWorldsStore = defineStore('worlds', {
                         // version switch (both answered at once). A small
                         // draft's ask is left drafting: it never fails this
                         // way once it's out (its reply or `_failed` comes),
-                        // and one refused before it went out can be
-                        // discarded from its spinner.
+                        // unless the error is its own action's, refused
+                        // before it went out (`smallRefused`).
+                        this.smallRefused(message.error.message);
                         this.synopses = Object.fromEntries(Object.entries(this.synopses).map(([key, value]) => [key, { ...value, pending: false }]));
                         this.smallDrafts = Object.fromEntries(Object.entries(this.smallDrafts)
                             .map(([key, value]) => [key, { ...value, accepting: false, switching: false }]));

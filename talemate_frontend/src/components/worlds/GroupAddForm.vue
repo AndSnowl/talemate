@@ -1,19 +1,21 @@
 <template>
     <div class="group-add pa-2" data-testid="group-add">
         <template v-if="!found">
-            <div class="d-flex align-center ga-2">
-                <v-text-field
-                    v-model="prompt"
-                    :label="promptLabel"
-                    :placeholder="tag ? `two more ${heading.toLowerCase()}, …` : 'a guild of ice-road pilots, …'"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    autofocus
-                    data-testid="group-add-prompt"
-                    @keydown.enter="draft"
-                    @keydown.esc="$emit('close')"
-                ></v-text-field>
+            <v-textarea
+                v-model="prompt"
+                :label="promptLabel"
+                :placeholder="tag ? `two more ${heading.toLowerCase()}, …` : 'a guild of ice-road pilots, …'"
+                auto-grow
+                rows="2"
+                density="compact"
+                variant="outlined"
+                hide-details
+                autofocus
+                data-testid="group-add-prompt"
+                @keydown.enter.exact="onEnter"
+                @keydown.esc="$emit('close')"
+            ></v-textarea>
+            <div class="d-flex ga-2 mt-2">
                 <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-creation" :disabled="!prompt.trim()" data-testid="group-add-draft" @click="draft">Draft</v-btn>
                 <v-btn variant="text" size="small" @click="$emit('close')">Cancel</v-btn>
             </div>
@@ -192,6 +194,14 @@ export default {
         },
     },
     methods: {
+        // Enter drafts (Shift+Enter a new line), not while an IME composes
+        onEnter(event) {
+            if (event.isComposing) {
+                return;
+            }
+            event.preventDefault();
+            this.draft();
+        },
         draft() {
             if (this.prompt.trim()) {
                 this.worlds.askGroupAdd(this.thingId, this.tag, this.prompt.trim(), { showUnder: this.showUnder });

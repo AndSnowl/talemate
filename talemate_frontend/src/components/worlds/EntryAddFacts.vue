@@ -62,7 +62,7 @@
                 <template v-else>
                     <div class="text-caption text-error" data-testid="fact-draft-error">{{ draft.error }}</div>
                     <div class="d-flex ga-2 mt-1">
-                        <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" data-testid="fact-draft-regenerate" @click="worlds.regenerateSmall(draft.key)">Try again</v-btn>
+                        <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" data-testid="fact-draft-regenerate" :disabled="!!yearInvalid" :title="yearInvalid" @click="worlds.regenerateSmall(draft.key)">Try again</v-btn>
                         <v-btn variant="text" size="small" data-testid="fact-draft-discard" @click="discard">Close</v-btn>
                     </div>
                 </template>
@@ -79,6 +79,7 @@
                     prompt-testid="add-prompt"
                     :busy="busy"
                     :locked="draft.pending ? 'drafting another version…' : null"
+                    :regenerate-locked="yearInvalid"
                     :primary-label="'Write ' + ticked"
                     :can-primary="ticked > 0"
                     :primary-loading="!!draft.accepting"
@@ -152,7 +153,7 @@
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
+import { eventYearValid, useWorldsStore } from '@/stores/worlds.js';
 import { dateParts } from './worldDates.js';
 import LinkedText from './LinkedText.vue';
 import PreviewRepeats from './PreviewRepeats.vue';
@@ -258,13 +259,20 @@ export default {
         },
         statusLine() {
             const where = this.onDraft ? 'Write puts the ticked facts into the draft.' : 'Tick what to write here.';
+            if (this.yearInvalid) {
+                return `${where} To regenerate, ${this.yearInvalid}.`;
+            }
             return this.dated ? `Dated ${this.draft.year}. ${where}` : where;
         },
         canAsk() {
             if (!this.prompt.trim()) {
                 return false;
             }
-            return !this.event || (Number.isInteger(this.year) && this.year >= 1 && this.year <= 9999);
+            return !this.event || eventYearValid(this.year);
+        },
+        // why an event draft can't regenerate from its bar's year, or null
+        yearInvalid() {
+            return this.dated && !eventYearValid(this.draft.year) ? 'the year must be a whole number from 1 to 9999' : null;
         },
         ticked() {
             return (this.draft?.rows || []).filter((row) => this.isTicked(row)).length;

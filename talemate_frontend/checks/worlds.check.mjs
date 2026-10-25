@@ -20,6 +20,7 @@ import {
     disagreements,
     elsewhereGroups,
     elsewhereSame,
+    eventYearValid,
     heritageFromMatches,
     historyBack,
     historyPushed,
@@ -34,7 +35,6 @@ import {
     repointedNote,
     moveInEdit,
     rowChanged,
-    rowsTicked,
     samePage,
     sameParents,
     useWorldsStore,
@@ -533,6 +533,12 @@ check('numbers show plain, ranges collapse when min and max agree', () => {
 
 // --- the store ---------------------------------------------------------------
 
+// `rows` with those at `indices` ticked (or not); the rest as they are
+function rowsTicked(rows, indices, ticked) {
+    const picked = new Set(indices);
+    return (rows || []).map((row, index) => (picked.has(index) ? { ...row, ticked } : row));
+}
+
 function freshStore() {
     setActivePinia(createPinia());
     const store = useWorldsStore();
@@ -747,7 +753,6 @@ check('elsewhere rows group by entry, untick together, and a stub row answers "s
     const groups = elsewhereGroups(rows);
     assert.deepEqual(groups.map((group) => [group.name, group.rows]), [['Moskov', [0]], ['Tsardom', [1, 3]], ['White Talon', [2, 4]]]);
     assert.equal(groups[2].new.name, 'White Talon');
-    assert.deepEqual(rowsTicked(rows, groups[1].rows, false).map((row) => row.ticked), [true, false, true, false, true]);
     assert.deepEqual(rowChanged(rows, 0, { category: 'description' })[0], { ...rows[0], category: 'description' });
     const same = elsewhereSame(rows, 'white talon', 'wt');
     assert.deepEqual(same.map((row) => row.new?.same_target_id ?? null), [null, null, 'wt', null, 'wt']);
@@ -3392,14 +3397,13 @@ check('an unrelated error leaves a small ask drafting: its reply is still taken'
     assert.equal(host.store.nestedDraft.version, 1);
 });
 
-check('an ask refused before it went out stays drafting, and can be discarded and asked again', () => {
+check('an ask refused before it went out ends with its error, and can be discarded and asked again', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('gone');
     store.askFacts('facts', 'its laws');
-    assert.equal(typeof store.smallDrafts['facts:gone'].askedAt, 'number');
     store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_facts: no such entry' } });
-    assert.equal(store.smallDrafts['facts:gone'].pending, true);
+    assert.deepEqual([store.smallDrafts['facts:gone'].pending, store.smallDrafts['facts:gone'].error], [false, 'Error during add_facts: no such entry']);
     store.discardSmall('facts:gone');
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'discard_small_draft', draft_key: 'facts:gone' });
     assert.equal(store.smallDrafts['facts:gone'], undefined);
@@ -3468,6 +3472,73 @@ check('a nested draft keeps its mode; a written one for another draft shows no n
     store.handleMessage(reply('write_nested_facts', { ...draftOf(HOST, { key: 'new:lore:other', version: 2 }), notes: ['moved'] }));
     assert.equal(store.notes, null);
     assert.equal(store.draft.version, 1);
+});
+
+check("the page draft's Accept (and Fill the stub instead) waits for a nested draft", () => {
+    const { store, sent } = hostDraft();
+    const key = 'new:lore:frostwing host';
+    // a nested ask out, nothing held yet: no accept goes, by either button
+    store.askNestedFacts('its drills');
+    sent.length = 0;
+    store.acceptPreview();
+    store.acceptPreview({}, { intoStub: 'k1' });
+    assert.deepEqual(sent, []);
+    assert.ok(!store.draft.accepting);
+    // held: the same
+    store.handleMessage(reply('add_facts', nestedReply(key, [{ category: 'general', text: 'It drills.' }])));
+    store.acceptPreview({}, { intoStub: 'k1' });
+    assert.deepEqual(sent, []);
+    // discarded: the accept goes
+    store.discardSmall(`nested:${key}`);
+    store.acceptPreview({}, { intoStub: 'k1' });
+    assert.equal(sent.at(-1).action, 'accept_preview');
+});
+
+check("an event draft's Regenerate needs a year from 1 to 9999", () => {
+    assert.equal(eventYearValid(1012), true);
+    assert.equal(eventYearValid(1), true);
+    assert.equal(eventYearValid(9999), true);
+    for (const bad of [null, undefined, 0, 10000, 12.5, NaN, '1012']) {
+        assert.equal(eventYearValid(bad), false, String(bad));
+    }
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v');
+    store.askFacts('event', 'the bluff collapse', 1012);
+    store.handleMessage(reply('add_event', factsReply(['The bluff fell.'], { year: 1012 })));
+    store.setSmallPrompt('facts:v', 'the bluff fell', null);
+    sent.length = 0;
+    store.regenerateSmall('facts:v');
+    assert.deepEqual(sent, []);
+    assert.equal(store.smallDrafts['facts:v'].pending, false);
+    store.setSmallPrompt('facts:v', 'the bluff fell', 1013);
+    store.regenerateSmall('facts:v');
+    assert.equal(sent.at(-1).year, 1013);
+});
+
+check('a Regenerate refused before it went out ends drafting, its versions kept', () => {
+    const { store } = factsDraft();
+    const found = () => store.smallDrafts['facts:v'];
+    store.regenerateSmall('facts:v');
+    assert.equal(found().pending, true);
+    // another action's error isn't this ask's
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_event: no' } });
+    assert.equal(found().pending, true);
+    // its own action's is: the draft takes Write, Regenerate and Version again
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_facts: 1 validation error' } });
+    assert.deepEqual([found().pending, found().version, found().versions.length], [false, 1, 1]);
+    assert.match(found().error, /validation error/);
+    // a reply that comes after all (the error was another add_facts') is still taken
+    store.handleMessage(reply('add_facts', factsReply(['Its walls.'], { version: 2, count: 2 })));
+    assert.deepEqual([found().pending, found().version, found().versions.length], [false, 2, 2]);
+    // a group draft's and a nested draft's the same
+    store.askGroupAdd('v', 'native', 'two');
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during group_add: no' } });
+    assert.equal(store.smallDrafts['group:v:native'].pending, false);
+    const host = hostDraft();
+    host.store.askNestedFacts('its drills', 990);
+    host.store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_event: bad year' } });
+    assert.equal(host.store.nestedHeld, false);
 });
 
 if (failures.length) {

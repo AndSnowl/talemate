@@ -11,7 +11,7 @@
             :data-testid="testids.primary"
             @click="$emit('primary')"
         >{{ primaryLabel }}</v-btn>
-        <v-btn variant="outlined" size="small" :disabled="busy" :data-testid="testids.discard" @click="$emit('discard')">Discard</v-btn>
+        <v-btn variant="outlined" size="small" color="danger" prepend-icon="mdi-close" :disabled="busy" :data-testid="testids.discard" @click="$emit('discard')">Discard</v-btn>
     </div>
     <div v-else class="suggestion-bar pa-2 mb-3" :data-testid="testid">
         <div class="d-flex align-center flex-wrap ga-2">
@@ -46,8 +46,8 @@
                 variant="outlined"
                 size="small"
                 prepend-icon="mdi-refresh"
-                :disabled="menuDisabled"
-                :title="lockedTitle"
+                :disabled="menuDisabled || !!regenerateLocked"
+                :title="lockedTitle || regenerateLocked"
                 :data-testid="testids.regenerate"
                 @click="$emit('regenerate')"
             >Regenerate</v-btn>
@@ -102,7 +102,9 @@
 // "Write"). `busy` (mid-request) disables everything, including
 // Discard; `locked` (a reason the owner can't act right now, e.g. a
 // nested draft is open) disables the version menu, Regenerate and the
-// primary button, each with it as `title`, and leaves Discard on. The
+// primary button, each with it as `title`, and leaves Discard on;
+// `regenerateLocked` (e.g. an event's year missing) disables Regenerate
+// alone, the same way. The
 // `status` slot is the line under the bar ("Nothing is written until
 // you accept.", the accept counts, an error, …). `foot: true` renders
 // only the primary and Discard buttons, for the end of a list (e.g. a
@@ -122,6 +124,9 @@ export default {
         // a reason the owner can't regenerate, switch version or go
         // primary right now, or null
         locked: { type: String, default: null },
+        // a reason the owner can't regenerate right now (the rest stays
+        // on), or null
+        regenerateLocked: { type: String, default: null },
         primaryLabel: { type: String, default: 'Accept' },
         canPrimary: { type: Boolean, default: true },
         primaryLoading: { type: Boolean, default: false },

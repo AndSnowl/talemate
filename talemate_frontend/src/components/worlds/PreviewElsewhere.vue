@@ -25,7 +25,6 @@
                 @tick="tick(index, $event)"
             >
                 <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames)" :text="rows[index].text" />
-                <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
                 <template #end>
                     <span v-if="rows[index].since" class="fact-date">{{ formatDate(worlds.calendar, rows[index].since) }}</span>
                     <v-select
@@ -40,7 +39,8 @@
                         @update:model-value="change(index, { category: $event })"
                     ></v-select>
                 </template>
-                <!-- where it goes, on a line of its own under its words -->
+                <!-- where it goes, on a line of its own under its words,
+                     with whom it's held by -->
                 <template #under>
                     <v-btn
                         variant="text"
@@ -59,6 +59,7 @@
                         :disabled="alsoHere.includes(rows[index].text)"
                         @click="$emit('also', rows[index])"
                     >also here</v-btn>
+                    <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
                 </template>
                 <template v-if="rows[index].repeat_of" #match>
                     <PreviewRepeats

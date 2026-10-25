@@ -218,7 +218,7 @@ def test_create_box_preview_accept(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert preview.get_by_label("Name").input_value() == "Oskar Dell"
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
 
     # accepting opens the new thing's page, and it's listed with the others
     thing = page.get_by_test_id("thing-page")

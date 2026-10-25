@@ -575,7 +575,7 @@ def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
     )
     natives.get_by_test_id("group-add-button").click()
     form = natives.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("a native")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill("a native")
     form.get_by_test_id("group-add-draft").click()
     sent = _wait_sent(page, "group_add")
     assert (sent["tag"], sent["show_under"]) == ("native", True)
@@ -803,7 +803,9 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     institutions = _group(thing, "Institutions")
     institutions.get_by_test_id("group-add-button").click()
     form = institutions.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("two more guilds")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill(
+        "two more guilds"
+    )
     form.get_by_test_id("group-add-draft").click()
     sent = _wait_sent(page, "group_add")
     assert (sent["tag"], sent["prompt"]) == ("institution", "two more guilds")
@@ -841,7 +843,7 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     connected = thing.get_by_test_id("entry-connected")
     connected.get_by_test_id("connected-add").click()
     form = connected.get_by_test_id("group-add").first
-    form.get_by_test_id("group-add-prompt").locator("input").fill("a landmark")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill("a landmark")
     form.get_by_test_id("group-add-draft").click()
     page.wait_for_function(
         "() => window.__e2eSent.filter((m) => JSON.parse(m).action === 'group_add').length === 2"
@@ -868,7 +870,7 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     institutions = _group(thing, "Institutions")
     institutions.get_by_test_id("group-add-button").click()
     form = institutions.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("the stair")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill("the stair")
     form.get_by_test_id("group-add-draft").click()
     expect(form.get_by_test_id("group-add-row")).to_have_count(1)
     form.get_by_test_id("group-add-accept").click()
@@ -945,7 +947,9 @@ def test_group_add_regenerate_keeps_prompt(app, page, fixed_group_add):
     institutions = _group(thing, "Institutions")
     institutions.get_by_test_id("group-add-button").click()
     form = institutions.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("two more guilds")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill(
+        "two more guilds"
+    )
     form.get_by_test_id("group-add-draft").click()
     _wait_sent(page, "group_add")
     rows = form.get_by_test_id("group-add-row")
