@@ -1,6 +1,6 @@
 <template>
     <div v-if="rows.length" class="preview-elsewhere mt-3" data-testid="preview-elsewhere">
-        <div class="heading">For other pages <span class="count">{{ rows.length }}</span></div>
+        <div class="suggestion-heading mt-3">For other pages <span class="count">{{ rows.length }}</span></div>
         <div v-for="group in groups" :key="group.key" class="group" data-testid="elsewhere-group">
             <div class="d-flex align-center flex-wrap ga-2">
                 <span :class="group.new ? 'stub-name' : 'entry-name'" data-testid="elsewhere-entry">{{ group.name }}</span>
@@ -16,19 +16,17 @@
                 />
                 <v-btn variant="text" size="x-small" @click="tickGroup(group, !anyTicked(group))">{{ anyTicked(group) ? 'Untick all' : 'Tick all' }}</v-btn>
             </div>
-            <div v-for="index in group.rows" :key="index" class="row" data-testid="elsewhere-row">
-                <div class="d-flex align-center ga-2">
-                    <v-checkbox-btn
-                        :model-value="rows[index].ticked !== false"
-                        density="compact"
-                        class="flex-grow-0"
-                        :aria-label="'Write ' + rows[index].text"
-                        @update:model-value="tick(index, $event)"
-                    ></v-checkbox-btn>
-                    <span class="flex-grow-1" :class="{ dropped: rows[index].ticked === false }">
-                        <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames)" :text="rows[index].text" />
-                        <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
-                    </span>
+            <SuggestionRow
+                v-for="index in group.rows"
+                :key="index"
+                :ticked="rows[index].ticked !== false"
+                :tick-label="'Write ' + rows[index].text"
+                testid="elsewhere-row"
+                @tick="tick(index, $event)"
+            >
+                <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames)" :text="rows[index].text" />
+                <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
+                <template #end>
                     <span v-if="rows[index].since" class="fact-date">{{ formatDate(worlds.calendar, rows[index].since) }}</span>
                     <v-select
                         :model-value="rows[index].category"
@@ -41,6 +39,9 @@
                         :aria-label="'Category of ' + rows[index].text"
                         @update:model-value="change(index, { category: $event })"
                     ></v-select>
+                </template>
+                <!-- where it goes, on a line of its own under its words -->
+                <template #under>
                     <v-btn
                         variant="text"
                         size="x-small"
@@ -58,9 +59,16 @@
                         :disabled="alsoHere.includes(rows[index].text)"
                         @click="$emit('also', rows[index])"
                     >also here</v-btn>
-                </div>
-                <div v-if="rows[index].repeat_of" class="match text-caption">≈ already on {{ rows[index].repeat_of.owner_name || group.name }}: {{ rows[index].repeat_of.text }}</div>
-            </div>
+                </template>
+                <template v-if="rows[index].repeat_of" #match>
+                    <PreviewRepeats
+                        :repeat="rows[index].repeat_of"
+                        :choice="elsewhereRepeatChoice(rows[index])"
+                        :unavailable="{ move: 'already on that page' }"
+                        @settle="settle(index, $event)"
+                    />
+                </template>
+            </SuggestionRow>
         </div>
         <ReferenceMenu
             v-model="retargeting"
@@ -75,12 +83,14 @@
 
 <script>
 import { elsewhereGroups, elsewhereSame, rowChanged, rowsTicked, useWorldsStore } from '@/stores/worlds.js';
-import { elsewhereSegments } from './draftPage.js';
+import { elsewhereRepeatChoice, elsewhereSegments, settleElsewhereRepeat } from './draftPage.js';
 import { formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
+import PreviewRepeats from './PreviewRepeats.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 import SameThingAsk from './SameThingAsk.vue';
+import SuggestionRow from './SuggestionRow.vue';
 
 // "For other pages" (curation goal 1, spec "The draft page" 4): a draft's
 // facts about other entries, grouped by the entry they're for, each ticked
@@ -89,14 +99,19 @@ import SameThingAsk from './SameThingAsk.vue';
 // target)`), and "+ also here" makes it one of this page's facts too
 // (`also(row)`; off once this page has those words). A group
 // can be unticked (or ticked) at once; each row's category can be changed
-// among its entry's kind's (a timeline fact only when dated). A repeat of
-// what the entry already says shows its match. An entry not made yet is a
+// among its entry's kind's (a timeline fact only when dated). Each row is
+// a `SuggestionRow`: its target and "+ also here" on a second line under
+// its words. A repeat of what the entry already says hangs its match
+// under the row (`PreviewRepeats`), settled Keep new (the entry's fact
+// removed on Accept), Keep existing or Keep both (`settleElsewhereRepeat`);
+// Move existing here is off, the fact being on that page already. An
+// entry not made yet is a
 // new stub: its kind and tag, and a "same as X?" choice when the world may
 // have it already (new by default). `rows` are the preview's
 // `elsewhere`; every change emits `update` with the whole list.
 export default {
     name: 'PreviewElsewhere',
-    components: { LinkedText, ReferenceMenu, SameThingAsk },
+    components: { LinkedText, PreviewRepeats, ReferenceMenu, SameThingAsk, SuggestionRow },
     props: {
         rows: { type: Array, required: true },
         // which preview it is ('create')
@@ -126,6 +141,7 @@ export default {
     },
     methods: {
         formatDate,
+        elsewhereRepeatChoice,
         elsewhereSegments,
         startRetarget(index, event) {
             this.retargetIndex = index;
@@ -146,6 +162,10 @@ export default {
         },
         tickGroup(group, ticked) {
             this.$emit('update', rowsTicked(this.rows, group.rows, ticked));
+        },
+        // a repeat settled: Keep new, Keep existing or Keep both
+        settle(index, how) {
+            this.$emit('update', settleElsewhereRepeat({ elsewhere: this.rows }, index, how).elsewhere);
         },
         change(index, changes) {
             this.$emit('update', rowChanged(this.rows, index, changes));
@@ -184,14 +204,6 @@ export default {
 </script>
 
 <style scoped>
-.heading {
-    margin-top: 10px;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: rgb(var(--v-theme-muted));
-}
-
 .group {
     border-left: 2px solid rgb(var(--v-theme-border));
     padding-left: 10px;
@@ -210,23 +222,10 @@ export default {
     text-decoration: underline dashed;
 }
 
-.row {
-    padding: 2px 0;
-}
-
-.dropped {
-    color: rgb(var(--v-theme-muted));
-}
-
 .held {
     margin-left: 6px;
     font-size: 11px;
     color: rgb(var(--v-theme-foreign));
-}
-
-.match {
-    margin-left: 34px;
-    color: rgb(var(--v-theme-muted));
 }
 
 .count {
@@ -234,7 +233,6 @@ export default {
 }
 
 .target {
-    flex: none;
     text-transform: none;
 }
 

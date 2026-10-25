@@ -1217,7 +1217,7 @@ def test_repeat_choices(app, page, fixed_preview):
     borders = freeze.evaluate(
         """host => [
             getComputedStyle(host).borderBottomStyle,
-            getComputedStyle(host.querySelector('.fact')).borderBottomStyle,
+            getComputedStyle(host.firstElementChild).borderBottomStyle,
         ]"""
     )
     assert borders == ["dashed", "none"]
@@ -1253,6 +1253,110 @@ def test_repeat_choices(app, page, fixed_preview):
     _fact(vel, GATE).wait_for(state="visible", timeout=TIMEOUT_MS)
     expect(_fact(vel, FREEZES)).to_have_count(0)
     expect(_fact(vel, BELLS)).to_have_count(0)
+    assert page.console_errors == []
+
+
+AGAIN = "The Khorol freezes solid every winter, bank to bank."
+
+
+def test_elsewhere_row_controls_under_text_and_repeat_choices(app, page, fixed_preview):
+    """An elsewhere row's placement controls ("→ page ▾", "+ also here")
+    sit on a second line under its text (owner, mockup B). A row that
+    repeats what its target says hangs its match under it with the four
+    choices, Move existing here shown off (already on that page); Keep
+    new writes it and removes the target's fact on Accept."""
+
+    world = _seeded(app, page, "ElsewhereRepeat")
+    fixed_preview(
+        _host(
+            "The Host is entirely owl-folk.",
+            elsewhere=[
+                {"entry": "Velikoye", "text": ON_VELIKOYE},
+                {"entry": "Velikoye", "text": AGAIN},
+            ],
+        )
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    other = draft.get_by_test_id("preview-elsewhere")
+    bridges = other.get_by_test_id("elsewhere-row").filter(has_text=ON_VELIKOYE)
+    tick = bridges.get_by_role("checkbox").bounding_box()
+    for testid in ("elsewhere-target", "elsewhere-also"):
+        box = bridges.get_by_test_id(testid).bounding_box()
+        assert box["y"] >= tick["y"] + tick["height"] - 1, testid
+
+    again = other.get_by_test_id("elsewhere-row").filter(has_text="bank to bank")
+    match = again.get_by_test_id("fact-match")
+    expect(match).to_contain_text(FREEZES)
+    expect(match.get_by_test_id("repeat-choice")).to_have_text(
+        ["Keep new", "Keep existing", "Keep both", "Move existing here"]
+    )
+    move = match.get_by_role("button", name="Move existing here")
+    expect(move).to_be_disabled()
+    expect(move).to_have_attribute("title", "already on that page")
+    # unticked, it looks dropped; ticked again by Keep new, it doesn't
+    expect(again.locator(".suggestion-dropped")).to_have_count(1)
+    match.get_by_role("button", name="Keep new").click()
+    expect(again.get_by_role("checkbox").first).to_be_checked()
+    expect(again.locator(".suggestion-dropped")).to_have_count(0)
+    expect(match.get_by_test_id("repeat-removing")).to_be_visible()
+
+    draft.get_by_role("button", name="Accept").click()
+    _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]
+    [row] = [e for e in accepted["elsewhere"] if e["text"] == AGAIN]
+    assert row["ticked"] is True and row["replaces_repeat"] is True
+    assert row["repeat_of"]["fact_id"] == world.facts[FREEZES]
+
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
+    _fact(vel, AGAIN).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(vel, FREEZES)).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_repeat_match_sits_above_separator(app, page, fixed_preview):
+    """A draft fact's repeat hangs under its own row, on the row's left
+    rule, and the dotted separator comes after the match: never between
+    a fact and its match."""
+
+    world = _seeded(app, page, "MatchRule")
+    fixed_preview(
+        {
+            "name": "Khorol Ice Road",
+            "facts": [
+                {
+                    "category": "description",
+                    "text": "The Khorol freezes from November to April.",
+                    "ticked": False,
+                    "repeat_of": {
+                        "fact_id": world.facts[FREEZES],
+                        "owner_id": world.things["Velikoye"],
+                        "owner_name": "Velikoye",
+                        "text": FREEZES,
+                        "score": 0.8,
+                    },
+                },
+                {"category": "description", "text": "Carts cross the ice in winter."},
+            ],
+            "prose": {"description": "The winter road."},
+        }
+    )
+    draft = _draft(page, "place", "The road over the frozen river.")
+    freeze = _draft_fact(draft, "November to April")
+    match = freeze.get_by_test_id("fact-match")
+    expect(match).to_be_visible()
+    # the match sits in the row's match slot, on its left rule
+    rule = match.evaluate("m => getComputedStyle(m.parentElement).borderLeftStyle")
+    assert rule == "solid"
+    # the row's separator runs under the match; the next row starts after it
+    assert freeze.evaluate("r => getComputedStyle(r).borderBottomStyle") == "dashed"
+    row_box = freeze.bounding_box()
+    match_box = match.bounding_box()
+    assert (
+        match_box["y"] + match_box["height"] <= row_box["y"] + row_box["height"] + 0.5
+    )
+    carts = _draft_fact(draft, "Carts cross").bounding_box()
+    assert carts["y"] >= match_box["y"] + match_box["height"] - 0.5
     assert page.console_errors == []
 
 

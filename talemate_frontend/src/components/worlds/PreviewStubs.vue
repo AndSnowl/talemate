@@ -1,23 +1,19 @@
 <template>
     <div v-if="rows.length" class="mt-3" data-testid="draft-new-names">
-        <div class="heading">New names <span class="text-muted">· {{ note }}</span></div>
-        <div v-for="row in rows" :key="row.name" class="stub-row d-flex align-center flex-wrap ga-2" data-testid="new-name-row">
-            <v-checkbox-btn
-                v-if="tickable"
-                :model-value="row.ticked !== false"
-                density="compact"
-                class="flex-grow-0"
-                data-testid="new-name-tick"
-                :aria-label="'Make a stub of ' + row.name"
-                @update:model-value="change(row, { ticked: $event })"
-            ></v-checkbox-btn>
-            <span class="stub-name" :class="{ dropped: tickable && row.ticked === false }">{{ row.name }}</span>
-            <span v-if="tickable && row.ticked === false" class="text-caption text-muted" data-testid="new-name-plain">no stub: its words stay plain</span>
-            <template v-else-if="row.same_target_id">
-                <span class="text-caption text-muted" data-testid="new-name-same">same as <b>{{ nameOf(row.same_target_id) }}</b>: no stub, it links that entry</span>
-                <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" :aria-label="'Not the same: ' + row.name" @click="change(row, { same_target_id: null })"></v-btn>
-            </template>
-            <template v-else>
+        <div class="suggestion-heading">New names <span class="text-muted">· {{ note }}</span></div>
+        <SuggestionRow
+            v-for="row in rows"
+            :key="row.name"
+            :tickable="tickable"
+            :ticked="row.ticked !== false"
+            :dropped="tickable && row.ticked === false"
+            :tick-label="'Make a stub of ' + row.name"
+            testid="new-name-row"
+            tick-testid="new-name-tick"
+            @tick="change(row, { ticked: $event })"
+        >
+            <span class="stub-name">{{ row.name }}</span>
+            <template v-if="!plain(row) && !row.same_target_id" #end>
                 <v-select
                     :model-value="row.kind"
                     :items="kindItems"
@@ -40,24 +36,36 @@
                     :aria-label="'Tag of ' + row.name"
                     @change="change(row, { tag: normaliseTag($event.target.value) || null })"
                 ></v-text-field>
-                <SameThingAsk
-                    v-if="row.same_as && row.same_as.length"
-                    variant="row"
-                    :name="row.name"
-                    :kind="row.kind"
-                    :offers="row.same_as"
-                    :chosen="row.same_target_id || null"
-                    @choose="change(row, { same_target_id: $event })"
-                />
-                <v-btn variant="text" size="x-small" data-testid="new-name-same-search" @click="search(row, 'same', $event)">same as… 🔎</v-btn>
-                <span v-if="filingOf(row)" class="text-caption" data-testid="new-name-filing">
-                    in <b>{{ filingOf(row) }}</b>
-                    <v-btn icon="mdi-close" variant="text" size="x-small" density="compact" :aria-label="'Not filed: ' + row.name" @click="change(row, { filing: null })"></v-btn>
-                </span>
-                <v-btn variant="text" size="x-small" data-testid="new-name-in" @click="search(row, 'in', $event)">in… 🔎</v-btn>
-                <v-btn variant="text" size="x-small" disabled prepend-icon="mdi-refresh" data-testid="new-name-rename" title="Renaming comes later, with languages">rename · later</v-btn>
             </template>
-        </div>
+            <!-- what it is and where it's filed, on a line under its name -->
+            <template #under>
+                <div class="d-flex align-center flex-wrap ga-2">
+                    <span v-if="plain(row)" class="text-caption text-muted" data-testid="new-name-plain">no stub: its words stay plain</span>
+                    <template v-else-if="row.same_target_id">
+                        <span class="text-caption text-muted" data-testid="new-name-same">same as <b>{{ nameOf(row.same_target_id) }}</b>: no stub, it links that entry</span>
+                        <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" :aria-label="'Not the same: ' + row.name" @click="change(row, { same_target_id: null })"></v-btn>
+                    </template>
+                    <template v-else>
+                        <SameThingAsk
+                            v-if="row.same_as && row.same_as.length"
+                            variant="row"
+                            :name="row.name"
+                            :kind="row.kind"
+                            :offers="row.same_as"
+                            :chosen="row.same_target_id || null"
+                            @choose="change(row, { same_target_id: $event })"
+                        />
+                        <v-btn variant="text" size="x-small" data-testid="new-name-same-search" @click="search(row, 'same', $event)">same as… 🔎</v-btn>
+                        <span v-if="filingOf(row)" class="text-caption" data-testid="new-name-filing">
+                            in <b>{{ filingOf(row) }}</b>
+                            <v-btn icon="mdi-close" variant="text" size="x-small" density="compact" :aria-label="'Not filed: ' + row.name" @click="change(row, { filing: null })"></v-btn>
+                        </span>
+                        <v-btn variant="text" size="x-small" data-testid="new-name-in" @click="search(row, 'in', $event)">in… 🔎</v-btn>
+                        <v-btn variant="text" size="x-small" disabled prepend-icon="mdi-refresh" data-testid="new-name-rename" title="Renaming comes later, with languages">rename · later</v-btn>
+                    </template>
+                </div>
+            </template>
+        </SuggestionRow>
         <ReferenceMenu
             v-model="searching"
             :target="searchAt"
@@ -74,6 +82,7 @@ import { normaliseTag } from './entryPage.js';
 import { STUB_KINDS, kindInfo } from './worldKinds.js';
 import ReferenceMenu from './ReferenceMenu.vue';
 import SameThingAsk from './SameThingAsk.vue';
+import SuggestionRow from './SuggestionRow.vue';
 
 // "New names" (spec "The draft page" 6): the names a draft's facts use
 // that the world hasn't (`new_names`), each a stub once the draft is
@@ -83,10 +92,12 @@ import SameThingAsk from './SameThingAsk.vue';
 // model said) and rename, greyed out: re-rolling a name comes later, with
 // languages. A change emits `change(name, changes)`. `tickable` (a "+ Add
 // facts…" draft, ruling H8) gives each row a tick, `ticked: false` making
-// no stub; `note` says when the stubs are made.
+// no stub; `note` says when the stubs are made. Each row is a
+// `SuggestionRow`: its kind and tag beside its name, the rest on a line
+// under it.
 export default {
     name: 'PreviewStubs',
-    components: { ReferenceMenu, SameThingAsk },
+    components: { ReferenceMenu, SameThingAsk, SuggestionRow },
     props: {
         rows: { type: Array, required: true },
         tickable: { type: Boolean, default: false },
@@ -106,6 +117,10 @@ export default {
     },
     methods: {
         normaliseTag,
+        // unticked (a "+ Add facts…" draft's): no stub, its words plain
+        plain(row) {
+            return this.tickable && row.ticked === false;
+        },
         change(row, changes) {
             this.$emit('change', row.name, changes);
         },
@@ -146,26 +161,17 @@ export default {
 </script>
 
 <style scoped>
-.heading {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: rgb(var(--v-theme-muted));
-}
-
-.stub-row {
-    padding: 2px 0;
-}
-
 .stub-name {
     font-weight: 600;
     color: rgb(var(--v-theme-foreign));
     text-decoration: underline dashed;
 }
 
-.stub-name.dropped {
-    color: rgb(var(--v-theme-muted));
-    text-decoration: line-through;
+/* unticked, the name greys and is struck through with the rest of its
+   row (no stub's dashed underline) */
+.suggestion-dropped .stub-name {
+    color: inherit;
+    text-decoration: none;
 }
 
 .kind {

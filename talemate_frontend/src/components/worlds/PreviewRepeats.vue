@@ -1,5 +1,5 @@
 <template>
-    <div class="repeat-match text-caption" :class="{ inset }" data-testid="fact-match">
+    <div class="repeat-match text-caption" data-testid="fact-match">
         <div class="match">
             ≈ already on <b>{{ repeat.owner_name || 'an entry' }}</b>: “{{ repeat.text }}”
             <span v-if="choice === 'move'" class="note" data-testid="repeat-moving">· the existing fact moves here</span>
@@ -47,7 +47,8 @@ const CHOICES = [
 // refused for a reason that's about where this row is, not the existing
 // fact (e.g. an elsewhere row's "Move existing here", already on that
 // page): `unavailable`, `{ [how]: reason }`, folded into the same
-// `refusal()`.
+// `refusal()`. It always sits in its row's `SuggestionRow` `match` slot,
+// which indents it (ruling R11).
 export default {
     name: 'PreviewRepeats',
     props: {
@@ -59,9 +60,6 @@ export default {
         // reasons a choice can't apply here, by `how` (e.g. `{ move:
         // 'already on that page' }`)
         unavailable: { type: Object, default: () => ({}) },
-        // indented to the fact's text on its own (ruling R11); off inside
-        // SuggestionRow's `match` slot, which indents it already
-        inset: { type: Boolean, default: true },
     },
     emits: ['settle'],
     data() {
@@ -89,10 +87,6 @@ export default {
 .repeat-match {
     padding-bottom: 4px;
     color: rgb(var(--v-theme-muted));
-}
-
-.repeat-match.inset {
-    margin-left: 34px;
 }
 
 .note {

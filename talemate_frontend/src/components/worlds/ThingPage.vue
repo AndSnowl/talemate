@@ -289,12 +289,13 @@
                             @copy="edit(copyFactTo(edited, row.index, $event))"
                             @held="edit(holdFact(edited, row.index, $event))"
                         >
-                            <PreviewRepeats
-                                v-if="row.fact.repeat_of"
-                                :repeat="row.fact.repeat_of"
-                                :choice="repeatChoice(row.fact)"
-                                @settle="edit(settleRepeat(edited, row.index, $event))"
-                            />
+                            <template v-if="row.fact.repeat_of" #match>
+                                <PreviewRepeats
+                                    :repeat="row.fact.repeat_of"
+                                    :choice="repeatChoice(row.fact)"
+                                    @settle="edit(settleRepeat(edited, row.index, $event))"
+                                />
+                            </template>
                             <div v-if="form && form.draft && form.index === row.index" class="my-2">
                                 <ThingFactForm :form="form" :categories="categories" :removable="false" @save="saveForm" @cancel="form = null" />
                             </div>
@@ -303,31 +304,34 @@
                         <!-- what it inherits, each ticked as kept: unticking one
                              the model missed marks it replaced by one of its own -->
                         <template v-if="edited.inherited && edited.inherited.length">
-                            <div class="text-caption text-muted text-uppercase mt-3">Inherited (untick to replace)</div>
-                            <div v-for="row in edited.inherited" :key="row.fact_id" class="fact inherited d-flex align-center ga-2" data-testid="preview-inherited">
-                                <v-checkbox-btn
-                                    :model-value="overriderOf(row) < 0"
-                                    aria-label="Kept"
-                                    density="compact"
-                                    class="flex-grow-0"
-                                    :disabled="!edited.facts.length"
-                                    @update:model-value="setKept(row, $event)"
-                                ></v-checkbox-btn>
-                                <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
-                                <v-select
-                                    v-if="overriderOf(row) >= 0"
-                                    :model-value="overriderOf(row)"
-                                    :items="ownFactItems"
-                                    label="Replaced by"
-                                    density="compact"
-                                    variant="outlined"
-                                    hide-details
-                                    class="override-by"
-                                    data-testid="override-by"
-                                    @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
-                                ></v-select>
-                                <v-chip size="x-small" label variant="tonal" color="muted">{{ row.source }}</v-chip>
-                            </div>
+                            <div class="suggestion-heading mt-3">Inherited (untick to replace)</div>
+                            <SuggestionRow
+                                v-for="row in edited.inherited"
+                                :key="row.fact_id"
+                                :ticked="overriderOf(row) < 0"
+                                tick-label="Kept"
+                                :disabled="!edited.facts.length"
+                                testid="preview-inherited"
+                                @tick="setKept(row, $event)"
+                            >
+                                <span class="inherited">{{ row.text }}</span>
+                                <template #end>
+                                    <v-chip size="x-small" label variant="tonal" color="muted" class="flex-0-0">{{ row.source }}</v-chip>
+                                </template>
+                                <template v-if="overriderOf(row) >= 0" #under>
+                                    <v-select
+                                        :model-value="overriderOf(row)"
+                                        :items="ownFactItems"
+                                        label="Replaced by"
+                                        density="compact"
+                                        variant="outlined"
+                                        hide-details
+                                        class="override-by"
+                                        data-testid="override-by"
+                                        @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
+                                    ></v-select>
+                                </template>
+                            </SuggestionRow>
                         </template>
                     </template>
 
@@ -435,18 +439,18 @@
                 <PreviewStubs :rows="edited.new_names || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
                 <!-- 7. File into this -->
                 <div v-if="(edited.file_into || []).length" class="mt-3" data-testid="draft-file-into">
-                    <div class="heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>
-                    <div v-for="row in edited.file_into" :key="row.thing_id" class="d-flex align-center ga-2" data-testid="file-into-row">
-                        <v-checkbox-btn
-                            :model-value="!!row.ticked"
-                            density="compact"
-                            class="flex-grow-0"
-                            :aria-label="'File ' + row.name + ' into this'"
-                            @update:model-value="edit(tickFileInto(edited, row.thing_id, $event))"
-                        ></v-checkbox-btn>
-                        <span class="file-into-name" :class="{ dropped: !row.ticked }">{{ row.name }}</span>
-                        <span v-if="row.role" class="role">{{ row.role }}</span>
-                    </div>
+                    <div class="suggestion-heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>
+                    <SuggestionRow
+                        v-for="row in edited.file_into"
+                        :key="row.thing_id"
+                        :ticked="!!row.ticked"
+                        :tick-label="'File ' + row.name + ' into this'"
+                        testid="file-into-row"
+                        @tick="edit(tickFileInto(edited, row.thing_id, $event))"
+                    >
+                        <span class="file-into-name">{{ row.name }}</span>
+                        <span v-if="row.role" class="role ml-2">{{ row.role }}</span>
+                    </SuggestionRow>
                 </div>
             </template>
 
@@ -527,6 +531,7 @@ import PreviewStubs from './PreviewStubs.vue';
 import SameThingAsk from './SameThingAsk.vue';
 import SelectionMenu from './SelectionMenu.vue';
 import StubCard from './StubCard.vue';
+import SuggestionRow from './SuggestionRow.vue';
 import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
@@ -653,6 +658,7 @@ export default {
         PreviewRepeats,
         PreviewStubs,
         SameThingAsk,
+        SuggestionRow,
         SelectionMenu,
         StubCard,
         ThingAka,
@@ -1375,34 +1381,22 @@ export default {
     padding: 2px 0;
 }
 
-.heading {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: rgb(var(--v-theme-muted));
-}
-
-.dropped {
-    color: rgb(var(--v-theme-muted));
-}
-
 .inherited {
     color: rgb(var(--v-theme-muted));
 }
 
-.replaced {
-    text-decoration: line-through;
-    color: rgb(var(--v-theme-muted));
-}
-
 .override-by {
-    flex: none;
     width: 220px;
 }
 
 .file-into-name {
     font-weight: 600;
     color: rgb(var(--v-theme-link));
+}
+
+/* an unticked row's name greys with the rest of its row */
+.suggestion-dropped .file-into-name {
+    color: inherit;
 }
 
 .role {

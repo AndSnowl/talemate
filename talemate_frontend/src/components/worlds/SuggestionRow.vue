@@ -8,9 +8,10 @@
                 class="flex-grow-0"
                 :aria-label="tickLabel"
                 :disabled="disabled"
+                :data-testid="tickTestid"
                 @update:model-value="$emit('tick', $event)"
             ></v-checkbox-btn>
-            <span class="flex-grow-1" :class="{ 'suggestion-dropped': dropped }">
+            <span class="flex-grow-1" :class="{ 'suggestion-dropped': isDropped }">
                 <slot></slot>
             </span>
             <slot name="end"></slot>
@@ -50,9 +51,18 @@ export default {
         disabled: { type: Boolean, default: false },
         // put on the root, for the tests
         testid: { type: String, default: null },
-        dropped: { type: Boolean, default: (props) => !props.ticked },
+        // put on the tick, for the tests
+        tickTestid: { type: String, default: null },
+        // null: follows `ticked` (a prop default is resolved once, at
+        // mount, so it can't be the default itself)
+        dropped: { type: Boolean, default: null },
     },
     emits: ['tick'],
+    computed: {
+        isDropped() {
+            return this.dropped ?? !this.ticked;
+        },
+    },
 };
 </script>
 

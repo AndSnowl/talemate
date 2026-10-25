@@ -102,6 +102,7 @@ import {
     filingKey,
     removeFiling,
     draftFactRows,
+    elsewhereRepeatChoice,
     elsewhereSegments,
     factDraftSegments,
     freshSegments,
@@ -112,6 +113,7 @@ import {
     removeFact,
     retarget,
     repeatChoice,
+    settleElsewhereRepeat,
     settleRepeat,
     tickFact,
     tickFileInto,
@@ -2619,6 +2621,32 @@ check('a repeat: Keep new, Keep existing, Keep both or Move existing here', () =
     assert.deepEqual(tickMoveHere(moving, 'm1', true).move_here.map((r) => r.ticked), [true, true]);
 });
 
+check('settleElsewhereRepeat sets replaces_repeat and ticks', () => {
+    // an elsewhere row repeating what its target says: Keep new, Keep
+    // existing or Keep both (Move existing here never: it's on that page)
+    const repeating = {
+        target_id: 'vel', target_name: 'Velikoye', new: null, category: 'description', text: 'The Khorol freezes solid in winter.', ticked: false,
+        repeat_of: { fact_id: 'f9', owner_id: 'vel', owner_name: 'Velikoye', text: 'The Khorol freezes solid.' },
+    };
+    const edited = { ...HOST, elsewhere: [HOST.elsewhere[0], repeating] };
+    assert.equal(elsewhereRepeatChoice(edited.elsewhere[1]), 'existing');
+    let out = settleElsewhereRepeat(edited, 1, 'new');
+    assert.deepEqual(Object.keys(out), ['elsewhere']);
+    assert.equal(out.elsewhere[0], edited.elsewhere[0]);
+    assert.deepEqual([out.elsewhere[1].ticked, out.elsewhere[1].replaces_repeat], [true, true]);
+    assert.equal(elsewhereRepeatChoice(out.elsewhere[1]), 'new');
+    const kept = { ...edited, ...out };
+    out = settleElsewhereRepeat(kept, 1, 'both');
+    assert.deepEqual([out.elsewhere[1].ticked, out.elsewhere[1].replaces_repeat], [true, false]);
+    assert.equal(elsewhereRepeatChoice(out.elsewhere[1]), 'both');
+    out = settleElsewhereRepeat(kept, 1, 'existing');
+    assert.deepEqual([out.elsewhere[1].ticked, out.elsewhere[1].replaces_repeat], [false, false]);
+    assert.equal(elsewhereRepeatChoice(out.elsewhere[1]), 'existing');
+    // retargeted, a Keep new no longer has a fact to replace
+    const moved = retarget(kept, 1, { id: 'ts', name: 'Tsardom', kind: 'place' }).elsewhere[1];
+    assert.deepEqual([moved.repeat_of, moved.replaces_repeat], [null, false]);
+});
+
 check('P6: a rewritten draft fact shows as the server rendered it, once the words match', () => {
     const page = draftOf(HOST);
     const edited = { ...HOST, facts: HOST.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies over Velikoye.' } : f)) };
@@ -2756,6 +2784,7 @@ check('For other pages: a row retargeted, "+ also here"; In, File into this and 
     const out = retarget(HOST, 0, { id: 'nc', name: 'The Night Court', kind: 'lore' });
     assert.deepEqual(out.elsewhere[0], {
         target_id: 'nc', target_name: 'The Night Court', new: null, category: 'general', text: 'Velikoye closes its bridges.', ticked: true, repeat_of: null,
+        replaces_repeat: false,
     });
     const also = alsoHere(HOST, HOST.elsewhere[0]);
     assert.deepEqual(also.facts.at(-1), {

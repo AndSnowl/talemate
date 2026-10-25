@@ -120,7 +120,6 @@
                                 :repeat="repeatOf(row)"
                                 :choice="repeatChoice(draft.edited.facts[row.index])"
                                 :disabled="rowsOff"
-                                :inset="false"
                                 :unavailable="unavailableFor(row)"
                                 @settle="worlds.editSmall(draft.key, settleRepeat(draft.edited, row.index, $event))"
                             />
