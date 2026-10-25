@@ -6970,7 +6970,8 @@ async def test_keep_new_drops_existing_checked(plugin, tmp_path, monkeypatch):
     fact is written and the world's one it repeats is removed, in the
     accept's one revision (undone in one step). Checked as a repeat move
     is: a fact no version of the draft held says it repeats isn't removed,
-    with a note, and nothing is removed without a draft to check."""
+    with a note, and nothing is removed without a draft to check. An
+    entry's summary is never removed (H4): it's edited on its page."""
 
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual(note="seed")) as rev:
@@ -6998,6 +6999,12 @@ async def test_keep_new_drops_existing_checked(plugin, tmp_path, monkeypatch):
                         "text": "The Khorol freezes over.",
                         "ticked": False,
                         "repeat_of": repeat_of(freeze, "The Khorol freezes solid."),
+                    },
+                    {
+                        "category": "general",
+                        "text": "Velikoye is a fortified capital.",
+                        "ticked": False,
+                        "repeat_of": repeat_of(s.capital, "The fortified capital."),
                     },
                 ],
                 "prose": {"description": "An ice road."},
@@ -7050,25 +7057,31 @@ async def test_keep_new_drops_existing_checked(plugin, tmp_path, monkeypatch):
 
     held = await draft()
     head = s.world.head_rev()
-    await _act(
-        plugin,
-        "accept_preview",
-        preview=keeping_new(
-            held["preview"], repeat_of(freeze, "The Khorol freezes solid.")
-        ),
-        draft_key=held["draft_key"],
+    preview = keeping_new(
+        held["preview"], repeat_of(freeze, "The Khorol freezes solid.")
     )
+    # Velikoye's summary as well: refused, with a note
+    preview["facts"][2].update(ticked=True, replaces_repeat=True)
+    await _act(plugin, "accept_preview", preview=preview, draft_key=held["draft_key"])
     road = _last(plugin, "accept_preview")["data"]
     assert s.world.head_rev() == head + 1
     assert sorted(f["rendered"] for f in road["facts"]) == [
         "Carts cross it in winter.",
         "The Khorol freezes over.",
+        "Velikoye is a fortified capital.",
     ]
+    assert any(
+        "summary" in note and "The fortified capital." in note for note in road["notes"]
+    )
     assert "The Khorol freezes solid." not in velikoye_texts()
     assert "Velikoye has many bells." in velikoye_texts()
+    assert "The fortified capital." in velikoye_texts()
 
     s.world.undo([s.world.head_rev()])
-    assert "The Khorol freezes solid." in velikoye_texts()
+    view = s.world.view()
+    assert view.thing(road["id"]) is None
+    restored = [f for f in view.thing(s.velikoye).facts if f.fact_id == freeze]
+    assert [f.text for f in restored] == ["The Khorol freezes solid."]
 
 
 async def test_accept_facts_waits_for_a_stub_draft(plugin, client):

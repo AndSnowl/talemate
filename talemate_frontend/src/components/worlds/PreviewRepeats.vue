@@ -13,8 +13,8 @@
                 :color="option.how === choice ? 'accent' : undefined"
                 size="x-small"
                 :aria-pressed="option.how === choice"
-                :title="option.title"
-                :disabled="disabled || (option.needsFact && !repeat.fact_id)"
+                :title="refusal(option) || option.title"
+                :disabled="disabled || !!refusal(option)"
                 data-testid="repeat-choice"
                 @click="$emit('settle', option.how)"
             >{{ option.label }}</v-btn>
@@ -25,10 +25,10 @@
 <script>
 // each named by the fact it keeps (P8)
 const CHOICES = [
-    { how: 'new', label: 'Keep new', title: 'Write this fact and remove the existing one', needsFact: true },
+    { how: 'new', label: 'Keep new', title: 'Write this fact and remove the existing one', takesExisting: true },
     { how: 'existing', label: 'Keep existing', title: "Keep the existing fact; this one isn't written" },
     { how: 'both', label: 'Keep both', title: 'Write this fact and leave the existing one where it is' },
-    { how: 'move', label: 'Move existing here', title: "Move the existing fact onto this entry; this one isn't written", needsFact: true },
+    { how: 'move', label: 'Move existing here', title: "Move the existing fact onto this entry; this one isn't written", takesExisting: true },
 ];
 
 // A draft fact that repeats one the world holds (curation goal 3, spec
@@ -41,7 +41,9 @@ const CHOICES = [
 // existing here" ('move': the existing fact moves onto this entry on
 // Accept and this one isn't written). `choice` is the way it's settled now
 // (`repeatChoice`): a repeat at or above the repeat threshold comes
-// unticked, as "Keep existing".
+// unticked, as "Keep existing". The existing fact can't be removed or
+// moved when it's its entry's summary (`repeat.summary`, H4): that's
+// edited on its page, and those two choices say so.
 export default {
     name: 'PreviewRepeats',
     props: {
@@ -54,6 +56,18 @@ export default {
     emits: ['settle'],
     data() {
         return { choices: CHOICES };
+    },
+    methods: {
+        // why a choice that takes the existing fact away can't, or null
+        refusal(option) {
+            if (!option.takesExisting) {
+                return null;
+            }
+            if (this.repeat.summary) {
+                return `That's the summary of ${this.repeat.owner_name || 'its entry'}; edit it on its page`;
+            }
+            return this.repeat.fact_id ? null : 'The existing fact is unknown';
+        },
     },
 };
 </script>

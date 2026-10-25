@@ -550,6 +550,29 @@ def test_short_repeat_is_flagged_but_stays_ticked(world, eternal):
     assert long is not None and long_ticked is False
 
 
+def test_repeat_of_marks_a_summary(world, eternal):
+    """H4: a repeat says whether the fact it repeats is its entry's
+    summary, which the draft never replaces or moves."""
+
+    from talemate.worldplay.create import repeat_flags
+
+    with world.revision(Source.manual(note="summary")) as rev:
+        rev.add_fact(
+            eternal.guild,
+            "general",
+            "The guild of the northern furriers.",
+            origin={"summary": True},
+        )
+        rev.add_fact(eternal.guild, "general", "Pine forests and frozen rivers.")
+    flags = repeat_flags(
+        world.view(),
+        ["The guild of the northern furriers.", "Pine forests and frozen rivers."],
+        [eternal.guild],
+        CurationSettings(),
+    )
+    assert [flag["summary"] for flag, _ticked in flags] == [True, False]
+
+
 async def test_unlinked_names_retry_keeps_elsewhere_stubs(world, eternal):
     """The `_UnlinkedNames` retry with elsewhere facts: a name no text
     uses is dropped and the write made again; a new name only an

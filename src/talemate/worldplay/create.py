@@ -1521,6 +1521,11 @@ def parse_elsewhere(
 UNTICK_MIN_WORDS = 3
 
 
+def _is_summary(view: WorldView, fact_id: str) -> bool:
+    found = view.fact(fact_id)
+    return found is not None and entries.is_summary_fact(found[1])
+
+
 def repeat_flags(
     view: WorldView,
     texts: Sequence[str],
@@ -1530,7 +1535,8 @@ def repeat_flags(
     """For each text, `(repeat_of, ticked)`: the fact of `owner_ids` that
     holds most of its words at the world's `repeat_threshold` or above
     (`repeats.find_repeats`), as `{fact_id, owner_id, owner_name, text,
-    score}`, or `None`; and whether it starts ticked -- unticked only when
+    score, summary}` (`summary`: whether it's its entry's summary, which
+    is never replaced or moved), or `None`; and whether it starts ticked -- unticked only when
     the overlap reaches `repeat_untick_threshold` and the text has at least
     `UNTICK_MIN_WORDS` content words."""
 
@@ -1546,6 +1552,7 @@ def repeat_flags(
                 "owner_name": view.name_of(found.owner_id) or "",
                 "text": found.text,
                 "score": found.score,
+                "summary": _is_summary(view, found.fact_id),
             },
             found.score < settings.repeat_untick_threshold
             or len(content_words(texts[found.index])) < UNTICK_MIN_WORDS,
@@ -4133,8 +4140,9 @@ def _write_keep_new(
     marked `replaces_repeat` repeats (its `repeat_of`), as removing a
     fact does (`remove_fact`). The router has checked the repeat against
     the draft's own versions (`_check_repeat_moves`); here a fact that's
-    no longer its entry's (`before`, the world before the accept), or
-    one moved here already, isn't removed, with a note. Returns `(owner,
+    no longer its entry's (`before`, the world before the accept), an
+    entry's summary (H4: edited on its page) or one moved here already
+    isn't removed, with a note. Returns `(owner,
     fact)` for each removed, as it was."""
 
     removed: list[tuple[str, FactState]] = []
@@ -4152,6 +4160,13 @@ def _write_keep_new(
             notes.append(
                 f'{name}\'s fact "{_clip(str(repeat.get("text") or ""), 60)}" '
                 "was moved or removed since the preview, so it isn't removed"
+            )
+            continue
+        if entries.is_summary_fact(found[1]):
+            name = before.name_of(owner_id) or owner_id
+            notes.append(
+                f'{name}\'s summary "{_clip(found[1].text, 60)}" is its own, so '
+                "it isn't removed: edit it on its page"
             )
             continue
         rev.remove_fact(fact_id)

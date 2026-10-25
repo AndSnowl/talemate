@@ -1140,12 +1140,26 @@ def test_repeat_choices(app, page, fixed_preview):
                     "ticked": False,
                     "repeat_of": repeat_of(BELLS),
                 },
+                {
+                    "category": "description",
+                    "text": "The Ashen Gate guards the road north.",
+                    "ticked": False,
+                    "repeat_of": {**repeat_of(GATE), "summary": True},
+                },
             ],
             "prose": {"description": "The winter road."},
         }
     )
     draft = _draft(page, "place", "The road over the frozen river.")
     counts = draft.get_by_test_id("accept-counts")
+    # a summary is edited on its page: never replaced or moved (H4)
+    gate = _draft_fact(draft, "guards the road north")
+    for name in ("Keep new", "Move existing here"):
+        button = gate.get_by_role("button", name=name)
+        expect(button).to_be_disabled()
+        assert "summary of Velikoye" in (button.get_attribute("title") or "")
+    expect(gate.get_by_role("button", name="Keep both")).to_be_enabled()
+
     freeze = _draft_fact(draft, "November to April")
     choices = freeze.get_by_test_id("repeat-choice")
     expect(choices).to_have_text(
@@ -1185,6 +1199,7 @@ def test_repeat_choices(app, page, fixed_preview):
     assert [f.get("replaces_repeat", False) for f in accepted["facts"]] == [
         False,
         True,
+        False,
         False,
     ]
     _fact(road, "November to April").wait_for(state="visible", timeout=TIMEOUT_MS)
