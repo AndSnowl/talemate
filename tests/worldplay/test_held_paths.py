@@ -157,3 +157,23 @@ async def test_homes_block_filed_entry_line_is_held(deep):
     lines = [line for _label, line in block[2]]
     # "holds:" -- the text has no subject of its own (`held_text`, ruling C6)
     assert f"Rite of Rain (rite): {CHURCH} holds: Rain answers the rite." in lines
+
+
+def test_role_prepositions_match_the_pages():
+    """M7: the entry page reads an "In" row's role as `held.filed_as`
+    does, from its own copy of `ROLE_PREPOSITIONS` (entryPage.js): the two
+    lists are the same words in the same order."""
+
+    import json
+    import re
+    from pathlib import Path
+
+    from talemate.worldplay.held import ROLE_PREPOSITIONS
+
+    page = (
+        Path(__file__).resolve().parents[2]
+        / "talemate_frontend/src/components/worlds/entryPage.js"
+    ).read_text(encoding="utf-8")
+    found = re.search(r"const ROLE_PREPOSITIONS = (\[[^\]]*\]);", page)
+    assert found, "entryPage.js has no ROLE_PREPOSITIONS array"
+    assert tuple(json.loads(found.group(1).replace("'", '"'))) == ROLE_PREPOSITIONS

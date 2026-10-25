@@ -132,7 +132,8 @@ export function rowMove(row, fromTag, toTag, toViaShowUnder = false) {
     return row?.show_under || (toViaShowUnder && to !== null) ? { showUnder: to } : { tag: to };
 }
 
-// the words a role can end with and take no "of" (`held.ROLE_PREPOSITIONS`)
+// the words a role can end with and take no "of" (`held.ROLE_PREPOSITIONS`,
+// kept the same by tests/worldplay/test_held_paths.py)
 const ROLE_PREPOSITIONS = ['in', 'of', 'by', 'at', 'for', 'to', 'from', 'with', 'on', 'under', 'through', 'over', 'into', 'across', 'within', 'as'];
 
 // What an "In" row reads before its target, the entry's way, as the
