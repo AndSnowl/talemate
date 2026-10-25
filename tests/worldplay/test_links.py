@@ -513,3 +513,21 @@ def test_link_text_lowercase_picks_link_as_written(world):
     )
     out = link_text(view, text, new_names={"Hope": "h1"})
     assert out == text
+
+
+def test_link_text_links_a_lowercase_led_stub_as_written(world):
+    """A stub stored lowercase-led ("river Vilya") links where a fact
+    writes it exactly so; another case stays plain, and a new name made
+    for this text (`new_names`) still links lowercase only as selected
+    (ruling F26)."""
+
+    with world.revision(Source.manual()) as rev:
+        vilya = rev.create_thing(
+            "place", fields={"name": "river Vilya", "stub": {"ignored": False}}
+        )
+    view = world.view(None)
+    text = "Above the river Vilya, the river vilya froze."
+    assert link_text(view, text) == (
+        f"Above the {ref(vilya, 'river Vilya')}, the river vilya froze."
+    )
+    assert link_text(view, text, new_names={"river Vilya": vilya}) == text

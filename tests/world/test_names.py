@@ -345,3 +345,36 @@ def test_other_name_beats_adjective_form(world):
     assert [(c.id, c.via) for c in match.candidates][0] == (tongue, "aka")
     assert [c.via for c in match.candidates] == ["aka", "adjective", "partial"]
     assert match.candidates[2].id == people
+
+
+def test_a_lowercase_led_name_matches_as_written(world):
+    """A name stored with a lowercase first word ("river Vilya") can't
+    meet the capital rule: it matches where the text writes it exactly as
+    stored, for a main name and an other name alike; written in any other
+    case it's left alone (a stub's "Vilya" stays only a suggestion)."""
+
+    with world.revision(Source.manual()) as rev:
+        vilya = rev.create_thing(
+            "place",
+            fields={
+                "name": "river Vilya",
+                "aka": [_aka("old Vilya water")],
+                "stub": {"ignored": False},
+            },
+        )
+    view = world.view(None)
+
+    (match,) = find_names(view, "overlooking the frozen river Vilya")
+    assert match.text == "river Vilya"
+    assert match.suggested is False
+    assert [(c.id, c.via) for c in match.candidates] == [(vilya, "name")]
+
+    (match,) = find_names(view, "they drank old Vilya water")
+    assert match.text == "old Vilya water"
+    assert [(c.id, c.via) for c in match.candidates] == [(vilya, "aka")]
+
+    # any other case still needs the capital the rule asks for
+    assert find_names(view, "the river vilya") == []
+    assert find_names(view, "they drank old vilya water") == []
+    (match,) = find_names(view, "the river vilya and Vilya")
+    assert (match.text, match.suggested) == ("Vilya", True)

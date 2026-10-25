@@ -7829,3 +7829,32 @@ async def test_in_row_marks_a_within_that_no_longer_holds(plugin):
     assert row["within_holds"] is False
     court = await _get_thing(plugin, s.court)
     assert s.dmitry not in [r["id"] for g in court["connected"] for r in g["rows"]]
+
+
+async def test_prose_links_a_lowercase_led_stub_as_written(plugin):
+    """The owner's Novogrudok: its prose names the stub "river Vilya" as
+    stored, so it links; written all lowercase it stays plain."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Rus"})
+    world = plugin.world
+    with world.revision(Source.manual(note="seed")) as rev:
+        city = rev.create_thing("place", {"name": "Novogrudok"})
+        rev.add_fact(city, "description", "A white city.")
+        vilya = rev.create_thing(
+            "place", {"name": "river Vilya", "stub": {"ignored": False}}
+        )
+    start, end = prose_gen.stretch_containing(world, city, None)
+    world.prose().put(
+        city,
+        "description",
+        start,
+        end,
+        "White walls overlooking the frozen river Vilya; the river vilya sleeps.",
+    )
+
+    thing = await _get_thing(plugin, city)
+    assert thing["prose_segments"]["description"] == [
+        _plain("White walls overlooking the frozen "),
+        {"text": "river Vilya", "ref": vilya, "stub": True},
+        _plain("; the river vilya sleeps."),
+    ]

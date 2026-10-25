@@ -204,18 +204,28 @@ def _link_plain(
     as_new: Collection[str],
     lowercase: Collection[str] = (),
     aliases: Aliases | None = None,
+    made: AbstractSet[str] = frozenset(),
 ) -> str:
     """Link the names in `text`, which holds no references. A name that
     means `owner` stays plain, and so does a match for a name treated as
     new (`as_new`) unless it's chosen. `lowercase`: the chosen names
     written without a capital (`_explicit_spans`); `aliases`, the view's
-    `alias_table` when the caller built it."""
+    `alias_table` when the caller built it. `made`: the ids of the new
+    names' stubs, which a match written without a capital (a stub stored
+    lowercase-led, "bells", found as written) never links: a new name
+    links lowercase only as the owner selected it (ruling F26)."""
 
     matched: list[_Span] = []
     for match in find_names(view, text, aliases=aliases):
         thing_id = chosen.get(_norm(match.text))
         if thing_id is None and not match.suggested and not is_new(match.text, as_new):
             thing_id = match.candidates[0].id
+        if (
+            thing_id in made
+            and _norm(match.text) not in lowercase
+            and not _capitalised(match.text)
+        ):
+            thing_id = None
         if thing_id == owner:
             thing_id = None
         # a suggestion left alone, or the owner's own name, still holds its
@@ -361,6 +371,7 @@ def link_text(
     chosen.pop("", None)
     # the owner's own selections link as written, capital or not
     allowed = {_norm(name) for name in lowercase}
+    made = frozenset((new_names or {}).values())
     if owner is not None:
         chosen = {
             key: thing_id for key, thing_id in chosen.items() if thing_id != owner
@@ -378,11 +389,14 @@ def link_text(
                 as_new,
                 allowed,
                 aliases,
+                made,
             )
         )
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen, owner, as_new, allowed, aliases))
+    out.append(
+        _link_plain(view, text[end:], chosen, owner, as_new, allowed, aliases, made)
+    )
     return "".join(out)
 
 
