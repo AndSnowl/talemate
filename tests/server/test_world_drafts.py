@@ -15,6 +15,7 @@ from talemate.server.world_drafts import (
     facts_key,
     group_key,
     nested_key,
+    page_key,
 )
 
 
@@ -101,6 +102,9 @@ def test_keys():
     assert group_key("x", None) == "group:x:"
     assert group_key("x", "") == "group:x:"
     assert nested_key("stub:1") == "nested:stub:1"
+    assert page_key(nested_key("new:lore:nested:x")) == "new:lore:nested:x"
+    with pytest.raises(ValueError):
+        page_key("facts:thing-1")
 
 
 def test_ask_sequence():

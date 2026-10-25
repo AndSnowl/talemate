@@ -47,6 +47,14 @@ def nested_key(page_key: str) -> str:
     return f"nested:{page_key}"
 
 
+def page_key(key: str) -> str:
+    """`nested_key`'s inverse: the page draft a nested draft's key names."""
+
+    if not key.startswith("nested:"):
+        raise ValueError(f"not a nested draft's key: {key}")
+    return key.removeprefix("nested:")
+
+
 class SmallDrafts:
     """A versioned, least-recently-used store of small drafts, keyed by
     `facts_key`/`group_key`/`nested_key` (or any string a caller picks).

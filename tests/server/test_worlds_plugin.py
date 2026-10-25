@@ -7538,6 +7538,173 @@ async def test_nested_keep_new_is_honoured_at_accept(plugin, client):
     }
 
 
+async def test_nested_forged_repeat_of_is_not_vouched_at_accept(plugin, client):
+    """A `repeat_of` the client set on a nested fact (no held nested
+    version flagged it) isn't carried into the page draft: the page
+    draft's accept then refuses a "Keep new" or "Move existing here" on
+    it, and the world's fact stays."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        bells = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+    forged = {
+        "fact_id": bells,
+        "owner_id": s.velikoye,
+        "owner_name": "Velikoye",
+        "text": "Velikoye has many bells.",
+        "score": 0.9,
+    }
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    added = await _nested_ask(plugin, key, _facts_reply("It hums at dusk."))
+    nested = added["draft"]
+    assert nested["facts"][0]["repeat_of"] is None
+    nested["facts"][0].update(repeat_of=forged, replaces_repeat=False)
+    page = await _write_nested(plugin, key, nested)
+    written = page["preview"]["facts"][-1]
+    assert written["text"] == "It hums at dusk."
+    assert written["repeat_of"] is None
+    assert all(
+        fact.repeat_of is None
+        for version in plugin._drafts[key]
+        for fact in version.facts
+    )
+
+    preview = page["preview"]
+    preview["facts"][-1].update(repeat_of=forged, replaces_repeat=True)
+    preview["move_here"] = [
+        {
+            "fact_id": bells,
+            "from_id": s.velikoye,
+            "text": "Velikoye has many bells.",
+            "ticked": True,
+            "repeat": True,
+        }
+    ]
+    await _act(plugin, "accept_preview", preview=preview, draft_key=key)
+    accepted = _last(plugin, "accept_preview")["data"]
+    assert any("bells" in note for note in accepted["notes"])
+    assert "Velikoye has many bells." in {
+        f.text for f in s.world.view().thing(s.velikoye).facts
+    }
+
+
+async def test_nested_move_existing_here_is_honoured_at_accept(plugin, client):
+    """A nested "Move existing here" (its fact unticked) carried into the
+    page draft is vouched for at accept: the unticked fact backing it
+    goes in with it, unticked, so the world's fact moves and no copy is
+    written."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        weave = rev.add_fact(
+            s.wattle, "general", "Wattlemakers weave fences along the row."
+        )
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Wattle Row", "Carts crowd it at noon."),
+        kind="place",
+        prompt="the row",
+        stub_id=s.wattle,
+    )
+    key = draft["draft_key"]
+    added = await _nested_ask(
+        plugin, key, _facts_reply("Wattlemakers weave fences along the row daily.")
+    )
+    nested = added["draft"]
+    nested["facts"][0]["ticked"] = False
+    nested["move_here"] = [
+        {
+            "fact_id": weave,
+            "from_id": s.wattle,
+            "text": "Wattlemakers weave fences along the row.",
+            "ticked": True,
+            "repeat": True,
+        }
+    ]
+    page = await _write_nested(plugin, key, nested)
+    assert page["notes"] == []
+    backing = page["preview"]["facts"][-1]
+    assert backing["ticked"] is False
+    assert backing["repeat_of"]["fact_id"] == weave
+    assert [m["fact_id"] for m in page["preview"]["move_here"]] == [weave]
+
+
+async def test_nested_ask_refused_while_page_regenerates(plugin, client):
+    """R7, one order: a nested ask sent while a regeneration of its page
+    draft is still out is refused (`add_facts_failed`), and the
+    regeneration then lands as a new version."""
+
+    await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    async with MockClientContext():
+        client_responses.get().append(_draft_reply("Frostwing Host", "Again."))
+        client_responses.get().append("The prose.")
+        # no reply for the nested ask: it never asks the model
+        await _act(
+            plugin,
+            "preview_thing",
+            kind="lore",
+            fields={},
+            prompt="again",
+            draft_key=key,
+        )
+        await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
+        await _drain(plugin)
+    failed = _last(plugin, "add_facts_failed")
+    assert "wait for the draft to finish regenerating" in failed["message"]
+    assert failed["data"] == {"draft_key": key}
+    assert _replies(plugin, "add_facts") == []
+    assert not plugin._small.held(f"nested:{key}")
+    assert _last(plugin, "preview_thing")["data"]["version"] == 2
+    assert not plugin._previews_out
+
+    # once it's in, the nested ask goes ahead
+    added = await _nested_ask(plugin, key, _facts_reply("It drills at dawn."))
+    assert added["nested_in"] == key
+
+
+async def test_page_preview_landing_on_a_held_nested_draft_is_refused(plugin, client):
+    """R7, the other order: a preview whose reply resolves to a page
+    draft whose nested draft is held (here one sent without its
+    `draft_key`, landing on the same key by name) adds no version and
+    answers `preview_failed`."""
+
+    await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    await _nested_ask(plugin, key, _facts_reply("It drills at dawn."))
+    replies = len(_replies(plugin, "preview_thing"))
+    async with MockClientContext():
+        client_responses.get().append(_draft_reply("Frostwing Host", "Again."))
+        client_responses.get().append("The prose.")
+        await _act(plugin, "preview_thing", kind="lore", fields={}, prompt="again")
+        await _drain(plugin)
+    failed = _last(plugin, "preview_failed")
+    assert "write or discard the added facts first" in failed["message"]
+    assert failed["data"] == {"draft_key": key}
+    assert len(_replies(plugin, "preview_thing")) == replies
+    assert len(plugin._drafts[key]) == 1
+    assert plugin._small.held(f"nested:{key}")
+
+
 async def test_accept_facts_refuses_a_nested_draft(plugin, client):
     s = await _open_filing_world(plugin)
     head = s.world.head_rev()

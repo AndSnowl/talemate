@@ -251,7 +251,13 @@ through `signal_operation_failed` (an `operation_done` envelope with
   them), answered with `nested_in: <page draft key>`; a result that
   comes after another version of the page draft became current is held
   nowhere and answers `add_facts_failed`/`add_event_failed` with
-  `{draft_key: <page draft key>, stale: true}`. `write_nested_facts
+  `{draft_key: <page draft key>, stale: true}`; one asked while a
+  `preview_thing` for the page draft is still out answers
+  `add_facts_failed`/`add_event_failed` ("wait for the draft to finish
+  regenerating", `{draft_key}`), and a `preview_thing` reply landing on
+  a page draft whose nested draft is held answers `preview_failed`
+  ("write or discard the added facts first", `{draft_key}`), adding no
+  version. `write_nested_facts
   {draft_key: <page draft key>, draft}` checks its repeat choices against
   the nested draft's held versions, puts its ticked facts and new names
   (and kept "Move existing here" rows) into a copy of the page draft's
@@ -368,7 +374,7 @@ import asyncio
 import hashlib
 import json
 import os
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from collections.abc import Callable, Collection, Coroutine, Sequence
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -385,6 +391,7 @@ from talemate.server.world_drafts import (
     facts_key,
     group_key,
     nested_key,
+    page_key,
 )
 from talemate.world import entries, heritage
 from talemate.world.calendar import Calendar
@@ -1941,6 +1948,9 @@ class WorldsPlugin(Plugin):
         # the small drafts of this session (fact, event and group-add
         # drafts), versioned, in memory only
         self._small = SmallDrafts()
+        # the page drafts with a `preview_thing` (a Regenerate) still out,
+        # and how many: a nested ask waits for them (R7)
+        self._previews_out: Counter[str] = Counter()
 
     def disconnect(self):
         self._set_world(None)
@@ -2683,15 +2693,31 @@ class WorldsPlugin(Plugin):
             "Error previewing a world thing",
             success_data=lambda preview: self._new_version(world, key, preview),
         )
+        if key is not None:
+            self._previews_out[key] += 1
 
         def on_done(task: asyncio.Task) -> None:
-            if (
-                known
-                and key not in self._drafts
-                and not task.cancelled()
-                and task.exception() is None
-            ):
+            if key is not None:
+                self._previews_out[key] -= 1
+                if self._previews_out[key] <= 0:
+                    del self._previews_out[key]
+            done = not task.cancelled() and task.exception() is None
+            if done and known and key not in self._drafts:
                 log.info("worlds.preview_dropped", draft_key=key)
+                return
+            resolved = (key or self._draft_key(task.result())) if done else None
+            if resolved is not None and self._small.held(nested_key(resolved)):
+                # R7: the page draft's nested draft was asked on the
+                # version current now, so no other version joins it
+                log.info("worlds.preview_refused_nested", draft_key=resolved)
+                self.websocket_handler.queue_put(
+                    {
+                        "type": self.router,
+                        "action": "preview_failed",
+                        "message": "write or discard the added facts first",
+                        "data": {"draft_key": resolved},
+                    }
+                )
                 return
             answer(task)
 
@@ -3958,6 +3984,19 @@ class WorldsPlugin(Plugin):
         client = self._client() if fixed is None else None
         reply = fixed.read_text(encoding="utf-8") if fixed is not None else None
         key = payload.draft_key
+        if key is not None and self._previews_out.get(key):
+            # R7: a Regenerate of the page draft is still out, and would
+            # make another version current under the nested draft
+            log.info("worlds.facts_wait", draft_key=key)
+            self.websocket_handler.queue_put(
+                {
+                    "type": self.router,
+                    "action": f"{action}_failed",
+                    "message": "wait for the draft to finish regenerating",
+                    "data": {"draft_key": key},
+                }
+            )
+            return
         if key is not None:
             # for the page draft's current version, held as its own nested
             # fact draft (`nested_key`): a fresh one, or with `regenerate`
@@ -4050,12 +4089,6 @@ class WorldsPlugin(Plugin):
         versions = self._require_draft(key)
         return versions[self._current.get(key, len(versions) - 1)]
 
-    @staticmethod
-    def _page_key(key: str) -> str:
-        """The page draft a nested draft's key (`nested_key`) names."""
-
-        return key.removeprefix(nested_key(""))
-
     def _nested_draft_out(self, world: World, key: str, draft: FactDraft) -> dict:
         """A nested fact draft for the wire, as `_fact_draft_out` answers a
         fact draft (`thing_id: null`, `draft`, `facts`), plus `nested_in`,
@@ -4064,8 +4097,8 @@ class WorldsPlugin(Plugin):
         the facts and new names added): its picks, the names it treats as
         new, its own names "this page" and the new names `fresh`."""
 
-        page_key = self._page_key(key)
-        preview = self._current_preview(page_key)
+        page = page_key(key)
+        preview = self._current_preview(page)
         start = len(preview.facts)
         joined = preview.model_copy(
             update={
@@ -4083,7 +4116,7 @@ class WorldsPlugin(Plugin):
         ]
         return {
             "thing_id": None,
-            "nested_in": page_key,
+            "nested_in": page,
             "draft": draft.model_dump(mode="json"),
             "facts": [
                 {
@@ -4118,8 +4151,11 @@ class WorldsPlugin(Plugin):
     async def handle_write_nested_facts(self, data: dict):
         """Write a page draft's nested fact draft into it, writing nothing
         to the world: its repeat choices are checked against every held
-        version of the nested draft (`_check_repeat_moves`), then its
-        ticked facts (each keeping its `repeat_of` and "Keep new") and
+        version of the nested draft (`_check_repeat_moves`), and each
+        fact's `repeat_of` is taken from those versions (one none of them
+        flagged is dropped, with its "Keep new"); then its ticked facts
+        (each keeping its `repeat_of` and "Keep new"), the unticked ones
+        a kept "Move existing here" row stands on (unticked) and its
         ticked new names join a copy of the page draft's current version,
         its kept "Move existing here" rows the copy's `move_here`. The
         copy is held as a new version of the page draft (`_new_version`),
@@ -4138,7 +4174,7 @@ class WorldsPlugin(Plugin):
         held = [
             fact
             for version in self._small.versions(small)
-            for fact in getattr(version, "facts", [])
+            for fact in cast(FactDraft, version).facts
         ]
         moves = [
             move
@@ -4147,14 +4183,35 @@ class WorldsPlugin(Plugin):
             )
             if move.repeat and move.ticked
         ]
+        moving = {(move.fact_id, move.from_id) for move in moves}
+        # each fact's repeat as the server flagged it, never the client's
+        # word: the page draft's accept vouches for its repeat choices
+        # against what its held versions say (`_check_page_repeats`), so
+        # an unflagged `repeat_of` must not reach them
+        flagged = {
+            (fact.repeat_of.get("fact_id"), fact.repeat_of.get("owner_id")): (
+                fact.repeat_of
+            )
+            for fact in held
+            if fact.repeat_of
+        }
+        joining: list[PreviewFact] = []
+        for fact in draft.facts:
+            repeat = fact.repeat_of or {}
+            pair = (repeat.get("fact_id"), repeat.get("owner_id"))
+            fact.repeat_of = dict(flagged[pair]) if pair in flagged else None
+            if fact.repeat_of is None:
+                fact.replaces_repeat = False
+            # the ticked ones, and an unticked one a kept "Move existing
+            # here" row stands on (as on a page draft, accept writes it
+            # not, but vouches for the move by it)
+            if fact.text.strip() and (fact.ticked or pair in moving):
+                joining.append(fact)
         copy = preview.model_copy(deep=True)
-        copy.facts.extend(
-            fact for fact in draft.facts if fact.ticked and fact.text.strip()
-        )
+        copy.facts.extend(joining)
         copy.new_names.extend(
             self._nested_names(copy, [row for row in draft.new_names if row.ticked])
         )
-        moving = {(move.fact_id, move.from_id) for move in moves}
         copy.move_here = [
             row for row in copy.move_here if (row.fact_id, row.from_id) not in moving
         ] + moves
