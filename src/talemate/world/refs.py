@@ -54,8 +54,8 @@ _EMPHASIS = [
 ]
 # a reference stands in as this while emphasis is scrubbed: no marker
 # character, and never written by a model
-_HOLD = "{}"
-_HELD = re.compile("(\\d+)")
+_HOLD = "\ue000{}\ue001"
+_HELD = re.compile("\ue000(\\d+)\ue001")
 
 
 def scrub_emphasis(text: str) -> str:
