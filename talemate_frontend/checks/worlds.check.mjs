@@ -80,6 +80,7 @@ import {
     groupView,
     headerNames,
     kindList,
+    mostPreciseHome,
     normaliseTag,
     referenceFieldLabel,
     roleLead,
@@ -2182,6 +2183,27 @@ check('the most precise place: drops a home another home already sits in', () =>
         kindList(unrelated, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
         [['p', 0], ['e', 1], ['q', 0]],
     );
+
+    // M1: a home filed in several places is climbed through all of them:
+    // the Halls are filed in the Academy first and Novograd second, so
+    // the HQ's Novograd home still drops out
+    const several = [
+        { id: 'hq', name: 'Postal Headquarters', filed_in: ['novograd', 'halls'] },
+        { id: 'novograd', name: 'Novograd', filed_in: [] },
+        { id: 'academy', name: 'Academy', filed_in: [] },
+        { id: 'halls', name: 'Great Stone Halls', filed_in: ['academy', 'novograd'] },
+    ];
+    assert.equal(mostPreciseHome(several[0].filed_in, new Map(several.map((t) => [t.id, t]))), 'halls');
+    // and further up through a non-first home: the Halls in the Academy,
+    // then the Wing; the Wing in Novograd only as its second home
+    const deeper = [
+        { id: 'hq', name: 'Postal Headquarters', filed_in: ['novograd', 'halls'] },
+        { id: 'novograd', name: 'Novograd', filed_in: [] },
+        { id: 'academy', name: 'Academy', filed_in: [] },
+        { id: 'wing', name: 'East Wing', filed_in: ['academy', 'novograd'] },
+        { id: 'halls', name: 'Great Stone Halls', filed_in: ['academy', 'wing'] },
+    ];
+    assert.equal(mostPreciseHome(deeper[0].filed_in, new Map(deeper.map((t) => [t.id, t]))), 'halls');
 
     // one home: unchanged
     const single = [

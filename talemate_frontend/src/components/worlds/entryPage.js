@@ -179,33 +179,29 @@ export function timelineShown(lines, mode, eventIds = []) {
     return (lines || []).filter((line) => events.has(line.owner_id));
 }
 
-// A listed thing's first listed home (`filed_in`'s first id that's in
-// `byId`), or null for none. This is the plain, single-step walk that
-// `ancestorsAbove` climbs to find what a home itself sits in; it never
-// calls `mostPreciseHome`, so a cycle between two homes can't recurse.
-function firstListedHome(id, byId) {
-    const thing = byId.get(id);
-    return (thing?.filed_in || []).find((homeId) => byId.has(homeId)) ?? null;
-}
-
-// Every listed id that `id`'s home chain reaches, climbing `firstListedHome`
-// (`held.ancestorsAbove`): cycle-safe, a seen-set stops a loop of homes
-// each filed in the next.
+// Every listed id that `id`'s homes reach, climbing every listed home of
+// each (`filed_in`), breadth first: a home filed in several places is
+// climbed through all of them. Cycle-safe: a seen-set stops a loop of
+// homes each filed in the next, and it never calls `mostPreciseHome`.
 function ancestorsAbove(id, byId) {
     const seen = new Set();
-    let current = firstListedHome(id, byId);
-    while (current && !seen.has(current)) {
-        seen.add(current);
-        current = firstListedHome(current, byId);
+    const queue = [id];
+    while (queue.length) {
+        const thing = byId.get(queue.shift());
+        for (const homeId of thing?.filed_in || []) {
+            if (byId.has(homeId) && !seen.has(homeId)) {
+                seen.add(homeId);
+                queue.push(homeId);
+            }
+        }
     }
     return seen;
 }
 
-// The most precise of a thing's listed homes (`held.mostPreciseHome`,
-// final review §6): among `filedIn`'s listed ids, drop any home that
-// another of them already sits in (its own `filed_in` chain, climbed
-// cycle-safe by `ancestorsAbove`); of what's left, the first filed. null
-// for no listed home.
+// The most precise of a thing's listed homes: among `filedIn`'s listed
+// ids, drop any home that another of them already sits in (every home
+// above it, `ancestorsAbove`); of what's left, the first filed. null for
+// no listed home.
 export function mostPreciseHome(filedIn, byId) {
     const homes = (filedIn || []).filter((id) => byId.has(id));
     if (homes.length <= 1) {
