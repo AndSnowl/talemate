@@ -229,22 +229,25 @@ through `signal_operation_failed` (an `operation_done` envelope with
   holding the model's reply.
 - Filing and tags (`talemate.world.filing`): the thing payload has
   `tag`, `hint` (the prompt hint it was written with), `in: [{target_id,
-  target_name, role, since, until, within_id, within_name, exceptions:
-  [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
+  target_name, role, show_under, since, until, within_id, within_name,
+  exceptions: [{fact_id, segments}]}]` (every filing, ended ones too, a target gone
   hidden), `connected: [{tag, heading, synopsis, rows: [{id, name, stub,
-  believed, line_segments, role, since, until}]}]` (what's filed in it,
-  grouped by tag; `believed` marks a believed or undecided being, shown
+  believed, line_segments, role, show_under, since, until}]}]` (what's
+  filed in it, grouped by the group each filing shows under, else the
+  entry's tag; `believed` marks a believed or undecided being, shown
   but not one of the people, ruling F24; `synopsis` is `groups.cached_synopsis` -- a fresh cached one, read
   with no model call, null when there's none cached or it's gone stale --
   and only at the latest telling) and `mentioned_in: [{id, name}]`.
   `add_filing {thing_id, target_id|new_name, kind?, tag?, role, since,
-  until, within, at}`, `edit_filing {thing_id, target_id, role?, since?,
-  until?, within?, at}` (an `until` ends it) and `remove_filing {thing_id,
+  until, within, show_under?, at}`, `edit_filing {thing_id, target_id,
+  role?, since?, until?, within?, show_under?, at}` (an `until` ends it;
+  `show_under` is a tag, the group it shows under on the target's page) and `remove_filing {thing_id,
   target_id, at}` (its exceptions go with it, named in its `notes`) each
   write one revision and answer with the thing; `add_exception {character_id, target_id, text,
   rejects, ...}` adds a "but..." to a filing. `set_tag {thing_id, tag}`
   answers with the thing; `list_tags` answers `{tags: [{tag, heading,
-  count}]}`; `rename_tag {old, new}` and `merge_tag {from, into}` retag
+  count}]}` (a filing's `show_under` counts) and `list_roles` `{roles:
+  [{role, count}]}`, the roles in use; `rename_tag {old, new}` and `merge_tag {from, into}` retag
   every entry in one revision and answer `{old, new | from, into,
   changed, tags}`. Filings and tags are no prose input: none is
   scheduled.
@@ -328,6 +331,7 @@ from talemate.world.filing import (
     filed_in,
     filings_of,
     mentioned_in,
+    roles_in_use,
     tag_heading,
     tag_of,
     tags_in_use,
@@ -724,7 +728,9 @@ GUARDED_FIELDS: dict[str, str] = {
 class AddFilingPayload(_ThingEdit):
     """File a thing in an entry the world has (`target_id`) or in a new
     stub named `new_name` (of `kind`, default lore, with `tag`), with a
-    role, dates and, for a person, a part of the target it's `within`."""
+    role, dates and, for a person, a part of the target it's `within`;
+    `show_under`, the group it shows under on the target's page (a tag),
+    else the entry's own tag."""
 
     target_id: str | None = None
     new_name: str | None = None
@@ -734,6 +740,7 @@ class AddFilingPayload(_ThingEdit):
     since: dict | None = None
     until: dict | None = None
     within: str | None = None
+    show_under: str | None = None
 
     @pydantic.model_validator(mode="after")
     def _one_target(self) -> "AddFilingPayload":
@@ -745,14 +752,15 @@ class AddFilingPayload(_ThingEdit):
 
 class EditFilingPayload(_ThingEdit):
     """Change one filing (the one into `target_id`): only the keys sent
-    change (`role`, `since`, `until`, `within`; null clears one). An
-    `until` ends it ("End this"). Its exceptions are kept."""
+    change (`role`, `since`, `until`, `within`, `show_under`; null clears
+    one). An `until` ends it ("End this"). Its exceptions are kept."""
 
     target_id: str
     role: str | None = None
     since: dict | None = None
     until: dict | None = None
     within: str | None = None
+    show_under: str | None = None
 
 
 class RemoveFilingPayload(_ThingEdit):
@@ -1386,6 +1394,7 @@ def _in_out(
                 "target_id": filing.target,
                 "target_name": view.name_of(filing.target) or "",
                 "role": filing.role,
+                "show_under": filing.show_under,
                 "since": _date_out(calendar, filing.since),
                 "until": _date_out(calendar, filing.until),
                 "within_id": within,
@@ -1461,6 +1470,7 @@ def _connected_out(
                     and not entries.acts_in_world(state),
                     "line_segments": links.segments(fact.text) if fact else [],
                     "role": filing.role,
+                    "show_under": filing.show_under,
                     "since": _date_out(calendar, filing.since),
                     "until": _date_out(calendar, filing.until),
                 }
@@ -2759,6 +2769,7 @@ class WorldsPlugin(Plugin):
                         since=since,
                         until=until,
                         within=payload.within,
+                        show_under=normalise_tag(payload.show_under or "") or None,
                     ),
                 ],
             )
@@ -2766,7 +2777,8 @@ class WorldsPlugin(Plugin):
 
     async def handle_edit_filing(self, data: dict):
         """Change the thing's filing into `target_id`: the keys sent
-        (`role`, `since`, `until`, `within`; null clears one), the rest
+        (`role`, `since`, `until`, `within`, `show_under`: the group it
+        shows under on the target's page, a tag; null clears one), the rest
         and its exceptions kept, in one revision. An `until` ends it
         ("End this"), which is how an item leaves an entry now. Refused as
         `add_filing` is, and for a filing the thing doesn't have."""
@@ -2793,6 +2805,8 @@ class WorldsPlugin(Plugin):
             update["until"] = _date_in(payload.until)
         if "within" in sent:
             update["within"] = payload.within
+        if "show_under" in sent:
+            update["show_under"] = normalise_tag(payload.show_under or "") or None
         filing = current[index].model_copy(update=update)
         self._filing_dates(filing.since, filing.until)
         filings = [*current[:index], filing, *current[index + 1 :]]
@@ -2933,6 +2947,20 @@ class WorldsPlugin(Plugin):
 
         self._reply("list_tags", {"tags": self._tags_out(self._require_world().view())})
 
+    async def handle_list_roles(self, data: dict):
+        """The filing roles in use (`filing.roles_in_use`), most used
+        first: `{roles: [{role, count}]}`, for the role picker."""
+
+        self._reply(
+            "list_roles",
+            {
+                "roles": [
+                    {"role": role, "count": count}
+                    for role, count in roles_in_use(self._require_world().view())
+                ]
+            },
+        )
+
     async def handle_set_tag(self, data: dict):
         """Give an entry its one tag (lowercased, its first comma part:
         `kinds.normalise_tag`), or clear it with a null or blank one, in
@@ -2966,18 +2994,24 @@ class WorldsPlugin(Plugin):
 
     @staticmethod
     def _tags_ever(world: World) -> set[str]:
-        """Every tag the world's entries carry at any date (a tag that
-        only holds in the past is in use too)."""
+        """Every tag the world's entries carry at any date, as their own
+        or as a filing's `show_under` (a tag that only holds in the past
+        is in use too)."""
 
         found: set[str] = set()
         for state in world.view().things():
             for entry in world.timeline(state.id):
-                if (
-                    entry.change == "field"
-                    and entry.field == "tag"
-                    and isinstance(entry.value, str)
-                ):
+                if entry.change != "field":
+                    continue
+                if entry.field == "tag" and isinstance(entry.value, str):
                     found.add(normalise_tag(entry.value))
+                elif entry.field == "filings" and isinstance(entry.value, list):
+                    found.update(
+                        normalise_tag(filing["show_under"])
+                        for filing in entry.value
+                        if isinstance(filing, dict)
+                        and isinstance(filing.get("show_under"), str)
+                    )
         return found
 
     def _tag_reply(self, action: str, world: World, changed: list[str], **data) -> None:

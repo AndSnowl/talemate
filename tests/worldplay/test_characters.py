@@ -895,6 +895,7 @@ def test_filing_line_for_a_role_that_says_how(world, spheres_world):
             [
                 {"target": s.council, "role": "ward under"},
                 {"target": s.tsardom, "role": "of this culture"},
+                {"target": s.kremova, "role": "acting as"},
             ],
             None,
         )
@@ -911,6 +912,8 @@ def test_filing_line_for_a_role_that_says_how(world, spheres_world):
     assert filing_lines(view, world.calendar, s.brenna) == [
         "Ward under the Council of Elders",
         "Of Tsardom of Moscavia",
+        # "as", "through", "over"... say how too (the In row reads it so)
+        "Acting as Kremova",
     ]
     assert filing_lines(view, world.calendar, oleg) == [
         "Born in Tsardom of Moscavia, within Kremova"

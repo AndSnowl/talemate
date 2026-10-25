@@ -117,6 +117,44 @@ export function dropTag(fromTag, toTag) {
     return (fromTag ?? null) === to ? undefined : to;
 }
 
+// What a Connected row moved from the group `fromTag` to `toTag` changes,
+// or null when it's dropped where it is: a row whose filing shows under a
+// group (`show_under`) changes only that (`{showUnder}`, null: back under
+// the entry's own tag); any other row, the entry's tag (`{tag}`, as
+// `dropTag`), which moves it on every page it's filed in.
+export function rowMove(row, fromTag, toTag) {
+    const to = dropTag(fromTag, toTag);
+    if (to === undefined) {
+        return null;
+    }
+    return row?.show_under ? { showUnder: to } : { tag: to };
+}
+
+// the words a role can end with and take no "of" (`held.ROLE_PREPOSITIONS`)
+const ROLE_PREPOSITIONS = ['in', 'of', 'by', 'at', 'for', 'to', 'from', 'with', 'on', 'under', 'through', 'over', 'into', 'across', 'within', 'as'];
+
+// What an "In" row reads before its target, the entry's way, as the
+// character sheet's line has it (`held.filed_as`): the role capitalised
+// and "of" ("Native of"), one that ends with a preposition as it is
+// ("Took place in", "Branch of"), one that opens "of", "Of"; a person
+// `within` a part of the target, "in" ("Trooper in"). '' for no role.
+export function roleLead(role, { within = false } = {}) {
+    const words = String(role ?? '').split(/\s+/).filter(Boolean);
+    if (!words.length) {
+        return '';
+    }
+    const text = words.join(' ');
+    const lead = text.slice(0, 1).toUpperCase() + text.slice(1);
+    const folded = words.map((word) => word.toLowerCase());
+    if (folded[0] === 'of') {
+        return 'Of';
+    }
+    if (ROLE_PREPOSITIONS.includes(folded[folded.length - 1])) {
+        return lead;
+    }
+    return `${lead} ${within ? 'in' : 'of'}`;
+}
+
 // The tag picker's choices for `query` (`tags`: `list_tags`' `{tag,
 // heading, count}`): the tags in use that hold it, then whether "+ new tag"
 // is offered (the query, normalised, is no tag in use). `current` (the

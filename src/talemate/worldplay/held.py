@@ -199,8 +199,26 @@ def timeline_text(view: WorldView, line: TimelineLine) -> str:
 
 
 # a role that ends with one of these already says how it holds its entry
-# ("took place in", "owned by", "branch of"): no "of" goes after it
-ROLE_PREPOSITIONS = ("in", "of", "by", "at", "for", "to", "from", "with", "on", "under")
+# ("took place in", "owned by", "branch of", "runs through", "acting
+# as"): no "of" goes after it
+ROLE_PREPOSITIONS = (
+    "in",
+    "of",
+    "by",
+    "at",
+    "for",
+    "to",
+    "from",
+    "with",
+    "on",
+    "under",
+    "through",
+    "over",
+    "into",
+    "across",
+    "within",
+    "as",
+)
 
 
 def mid_sentence_name(name: str) -> str:

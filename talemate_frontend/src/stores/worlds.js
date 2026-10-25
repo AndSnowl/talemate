@@ -89,7 +89,8 @@
 // chip, or a Connected row dragged to another group, which may be another
 // thing: its reply refreshes the open page); `listTags` keeps `tags`
 // (`list_tags`) for the picker and the Tags tab, whose `renameTag` and
-// `mergeTag` retag every entry. A group's "✎ Synopsis" (`groupSynopsis`)
+// `mergeTag` retag every entry (a filing's `show_under` too); `listRoles`
+// keeps `roles` (`list_roles`), the roles in use, for the role picker. A group's "✎ Synopsis" (`groupSynopsis`)
 // and "+ Add" (`groupAdd`, then `acceptGroupAdd` or `discardGroupAdd`)
 // are kept per page and tag (`groupKey`) in `synopses` and `groupAdds`.
 // "+ Add facts…" and "+ Add event…" (`addFacts`, `addEvent`) draft a few
@@ -649,6 +650,8 @@ function worldState() {
         akaQueue: {},
         // `list_tags`: `{tag, heading, count}` of every tag in use
         tags: [],
+        // `list_roles`: `{role, count}` of every filing role in use
+        roles: [],
         // the last rename or merge answered: `{from, to}`
         tagsChanged: null,
         // `groupKey(page, tag)` -> a group's synopsis asked for: `{pending,
@@ -1255,25 +1258,28 @@ export const useWorldsStore = defineStore('worlds', {
 
         // file the open page in `targetId`, or in a new stub `newName` (of
         // `kind`, with `tag`): `{targetId | newName, kind, tag, role, since,
-        // until, within}`
-        addFiling({ targetId = null, newName = null, kind = null, tag = null, role = null, since = null, until = null, within = null }) {
+        // until, within, showUnder}` (`showUnder`: the group it shows under
+        // on the target's page, a tag; sent only when there is one)
+        addFiling({ targetId = null, newName = null, kind = null, tag = null, role = null, since = null, until = null, within = null, showUnder = null }) {
             this.filingEdit('add_filing', null, {
                 ...(targetId ? { target_id: targetId } : { new_name: newName, ...(kind ? { kind } : {}), ...(tag ? { tag } : {}) }),
                 role: role || null,
                 since: dateIn(since),
                 until: dateIn(until),
                 within,
+                ...(showUnder ? { show_under: showUnder } : {}),
             });
         },
 
-        // `changes`: only what changes of `{role, since, until, within}`
-        // (null clears one; an `until` ends it, "End this")
-        editFiling(targetId, changes) {
+        // `changes`: only what changes of `{role, since, until, within,
+        // show_under}` (null clears one; an `until` ends it, "End this"),
+        // of the open page's filing, or `thingId`'s (a Connected row moved)
+        editFiling(targetId, changes, thingId = null) {
             const data = { target_id: targetId };
             for (const [key, value] of Object.entries(changes)) {
                 data[key] = key === 'since' || key === 'until' ? dateIn(value) : value;
             }
-            this.filingEdit('edit_filing', null, data);
+            this.filingEdit('edit_filing', thingId, data);
         },
 
         removeFiling(targetId) {
@@ -1300,6 +1306,11 @@ export const useWorldsStore = defineStore('worlds', {
 
         listTags() {
             this.request('list_tags');
+        },
+
+        // the role picker's choices
+        listRoles() {
+            this.request('list_roles');
         },
 
         renameTag(old, renamed) {
@@ -1696,7 +1707,7 @@ export const useWorldsStore = defineStore('worlds', {
             }
             this.listStubs();
             this.listAllThings();
-            if (action === 'set_tag' || action === 'accept_group_add' || action === 'add_filing') {
+            if (action === 'set_tag' || action === 'accept_group_add' || action === 'add_filing' || action === 'edit_filing') {
                 this.listTags();
             }
         },
@@ -1790,6 +1801,9 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'list_tags':
                     this.tags = data.tags;
+                    break;
+                case 'list_roles':
+                    this.roles = data.roles;
                     break;
                 case 'rename_tag':
                 case 'merge_tag':

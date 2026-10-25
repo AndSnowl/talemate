@@ -102,7 +102,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { dropTag, filingDates, groupKey, groupView } from './entryPage.js';
+import { filingDates, groupKey, groupView, rowMove } from './entryPage.js';
 import GroupAddForm from './GroupAddForm.vue';
 
 // the drag's data type: the row dragged and the group it's from
@@ -117,7 +117,9 @@ const DRAG_TYPE = 'application/x-fantasymate-row';
 // group's synopsis (`group_synopsis`; again, skipping the cache, once
 // there is one); "+ Add" drafts new entries for it (`GroupAddForm`).
 // A row dragged onto another group takes that group's tag (`set_tag`),
-// so it moves there on every page it's filed in; its "▾" menu does the
+// so it moves there on every page it's filed in; one whose filing names
+// the group it shows under (`show_under`) has only that filing changed
+// (`edit_filing`), on this page alone (`rowMove`). Its "▾" menu does the
 // same from the keyboard. A believed (or undecided) being is marked
 // "believed" (ruling F24). On a draft (`readonly`) the group only shows
 // (no synopsis, "+ Add", drag or move: each writes or asks before the
@@ -173,9 +175,16 @@ export default {
             this.worlds.groupSynopsis(this.thingId, this.group.tag, !!this.synopsis);
         },
         moveTo(row, tag) {
-            const to = dropTag(this.group.tag, tag);
-            if (to !== undefined) {
-                this.worlds.setTag(row.id, to);
+            this.move(row, rowMove(row, this.group.tag, tag));
+        },
+        move(row, change) {
+            if (!change) {
+                return;
+            }
+            if ('showUnder' in change) {
+                this.worlds.editFiling(this.thingId, { show_under: change.showUnder }, row.id);
+            } else {
+                this.worlds.setTag(row.id, change.tag);
             }
         },
         // only a Connected row may be dropped here
@@ -187,7 +196,7 @@ export default {
         },
         dragStart(event, row) {
             event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ id: row.id, tag: this.group.tag ?? null }));
+            event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ id: row.id, tag: this.group.tag ?? null, show_under: row.show_under ?? null }));
             event.dataTransfer.setData('text/plain', row.name);
         },
         drop(event) {
@@ -198,10 +207,7 @@ export default {
             }
             event.preventDefault();
             const dragged = JSON.parse(raw);
-            const tag = dropTag(dragged.tag, this.group.tag);
-            if (tag !== undefined) {
-                this.worlds.setTag(dragged.id, tag);
-            }
+            this.move(dragged, rowMove(dragged, dragged.tag, this.group.tag));
         },
     },
 };

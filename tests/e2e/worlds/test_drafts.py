@@ -270,7 +270,8 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     rows = filed.get_by_test_id("draft-in-row")
     expect(rows).to_have_count(2)
     tsardom = rows.filter(has_text="Tsardom of Moscavia")
-    expect(tsardom.get_by_test_id("in-role-text")).to_have_text("the realm's army")
+    # read the entry's way: "<Role> of <Target>"
+    expect(tsardom.get_by_test_id("in-role-text")).to_have_text("The realm's army of")
     for row in rows.all():
         assert not row.get_by_role("checkbox").is_checked()
     tsardom.get_by_role("checkbox").check()
@@ -290,7 +291,7 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     edit = filed.get_by_test_id("in-edit-form")
     edit.get_by_label("Role").fill("answers to")
     edit.get_by_role("button", name="Save").click()
-    expect(court.get_by_test_id("in-role-text")).to_have_text("answers to")
+    expect(court.get_by_test_id("in-role-text")).to_have_text("Answers to")
 
     # "File into this": unticked too
     into = draft.get_by_test_id("draft-file-into")
@@ -319,7 +320,7 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     in_rows = host.get_by_test_id("entry-in").get_by_test_id("in-row")
     expect(in_rows).to_have_count(2)
     expect(in_rows.filter(has_text="Velikoye")).to_have_count(0)
-    assert "answers to" in in_rows.filter(has_text="The Night Court").inner_text()
+    assert "Answers to" in in_rows.filter(has_text="The Night Court").inner_text()
     page.get_by_test_id("kind-lore").click()
     talon_page = _open_thing(page, "The White Talon")
     expect(

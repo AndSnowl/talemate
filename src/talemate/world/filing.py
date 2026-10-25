@@ -14,7 +14,10 @@ kept, hidden, and shows again once the target is back.
 
 A page's Connected section groups what is filed in it by each entry's tag
 (`connected`), headed by the tag pluralised (`tag_heading`); an untagged
-entry goes under "Other".
+entry goes under "Other". A filing can name the group it "shows under"
+on its target's page (`show_under`, a value from the tag pool: Vasha, a
+postal worker, shows under "Natives" in his hometown), which then groups
+it there instead of the entry's tag.
 
 The store runs `check_filings` on every write of `filings`; it refuses a
 filing into the thing itself, a `within` that doesn't sit in its target,
@@ -26,7 +29,9 @@ bring a cycle back: every reader that walks filings must be cycle-safe
 (`sits_in` visits each thing once).
 
 A stored filing always has the full shape (`stored_filings_value`), with
-a blank role kept as `None`.
+a blank role kept as `None` and `show_under` normalised as a tag is
+(`kinds.normalise_tag`), a blank one `None`. Reading is lenient: a filing
+stored before `show_under` existed reads as one without.
 
 An event's `place` and an item's `owner` are filings too (`FIELD_ROLES`):
 an event "took place in" its place, an item is "owned by" its owner.
@@ -40,6 +45,7 @@ import structlog
 from pydantic import BaseModel, Field, ValidationError
 
 from .dates import WorldDate
+from .kinds import normalise_tag
 from .view import ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.filing")
@@ -57,6 +63,7 @@ __all__ = [
     "filing_live",
     "filings_of",
     "mentioned_in",
+    "roles_in_use",
     "sits_in",
     "stored_filings_value",
     "tag_heading",
@@ -81,6 +88,9 @@ class Filing(BaseModel):
     until: WorldDate | None = None
     within: str | None = None
     exceptions: list[str] = Field(default_factory=list)
+    # the group it shows under on the target's page (a tag-pool value);
+    # `None`, the entry's own tag
+    show_under: str | None = None
 
 
 class Group(BaseModel):
@@ -108,13 +118,16 @@ def _stored_filings(state: ThingState) -> list[Filing]:
 def stored_filings_value(filings: Sequence[object]) -> list[dict[str, object]]:
     """`filings` (already of the right shape, `kinds.validate_field`) as
     they're stored: every key present (`Filing`'s defaults filling the
-    missing ones), dates in their JSON form, and a blank role as `None`."""
+    missing ones), dates in their JSON form, a blank role as `None`, and
+    `show_under` normalised (`kinds.normalise_tag`), a blank one `None`."""
 
     stored: list[dict[str, object]] = []
     for raw in filings:
         filing = Filing.model_validate(raw)
         if filing.role is not None and not filing.role.strip():
             filing.role = None
+        if filing.show_under is not None:
+            filing.show_under = normalise_tag(filing.show_under) or None
         stored.append(filing.model_dump(mode="json"))
     return stored
 
@@ -406,7 +419,8 @@ def connected(
     index: FilingIndex | None = None,
 ) -> list[Group]:
     """What is filed in the target (`filed_in`, ended filings too with
-    `include_ended`), grouped by each entry's tag, an untagged entry under
+    `include_ended`), grouped by the group each filing shows under
+    (`show_under`), else the entry's tag, an untagged entry under
     "Other". Groups run largest first, then by heading; rows by role (a
     row without one last), then since (undated first), then name."""
 
@@ -414,7 +428,9 @@ def connected(
     for state, filing in filed_in(
         view, target_id, things=things, include_ended=include_ended, index=index
     ):
-        by_tag.setdefault(tag_of(state), []).append((state, filing))
+        by_tag.setdefault(filing.show_under or tag_of(state), []).append(
+            (state, filing)
+        )
 
     def row_key(
         row: tuple[ThingState, Filing],
@@ -471,7 +487,8 @@ def mentioned_in(
 
 
 def tags_in_use(view: WorldView) -> list[tuple[str, int]]:
-    """Every tag the view's entries carry, with how many carry it, most
+    """Every tag the view's entries carry, as their own tag or as a
+    filing's `show_under`, with how many entries use it (each once), most
     used first, then by tag. An ignored stub doesn't count: ignoring a
     stub hides it everywhere."""
 
@@ -479,9 +496,27 @@ def tags_in_use(view: WorldView) -> list[tuple[str, int]]:
     for state in view.things():
         if state.stub_ignored:
             continue
-        tag = tag_of(state)
-        if tag is not None:
-            counts[tag] = counts.get(tag, 0) + 1
+        used = {filing.show_under for filing in _stored_filings(state)}
+        used.add(tag_of(state))
+        for tag in used:
+            if tag:
+                counts[tag] = counts.get(tag, 0) + 1
+    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def roles_in_use(view: WorldView) -> list[tuple[str, int]]:
+    """Every role the view's entries' filings carry (stripped), with how
+    many filings carry it, most used first, then by role: the role
+    picker's choices. An ignored stub's don't count."""
+
+    counts: dict[str, int] = {}
+    for state in view.things():
+        if state.stub_ignored:
+            continue
+        for filing in _stored_filings(state):
+            role = " ".join((filing.role or "").split())
+            if role:
+                counts[role] = counts.get(role, 0) + 1
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
 

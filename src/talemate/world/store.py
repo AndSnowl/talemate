@@ -353,20 +353,12 @@ class Revision:
         values are corrected as `set_field` corrects one. A removed
         thing's values -- those its removal retired -- get a new value too,
         so undoing the removal brings it back with the new tag (the undo
-        finds the slot written after the removal and leaves it alone)."""
+        finds the slot written after the removal and leaves it alone).
+        A filing that shows under `old` (`show_under`) shows under `new`
+        the same way, every other key of its value kept."""
 
         old_tag, new_tag = normalise_tag(old), normalise_tag(new)
-        rows = self._conn.execute(
-            "SELECT fv.thing_id, fv.value_json, fv.valid_from, fv.from_precision, "
-            "fv.rev_removed, "
-            "(SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
-            " ORDER BY t.row_id DESC LIMIT 1) AS thing_removed "
-            "FROM field_values fv WHERE fv.field = 'tag' "
-            "AND (fv.rev_removed IS NULL OR fv.rev_removed = "
-            " (SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
-            "  ORDER BY t.row_id DESC LIMIT 1)) "
-            "ORDER BY fv.thing_id, fv.row_id",
-        ).fetchall()
+        rows = self._retag_rows("tag")
         changed: list[str] = []
         for row in rows:
             value = json.loads(row["value_json"])
@@ -398,7 +390,66 @@ class Revision:
                 )
             if thing_id not in changed:
                 changed.append(thing_id)
+        for row in self._retag_rows("filings"):
+            thing_id = cast(str, row["thing_id"])
+            if row["thing_removed"] is None and row["rev_removed"] is not None:
+                continue
+            value = json.loads(row["value_json"])
+            if not isinstance(value, list):
+                continue
+            hits = [
+                isinstance(filing, dict)
+                and isinstance(filing.get("show_under"), str)
+                and normalise_tag(filing["show_under"]) == old_tag
+                for filing in value
+            ]
+            if not any(hits):
+                continue
+            renamed = [
+                {**filing, "show_under": new_tag} if hit else filing
+                for filing, hit in zip(value, hits)
+            ]
+            if row["thing_removed"] is None:
+                # only the group a filing shows under changes: nothing for
+                # `check_filings` to look at, so written as stored
+                self._retire_field_value(
+                    thing_id, "filings", cast("int | None", row["valid_from"])
+                )
+            self._conn.execute(
+                "INSERT INTO field_values (thing_id, field, value_json, "
+                "valid_from, from_precision, rev_added) "
+                "VALUES (?, 'filings', ?, ?, ?, ?)",
+                (
+                    thing_id,
+                    json.dumps(renamed),
+                    row["valid_from"],
+                    row["from_precision"],
+                    self.rev,
+                ),
+            )
+            if thing_id not in changed:
+                changed.append(thing_id)
         return sorted(changed)
+
+    def _retag_rows(self, field: str) -> list[sqlite3.Row]:
+        """`retag`'s rows of `field`: each thing's live values, and a
+        removed thing's values its removal retired, with `thing_removed`
+        (the thing's removal, if any)."""
+
+        return list(
+            self._conn.execute(
+                "SELECT fv.thing_id, fv.value_json, fv.valid_from, "
+                "fv.from_precision, fv.rev_removed, "
+                "(SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
+                " ORDER BY t.row_id DESC LIMIT 1) AS thing_removed "
+                "FROM field_values fv WHERE fv.field = ? "
+                "AND (fv.rev_removed IS NULL OR fv.rev_removed = "
+                " (SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
+                "  ORDER BY t.row_id DESC LIMIT 1)) "
+                "ORDER BY fv.thing_id, fv.row_id",
+                (field,),
+            ).fetchall()
+        )
 
     @_require_open
     def remove_field_value(

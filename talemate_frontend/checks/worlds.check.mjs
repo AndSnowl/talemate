@@ -81,6 +81,8 @@ import {
     kindList,
     normaliseTag,
     referenceFieldLabel,
+    roleLead,
+    rowMove,
     tagChoices,
     tagHeading,
     timelineShown,
@@ -2704,6 +2706,56 @@ check('names asked for and failed stop waiting', () => {
     store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no such thing' } });
     assert.deepEqual(store.namesWanted, []);
     assert.equal(store.namesFailed, 'gone');
+});
+
+check('an In row reads the entry\'s way: "<Role> of <Target>"', () => {
+    // as the character sheet's line (`held.filed_as`)
+    assert.equal(roleLead('native'), 'Native of');
+    assert.equal(roleLead('  carrier   owl '), 'Carrier owl of');
+    assert.equal(roleLead('took place in'), 'Took place in');
+    assert.equal(roleLead('branch of'), 'Branch of');
+    assert.equal(roleLead('runs through'), 'Runs through');
+    assert.equal(roleLead('acting as'), 'Acting as');
+    assert.equal(roleLead('of this culture'), 'Of');
+    // a person within a part of it: "Trooper in the Tsar's Army"
+    assert.equal(roleLead('trooper', { within: true }), 'Trooper in');
+    assert.equal(roleLead('owned by', { within: true }), 'Owned by');
+    // no role: the target alone
+    assert.equal(roleLead(null), '');
+    assert.equal(roleLead('  '), '');
+});
+
+check('a Connected row moved: its tag, or the group its filing shows under', () => {
+    // no show_under: the entry's tag, as before
+    assert.deepEqual(rowMove({ id: 'vasha', show_under: null }, 'postal worker', 'native'), { tag: 'native' });
+    assert.deepEqual(rowMove({ id: 'vasha' }, 'river', null), { tag: null });
+    // shown under a group: only this filing's group changes
+    assert.deepEqual(rowMove({ id: 'vasha', show_under: 'native' }, 'native', 'ruler'), { showUnder: 'ruler' });
+    assert.deepEqual(rowMove({ id: 'vasha', show_under: 'native' }, 'native', null), { showUnder: null });
+    // where it is: nothing
+    assert.equal(rowMove({ id: 'vasha', show_under: 'native' }, 'native', 'native'), null);
+    assert.equal(rowMove({ id: 'vasha' }, 'river', 'river'), null);
+});
+
+check('roles in use: listed for the picker; a filing shows under a group', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('vasha');
+    store.handleMessage(reply('get_thing', { id: 'vasha', kind: 'character', name: 'Vasha' }));
+    store.listRoles();
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'list_roles' });
+    const roles = [{ role: 'native', count: 2 }, { role: 'carrier owl', count: 1 }];
+    store.handleMessage(reply('list_roles', { roles }));
+    assert.deepEqual(store.roles, roles);
+    store.addFiling({ targetId: 'ustyug', role: 'native', showUnder: 'native' });
+    assert.equal(sent.at(-1).show_under, 'native');
+    store.addFiling({ targetId: 'ustyug', role: 'native' });
+    assert.equal('show_under' in sent.at(-1), false);
+    store.editFiling('ustyug', { show_under: null });
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'edit_filing', thing_id: 'vasha', at: null, target_id: 'ustyug', show_under: null });
+    // another entry's filing (a Connected row moved): at the latest
+    store.editFiling('ustyug', { show_under: 'ruler' }, 'olga');
+    assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'edit_filing', thing_id: 'olga', at: null, target_id: 'ustyug', show_under: 'ruler' });
 });
 
 if (failures.length) {

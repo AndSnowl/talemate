@@ -14,7 +14,9 @@ Every kind also has fields of its own:
   (`normalise_field`);
 - `filings`: a list of `{"target": <32-hex>, "role": str|null, "since":
   date|null, "until": date|null, "within": <32-hex>|null, "exceptions":
-  [fact id...]}`, the entries it is filed in (`filing.py` reads them).
+  [fact id...], "show_under": str|null}`, the entries it is filed in
+  (`filing.py` reads them); `show_under` is the group it shows under on
+  the target's page, a tag (stored normalised), else the entry's own.
   `within` is a part of the target (never the target itself), and no
   target may appear twice. What needs the world to check (a filing into
   itself, a `within` that doesn't sit in its target, a cycle) is
@@ -400,6 +402,7 @@ FILING_KEYS: tuple[str, ...] = (
     "until",
     "within",
     "exceptions",
+    "show_under",
 )
 
 
@@ -411,7 +414,7 @@ def _validate_filings(field: str, value: object) -> None:
         f"{field!r} entries must be "
         '{"target": <32-hex>, "role": str|null, "since": WorldDate|null, '
         '"until": WorldDate|null, "within": <32-hex>|null, '
-        '"exceptions": [fact id...]}'
+        '"exceptions": [fact id...], "show_under": str|null}'
     )
     if not isinstance(value, list):
         raise ValueError(f"{field!r} must be a list of filings")
@@ -424,6 +427,10 @@ def _validate_filings(field: str, value: object) -> None:
             or not isinstance(filing["target"], str)
             or not _THING_ID_RE.match(filing["target"])
             or not (filing.get("role") is None or isinstance(filing["role"], str))
+            or not (
+                filing.get("show_under") is None
+                or isinstance(filing["show_under"], str)
+            )
             or not (
                 filing.get("within") is None
                 or (

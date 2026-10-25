@@ -4371,6 +4371,7 @@ async def test_payload_in_connected_mentioned(plugin):
         "target_id": s.tsardom,
         "target_name": "Tsardom of Moscavia",
         "role": None,
+        "show_under": None,
         "since": velikoye["in"][0]["since"],
         "until": None,
         "within_id": None,
@@ -4396,6 +4397,7 @@ async def test_payload_in_connected_mentioned(plugin):
             "believed": False,
             "line_segments": [_plain("A wide, cold river.")],
             "role": "runs through",
+            "show_under": None,
             "since": None,
             "until": None,
         }
@@ -4760,6 +4762,88 @@ async def test_group_synopsis(plugin, client):
         await _drain(plugin)
     assert len(client.prompt_history) == 1
     assert _last(plugin, "group_synopsis")["data"]["synopsis"] == out["synopsis"]
+
+
+async def test_show_under_through_filings_tags_and_roles(plugin, client):
+    """`add_filing` and `edit_filing` take `show_under` (a tag, stored
+    normalised; null goes back to the entry's tag): the row shows under it
+    on the target's page, the In row and Connected row carry it, a cached
+    synopsis of the group it left is stale, and `rename_tag` and
+    `list_tags` reach it. `list_roles` answers the roles in use."""
+
+    s = await _open_filing_world(plugin)
+    head = s.world.head_rev()
+
+    # the Night Court's group in Velikoye, its synopsis cached
+    async with MockClientContext():
+        client_responses.get().append(json.dumps({"synopsis": "The Court sits."}))
+        await _act(plugin, "group_synopsis", thing_id=s.velikoye, tag="institution")
+        await _drain(plugin)
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert _group(velikoye, "institution")["synopsis"] == "The Court sits."
+    head = s.world.head_rev()
+
+    await _act(
+        plugin,
+        "add_filing",
+        thing_id=s.court,
+        target_id=s.tsardom,
+        role="branch of",
+        show_under="Council, body",
+    )
+    court = _last(plugin, "add_filing")["data"]
+    assert s.world.head_rev() == head + 1
+    row = next(r for r in court["in"] if r["target_id"] == s.tsardom)
+    assert (row["role"], row["show_under"]) == ("branch of", "council")
+    tsardom = await _get_thing(plugin, s.tsardom)
+    assert [r["id"] for r in _group(tsardom, "council")["rows"]] == [s.court]
+    assert _group(tsardom, "council")["rows"][0]["show_under"] == "council"
+    assert _group(tsardom, "council")["heading"] == "Councils"
+
+    # edited: Velikoye's Court shows under "council" too; the institution
+    # group it left is gone, and nothing cached is claimed for the new one
+    await _act(
+        plugin,
+        "edit_filing",
+        thing_id=s.court,
+        target_id=s.velikoye,
+        show_under="council",
+    )
+    velikoye = _last(plugin, "edit_filing")["data"]
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert "institution" not in [g["tag"] for g in velikoye["connected"]]
+    assert _group(velikoye, "council")["synopsis"] is None
+    # null: back under its own tag, the synopsis fresh again
+    await _act(
+        plugin,
+        "edit_filing",
+        thing_id=s.court,
+        target_id=s.velikoye,
+        show_under=None,
+    )
+    velikoye = await _get_thing(plugin, s.velikoye)
+    assert _group(velikoye, "institution")["synopsis"] == "The Court sits."
+    assert _group(velikoye, "institution")["rows"][0]["show_under"] is None
+
+    # a tag only a filing shows under is in use: listed, renamed
+    await _act(plugin, "list_tags")
+    tags = _last(plugin, "list_tags")["data"]["tags"]
+    assert {"tag": "council", "heading": "Councils", "count": 1} in tags
+    await _act(plugin, "rename_tag", old="council", new="assembly")
+    assert _last(plugin, "rename_tag")["data"]["changed"] == [s.court]
+    tsardom = await _get_thing(plugin, s.tsardom)
+    assert [r["id"] for r in _group(tsardom, "assembly")["rows"]] == [s.court]
+    # merged into a tag in use
+    await _act(plugin, "merge_tag", **{"from": "assembly", "into": "institution"})
+    tsardom = await _get_thing(plugin, s.tsardom)
+    assert [r["id"] for r in _group(tsardom, "institution")["rows"]] == [s.court]
+
+    # the roles in use, most used first
+    await _act(plugin, "list_roles")
+    roles = _last(plugin, "list_roles")["data"]["roles"]
+    assert {"role": "branch of", "count": 1} in roles
+    assert {"role": "presides", "count": 1} in roles
+    assert [r["role"] for r in roles] == sorted(r["role"] for r in roles)
 
 
 async def test_group_synopsis_unknown_entry_fails(plugin, client):

@@ -33,7 +33,8 @@
                     <v-select v-model="adding.kind" :items="kindItems" label="Kind" density="compact" variant="outlined" hide-details class="in-small" data-testid="in-new-kind"></v-select>
                     <v-text-field v-model="adding.tag" label="Tag" density="compact" variant="outlined" hide-details class="in-small" data-testid="in-new-tag"></v-text-field>
                 </template>
-                <v-text-field v-model="adding.role" label="Role (optional)" density="compact" variant="outlined" hide-details class="in-role" data-testid="in-role"></v-text-field>
+                <v-combobox v-model="adding.role" :items="roleItems" label="Role (optional)" :placeholder="ROLE_HINT" density="compact" variant="outlined" hide-details class="in-role" data-testid="in-role"></v-combobox>
+                <TagChip v-if="!draft" local testid="in-show-under" label="Shows under" prefix="shows under" :tag="adding.showUnder" :fallback="thing.tag" empty-text="Other" clear-text="its own tag" @pick="adding.showUnder = $event"></TagChip>
                 <v-text-field v-model.number="adding.since" label="Since (year)" type="number" density="compact" variant="outlined" hide-details class="in-year" data-testid="in-since"></v-text-field>
                 <v-btn color="accent" variant="flat" size="small" :disabled="!addValid" :loading="!draft && !!worlds.pending.add_filing" @click="saveAdd">File it</v-btn>
                 <v-btn variant="text" size="small" @click="adding = null">Cancel</v-btn>
@@ -53,13 +54,24 @@
                     :aria-label="'File in ' + row.target_name"
                     @update:model-value="$emit('change', keyOf(row), { ticked: $event })"
                 ></v-checkbox-btn>
-                <span v-if="row.new_name" class="stub-name">{{ row.target_name }}</span>
-                <a v-else class="thing-link" :class="{ dropped: row.draft && !row.ticked }" href="#" data-testid="in-target-link" @click.prevent="worlds.openThing(row.target_id)">{{ row.target_name }}</a>
+                <!-- "Native of Velikiy Ustyug": the role, then its target -->
+                <span class="filed-as"><span v-if="lead(row)" class="role" data-testid="in-role-text">{{ lead(row) }}</span> <span v-if="row.new_name" class="stub-name">{{ row.target_name }}</span><a v-else class="thing-link" :class="{ dropped: row.draft && !row.ticked }" href="#" data-testid="in-target-link" @click.prevent="worlds.openThing(row.target_id)">{{ row.target_name }}</a></span>
                 <span v-if="row.new_name" class="text-caption text-muted">new stub · {{ [row.new_name.kind, row.new_name.tag].filter(Boolean).join(', ') }}</span>
-                <span v-if="row.role" class="role" data-testid="in-role-text">{{ row.role }}</span>
                 <span v-if="row.within_id" class="within">within <a class="thing-link" href="#" @click.prevent="worlds.openThing(row.within_id)">{{ row.within_name }}</a><span v-if="row.within_holds === false" class="within-stale" data-testid="in-within-stale"> (no longer part of {{ row.target_name }})</span></span>
                 <span v-if="dates(row)" class="when" data-testid="in-dates">{{ dates(row) }}</span>
                 <span v-if="draft && !row.draft" class="text-caption text-muted">· already filed</span>
+                <TagChip
+                    v-if="!draft"
+                    local
+                    testid="in-show-under"
+                    label="Shows under"
+                    prefix="shows under"
+                    :tag="row.show_under"
+                    :fallback="thing.tag"
+                    empty-text="Other"
+                    clear-text="its own tag"
+                    @pick="showUnder(row, $event)"
+                ></TagChip>
                 <v-spacer></v-spacer>
                 <template v-if="!draft || row.draft">
                     <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit filing" data-testid="in-edit" @click="startEdit(row)"></v-btn>
@@ -75,7 +87,7 @@
             <!-- edit one filing: only what changes is sent -->
             <div v-if="editing && editing.targetId === keyOf(row)" class="in-form pa-2 mb-2" data-testid="in-edit-form" @keydown.esc="escape($event)">
                 <div class="d-flex align-center flex-wrap ga-2">
-                    <v-text-field v-model="editing.role" label="Role" density="compact" variant="outlined" hide-details class="in-role" autofocus></v-text-field>
+                    <v-combobox v-model="editing.role" :items="roleItems" label="Role" :placeholder="ROLE_HINT" density="compact" variant="outlined" hide-details class="in-role" autofocus></v-combobox>
                     <v-text-field v-model.number="editing.since" label="Since (year)" type="number" density="compact" variant="outlined" hide-details class="in-year"></v-text-field>
                     <v-text-field v-if="!draft" v-model.number="editing.until" label="Until (year)" type="number" density="compact" variant="outlined" hide-details class="in-year"></v-text-field>
                     <v-autocomplete
@@ -114,14 +126,18 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, dateParts } from './worldDates.js';
-import { filingDates, normaliseTag } from './entryPage.js';
+import { filingDates, normaliseTag, roleLead } from './entryPage.js';
 import { filingKey } from './draftPage.js';
 import { STUB_KINDS, actsInWorld, escapeCloses, kindInfo } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
+import TagChip from './TagChip.vue';
 
 // the target choice that makes a stub of the typed name, and its title
 const NEW = '__new__';
 const NEW_LABEL = 'Make a stub “';
+// the role field's hint: a role says how the entry relates to the target,
+// not what it is (that's its tag)
+const ROLE_HINT = 'native, member, branch of…';
 
 function yearOf(date) {
     return date ? dateParts(date).year : null;
@@ -138,6 +154,12 @@ function yearOf(date) {
 // gets "+ but…" (`add_exception`). "+ in… 🔎" searches the world's entries
 // and live stubs; a name the world hasn't makes a stub of it, with a kind
 // and tag, filed here (`add_filing {new_name}`).
+// A row reads the entry's way, as the character sheet does: "Native of
+// Velikiy Ustyug" (`roleLead`). The role field offers the roles in use
+// (`list_roles`), free text still allowed. Each row's "shows under" chip
+// (the tag picker) names the group it shows under on the target's page
+// (`show_under`), the entry's own tag while none is picked; "+ in…" can
+// pick one too.
 //
 // On a draft (`draft`, the page's draft mode) nothing is sent: its own
 // rows (`draft: true`) carry their tick, the AI's coming unticked (ruling
@@ -148,7 +170,7 @@ function yearOf(date) {
 // far show as they are.
 export default {
     name: 'EntryIn',
-    components: { LinkedText },
+    components: { LinkedText, TagChip },
     props: {
         // the page's payload (a draft's: its rows as the owner left them)
         thing: { type: Object, required: true },
@@ -156,7 +178,7 @@ export default {
     },
     emits: ['add', 'change', 'remove'],
     setup() {
-        return { worlds: useWorldsStore(), NEW };
+        return { worlds: useWorldsStore(), NEW, ROLE_HINT };
     },
     data() {
         // `sent`: a form's request is out; its reply closes the forms
@@ -165,6 +187,10 @@ export default {
     computed: {
         rows() {
             return this.thing.in || [];
+        },
+        // the roles in use, for the role picker
+        roleItems() {
+            return (this.worlds.roles || []).map((item) => item.role);
         },
         persons() {
             return actsInWorld(this.thing);
@@ -231,6 +257,17 @@ export default {
         keyOf(row) {
             return filingKey(row);
         },
+        lead(row) {
+            return roleLead(row.role, { within: !!row.within_id });
+        },
+        // the group the filing shows under on its target's page (null: the
+        // entry's own tag)
+        showUnder(row, tag) {
+            if ((tag || null) !== (row.show_under || null)) {
+                this.worlds.editFiling(row.target_id, { show_under: tag || null });
+                this.sent = true;
+            }
+        },
         rowTestId(row) {
             if (!this.draft) {
                 return 'in-row';
@@ -266,14 +303,17 @@ export default {
         },
         startAdd() {
             this.editing = null;
-            this.adding = { target: null, search: '', typed: '', kind: 'lore', tag: '', role: '', since: null };
+            // a role of null, not '': a combobox holding '' counts as filled
+            // and hides its hint
+            this.adding = { target: null, search: '', typed: '', kind: 'lore', tag: '', role: null, since: null, showUnder: null };
+            this.worlds.listRoles();
         },
         saveAdd() {
             const adding = this.adding;
             if (!this.addValid) {
                 return;
             }
-            const filing = { role: adding.role.trim() || null, since: this.year(adding.since) };
+            const filing = { role: (adding.role || '').trim() || null, since: this.year(adding.since) };
             if (this.draft) {
                 const target = adding.target === NEW
                     ? { newName: this.newName, kind: adding.kind, tag: normaliseTag(adding.tag) || null }
@@ -284,10 +324,11 @@ export default {
                 this.adding = null;
                 return;
             }
+            const showUnder = adding.showUnder || null;
             if (adding.target === NEW) {
-                this.worlds.addFiling({ newName: this.newName, kind: adding.kind, tag: normaliseTag(adding.tag) || null, ...filing });
+                this.worlds.addFiling({ newName: this.newName, kind: adding.kind, tag: normaliseTag(adding.tag) || null, ...filing, showUnder });
             } else {
-                this.worlds.addFiling({ targetId: adding.target, ...filing });
+                this.worlds.addFiling({ targetId: adding.target, ...filing, showUnder });
             }
             this.sent = true;
         },
@@ -296,11 +337,12 @@ export default {
             this.ending = null;
             this.editing = {
                 targetId: this.keyOf(row),
-                role: row.role || '',
+                role: row.role || null,
                 since: yearOf(row.since),
                 until: yearOf(row.until),
                 within: row.within_id,
             };
+            this.worlds.listRoles();
         },
         withinItems(row) {
             return this.worlds.referenceTargets.filter((target) => target.id !== row.target_id && target.id !== this.thing.id);
@@ -312,7 +354,7 @@ export default {
                 return;
             }
             const changes = {};
-            const role = editing.role.trim() || null;
+            const role = (editing.role || '').trim() || null;
             if (role !== (row.role || null)) {
                 changes.role = role;
             }

@@ -3,6 +3,8 @@ entries, read through a `WorldView` (filings of a thing, what's filed in
 one, its Connected groups by tag, mentions that aren't filings, tags in
 use)."""
 
+import json
+
 import pytest
 
 from talemate.world.dates import WorldDate
@@ -13,6 +15,7 @@ from talemate.world.filing import (
     filings_of,
     mentioned_in,
     sits_in,
+    roles_in_use,
     tag_heading,
     tags_in_use,
 )
@@ -298,6 +301,7 @@ def test_filings_stored_in_full_shape_blank_role_none(world):
             "until": None,
             "within": None,
             "exceptions": [],
+            "show_under": None,
         }
     ]
 
@@ -540,3 +544,173 @@ def test_one_filing_index_reads_as_filed_index_both_ways(world, at):
     assert [s.id for s in index.things] == [s.id for s in view.things()]
     with pytest.raises(ValueError):
         FilingIndex(view, include_ended=(False,)).get(True)
+
+
+def test_show_under_groups_row(world):
+    """A filing's `show_under` (a tag-pool value, normalised) is the
+    group the row shows under on the target's page; the entry's own tag
+    still groups it on other pages."""
+
+    with world.revision(Source.manual()) as rev:
+        ustyug = _thing(rev, "place", "Velikiy Ustyug", tag="city")
+        post = _thing(rev, "lore", "Postal HQ", tag="institution")
+        vasha = _thing(
+            rev,
+            "character",
+            "Vasha",
+            tag="postal worker",
+            filings=[
+                {**_filing(ustyug, role="native"), "show_under": "  Native, folk "},
+                _filing(post, role="carrier owl"),
+            ],
+        )
+        _thing(rev, "character", "Olga", tag="postal worker", filings=[_filing(ustyug)])
+
+    # stored normalised (lowercased, its first comma part)
+    stored = world.view().thing(vasha).fields["filings"]
+    assert stored[0]["show_under"] == "native"
+    assert stored[1]["show_under"] is None
+
+    groups = connected(world.view(), ustyug)
+    assert [(g.tag, g.heading) for g in groups] == [
+        ("native", "Natives"),
+        ("postal worker", "Postal workers"),
+    ]
+    assert [thing_id for thing_id, _ in groups[0].rows] == [vasha]
+    assert groups[0].rows[0][1].show_under == "native"
+    # on the HQ's page, the entry's own tag
+    assert [g.tag for g in connected(world.view(), post)] == ["postal worker"]
+    # a blank one is none
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(vasha, "filings", [{**_filing(ustyug), "show_under": "  "}], None)
+    assert world.view().thing(vasha).fields["filings"][0]["show_under"] is None
+    # show_under values count as tags in use, once per entry
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(
+            vasha,
+            "filings",
+            [
+                {**_filing(ustyug), "show_under": "native"},
+                {**_filing(post), "show_under": "native"},
+            ],
+            None,
+        )
+    assert dict(tags_in_use(world.view()))["native"] == 1
+    with pytest.raises(ValueError):
+        with world.revision(Source.manual()) as rev:
+            rev.set_field(
+                vasha, "filings", [{**_filing(ustyug), "show_under": 3}], None
+            )
+
+
+def test_show_under_absent_groups_by_tag(world):
+    """A filing stored before `show_under` existed (no key) reads as one
+    without: grouped by the entry's tag, exactly as before."""
+
+    with world.revision(Source.manual()) as rev:
+        ustyug = _thing(rev, "place", "Velikiy Ustyug", tag="city")
+        vasha = _thing(rev, "character", "Vasha", tag="postal worker")
+    # the old shape, written straight to the store (no `show_under` key)
+    old = _filing(ustyug, role="native")
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(vasha, "filings", [old], None)
+    world._conn.execute(
+        "UPDATE field_values SET value_json = ? "
+        "WHERE thing_id = ? AND field = 'filings' AND rev_removed IS NULL",
+        (json.dumps([old]), vasha),
+    )
+    assert "show_under" not in world.view().thing(vasha).fields["filings"][0]
+
+    (filing,) = filings_of(world.view(), vasha)
+    assert filing.show_under is None
+    groups = connected(world.view(), ustyug)
+    assert [(g.tag, g.heading) for g in groups] == [("postal worker", "Postal workers")]
+
+
+def test_rename_tag_reaches_show_under(world):
+    """`retag` rewrites `show_under` as it does tags: at every date, on a
+    removed entry too, and one undo puts it all back."""
+
+    with world.revision(Source.manual()) as rev:
+        ustyug = _thing(rev, "place", "Velikiy Ustyug", tag="city")
+        vasha = _thing(
+            rev,
+            "character",
+            "Vasha",
+            tag="postal worker",
+            filings=[{**_filing(ustyug), "show_under": "native"}],
+        )
+        rev.set_field(
+            vasha,
+            "filings",
+            [{**_filing(ustyug, role="born here"), "show_under": "native"}],
+            WorldDate.of(900),
+        )
+        gone = _thing(
+            rev,
+            "character",
+            "Pyotr",
+            filings=[{**_filing(ustyug), "show_under": "native"}],
+        )
+        other = _thing(
+            rev,
+            "character",
+            "Olga",
+            filings=[{**_filing(ustyug), "show_under": "visitor"}],
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    deleted = world.head_rev()
+    with world.revision(Source.manual()) as rev:
+        assert rev.retag("Native", "local") == sorted([vasha, gone])
+    retagged = world.head_rev()
+
+    def under(thing_id, at=None):
+        return [f.show_under for f in filings_of(world.view(at), thing_id, live=False)]
+
+    assert under(vasha) == ["local"]
+    assert under(vasha, WorldDate.of(950)) == ["local"]
+    assert filings_of(world.view(WorldDate.of(950)), vasha)[0].role == "born here"
+    assert under(other) == ["visitor"]
+    assert [g.tag for g in connected(world.view(), ustyug)] == ["local", "visitor"]
+
+    world.undo([retagged])
+    assert under(vasha) == ["native"]
+    assert under(vasha, WorldDate.of(950)) == ["native"]
+    world.undo([deleted])
+    assert under(gone) == ["native"]
+
+
+def test_roles_in_use_counts(world):
+    """Every role the view's filings carry, with how many filings carry
+    it, most used first, then by role; an ignored stub's don't count."""
+
+    with world.revision(Source.manual()) as rev:
+        ustyug = _thing(rev, "place", "Velikiy Ustyug", tag="city")
+        post = _thing(rev, "lore", "Postal HQ", tag="institution")
+        _thing(
+            rev,
+            "character",
+            "Vasha",
+            filings=[_filing(ustyug, role="native"), _filing(post, role="carrier owl")],
+        )
+        _thing(rev, "character", "Olga", filings=[_filing(ustyug, role=" native ")])
+        _thing(rev, "character", "Pyotr", filings=[_filing(post, role="carrier owl")])
+        _thing(
+            rev, "place", "Lower Market", filings=[_filing(ustyug, role="branch of")]
+        )
+        _thing(rev, "place", "Old Gate", filings=[_filing(ustyug)])
+        rev.create_thing(
+            "place",
+            {
+                "name": "Hidden Hall",
+                "stub": {"ignored": True},
+                "filings": [_filing(ustyug, role="secret")],
+            },
+        )
+
+    assert roles_in_use(world.view()) == [
+        ("carrier owl", 2),
+        ("native", 2),
+        ("branch of", 1),
+    ]

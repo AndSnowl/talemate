@@ -309,7 +309,7 @@ def test_velikoye_connected_by_tag(app, page):
     river = _opened(page, "Khorol River")
     expect(river.get_by_test_id("in-row")).to_have_count(2)
     expect(river.get_by_test_id("in-row").filter(has_text="Velikoye")).to_contain_text(
-        "runs through"
+        "Runs through Velikoye"
     )
     assert page.console_errors == []
 
@@ -337,7 +337,7 @@ def test_add_filing_and_role(app, page):
     assert sent["role"] == "presides"
     assert sent["since"]["precision"] == "year"
     court = entry_in.get_by_test_id("in-row").filter(has_text="The Night Court")
-    expect(court).to_contain_text("presides")
+    expect(court).to_contain_text("Presides of The Night Court")
     expect(court).to_contain_text("since 995")
 
     # a name the world hasn't: a stub of it, filed here
@@ -369,7 +369,7 @@ def test_add_filing_and_role(app, page):
     sent = _wait_sent(page, "edit_filing")
     assert sent["role"] == "presides over it"
     assert "since" not in sent and "until" not in sent
-    expect(court).to_contain_text("presides over it")
+    expect(court).to_contain_text("Presides over it of The Night Court")
     court.get_by_test_id("in-end").click()
     end = entry_in.get_by_test_id("in-end-form")
     end.get_by_label("Year").fill("1010")
@@ -399,6 +399,128 @@ def test_add_filing_and_role(app, page):
     council = thing.get_by_test_id("in-row").filter(has_text="The Frost Council")
     council.get_by_test_id("in-remove").click()
     expect(council).to_have_count(0)
+    assert page.console_errors == []
+
+
+USTYUG = [
+    {"kind": "place", "name": "Velikiy Ustyug", "fields": {"tag": "city"}},
+    _entry("lore", "Postal HQ", "institution", [], "The owl post's seat."),
+    _entry(
+        "character",
+        "Mikhail",
+        "smith",
+        [_in("Velikiy Ustyug", "native")],
+        "Forges the post's rings.",
+    ),
+    _entry(
+        "character",
+        "Olga",
+        "postal worker",
+        [_in("Postal HQ", "carrier owl")],
+        "Flies the winter route.",
+    ),
+    _entry(
+        "character",
+        "Vasha",
+        "postal worker",
+        [_in("Postal HQ", "carrier owl", since=995)],
+        "A young carrier owl.",
+    ),
+]
+
+
+def _picker(page):
+    """The tag picker open now (one closed earlier may still be in the
+    page, hidden)."""
+
+    return page.locator('[data-testid="tag-picker"]:visible')
+
+
+def test_file_with_show_under_and_role_picker(app, page):
+    """Vasha, a postal worker, filed in his hometown as a native: the role
+    picked from the roles in use, the group he shows under there picked
+    from the tag pool. His In row reads "Native of Velikiy Ustyug"; on the
+    town's page he is under Natives, not Postal workers, until the filing
+    goes back to his own tag."""
+
+    name = _world_name("Ustyug")
+    world = seed_fm_world(app.root, name, present_year=1020, things=USTYUG)
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Vasha")
+    entry_in = thing.get_by_test_id("entry-in")
+    post = entry_in.get_by_test_id("in-row").filter(has_text="Postal HQ")
+    expect(post.get_by_test_id("in-role-text")).to_have_text("Carrier owl of")
+    # no group named: it shows under the entry's own tag
+    expect(post.get_by_test_id("in-show-under")).to_have_text(
+        "shows under postal worker"
+    )
+
+    entry_in.get_by_test_id("in-add").click()
+    form = entry_in.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("Ustyug")
+    page.get_by_role("option", name="Velikiy Ustyug").click()
+    # the role picker: the roles in use, most used first; a hint to relate
+    role = form.get_by_label("Role (optional)")
+    _wait_sent(page, "list_roles")
+    role.click()
+    expect(role).to_have_attribute("placeholder", "native, member, branch of…")
+    options = page.get_by_role("option")
+    expect(options.filter(has_text="carrier owl")).to_have_count(1)
+    page.get_by_role("option", name="native", exact=True).click()
+    # "shows under": the tag picker, a new tag made in it
+    form.get_by_test_id("in-show-under").click()
+    picker = _picker(page)
+    picker.get_by_test_id("tag-search").locator("input").fill("Native")
+    new = picker.get_by_test_id("tag-new")
+    expect(new).to_contain_text("new tag “native”")
+    new.click()
+    expect(form.get_by_test_id("in-show-under")).to_have_text("shows under native")
+    form.get_by_role("button", name="File it").click()
+    sent = _wait_sent(page, "add_filing")
+    assert (sent["target_id"], sent["role"], sent["show_under"]) == (
+        world.things["Velikiy Ustyug"],
+        "native",
+        "native",
+    )
+
+    # read the entry's way
+    town = entry_in.get_by_test_id("in-row").filter(has_text="Velikiy Ustyug")
+    expect(town).to_contain_text("Native of Velikiy Ustyug")
+    expect(town.get_by_test_id("in-show-under")).to_have_text("shows under native")
+
+    # on the town's page: under Natives, not Postal workers (Mikhail, a
+    # native too but naming no group, is under his own tag)
+    town.get_by_test_id("in-target-link").click()
+    ustyug = _opened(page, "Velikiy Ustyug")
+    natives = _group(ustyug, "Natives")
+    expect(_row(natives, "Vasha")).to_contain_text("native")
+    assert "Postal workers" not in _headings(ustyug)
+    assert "Smiths" in _headings(ustyug)
+    ustyug.get_by_role("button", name="Back").click()
+
+    # back to his own tag: under Postal workers there
+    thing = _opened(page, "Vasha")
+    town = (
+        thing.get_by_test_id("entry-in")
+        .get_by_test_id("in-row")
+        .filter(has_text="Velikiy Ustyug")
+    )
+    town.get_by_test_id("in-show-under").click()
+    _picker(page).get_by_test_id("tag-clear").click()
+    sent = _wait_sent(page, "edit_filing")
+    assert (sent["target_id"], sent["show_under"]) == (
+        world.things["Velikiy Ustyug"],
+        None,
+    )
+    expect(town.get_by_test_id("in-show-under")).to_have_text(
+        "shows under postal worker"
+    )
+    town.get_by_test_id("in-target-link").click()
+    ustyug = _opened(page, "Velikiy Ustyug")
+    expect(_row(_group(ustyug, "Postal workers"), "Vasha")).to_be_visible()
+    assert "Natives" not in _headings(ustyug)
     assert page.console_errors == []
 
 

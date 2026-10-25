@@ -10,10 +10,10 @@
                 class="tag-chip"
                 :class="{ untagged: !tag }"
                 append-icon="mdi-menu-down"
-                data-testid="tag-chip"
-                :aria-label="tag ? `Tag: ${tag}` : 'No tag'"
+                :data-testid="testid"
+                :aria-label="`${label}: ${tag || fallback || emptyText}`"
                 @click="query = ''"
-            >{{ tag || 'no tag' }}</v-chip>
+            ><span v-if="prefix" class="prefix">{{ prefix }}&nbsp;</span>{{ tag || fallback || emptyText }}</v-chip>
         </template>
         <v-card class="pa-2" min-width="240" data-testid="tag-picker" @keydown.esc="open = false">
             <v-text-field
@@ -41,7 +41,7 @@
                     <v-list-item-title>new tag “{{ choices.fresh }}”</v-list-item-title>
                 </v-list-item>
                 <v-list-item v-if="tag" prepend-icon="mdi-close" data-testid="tag-clear" @click="pick(null)">
-                    <v-list-item-title class="text-muted">no tag</v-list-item-title>
+                    <v-list-item-title class="text-muted">{{ clearText }}</v-list-item-title>
                 </v-list-item>
             </v-list>
         </v-card>
@@ -59,12 +59,22 @@ import { normaliseTag, tagChoices } from './entryPage.js';
 // backend keeps a tag lowercase, its first comma part. On a draft
 // (`local`) nothing is sent: the tag picked is emitted (`pick`, normalised
 // as the backend would store it) for the draft to keep.
+// The same picker serves a filing's "shows under" (`EntryIn`, `local`):
+// `prefix` reads before the value, `fallback` (the entry's own tag) shows
+// dimmed while none is picked, `clearText` names going back to it, and
+// `testid` and `label` tell the chips apart.
 export default {
     name: 'TagChip',
     props: {
         thingId: { type: String, default: null },
         tag: { type: String, default: null },
         local: { type: Boolean, default: false },
+        testid: { type: String, default: 'tag-chip' },
+        label: { type: String, default: 'Tag' },
+        prefix: { type: String, default: '' },
+        fallback: { type: String, default: null },
+        emptyText: { type: String, default: 'no tag' },
+        clearText: { type: String, default: 'no tag' },
     },
     emits: ['pick'],
     setup() {
@@ -116,5 +126,9 @@ export default {
 
 .tag-chip.untagged {
     opacity: 0.6;
+}
+
+.prefix {
+    font-style: italic;
 }
 </style>
