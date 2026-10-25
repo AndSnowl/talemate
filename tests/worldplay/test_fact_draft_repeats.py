@@ -60,9 +60,12 @@ def test_accept_facts_keep_new_replaces_repeat(river):
     )
     head = river.head_rev()
     notes: list[str] = []
-    written = facts.accept_facts(river, draft, notes)
+    prose: list[str] = []
+    written = facts.accept_facts(river, draft, notes, prose)
     assert river.head_rev() == head + 1
     assert len(written) == 1
+    # the page the repeat was removed from; nothing moved onto this one
+    assert prose == [river.velikoye]
     assert "It freezes over every winter." in _texts(river, river.khorol)
     assert EXISTING not in _texts(river, river.velikoye)
     assert "Velikoye has many bells." in _texts(river, river.velikoye)
@@ -93,8 +96,11 @@ def test_accept_facts_move_existing_here(river):
     )
     head = river.head_rev()
     notes: list[str] = []
-    facts.accept_facts(river, draft, notes)
+    prose: list[str] = []
+    facts.accept_facts(river, draft, notes, prose)
     assert river.head_rev() == head + 1
+    # the page it left and the page it moved onto read it
+    assert sorted(prose) == sorted([river.velikoye, river.khorol])
     texts = _texts(river, river.khorol)
     assert EXISTING in texts
     assert "It freezes over every winter." not in texts

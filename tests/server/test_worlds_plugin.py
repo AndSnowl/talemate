@@ -5465,6 +5465,115 @@ async def test_accept_facts_refuses_forged_repeat(plugin, client):
     assert "It meets at dusk." not in court
 
 
+def _flagged_court_draft(s, fact_id, text, **fact):
+    """A fact draft for the Night Court whose one fact repeats Velikoye's
+    `fact_id`, as a held version would flag it."""
+
+    return FactDraft(
+        thing_id=s.court,
+        prompt="when",
+        facts=[
+            PreviewFact(
+                category="general",
+                text="It meets when the bells ring.",
+                repeat_of={
+                    "fact_id": fact_id,
+                    "owner_id": s.velikoye,
+                    "owner_name": "Velikoye",
+                    "text": text,
+                    "score": 0.9,
+                },
+                **fact,
+            )
+        ],
+    )
+
+
+async def test_accept_facts_move_existing_here_refreshes_both_prose(
+    plugin, client, monkeypatch
+):
+    """ "Move existing here" on a fact draft whose own fact is unticked:
+    the page the fact moved onto and the page it left both have their
+    prose written again."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        meets = rev.add_fact(s.velikoye, "general", "The Night Court meets at dusk.")
+    key = f"facts:{s.court}"
+    draft = _flagged_court_draft(
+        s, meets, "The Night Court meets at dusk.", ticked=False
+    )
+    plugin._small.add(key, draft)
+    scheduled = _record_prose(plugin, monkeypatch)
+    move = {
+        "fact_id": meets,
+        "from_id": s.velikoye,
+        "text": "The Night Court meets at dusk.",
+        "ticked": True,
+        "repeat": True,
+    }
+    await _act(
+        plugin,
+        "accept_facts",
+        draft={**draft.model_dump(), "move_here": [move]},
+        draft_key=key,
+    )
+    reply = _last(plugin, "accept_facts")["data"]
+    assert reply["fact_ids"] == [] and reply["notes"] == []
+    court = {f.text for f in s.world.view().thing(s.court).facts}
+    assert "The Night Court meets at dusk." in court
+    assert sorted(scheduled) == sorted([s.velikoye, s.court])
+
+
+async def test_accept_facts_keep_new_refreshes_both_prose(plugin, client, monkeypatch):
+    """ "Keep new" on a fact draft: the page written to and the page
+    whose repeated fact was removed both have their prose written again."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        bells = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+    key = f"facts:{s.court}"
+    draft = _flagged_court_draft(
+        s, bells, "Velikoye has many bells.", replaces_repeat=True
+    )
+    plugin._small.add(key, draft)
+    scheduled = _record_prose(plugin, monkeypatch)
+    await _act(plugin, "accept_facts", draft=draft.model_dump(), draft_key=key)
+    reply = _last(plugin, "accept_facts")["data"]
+    assert len(reply["fact_ids"]) == 1 and reply["notes"] == []
+    texts = {f.text for f in s.world.view().thing(s.velikoye).facts}
+    assert "Velikoye has many bells." not in texts
+    assert sorted(scheduled) == sorted([s.velikoye, s.court])
+
+
+async def test_accept_facts_other_pages_draft_doesnt_vouch(plugin, client):
+    """A held draft key whose versions are another page's doesn't vouch
+    for a repeat: the accepted draft's own page must match."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        bells = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+    other = _flagged_court_draft(
+        s, bells, "Velikoye has many bells.", replaces_repeat=True
+    )
+    other.thing_id = s.khorol
+    plugin._small.add(f"facts:{s.khorol}", other)
+    forged = _flagged_court_draft(
+        s, bells, "Velikoye has many bells.", replaces_repeat=True
+    )
+    await _act(
+        plugin,
+        "accept_facts",
+        draft=forged.model_dump(),
+        draft_key=f"facts:{s.khorol}",
+    )
+    reply = _last(plugin, "accept_facts")["data"]
+    assert len(reply["fact_ids"]) == 1
+    texts = {f.text for f in s.world.view().thing(s.velikoye).facts}
+    assert "Velikoye has many bells." in texts
+    assert any("isn't a fact this draft repeats" in n for n in reply["notes"])
+
+
 def _group_reply(name):
     return json.dumps(
         {

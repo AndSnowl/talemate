@@ -71,6 +71,7 @@ from talemate.worldplay.create import (
     name_filings,
     offer_same,
     parse_create_reply,
+    prose_reads,
     repeat_flags,
     write_repeat_choices,
 )
@@ -429,8 +430,8 @@ def accept_facts(
     `replaces_repeat` ("Keep new") is written and the fact it repeats
     removed; a ticked `repeat` row of `move_here` ("Move existing here")
     moves the world's fact onto the entry. `prose` gets the entries whose
-    prose read a fact moved or removed, and the entry itself when a fact
-    moved onto it."""
+    prose read a fact moved or removed, and the entry itself when its
+    prose reads a fact moved onto it."""
 
     view = world.view()
     state = view.thing(draft.thing_id)
@@ -460,7 +461,8 @@ def accept_facts(
             return []
     if prose is not None:
         changed = _moved_from_prose(view, [*moved, *removed], draft.thing_id)
-        if moved:
+        # the entry itself, when its prose reads a fact moved onto it
+        if any(prose_reads(state.kind, fact.category) for _o, fact in moved):
             changed.append(draft.thing_id)
         prose.extend(t for t in changed if t not in prose)
     log.info(

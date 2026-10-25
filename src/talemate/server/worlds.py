@@ -4124,13 +4124,19 @@ class WorldsPlugin(Plugin):
                 self._schedule_prose(changed, None)
         state = world.view().thing(payload.draft.thing_id)
         if (
-            (fact_ids or payload.draft.thing_id in prose)
-            and state is not None
+            state is not None
             and not state.is_stub
-            and any(
-                prose_reads(state.kind, fact.category)
-                for fact in payload.draft.facts
-                if fact.ticked
+            and (
+                # its prose reads a fact moved onto it
+                draft.thing_id in prose
+                or (
+                    fact_ids
+                    and any(
+                        prose_reads(state.kind, fact.category)
+                        for fact in draft.facts
+                        if fact.ticked
+                    )
+                )
             )
         ):
             self._schedule_prose(payload.draft.thing_id, at)
