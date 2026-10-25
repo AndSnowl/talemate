@@ -1344,6 +1344,16 @@ def test_add_facts_repeat_keep_new(app, page, fixed_facts):
     expect(match.get_by_test_id("repeat-choice")).to_have_text(
         ["Keep new", "Keep existing", "Keep both", "Move existing here"]
     )
+    # a repeat of this page's own fact can't move here: shown off, with why
+    move = match.get_by_role("button", name="Move existing here")
+    expect(move).to_be_disabled()
+    expect(move).to_have_attribute("title", "already on this page")
+    # the page holds one fact-or-event draft: "+ Add event…" waits for it
+    add_event = thing.get_by_test_id("entry-timeline").get_by_test_id("add-event")
+    expect(add_event).to_be_disabled()
+    expect(add_event).to_have_attribute(
+        "title", "write or discard the facts draft first"
+    )
     match.get_by_role("button", name="Keep new").click()
     expect(row.get_by_role("checkbox")).to_be_checked()
     expect(match.get_by_test_id("repeat-removing")).to_be_visible()
@@ -1376,6 +1386,11 @@ def test_nested_add_facts_on_draft(app, page, fixed_preview, fixed_facts):
     heading = draft.get_by_test_id("facts-heading").bounding_box()
     box = nested.bounding_box()
     assert box["y"] > heading["y"] and box["x"] > heading["x"]
+    add_event = draft.get_by_test_id("entry-timeline").get_by_test_id("add-event")
+    expect(add_event).to_be_disabled()
+    expect(add_event).to_have_attribute(
+        "title", "write or discard the added facts first"
+    )
     accept = bar.get_by_role("button", name="Accept")
     expect(accept).to_be_disabled()
     expect(accept).to_have_attribute("title", "write or discard the added facts first")

@@ -9,8 +9,8 @@
             color="accent"
             prepend-icon="mdi-creation"
             :data-testid="event ? 'add-event' : 'add-facts'"
-            :disabled="onDraft && worlds.nestedHeld"
-            :title="onDraft && worlds.nestedHeld ? 'write or discard the added facts first' : null"
+            :disabled="!!blocked"
+            :title="blocked"
             @click="start"
         >{{ event ? '+ Add event…' : '+ Add facts…' }}</v-btn>
 
@@ -28,7 +28,7 @@
                     autofocus
                     class="flex-grow-1"
                     data-testid="add-prompt"
-                    @keydown.enter.exact.prevent="ask"
+                    @keydown.enter.exact="onEnter"
                 ></v-textarea>
                 <v-text-field
                     v-if="event"
@@ -43,7 +43,7 @@
                 ></v-text-field>
             </div>
             <div class="d-flex ga-2 mt-2">
-                <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-creation" :disabled="!canAsk || (onDraft && worlds.nestedHeld)" data-testid="add-draft" @click="ask">Draft</v-btn>
+                <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-creation" :disabled="!canAsk || !!blocked" data-testid="add-draft" @click="ask">Draft</v-btn>
                 <v-btn variant="text" size="small" @click="asking = false">Cancel</v-btn>
             </div>
         </div>
@@ -51,7 +51,7 @@
         <!-- the drafted facts, for the owner to tick: nothing is written
              before Write (on a draft page, nothing reaches the world
              before the page draft's Accept) -->
-        <div v-if="draft" class="panel" :class="{ nested: onDraft }" data-testid="fact-draft">
+        <div v-if="draft" ref="panel" class="panel" :class="{ nested: onDraft }" data-testid="fact-draft">
             <!-- its first ask: nothing held yet -->
             <template v-if="!draft.versions.length">
                 <div v-if="draft.pending" class="d-flex align-center ga-2 text-caption text-muted">
@@ -121,6 +121,7 @@
                                 :choice="repeatChoice(draft.edited.facts[row.index])"
                                 :disabled="rowsOff"
                                 :inset="false"
+                                :unavailable="unavailableFor(row)"
                                 @settle="worlds.editSmall(draft.key, settleRepeat(draft.edited, row.index, $event))"
                             />
                         </div>
@@ -219,6 +220,28 @@ export default {
             const found = this.worlds.smallDrafts[factsKey(this.thing.id)];
             return found && found.kind === (this.event ? 'event' : 'facts') ? found : null;
         },
+        // the page's one fact-or-event draft (on a draft page, its one
+        // nested draft), whichever of the two buttons asked it
+        slot() {
+            return this.onDraft ? this.worlds.nestedDraft : this.worlds.smallDrafts[factsKey(this.thing.id)] || null;
+        },
+        // why this button can't ask now, or null: the other button's
+        // draft holds the one slot (asking would replace it)
+        blocked() {
+            const slot = this.slot;
+            if (!slot || slot === this.draft) {
+                return null;
+            }
+            if (this.onDraft) {
+                return 'write or discard the added facts first';
+            }
+            return `write or discard the ${slot.kind === 'event' ? 'event' : 'facts'} draft first`;
+        },
+        // the entry the draft's facts are for: a draft page's stub (none
+        // for a new entry), else this page
+        ownId() {
+            return this.onDraft ? this.worlds.draft?.edited?.stub_id || null : this.thing.id;
+        },
         // an event's draft (its facts all dated its year)
         dated() {
             return this.draft?.mode === 'event';
@@ -252,11 +275,19 @@ export default {
         'thing.id'() {
             this.asking = false;
         },
-        // asked: the form gives way to its draft
-        draft(now) {
+        // asked (here or by the other button): the form gives way to the
+        // draft
+        slot(now) {
             if (now) {
                 this.asking = false;
                 this.prompt = '';
+            }
+        },
+        // a draft page's nested event draft, asked from the Timeline far
+        // below, is shown here under Facts: brought into view
+        draft(now, before) {
+            if (now && !before && this.onDraft && now.mode === 'event') {
+                this.$nextTick(() => this.$refs.panel?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }));
             }
         },
     },
@@ -274,6 +305,20 @@ export default {
         // the fact a row repeats, as the draft holds it, or null
         repeatOf(row) {
             return this.draft?.edited?.facts?.[row.index]?.repeat_of || null;
+        },
+        // "Move existing here" can't apply to a repeat of this entry's
+        // own fact (the server skips such a move)
+        unavailableFor(row) {
+            const repeat = this.repeatOf(row);
+            return repeat?.owner_id && repeat.owner_id === this.ownId ? { move: 'already on this page' } : {};
+        },
+        // Enter asks (Shift+Enter a new line), not while an IME composes
+        onEnter(event) {
+            if (event.isComposing) {
+                return;
+            }
+            event.preventDefault();
+            this.ask();
         },
         tick(index, ticked) {
             const edited = this.draft.edited;
@@ -293,12 +338,9 @@ export default {
             }
             const year = this.event ? this.year : null;
             if (this.onDraft) {
+                // shown under Facts (an event's too); the form closes as
+                // the draft comes (the `slot` watcher)
                 this.worlds.askNestedFacts(this.prompt.trim(), year);
-                // shown under Facts (an event's too): this form is done
-                if (this.worlds.nestedDraft) {
-                    this.asking = false;
-                    this.prompt = '';
-                }
             } else {
                 this.worlds.askFacts(this.event ? 'event' : 'facts', this.prompt.trim(), year);
             }
