@@ -112,9 +112,14 @@ class FactDraft(BaseModel):
     `new_names`: the names its facts use that the world hasn't. The owner
     ticks, edits or drops them before `accept_facts`. `move_here`: the
     owner's "Move existing here" rows (`repeat`) on facts that repeat the
-    world's, as a page draft's."""
+    world's, as a page draft's.
 
-    thing_id: str
+    `thing_id` is `None` for a page draft's nested draft (its "+ Add
+    facts" while the entry is still in draft): `accept_facts` refuses it,
+    since the router's `write_nested_facts` writes its facts into the
+    page draft instead of the world."""
+
+    thing_id: str | None = None
     prompt: str
     year: int | None = None
     facts: list[PreviewFact] = Field(default_factory=list)
@@ -433,6 +438,8 @@ def accept_facts(
     prose read a fact moved or removed, and the entry itself when its
     prose reads a fact moved onto it."""
 
+    if draft.thing_id is None:
+        raise ValueError("a page draft's facts are written into the draft")
     view = world.view()
     state = view.thing(draft.thing_id)
     if state is None:

@@ -7160,10 +7160,28 @@ async def test_drafts_are_bounded_and_a_late_result_after_discard_is_dropped(
     assert s.world.head_rev()
 
 
+async def _nested_ask(plugin, key, reply, action="add_facts", **extra):
+    """ "+ Add facts" (or `action`) on the page draft `key`: its nested
+    fact draft's reply."""
+
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, action, draft_key=key, prompt="more", **extra)
+        await _drain(plugin)
+    return _last(plugin, action)["data"]
+
+
+async def _write_nested(plugin, key, draft):
+    await _act(plugin, "write_nested_facts", draft_key=key, draft=draft)
+    return _last(plugin, "write_nested_facts")["data"]
+
+
 async def test_add_facts_and_event_on_a_draft(plugin, client):
-    """Ruling F16: on a draft page, "+ Add facts..." and "+ Add event..."
-    append to the draft's current version on the server, writing nothing,
-    and answer with the updated draft; the accept writes them."""
+    """On a draft page, "+ Add facts..." and "+ Add event..." are their
+    own nested fact draft (`nested:<page key>`), writing nothing and
+    leaving the page draft as it was; `write_nested_facts` puts the
+    ticked facts into a new version of the page draft, and the page
+    draft's accept writes them."""
 
     s = await _open_filing_world(plugin)
     draft = await _preview(
@@ -7175,38 +7193,48 @@ async def test_add_facts_and_event_on_a_draft(plugin, client):
     head = s.world.head_rev()
     key = draft["draft_key"]
     async with MockClientContext():
-        client_responses.get().append(
-            json.dumps(
-                {"facts": [{"category": "general", "text": "It drills at dawn."}]}
-            )
-        )
+        client_responses.get().append(_facts_reply("It drills at dawn."))
         await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
         await _drain(plugin)
     assert "Frostwing Host" in str(client.prompt_history[-1]["prompt"])
     added = _last(plugin, "add_facts")["data"]
-    assert (added["draft_key"], added["version"]) == (key, 1)
-    assert [f["text"] for f in added["facts"]] == [
+    assert added["draft_key"] == f"nested:{key}"
+    assert added["nested_in"] == key
+    assert added["thing_id"] is None
+    assert added["version"] == 1
+    assert added["versions"] == [{"version": 1, "prompt": "its drills", "year": None}]
+    assert [f["rendered"] for f in added["facts"]] == ["It drills at dawn."]
+    assert added["draft"]["thing_id"] is None
+    # the page draft is untouched until the nested draft is written
+    assert [f.text for f in plugin._current_preview(key).facts] == [
+        "It flies at night."
+    ]
+
+    written = await _write_nested(plugin, key, added["draft"])
+    assert (written["draft_key"], written["version"]) == (key, 2)
+    assert [f["text"] for f in written["preview"]["facts"]] == [
         "It flies at night.",
         "It drills at dawn.",
     ]
-    assert [f["text"] for f in added["preview"]["facts"]] == [
-        "It flies at night.",
-        "It drills at dawn.",
-    ]
-    async with MockClientContext():
-        client_responses.get().append(
-            json.dumps({"facts": [{"category": "general", "text": "It was raised."}]})
-        )
-        await _act(plugin, "add_event", draft_key=key, prompt="its raising", year=990)
-        await _drain(plugin)
-    evented = _last(plugin, "add_event")["data"]
-    assert evented["preview"]["facts"][-1]["since"] == WorldDate.of(990).model_dump(
+    assert not plugin._small.held(f"nested:{key}")
+
+    evented = await _nested_ask(
+        plugin, key, _facts_reply("It was raised."), action="add_event", year=990
+    )
+    assert evented["facts"][0]["since"]["label"] == "990"
+    assert evented["draft"]["facts"][0]["since"] == WorldDate.of(990).model_dump(
         mode="json"
     )
-    assert [line["date"]["label"] for line in evented["entry_timeline"]] == ["990"]
+    assert evented["versions"][0]["year"] == 990
+    page = await _write_nested(plugin, key, evented["draft"])
+    assert page["version"] == 3
+    assert page["preview"]["facts"][-1]["since"] == WorldDate.of(990).model_dump(
+        mode="json"
+    )
+    assert [line["date"]["label"] for line in page["entry_timeline"]] == ["990"]
     assert s.world.head_rev() == head
 
-    await _act(plugin, "accept_preview", preview=evented["preview"], draft_key=key)
+    await _act(plugin, "accept_preview", preview=page["preview"], draft_key=key)
     host = _last(plugin, "accept_preview")["data"]
     assert {"It drills at dawn.", "It was raised."} <= {
         f["text"] for f in host["facts"]
@@ -7214,9 +7242,10 @@ async def test_add_facts_and_event_on_a_draft(plugin, client):
 
 
 async def test_added_facts_on_a_draft_join_its_new_names(plugin, client):
-    """Ruling H8 on a draft: the names "+ Add facts" brings join the
-    draft's own New names (shown fresh), writing nothing; the draft's
-    accept makes the stubs."""
+    """Ruling H8 on a draft: the names "+ Add facts" brings are the nested
+    draft's New names (shown fresh), and the ticked ones join the page
+    draft's own when it's written, writing nothing; the page draft's
+    accept makes the stubs. An unticked one joins nothing."""
 
     s = await _open_filing_world(plugin)
     draft = await _preview(
@@ -7227,38 +7256,47 @@ async def test_added_facts_on_a_draft_join_its_new_names(plugin, client):
     )
     head = s.world.head_rev()
     key = draft["draft_key"]
-    async with MockClientContext():
-        client_responses.get().append(
-            json.dumps(
-                {
-                    "facts": [
-                        {
-                            "category": "general",
-                            "text": "It drills on the Field of Talons.",
-                        }
-                    ],
-                    "names": [
-                        {"name": "Field of Talons", "kind": "place", "tag": "field"}
-                    ],
-                }
-            )
-        )
-        await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
-        await _drain(plugin)
-    added = _last(plugin, "add_facts")["data"]
-    assert [n["name"] for n in added["preview"]["new_names"]] == ["Field of Talons"]
-    fact = next(f for f in added["facts"] if "drills" in f["text"])
+    added = await _nested_ask(
+        plugin,
+        key,
+        json.dumps(
+            {
+                "facts": [
+                    {
+                        "category": "general",
+                        "text": "It drills on the Field of Talons.",
+                    },
+                    {"category": "general", "text": "It rests at Crowmere."},
+                ],
+                "names": [
+                    {"name": "Field of Talons", "kind": "place", "tag": "field"},
+                    {"name": "Crowmere", "kind": "place", "tag": "lake"},
+                ],
+            }
+        ),
+    )
+    names = [n["name"] for n in added["draft"]["new_names"]]
+    assert names == ["Field of Talons", "Crowmere"]
+    fact = next(f for f in added["facts"] if "drills" in f["rendered"])
     assert any(
         run.get("fresh") and run["text"] == "Field of Talons"
         for run in fact["segments"]
     )
+    assert plugin._current_preview(key).new_names == []
+
+    nested = added["draft"]
+    nested["new_names"][1]["ticked"] = False
+    nested["facts"][1]["ticked"] = False
+    page = await _write_nested(plugin, key, nested)
+    assert [n["name"] for n in page["preview"]["new_names"]] == ["Field of Talons"]
     assert s.world.head_rev() == head
 
-    await _act(plugin, "accept_preview", preview=added["preview"], draft_key=key)
+    await _act(plugin, "accept_preview", preview=page["preview"], draft_key=key)
     host = _last(plugin, "accept_preview")["data"]
     view = s.world.view()
     (field,) = [t for t in view.things() if view.name_of(t.id) == "Field of Talons"]
     assert field.is_stub
+    assert not [t for t in view.things() if view.name_of(t.id) == "Crowmere"]
     assert f"It drills on the {ref(field.id, 'Field of Talons')}." in [
         f["text"] for f in host["facts"]
     ]
@@ -7266,9 +7304,10 @@ async def test_added_facts_on_a_draft_join_its_new_names(plugin, client):
 
 async def test_draft_facts_for_a_version_left_join_none(plugin, client):
     """A draft's "+ Add facts..." whose reply comes after the owner made
-    another version current (here `use_version`) joins no version: neither
-    the one asked for nor the one now current gains the facts, and the
-    owner is told (`add_facts_failed`, `stale`), writing nothing."""
+    another version of the page draft current (here `use_version`) holds
+    no nested draft: the owner is told (`add_facts_failed`, `stale`, with
+    the page draft's key), and no version gains the facts, writing
+    nothing."""
 
     s = await _open_filing_world(plugin)
     first = await _preview(
@@ -7288,11 +7327,7 @@ async def test_draft_facts_for_a_version_left_join_none(plugin, client):
     assert second["version"] == 2
     head = s.world.head_rev()
     async with MockClientContext():
-        client_responses.get().append(
-            json.dumps(
-                {"facts": [{"category": "general", "text": "It drills at dawn."}]}
-            )
-        )
+        client_responses.get().append(_facts_reply("It drills at dawn."))
         # asked for on version 2, then version 1 restored before it comes
         await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
         await _act(plugin, "use_version", draft_key=key, version=1)
@@ -7301,10 +7336,222 @@ async def test_draft_facts_for_a_version_left_join_none(plugin, client):
     failed = _last(plugin, "add_facts_failed")
     assert failed["data"] == {"draft_key": key, "stale": True}
     assert "ask again" in failed["message"]
+    assert not plugin._small.held(f"nested:{key}")
     for version, text in ((1, "It flies at night."), (2, "It hunts by moonlight.")):
         await _act(plugin, "use_version", draft_key=key, version=version)
         shown = _last(plugin, "use_version")["data"]
         assert [f["text"] for f in shown["preview"]["facts"]] == [text]
+    assert s.world.head_rev() == head
+
+
+async def test_nested_facts_write_into_a_new_version(plugin, client):
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    head = s.world.head_rev()
+    added = await _nested_ask(
+        plugin, key, _facts_reply("It drills at dawn.", "It sings at dusk.")
+    )
+    assert [f.text for f in plugin._current_preview(key).facts] == [
+        "It flies at night."
+    ]
+    nested = added["draft"]
+    nested["facts"][1]["ticked"] = False
+    page = await _write_nested(plugin, key, nested)
+    assert page["version"] == draft["version"] + 1
+    assert [v["version"] for v in page["versions"]] == [1, 2]
+    assert [f["text"] for f in page["preview"]["facts"]] == [
+        "It flies at night.",
+        "It drills at dawn.",
+    ]
+    # the version written from is kept as it was
+    await _act(plugin, "use_version", draft_key=key, version=1)
+    shown = _last(plugin, "use_version")["data"]
+    assert [f["text"] for f in shown["preview"]["facts"]] == ["It flies at night."]
+    assert s.world.head_rev() == head
+
+    # with nothing held there's nothing to write
+    before = len(_errors(plugin))
+    await _act(plugin, "write_nested_facts", draft_key=key, draft=nested)
+    assert len(_errors(plugin)) == before + 1
+
+
+async def test_nested_regenerate_and_use(plugin, client):
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    nested = f"nested:{key}"
+    head = s.world.head_rev()
+    first = await _nested_ask(plugin, key, _facts_reply("It drills at dawn."))
+    second = await _nested_ask(
+        plugin, key, _facts_reply("It sings at dusk."), regenerate=True
+    )
+    assert (second["draft_key"], second["version"]) == (nested, 2)
+    assert [v["version"] for v in second["versions"]] == [1, 2]
+    assert [f["rendered"] for f in second["facts"]] == ["It sings at dusk."]
+    assert first["version"] == 1
+
+    await _act(plugin, "use_small_version", draft_key=nested, version=1)
+    restored = _last(plugin, "use_small_version")["data"]
+    assert restored["kind"] == "nested"
+    assert restored["nested_in"] == key
+    assert restored["version"] == 1
+    assert [f["rendered"] for f in restored["facts"]] == ["It drills at dawn."]
+
+    # a fresh ask (no regenerate) starts the slot afresh
+    third = await _nested_ask(plugin, key, _facts_reply("It hunts at noon."))
+    assert third["version"] == 1
+    assert len(third["versions"]) == 1
+    assert s.world.head_rev() == head
+
+
+async def test_page_draft_refuses_while_nested_held(plugin, client):
+    """Review focus 5: while a nested draft is held, the page draft's
+    accept, version switch and regeneration are refused, writing
+    nothing; once the nested draft is discarded, accept works."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    await _nested_ask(plugin, key, _facts_reply("It drills at dawn."))
+    head = s.world.head_rev()
+    versions = len(plugin._drafts[key])
+
+    for action, data in (
+        ("accept_preview", {"preview": draft["preview"]}),
+        ("use_version", {"version": 1}),
+        ("preview_thing", {"kind": "lore", "fields": {}, "prompt": "again"}),
+    ):
+        before = len(_errors(plugin))
+        await _act(plugin, action, draft_key=key, **data)
+        await _drain(plugin)
+        assert len(_errors(plugin)) == before + 1, action
+        assert (
+            "write or discard the added facts first"
+            in _errors(plugin)[-1]["error"]["message"]
+        )
+    assert s.world.head_rev() == head
+    assert len(plugin._drafts[key]) == versions
+
+    await _act(plugin, "discard_small_draft", draft_key=f"nested:{key}")
+    await _act(plugin, "accept_preview", preview=draft["preview"], draft_key=key)
+    assert _last(plugin, "accept_preview")["data"]["name"] == "Frostwing Host"
+    assert s.world.head_rev() == head + 1
+
+
+async def test_discard_page_draft_discards_nested(plugin, client):
+    await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    await _nested_ask(plugin, key, _facts_reply("It drills at dawn."))
+    assert plugin._small.held(f"nested:{key}")
+    await _act(plugin, "discard_preview", draft_key=key)
+    assert not plugin._small.held(f"nested:{key}")
+
+    # and a nested ask still out when the page draft goes is dropped
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    key = draft["draft_key"]
+    async with MockClientContext():
+        client_responses.get().append(_facts_reply("It drills at dawn."))
+        await _act(plugin, "add_facts", draft_key=key, prompt="more")
+        await _act(plugin, "discard_preview", draft_key=key)
+        await _drain(plugin)
+    assert not plugin._small.held(f"nested:{key}")
+    assert len(_replies(plugin, "add_facts")) == 1
+
+
+async def test_nested_keep_new_is_honoured_at_accept(plugin, client):
+    """A nested fact's "Keep new" carried into the page draft by
+    `write_nested_facts` is vouched for at the page draft's accept (the
+    new version holds the fact with its `repeat_of`): the fact it
+    repeats is removed. A forged one is refused at the write."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="seed")) as rev:
+        weave = rev.add_fact(
+            s.wattle, "general", "Wattlemakers weave fences along the row."
+        )
+        bells = rev.add_fact(s.velikoye, "general", "Velikoye has many bells.")
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Wattle Row", "Carts crowd it at noon."),
+        kind="place",
+        prompt="the row",
+        stub_id=s.wattle,
+    )
+    key = draft["draft_key"]
+    added = await _nested_ask(
+        plugin, key, _facts_reply("Wattlemakers weave fences along the row daily.")
+    )
+    (row,) = added["draft"]["facts"]
+    assert row["repeat_of"]["fact_id"] == weave
+    nested = added["draft"]
+    nested["facts"][0].update(ticked=True, replaces_repeat=True)
+    nested["move_here"] = [
+        {
+            "fact_id": bells,
+            "from_id": s.velikoye,
+            "text": "Velikoye has many bells.",
+            "ticked": True,
+            "repeat": True,
+        }
+    ]
+    page = await _write_nested(plugin, key, nested)
+    assert any("bells" in note for note in page["notes"])
+    assert page["preview"]["move_here"] == []
+    kept = page["preview"]["facts"][-1]
+    assert kept["replaces_repeat"] and kept["repeat_of"]["fact_id"] == weave
+
+    await _act(plugin, "accept_preview", preview=page["preview"], draft_key=key)
+    accepted = _last(plugin, "accept_preview")["data"]
+    texts = [f["text"] for f in accepted["facts"]]
+    assert "Wattlemakers weave fences along the row daily." in texts
+    assert "Wattlemakers weave fences along the row." not in texts
+    assert "Velikoye has many bells." in {
+        f.text for f in s.world.view().thing(s.velikoye).facts
+    }
+
+
+async def test_accept_facts_refuses_a_nested_draft(plugin, client):
+    s = await _open_filing_world(plugin)
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "accept_facts",
+        draft={"thing_id": None, "prompt": "x", "facts": []},
+    )
+    assert len(_errors(plugin)) == before + 1
+    assert (
+        "a page draft's facts are written into the draft"
+        in _errors(plugin)[-1]["error"]["message"]
+    )
     assert s.world.head_rev() == head
 
 
