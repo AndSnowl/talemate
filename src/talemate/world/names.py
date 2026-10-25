@@ -298,7 +298,8 @@ def alias_table(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
         )
         aliases.setdefault(key, []).append((_RANKS[via], candidate))
 
-    pool = [(state, False) for state in view.things()]
+    # names only: no facts loaded
+    pool = [(state, False) for state in view.things(facts=False)]
     pool += [(state, True) for state in extra]
     for state, drafted in pool:
         if state.stub_ignored:

@@ -234,3 +234,24 @@ def test_facts_of_one_date_come_in_written_order(world):
     assert [f.text for _owner, f in view.referencing(lake, any_date=True)] == texts
     (state,) = [t for t in view.things("place") if t.id == city]
     assert [f.text for f in state.facts] == texts
+
+
+def test_things_without_facts(world):
+    """I1: `things(facts=False)` is every thing with its fields alone, for
+    a caller after names: the same things, no facts loaded."""
+
+    with world.revision(Source.manual()) as rev:
+        maren = rev.create_thing("character", {"name": "Maren", "aka": []})
+        rev.add_fact(maren, "appearance", "Tall.")
+        rev.create_thing("place", {"name": "The Harbour"})
+    view = world.view()
+    full = view.things()
+    bare = view.things(facts=False)
+    assert [(t.id, t.kind, t.fields) for t in bare] == [
+        (t.id, t.kind, t.fields) for t in full
+    ]
+    assert all(t.facts == [] for t in bare)
+    assert any(t.facts for t in full)
+    assert [t.id for t in view.things("place", facts=False)] == [
+        t.id for t in view.things("place")
+    ]

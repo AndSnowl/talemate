@@ -436,7 +436,8 @@ class _Known(NamedTuple):
 
 def _known_things(view: WorldView) -> list[_Known]:
     known = []
-    for state in view.things():
+    # names only: no facts loaded
+    for state in view.things(facts=False):
         keys = [name_key(view.name_of(state.id) or "")]
         aka = state.fields.get("aka")
         for entry in aka if isinstance(aka, list) else []:

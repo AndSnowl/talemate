@@ -285,9 +285,13 @@ class WorldView:
             id=thing_id, kind=kind, fields=fields, facts=facts, created=row["created"]
         )
 
-    def things(self, kind: str | None = None) -> list[ThingState]:
+    def things(
+        self, kind: str | None = None, *, facts: bool = True
+    ) -> list[ThingState]:
         """Every thing that exists at `rev`, optionally restricted to one
-        `kind`, ordered by id."""
+        `kind`, ordered by id. Without `facts`, each has its fields only
+        (`facts` empty): what a caller after names alone reads, at a
+        fraction of the cost (I1)."""
 
         things_filter, things_params = self._live_things_filter("", kind=kind)
         rows = self._conn.execute(
@@ -299,14 +303,14 @@ class WorldView:
         kinds = {row["id"]: row["kind"] for row in rows}
         created = {row["id"]: row["created"] for row in rows}
         fields_by_id = self._fetch_fields(list(kinds), kind=kind)
-        facts_by_id = self._fetch_facts(list(kinds), kind=kind)
+        facts_by_id = self._fetch_facts(list(kinds), kind=kind) if facts else {}
 
         return [
             ThingState(
                 id=thing_id,
                 kind=thing_kind,
                 fields=fields_by_id[thing_id],
-                facts=facts_by_id[thing_id],
+                facts=facts_by_id.get(thing_id, []),
                 created=created[thing_id],
             )
             for thing_id, thing_kind in kinds.items()
