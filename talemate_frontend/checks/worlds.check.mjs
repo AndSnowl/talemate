@@ -2495,6 +2495,49 @@ check('a repeat: Move that one here, Keep both or Drop this', () => {
     assert.deepEqual(tickMoveHere(moving, 'm1', true).move_here.map((r) => r.ticked), [true, true]);
 });
 
+check('P6: a rewritten draft fact shows as the server rendered it, once the words match', () => {
+    const page = draftOf(HOST);
+    const edited = { ...HOST, facts: HOST.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies over Velikoye.' } : f)) };
+    const linked = [{ text: 'It flies over ', ref: null, stub: false }, { text: 'Velikoye', ref: 'vel', stub: false }, { text: '.', ref: null, stub: false }];
+    const rendered = { facts: [{ index: 0, text: 'It flies over Velikoye.', segments: linked }] };
+    const rows = draftFactRows(page, edited, rendered);
+    assert.deepEqual(rows[0].segments, linked);
+    assert.equal(rows[0].serverIndex, null);
+    // rendered for other words (an edit since): the plain fallback
+    const later = { ...edited, facts: edited.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies.' } : f)) };
+    assert.deepEqual(draftFactRows(page, later, rendered)[0].segments, [{ text: 'It flies.', ref: null, stub: false }]);
+    // a fact the server rendered on its own page keeps the server's runs
+    const served = { ...page, facts: page.facts.map((f, i) => (i === 1 ? { ...f, segments: [{ text: 'The Khorol', ref: 'kh', stub: false }, { text: ' freezes.', ref: null, stub: false }] } : f)) };
+    assert.equal(draftFactRows(served, HOST)[1].segments[0].ref, 'kh');
+});
+
+check('P6: a draft edit asks the server to render the draft; only the newest answer is kept', () => {
+    const { store, sent } = hostDraft();
+    const key = store.draft.key;
+    store.editDraft({ facts: store.draft.edited.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies over Velikoye.' } : f)) });
+    const first = sent.filter((m) => m.action === 'draft_render').at(-1);
+    assert.equal(first.draft_key, key);
+    assert.equal(first.preview.facts[0].text, 'It flies over Velikoye.');
+    store.editDraft({ name: 'The Frostwing Riders' });
+    const second = sent.filter((m) => m.action === 'draft_render').at(-1);
+    assert.ok(second.seq > first.seq);
+    const timeline = [{ fact_id: null, date: dateOf(990), segments: [{ text: 'It was raised.', ref: null, stub: false }], here: true }];
+    store.handleMessage(reply('draft_render', { draft_key: key, seq: first.seq, facts: [], prose_segments: {}, entry_timeline: [] }));
+    assert.equal(store.draft.rendered, null);
+    store.handleMessage(reply('draft_render', { draft_key: key, seq: second.seq, facts: [], prose_segments: {}, entry_timeline: timeline }));
+    assert.deepEqual(store.draft.rendered.entry_timeline, timeline);
+    // another draft's answer is no answer for this one
+    store.handleMessage(reply('draft_render', { draft_key: 'new:lore:other', seq: second.seq + 1, facts: [], prose_segments: {}, entry_timeline: [] }));
+    assert.deepEqual(store.draft.rendered.entry_timeline, timeline);
+    // a server copy taken again: rendered anew, the owner's edits on it
+    const asked = sent.filter((m) => m.action === 'draft_render').length;
+    store.keepDraftEdits();
+    store.handleMessage(reply('use_version', draftOf(HOST)));
+    assert.equal(store.draft.rendered, null);
+    assert.equal(store.draft.edited.name, 'The Frostwing Riders');
+    assert.equal(sent.filter((m) => m.action === 'draft_render').length, asked + 1);
+});
+
 check('For other pages: a row retargeted, "+ also here"; In, File into this and new names', () => {
     const out = retarget(HOST, 0, { id: 'nc', name: 'The Night Court', kind: 'lore' });
     assert.deepEqual(out.elsewhere[0], {

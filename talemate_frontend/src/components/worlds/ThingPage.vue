@@ -704,7 +704,9 @@ export default {
         },
         // the draft as the page it will be: the server's page of it
         // (a stub's draft starts from the stub's own page), with the
-        // owner's name, kind, tag and "In" rows, and its prose
+        // owner's name, kind, tag and "In" rows, and its prose; its
+        // timeline and prose linked as the server rendered the owner's
+        // copy (`draft.rendered`, P6), once it has
         draftThing() {
             const draft = this.worlds.draft;
             if (!draft) {
@@ -735,6 +737,8 @@ export default {
                 facts: (page.facts || []).filter((fact) => !fact.draft),
                 inherited: [],
                 prose: Object.fromEntries(Object.entries(edited.prose || {}).map(([section, text]) => [section, { text, stale: false }])),
+                prose_segments: draft.rendered?.prose_segments || page.prose_segments,
+                entry_timeline: draft.rendered?.entry_timeline || page.entry_timeline,
             };
         },
         kindItems() {
@@ -751,7 +755,7 @@ export default {
             if (!this.draft || !this.worlds.draft) {
                 return [];
             }
-            return draftFactRows(this.worlds.draft.page, this.edited).map((row) => ({
+            return draftFactRows(this.worlds.draft.page, this.edited, this.worlds.draft.rendered).map((row) => ({
                 ...row,
                 view: {
                     text: row.fact.text,

@@ -152,7 +152,10 @@ through `signal_operation_failed` (an `operation_done` envelope with
   recently used forgotten first. `use_version {draft_key, version}`
   answers that version as `preview_thing` does and makes it the current
   one; `discard_preview {draft_key}` drops every version, writing
-  nothing, and answers `{draft_key}`; a regeneration whose draft is
+  nothing, and answers `{draft_key}`; `draft_render {draft_key, seq?,
+  preview}` (P6) answers `{draft_key, seq, facts: [{index, text,
+  segments}], prose_segments, entry_timeline}`: the owner's copy linked
+  as accept will link it, writing nothing; a regeneration whose draft is
   discarded before its reply comes is dropped, unanswered. Opening
   another world drops them all. The client must always send `draft_key`
   with `accept_preview`, or the draft lingers until forgotten.
@@ -319,6 +322,7 @@ formatted with the world's calendar; `label` is ignored on the way in.
 """
 
 import asyncio
+import hashlib
 import json
 import os
 from collections import OrderedDict
@@ -577,6 +581,13 @@ class AcceptPreviewPayload(pydantic.BaseModel):
 
 class DraftKeyPayload(pydantic.BaseModel):
     draft_key: str
+
+
+class DraftRenderPayload(DraftKeyPayload):
+    # the draft as the owner left it: the client's copy, edits and all
+    preview: CreatePreview
+    # sent back as it came, so the client keeps the newest reply only
+    seq: int | None = None
 
 
 class UseVersionPayload(DraftKeyPayload):
@@ -1244,6 +1255,56 @@ class _Links:
         runs.append(Segment(text=text[end:], ref=None))
         return self._out([run for run in runs if run.text])
 
+    def draft_segments(
+        self, written: str, fresh: dict[str, str], *, links: bool = True
+    ) -> list[dict]:
+        """A draft's text as linked runs, from `written`, the text as
+        `link_text` links it with each of the draft's new names linked to a
+        stand-in id (`_draft_new_names`; `fresh` maps each stand-in to its
+        kind): a run linking a stand-in is the stub it will be on accept,
+        `fresh` (with its `kind`), linking nothing yet. With `links` off,
+        every other link reads as its plain words (prose, whose links
+        `prose_segments` found already)."""
+
+        out: list[dict] = []
+
+        def add(run: dict) -> None:
+            plain = run["ref"] is None and not run.get("fresh")
+            if plain and out and out[-1]["ref"] is None and not out[-1].get("fresh"):
+                out[-1]["text"] += run["text"]
+            elif run["text"]:
+                out.append(run)
+
+        def words(text: str) -> None:
+            if not text:
+                return
+            if links:
+                for run in self.segments(text):
+                    add(run)
+            else:
+                add({"text": self.view.render(text), "ref": None, "stub": False})
+
+        end = 0
+        for match in REF_PATTERN.finditer(written):
+            words(written[end : match.start()])
+            kind = fresh.get(match.group(1))
+            if kind is not None:
+                shown = match.group(2) or ""
+                add(
+                    {
+                        "text": shown,
+                        "ref": None,
+                        "stub": False,
+                        "fresh": True,
+                        "kind": kind,
+                    }
+                )
+            else:
+                words(match.group(0))
+            end = match.end()
+        words(written[end:])
+        return out
+
     def named_stubs(self, state: ThingState) -> list[dict]:
         """`{id, name, kind}` of each live stub `state`'s facts link to (not
         an ignored one), in the order they're first linked."""
@@ -1266,6 +1327,45 @@ class _Links:
                     }
                 )
         return found
+
+
+def _draft_new_names(
+    view: WorldView, rows: Collection[NewName]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """A draft's new names (`rows`: its own and its elsewhere rows') as
+    `link_text`'s `new_names`, mapped the way accept maps them
+    (`links.make_stubs`, `create._row_stubs`), so the draft links them as
+    accept will: a name left new, with its name without a lowercase
+    leading "the", its other names and its written forms, maps to a
+    stand-in id for the stub it will be (the second mapping: stand-in to
+    kind, for `_Links.draft_segments`); a name marked the same as a live
+    entry maps, with its written forms, to that entry."""
+
+    mapping: dict[str, str] = {}
+    fresh: dict[str, str] = {}
+    for row in rows:
+        written = " ".join(row.name.split())
+        key = name_key(written)
+        if not key:
+            continue
+        target = row.same_target_id
+        state = view.thing(target) if target else None
+        if target is not None and state is not None and not state.stub_ignored:
+            for form in (written, *row.written):
+                mapping.setdefault(" ".join(form.split()), target)
+            continue
+        stand_in = hashlib.sha256(f"draft-new:{key}".encode()).hexdigest()[:32]
+        fresh.setdefault(stand_in, row.kind or "lore")
+        parts = written.split()
+        name = " ".join(parts[1:]) if len(parts) > 1 and parts[0] == "the" else written
+        others = [
+            str(entry["name"])
+            for entry in row.aka
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        ]
+        for form in (written, name, *others, *row.written):
+            mapping.setdefault(" ".join(form.split()), stand_in)
+    return mapping, fresh
 
 
 # --- curation -----------------------------------------------------------------
@@ -2510,6 +2610,42 @@ class WorldsPlugin(Plugin):
         self._current.pop(payload.draft_key, None)
         self._reply("discard_preview", {"draft_key": payload.draft_key})
 
+    async def handle_draft_render(self, data: dict):
+        """The draft as the owner left it, linked as accept will link it
+        (P6), writing nothing: `{draft_key, seq, facts: [{index, text,
+        segments}], prose_segments, entry_timeline}` for `preview`, the
+        client's copy with the owner's edits. Its facts, prose and
+        timeline are `_draft_payload`'s for that copy: a rewritten fact's
+        names link, its new names show `fresh`, and the timeline holds the
+        dated facts accept will write. As at accept, only the selected
+        names a version held here recorded link without a capital, and
+        the stub expanded is the server's copy's."""
+
+        payload = DraftRenderPayload(**data)
+        world = self._require_world()
+        held = self._current_preview(payload.draft_key)
+        preview = payload.preview.model_copy(update={"stub_id": held.stub_id})
+        self._check_selected_names(preview, payload.draft_key)
+        page = self._draft_payload(world, preview)
+        self._reply(
+            "draft_render",
+            {
+                "draft_key": payload.draft_key,
+                "seq": payload.seq,
+                "facts": [
+                    {
+                        "index": fact["index"],
+                        "text": fact["text"],
+                        "segments": fact["segments"],
+                    }
+                    for fact in page["facts"]
+                    if fact.get("draft")
+                ],
+                "prose_segments": page["prose_segments"],
+                "entry_timeline": page["entry_timeline"],
+            },
+        )
+
     def _draft_payload(self, world: World, preview: CreatePreview) -> dict:
         """The draft as the page the entry will be, from the data it would
         write, writing nothing. A stub being expanded starts from its own
@@ -2518,7 +2654,10 @@ class WorldsPlugin(Plugin):
         kind, tag, hint, other names, fields, prose, what it inherits, its
         facts (`draft: true`, each linked as it would be, with its tick,
         repeat and holder) and its "In" rows (`draft: true`, with their
-        tick), and its dated facts on the timeline. `id` is the stub's, or
+        tick), and the dated facts accept will write (its ticked ones) on
+        the timeline. Its new names are linked as accept links them, to
+        the stubs they'll be, and shown `fresh` (`_draft_new_names`), in
+        its facts, timeline and prose alike. `id` is the stub's, or
         `null`; `draft` is true."""
 
         view = world.view()
@@ -2556,18 +2695,63 @@ class WorldsPlugin(Plugin):
                 },
             }
         owner = stub.id if stub is not None else None
+        # its new names linked as accept will link them: each to a
+        # stand-in for its stub, shown `fresh`
+        new_names, fresh = _draft_new_names(
+            view,
+            [
+                *preview.new_names,
+                *(row.new for row in preview.elsewhere if row.new is not None),
+            ],
+        )
 
         def linked(text: str) -> list[dict]:
-            return links.segments(
+            return links.draft_segments(
                 link_text(
                     view,
                     text,
                     picks=preview.picks,
+                    new_names=new_names,
                     owner=owner,
                     as_new=preview.treated_as_new,
                     lowercase=preview.selected_names,
-                )
+                ),
+                fresh,
             )
+
+        def prose_linked(text: str) -> list[dict]:
+            # as the accepted page links it (`prose_segments`), the new
+            # names, stubs then, marked in the words it leaves plain
+            out: list[dict] = []
+            for run in links.prose_segments(text, owner or ""):
+                found = (
+                    links.draft_segments(
+                        link_text(
+                            view,
+                            run["text"],
+                            new_names=new_names,
+                            owner=owner,
+                            as_new=preview.treated_as_new,
+                            lowercase=preview.selected_names,
+                        ),
+                        fresh,
+                        links=False,
+                    )
+                    if run["ref"] is None
+                    else [run]
+                )
+                for part in found:
+                    if (
+                        out
+                        and part["ref"] is None
+                        and not part.get("fresh")
+                        and out[-1]["ref"] is None
+                        and not out[-1].get("fresh")
+                    ):
+                        out[-1] = {**out[-1], "text": out[-1]["text"] + part["text"]}
+                    else:
+                        out.append(part)
+            return out
 
         def held(holder: str | None) -> dict | None:
             if holder is None or view.thing(holder) is None:
@@ -2614,19 +2798,21 @@ class WorldsPlugin(Plugin):
             for row in preview.filings
             if row.target_id is None or row.target_id not in filed
         ]
+        # the dated facts accept will write (its ticked ones), as the
+        # owner left them
         lines = [
             {
                 "fact_id": None,
                 "owner_id": owner,
                 "owner_name": preview.name,
                 "date": _date_out(calendar, fact.since),
-                "until": None,
+                "until": _date_out(calendar, fact.until),
                 "segments": linked(fact.text),
                 "here": True,
                 "disagrees_with": [],
             }
             for fact in preview.facts
-            if fact.since is not None
+            if fact.since is not None and fact.ticked
         ]
         timeline = sorted(
             [*page["entry_timeline"], *lines],
@@ -2683,7 +2869,7 @@ class WorldsPlugin(Plugin):
             },
             "prose_segments": {
                 section: (
-                    links.prose_segments(preview.prose[section], owner or "")
+                    prose_linked(preview.prose[section])
                     if preview.prose.get(section)
                     else []
                 )

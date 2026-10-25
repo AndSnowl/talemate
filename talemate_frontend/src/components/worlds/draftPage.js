@@ -203,11 +203,15 @@ export function categoryFor(kind, category) {
 
 // The draft's own facts as its page lists them: `{index (into `edited.facts`),
 // fact, segments, local, edited (its words changed here), serverIndex}`,
-// a removed one left out. A server fact's segments are the server's (its
-// names linked, the draft's new names marked fresh); one the owner wrote
-// or rewrote here is plain words, marked fresh.
-export function draftFactRows(page, edited) {
+// a removed one left out. Its segments are as accept will link it (P6):
+// the server's render of the owner's copy (`rendered`, `draft_render`'s
+// reply: `facts: [{index, text, segments}]`) when it rendered these words,
+// else the server's copy's own (its names linked, its new names marked
+// fresh), else, for words the owner wrote or rewrote here and not yet
+// rendered, plain words with the draft's new names marked fresh.
+export function draftFactRows(page, edited, rendered = null) {
     const served = new Map((page?.facts || []).filter((fact) => fact.draft).map((fact) => [fact.index, fact]));
+    const drawn = new Map((rendered?.facts || []).map((row) => [row.index, row]));
     const newNames = edited?.new_names || [];
     return (edited?.facts || []).flatMap((fact, index) => {
         if (fact.removed) {
@@ -215,6 +219,15 @@ export function draftFactRows(page, edited) {
         }
         const server = fact.local ? null : served.get(index);
         const rewritten = !server || server.text !== fact.text;
+        const render = drawn.get(index);
+        let segments;
+        if (render && render.text === fact.text) {
+            segments = render.segments;
+        } else if (!rewritten) {
+            segments = server.segments;
+        } else {
+            segments = freshSegments([{ text: fact.text, ref: null, stub: false }], newNames, edited?.selected_names);
+        }
         return [{
             index,
             fact,
@@ -222,7 +235,7 @@ export function draftFactRows(page, edited) {
             edited: rewritten,
             // what a selection names: the server's fact, as the server has it
             serverIndex: rewritten ? null : index,
-            segments: freshSegments(rewritten ? [{ text: fact.text, ref: null, stub: false }] : server.segments, newNames, edited?.selected_names),
+            segments,
         }];
     });
 }

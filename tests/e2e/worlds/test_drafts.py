@@ -26,6 +26,8 @@ import re
 
 from playwright.sync_api import expect
 
+from talemate.world.dates import WorldDate
+
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_connections_create import (
     _choose_mode,
@@ -1022,3 +1024,82 @@ def test_repoint_mode_picker(app, page):
         "Pure-line Moscavians"
     )
     assert page.console_errors == []
+
+
+COUNCIL = "It answers to the Boyar Council."
+RAISED = "It was raised in winter."
+
+
+def test_draft_edit_keeps_highlights(app, page, fixed_preview):
+    """P6: the draft shows what accept will write. Its new names are
+    highlighted in its facts and prose (one written with a lowercase
+    "the" too); a fact rewritten on the draft keeps its highlights, the
+    world's names linked as accept will link them; the timeline follows
+    the facts' words, dates and ticks; and accept links what the draft
+    showed."""
+
+    _seeded(app, page, "Highlights")
+    fixed_preview(
+        {
+            "name": "The Frostwing Host",
+            "facts": [
+                {"category": "general", "text": COUNCIL},
+                {
+                    "category": "general",
+                    "text": RAISED,
+                    "since": WorldDate.of(990).model_dump(mode="json"),
+                },
+            ],
+            "names": [{"name": "The Boyar Council", "kind": "lore"}],
+            "prose": {"description": "A host sworn to the Boyar Council."},
+        }
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    council = _draft_fact(draft, COUNCIL)
+    expect(council.get_by_test_id("linked-new")).to_have_text("the Boyar Council")
+    prose = draft.get_by_test_id("draft-prose")
+    expect(prose.get_by_test_id("linked-new")).to_contain_text("Boyar Council")
+
+    # rewritten on the draft: the world's name it now writes links, the
+    # new name stays a new name
+    council.get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-edit").click()
+    form = draft.get_by_test_id("fact-form")
+    form.get_by_label("Fact", exact=True).fill(
+        "It guards Velikoye for the Boyar Council."
+    )
+    form.get_by_role("button", name="Save").click()
+    guards = _draft_fact(draft, "It guards Velikoye")
+    expect(guards.get_by_test_id("linked-ref")).to_have_text("Velikoye")
+    expect(guards.get_by_test_id("linked-new")).to_have_text("the Boyar Council")
+    assert "It guards Velikoye for the Boyar Council." in [
+        fact["text"] for fact in _sent(page, "draft_render")[-1]["preview"]["facts"]
+    ]
+
+    # the timeline follows the facts: a new date, then unticked, gone
+    timeline = draft.get_by_test_id("entry-timeline")
+    row = timeline.get_by_test_id("timeline-row").filter(has_text=RAISED)
+    expect(row).to_contain_text("990")
+    raised = _draft_fact(draft, RAISED)
+    raised.get_by_test_id("fact-menu-button").click()
+    # the first fact's menu, closed, may still be in the page
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-dates").locator(
+        "visible=true"
+    ).click()
+    form = draft.get_by_test_id("fact-form")
+    form.get_by_label("From year").fill("995")
+    form.get_by_role("button", name="Save").click()
+    expect(row).to_contain_text("995")
+    raised.get_by_role("checkbox").click()
+    expect(row).to_have_count(0)
+    raised.get_by_role("checkbox").click()
+    expect(row).to_contain_text("995")
+
+    draft.get_by_role("button", name="Accept").click()
+    host = _opened(page, "The Frostwing Host")
+    fact = _fact(host, "It guards Velikoye")
+    expect(fact.get_by_test_id("linked-ref")).to_have_text("Velikoye")
+    expect(fact.get_by_test_id("linked-stub")).to_have_text("the Boyar Council")
+    assert page.console_errors == []
+
+

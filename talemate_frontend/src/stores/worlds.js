@@ -1092,11 +1092,32 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('use_version', { draft_key: draft.key, version });
         },
 
-        // the owner's edits to the draft (`changes` merged into `edited`)
+        // the owner's edits to the draft (`changes` merged into `edited`),
+        // then rendered by the server as accept will write them
         editDraft(changes) {
             if (this.draft) {
                 this.draft = { ...this.draft, edited: { ...this.draft.edited, ...changes } };
+                this.renderDraft();
             }
+        },
+
+        // P6: the server links the owner's copy of the draft as accept
+        // will (`draft_render`, writing nothing): its facts, prose and
+        // timeline (`draft.rendered`). Each request is numbered (`seq`);
+        // only the answer to the newest is kept. A copy the owner hasn't
+        // changed is the server's page as it is.
+        renderDraft() {
+            const draft = this.draft;
+            if (!draft) {
+                return;
+            }
+            const seq = (draft.renderSeq || 0) + 1;
+            this.draft = { ...draft, renderSeq: seq };
+            if (draft.edited === draft.base) {
+                this.draft = { ...this.draft, rendered: null };
+                return;
+            }
+            this.request('draft_render', { draft_key: draft.key, seq, preview: acceptable(draft.edited) });
         },
 
         // "+ Add facts…" / "+ Add event…" on the draft: one at a time
@@ -1162,9 +1183,16 @@ export const useWorldsStore = defineStore('worlds', {
                 addError: null,
                 accepting: false,
                 selecting: done === 'selecting' || !before ? null : before.selecting,
+                // the server's page is this copy's: rendered anew once
+                // the owner's edits are on it
+                rendered: null,
+                renderSeq: before?.renderSeq || 0,
             };
             if (how === 'new') {
                 this.draftShown = true;
+            }
+            if (edited !== preview) {
+                this.renderDraft();
             }
         },
 
@@ -1988,6 +2016,12 @@ export const useWorldsStore = defineStore('worlds', {
                     }
                     break;
                 case 'discard_preview':
+                    break;
+                case 'draft_render':
+                    if (this.draft?.key === data.draft_key && this.draft.renderSeq === data.seq) {
+                        const { draft_key: _key, seq: _seq, ...rendered } = data;
+                        this.draft = { ...this.draft, rendered };
+                    }
                     break;
                 case 'make_stub_from_text':
                 case 'link_text':

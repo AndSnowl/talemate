@@ -6806,6 +6806,130 @@ async def test_repeat_move_that_one_here(plugin, tmp_path, monkeypatch):
     assert "Velikoye has many bells." in texts
 
 
+def _fresh_runs(segments):
+    return [seg["text"] for seg in segments if seg.get("fresh")]
+
+
+async def test_draft_render_links_edited_facts(plugin, client):
+    """P6: the draft's facts are linked as accept will link them, the
+    draft's new names marked `fresh` (here one written with a lowercase
+    "the"), and so is a fact the owner rewrote (`draft_render`, writing
+    nothing): the world's names it writes link, and a new name marked the
+    same as an entry links to that entry."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply(
+            "Frostwing Host",
+            "It answers to the Boyar Council.",
+            names=[{"name": "The Boyar Council", "kind": "lore"}],
+        ),
+        prompt="a host",
+    )
+    (fact,) = [f for f in draft["facts"] if f["draft"]]
+    assert _fresh_runs(fact["segments"]) == ["the Boyar Council"]
+    head = s.world.head_rev()
+
+    preview = draft["preview"]
+    rewritten = {
+        **preview,
+        "facts": [
+            {
+                **preview["facts"][0],
+                "text": "It guards Velikoye for the Boyar Council.",
+            }
+        ],
+    }
+    await _act(
+        plugin, "draft_render", draft_key=draft["draft_key"], seq=3, preview=rewritten
+    )
+    rendered = _last(plugin, "draft_render")["data"]
+    assert (rendered["draft_key"], rendered["seq"]) == (draft["draft_key"], 3)
+    (row,) = rendered["facts"]
+    assert (row["index"], row["text"]) == (
+        0,
+        "It guards Velikoye for the Boyar Council.",
+    )
+    assert [seg["ref"] for seg in row["segments"] if seg["text"] == "Velikoye"] == [
+        s.velikoye
+    ]
+    assert _fresh_runs(row["segments"]) == ["the Boyar Council"]
+    assert "".join(seg["text"] for seg in row["segments"]) == row["text"]
+
+    # marked the same as the Night Court, the name links there instead
+    same = {
+        **rewritten,
+        "new_names": [
+            {**preview["new_names"][0], "same_target_id": s.court},
+        ],
+    }
+    await _act(plugin, "draft_render", draft_key=draft["draft_key"], preview=same)
+    (row,) = _last(plugin, "draft_render")["data"]["facts"]
+    assert _fresh_runs(row["segments"]) == []
+    assert s.court in [seg["ref"] for seg in row["segments"]]
+    assert s.world.head_rev() == head
+
+    # accepted, the rewritten fact links just as it was shown
+    await _act(
+        plugin, "accept_preview", preview=rewritten, draft_key=draft["draft_key"]
+    )
+    host = _last(plugin, "accept_preview")["data"]
+    (written,) = host["facts"]
+    linked = {seg["text"]: seg for seg in written["segments"] if seg["ref"]}
+    assert linked["Velikoye"]["ref"] == s.velikoye
+    assert linked["the Boyar Council"]["stub"] is True
+
+
+async def test_draft_timeline_follows_edits(plugin, client):
+    """P6: the draft's timeline is built from the facts as the owner left
+    them (`draft_render`): a rewritten dated fact shows its new words and
+    date, linked; a fact the owner unticked (or removed) isn't on it, as
+    accept won't write it; one the owner dated joins it."""
+
+    s = await _open_filing_world(plugin)
+    reply = json.dumps(
+        {
+            "name": "Frostwing Host",
+            "tag": "military",
+            "facts": [
+                {"category": "general", "text": "It was raised.", "since": 990},
+                {"category": "general", "text": "It fought at dawn.", "since": 1001},
+                {"category": "general", "text": "It flies at night."},
+            ],
+        }
+    )
+    draft = await _preview(plugin, client, reply, prompt="a host")
+    assert [line["date"]["label"] for line in draft["entry_timeline"]] == [
+        "990",
+        "1001",
+    ]
+    preview = draft["preview"]
+    facts = [dict(fact) for fact in preview["facts"]]
+    facts[0].update(
+        text="It was raised at Velikoye.",
+        since=WorldDate.of(995).model_dump(mode="json"),
+    )
+    facts[1].update(ticked=False)
+    facts[2].update(since=WorldDate.of(1010).model_dump(mode="json"))
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "draft_render",
+        draft_key=draft["draft_key"],
+        preview={**preview, "facts": facts},
+    )
+    lines = _last(plugin, "draft_render")["data"]["entry_timeline"]
+    assert [line["date"]["label"] for line in lines] == ["995", "1010"]
+    assert "".join(seg["text"] for seg in lines[0]["segments"]) == (
+        "It was raised at Velikoye."
+    )
+    assert s.velikoye in [seg["ref"] for seg in lines[0]["segments"]]
+    assert all(line["here"] for line in lines)
+    assert s.world.head_rev() == head
+
+
 async def test_accept_facts_waits_for_a_stub_draft(plugin, client):
     """A stub being drafted takes facts through its draft: `accept_facts`
     on it is refused, writing nothing, until the draft is accepted or
