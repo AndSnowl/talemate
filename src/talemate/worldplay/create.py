@@ -888,17 +888,23 @@ TITLE_WORDS: tuple[str, ...] = ("office", "title", "rank")
 _NOT_TAGS = frozenset((*KINDS, *AKA_TAGS))
 
 
-def clean_tag(value: object) -> str | None:
+def clean_tag(value: object, kind: str | None = None) -> str | None:
     """A reply's tag as stored: lowercase, its first comma-separated part
     that's a tag (ruling F8: "institution, doctrine" is "institution"; a
     kind's name or an `aka` tag is none, so "lore, religion" is
-    "religion"), or `None` (the example's "...", nothing usable)."""
+    "religion"), or `None` (the example's "...", nothing usable). A part
+    dropped as a kind's name or an `aka` tag is logged at debug, with the
+    entry's `kind` when given."""
 
     if not isinstance(value, str):
         return None
     for part in value.split(","):
         tag = " ".join(part.split()).strip(" .").lower()
-        if tag and tag not in _NOT_TAGS:
+        if tag in _NOT_TAGS:
+            # the model's commonest miss: the kind's own name as the tag
+            log.debug("create.tag_dropped", value=tag, kind=kind)
+            continue
+        if tag:
             return tag
     return None
 
@@ -943,7 +949,7 @@ def listed_names(raw_names: object) -> list[ListedName]:
                     name=name,
                     kind=kind,
                     aka=_aka_entries(item.get("aka")),
-                    tag=clean_tag(item.get("tag")),
+                    tag=clean_tag(item.get("tag"), kind),
                 ),
                 scrub_emphasis(" ".join(into.split()))
                 if isinstance(into, str) and into.strip()
@@ -2917,7 +2923,7 @@ async def preview_thing(
         validate_field(kind_spec, field, value)
     owner_aka = fields.pop("aka", None)
     fields.pop("stub", None)
-    owner_tag = clean_tag(fields.pop("tag", None))
+    owner_tag = clean_tag(fields.pop("tag", None), kind)
     if stub is not None and not fields.get("name"):
         fields["name"] = view.name_of(stub.id) or ""
     treated_as_new = [name for name in new_names if name.strip()]
@@ -3164,7 +3170,7 @@ async def preview_thing(
         fields["born"] = WorldDate.of(max(1, now_year - age))
 
     tag = known_tag or clean_tag(
-        wrapper.get("tag") if wrapper is not None else _cut_off_tag(reply)
+        wrapper.get("tag") if wrapper is not None else _cut_off_tag(reply), kind
     )
     raw_summary = wrapper.get("summary") if wrapper is not None else None
     summary = (

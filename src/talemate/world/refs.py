@@ -74,4 +74,10 @@ def scrub_emphasis(text: str) -> str:
     held = REF_PATTERN.sub(hold, text)
     for pattern in _EMPHASIS:
         held = pattern.sub(r"\1", held)
-    return _HELD.sub(lambda m: tokens[int(m.group(1))], held)
+
+    def back(match: re.Match[str]) -> str:
+        # a placeholder the text held already (no reference of ours) stays
+        index = int(match.group(1))
+        return tokens[index] if index < len(tokens) else match.group(0)
+
+    return _HELD.sub(back, held)

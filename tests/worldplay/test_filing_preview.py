@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 import pytest
+from structlog.testing import capture_logs
 
 from talemate.world.entries import held_by
 from talemate.world.filing import filings_of
@@ -696,6 +697,31 @@ async def test_tag_rule_without_entries_near(world):
     assert preview.tag == "custom"
 
 
+async def test_tag_rule_says_never_the_kind_name(world):
+    """Task 2 follow-up (docs/superpowers/probes/2026-10-24-tags-kind-names.md):
+    Skyfall tagged 4 of 6 untagged event stubs with "event", the kind's own
+    name, which `clean_tag` drops; the tag rule now says the tag is never
+    the kind's name, with the probe's wording."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            json.dumps(
+                {
+                    "name": "The Blinding",
+                    "tag": "cataclysm",
+                    "facts": [{"category": "general", "text": "It came in 994."}],
+                    "names": [],
+                }
+            )
+        )
+        await preview_thing(world, "event", "The Blinding", {}, client)
+    assert (
+        "The tag is never the kind's own name (lore, event, place, …): say what "
+        "sort of event it is, such as custom, law, battle, festival."
+    ) in _create_prompt(client)
+
+
 async def test_untagged_stub_expand_asks_tag(world):
     """Hubs round 1, P3 (feedback line 21): a stub the owner made by hand
     has no tag, and its expand prompt asks for one as a new entry's does;
@@ -827,6 +853,42 @@ async def test_species_prompt_asks_tag(world, heritage_world):
     assert '- "tag": one or two words for what the race is' in prompt
     assert '"tag": "..."' in prompt.split("Reply with only one JSON object", 1)[1]
     assert preview.tag == "owl race"
+
+
+async def test_species_and_race_names_carry_a_tag(world, heritage_world):
+    """Task 2 follow-up: the species and race examples' "names" items have
+    a "tag", as the other branches' do (their names rule already asks for
+    one); a listed name's tag reaches the stub it becomes."""
+
+    names_item = '"names": [{"name": "...", "kind": "place", "tag": "...", "aka": []}]'
+    reply = {
+        "name": "Badger-folk",
+        "tag": "beastfolk",
+        "facts": [
+            {"category": "origin", "text": "They came from the Deep Sett."},
+        ],
+        "names": [{"name": "Deep Sett", "kind": "place", "tag": "warren"}],
+    }
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps(reply))
+        preview = await preview_thing(
+            world, "species", "Badger-folk, stout diggers", {}, client
+        )
+    assert names_item in _create_prompt(client)
+    assert [(n.name, n.tag) for n in preview.new_names] == [("Deep Sett", "warren")]
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(json.dumps({**reply, "name": "Tawny", "no_longer_true": []}))
+        await preview_thing(
+            world,
+            "race",
+            "Tawny owls of the woods",
+            {"species": heritage_world.owl_folk},
+            client,
+        )
+    assert names_item in _create_prompt(client)
 
 
 async def test_unknown_hint_refused(world, moscavia):
@@ -1049,3 +1111,42 @@ def test_event_place_and_item_owner_are_filings(world, moscavia):
     assert [(f.target, f.role) for f in filings_of(view, item)] == [
         (moscavia.khorol, "owned by")
     ]
+
+
+async def test_clean_tag_logs_a_dropped_kind_name(world):
+    """Task 2 follow-up: a tag `clean_tag` drops (a kind's name, an `aka`
+    tag) is logged at debug with the value and the entry's kind, so a
+    draft left untagged says why; the reply's "lore" for a lore entry is
+    the review's case (Test2's Corners of the Earth)."""
+
+    with capture_logs() as logs:
+        assert create.clean_tag("Lore", kind="lore") is None
+        assert create.clean_tag("event, battle", kind="event") == "battle"
+        assert create.clean_tag("custom", kind="lore") == "custom"
+    dropped = [e for e in logs if e["event"] == "create.tag_dropped"]
+    assert [(e["value"], e["kind"]) for e in dropped] == [
+        ("lore", "lore"),
+        ("event", "event"),
+    ]
+    assert all(e["log_level"] == "debug" for e in dropped)
+
+    client = MockClient("test")
+    with capture_logs() as logs:
+        async with MockClientContext():
+            _queue(
+                json.dumps(
+                    {
+                        "name": "Corners of the Earth",
+                        "tag": "lore",
+                        "facts": [{"category": "general", "text": "Four of them."}],
+                        "names": [],
+                    }
+                )
+            )
+            preview = await preview_thing(
+                world, "lore", "Corners of the Earth", {}, client
+            )
+    assert preview.tag is None
+    assert [
+        (e["value"], e["kind"]) for e in logs if e["event"] == "create.tag_dropped"
+    ] == [("lore", "lore")]

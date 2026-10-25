@@ -173,3 +173,14 @@ async def test_scene_text_keeps_emphasis(world):
     assert _texts(world, thing_id) == ["The ford is shallow."]
     cached = world.prose().get(thing_id, "description", None)
     assert cached.text == "The ford is *shallow*, and **cold**."
+
+
+def test_scrub_emphasis_keeps_a_stray_placeholder():
+    """Task 2 follow-up: text that already holds the scrub's private-use
+    placeholder, with a number no reference stands for, is kept as it is
+    rather than raising."""
+
+    stray = "7 and *this*"
+    assert scrub_emphasis(stray) == "7 and this"
+    thing = "b" * 32
+    assert scrub_emphasis(f"3 {ref(thing, 'X')}") == (f"3 {ref(thing, 'X')}")

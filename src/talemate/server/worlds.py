@@ -1118,7 +1118,7 @@ async def _fixed_preview(
         same_as=same_as,
         verdict=verdict,
         new_names=new_names,
-        tag=clean_tag(fixed.get("tag")),
+        tag=clean_tag(fixed.get("tag"), kind),
         aka=list(fixed.get("aka") or []),
         hint=payload.hint,
         filings=filings,
@@ -3430,7 +3430,7 @@ class WorldsPlugin(Plugin):
                 NewName(
                     name=words,
                     kind=payload.kind,
-                    tag=normalise_tag(payload.tag) if payload.tag else None,
+                    tag=(normalise_tag(payload.tag) or None) if payload.tag else None,
                     filing=(
                         NameFiling(
                             target_id=payload.filing.target_id,
@@ -3448,6 +3448,8 @@ class WorldsPlugin(Plugin):
             return
         owner_id, fact, start, end, words = self._selected(world, payload)
         name = " ".join(words.split())
+        # stored as the draft path stores it; a blank tag is none
+        tag = (normalise_tag(payload.tag) or None) if payload.tag else None
         before = world.view()
         if payload.filing is not None:
             self._require_entry(before, payload.filing.target_id)
@@ -3455,7 +3457,7 @@ class WorldsPlugin(Plugin):
             made = make_stubs(
                 rev,
                 world.view(),
-                [NewName(name=name, kind=payload.kind, tag=payload.tag)],
+                [NewName(name=name, kind=payload.kind, tag=tag)],
             )
             stub_id = made[name]
             if stub_id == owner_id:

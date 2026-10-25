@@ -522,7 +522,7 @@ async def group_add(
         if not name or not line:
             continue
         kind = _clean_kind(raw.get("kind"))
-        row_tag = tag if tag is not None else clean_tag(raw.get("tag"))
+        row_tag = tag if tag is not None else clean_tag(raw.get("tag"), kind)
         if _is_title(kind, row_tag):
             continue
         rows.append(
@@ -598,7 +598,7 @@ def accept_group_add(
         name = scrub_emphasis(" ".join(row.name.split()))
         line = scrub_emphasis(" ".join(row.line.split()))
         kind = row.kind.strip().lower()
-        tag = clean_tag(row.tag) if row.tag else None
+        tag = clean_tag(row.tag, kind) if row.tag else None
         if not name or not line or kind not in ALLOWED_KINDS:
             continue
         if _is_title(kind, tag):

@@ -949,6 +949,44 @@ async def test_preview_mix_uses_the_decided_name(probe_world):
     )
 
 
+async def test_mix_prompt_asks_tag(probe_world):
+    """Task 2 follow-up: a mix is asked for its tag, with the create
+    template's tag-rule wording, so mixes stop landing under "Other"; the
+    reply's tag is the draft's (`clean_tag`) and is written on accept."""
+
+    world = probe_world.world
+    with world.revision(Source.manual(note="tag")) as rev:
+        rev.set_field(probe_world.orc, "tag", "brute folk", None)
+    reply = json.dumps(
+        {
+            "name": "Half-orc",
+            "tag": "Half-blood, mix",
+            "facts": [{"category": "physical", "text": "Small tusks."}],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply, "Half-orcs are tusked.")
+        preview = await preview_thing(
+            world,
+            "mix",
+            "",
+            {"parents": [probe_world.lowlander, probe_world.orc]},
+            client,
+        )
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert '"tag": "..."' in prompt
+    assert (
+        '- "tag": one or two words for what the mix is, such as river, ruler, '
+        "custom, institution, regiment, capital or doctrine. Use a tag from the "
+        "tags in use when one fits; make a new one only when none does." in prompt
+    )
+    assert "brute folk (1)" in prompt
+    assert preview.tag == "half-blood"
+    thing_id = accept_preview(world, preview)
+    assert world.view().thing(thing_id).fields["tag"] == "half-blood"
+
+
 def test_accept_writes_overrides(probe_world):
     world = probe_world.world
     yellow = probe_world.facts["snowy-3"]

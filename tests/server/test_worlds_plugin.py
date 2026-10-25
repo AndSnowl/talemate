@@ -5278,6 +5278,35 @@ async def test_make_stub_from_text(plugin):
     assert s.world.head_rev() == head + 1
 
 
+async def test_make_stub_from_text_normalises_the_tag(plugin):
+    """Task 2 follow-up: off a draft, the stub's tag is stored as the
+    draft path stores it (`normalise_tag`: lowercase, its first comma
+    part); a blank one is no tag."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        fact = rev.add_fact(
+            s.court, "general", "It meets in the Hall of Dusk and the Amber Room."
+        )
+    rendered = "It meets in the Hall of Dusk and the Amber Room."
+    for words, tag, stored in (
+        ("Hall of Dusk", "  Hall, chamber ", "hall"),
+        ("Amber Room", "   ", None),
+    ):
+        start = rendered.index(words)
+        await _act(
+            plugin,
+            "make_stub_from_text",
+            fact_id=fact,
+            start=start,
+            end=start + len(words),
+            kind="place",
+            tag=tag,
+        )
+        stub_id = _last(plugin, "make_stub_from_text")["data"]["stub_id"]
+        assert s.world.view().thing(stub_id).fields.get("tag") == stored
+
+
 async def test_link_text(plugin):
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
