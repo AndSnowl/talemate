@@ -435,6 +435,20 @@ async def test_hand_written_facts_lose_emphasis(plugin, client):
             }
         )
     assert "Tall and grey-eyed." in [f.text for f in world.view().thing(maren).facts]
+    # and a "+ but..." exception's (M5)
+    with world.revision(Source.manual(note="filed")) as rev:
+        rev.set_field(maren, "filings", [{"target": harbour, "role": None}], None)
+    await _act(
+        plugin,
+        "add_exception",
+        character_id=maren,
+        target_id=harbour,
+        text="She *never* pays the **harbour dues**.",
+    )
+    assert any(
+        f.text.startswith("She never pays the harbour dues.")
+        for f in world.view().thing(maren).facts
+    ), [f.text for f in world.view().thing(maren).facts]
 
 
 async def test_correct_end_and_set_field(plugin, client):
