@@ -3865,9 +3865,11 @@ class WorldsPlugin(Plugin):
         filing the store refuses (a cycle, a target gone since) is noted
         rather than silently dropped -- its fact is still written, since
         it's the owner's row. Answers `accept_group_add {..., thing_ids,
-        notes}` with the page's payload plus each kept row's resolved
-        entry id (new or reused). With `draft_key`, that small draft is
-        dropped once written."""
+        notes, draft_key}` with the page's payload plus each kept row's
+        resolved entry id (new or reused). With `draft_key`, that small
+        draft is dropped once written, and echoed back so the client
+        drops its own slot by key rather than guessing which one
+        answered."""
 
         payload = AcceptGroupAddPayload(**data)
         world = self._require_world()
@@ -3882,6 +3884,7 @@ class WorldsPlugin(Plugin):
                 **self._thing_payload(world, payload.thing_id, None),
                 "thing_ids": thing_ids,
                 "notes": notes,
+                "draft_key": payload.draft_key,
             },
         )
 
@@ -4328,10 +4331,12 @@ class WorldsPlugin(Plugin):
         with its repeat choices ("Keep new", "Move existing here") once
         checked against the held versions of the draft (`draft_key`,
         `_check_repeat_moves`); answers `accept_facts` with the entry,
-        `fact_ids` and `notes`, and refreshes the prose that reads what
-        changed. A stub a draft of this session
-        expands is refused: its facts go into the draft, and nothing is
-        written before the draft is accepted."""
+        `fact_ids`, `notes` and `draft_key` (echoed back, so the client
+        drops its own slot by key rather than guessing which one
+        answered), and refreshes the prose that reads what changed. A
+        stub a draft of this session expands is refused: its facts go
+        into the draft, and nothing is written before the draft is
+        accepted."""
 
         payload = AcceptFactsPayload(**data)
         world = self._require_world()
@@ -4361,6 +4366,7 @@ class WorldsPlugin(Plugin):
                 **self._thing_payload(world, draft.thing_id, at),
                 "fact_ids": fact_ids,
                 "notes": notes,
+                "draft_key": payload.draft_key,
             },
         )
         for changed in prose:

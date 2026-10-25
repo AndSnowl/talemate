@@ -2404,7 +2404,7 @@ check('a group\'s "+ Add": drafted rows, edited, the ticked ones accepted', () =
     assert.equal(store.smallDrafts[key].edited.rows[0].name, 'The Ice Guild');
     store.acceptSmall(key);
     assert.deepEqual(sent.at(-1), accept);
-    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [] }));
+    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [], draft_key: key }));
     assert.equal(store.smallDrafts[key], undefined);
     assert.equal(store.thing.id, 'v');
     assert.equal(store.notes, null);
@@ -2451,7 +2451,7 @@ check('"+ Add facts…" and "+ Add event…": a draft to tick, then written', ()
     assert.equal(found().accepting, false);
     assert.deepEqual(found().edited.facts.map((f) => f.ticked), [true, false]);
     store.acceptSmall('facts:v');
-    store.handleMessage(reply('accept_facts', { id: 'v', kind: 'place', name: 'Velikoye', fact_ids: ['f'], notes: ['kept the new one'] }));
+    store.handleMessage(reply('accept_facts', { id: 'v', kind: 'place', name: 'Velikoye', fact_ids: ['f'], notes: ['kept the new one'], draft_key: 'facts:v' }));
     assert.equal(found(), undefined);
     assert.deepEqual(store.notes, { action: 'accept_facts', notes: ['kept the new one'] });
     // an event: its year goes along; a failure says why, the prompt kept
@@ -3378,7 +3378,7 @@ check('while a small version switch is out the draft takes no ask, edit or accep
     assert.equal(found().switching, false);
 });
 
-check("an accept's reply drops the draft accepted, the oldest one out", () => {
+check("an accept's reply drops the draft accepted, by its echoed draft_key", () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('v');
@@ -3388,9 +3388,13 @@ check("an accept's reply drops the draft accepted, the oldest one out", () => {
     }
     store.acceptSmall('group:v:native');
     store.acceptSmall('group:v:institution');
-    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [] }));
-    assert.deepEqual(Object.keys(store.smallDrafts), ['group:v:institution']);
-    assert.equal(store.smallDrafts['group:v:institution'].accepting, true);
+    // the institution one answers first, though it was accepted second:
+    // its own key is dropped, never "the oldest accept out"
+    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['g'], notes: [], draft_key: 'group:v:institution' }));
+    assert.deepEqual(Object.keys(store.smallDrafts), ['group:v:native']);
+    assert.equal(store.smallDrafts['group:v:native'].accepting, true);
+    store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['h'], notes: [], draft_key: 'group:v:native' }));
+    assert.deepEqual(Object.keys(store.smallDrafts), []);
     // a group that wasn't accepted stays as it is
     store.askGroupAdd('v', 'ruler', 'one');
     store.handleMessage(reply('accept_group_add', { id: 'v', kind: 'place', name: 'Velikoye', thing_ids: ['h'], notes: [] }));

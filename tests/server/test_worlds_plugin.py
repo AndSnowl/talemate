@@ -5567,7 +5567,11 @@ async def test_accept_facts_drops_its_slot(plugin, client):
     await _act(
         plugin, "accept_facts", draft=drafted["draft"], draft_key=drafted["draft_key"]
     )
-    assert len(_last(plugin, "accept_facts")["data"]["fact_ids"]) == 1
+    accepted = _last(plugin, "accept_facts")["data"]
+    assert len(accepted["fact_ids"]) == 1
+    # the accepted slot's key, echoed back, so the client drops its own
+    # slot by key rather than guessing which accept answered
+    assert accepted["draft_key"] == drafted["draft_key"]
     assert s.world.head_rev() == head + 1
     before = len(_errors(plugin))
     await _act(plugin, "use_small_version", draft_key=drafted["draft_key"], version=1)
@@ -5839,7 +5843,11 @@ async def test_group_add_versions(plugin, client):
         rows=restored["rows"],
         draft_key=key,
     )
-    assert len(_last(plugin, "accept_group_add")["data"]["thing_ids"]) == 1
+    accepted = _last(plugin, "accept_group_add")["data"]
+    assert len(accepted["thing_ids"]) == 1
+    # the accepted slot's key, echoed back, so the client drops its own
+    # slot by key rather than guessing which accept answered
+    assert accepted["draft_key"] == key
     before = len(_errors(plugin))
     await _act(plugin, "use_small_version", draft_key=key, version=1)
     assert len(_errors(plugin)) == before + 1

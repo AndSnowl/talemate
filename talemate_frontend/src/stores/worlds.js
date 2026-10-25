@@ -120,8 +120,8 @@
 // it can be asked again. An ask ends only with its reply or `_failed`,
 // never with another request's error; one refused before it went out
 // stays drafting until the owner discards it. `useSmallVersion` is one
-// at a time (`switching`), and an accept's reply drops the oldest accept
-// out (the server answers them in turn, without their keys). While a nested draft is out or held
+// at a time (`switching`), and an accept's reply drops the slot by its
+// `draft_key`, echoed back. While a nested draft is out or held
 // (`nestedHeld`) the page draft waits for it; discarding or accepting the
 // page draft drops it. A world switch drops them all.
 //
@@ -711,7 +711,7 @@ function worldState() {
         // (smallDrafts.js): `{key, kind: 'facts'|'event'|'group'|'nested',
         // mode: 'facts'|'event' (null for a group's), thingId, tag,
         // showUnder, prompt, year, version, versions, base, edited, rows,
-        // pending, askedAt, accepting, acceptSeq, switching, error}`
+        // pending, askedAt, accepting, switching, error}`
         smallDrafts: {},
         // small draft key -> version -> `{base, edited}`: what the owner
         // left on each version this session
@@ -730,8 +730,6 @@ function worldState() {
 
 // the function actions send with; set by `connect`
 let send = null;
-// the last small-draft accept's number (`acceptSmall`)
-let acceptSeq = 0;
 
 // P6: the draft edits that change what the server renders of it (what's
 // linked, dated or ticked): the others ("In" rows, tags, ticks of other
@@ -1519,7 +1517,6 @@ export const useWorldsStore = defineStore('worlds', {
                     pending: true,
                     askedAt: Date.now(),
                     accepting: false,
-                    acceptSeq: null,
                     switching: false,
                     error: null,
                 },
@@ -1628,10 +1625,7 @@ export const useWorldsStore = defineStore('worlds', {
             if (!slot?.edited || slot.accepting || slot.pending || slot.switching) {
                 return;
             }
-            // the server answers accepts in turn, without the key: the
-            // oldest one out is the one answered (`acceptedSmall`)
-            acceptSeq += 1;
-            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true, acceptSeq } };
+            this.smallDrafts = { ...this.smallDrafts, [key]: { ...slot, accepting: true } };
             if (slot.kind === 'group') {
                 this.pending = { ...this.pending, accept_group_add: true };
                 this.request('accept_group_add', { thing_id: slot.thingId, rows: slot.edited.rows, draft_key: key });
@@ -1684,17 +1678,6 @@ export const useWorldsStore = defineStore('worlds', {
                     error: null,
                 },
             };
-        },
-
-        // the accept (`kinds` of small draft) of the thing `thingId` the
-        // server answered: the oldest one out, dropped (the server did)
-        acceptedSmall(thingId, kinds) {
-            const out = Object.values(this.smallDrafts)
-                .filter((slot) => slot.accepting && slot.thingId === thingId && kinds.includes(slot.kind))
-                .sort((a, b) => a.acceptSeq - b.acceptSeq);
-            if (out.length) {
-                this.dropSmall(out[0].key);
-            }
         },
 
         // an ask for a small draft that failed (`key`): it stays, with
@@ -1988,9 +1971,10 @@ export const useWorldsStore = defineStore('worlds', {
         // open page takes it, or is fetched again when it's another thing
         // (a Connected row retagged); new stubs and tags may come with it
         filingEdited(action, data) {
-            // an accepted small draft is done with (the server dropped it)
-            if (action === 'accept_facts' || action === 'accept_group_add') {
-                this.acceptedSmall(data.id, action === 'accept_facts' ? ['facts', 'event'] : ['group']);
+            // an accepted small draft is done with (the server dropped
+            // it too), by its echoed key
+            if ((action === 'accept_facts' || action === 'accept_group_add') && data.draft_key) {
+                this.dropSmall(data.draft_key);
             }
             if (data.id === this.selectedThingId && !this.thingAt) {
                 this.pageTaken(data);
