@@ -486,17 +486,23 @@ def mentioned_in(
     return sorted(owners, key=lambda owner_id: owners[owner_id])
 
 
-def tags_in_use(view: WorldView) -> list[tuple[str, int]]:
+def tags_in_use(view: WorldView, *, show_under: bool = True) -> list[tuple[str, int]]:
     """Every tag the view's entries carry, as their own tag or as a
     filing's `show_under`, with how many entries use it (each once), most
-    used first, then by tag. An ignored stub doesn't count: ignoring a
-    stub hides it everywhere."""
+    used first, then by tag: the tag picker's choices. An ignored stub
+    doesn't count: ignoring a stub hides it everywhere. Without
+    `show_under`, only the entries' own tags (I2: what the AI is told
+    entries are; a `show_under` says how one shows on a page)."""
 
     counts: dict[str, int] = {}
     for state in view.things():
         if state.stub_ignored:
             continue
-        used = {filing.show_under for filing in _stored_filings(state)}
+        used = (
+            {filing.show_under for filing in _stored_filings(state)}
+            if show_under
+            else set()
+        )
         used.add(tag_of(state))
         for tag in used:
             if tag:

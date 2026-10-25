@@ -596,6 +596,8 @@ def test_show_under_groups_row(world):
             None,
         )
     assert dict(tags_in_use(world.view()))["native"] == 1
+    # but not as a tag an entry carries (I2: the AI's tags in use)
+    assert "native" not in dict(tags_in_use(world.view(), show_under=False))
     with pytest.raises(ValueError):
         with world.revision(Source.manual()) as rev:
             rev.set_field(

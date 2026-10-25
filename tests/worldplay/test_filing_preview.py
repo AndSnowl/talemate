@@ -19,7 +19,7 @@ import pytest
 from structlog.testing import capture_logs
 
 from talemate.world.entries import held_by
-from talemate.world.filing import filings_of
+from talemate.world.filing import filings_of, tags_in_use
 from talemate.world.dates import WorldDate
 from talemate.world.refs import ref
 from talemate.world.store import Source
@@ -293,6 +293,28 @@ async def test_reply_tag_and_in_parsed(world, moscavia):
     assert "regiment (2)" in prompt
     assert "M1" not in prompt and "move_in" not in prompt
     assert "Only named things become entries." in prompt
+
+
+async def test_show_under_never_reaches_the_tags_in_use(world, moscavia):
+    """I2: a filing's `show_under` is how the entry shows on that page,
+    not a tag it carries: the create prompt's "Tags in use" lists only
+    entries' own tags, while the tag picker (`tags_in_use`) still offers
+    the `show_under` ones."""
+
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(
+            moscavia.talon,
+            "filings",
+            [{**_filed(moscavia.tsardom)[0], "show_under": "native"}],
+            None,
+        )
+    assert dict(tags_in_use(world.view()))["native"] == 1
+    _preview, client = await _host_preview(world, moscavia)
+    prompt = _create_prompt(client)
+    tags = prompt.split("Tags in use in the world", 1)[1].split("\n")[1]
+    assert "regiment (2)" in tags.split(", "), tags
+    assert "native" not in tags, tags
+    assert "native" not in prompt
 
 
 async def test_accept_writes_tag_filings_file_into(world, moscavia):

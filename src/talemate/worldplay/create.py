@@ -1981,11 +1981,11 @@ def filing_line(view: WorldView, state: ThingState) -> str:
 
 
 def tags_line(view: WorldView, skip: str | None = None) -> list[str]:
-    """The tags in use (`filing.tags_in_use`), as the prompt lists them,
-    most used first: "city (7)". The tag of `skip` (the stub being
-    written) isn't counted."""
+    """The tags entries carry (`filing.tags_in_use`, never a filing's
+    `show_under`: I2), as the prompt lists them, most used first: "city
+    (7)". The tag of `skip` (the stub being written) isn't counted."""
 
-    counts = dict(tags_in_use(view))
+    counts = dict(tags_in_use(view, show_under=False))
     state = view.thing(skip) if skip is not None else None
     own = tag_of(state) if state is not None else None
     if own is not None and own in counts:
