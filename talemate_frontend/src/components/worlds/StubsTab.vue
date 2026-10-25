@@ -28,6 +28,7 @@
                 <tr>
                     <th>Name</th>
                     <th>Kind</th>
+                    <th>Tag</th>
                     <th>First mentioned</th>
                     <th>Mentions</th>
                     <th></th>
@@ -52,6 +53,9 @@
                             :disabled="!!worlds.pending.change_stub_kind"
                             @update:model-value="setKind(stub, $event)"
                         ></v-select>
+                    </td>
+                    <td>
+                        <v-chip size="x-small" label variant="outlined" color="foreign" class="stub-tag" :class="{ untagged: !stub.tag }" data-testid="stub-row-tag">{{ stub.tag || 'no tag' }}</v-chip>
                     </td>
                     <td>
                         <a v-if="stub.first_mentioned" href="#" class="thing-link" @click.prevent="worlds.openThing(stub.first_mentioned.thing_id)">{{ stub.first_mentioned.name }}</a>
@@ -90,7 +94,7 @@ import { STUB_KINDS, canExpand, expandLabel, expandNote, kindInfo } from './worl
 import StubRepointButton from './StubRepointButton.vue';
 
 // The World tab's Stubs: every name mentioned but not made yet, with its
-// kind (changeable), where it was first mentioned, its mention count,
+// kind (changeable), its tag (shown only, "no tag" dimmed), where it was first mentioned, its mention count,
 // Expand, Ignore and Re-point… (every link to the stub moved to an entry,
 // which takes its names; a note says what was done). Ignored stubs are
 // hidden until "show ignored", and can be brought back.
@@ -167,6 +171,10 @@ tr.ignored td {
 
 .kind-select {
     min-width: 120px;
+}
+
+.stub-tag.untagged {
+    opacity: 0.6;
 }
 
 .actions {

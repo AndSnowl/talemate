@@ -696,6 +696,139 @@ async def test_tag_rule_without_entries_near(world):
     assert preview.tag == "custom"
 
 
+async def test_untagged_stub_expand_asks_tag(world):
+    """Hubs round 1, P3 (feedback line 21): a stub the owner made by hand
+    has no tag, and its expand prompt asks for one as a new entry's does;
+    the reply's tag is the draft's and is written on accept. A stub with a
+    tag keeps it: the prompt has it as decided."""
+
+    with world.revision(Source.manual(note="stubs")) as rev:
+        bare = rev.create_thing(
+            "lore", {"name": "Boyar Council", "stub": {"ignored": False}}
+        )
+        tagged = rev.create_thing(
+            "lore",
+            {"name": "Night Court", "tag": "council", "stub": {"ignored": False}},
+        )
+    reply = json.dumps(
+        {
+            "name": "Boyar Council",
+            "tag": "Council, assembly",
+            "facts": [{"category": "general", "text": "The boyars sit in it."}],
+            "names": [],
+        }
+    )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(reply)
+        preview = await preview_thing(
+            world, "lore", "Boyar Council", {}, client, stub_id=bare
+        )
+    prompt = _create_prompt(client)
+    assert '- "tag": one or two words for what the lore is' in prompt
+    assert '"tag": "..."' in prompt
+    assert "- tag:" not in prompt
+    assert preview.tag == "council"
+    thing_id = accept_preview(world, preview)
+    assert thing_id == bare
+    assert world.view().thing(bare).fields.get("tag") == "council"
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            reply.replace("Boyar Council", "Night Court").replace(
+                "Council, assembly", "court"
+            )
+        )
+        preview = await preview_thing(
+            world, "lore", "Night Court", {}, client, stub_id=tagged
+        )
+    assert "- tag: council" in _create_prompt(client)
+    assert preview.tag == "council"
+
+    # a species stub, which the tag rule used to skip
+    with world.revision(Source.manual(note="species stub")) as rev:
+        kin = rev.create_thing(
+            "species", {"name": "Badger-folk", "stub": {"ignored": False}}
+        )
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            json.dumps(
+                {
+                    "name": "Badger-folk",
+                    "tag": "beastfolk",
+                    "facts": [{"category": "physical", "text": "Striped faces."}],
+                    "names": [],
+                }
+            )
+        )
+        preview = await preview_thing(
+            world, "species", "Badger-folk", {}, client, stub_id=kin
+        )
+    assert '- "tag": one or two words for what the species is' in _create_prompt(client)
+    accept_preview(world, preview)
+    assert world.view().thing(kin).fields.get("tag") == "beastfolk"
+
+
+async def test_species_prompt_asks_tag(world, heritage_world):
+    """Hubs round 1, P3: species and races are asked for their tag too (all
+    8 of the acceptance world's were untagged), with the tag rule's wording
+    as the other branches have it; the reply's tag is the draft's and is
+    written on accept."""
+
+    rule = '- "tag": one or two words for what the species is'
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            json.dumps(
+                {
+                    "name": "Badger-folk",
+                    "lifespan": 60,
+                    "adult_age": 14,
+                    "measures": [{"name": "height", "min": 3, "max": 4, "unit": "ft"}],
+                    "tag": "beastfolk",
+                    "facts": [{"category": "physical", "text": "Striped faces."}],
+                    "names": [],
+                }
+            )
+        )
+        preview = await preview_thing(
+            world, "species", "Badger-folk, stout diggers", {}, client
+        )
+    prompt = _create_prompt(client)
+    assert rule in prompt
+    assert '"tag": "..."' in prompt.split("Reply with only one JSON object", 1)[1]
+    assert preview.tag == "beastfolk"
+    thing_id = accept_preview(world, preview)
+    assert world.view().thing(thing_id).fields.get("tag") == "beastfolk"
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(
+            json.dumps(
+                {
+                    "name": "Tawny",
+                    "tag": "owl race",
+                    "facts": [{"category": "physical", "text": "Brown plumage."}],
+                    "no_longer_true": [],
+                    "names": [],
+                }
+            )
+        )
+        preview = await preview_thing(
+            world,
+            "race",
+            "Tawny owls of the woods",
+            {"species": heritage_world.owl_folk},
+            client,
+        )
+    prompt = _create_prompt(client)
+    assert '- "tag": one or two words for what the race is' in prompt
+    assert '"tag": "..."' in prompt.split("Reply with only one JSON object", 1)[1]
+    assert preview.tag == "owl race"
+
+
 async def test_unknown_hint_refused(world, moscavia):
     with pytest.raises(ValueError, match="no such prompt hint"):
         await preview_thing(

@@ -2,6 +2,8 @@
     <v-card class="stub-card pa-3" :class="{ flat: onPage }" :variant="onPage ? 'flat' : 'elevated'" min-width="260" data-testid="stub-card">
         <div class="d-flex align-center ga-2">
             <a v-if="!onPage" href="#" class="stub-name" @click.prevent="worlds.openThing(stub.id)">{{ stub.name }}</a>
+            <!-- its tag, shown only (its page has the editable chip) -->
+            <v-chip v-if="!onPage && stub.tag !== undefined" size="x-small" label variant="outlined" color="foreign" class="stub-tag" :class="{ untagged: !stub.tag }" data-testid="stub-tag">{{ stub.tag || 'no tag' }}</v-chip>
             <span class="text-caption text-muted">{{ stub.ignored ? 'ignored, not made yet' : 'not made yet' }}</span>
         </div>
         <div class="d-flex align-center ga-3 mt-2">
@@ -36,7 +38,9 @@ import { useWorldsStore } from '@/stores/worlds.js';
 import { STUB_KINDS, canExpand, expandLabel, expandNote, kindInfo } from './worldKinds.js';
 import StubRepointButton from './StubRepointButton.vue';
 
-// One stub's card: its name (opening its page) and "not made yet", its
+// One stub's card: its name (opening its page), its tag (shown only,
+// "no tag" dimmed; not on its own page, which has the editable chip) and
+// "not made yet", its
 // kind (a guess the owner can change), its mention count, Expand (its
 // kind's create box, from the stub; a race or mix can't be, with a note
 // why) and Ignore (or Unignore), then whatever the slot adds (a
@@ -49,8 +53,8 @@ export default {
     name: 'StubCard',
     components: { StubRepointButton },
     props: {
-        // `{id, name, kind, mentions, ignored}`; `kind` and `mentions` may
-        // be null while the stubs aren't listed yet
+        // `{id, name, kind, tag, mentions, ignored}`; `kind` and `mentions`
+        // may be null, and `tag` missing, while the stubs aren't listed yet
         stub: { type: Object, required: true },
         onPage: { type: Boolean, default: false },
     },
@@ -107,5 +111,9 @@ export default {
 
 .kind-select {
     max-width: 170px;
+}
+
+.stub-tag.untagged {
+    opacity: 0.6;
 }
 </style>

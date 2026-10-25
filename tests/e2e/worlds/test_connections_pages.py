@@ -215,6 +215,40 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     )
 
 
+def test_stubs_list_shows_the_tag(app, page):
+    """Hubs round 1, P3 (feedback line 8): a stub's tag shows in the Stubs
+    list ("no tag" for none), on its link's hover card and in the expand
+    box's header."""
+
+    name = _world_name("Vasel")
+    tagged = {**YELENA, "fields": {"tag": "ferrywoman"}}
+    seed_fm_world(app.root, name, present_year=1026, things=[tagged, OLD_RITE, VASHA])
+    _open_world(page, name)
+    _world_tab(page)
+
+    rows = _stubs_tab(page).get_by_test_id("stub-row")
+    yelena = rows.filter(has_text="Yelena")
+    yelena.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(yelena.get_by_test_id("stub-row-tag")).to_have_text("ferrywoman")
+    expect(
+        rows.filter(has_text="Old Rite").get_by_test_id("stub-row-tag")
+    ).to_have_text("no tag")
+
+    page.get_by_test_id("kind-character").click()
+    vasha = _open_thing(page, "Vasha")
+    fact = _fact(vasha, "Raised by her mother")
+    card = _stub_card(
+        page, fact.get_by_test_id("linked-stub").filter(has_text="Yelena")
+    )
+    expect(card.get_by_test_id("stub-tag")).to_have_text("ferrywoman")
+    card.get_by_role("button", name="Expand").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("from-stub").filter(has_text="Yelena").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(box.get_by_test_id("from-stub-tag")).to_have_text("ferrywoman")
+
+
 def test_setup_cards_show_stub_previews(app, page, fixed_setup, fixed_preview):
     name = _world_name("Vasel")
     seed_fm_world(app.root, name, present_year=1026, things=[YELENA, OLD_RITE, VASHA])

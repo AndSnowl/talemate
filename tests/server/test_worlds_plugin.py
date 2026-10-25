@@ -2398,7 +2398,12 @@ async def test_make_stub_action(plugin, monkeypatch):
 
 
 async def test_list_stubs_counts_and_ignored(plugin):
+    """Each stub with its tag (hubs round 1, P3: the Stubs list, a stub
+    link's card and the expand header show it), `None` for none."""
+
     s = await _open_stub_world(plugin)
+    with s.world.revision(Source.manual(note="tag")) as rev:
+        rev.set_field(s.tsardom, "tag", "nation", None)
 
     await plugin.handle({"type": "worlds", "action": "list_stubs"})
     assert _last(plugin, "list_stubs")["data"] == {
@@ -2407,6 +2412,7 @@ async def test_list_stubs_counts_and_ignored(plugin):
                 "id": s.tsardom,
                 "name": "Tsardom of Moscavia",
                 "kind": "place",
+                "tag": "nation",
                 # Maren's fact was written first
                 "first_mentioned": {"thing_id": s.maren, "name": "Maren"},
                 "mentions": 2,
@@ -2424,6 +2430,7 @@ async def test_list_stubs_counts_and_ignored(plugin):
         "id": s.hope,
         "name": "Hope",
         "kind": "lore",
+        "tag": None,
         "first_mentioned": {"thing_id": s.maren, "name": "Maren"},
         "mentions": 1,
         "ignored": True,

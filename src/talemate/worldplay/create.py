@@ -2890,7 +2890,10 @@ async def preview_thing(
     carries a tag and the filing its "in" gives (`name_filings`, ticked),
     and a title is no name (ruling F5). "Could move here"
     (`move_here_rows`) is found by code: facts near it that name it. The
-    generic branch's reply also gives its "elsewhere" list.
+    generic branch's reply also gives its "elsewhere" list. Species and
+    races list no entries near them, but are asked for their tag too, as
+    a stub with no tag is (hubs round 1, P3); a stub's own tag, or the
+    owner's, is kept as decided.
 
     The reply's `aka` becomes the preview's other names and its `names`
     the `new_names` accept makes stubs for (`_new_names`). Without a

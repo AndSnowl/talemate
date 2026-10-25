@@ -7,6 +7,7 @@
         <div class="d-flex align-center ga-2 mb-1">
             <span class="text-subtitle-2">New {{ info.singular }}</span>
             <span v-if="fromStub" class="text-caption text-muted" data-testid="from-stub">from stub “{{ fromStub.name }}”</span>
+            <v-chip v-if="fromStub" size="x-small" label variant="outlined" color="foreign" class="stub-tag" :class="{ untagged: !fromStubTag }" data-testid="from-stub-tag" :title="fromStubTag ? 'The stub\'s tag: the draft keeps it' : 'No tag yet: the AI is asked for one'">{{ fromStubTag || 'no tag' }}</v-chip>
             <v-btn v-if="fromStub" icon="mdi-close" variant="text" size="x-small" density="comfortable" aria-label="Not from the stub" :disabled="busy" @click="notFromStub"></v-btn>
         </div>
 
@@ -193,7 +194,8 @@ function yearDate(year) {
 // from it: the prompt starts as the stub's name, then as the suggestion
 // made from its mentions (`stub_suggestion`) unless the owner has typed
 // meanwhile, and the draft carries the stub's id, so accepting fills the
-// stub in place. An event's picks
+// stub in place. The header shows the stub's tag ("no tag" dimmed: the
+// AI is asked for one). An event's picks
 // are its years and place, an item's its owner. A nested box (`stay`, the
 // mix drafted for a character) shows its draft in place too, and accepting
 // it doesn't open its page.
@@ -259,6 +261,11 @@ export default {
         fromStub() {
             const stub = this.worlds.expanding;
             return stub && stub.kind === this.kind ? stub : null;
+        },
+        // the expanded stub's tag, as the stubs list has it (the draft
+        // keeps it; with none, the AI is asked for one)
+        fromStubTag() {
+            return this.fromStub ? (this.fromStub.tag ?? this.worlds.stubInfo(this.fromStub.id)?.tag ?? null) : null;
         },
         // the store's preview request is this box's
         mine() {
@@ -501,6 +508,10 @@ export default {
 </script>
 
 <style scoped>
+.stub-tag.untagged {
+    opacity: 0.6;
+}
+
 .create-box {
     background: rgb(var(--v-theme-raised));
 }

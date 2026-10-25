@@ -34,11 +34,12 @@ v1, with v2's names-rule parenthesis and v2's belief rule, ruling F9):
 every branch with `nearby` -- the entries near this one (filing nearness,
 ruling F6), each "Name (kind, tag; usually called X; in A (role), B;
 stub): its summary or first fact" -- gets "in" and "file_into" in its
-example object and their rules; every branch but species and race asks
-for its "tag", with or without `nearby` (Filing Task 12: a prompt that
-names no entry has no near list, and without the rule the model wrote
-the kind, "lore", as its tag), and `tags` (`["city (7)", ...]`) is
-the tags in use. `hint` is a prompt hint's text (prompts/templates/world/
+example object and their rules; every branch asks for its "tag", with
+or without `nearby` (Filing Task 12: a prompt that names no entry has no
+near list, and without the rule the model wrote the kind, "lore", as its
+tag), species and race too (hubs round 1, P3: the acceptance world's 8
+were all untagged; the rule's wording is the other branches', unprobed
+for them), and `tags` (`["city (7)", ...]`) is the tags in use. `hint` is a prompt hint's text (prompts/templates/world/
 hints/). The generic branch also gets the "elsewhere" list and its rules,
 verbatim from docs/superpowers/probes/2026-10-22-curation.md, "Wording, if
 the owner goes ahead" (create-thing, v3: with the relation-claim rule);
@@ -168,7 +169,7 @@ The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %}
 <|SECTION:FORMAT|>
 Reply with only one JSON object, shaped exactly like this example:
 {% if kind == "species" -%}
-{"name": "...", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "origin", "text": "One claim, in a full sentence."}, {"category": "general", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "origin", "text": "One claim, in a full sentence."}, {"category": "general", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
 
 - "name": the species' name.{% if has_name %} Use the name already decided: "{{ name }}".{% else %} Invent one if the prompt doesn't give it.{% endif %}
 - "lifespan": how long they typically live, in years, as a number.
@@ -178,7 +179,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "facts": between {{ min_facts }} and {{ max_facts }} facts, one claim each. "category" is one of: {{ categories | join(", ") }}. physical: the body; instinct: inborn tendencies; variation: how members differ from each other; origin: where they come from.
 - Leave "since" out: these facts describe the species for as long as it has existed, and are never dated.
 {%- elif kind == "race" -%}
-{"name": "...", "measures": [{"name": "{{ example_measure }}", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "physical", "text": "One claim, in a full sentence."}, {"category": "variation", "text": "Another claim."}], "no_longer_true": [], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", "measures": [{"name": "{{ example_measure }}", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "physical", "text": "One claim, in a full sentence."}, {"category": "variation", "text": "Another claim."}], "no_longer_true": [], "names": [{"name": "...", "kind": "place", "aka": []}]}
 
 - "name": the race's name.{% if has_name %} Use the name already decided: "{{ name }}".{% else %} Use the prompt's name if it gives one.{% endif %}
 - "lifespan", "adult_age" and "measures": give each only where this race differs from {{ species_name }} (a measure narrower or outside the species' range); leave out any that is the same, it is inherited. lifespan and adult_age are years, as numbers; each measure is {"name", "min", "max", "unit"}, using the species' measure names.
@@ -214,9 +215,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "elsewhere": after the names, what you would add about other entries, each {"entry", "text", "held_by"}: "entry" the entry's name as the list of entries near this one writes it, or a new name you also list in "names"; "text" one claim in a full sentence. Never the {{ kind }} itself. An empty list is fine.
 - A claim that ties another entry to the {{ kind }} ("it is taught at X", "unlike X, it...", "X uses it") is the {{ kind }}'s own: it goes in "facts". "elsewhere" is only for what another entry's page should say even if the {{ kind }} didn't exist.
 {%- endif %}
-{%- if kind not in ("species", "race") %}
 - "tag": one or two words for what the {{ kind }} is, such as river, ruler, custom, institution, regiment, capital or doctrine.{% if tags %} Use a tag from the tags in use when one fits; make a new one only when none does.{% endif %}
-{%- endif %}
 {%- if nearby %}
 - "in": the entries listed above that the {{ kind }} belongs in, each {"entry", "role"}: "entry" the entry's name as the list writes it; "role" a few words for how it belongs there ("flows through", "sovereign", "practitioner", "branch of", "taught here"), or null. A thing can be in several entries: a road in each realm it crosses, a temple in its city and in the faith it serves. Only entries from the list; an empty list is fine.
 - "file_into": the entries listed above that belong in this {{ kind }}: its parts, members, branches or what it holds, each {"entry", "role"}, "role" how that entry belongs in this {{ kind }}, or null. Never an entry you put in "in". Only entries from the list; an empty list is fine.

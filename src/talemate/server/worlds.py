@@ -86,7 +86,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
   ignored stub) and links that phrase in the fact (its first plain
-  occurrence, nothing else), answering like `correct_fact`. `list_stubs {include_ignored}` answers `{stubs: [{id, name, kind, first_mentioned:
+  occurrence, nothing else), answering like `correct_fact`. `list_stubs {include_ignored}` answers `{stubs: [{id, name, kind, tag, first_mentioned:
   {thing_id, name}, mentions, ignored}]}`. `ignore_stub {id, ignored}` and
   `change_stub_kind {id, kind}` answer with the stub's payload.
   `stub_suggestion {id}` answers `{id, prompt, context}`: the create box's
@@ -3588,6 +3588,7 @@ class WorldsPlugin(Plugin):
                     "id": state.id,
                     "name": view.name_of(state.id) or "",
                     "kind": state.kind,
+                    "tag": tag_of(state),
                     "first_mentioned": (
                         {"thing_id": first[1].owner_id, "name": first[1].owner_name}
                         if first is not None
