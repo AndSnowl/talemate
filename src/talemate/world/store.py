@@ -392,8 +392,6 @@ class Revision:
                 changed.append(thing_id)
         for row in self._retag_rows("filings"):
             thing_id = cast(str, row["thing_id"])
-            if row["thing_removed"] is None and row["rev_removed"] is not None:
-                continue
             value = json.loads(row["value_json"])
             if not isinstance(value, list):
                 continue
