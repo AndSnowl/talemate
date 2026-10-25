@@ -248,3 +248,29 @@ async def test_draft_facts_for_adds_new_names_to_the_draft(realm):
     assert field.is_stub
     texts = [f.text for f in view.thing(thing_id).facts]
     assert any(ref(field.id, "Field of Talons") in t for t in texts)
+
+
+async def test_add_facts_prompt_has_create_s_tag_rule(realm):
+    """Ruling H9: the names' tags follow create-thing's tag rule, copied
+    verbatim; the kind-name line only for a lore or event entry."""
+
+    client = MockClient("test")
+    async with MockClientContext():
+        client_responses.get().append(_reply("It is cold."))
+        await facts.draft_facts(realm, realm.tsardom, "the current Tsar", client)
+    prompt = str(client.prompt_history[-1]["prompt"])
+    assert (
+        '- "tag": one or two words for what the place is, such as river, ruler,'
+        " custom, institution, regiment, capital or doctrine." in prompt
+    )
+    assert "kind's own name" not in prompt
+    with realm.revision(Source.manual(note="lore")) as rev:
+        rite = rev.create_thing("lore", {"name": "Rite of First Flight"})
+    async with MockClientContext():
+        client_responses.get().append(_reply("It is old."))
+        await facts.draft_facts(realm, rite, "its origin", client)
+    prompt = str(client.prompt_history[-1]["prompt"])
+    assert (
+        "The tag is never the kind's own name (lore, event, place, …): say what"
+        " sort of lore it is, such as custom, law, battle, festival." in prompt
+    )
