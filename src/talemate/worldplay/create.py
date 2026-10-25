@@ -169,6 +169,8 @@ from talemate.world.repeats import content_words, find_repeats
 from talemate.world.sameness import NameIndex, name_index, same_candidates
 from talemate.world.names import (
     ARTICLES,
+    Aliases,
+    alias_table,
     everyday_name,
     find_names,
     unknown_proper_phrases,
@@ -1728,6 +1730,7 @@ def write_elsewhere(
     picks: dict[str, str] | None = None,
     as_new: Sequence[str] = (),
     lowercase: Sequence[str] = (),
+    aliases: Aliases | None = None,
 ) -> set[str]:
     """Write each of `items` (from `live_elsewhere`) onto its target in
     `rev`: an existing thing, or the stub `make_stubs` made for its new
@@ -1735,7 +1738,9 @@ def write_elsewhere(
     unless the target's kind has no such category (then
     `default_category`'s), with its `since` and its holder (unless the
     holder was deleted). Returns the ids its texts link and the stubs it
-    wrote to, so those aren't orphans."""
+    wrote to, so those aren't orphans. `aliases`: `linking`'s
+    `alias_table`, built once by the caller (writing facts names nothing
+    new)."""
 
     linked: set[str] = set()
     for item in items:
@@ -1759,6 +1764,7 @@ def write_elsewhere(
             owner=target,
             as_new=as_new,
             lowercase=lowercase,
+            aliases=aliases,
         )
         linked.update(parse_refs(text))
         linked.add(target)
@@ -3793,8 +3799,12 @@ def _write_preview(
         # names are in it, so a name meaning the thing itself stays plain
         linking = world.view()
         linked: set[str] = set()
+        # its names, gathered once for the summary and facts (I1): writing
+        # facts names nothing new; the "In" rows may make stubs, so their
+        # exceptions link against the view as it is then
+        names = alias_table(linking)
 
-        def linked_text(text: str) -> str:
+        def linked_text(text: str, aliases: Aliases | None = None) -> str:
             written = link_text(
                 linking,
                 scrub_emphasis(text),
@@ -3803,6 +3813,7 @@ def _write_preview(
                 owner=thing_id,
                 as_new=preview.treated_as_new,
                 lowercase=preview.selected_names,
+                aliases=aliases,
             )
             linked.update(parse_refs(written))
             return written
@@ -3829,7 +3840,7 @@ def _write_preview(
             rev.add_fact(
                 thing_id,
                 moved_category(preview.kind, "about", False),
-                linked_text(summary),
+                linked_text(summary, names),
                 origin=dict(SUMMARY_ORIGIN),
             )
             has_summary = True
@@ -3849,7 +3860,7 @@ def _write_preview(
             rev.add_fact(
                 thing_id,
                 fact.category,
-                linked_text(fact.text),
+                linked_text(fact.text, names),
                 valid_from=fact.since,
                 valid_until=fact.until,
                 overrides=fact.overrides,
@@ -3881,6 +3892,7 @@ def _write_preview(
             picks=picks,
             as_new=preview.treated_as_new,
             lowercase=preview.selected_names,
+            aliases=alias_table(linking) if elsewhere else None,
         )
         _teach_pick_names(rev, world, preview, picks, linked, thing_id)
         orphans = {
@@ -4517,8 +4529,10 @@ def _write_same(
         assert state is not None
         categories = get_kind(state.kind).categories
         linked: set[str] = set()
+        # gathered once for its facts, as at accept (I1)
+        names = alias_table(linking)
 
-        def linked_text(text: str) -> str:
+        def linked_text(text: str, aliases: Aliases | None = None) -> str:
             written = link_text(
                 linking,
                 scrub_emphasis(text),
@@ -4527,6 +4541,7 @@ def _write_same(
                 owner=target_id,
                 as_new=preview.treated_as_new,
                 lowercase=preview.selected_names,
+                aliases=aliases,
             )
             linked.update(parse_refs(written))
             return written
@@ -4545,7 +4560,7 @@ def _write_same(
             rev.add_fact(
                 target_id,
                 category,
-                linked_text(fact.text),
+                linked_text(fact.text, names),
                 valid_from=fact.since,
                 overrides=[o for o in fact.overrides if o in inherited] or None,
                 origin=entries.with_held_by(None, holder) if held else None,
@@ -4574,6 +4589,7 @@ def _write_same(
             picks=picks,
             as_new=preview.treated_as_new,
             lowercase=preview.selected_names,
+            aliases=alias_table(linking) if elsewhere else None,
         )
         _teach_pick_names(rev, world, preview, picks, linked, target_id)
         orphans = {

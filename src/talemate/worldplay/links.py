@@ -43,7 +43,7 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.world.kinds import AKA_TAGS, HERITAGE_KINDS, KINDS
-from talemate.world.names import ARTICLES, find_names
+from talemate.world.names import ARTICLES, Aliases, find_names
 from talemate.world.refs import REF_PATTERN, ref
 from talemate.world.sameness import SameCandidate
 from talemate.world.store import Revision
@@ -203,14 +203,16 @@ def _link_plain(
     owner: str | None,
     as_new: Collection[str],
     lowercase: Collection[str] = (),
+    aliases: Aliases | None = None,
 ) -> str:
     """Link the names in `text`, which holds no references. A name that
     means `owner` stays plain, and so does a match for a name treated as
     new (`as_new`) unless it's chosen. `lowercase`: the chosen names
-    written without a capital (`_explicit_spans`)."""
+    written without a capital (`_explicit_spans`); `aliases`, the view's
+    `alias_table` when the caller built it."""
 
     matched: list[_Span] = []
-    for match in find_names(view, text):
+    for match in find_names(view, text, aliases=aliases):
         thing_id = chosen.get(_norm(match.text))
         if thing_id is None and not match.suggested and not is_new(match.text, as_new):
             thing_id = match.candidates[0].id
@@ -288,6 +290,7 @@ def link_text(
     as_new: Collection[str] = (),
     spans: Collection[LinkSpan] = (),
     lowercase: Collection[str] = (),
+    aliases: Aliases | None = None,
 ) -> str:
     """`text` with every name in it linked to its thing, keeping the words
     written as the reference's shown text (a trailing `'s` stays outside
@@ -316,7 +319,9 @@ def link_text(
       span, or one crossing a reference, raises `ValueError`.
 
     Text inside an existing reference isn't touched, so linking twice
-    changes nothing."""
+    changes nothing. `aliases` is `names.alias_table(view)`, for a caller
+    linking many texts against one view: building it loads the whole
+    world (I1)."""
 
     if spans:
         out: list[str] = []
@@ -331,6 +336,7 @@ def link_text(
                     owner=owner,
                     as_new=as_new,
                     lowercase=lowercase,
+                    aliases=aliases,
                 )
             )
             words = text[start:stop]
@@ -345,6 +351,7 @@ def link_text(
                 owner=owner,
                 as_new=as_new,
                 lowercase=lowercase,
+                aliases=aliases,
             )
         )
         return "".join(out)
@@ -364,12 +371,18 @@ def link_text(
     for existing in REF_PATTERN.finditer(text):
         out.append(
             _link_plain(
-                view, text[end : existing.start()], chosen, owner, as_new, allowed
+                view,
+                text[end : existing.start()],
+                chosen,
+                owner,
+                as_new,
+                allowed,
+                aliases,
             )
         )
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen, owner, as_new, allowed))
+    out.append(_link_plain(view, text[end:], chosen, owner, as_new, allowed, aliases))
     return "".join(out)
 
 

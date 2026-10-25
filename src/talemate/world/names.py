@@ -276,6 +276,17 @@ def _aliases(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
     with its rank: the view's things', then `extra`'s (things not in the
     view, named by their own `name` field)."""
 
+    return alias_table(view, extra)
+
+
+def alias_table(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
+    """`find_names`' table of every name in `view` (and `extra`), built
+    once: it loads every thing in the world, so a caller linking many
+    texts against one unchanging view builds it once and passes it as
+    `find_names(..., aliases=)` (I1). Stale once the view's names change:
+    a view inside an open revision that renames or adds things needs a
+    new one."""
+
     aliases: Aliases = {}
 
     def add(alias: str, state: ThingState, name: str, via: Via) -> None:
@@ -364,15 +375,21 @@ def _needs_capital(candidate: NameCandidate) -> bool:
 
 
 def find_names(
-    view: WorldView, text: str, *, extra: Sequence[ThingState] = ()
+    view: WorldView,
+    text: str,
+    *,
+    extra: Sequence[ThingState] = (),
+    aliases: Aliases | None = None,
 ) -> list[NameMatch]:
     """Every name of the view's things in `text`, as they're named at the
     view's date, in order. Longer names are tried first, so overlapping
     names match once ("Maren Vos" never also as "Maren"). `extra` are
     things matched as if the view had them (an entry still being drafted,
-    named by its `name` and `aka` fields)."""
+    named by its `name` and `aka` fields). `aliases`, `alias_table`'s
+    for the view (`extra` then unused), saves building it again."""
 
-    aliases = _aliases(view, extra)
+    if aliases is None:
+        aliases = _aliases(view, extra)
     folded = text.casefold()
 
     # (start, end, end with any `'s`, written, candidates)

@@ -20,6 +20,7 @@ from talemate.world.refs import ref
 from talemate.world.scenes import MessageRecord
 from talemate.world.filing import filings_of
 from talemate.world.store import Source, World
+from talemate.world.view import WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.characters import character_from_world
 from talemate.worldplay.create import CreatePreview, PreviewFact
@@ -6899,6 +6900,130 @@ async def test_draft_render_links_edited_facts(plugin, client):
     linked = {seg["text"]: seg for seg in written["segments"] if seg["ref"]}
     assert linked["Velikoye"]["ref"] == s.velikoye
     assert linked["the Boyar Council"]["stub"] is True
+
+
+async def test_draft_render_loads_the_world_once(plugin, client, monkeypatch):
+    """I1: one render loads the world's things once, not once per fact,
+    timeline line, "For other pages" row and run of prose: its names are
+    gathered once and every text linked against them (a cheap guard on
+    the render's cost, counted rather than timed)."""
+
+    s = await _open_filing_world(plugin)
+    reply = json.dumps(
+        {
+            "name": "Frostwing Host",
+            "tag": "military",
+            "facts": [
+                {
+                    "category": "general",
+                    "text": f"It rode to Velikoye in {year}.",
+                    "since": year,
+                }
+                for year in (990, 995, 1001, 1005)
+            ]
+            + [
+                {"category": "general", "text": "It guards the Khorol River."},
+                {"category": "general", "text": "It serves the Night Court."},
+            ],
+            "elsewhere": [
+                {"entry": "Velikoye", "text": "Velikoye feeds the Frostwing Host."},
+                {
+                    "entry": "Khorol River",
+                    "text": "The Khorol River carries its boats.",
+                },
+            ],
+        }
+    )
+    draft = await _preview(plugin, client, reply, prompt="a host")
+    preview = {
+        **draft["preview"],
+        "prose": {
+            "description": " ".join(
+                f"It rode from Velikoye to the Khorol River, {n} times, for the"
+                " Night Court and the White Dawn."
+                for n in range(6)
+            )
+        },
+    }
+    loads = []
+    things = WorldView.things
+
+    def counted(self, *args, **kwargs):
+        loads.append(1)
+        return things(self, *args, **kwargs)
+
+    monkeypatch.setattr(WorldView, "things", counted)
+    await _act(
+        plugin, "draft_render", draft_key=draft["draft_key"], seq=1, preview=preview
+    )
+    rendered = _last(plugin, "draft_render")["data"]
+    assert len(rendered["facts"]) == 6
+    assert len(rendered["elsewhere"]) == 2
+    assert s.velikoye in [
+        seg["ref"] for seg in rendered["prose_segments"]["description"]
+    ]
+    assert len(loads) <= 2, f"the render loaded the world {len(loads)} times"
+
+
+async def test_accept_links_against_names_gathered_once(plugin, client, monkeypatch):
+    """I1, at accept: the facts and "For other pages" rows are linked
+    against the world's names gathered once each, not once per text, so
+    the world is loaded a fixed number of times however many facts the
+    draft has."""
+
+    s = await _open_filing_world(plugin)
+    DEEDS = [
+        "Its riders sing hymns at dusk.",
+        "Smiths forge its spears from bog iron.",
+        "Fallen captains lie in barrows.",
+        "Falconers tame birds for scouting.",
+        "Brewers keep honey mead barrels.",
+        "Carvers cut wooden icons each spring.",
+        "It guards Velikoye.",
+    ]
+
+    def reply(count):
+        return json.dumps(
+            {
+                "name": f"Frostwing Host {count}",
+                "tag": "military",
+                "facts": [
+                    {"category": "general", "text": deed} for deed in DEEDS[-count:]
+                ],
+                "elsewhere": [
+                    {"entry": "Velikoye", "text": f"Velikoye pays: {deed}"}
+                    for deed in DEEDS[-count:]
+                ],
+            }
+        )
+
+    loads = []
+    things = WorldView.things
+
+    def counted(self, *args, **kwargs):
+        loads.append(1)
+        return things(self, *args, **kwargs)
+
+    counts = []
+    for count in (1, 6):
+        draft = await _preview(plugin, client, reply(count), prompt=f"a host {count}")
+        monkeypatch.setattr(WorldView, "things", counted)
+        loads.clear()
+        await _act(
+            plugin,
+            "accept_preview",
+            preview=draft["preview"],
+            draft_key=draft["draft_key"],
+        )
+        monkeypatch.setattr(WorldView, "things", things)
+        await _drain(plugin)
+        accepted = _last(plugin, "accept_preview")["data"]
+        assert len(accepted["facts"]) == count
+        assert s.velikoye in [
+            seg["ref"] for fact in accepted["facts"] for seg in fact["segments"]
+        ]
+        counts.append(len(loads))
+    assert counts[0] == counts[1], f"world loads by fact count: {counts}"
 
 
 async def test_draft_render_fails_quietly(plugin, client):

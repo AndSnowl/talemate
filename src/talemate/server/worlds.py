@@ -364,7 +364,12 @@ from talemate.world.kinds import (
     get_kind,
     normalise_tag,
 )
-from talemate.world.names import find_names, unknown_proper_phrases
+from talemate.world.names import (
+    Aliases,
+    alias_table,
+    find_names,
+    unknown_proper_phrases,
+)
 from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
@@ -1210,10 +1215,12 @@ class _Links:
     """Linked text in one view, for the wire: runs of rendered text as
     `{text, ref, stub}`, `ref` the thing a run links to and `stub` whether
     that thing is a stub. A link to an ignored stub is plain text: ignoring
-    a stub hides it everywhere. Each linked thing is looked up once."""
+    a stub hides it everywhere. Each linked thing is looked up once;
+    `aliases`, the view's `alias_table` when the caller built it."""
 
-    def __init__(self, view: WorldView) -> None:
+    def __init__(self, view: WorldView, aliases: Aliases | None = None) -> None:
         self.view = view
+        self.aliases = aliases
         self._states: dict[str, ThingState | None] = {}
 
     def _state(self, thing_id: str) -> ThingState | None:
@@ -1251,7 +1258,7 @@ class _Links:
 
         runs: list[Segment] = []
         end = 0
-        for match in find_names(self.view, text):
+        for match in find_names(self.view, text, aliases=self.aliases):
             if match.suggested or any(c.id == owner for c in match.candidates):
                 continue
             runs.append(Segment(text=text[end : match.start], ref=None))
@@ -1337,6 +1344,11 @@ class _Links:
                     }
                 )
         return found
+
+
+# joins a draft prose's plain runs, linked in one pass (`_draft_payload`):
+# not a word character nor a space, so no name matches across it
+_RUN_MARK = "\ue002"
 
 
 def _draft_new_names(
@@ -2693,7 +2705,10 @@ class WorldsPlugin(Plugin):
 
         view = world.view()
         calendar = world.calendar
-        links = _Links(view)
+        # the world's names, gathered once for every text the draft links
+        # (I1): a revision's view never changes
+        aliases = alias_table(view)
+        links = _Links(view, aliases)
         stub = view.thing(preview.stub_id) if preview.stub_id else None
         if stub is not None and stub.is_stub:
             page = self._thing_payload(world, stub.id, None)
@@ -2746,6 +2761,7 @@ class WorldsPlugin(Plugin):
                     owner=owner,
                     as_new=preview.treated_as_new,
                     lowercase=preview.selected_names,
+                    aliases=aliases,
                 ),
                 fresh,
             )
@@ -2788,28 +2804,46 @@ class WorldsPlugin(Plugin):
                     owner=target,
                     as_new=preview.treated_as_new,
                     lowercase=preview.selected_names,
+                    aliases=aliases,
                 ),
                 own_fresh,
             )
 
         def prose_linked(text: str) -> list[dict]:
             # as the accepted page links it (`prose_segments`), the new
-            # names, stubs then, marked in the words it leaves plain
-            out: list[dict] = []
-            for run in links.prose_segments(text, owner or ""):
-                found = (
-                    links.draft_segments(
-                        link_text(
-                            view,
-                            run["text"],
-                            new_names=new_names,
-                            owner=owner,
-                            as_new=preview.treated_as_new,
-                            lowercase=preview.selected_names,
-                        ),
-                        fresh,
-                        keep=same_targets,
+            # names, stubs then, marked in the words it leaves plain: those
+            # words linked in one pass, joined by a mark no name matches
+            # across, so each run links as it would alone
+            runs = links.prose_segments(text, owner or "")
+            plain = [run["text"] for run in runs if run["ref"] is None]
+            if any(_RUN_MARK in words for words in plain):
+                written = [
+                    link_text(
+                        view,
+                        words,
+                        new_names=new_names,
+                        owner=owner,
+                        as_new=preview.treated_as_new,
+                        lowercase=preview.selected_names,
+                        aliases=aliases,
                     )
+                    for words in plain
+                ]
+            else:
+                written = link_text(
+                    view,
+                    _RUN_MARK.join(plain),
+                    new_names=new_names,
+                    owner=owner,
+                    as_new=preview.treated_as_new,
+                    lowercase=preview.selected_names,
+                    aliases=aliases,
+                ).split(_RUN_MARK)
+            linked_runs = iter(written)
+            out: list[dict] = []
+            for run in runs:
+                found = (
+                    links.draft_segments(next(linked_runs), fresh, keep=same_targets)
                     if run["ref"] is None
                     else [run]
                 )
@@ -2831,6 +2865,8 @@ class WorldsPlugin(Plugin):
                 return None
             return {"id": holder, "name": view.name_of(holder) or ""}
 
+        # each fact linked once, its timeline line reusing its segments
+        segments = [linked(fact.text) for fact in preview.facts]
         facts = [
             {
                 "fact_id": None,
@@ -2839,7 +2875,7 @@ class WorldsPlugin(Plugin):
                 "category": fact.category,
                 "text": fact.text,
                 "rendered": fact.text,
-                "segments": linked(fact.text),
+                "segments": segments[index],
                 "valid_from": _date_out(calendar, fact.since),
                 "valid_until": None,
                 "source_rev": None,
@@ -2880,11 +2916,11 @@ class WorldsPlugin(Plugin):
                 "owner_name": preview.name,
                 "date": _date_out(calendar, fact.since),
                 "until": _date_out(calendar, fact.until),
-                "segments": linked(fact.text),
+                "segments": segments[index],
                 "here": True,
                 "disagrees_with": [],
             }
-            for fact in preview.facts
+            for index, fact in enumerate(preview.facts)
             if fact.since is not None and fact.ticked
         ]
         timeline = sorted(
