@@ -3105,12 +3105,15 @@ class WorldsPlugin(Plugin):
     def _prose_name(self, preview: CreatePreview, key: str | None) -> str | None:
         """The name the preview's prose was written under, from the
         server's own copies (P7): the name of the version of the draft
-        this session holds with that prose; `None` without one."""
+        this session holds with that prose, else (the owner edited the
+        prose too, M4) the name of its current version, whose prose the
+        edits began from; `None` without a held draft."""
 
-        for version in self._drafts.get(key or "") or []:
+        versions = self._drafts.get(key or "") or []
+        for version in versions:
             if version.prose == preview.prose:
                 return version.name
-        return None
+        return self._current_preview(key).name if key and versions else None
 
     def _check_selected_names(self, preview: CreatePreview, key: str | None) -> None:
         """Keep only the `selected_names` (ruling F26: words that link

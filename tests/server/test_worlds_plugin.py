@@ -7306,6 +7306,25 @@ async def test_renamed_draft_prose_stale(plugin, client):
     assert watch["prose"]["description"]["stale"] is False
     assert s.world.head_rev() > 0
 
+    # M4: renamed and the prose edited too, no held version has that
+    # prose: it was still written under the held draft's name, so stale
+    draft = await _preview(
+        plugin, client, _draft_reply("Iron Choir", "It sings."), prompt="a choir"
+    )
+    await _act(
+        plugin,
+        "accept_preview",
+        preview={
+            **draft["preview"],
+            "name": "Iron Chorus",
+            "prose": {"description": "The prose, edited by hand."},
+        },
+        draft_key=draft["draft_key"],
+    )
+    chorus = _last(plugin, "accept_preview")["data"]
+    assert chorus["name"] == "Iron Chorus"
+    assert chorus["prose"]["description"]["stale"] is True
+
 
 async def test_keep_new_drops_existing_checked(plugin, tmp_path, monkeypatch):
     """P8 "Keep new" on a draft fact repeating the world's: the draft's
