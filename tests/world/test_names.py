@@ -378,3 +378,17 @@ def test_a_lowercase_led_name_matches_as_written(world):
     assert find_names(view, "they drank old vilya water") == []
     (match,) = find_names(view, "the river vilya and Vilya")
     assert (match.text, match.suggested) == ("Vilya", True)
+
+
+def test_an_all_lowercase_name_never_matches_as_written(world):
+    """Only a lowercase-led name with a capital in it ("river Vilya")
+    matches as written: a stub named all lowercase ("hope", "watch")
+    still needs a capital, so common words stay plain."""
+
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("lore", fields={"name": "hope", "stub": {"ignored": False}})
+        rev.create_thing("lore", fields={"name": "watch", "stub": {"ignored": False}})
+    view = world.view(None)
+
+    assert find_names(view, "I hope so") == []
+    assert find_names(view, "stand the watch") == []

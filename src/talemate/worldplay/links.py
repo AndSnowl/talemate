@@ -212,7 +212,7 @@ def _link_plain(
     written without a capital (`_explicit_spans`); `aliases`, the view's
     `alias_table` when the caller built it. `made`: the ids of the new
     names' stubs, which a match written without a capital (a stub stored
-    lowercase-led, "bells", found as written) never links: a new name
+    lowercase-led, "al-Qadir", found as written) never links: a new name
     links lowercase only as the owner selected it (ruling F26)."""
 
     matched: list[_Span] = []

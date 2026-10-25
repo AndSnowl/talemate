@@ -23,8 +23,9 @@ A stub whose name is a common word ("Hope") mustn't link the "hope" in
 "I hope", so a stub, like another name ("the Pier") or a suggestion,
 matches only text written with a capital letter (a leading article may
 stay lowercase: "the Drowned Stag"). A main or other name stored with a
-lowercase first word ("river Vilya") also matches text writing it exactly
-as stored, case and all. A stub the owner ignored isn't
+lowercase first word but a capitalised word in it ("river Vilya") also
+matches text writing it exactly as stored, case and all; one with no
+capital at all ("hope") never matches as written. A stub the owner ignored isn't
 matched at all. An adjective form needs a capital too. The main name (and a character's first name) of an
 entry that isn't a stub matches in any case, as scene setup always has.
 
@@ -164,9 +165,9 @@ class NameCandidate(BaseModel):
     kind: str
     stub: bool = False
     via: Via = "name"
-    # the main or other name as stored, when it starts lowercase ("river
-    # Vilya"): text writing it exactly so matches whatever the capital rule
-    # says. Never sent
+    # the main or other name as stored, when it starts lowercase but has a
+    # capitalised word ("river Vilya", `_as_written`): text writing it
+    # exactly so matches whatever the capital rule says. Never sent
     as_stored: str | None = Field(default=None, exclude=True)
 
 
@@ -301,9 +302,18 @@ def _add_alias(
         kind=state.kind,
         stub=state.is_stub,
         via=via,
-        as_stored=(tidy if via in ("name", "aka") and not _capitalised(tidy) else None),
+        as_stored=(tidy if via in ("name", "aka") and _as_written(tidy) else None),
     )
     aliases.setdefault(key, []).append((_RANKS[via], candidate))
+
+
+def _as_written(name: str) -> bool:
+    """Whether `name` matches text writing it exactly as stored: it starts
+    lowercase but has a capitalised word, so it still reads as a proper
+    name ("river Vilya"). One with no capital at all ("hope", "watch")
+    keeps the capital rule, so a common word never matches."""
+
+    return not _capitalised(name) and any(word[:1].isupper() for word in name.split())
 
 
 def own_alias_table(state: ThingState, name: str) -> Aliases:
