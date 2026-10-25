@@ -11,7 +11,8 @@ fact menu (⋯ or right-click: Move to…, Copy to…, Held by…, Edit, Change
 dates, End this, Remove) and the selection menu (Make a stub, Make a stub
 and expand now, Link to an entry…, "Ask about this" for later) work on
 accepted pages and drafts alike; on a draft a selection is keyed by name
-(ruling F16). A stub's Re-point gains "use the name…".
+(ruling F16). Re-pointing and linking choose how the words go (P4): another
+name of the entry, or renamed to one of its names.
 
 The worlds are seeded through `talemate.world` (`seed.seed_fm_world`). No
 model is asked anything: drafts come from the fixed preview file, a
@@ -26,7 +27,12 @@ import re
 from playwright.sync_api import expect
 
 from e2e.seed import seed_fm_world
-from e2e.worlds.test_connections_create import _opened, _search_and_pick, _wait_sent
+from e2e.worlds.test_connections_create import (
+    _choose_mode,
+    _opened,
+    _search_and_pick,
+    _wait_sent,
+)
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
@@ -504,6 +510,7 @@ def test_selection_make_stub_and_link(app, page, fixed_preview):
     _select(page, _fact(vel, "north road"), "north road")
     page.get_by_test_id("selection-menu").get_by_test_id("selection-link").click()
     _search_and_pick(page, "tsar", "Tsardom of Moscavia")
+    _choose_mode(page)
     sent = _wait_sent(page, "link_text")
     assert (sent["start"], sent["end"]) == (29, 39)
     assert sent["target_id"] == world.things["Tsardom of Moscavia"]
@@ -544,6 +551,12 @@ def test_selection_make_stub_and_link(app, page, fixed_preview):
     _select(page, patrol, "the north pass")
     page.get_by_test_id("selection-menu").get_by_test_id("selection-link").click()
     _search_and_pick(page, "veli", "Velikoye")
+    # on a draft, renaming waits for the accept
+    chooser = page.get_by_test_id("name-mode")
+    chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(chooser.get_by_test_id("mode-rename-later")).to_have_count(1)
+    expect(chooser.get_by_test_id("mode-rename-option")).to_have_count(0)
+    _choose_mode(page)
     sent = _wait_sent(page, "link_text")
     assert sent["draft_key"] == "new:lore:frostwing host"
     assert sent["target_id"] == velikoye
@@ -686,20 +699,20 @@ def test_hard_repoint(app, page):
     # the stub's own card offers it too
     page.get_by_test_id("stub-item").filter(has_text="the Old Capital").click()
     stub_page = _opened(page, "the Old Capital")
-    expect(stub_page.get_by_test_id("stub-repoint-name")).to_have_count(1)
+    expect(stub_page.get_by_test_id("stub-repoint")).to_have_count(1)
 
-    # the Stubs page: "use the name…", one of the target's names for every
+    # the Stubs page: "Rename to…", one of the target's names for every
     # link's words
     page.get_by_test_id("kind-stubs").click()
     tab = page.get_by_test_id("stubs-tab")
     row = tab.get_by_test_id("stub-row").filter(has_text="the Old Capital")
-    row.get_by_test_id("stub-repoint-name").click()
+    row.get_by_test_id("stub-repoint").click()
     _search_and_pick(page, "veli", "Velikoye")
-    names = page.get_by_test_id("repoint-names")
-    names.wait_for(state="visible", timeout=TIMEOUT_MS)
-    options = names.get_by_test_id("repoint-name-option")
+    chooser = page.get_by_test_id("name-mode")
+    chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    options = chooser.get_by_test_id("mode-rename-option")
     expect(options).to_have_text(["Velikoye", "the capital"])
-    options.filter(has_text="the capital").click()
+    _choose_mode(page, "the capital")
     sent = _wait_sent(page, "repoint_stub")
     assert sent == {
         "type": "worlds",
@@ -891,4 +904,86 @@ def test_create_another_kind_asks_first(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert _sent(page, "preview_thing")[-1]["kind"] == "place"
+    assert page.console_errors == []
+
+
+MARSH = {
+    "kind": "place",
+    "name": "Owl Marsh",
+    "facts": [
+        {
+            "category": "general",
+            "text": "Pure-line Moscavians nest by [[@The Night Court|the court]].",
+        }
+    ],
+}
+
+
+def test_repoint_mode_picker(app, page):
+    """P4: once a link's target is picked, the owner chooses how it takes
+    the words -- "Add as another name" (the default) or "Rename to…" one
+    of its names -- on a selection's "Link to an entry…" and a link card's
+    "Re-point…" alike."""
+
+    name = _world_name("Modes")
+    world = seed_fm_world(app.root, name, present_year=1020, things=[*WORLD, MARSH])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    marsh = _open_thing(page, "Owl Marsh")
+
+    # plain words linked: the default teaches the entry them
+    _select(page, _fact(marsh, "nest by"), "Pure-line Moscavians")
+    page.get_by_test_id("selection-menu").get_by_test_id("selection-link").click()
+    _search_and_pick(page, "tsar", "Tsardom of Moscavia")
+    chooser = page.get_by_test_id("name-mode")
+    chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(chooser.get_by_test_id("mode-add-name")).to_have_class(
+        re.compile(r"v-list-item--active")
+    )
+    expect(chooser.get_by_test_id("mode-add-name")).to_contain_text(
+        "Add “Pure-line Moscavians” as another name"
+    )
+    expect(chooser.get_by_test_id("mode-rename-option")).to_have_text(
+        ["Tsardom of Moscavia"]
+    )
+    _choose_mode(page)
+    sent = _wait_sent(page, "link_text")
+    assert sent["target_id"] == world.things["Tsardom of Moscavia"]
+    assert "use_name" not in sent
+    expect(page.get_by_test_id("accept-notes")).to_contain_text(
+        "Added as another name: Pure-line Moscavians"
+    )
+    _fact(marsh, "nest by").get_by_test_id("linked-ref").filter(
+        has_text="Pure-line Moscavians"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    # a link re-pointed, renamed to one of the new entry's names
+    link = (
+        _fact(marsh, "nest by")
+        .get_by_test_id("linked-ref")
+        .filter(has_text="the court")
+    )
+    link.hover()
+    card = page.get_by_test_id("link-card")
+    card.wait_for(state="visible", timeout=TIMEOUT_MS)
+    card.get_by_role("button", name="Re-point…").click()
+    _search_and_pick(page, "veli", "Velikoye")
+    _choose_mode(page, "the capital")
+    sent = _wait_sent(page, "repoint_ref")
+    assert (sent["to_id"], sent["use_name"]) == (
+        world.things["Velikoye"],
+        "the capital",
+    )
+    expect(
+        _fact(marsh, "nest by the capital.").get_by_test_id("linked-ref")
+    ).to_have_text(["Pure-line Moscavians", "the capital"])
+
+    # the Tsardom goes by the words now
+    page.get_by_test_id("kind-place").click()
+    tsardom = _open_thing(page, "Tsardom of Moscavia")
+    expect(tsardom.get_by_test_id("thing-other-names")).to_contain_text(
+        "Pure-line Moscavians"
+    )
     assert page.console_errors == []

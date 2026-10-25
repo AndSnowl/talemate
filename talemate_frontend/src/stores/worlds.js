@@ -80,7 +80,10 @@
 // touches the rest of the fact. Selected words of a fact (the selection
 // menu) are `makeStubFromText` ("Make a stub", and "… and expand now":
 // `stubExpandAfter` opens its box once it's made) and `linkText`, by
-// their UTF-16 offsets in its rendered text (ruling F18). `referenceTargets` is what Add reference searches: every entry and
+// their UTF-16 offsets in its rendered text (ruling F18). `linkText` and
+// `repointRef` take the owner's mode (P4, `NameModeMenu`): the words kept
+// and taught as another name (the reply's `aka_added`, shown as a note),
+// or `useName`, one of the target's names in their place. `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
 // Filing and tags (the entry page, mockup v3): `addFiling`, `editFiling`
@@ -262,6 +265,12 @@ export function pageAfterDelete(thing, heritage, openedFrom) {
         return first ? speciesOf(heritage, first) : null;
     }
     return null;
+}
+
+// The note on a link that taught its target other names (P4's "add as
+// another name": `link_text`, `repoint_ref`).
+export function otherNamesNote(names) {
+    return `Added as another name: ${names.join(', ')}`;
 }
 
 // The Stubs page's (and the target page's) note on a `stubRepointed`.
@@ -596,8 +605,8 @@ function worldState() {
         // draft key -> version -> `{base, edited}`: what the owner left on
         // each version this session, restored when it's used again
         draftEdits: {},
-        // thing id -> its names (`[name, ...other names]`), for "use the
-        // name…", once asked for (`fetchNames`)
+        // thing id -> its names (`[name, ...other names]`), for "Rename
+        // to…", once asked for (`fetchNames`)
         namesOf: {},
         namesWanted: [],
         // the last names asked for that failed (the thing is gone)
@@ -1180,7 +1189,7 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // thing `id`'s names (`namesOf[id]`: its name, then its other
-        // names), fetched for "use the name…"
+        // names), fetched for "Rename to…" (`NameModeMenu`)
         fetchNames(id) {
             this.namesFailed = null;
             if (!this.namesWanted.includes(id)) {
@@ -1516,9 +1525,11 @@ export const useWorldsStore = defineStore('worlds', {
             this.edit('make_stub_from_text', { fact_id: factId, start, end, kind, ...(tag ? { tag } : {}) });
         },
 
-        // selected words of the open page's fact linked to `targetId`
-        linkText(factId, start, end, targetId) {
-            this.edit('link_text', { fact_id: factId, start, end, target_id: targetId });
+        // selected words of the open page's fact linked to `targetId`:
+        // kept and taught as another name, or (`useName`, "Rename to…")
+        // one of its names in their place
+        linkText(factId, start, end, targetId, useName = null) {
+            this.edit('link_text', { fact_id: factId, start, end, target_id: targetId, ...(useName ? { use_name: useName } : {}) });
         },
 
         // who holds the open page's fact `factId` as a belief (null: world
@@ -1590,9 +1601,10 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // point the `occurrence`-th reference of the open thing's fact
-        // `factId` at `toId`, keeping its words
-        repointRef(factId, occurrence, toId) {
-            this.edit('repoint_ref', { fact_id: factId, occurrence, to_id: toId });
+        // `factId` at `toId`: its words kept and taught as another name,
+        // or (`useName`, "Rename to…") one of `toId`'s names in their place
+        repointRef(factId, occurrence, toId, useName = null) {
+            this.edit('repoint_ref', { fact_id: factId, occurrence, to_id: toId, ...(useName ? { use_name: useName } : {}) });
         },
 
         // make `text`, a phrase in the open thing's fact `factId`, a stub
@@ -1984,6 +1996,9 @@ export const useWorldsStore = defineStore('worlds', {
                         } else {
                             this.refreshThing();
                         }
+                        if (data.aka_added?.length) {
+                            this.showNotes(action, [otherNamesNote(data.aka_added)]);
+                        }
                         this.listStubs();
                         this.listAllThings();
                         const expand = this.stubExpandAfter;
@@ -2162,6 +2177,10 @@ export const useWorldsStore = defineStore('worlds', {
                         this.filingEdited(action, data);
                     } else if (EDIT_ACTIONS.includes(action) && data.id === this.selectedThingId) {
                         this.thing = data;
+                        if (action === 'repoint_ref' && data.aka_added?.length) {
+                            this.showNotes(action, [otherNamesNote(data.aka_added)]);
+                            this.listAllThings();
+                        }
                         // a linked fact (or a new name) changes the stubs' mentions
                         this.listStubs();
                         if (action === 'set_field') {

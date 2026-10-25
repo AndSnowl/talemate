@@ -61,12 +61,20 @@
         search-label="Re-point to…"
         :exclude="repointExclude"
         @pick="repointTo"
+    /><NameModeMenu
+        v-if="repoint"
+        v-model="choosing"
+        :target="repointTarget"
+        :words="repointing === null ? '' : shown[repointing]?.text || ''"
+        :thing="chosen"
+        @choose="repointAs"
     /></span>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { canExpand } from './worldKinds.js';
+import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 import StubCard from './StubCard.vue';
 
@@ -80,9 +88,11 @@ import StubCard from './StubCard.vue';
 //
 // With `repoint` (an own fact on its thing's page), an entry link gets a
 // hover card too, and both cards offer "Re-point…": a search
-// (`ReferenceMenu`) for the thing the link should mean, emitted as
-// `repoint {index, to}` (`index` into `segments`); the page rewrites the
-// fact, keeping the link's words. `exclude` are ids never offered.
+// (`ReferenceMenu`) for the thing the link should mean, then how it takes
+// the words (`NameModeMenu`, P4: another name of it, or renamed to one of
+// its names), emitted as `repoint {index, to, useName}` (`index` into
+// `segments`; `useName` null to keep the words); the page rewrites the
+// fact. `exclude` are ids never offered.
 //
 // With `selectable` (a fact's words), right-clicking selected words inside
 // it emits `select {start, end, words, x, y}` instead of the browser's
@@ -92,7 +102,7 @@ import StubCard from './StubCard.vue';
 // row (its fact menu).
 export default {
     name: 'LinkedText',
-    components: { ReferenceMenu, StubCard },
+    components: { NameModeMenu, ReferenceMenu, StubCard },
     props: {
         segments: { type: Array, default: null },
         text: { type: String, default: '' },
@@ -112,6 +122,9 @@ export default {
             repointing: null,
             repointOpen: false,
             repointTarget: null,
+            // the thing picked, while its mode is chosen
+            chosen: null,
+            choosing: false,
         };
     },
     computed: {
@@ -181,9 +194,16 @@ export default {
         },
         repointTo(target) {
             if (this.repointing !== null) {
-                this.$emit('repoint', { index: this.repointing, to: target.id });
+                this.chosen = { id: target.id, name: target.name };
+                this.choosing = true;
+            }
+        },
+        repointAs({ useName }) {
+            if (this.repointing !== null && this.chosen) {
+                this.$emit('repoint', { index: this.repointing, to: this.chosen.id, useName });
             }
             this.repointing = null;
+            this.chosen = null;
         },
     },
 };

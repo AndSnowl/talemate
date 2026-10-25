@@ -104,6 +104,21 @@ def _search_and_pick(page, query: str, name: str):
     return text
 
 
+def _choose_mode(page, rename_to: str | None = None):
+    """The mode chooser after a link's target is picked (P4): "Add as
+    another name" (the default), or "Rename to…" one of its names."""
+
+    chooser = page.get_by_test_id("name-mode")
+    chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    if rename_to is None:
+        chooser.get_by_test_id("mode-add-name").click()
+    else:
+        chooser.get_by_test_id("mode-rename-option").filter(
+            has_text=re.compile(f"^{re.escape(rename_to)}$")
+        ).click()
+    chooser.wait_for(state="hidden", timeout=TIMEOUT_MS)
+
+
 def test_expand_stub_prefills_and_fills_it(app, page, fixed_preview):
     name = _world_name("Moscavia")
     world = seed_fm_world(
@@ -399,6 +414,7 @@ def test_repoint_link_keeps_words(app, page):
     card.wait_for(state="visible", timeout=TIMEOUT_MS)
     card.get_by_role("button", name="Re-point…").click()
     _search_and_pick(page, "holt", "Maren Holt")
+    _choose_mode(page)
 
     # that one reference, now meaning the other Maren; the known name
     # written plain stays plain

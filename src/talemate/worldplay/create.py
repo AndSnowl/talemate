@@ -491,6 +491,10 @@ class CreatePreview(BaseModel):
     # (ruling F26): only these link where they're written without a
     # capital; the router keeps only those its own copy of the draft holds
     selected_names: list[str] = Field(default_factory=list)
+    # words the owner linked on the draft with "add as another name" (P4):
+    # accept teaches each its pick's target as a common other name; the
+    # router keeps only those its own copy of the draft holds
+    pick_names: list[str] = Field(default_factory=list)
 
 
 # --- the calendar ------------------------------------------------------------
@@ -3846,6 +3850,7 @@ def _write_preview(
             as_new=preview.treated_as_new,
             lowercase=preview.selected_names,
         )
+        _teach_pick_names(rev, world, preview, picks, linked, thing_id)
         orphans = {
             stub_id
             for stub_id in made.values()
@@ -4095,6 +4100,27 @@ def _write_move_here(
 # --- same thing: onto an entry the world has ---------------------------------
 
 _SAME_NOTE = "added to an entry from prompt"
+
+
+def _teach_pick_names(
+    rev: Any,
+    world: World,
+    preview: CreatePreview,
+    picks: dict[str, str],
+    linked: set[str],
+    owner: str,
+) -> None:
+    """Teach each of the draft's `pick_names` (P4: words linked with "add
+    as another name") to the thing its pick links, as a common other name
+    (`_common_name`), in `rev`: only a thing the accept linked, never the
+    entry itself."""
+
+    by_key = {name_key(words): target for words, target in picks.items()}
+    for words in preview.pick_names:
+        target = by_key.get(name_key(words))
+        if target is None or target == owner or target not in linked:
+            continue
+        _common_name(rev, world.view(), target, words)
 
 
 def _common_name(rev: Any, view: WorldView, thing_id: str, name: str) -> bool:
@@ -4459,6 +4485,7 @@ def _write_same(
             as_new=preview.treated_as_new,
             lowercase=preview.selected_names,
         )
+        _teach_pick_names(rev, world, preview, picks, linked, target_id)
         orphans = {
             thing_id
             for thing_id in made.values()

@@ -46,9 +46,8 @@ import StubRepointButton from './StubRepointButton.vue';
 // why) and Ignore (or Unignore), then whatever the slot adds (a
 // link's "Re-point…"). Shown on hover over a stub link, and on the stub's
 // own page (`onPage`, without the name), where "Re-point…" moves every
-// link to the stub (`StubRepointButton`), and "use the name…" does so
-// writing one of the target's names in the links' words (the hard
-// re-point).
+// link to the stub (`StubRepointButton`), its words another name of the
+// target or renamed to one of its names (P4).
 export default {
     name: 'StubCard',
     components: { StubRepointButton },

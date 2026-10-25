@@ -287,6 +287,34 @@ def _hard_words(use_name: str, shown: str, before: str) -> str:
     return use_name
 
 
+def target_name(view: WorldView, target_id: str, use_name: str) -> str:
+    """`use_name` as the thing `target_id` has it: one of its own names
+    (its name or an other name), matched by `name_key`, so any case will
+    do. `KeyError` for a thing that isn't there, `ValueError` for a name
+    it hasn't."""
+
+    state = view.thing(target_id)
+    if state is None:
+        raise KeyError(f"no such thing: {target_id}")
+    name = view.name_of(target_id) or ""
+    names = {name_key(each): each for each in _target_names(state, name)}
+    key = name_key(use_name)
+    if not key or key not in names:
+        raise ValueError(
+            f"the links can take one of {name}'s names"
+            f" ({', '.join(names.values())}), not {' '.join(use_name.split())}"
+        )
+    return names[key]
+
+
+def renamed_words(use_name: str, shown: str, before: str) -> str:
+    """The words "Rename to..." writes for a link (or selected words)
+    showing `shown` after the text `before`: `use_name`, its article fitted
+    to the text (`_hard_words`, as the hard re-point writes them)."""
+
+    return _hard_words(use_name, shown, before)
+
+
 def _rewriter(
     view: WorldView,
     stub_id: str,
@@ -1286,16 +1314,7 @@ def plan_repoint(
 
     job = _job(world, stub_id, target_id)
     if use_name is not None:
-        names = {
-            name_key(name): name for name in _target_names(job.target, job.target_name)
-        }
-        key = name_key(use_name)
-        if not key or key not in names:
-            raise ValueError(
-                f"the links can take one of {job.target_name}'s names"
-                f" ({', '.join(names.values())}), not {' '.join(use_name.split())}"
-            )
-        job.use_name = names[key]
+        job.use_name = target_name(job.view, target_id, use_name)
     if as_kind is not None and as_kind != job.target.kind:
         job.target = job.target.model_copy(update={"kind": as_kind})
     return _plan(job)

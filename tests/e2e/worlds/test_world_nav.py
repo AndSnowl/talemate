@@ -13,7 +13,7 @@ anything.
 from __future__ import annotations
 
 from e2e.seed import seed_fm_world
-from e2e.worlds.test_connections_create import _search_and_pick
+from e2e.worlds.test_connections_create import _choose_mode, _search_and_pick
 from e2e.worlds.test_connections_pages import _stubs_tab
 from e2e.worlds.test_heritage_pages import OWL_FOLK, SNOWY
 from e2e.worlds.test_world_tab import (
@@ -136,6 +136,7 @@ def test_stubs_page_repoints_a_stub_onto_an_entry(app, page):
     row.wait_for(state="visible", timeout=TIMEOUT_MS)
     row.get_by_test_id("stub-repoint").click()
     _search_and_pick(page, "mosc", "Moscavy")
+    _choose_mode(page)
 
     # the stub is gone; a note says where its links went and what names
     # Moscavy took

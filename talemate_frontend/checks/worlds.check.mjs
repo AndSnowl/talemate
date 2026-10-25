@@ -26,6 +26,7 @@ import {
     lineDates,
     listedFacts,
     nameKey,
+    otherNamesNote,
     pageAfterDelete,
     parseWorldTarget,
     previewCounts,
@@ -2636,6 +2637,27 @@ check('Copy to… keeps the fact; the hard re-point sends the name; names fetche
     assert.deepEqual(sent.at(-1), { type: 'worlds', action: 'repoint_stub', stub_id: 's1', target_id: 'ts', use_name: 'the realm' });
     store.repointStub('s1', 'ts');
     assert.equal('use_name' in sent.at(-1), false);
+});
+
+check('P4: link and re-point send the mode; a name taught shows as a note', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('vel');
+    store.linkText('f1', 0, 20, 'owls', 'Snowy Owls');
+    assert.deepEqual(sent.at(-1), {
+        type: 'worlds', action: 'link_text', thing_id: 'vel', at: null, fact_id: 'f1', start: 0, end: 20, target_id: 'owls', use_name: 'Snowy Owls',
+    });
+    store.linkText('f1', 0, 20, 'owls');
+    assert.equal('use_name' in sent.at(-1), false);
+    store.handleMessage(reply('link_text', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['Pure-line Moscavians'] }));
+    assert.deepEqual(store.notes, { action: 'link_text', notes: ['Added as another name: Pure-line Moscavians'] });
+    store.repointRef('f1', 0, 'holt', 'Maren Holt');
+    assert.equal(sent.at(-1).use_name, 'Maren Holt');
+    store.repointRef('f1', 0, 'holt');
+    assert.equal('use_name' in sent.at(-1), false);
+    store.handleMessage(reply('repoint_ref', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['the town'] }));
+    assert.deepEqual(store.notes, { action: 'repoint_ref', notes: ['Added as another name: the town'] });
+    assert.equal(otherNamesNote(['a', 'b']), 'Added as another name: a, b');
 });
 
 // --- Task 10 fix round 1 -------------------------------------------------------

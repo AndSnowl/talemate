@@ -1289,10 +1289,10 @@ export default {
         },
         // `segments[index]` of the own fact `fact` now links `to`, its
         // words kept
-        repointLink(fact, { index, to }) {
+        repointLink(fact, { index, to, useName = null }) {
             const occurrence = refOccurrence(fact.text, fact.segments, index);
-            if (occurrence !== null && to !== fact.segments[index].ref) {
-                this.worlds.repointRef(fact.fact_id, occurrence, to);
+            if (occurrence !== null && (to !== fact.segments[index].ref || useName)) {
+                this.worlds.repointRef(fact.fact_id, occurrence, to, useName);
             }
         },
         // words selected in the fact `fact` (`LinkedText`'s `select`)
@@ -1326,16 +1326,18 @@ export default {
                 this.worlds.makeStubFromText(found.factId, found.start, found.end, kind, tag, { expand, words });
             }
         },
-        linkWords(target) {
+        // `useName`: "Rename to…" one of the target's names (P4), else
+        // the words are kept and taught as another name
+        linkWords({ target, useName = null }) {
             const found = this.selection;
             if (found && this.draft) {
-                if (found.index !== null) {
+                if (found.index !== null && !useName) {
                     this.worlds.draftSelection('link_text', found.index, found.start, found.end, { target_id: target.id });
                 }
                 return;
             }
             if (found) {
-                this.worlds.linkText(found.factId, found.start, found.end, target.id);
+                this.worlds.linkText(found.factId, found.start, found.end, target.id, useName);
             }
         },
         removeFact(fact) {

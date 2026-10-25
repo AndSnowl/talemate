@@ -78,20 +78,23 @@
         search-only
         search-label="Link the words to…"
         :exclude="exclude"
-        @pick="$emit('link', $event)"
+        @pick="picked"
     />
+    <NameModeMenu v-model="choosing" :target="target" :words="words" :thing="chosen" :draft="draft" @choose="chose" />
 </template>
 
 <script>
 import { normaliseTag } from './entryPage.js';
 import { STUB_KINDS, canExpand, kindInfo } from './worldKinds.js';
+import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 
 // The menu on selected words of a fact (spec "Menus that work
 // everywhere"): "Make a stub" with a kind and a tag (`stub {kind, tag}`),
 // "Make a stub and expand now…" (`expand {kind, tag}`: its kind's create
-// box opens from it), "Link to an entry… 🔎" (a search, `link` with the
-// entry picked) and "Ask about this…", shown greyed out for the later
+// box opens from it), "Link to an entry… 🔎" (a search, then the mode
+// chooser, `NameModeMenu`, P4: `link {target, useName}`, `useName` null to
+// keep the words as another name of the entry) and "Ask about this…", shown greyed out for the later
 // "dynamic questions" feature. On a draft (ruling F16) nothing is written:
 // the stub is a new name and the link a pick, both keyed by the words, so
 // they apply wherever the draft writes them, which the menu says; a stub
@@ -99,7 +102,7 @@ import ReferenceMenu from './ReferenceMenu.vue';
 // used (a fact rewritten on the draft), every action off.
 export default {
     name: 'SelectionMenu',
-    components: { ReferenceMenu },
+    components: { NameModeMenu, ReferenceMenu },
     props: {
         modelValue: { type: Boolean, default: false },
         target: { type: [Array, Object], default: null },
@@ -110,7 +113,7 @@ export default {
     },
     emits: ['update:modelValue', 'stub', 'expand', 'link'],
     data() {
-        return { kind: 'lore', tag: '', linking: false };
+        return { kind: 'lore', tag: '', linking: false, choosing: false, chosen: null };
     },
     computed: {
         kindItems() {
@@ -139,6 +142,13 @@ export default {
         searchLink() {
             this.close();
             this.linking = true;
+        },
+        picked(target) {
+            this.chosen = target;
+            this.choosing = true;
+        },
+        chose({ useName }) {
+            this.$emit('link', { target: this.chosen, useName });
         },
     },
 };

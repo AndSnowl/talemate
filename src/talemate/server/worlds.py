@@ -198,12 +198,15 @@ through `signal_operation_failed` (an `operation_done` envelope with
   entries and stubs, and the picks, in the rest, keeping the words
   written; the thing's own names, and names the owner treats as new, stay
   plain, and unknown phrases are never made stubs.
-  `repoint_ref {thing_id, fact_id, occurrence, to_id, at}` points one
-  reference of a fact (the `occurrence`-th in its text) at another thing,
-  keeping its words, and teaches the target the link's words (unless
-  another entry goes by them) and, when it was a stub's last reference,
-  the stub's names, as other names (`repoint.learn_names`), in one
-  revision; it answers like `correct_fact`, plus `aka_added`.
+  `repoint_ref {thing_id, fact_id, occurrence, to_id, use_name?, at}`
+  points one reference of a fact (the `occurrence`-th in its text) at
+  another thing, keeping its words, and teaches the target the link's
+  words (unless another entry goes by them) and, when it was a stub's last
+  reference, the stub's names, as other names (`repoint.learn_names`), in
+  one revision; with `use_name` ("Rename to...", P4: one of the target's
+  names) that name takes the words' place, its article fitted, and only
+  the stub's names are taught. It answers like `correct_fact`, plus
+  `aka_added`.
 - Selected words (`start`/`end` index a fact's `rendered` text, in
   UTF-16 code units, ruling F18; a held fact's "<Holder> holds that ..."
   prefix isn't in `rendered`, and a link to an ignored stub shown plain
@@ -214,10 +217,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
   {target_id, role}, at}` makes a stub of the words (or uses the entry
   of that name), filed as `filing` says, and links them, in one
   revision, answering with the fact's entry plus `stub_id`;
-  `link_text {fact_id, start, end, target_id, at}` links them to an
-  entry. A selection that cuts through or takes in a link is refused. On
-  a draft, the words are recorded in its `selected_names` (ruling F26):
-  only those link where they're written without a capital.
+  `link_text {fact_id, start, end, target_id, use_name?, at}` links them
+  to an entry, teaching it the words as another name (P4), or, with
+  `use_name`, writing one of its names in their place; it answers with
+  the fact's entry plus `aka_added`. A selection that cuts through or
+  takes in a link is refused. On a draft, the words are recorded in its
+  `selected_names` (ruling F26): only those link where they're written
+  without a capital; a link's words join its `pick_names`, taught at
+  accept, and `use_name` is refused.
 - Prompt additions: `add_facts {thing_id, prompt}` and `add_event
   {thing_id, prompt, year}` (`worldplay.facts`) run in the background and
   answer `{thing_id, draft, facts}` (or `add_facts_failed` /
@@ -427,7 +434,14 @@ from talemate.worldplay.merge import (
     preview_merge,
     repoint_overrides,
 )
-from talemate.worldplay.repoint import copy_facts, learn_names, move_fact, repoint_stub
+from talemate.worldplay.repoint import (
+    copy_facts,
+    learn_names,
+    move_fact,
+    renamed_words,
+    repoint_stub,
+    target_name,
+)
 from talemate.worldplay.setup import (
     SceneSetup,
     continue_setup,
@@ -603,6 +617,9 @@ class RepointRefPayload(_ThingEdit):
     # which reference of the fact's text, 0-based, in order
     occurrence: int
     to_id: str
+    # "Rename to..." (P4): one of the target's names for the link's words;
+    # unset, "add as another name" (the words kept, and taught)
+    use_name: str | None = None
 
 
 class MakeStubPayload(_ThingEdit):
@@ -865,6 +882,9 @@ class MakeStubFromTextPayload(_Selection):
 
 class LinkTextPayload(_Selection):
     target_id: str
+    # "Rename to..." (P4): one of the target's names in the words' place;
+    # unset, "add as another name" (the words kept, and taught)
+    use_name: str | None = None
 
 
 class CopyFactPayload(pydantic.BaseModel):
@@ -2668,8 +2688,9 @@ class WorldsPlugin(Plugin):
 
     def _check_selected_names(self, preview: CreatePreview, key: str | None) -> None:
         """Keep only the `selected_names` (ruling F26: words that link
-        without a capital) a version of the draft this session holds
-        recorded from the owner's own selections, never the client's word."""
+        without a capital) and `pick_names` (P4: words taught as other
+        names) a version of the draft this session holds recorded from the
+        owner's own selections, never the client's word."""
 
         held = {
             name_key(name)
@@ -2678,6 +2699,15 @@ class WorldsPlugin(Plugin):
         }
         preview.selected_names = [
             name for name in preview.selected_names if name_key(name) in held
+        ]
+        # P4's "add as another name" on the draft, as recorded here too
+        taught = {
+            name_key(name)
+            for version in (self._drafts.get(key or "") or [])
+            for name in version.pick_names
+        }
+        preview.pick_names = [
+            name for name in preview.pick_names if name_key(name) in taught
         ]
 
     async def handle_accept_preview(self, data: dict):
@@ -3416,6 +3446,7 @@ class WorldsPlugin(Plugin):
         preview.treated_as_new = [
             w for w in preview.treated_as_new if name_key(w) != key
         ]
+        preview.pick_names = [w for w in preview.pick_names if name_key(w) != key]
 
     @staticmethod
     def _selected_name(preview: CreatePreview, words: str) -> None:
@@ -3522,13 +3553,21 @@ class WorldsPlugin(Plugin):
 
     async def handle_link_text(self, data: dict):
         """Link selected words of a fact to an entry ("Link to an
-        entry..."), keeping the words, in one revision; answers with the
-        fact's entry. Refused, writing nothing: a selection that cuts
-        through a link, a target that's gone, the fact's own entry. On a
-        draft (`draft_key` and `index`, ruling F16), the draft's current
-        version gains a pick of the words for the target, keyed by name, so
-        accept links every occurrence of those words in the draft; the
-        updated draft answers."""
+        entry..."), in one revision, in one of two modes (P4): "add as
+        another name" (the default) keeps the words and teaches the target
+        them, spaces normalised, as a common other name
+        (`repoint.learn_names`: never one it has or another thing goes
+        by); "Rename to..." (`use_name`, one of the target's names) writes
+        that name in the words' place, its article fitted
+        (`repoint.renamed_words`), teaching nothing. Answers with the
+        fact's entry plus `aka_added`. Refused, writing nothing: a
+        selection that cuts through a link, a target that's gone, the
+        fact's own entry, a name the target hasn't. On a draft (`draft_key`
+        and `index`, ruling F16), the draft's current version gains a pick
+        of the words for the target, keyed by name, so accept links every
+        occurrence of those words in the draft, and the words join its
+        `pick_names`, which accept teaches the target; "Rename to..."
+        waits for the accept (refused). The updated draft answers."""
 
         payload = LinkTextPayload(**data)
         world = self._require_world()
@@ -3536,23 +3575,45 @@ class WorldsPlugin(Plugin):
         if payload.draft_key is not None:
             # a draft's fact (ruling F16): a pick, keyed by name, so accept
             # links every place the draft writes these words
+            if payload.use_name is not None:
+                raise ValueError(
+                    "on a draft the words can't be renamed yet: rename them"
+                    " once it's accepted"
+                )
             key, preview, words = self._draft_selected(world, payload)
             if payload.target_id == preview.stub_id:
                 raise ValueError("a fact can't link its own entry")
             self._unnamed(preview, words)
             self._selected_name(preview, words)
             preview.picks[words] = payload.target_id
+            preview.pick_names.append(words)
             self._reply("link_text", self._draft_out(world, key))
             return
         owner_id, fact, text, start, end, words = self._selected(world, payload)
         if payload.target_id == owner_id:
             raise ValueError("a fact can't link its own entry")
+        shown = words
+        if payload.use_name is not None:
+            name = target_name(world.view(), payload.target_id, payload.use_name)
+            shown = renamed_words(name, words, text[:start])
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(
                 fact.fact_id,
-                text=text[:start] + ref(payload.target_id, words) + text[end:],
+                text=text[:start] + ref(payload.target_id, shown) + text[end:],
             )
-        self._edited("link_text", owner_id, _date_in(payload.at), prose=False)
+            added = (
+                learn_names(rev, world, payload.target_id, [words])
+                if payload.use_name is None
+                else []
+            )
+        at = _date_in(payload.at)
+        self._reply(
+            "link_text",
+            {**self._thing_payload(world, owner_id, at), "aka_added": added},
+        )
+        if payload.use_name is not None:
+            # the fact's words changed
+            self._schedule_prose(owner_id, at)
 
     # --- stubs ------------------------------------------------------------
 
@@ -3882,8 +3943,12 @@ class WorldsPlugin(Plugin):
 
     async def handle_repoint_ref(self, data: dict):
         """Point one reference of an own fact (its `occurrence`-th, in the
-        raw text) at `to_id`, keeping its words; nothing else in the fact
-        changes. Answers like `correct_fact`."""
+        raw text) at `to_id`; nothing else in the fact changes. Two modes
+        (P4): "add as another name" (the default) keeps its words and
+        teaches the target them; "Rename to..." (`use_name`, one of the
+        target's names) writes that name in their place, its article
+        fitted (`repoint.renamed_words`), teaching only a stub's own names.
+        Answers like `correct_fact`, plus `aka_added`."""
 
         payload = RepointRefPayload(**data)
         world = self._require_world()
@@ -3906,13 +3971,27 @@ class WorldsPlugin(Plugin):
         rendered = (
             "".join(seg.text for seg in view.segments(old.group(0))) if old else ""
         )
-        new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
+        if payload.use_name is not None and old is not None:
+            name = target_name(view, payload.to_id, payload.use_name)
+            rendered = renamed_words(
+                name, old.group(2) or rendered, text[: old.start()]
+            )
+            new_text = (
+                text[: old.start()] + ref(payload.to_id, rendered) + text[old.end() :]
+            )
+        else:
+            new_text = repoint_ref(text, payload.occurrence, payload.to_id, rendered)
         # the names the link went by, which the target learns as other
         # names (as `repoint_stub` teaches them): its words, unless another
-        # entry goes by them; and a stub's own names only when this was its
-        # last reference (it names nothing else, so its names are free)
+        # entry goes by them or they're renamed; and a stub's own names
+        # only when this was its last reference (it names nothing else, so
+        # its names are free)
         from_id = old.group(1) if old else None
-        names = [(old.group(2) or rendered) if old else ""]
+        names = (
+            [(old.group(2) or rendered) if old else ""]
+            if payload.use_name is None
+            else []
+        )
         skip: set[str] = set()
         source = view.thing(from_id) if from_id else None
         if source is not None and source.is_stub and from_id is not None:
@@ -3946,6 +4025,9 @@ class WorldsPlugin(Plugin):
             "repoint_ref",
             {**self._thing_payload(world, payload.thing_id, at), "aka_added": added},
         )
+        if payload.use_name is not None:
+            # the fact's words changed
+            self._schedule_prose(payload.thing_id, at)
 
     async def handle_end_fact(self, data: dict):
         payload = EndFactPayload(**data)
