@@ -2,10 +2,11 @@
 
 Two parents always go through a mix entry: picking two parents with a mix
 of them uses it as the heritage; with none yet, the create box drafts the
-mix first and comes back to the character with its prompt kept. Races and
-mixes are also created from their species page. Previews come from the
-fixed preview file (the `fixed_preview` fixture), rewritten before each
-Create; no model is asked anything.
+mix first (its draft page in place, under the character) and comes back to
+the character with its prompt kept. Races and mixes are also created from
+their species page. Drafts come from the fixed preview file (the
+`fixed_preview` fixture), rewritten before each Create; no model is asked
+anything.
 """
 
 from __future__ import annotations
@@ -117,7 +118,7 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
     assert "Orc" in _parent(draft, 2).inner_text()
     draft.get_by_role("button", name="Create").click()
 
-    preview = draft.get_by_test_id("create-preview")
+    preview = draft.get_by_test_id("draft-page")
     preview.get_by_text("Half-orcs are broad and short-tusked.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
@@ -148,7 +149,7 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
 
     fixed_preview(GORRA_PREVIEW)
     box.get_by_role("button", name="Create").click()
-    gorra = box.get_by_test_id("create-preview")
+    gorra = box.get_by_test_id("draft-page")
     gorra.get_by_text("Gorra is broad.").wait_for(state="visible", timeout=TIMEOUT_MS)
     gorra.get_by_role("button", name="Accept").click()
     thing = page.get_by_test_id("thing-page")
@@ -188,7 +189,7 @@ def test_two_parents_with_mix_uses_it(app, page, fixed_preview):
 
     fixed_preview(GORRA_PREVIEW)
     box.get_by_role("button", name="Create").click()
-    preview = box.get_by_test_id("create-preview")
+    preview = box.get_by_test_id("draft-page")
     preview.get_by_text("Gorra is broad.").wait_for(state="visible", timeout=TIMEOUT_MS)
     assert box.get_by_test_id("mix-draft").count() == 0
     assert "Half-orc" in _parent(box, 1).inner_text()
@@ -225,7 +226,7 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     existing = mix_box.get_by_test_id("mix-exists")
     existing.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert "Half-orc" in existing.inner_text()
-    assert mix_box.get_by_test_id("create-preview").count() == 0
+    assert mix_box.get_by_test_id("draft-page").count() == 0
     mix_box.get_by_role("button", name="Cancel").click()
     mix_box.wait_for(state="hidden", timeout=TIMEOUT_MS)
 
@@ -245,7 +246,7 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
         }
     )
     race_box.get_by_role("button", name="Create").click()
-    race_preview = race_box.get_by_test_id("create-preview")
+    race_preview = race_box.get_by_test_id("draft-page")
     race_preview.get_by_text("Tall hill people.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
@@ -317,7 +318,7 @@ def test_mix_drafted_in_place_keeps_the_character(app, page, fixed_preview):
     assert character_prompt.input_value() == prompt
 
     draft.get_by_role("button", name="Create", exact=True).click()
-    preview = draft.get_by_test_id("create-preview")
+    preview = draft.get_by_test_id("draft-page")
     preview.get_by_text("Grey-white owl-folk with short tufts.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )

@@ -1,0 +1,293 @@
+{
+  "about": "Hand labels for the curation probes (Task 3 of the Curation plan), written and committed before any model call. World: a copy of the owner's acceptance snapshot (head rev 25, present year 1000). Fact ids are the first 8 hex characters. Worlds: 'head' is the snapshot; 'undo N' is the snapshot with every revision from N on undone (World.undo); 'w5' is the head with the White Talon put back to a fact-less stub (its 12 facts removed, a stub marker set) so the Tsardom is a nation sphere and the regiment has never been expanded. Generated text can't be labelled in advance: probes 1 and 4 are labelled as rubrics (what is on topic, which homes are acceptable for which topic, what counts as a belief), and each generated fact is judged against its rubric after the run, by hand, not blind (as in the fact placement probe's b_judged). Probes 2, 3 and the same-thing verdict are labelled fact by fact.",
+  "conventions": {
+    "bar": "A probe passes when at least 80% of its labelled cases are right and at most 5% are false moves or false flags (spec, 'Pass bars and fallbacks').",
+    "probe1_right": "an own fact (create: facts; core: summary, timeline and items; Fill: new_items) is on topic when its rubric says so; an elsewhere item is right when its target is an acceptable home for its topic (an existing entry, or a new name when the rubric allows a new entry for that topic).",
+    "probe1_false_move": "an elsewhere item whose text is mainly about the entry being written (it belonged here).",
+    "probe2_right": "share of 'move' labels the reply's move_in holds; 'either' labels aren't scored.",
+    "probe2_false": "share of 'stay' labels the reply's move_in holds.",
+    "probe3_right": "share of labelled contradictions found (any listed alternative pair counts).",
+    "probe3_false": "a fact that appears in a flagged pair that is no labelled contradiction (nor a 'bonus' one), over the facts in no labelled contradiction.",
+    "probe4_right": "share of 'belief' facts (bare belief claims, rubric below) marked held_by the right holder.",
+    "probe4_false": "share of plain world facts marked held_by anything. 'attributed' facts (the text itself says 'the Church teaches/holds/interprets') are right either way and not scored.",
+    "probe5_right": "a positive run proposes the chain: the regiment's part_of names a new body that the reply lists in names as a sphere (template order) whose part_of is the Tsardom of Moscavia under Governance & Military (or a new Military drawer of it), with a sensible name (an army or host of the Tsardom).",
+    "probe5_false": "a run that invents an outer body (a new sphere in names that the entry or a name is put inside) where none is wanted: every probe 1 create run, plus the negative cases.",
+    "same_right": "same-or-not: 'same' for a same pair, anything else for a not-same pair.",
+    "same_false": "'same' given for a not-same pair."
+  },
+  "probe1": {
+    "variants": {
+      "r1": {"reach": 1, "entries": 12},
+      "r2": {"reach": 2, "entries": 12},
+      "r3": {"reach": 3, "entries": 12},
+      "r3w": {"reach": 3, "entries": 24}
+    },
+    "cases": {
+      "create:The Divine Right of the Tsar": {
+        "prompt": "create-thing", "world": "undo 6", "stub": "The Divine Right of the Tsar",
+        "on_topic": "the doctrine itself: what it holds, who holds it and how it's taught, invoked or enforced, its history as a doctrine, what follows from it, how a Tsar is chosen or crowned under it, challenges to it.",
+        "homes": [
+          {"topic": "the Tsardom's lands, borders, government, army, trade, architecture, people", "homes": ["Tsardom of Moscavia"]},
+          {"topic": "the regiments", "homes": ["Tsardom of Moscavia", "White Talon", "Frosted Wing"]},
+          {"topic": "Moskov, the capital", "homes": ["Moskov"]},
+          {"topic": "the Church: its founding, teachings, clergy, rites, cathedrals", "homes": ["Church of the Eternal Light", "The Dawn Vigil", "The Festival of the Solstice Flame", "The Cathedral of the Eternal Light, Moskov", "The Shrine of First Dawn", "The Patriarch of Moscavia", "The Synod of Lanterns"]},
+          {"topic": "the transformation of 994 as an event, and its doctrine", "homes": ["Moscavian Owl-folk", "The Illumination", "Tsardom of Moscavia"]},
+          {"topic": "pure-line or eared owl-folk, their looks and spread", "homes": ["Snowy Moscavian Owls", "Pure-line Moscavians", "Eared Moscavian Owls", "Moscavian Owl-folk"]},
+          {"topic": "the law code", "homes": ["Zakonnik"]},
+          {"topic": "the Tsar's office, throne and court", "homes": ["Tsar", "Tsardom of Moscavia"]}
+        ],
+        "new_entry_ok": "a named council, rite or office of the doctrine that the world doesn't hold (as a new name)",
+        "expected_targets": ["Tsardom of Moscavia", "Church of the Eternal Light", "Moscavian Owl-folk", "Snowy Moscavian Owls", "Zakonnik", "Moskov"]
+      },
+      "create:The Illumination": {
+        "prompt": "create-thing", "world": "undo 8", "stub": "The Illumination",
+        "on_topic": "the doctrine of the Illumination: the Church's teaching that the 994 transformation was the Light's act, what it holds about the transformed, how it's taught or celebrated as a doctrine, its consequences for belief and law, disputes about it. The bare event of 994 told as history is acceptable here once (it is the doctrine's subject) but its retelling of species traits is not.",
+        "homes": [
+          {"topic": "the transformation as an event, the species' body and instincts", "homes": ["Moscavian Owl-folk", "Tsardom of Moscavia", "The Illumination"]},
+          {"topic": "pure-line or eared owl-folk, their looks and spread", "homes": ["Snowy Moscavian Owls", "Pure-line Moscavians", "Eared Moscavian Owls", "Moscavian Owl-folk"]},
+          {"topic": "the Tsardom's government, army, law, architecture, trade", "homes": ["Tsardom of Moscavia", "Zakonnik", "White Talon", "Frosted Wing", "Tsar"]},
+          {"topic": "the Church: its status, teachings in general, rites, clergy", "homes": ["Church of the Eternal Light", "The Dawn Vigil", "The Festival of the Solstice Flame", "The Cathedral of the Eternal Light, Moskov", "The Patriarch of Moscavia", "The Synod of Lanterns"]},
+          {"topic": "the doctrine of divine right", "homes": ["The Divine Right of the Tsar"]},
+          {"topic": "Moskov", "homes": ["Moskov"]}
+        ],
+        "new_entry_ok": "a feast, rite or text of the Illumination the world doesn't hold",
+        "expected_targets": ["Moscavian Owl-folk", "Church of the Eternal Light", "Tsardom of Moscavia", "Snowy Moscavian Owls", "Eared Moscavian Owls"]
+      },
+      "create:Deepcarving": {
+        "prompt": "create-thing", "world": "undo 18", "stub": "Deepcarving",
+        "on_topic": "the technique: how it's done, its tools, materials, effects, training, rules, history and uses.",
+        "homes": [
+          {"topic": "Runeweaving's general principles and oaths", "homes": ["Runeweaving", "The Law of Resonance", "The Doctrine of Cost", "The Prohibition of the Flesh Rune"]},
+          {"topic": "the Conclave and Stonehold", "homes": ["Runeweavers' Conclave", "Stonehold"]},
+          {"topic": "the Ashenmere caves and their inscriptions", "homes": ["The Ashenmere Caves", "Ashenmere"]},
+          {"topic": "the Codex", "homes": ["First Codex of Aelberth"]},
+          {"topic": "other techniques", "homes": ["Firescribing"]}
+        ],
+        "new_entry_ok": "a named tool, school or master of deepcarving the world doesn't hold",
+        "expected_targets": []
+      },
+      "core:Eternal Light": {
+        "prompt": "sphere-core", "world": "undo 12", "stub": "Eternal Light", "template": "field",
+        "note": "the owner's own mistake made again (a god made as a field sphere), now with the elsewhere list: does the core send the Church's material to the Church?",
+        "on_topic": "the Eternal Light itself: its nature, what is believed of it, how it is worshipped and revered, its sites, texts and lore of the Light. Church organisation (clergy, ranks, councils, cathedrals as the Church's seats) is off topic.",
+        "homes": [
+          {"topic": "the Church's founding, status, clergy, ranks, councils, cathedrals and rites", "homes": ["Church of the Eternal Light", "The Dawn Vigil", "The Festival of the Solstice Flame", "The Cathedral of the Eternal Light, Moskov", "The Shrine of First Dawn", "The Patriarch of Moscavia", "The Synod of Lanterns", "Patriarch", "Cathedral of the Eternal Light", "Baptism by Candlelight"]},
+          {"topic": "the transformation of 994", "homes": ["The Illumination", "Moscavian Owl-folk", "Tsardom of Moscavia"]},
+          {"topic": "divine right", "homes": ["The Divine Right of the Tsar", "Tsar"]},
+          {"topic": "the Tsardom and Moskov", "homes": ["Tsardom of Moscavia", "Moskov"]}
+        ],
+        "new_entry_ok": "none",
+        "expected_targets": ["Church of the Eternal Light"]
+      },
+      "core:Runeweavers' Conclave": {
+        "prompt": "sphere-core", "world": "head", "stub": "Runeweavers' Conclave", "template": "order",
+        "on_topic": "the Conclave: its seat, offices, ranks, councils, members, rules, teaching, founding and acts (the 947 expedition, the debate, guarding Ashenmere's entrance, compiling the Codex).",
+        "homes": [
+          {"topic": "the caves of Ashenmere and their inscriptions", "homes": ["The Ashenmere Caves", "Ashenmere"]},
+          {"topic": "the Codex's content", "homes": ["First Codex of Aelberth"]},
+          {"topic": "Runeweaving's principles, techniques and doctrines", "homes": ["Runeweaving", "The Law of Resonance", "The Doctrine of Cost", "Deepcarving", "Firescribing", "The Prohibition of the Flesh Rune", "The Unwritten Rune"]},
+          {"topic": "the dialect", "homes": ["Ashenmere rune dialect", "Ashenmere", "The Ashenmere Caves"]},
+          {"topic": "Stonehold and Greywood Valley as places", "homes": ["Stonehold", "Greywood Valley"]},
+          {"topic": "Greyholm and its burning", "homes": ["Greyholm", "Burning of Greyholm", "The Greyholm Archive"]}
+        ],
+        "new_entry_ok": "none (a new office or council of the Conclave is an item, on topic)",
+        "expected_targets": ["The Ashenmere Caves", "First Codex of Aelberth", "Runeweaving"]
+      },
+      "core:Tsardom of Moscavia": {
+        "prompt": "sphere-core", "world": "undo 10", "promote": "Tsardom of Moscavia", "template": "nation",
+        "note": "the promotion at rev 10, which wrote 'The White Talon: ...' and 'Moskov: ...' as plain lines though both were entries",
+        "on_topic": "the nation: its lands and sites, rites and customs, laws, learning, governance and military, as items or statements; an item naming an existing entry (Moskov, the Zakonnik, the White Talon, the Divine Right) is on topic, since code links it.",
+        "homes": [
+          {"topic": "the Church's own teachings and rites", "homes": ["Church of the Eternal Light", "The Dawn Vigil", "The Festival of the Solstice Flame", "The Illumination", "The Divine Right of the Tsar"]},
+          {"topic": "Moskov's own details", "homes": ["Moskov"]},
+          {"topic": "the White Talon's own details", "homes": ["White Talon"]},
+          {"topic": "species and races", "homes": ["Moscavian Owl-folk", "Snowy Moscavian Owls", "Eared Moscavian Owls", "Pure-line Moscavians"]},
+          {"topic": "neighbours", "homes": ["Valdmark", "Keshra", "Free Cities of the Southern Reach", "Southern Reach"]},
+          {"topic": "the law code", "homes": ["Zakonnik"]}
+        ],
+        "new_entry_ok": "none",
+        "expected_targets": ["Church of the Eternal Light", "Moskov"]
+      },
+      "fill:Church of the Eternal Light/Hierarchy": {
+        "prompt": "sphere-fill", "world": "head", "sphere": "Church of the Eternal Light", "drawer": "Hierarchy",
+        "on_topic": "offices, ranks, councils and orders of the Church.",
+        "homes": [
+          {"topic": "the Patriarch's person, seat or duties", "homes": ["Patriarch", "The Patriarch of Moscavia"]},
+          {"topic": "the governing council", "homes": ["The Synod of Lanterns", "Great Synod of Moskov"]},
+          {"topic": "the cathedral", "homes": ["The Cathedral of the Eternal Light, Moskov", "Cathedral of the Eternal Light"]},
+          {"topic": "the Tsar's role", "homes": ["Tsar", "The Divine Right of the Tsar", "Tsardom of Moscavia"]}
+        ],
+        "new_entry_ok": "none",
+        "expected_targets": []
+      },
+      "fill:Runeweaving/Sites": {
+        "prompt": "sphere-fill", "world": "head", "sphere": "Runeweaving", "drawer": "Sites",
+        "on_topic": "places of the field, as items.",
+        "homes": [
+          {"topic": "Ashenmere's own details", "homes": ["Ashenmere", "The Ashenmere Caves"]},
+          {"topic": "Stonehold's own details, the Conclave", "homes": ["Stonehold", "Runeweavers' Conclave"]},
+          {"topic": "Greyholm", "homes": ["Greyholm", "The Greyholm Archive", "Burning of Greyholm"]}
+        ],
+        "new_entry_ok": "none",
+        "expected_targets": []
+      },
+      "fill:Tsardom of Moscavia/Governance & Military": {
+        "prompt": "sphere-fill", "world": "head", "sphere": "Tsardom of Moscavia", "drawer": "Governance & Military",
+        "on_topic": "offices, councils, ranks and divisions of the Tsardom.",
+        "homes": [
+          {"topic": "a regiment's own details", "homes": ["White Talon", "Frosted Wing"]},
+          {"topic": "the Tsar's person or throne", "homes": ["Tsar"]},
+          {"topic": "the Church's clergy", "homes": ["Church of the Eternal Light", "Patriarch", "The Patriarch of Moscavia"]},
+          {"topic": "the law code", "homes": ["Zakonnik"]},
+          {"topic": "Moskov and the Kremlin", "homes": ["Moskov", "Kremlin"]}
+        ],
+        "new_entry_ok": "none",
+        "expected_targets": []
+      }
+    },
+    "open_question": "Do culture/cultures, an item's owner, an event's place and a species' origin count as nearness links? In this world no thing has any of those fields set (field_values holds none), so the probe can only record whether an expected elsewhere target is missing from a candidate list for want of such a link."
+  },
+  "probe2": {
+    "cases": {
+      "The Architecture of Moskov": {
+        "world": "w5", "new": {"kind": "lore", "prompt": "The Architecture of Moskov: the stone, timber and onion domes of the capital, and how its buildings were adapted for the owl-folk."},
+        "broader": "Moskov",
+        "move": ["27271f7e", "a2a784e9"],
+        "either": ["acf792fe"],
+        "stay": ["ec4fe46a", "066d22ff", "ce195d40", "667b1446", "963022f6", "f1888d56", "4f14d07d", "9692bece", "b909cbd0"]
+      },
+      "Zakonnik": {
+        "world": "w5", "stub": "Zakonnik", "broader": "Tsardom of Moscavia",
+        "move": ["b22bce88"],
+        "either": [],
+        "stay": ["9e5b495b", "c968850f", "23a407d2", "98682af8", "621ba2a0", "0854896d", "1c008d85", "983e0b9b", "e22cdc76", "f6282d4f", "af1302a1", "6fd3e6c7", "51ec8f08", "a606c290", "5712eb1e", "09a31556", "6d6c7ab5", "45ad33f1", "072f6aab", "72662661", "0efa0a62", "a4c9294f"]
+      },
+      "The Runeweavers' Oath": {
+        "world": "w5", "new": {"kind": "lore", "prompt": "The Runeweavers' Oath: the oath every Runeweaver swears on entering the craft."},
+        "broader": "Runeweaving",
+        "move": ["5f8cdb15"],
+        "either": ["17e08bc2"],
+        "stay": ["1c59ac24", "536d4cd6", "9c7a84c3", "42ffcd6a", "9a5850a5", "e789e6b3", "325765d6", "4a266a68"]
+      },
+      "The Ashenmere Caves": {
+        "world": "undo 22", "stub": "The Ashenmere Caves", "broader": "Runeweaving",
+        "move": ["9a5850a5"],
+        "either": [],
+        "stay": ["1c59ac24", "536d4cd6", "9c7a84c3", "42ffcd6a", "5f8cdb15", "17e08bc2", "e789e6b3", "325765d6", "4a266a68"]
+      },
+      "The Festival of the Solstice Flame": {
+        "world": "w5", "stub": "The Festival of the Solstice Flame", "broader": "Church of the Eternal Light",
+        "move": [],
+        "either": [],
+        "stay": ["037180f5", "0866b642", "896d831d", "1ae5aceb", "b2aeef27", "4d1a1b4d", "5dd556bb"]
+      }
+    },
+    "note": "The broader entry's summary fact (origin summary) is never offered: it is the entry's own description. Statements in its drawers are offered, as its own facts."
+  },
+  "probe3": {
+    "cases": {
+      "Ashenmere + The Ashenmere Caves": {
+        "a": {"entry": "Ashenmere"}, "b": {"entry": "The Ashenmere Caves"},
+        "contradictions": [],
+        "note": "one place written twice; dates differ in places (947 on some facts of one side only) but nothing contradicts"
+      },
+      "Patriarch + The Patriarch of Moscavia": {
+        "a": {"entry": "Patriarch"}, "b": {"entry": "The Patriarch of Moscavia"},
+        "contradictions": [{"a": ["6ffeea7e"], "b": ["b8c4fb9e"], "why": "elected by a council of senior clergy vs appointed by the Tsar"}]
+      },
+      "Church of the Eternal Light + Eternal Light": {
+        "a": {"entry": "Church of the Eternal Light"}, "b": {"entry": "Eternal Light"},
+        "contradictions": [{"a": ["4d1a1b4d"], "b": ["2c36360c"], "why": "the Great Synod of Moskov in 687 vs in 996"}]
+      },
+      "First Codex of Aelberth + Codex Aelberth": {
+        "a": {"entry": "First Codex of Aelberth"},
+        "b": {"constructed": "Codex Aelberth", "facts": ["e789e6b3", "45aa67d8", "3f4f475a", "f1067c67", "325765d6"]},
+        "contradictions": [{"a": ["a8907760", "094a94f6"], "b": ["e789e6b3"], "why": "compiled in 312 vs 217"}],
+        "bonus": [{"a": ["094a94f6"], "b": ["325765d6"], "why": "compiled by the Conclave in 312, though the Conclave was founded in 642"}],
+        "note": "B is built from what other entries say of the Codex (Runeweaving's timeline, the Law of Resonance, the Unwritten Rune, Deepcarving) plus the Conclave's founding line"
+      },
+      "White Talon + Belyy Kogtyo": {
+        "a": {"entry": "White Talon"},
+        "b": {"constructed": "Belyy Kogtyo", "texts": {
+          "B1": "Belyy Kogtyo is the Tsardom's elite regiment of snowy owl-folk.",
+          "B2": "The regiment keeps a winter garrison at the fortress of Vetrograd on the Keshra border.",
+          "B3": "Its officers carry ceremonial sabres with hilts shaped like an owl's foot.",
+          "B4": "Recruits must serve two years in the Frosted Wing before they may apply.",
+          "B5": "Its banner shows a black talon on a field of crimson.",
+          "B6": "The regiment was founded in 997, three years after the Illumination.",
+          "B7": "A General commands the regiment, answering directly to the Tsar.",
+          "B8": "Most of its soldiers are eared owl-folk from the borderlands."
+        }},
+        "contradictions": [
+          {"a": ["8db8b375"], "b": ["B5"], "why": "white talon and golden sword on midnight blue vs black talon on crimson"},
+          {"a": ["60748ca5"], "b": ["B7"], "why": "a Colonel at its head vs a General"},
+          {"a": ["4d85e893", "ffeb56f6"], "b": ["B8"], "why": "recruited from pure-line snowy owl-folk vs mostly eared owl-folk"}
+        ],
+        "note": "the White Talon as it stands at head (12 facts); B is constructed: B1-B4 and B6 add or repeat without contradicting (B6 is a tempting one: 997 is 'in the years following the Illumination')"
+      },
+      "Moskov + Moscow": {
+        "a": {"entry": "Moskov"},
+        "b": {"constructed": "Moscow", "texts": {
+          "B1": "Moscow sits where the Moskva meets the Volga.",
+          "B2": "The city's lantern-lighters' guild tends the street lanterns every dusk.",
+          "B3": "Its population is mostly eared owl-folk, drawn from the borderlands.",
+          "B4": "The Cathedral of the Eternal Light was destroyed by fire in 998 and has not been rebuilt.",
+          "B5": "Moscow's markets close at dawn, when the owl-folk sleep.",
+          "B6": "Moscow lies on the shore of a great lake in the far south of the Tsardom."
+        }},
+        "contradictions": [
+          {"a": ["066d22ff"], "b": ["B3"], "why": "overwhelmingly pure-line vs mostly eared"},
+          {"a": ["667b1446"], "b": ["B4"], "why": "the cathedral stands at the city's heart vs destroyed and not rebuilt"},
+          {"a": ["ec4fe46a"], "b": ["B6"], "why": "at the confluence of two rivers in the north vs on a lake in the far south"}
+        ],
+        "note": "B is constructed; B1, B2 and B5 agree or add (B5 fits the nocturnal markets)"
+      },
+      "The Holy Synod + The Synod of Lanterns": {
+        "a": {"entry": "The Holy Synod"}, "b": {"entry": "The Synod of Lanterns"},
+        "contradictions": [],
+        "note": "two councils described differently (senior clergy vs twelve senior bishops): they differ but don't contradict"
+      }
+    }
+  },
+  "same_thing": {
+    "note": "the verdict Task 6 asks for: a new entry's preview facts (A, the facts its expansion wrote, at the revision before) against an existing entry with facts (B, at that revision). Both sides have facts in every pair.",
+    "pairs": [
+      {"id": "S1", "a": {"expanded": "The Ashenmere Caves", "rev": 22}, "b": {"entry": "Ashenmere"}, "truth": "same"},
+      {"id": "S2", "a": {"expanded": "Patriarch", "rev": 13}, "b": {"entry": "The Patriarch of Moscavia"}, "truth": "same"},
+      {"id": "S3", "a": {"expanded": "Patriarch", "rev": 13}, "b": {"entry": "The Patriarch of Moskov"}, "truth": "same"},
+      {"id": "S4", "a": {"expanded": "Cathedral of the Eternal Light", "rev": null, "facts_only": true}, "b": {"entry": "The Cathedral of the Eternal Light, Moskov"}, "truth": "same"},
+      {"id": "S5", "a": {"expanded": "The Illumination", "rev": 8}, "b": {"entry": "The Feast of the Illumination", "at_head": true}, "truth": "different"},
+      {"id": "S6", "a": {"expanded": "The Illumination", "rev": 8}, "b": {"entry": "The Illumination Shrine, Moskov", "at_head": true}, "truth": "different"},
+      {"id": "S7", "a": {"expanded": "Eternal Light", "rev": 12}, "b": {"entry": "Church of the Eternal Light"}, "truth": "different"},
+      {"id": "S8", "a": {"expanded": "Moskov", "rev": 7}, "b": {"entry": "The Cathedral of the Eternal Light, Moskov"}, "truth": "different"}
+    ]
+  },
+  "probe4": {
+    "holder": "Church of the Eternal Light",
+    "acceptable_holders": ["Church of the Eternal Light"],
+    "belief": "a bare claim about the Light's will, nature or acts, or about divine favour: that the Light chose, blesses or guides the Tsar; that the transformation was the Light's act, grace, revelation or a raising to a higher state; that the Light is the source of creation or truth; that darkness is the absence of divine knowledge; what the faithful will receive. Must be held_by the Church.",
+    "attributed": "a claim whose own text says the Church (or the faithful, or the doctrine) teaches, holds, interprets or believes it: held_by the Church or null are both right; not scored.",
+    "plain": "everything else: that an event happened, a law, rite or office as practised, where something is, who did what, what a doctrine is used for, how it's taught. Must be null.",
+    "cases": {
+      "create:The Divine Right of the Tsar": "probe 1's create runs",
+      "create:The Illumination": "probe 1's create runs",
+      "create:Deepcarving": "probe 1's create runs: a negative control (no faith in it; every held_by is false unless the fact is a belief of some order)",
+      "being:The Eternal Light": {"world": "undo 12", "kind": "being", "prompt": "The Eternal Light: the god the Church of the Eternal Light worships.", "picks": ["Church of the Eternal Light"], "variant": "r2"},
+      "elsewhere items": "every elsewhere item of every probe 1 run, by the same rubric"
+    }
+  },
+  "probe5": {
+    "world": "w5",
+    "positives": {
+      "White Talon": {"stub": "White Talon", "part_of_now": null, "expect": "part_of -> a new body; that body in names as a sphere, template order, part_of Tsardom of Moscavia / Governance & Military"},
+      "Frosted Wing": {"stub": "Frosted Wing", "part_of_now": "Tsardom of Moscavia / Governance & Military", "expect": "as for the White Talon: moved inside a new body that is itself part of the Tsardom"}
+    },
+    "negatives": {
+      "The Synod of Lanterns": {"stub": "The Synod of Lanterns", "expect": "keeps Church of the Eternal Light / Hierarchy; no new body"},
+      "Zakonnik": {"stub": "Zakonnik", "expect": "keeps Tsardom of Moscavia / Doctrines & Laws; no new body (probe 2's run)"},
+      "Tsar": {"stub": "Tsar", "expect": "null or Tsardom of Moscavia / Governance & Military; no new body"},
+      "probe 1 creates": "every probe 1 create run: no new outer body"
+    },
+    "sensible_names": "any name for the Tsardom's whole army: 'the Tsar's Army', 'the Imperial Host', 'the Moscavian Army', 'the Standing Army of Moscavia', 'the Tsardom's Host', 'the Owl Host'... A name for one more regiment, or for the Tsardom itself, isn't sensible."
+  }
+}

@@ -1,5 +1,5 @@
 <template>
-    <span class="linked-text"><template v-for="(segment, index) in shown" :key="index"><a
+    <span ref="root" class="linked-text" @contextmenu="contextMenu"><template v-for="(segment, index) in shown" :key="index"><a
         v-if="segment.ref && !segment.stub && !repoint"
         class="linked-ref"
         data-testid="linked-ref"
@@ -53,6 +53,11 @@
         class="linked-stub fresh"
         data-testid="linked-new"
         :title="`A new ${segment.kind || 'name'}: a stub once accepted`"
+    >{{ segment.text }}</span><span
+        v-else-if="segment.self"
+        class="linked-self"
+        data-testid="linked-self"
+        title="this page"
     >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template><ReferenceMenu
         v-if="repoint"
         v-model="repointOpen"
@@ -61,12 +66,22 @@
         search-label="Re-point to…"
         :exclude="repointExclude"
         @pick="repointTo"
+    /><NameModeMenu
+        v-if="repoint"
+        v-model="choosing"
+        :target="repointTarget"
+        :words="repointing === null ? '' : shown[repointing]?.text || ''"
+        :before="repointing === null ? '' : shown.slice(0, repointing).map((segment) => segment.text).join('')"
+        :thing="chosen"
+        :name-default="repointing !== null && !!shown[repointing]?.stub"
+        @choose="repointAs"
     /></span>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { canExpand } from './worldKinds.js';
+import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 import StubCard from './StubCard.vue';
 
@@ -75,25 +90,37 @@ import StubCard from './StubCard.vue';
 // entry is a solid link that opens its page; one linking a stub is dashed,
 // in the stub colour, with the stub's card on hover (not made yet, its
 // kind, its mentions, Expand and Ignore), and clicking it expands it (a
-// stub that can't be expanded here, a culture, race or mix, opens its page). A `fresh` run is a
-// name a preview invents: stub-styled, with no card, since the stub is
-// only made on accept. With no segments, `text` shows as it is.
+// race or mix stub, which can't be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
+// only made on accept. A `self` run is the page's own name (ruling H7):
+// in the link colour, titled "this page", not clickable, since it links
+// nothing. With no segments, `text` shows as it is.
 //
 // With `repoint` (an own fact on its thing's page), an entry link gets a
 // hover card too, and both cards offer "Re-point…": a search
-// (`ReferenceMenu`) for the thing the link should mean, emitted as
-// `repoint {index, to}` (`index` into `segments`); the page rewrites the
-// fact, keeping the link's words. `exclude` are ids never offered.
+// (`ReferenceMenu`) for the thing the link should mean, then how it takes
+// the words (`NameModeMenu`, P4: another name of it, or renamed to one of
+// its names, or only linked, ruling H2), emitted as `repoint {index, to,
+// mode, useName}` (`index` into `segments`); the page rewrites the fact.
+// `exclude` are ids never offered.
+//
+// With `selectable` (a fact's words), right-clicking selected words inside
+// it emits `select {start, end, words, before, x, y}` (`before`: the text
+// shown before the words) instead of the browser's
+// menu: `start`/`end` count UTF-16 code units (the browser's own measure,
+// ruling F18) from the start of the text shown, which is the fact's
+// `rendered` text. A right-click with no selection in it goes on to the
+// row (its fact menu).
 export default {
     name: 'LinkedText',
-    components: { ReferenceMenu, StubCard },
+    components: { NameModeMenu, ReferenceMenu, StubCard },
     props: {
         segments: { type: Array, default: null },
         text: { type: String, default: '' },
         repoint: { type: Boolean, default: false },
         exclude: { type: Array, default: () => [] },
+        selectable: { type: Boolean, default: false },
     },
-    emits: ['repoint'],
+    emits: ['repoint', 'select'],
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -105,6 +132,9 @@ export default {
             repointing: null,
             repointOpen: false,
             repointTarget: null,
+            // the thing picked, while its mode is chosen
+            chosen: null,
+            choosing: false,
         };
     },
     computed: {
@@ -140,6 +170,32 @@ export default {
                 this.openCard = null;
             }
         },
+        // the selected words, if a selection lies inside the text
+        contextMenu(event) {
+            if (!this.selectable) {
+                return;
+            }
+            const selection = window.getSelection();
+            if (!selection || !selection.rangeCount || selection.isCollapsed) {
+                return;
+            }
+            const range = selection.getRangeAt(0);
+            const root = this.$refs.root;
+            if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+                return;
+            }
+            const before = document.createRange();
+            before.selectNodeContents(root);
+            before.setEnd(range.startContainer, range.startOffset);
+            const start = before.toString().length;
+            const words = range.toString();
+            if (!words.trim()) {
+                return;
+            }
+            event.preventDefault();
+            event.stopPropagation();
+            this.$emit('select', { start, end: start + words.length, words, before: before.toString(), x: event.clientX, y: event.clientY });
+        },
         startRepoint(index, event) {
             this.openCard = null;
             this.repointing = index;
@@ -148,9 +204,16 @@ export default {
         },
         repointTo(target) {
             if (this.repointing !== null) {
-                this.$emit('repoint', { index: this.repointing, to: target.id });
+                this.chosen = { id: target.id, name: target.name };
+                this.choosing = true;
+            }
+        },
+        repointAs({ mode, useName }) {
+            if (this.repointing !== null && this.chosen) {
+                this.$emit('repoint', { index: this.repointing, to: this.chosen.id, mode, useName });
             }
             this.repointing = null;
+            this.chosen = null;
         },
     },
 };
@@ -161,6 +224,11 @@ export default {
     color: rgb(var(--v-theme-link));
     text-decoration: underline;
     text-underline-offset: 2px;
+}
+
+.linked-self {
+    color: rgb(var(--v-theme-link));
+    cursor: default;
 }
 
 .linked-stub {

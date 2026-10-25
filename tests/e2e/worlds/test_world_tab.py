@@ -100,6 +100,34 @@ def test_worlds_home_lists_and_opens(app, page):
     assert page.get_by_test_id("kind-culture").get_by_text("via skill").is_visible()
 
 
+def test_a_world_made_before_filing_is_refused_with_a_plain_message(app, page):
+    """Final review I3: a world made before Filing (here a `sphere` row
+    written as the old version wrote it) isn't opened; the Worlds home says
+    why, in plain words."""
+
+    import sqlite3
+
+    name = _world_name("Curation")
+    seeded = seed_fm_world(app.root, name, things=[MAREN])
+    conn = sqlite3.connect(seeded.path / "world.sqlite")
+    with conn:
+        conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES (?, 'sphere', 1)",
+            (uuid.uuid4().hex,),
+        )
+    conn.close()
+
+    home = page.get_by_test_id("worlds-home")
+    home.wait_for(state="visible", timeout=TIMEOUT_MS)
+    home.get_by_role("button", name="Refresh worlds").click()
+    row = home.get_by_test_id("world-row").filter(has_text=name)
+    row.get_by_role("button", name="Open").click()
+    alert = home.get_by_role("alert").filter(has_text="made before Filing")
+    alert.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert "Start a fresh world." in alert.inner_text()
+    assert row.get_by_role("button", name="Open").is_visible()
+
+
 def test_thing_page_shows_facts_and_date_view(app, page):
     name = _world_name("Sallow")
     seed_fm_world(app.root, name, present_year=318, things=[MAREN])
@@ -134,7 +162,7 @@ def test_add_fact_updates_page(app, page):
     _world_tab(page)
     thing = _open_thing(page, "Maren Vos")
 
-    thing.get_by_role("button", name="Add fact").click()
+    thing.get_by_role("button", name="Add fact", exact=True).click()
     form = thing.get_by_test_id("fact-form")
     form.get_by_label("Fact", exact=True).fill("A pale scar along her jaw.")
     form.get_by_label("From year").fill("316")
@@ -175,13 +203,14 @@ def test_create_box_preview_accept(app, page, fixed_preview):
     box.get_by_label("Describe it").fill("A grizzled ferryman who owes the Wardens.")
     box.get_by_role("button", name="Create").click()
 
-    preview = page.get_by_test_id("create-preview")
+    # the draft page stands in for the box until it's accepted
+    preview = page.get_by_test_id("draft-page")
     preview.get_by_text("Oskar Dell is a weathered ferryman.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
     assert preview.get_by_text("Never forgets a debt.").is_visible()
 
-    # switching kinds and back remounts the box; the preview keeps its name
+    # switching kinds and back remounts the box; the draft keeps its name
     page.get_by_test_id("kind-place").click()
     preview.wait_for(state="hidden", timeout=TIMEOUT_MS)
     page.get_by_test_id("kind-character").click()

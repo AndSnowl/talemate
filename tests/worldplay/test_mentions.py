@@ -254,3 +254,115 @@ def test_heritage_origin_facts_outlast_the_cap(world):
     # the mention, the first 8 key facts, then the origin fact the cap cut;
     # the general fact stays cut
     assert _heads(facts[1:]) == [*["Physical"] * 5, *["Instinct"] * 3, "Origin:"]
+
+
+def test_suggested_prompt_of_a_filed_stub(world):
+    """A stub filed in an entry (the Dawn Vigil, a rite of the White Dawn)
+    suggests its own fact first, then what it's filed in, as the sheet
+    reads a filing ("Rite of the White Dawn."; "Part of ..." with no
+    role), then what mentions it: in the spheres Task 10 session the
+    Vigil's prompt led with a character's "but..." exception, and the
+    model wrote the Vigil around her."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        dawn = rev.create_thing("lore", fields={"name": "The White Dawn"})
+        peak = rev.create_thing("place", fields={"name": "Dawn Peak"})
+        vigil = rev.create_thing(
+            "lore",
+            fields={
+                "name": "The Dawn Vigil",
+                "stub": {"ignored": False},
+                "filings": [
+                    {"target": dawn, "role": "rite"},
+                    {"target": peak, "role": "held at"},
+                ],
+            },
+        )
+        rev.add_fact(vigil, "general", "A silent prayer at first light")
+        vasha = rev.create_thing("character", fields={"name": "Vasha"})
+        rev.add_fact(
+            vasha, "ties", f"She keeps {ref(vigil, 'the Dawn Vigil')} out of habit."
+        )
+    view = world.view(None)
+
+    assert suggested_prompt(view, vigil) == (
+        "The Dawn Vigil: A silent prayer at first light. Rite of the White "
+        "Dawn. Held at Dawn Peak. She keeps the Dawn Vigil out of habit."
+    )
+
+    with world.revision(Source.manual(note="no role")) as rev:
+        rev.set_field(vigil, "filings", [{"target": dawn}], None)
+    assert "Part of the White Dawn." in suggested_prompt(world.view(None), vigil)
+
+
+def _church_world(world):
+    """A faith, the Church of the Deep, whose beliefs name the stub Veles;
+    Veles' own fact is the church's belief too. Returns `(church, veles)`."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        veles = rev.create_thing(
+            "being", fields={"name": "Veles", "stub": {"ignored": False}}
+        )
+        church = rev.create_thing(
+            "lore", fields={"name": "Church of the Deep", "hint": "religion"}
+        )
+        rev.add_fact(
+            church, "belief", f"{ref(veles, 'Veles')} wept the rivers into being."
+        )
+        rev.add_fact(church, "belief", "The drowned are reborn as fish.")
+        rev.add_fact(church, "general", "Its priests wear green.")
+        rev.add_fact(
+            veles,
+            "nature",
+            "Veles sleeps beneath the lake.",
+            origin={"held_by": church},
+        )
+    return church, veles
+
+
+def test_held_facts_reach_the_expand_context_as_held(world):
+    """Final review I2: a faith's beliefs reach "Mentioned elsewhere",
+    "About those" and the suggested prompt worded as held, never as world
+    truth."""
+
+    _church, veles = _church_world(world)
+    view = world.view(None)
+    ((heading, facts),) = mention_context(view, veles)
+    assert heading == "Church of the Deep (lore)"
+    assert "Church of the Deep holds that Veles wept the rivers into being." in facts
+    assert "Church of the Deep holds that the drowned are reborn as fish." in facts
+    assert "Its priests wear green." in facts
+    assert "Veles wept the rivers into being." not in facts
+
+    prompt = suggested_prompt(view, veles)
+    assert prompt.startswith(
+        "Veles: Church of the Deep holds that Veles sleeps beneath the lake."
+    )
+    assert "Church of the Deep holds that Veles wept the rivers into being." in prompt
+    held = "Church of the Deep holds that Veles wept the rivers into being."
+    assert "Veles wept the rivers" not in prompt.replace(held, "")
+
+
+def test_key_facts_come_in_written_order_within_a_category(world):
+    """Final review (T12 nondeterminism): within a category, "About those"
+    lists an entry's facts in the order they were written, never in its
+    random fact ids' order, so one world always gives one prompt."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        stub = rev.create_thing(
+            "place", fields={"name": "Kitezh", "stub": {"ignored": False}}
+        )
+        lake = rev.create_thing("place", fields={"name": "Lake Svetloyar"})
+        rev.add_fact(lake, "general", f"{ref(stub, 'Kitezh')} sank beneath it.")
+    texts = [f"Fact {i}." for i in range(8)]
+    for text in texts:
+        # one revision each, and several in one: both keep written order
+        with world.revision(Source.manual(note=text)) as rev:
+            rev.add_fact(lake, "general", text)
+    with world.revision(Source.manual(note="more")) as rev:
+        more = [f"More {i}." for i in range(3)]
+        for text in more:
+            rev.add_fact(lake, "description", text)
+    (about,) = gather_mentions(world.view(None), stub).about
+    # a place's descriptions come before its general facts
+    assert about.facts == (more + texts)[:KEY_FACTS]

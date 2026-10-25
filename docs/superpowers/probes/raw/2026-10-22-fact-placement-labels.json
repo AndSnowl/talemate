@@ -1,0 +1,203 @@
+{
+  "about": "Hand-labelled ground truth for the fact placement probe (docs/superpowers/probes/2026-10-22-fact-placement.md), written and committed before any model call. World: the owner's acceptance snapshot. Each entry is judged at accept time: the world as it stood the revision before its expansion (`rev_before`), so a fact can only restate what existed then. Fact ids are 8-hex prefixes of the store's fact ids.",
+  "conventions": {
+    "home": "acceptable homes, first is the primary: \"this\" (the entry being written), an existing entry's name, or \"new:<name>:<kind>\" for an entry that doesn't exist yet. Two entries that are one thing (Ashenmere / The Ashenmere Caves) are both acceptable.",
+    "restates": "strict: the fact's claim is already in the world (adding an example or a small detail still counts). The ids are the existing facts it restates; any one of them caught counts.",
+    "partial": "overlaps an existing fact but adds a real new claim: catching it is not a miss and not a false flag, missing it is not a miss.",
+    "timeline": "null: no dated event. A list: the spheres whose timeline the event belongs on (any one counts). timeline_required false: null is also accepted (an event restated, or an event with no year).",
+    "year": "the event's year, where the fact gives one"
+  },
+  "entries": {
+    "The Divine Right of the Tsar": {
+      "rev": 6,
+      "existing": ["2ea57d7e"],
+      "facts": [
+        {"fact": "5da588ee", "home": ["this"], "restates": ["2ea57d7e"], "partial": ["23a407d2"], "timeline": null, "note": "own stub line again, with the Church's blessing"},
+        {"fact": "8d3bd3bf", "home": ["Church of the Eternal Light"], "restates": ["b2aeef27", "4d1a1b4d"], "timeline": ["Church of the Eternal Light"], "timeline_required": false, "note": "the Church's founding and the Great Synod: both already on its timeline"},
+        {"fact": "3eb1b947", "home": ["Church of the Eternal Light", "The Illumination", "Moscavian Owl-folk", "Tsardom of Moscavia"], "restates": ["5dd556bb", "98682af8", "ac18484f"], "timeline": ["Church of the Eternal Light", "Tsardom of Moscavia"], "timeline_required": false, "year": 994},
+        {"fact": "9617e5ae", "home": ["Zakonnik", "Tsardom of Moscavia"], "restates": ["b22bce88"], "timeline": null},
+        {"fact": "8f021987", "home": ["Pure-line Moscavians", "Snowy Moscavian Owls"], "restates": ["0854896d", "fc6a6c35", "529ea9bb", "80858f7c"], "timeline": null},
+        {"fact": "9ee9f0fa", "home": ["Tsardom of Moscavia"], "restates": ["9e5b495b"], "timeline": null},
+        {"fact": "61382261", "home": ["Moskov", "Tsardom of Moscavia"], "restates": ["c968850f"], "timeline": null},
+        {"fact": "b69053a5", "home": ["Church of the Eternal Light"], "restates": ["037180f5", "0866b642"], "timeline": null},
+        {"fact": "d97d8836", "home": ["Tsardom of Moscavia", "White Talon"], "restates": ["e22cdc76"], "timeline": null},
+        {"fact": "7c0d18c0", "home": ["Tsardom of Moscavia"], "restates": ["f6282d4f"], "timeline": null},
+        {"fact": "f46402ab", "home": ["Tsardom of Moscavia", "Tsar"], "restates": ["621ba2a0", "983e0b9b"], "timeline": null}
+      ]
+    },
+    "The Illumination": {
+      "rev": 8,
+      "existing": ["84fbf70d"],
+      "facts": [
+        {"fact": "63330cc0", "home": ["this", "Blinding Transformation", "Moscavian Owl-folk"], "restates": ["ac18484f", "98682af8", "3eb1b947"], "timeline": ["Tsardom of Moscavia", "Church of the Eternal Light"], "timeline_required": false, "year": 994, "note": "the transformation itself; already the species' origin, the Tsardom's history and the Church's timeline"},
+        {"fact": "121b74e4", "home": ["Moscavian Owl-folk"], "restates": ["fe563834", "0d7091bd"], "timeline": null},
+        {"fact": "238ffbf3", "home": ["Pure-line Moscavians", "Snowy Moscavian Owls"], "restates": ["fc6a6c35", "529ea9bb", "42decdb8", "80858f7c", "6a46118d", "8f021987"], "timeline": null},
+        {"fact": "393c054d", "home": ["Eared Moscavian Owls", "Moscavian Owl-folk"], "restates": ["c06ee472", "c1e6509d", "2db4c22f"], "timeline": null},
+        {"fact": "ac8096c3", "home": ["this", "Church of the Eternal Light"], "restates": ["84fbf70d", "5dd556bb", "3eb1b947"], "timeline": null, "note": "the doctrine itself, but said twice already"},
+        {"fact": "3d232250", "home": ["Church of the Eternal Light"], "restates": ["079dcd80"], "timeline": null},
+        {"fact": "ed56f8a5", "home": ["Tsardom of Moscavia"], "restates": ["621ba2a0", "b22bce88"], "timeline": null},
+        {"fact": "620aa987", "home": ["Tsardom of Moscavia", "Eared Moscavian Owls", "Moscavian Owl-folk"], "restates": [], "partial": ["f6282d4f", "b909cbd0", "7c0d18c0"], "timeline": null, "note": "a present-day state, not the doctrine"},
+        {"fact": "43de817a", "home": ["Moscavian Owl-folk"], "restates": ["aa1f2fc2"], "partial": ["b22bce88"], "timeline": null},
+        {"fact": "68cfbada", "home": ["Tsardom of Moscavia", "White Talon"], "restates": ["e22cdc76", "d97d8836"], "timeline": null},
+        {"fact": "7e016062", "home": ["Church of the Eternal Light"], "restates": ["0866b642", "9692bece", "b69053a5"], "timeline": null},
+        {"fact": "4f5bf2c7", "home": ["Church of the Eternal Light"], "restates": ["896d831d", "af1302a1"], "timeline": null}
+      ]
+    },
+    "White Talon": {
+      "rev": 9,
+      "existing": [],
+      "facts": [
+        {"fact": "451730a8", "home": ["this"], "restates": [], "partial": ["e22cdc76", "d97d8836", "68cfbada"], "timeline": null, "note": "its defining fact; the Tsardom only names it among regiments"},
+        {"fact": "1ee3a461", "home": ["this"], "restates": [], "timeline": ["this", "Tsardom of Moscavia"], "timeline_required": false, "note": "founded after 994, no year"},
+        {"fact": "ffeb56f6", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "3cb1c86a", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "4d85e893", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "8db8b375", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "158d6eeb", "home": ["Tsardom of Moscavia", "this"], "restates": [], "partial": ["e22cdc76", "d97d8836", "68cfbada"], "timeline": null, "note": "the regiments in general"},
+        {"fact": "c598f493", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "17fc0686", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "60748ca5", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "3cef2462", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "73e81ed4", "home": ["this"], "restates": [], "timeline": null}
+      ]
+    },
+    "Deepcarving": {
+      "rev": 18,
+      "existing": ["1c107513"],
+      "facts": [
+        {"fact": "242e1cf3", "home": ["this"], "restates": ["1c107513"], "timeline": null, "note": "the drawer line again"},
+        {"fact": "67cd08f4", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "eecddac5", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "9a800e8c", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "f1067c67", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "8bcd2089", "home": ["Runeweaving", "this"], "restates": ["17e08bc2", "5f8cdb15"], "timeline": null, "note": "Runeweaving's two doctrines"},
+        {"fact": "2d66f728", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "48f3bfde", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "ae83fd1d", "home": ["this", "Runeweavers' Conclave"], "restates": [], "timeline": null},
+        {"fact": "75ebb141", "home": ["this", "Runeweaving"], "restates": [], "partial": ["9c7a84c3"], "timeline": ["Runeweaving"], "timeline_required": false, "year": 947, "note": "the 947 rediscovery, here as its effect on deepcarving"},
+        {"fact": "2a13a1cc", "home": ["this"], "restates": [], "timeline": null}
+      ]
+    },
+    "The Law of Resonance": {
+      "rev": 20,
+      "existing": ["1c839cf1"],
+      "facts": [
+        {"fact": "677cbae9", "home": ["this"], "restates": ["1c839cf1"], "timeline": null, "note": "the drawer line again, plus an example"},
+        {"fact": "45aa67d8", "home": ["this"], "restates": [], "partial": ["e789e6b3"], "timeline": null},
+        {"fact": "abbaf868", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "b88f785b", "home": ["this"], "restates": [], "partial": ["1c59ac24"], "timeline": null},
+        {"fact": "3ce9a3c7", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "227e2bf0", "home": ["this", "Runeweaving"], "restates": [], "partial": ["17e08bc2"], "timeline": null},
+        {"fact": "2c92283a", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "2b99ed51", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "180a2c6a", "home": ["this", "Runeweaving", "new:Ashenmere rune dialect:lore"], "restates": [], "partial": ["9c7a84c3", "75ebb141"], "timeline": ["Runeweaving"], "timeline_required": false, "year": 947}
+      ]
+    },
+    "Ashenmere": {
+      "rev": 21,
+      "existing": [],
+      "same_as": "The Ashenmere Caves",
+      "facts": [
+        {"fact": "7b54bc40", "home": ["this", "The Ashenmere Caves"], "restates": [], "partial": ["adf6c426"], "timeline": null},
+        {"fact": "5b3037d7", "home": ["this", "The Ashenmere Caves"], "restates": ["9a5850a5", "adf6c426"], "timeline": null},
+        {"fact": "7d2cdc82", "home": ["this", "The Ashenmere Caves"], "restates": [], "partial": ["4a266a68"], "timeline": ["Runeweaving", "new:Burning of Greyholm:event"], "timeline_required": false},
+        {"fact": "9e758731", "home": ["this", "The Ashenmere Caves"], "restates": [], "timeline": null},
+        {"fact": "d9f64328", "home": ["this", "The Ashenmere Caves"], "restates": [], "timeline": null},
+        {"fact": "73412e8b", "home": ["Runeweaving", "this", "The Ashenmere Caves", "Runeweavers' Conclave", "new:Ashenmere rune dialect:lore"], "restates": [], "partial": ["9c7a84c3", "adf6c426", "75ebb141", "180a2c6a"], "timeline": ["Runeweaving", "Runeweavers' Conclave"], "timeline_required": true, "year": 947, "note": "THE 947 rediscovery as an event: it belongs on Runeweaving's timeline"},
+        {"fact": "398e7d57", "home": ["new:Ashenmere rune dialect:lore", "Runeweaving", "The Law of Resonance"], "restates": ["180a2c6a"], "partial": ["9c7a84c3"], "timeline": null},
+        {"fact": "81ab957f", "home": ["Runeweaving", "Runeweavers' Conclave", "new:Ashenmere rune dialect:lore"], "restates": ["180a2c6a", "75ebb141"], "timeline": ["Runeweaving", "Runeweavers' Conclave"], "timeline_required": false, "year": 947},
+        {"fact": "79152dfc", "home": ["this", "The Ashenmere Caves", "Runeweavers' Conclave"], "restates": [], "timeline": null},
+        {"fact": "4e0524eb", "home": ["this", "The Ashenmere Caves", "Deepcarving"], "restates": [], "partial": ["f1067c67"], "timeline": null},
+        {"fact": "427f9e66", "home": ["this", "The Ashenmere Caves"], "restates": [], "timeline": null}
+      ]
+    },
+    "The Ashenmere Caves": {
+      "rev": 22,
+      "existing": ["adf6c426"],
+      "same_as": "Ashenmere",
+      "facts": [
+        {"fact": "5747358f", "home": ["this", "Ashenmere"], "restates": ["7b54bc40"], "timeline": null},
+        {"fact": "fa0ce9d0", "home": ["this", "Ashenmere"], "restates": ["5b3037d7", "9a5850a5"], "timeline": null},
+        {"fact": "538c9271", "home": ["this", "Ashenmere"], "restates": ["7d2cdc82"], "timeline": ["Runeweaving"], "timeline_required": false},
+        {"fact": "a9ade3ff", "home": ["Runeweaving", "this", "Ashenmere", "Runeweavers' Conclave"], "restates": ["73412e8b"], "timeline": ["Runeweaving", "Runeweavers' Conclave"], "timeline_required": false, "year": 947},
+        {"fact": "c657dca7", "home": ["Runeweaving", "Runeweavers' Conclave", "Ashenmere", "this"], "restates": ["81ab957f", "180a2c6a"], "timeline": ["Runeweaving", "Runeweavers' Conclave"], "timeline_required": false, "year": 947},
+        {"fact": "3d9f4bb0", "home": ["this", "Ashenmere", "Deepcarving"], "restates": ["4e0524eb", "f1067c67"], "timeline": null},
+        {"fact": "425c40da", "home": ["this", "Ashenmere"], "restates": ["9e758731"], "timeline": null},
+        {"fact": "d9457ada", "home": ["this", "Ashenmere"], "restates": ["9e758731"], "timeline": null},
+        {"fact": "df698b4f", "home": ["this", "Ashenmere"], "restates": ["d9f64328"], "timeline": null},
+        {"fact": "dac73d59", "home": ["new:Ashenmere rune dialect:lore", "Runeweaving", "The Law of Resonance", "Ashenmere"], "restates": ["398e7d57", "180a2c6a"], "timeline": null},
+        {"fact": "dd0b8a42", "home": ["this", "Ashenmere"], "restates": ["427f9e66"], "timeline": null},
+        {"fact": "0ef961bc", "home": ["this", "Ashenmere", "Runeweavers' Conclave"], "restates": ["79152dfc"], "timeline": null}
+      ]
+    },
+    "The Unwritten Rune": {
+      "rev": 23,
+      "existing": ["166f2a4f"],
+      "facts": [
+        {"fact": "a855d7eb", "home": ["this"], "restates": ["166f2a4f"], "timeline": null, "note": "the drawer line again"},
+        {"fact": "485f3bd2", "home": ["this"], "restates": ["166f2a4f"], "timeline": null},
+        {"fact": "ee82189c", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "8f59ca6c", "home": ["this"], "restates": [], "partial": ["1c59ac24"], "timeline": null},
+        {"fact": "daef2afe", "home": ["this"], "restates": [], "partial": ["17e08bc2"], "timeline": null},
+        {"fact": "9e6a4ed5", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "56196692", "home": ["this"], "restates": [], "partial": ["4a266a68"], "timeline": null},
+        {"fact": "6d3b3b6d", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "3f4f475a", "home": ["this", "First Codex of Aelberth"], "restates": [], "timeline": null},
+        {"fact": "91e5788e", "home": ["this"], "restates": [], "partial": ["5f8cdb15"], "timeline": null},
+        {"fact": "c3cd65bd", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "de615ac8", "home": ["this"], "restates": [], "partial": ["536d4cd6"], "timeline": null}
+      ]
+    },
+    "First Codex of Aelberth": {
+      "rev": 24,
+      "existing": [],
+      "facts": [
+        {"fact": "a8907760", "home": ["this"], "restates": [], "partial": ["e789e6b3"], "timeline": null},
+        {"fact": "094a94f6", "home": ["this"], "restates": [], "partial": ["e789e6b3"], "timeline": ["Runeweaving"], "timeline_required": false, "note": "the compilation is on Runeweaving's timeline already (e789e6b3), in another year"},
+        {"fact": "2408b88d", "home": ["this"], "restates": [], "partial": ["e789e6b3"], "timeline": null},
+        {"fact": "b569e110", "home": ["this", "The Law of Resonance"], "restates": ["45aa67d8"], "partial": ["1c839cf1"], "timeline": null},
+        {"fact": "d332e29c", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "f4e1f6b7", "home": ["this"], "restates": [], "partial": ["17e08bc2", "5f8cdb15"], "timeline": null},
+        {"fact": "731f0fee", "home": ["this", "The Unwritten Rune"], "restates": ["3f4f475a"], "timeline": null},
+        {"fact": "0a931e69", "home": ["this", "Runeweaving", "new:Ashenmere rune dialect:lore"], "restates": ["180a2c6a", "81ab957f", "c657dca7"], "partial": ["9c7a84c3"], "timeline": ["Runeweaving"], "timeline_required": false, "year": 947},
+        {"fact": "27249043", "home": ["this"], "restates": [], "timeline": null},
+        {"fact": "16a8f625", "home": ["new:Aelberth:character", "this"], "restates": [], "timeline": null, "note": "the missing Aelberth stub"},
+        {"fact": "825311ab", "home": ["Deepcarving", "this"], "restates": [], "partial": ["f1067c67"], "timeline": null}
+      ]
+    }
+  },
+  "same_thing": [
+    {"a": {"entry": "Ashenmere"}, "b": {"entry": "The Ashenmere Caves"}, "relation": "same"},
+    {"a": {"entry": "Moskov"}, "b": {"line": "6fd3e6c7", "name": "Moskov"}, "relation": "same", "note": "the capital and the Tsardom's Lands & Sites statement line"},
+    {"a": {"entry": "Eternal Light"}, "b": {"entry": "Church of the Eternal Light"}, "relation": "different", "note": "a god and its church"},
+    {"a": {"mention": "the Conclave", "facts": ["79152dfc", "4e0524eb", "73412e8b"]}, "b": {"entry": "Runeweavers' Conclave"}, "relation": "same"},
+    {"a": {"mention": "Aelberth", "facts": ["16a8f625", "81ab957f"]}, "b": {"entry": "First Codex of Aelberth"}, "relation": "different", "note": "the compiler and his book"},
+    {"a": {"entry": "Cathedral of the Eternal Light"}, "b": {"entry": "The Cathedral of the Eternal Light, Moskov"}, "relation": "same"},
+    {"a": {"entry": "Patriarch"}, "b": {"entry": "The Patriarch of Moscavia"}, "relation": "same"},
+    {"a": {"entry": "The Patriarch of Moskov"}, "b": {"entry": "The Patriarch of Moscavia"}, "relation": "same"},
+    {"a": {"entry": "The Holy Synod"}, "b": {"entry": "The Synod of Lanterns"}, "relation": "same", "note": "both 'the governing council of the Church'"},
+    {"a": {"entry": "White Talon"}, "b": {"line": "072f6aab", "name": "The White Talon"}, "relation": "same"},
+    {"a": {"entry": "Baptism by Candlelight"}, "b": {"line": "0866b642", "name": "Baptism by candlelight"}, "relation": "same"},
+    {"a": {"entry": "Monastic Scriptoria"}, "b": {"line": "6d6c7ab5", "name": "Monastic scriptoria"}, "relation": "same"},
+    {"a": {"entry": "The Greyholm Archive"}, "b": {"entry": "Greyholm"}, "relation": "part_of"},
+    {"a": {"entry": "The Feast of the Illumination"}, "b": {"entry": "The Illumination"}, "relation": "different"},
+    {"a": {"entry": "Frosted Wing"}, "b": {"entry": "White Talon"}, "relation": "different"},
+    {"a": {"entry": "Burning of Greyholm"}, "b": {"entry": "Greyholm"}, "relation": "different"},
+    {"a": {"entry": "Stonehold"}, "b": {"entry": "Runeweavers' Conclave"}, "relation": "different"},
+    {"a": {"entry": "Ashenmere rune dialect"}, "b": {"entry": "Ashenmere"}, "relation": "different"},
+    {"a": {"entry": "Moskva River"}, "b": {"entry": "Moskov"}, "relation": "different"},
+    {"a": {"entry": "Great Synod of Moskov"}, "b": {"entry": "The Holy Synod"}, "relation": "different", "note": "a meeting in 996 and a standing council"},
+    {"a": {"entry": "Cathedral of the Eternal Light"}, "b": {"entry": "Eternal Light"}, "relation": "different"},
+    {"a": {"entry": "Tsar"}, "b": {"entry": "The Divine Right of the Tsar"}, "relation": "different"},
+    {"a": {"entry": "Blinding Transformation"}, "b": {"entry": "The Illumination"}, "relation": "ambiguous", "note": "the 994 event and the doctrine about it; the world also calls the event 'the Illumination'. Not scored."}
+  ],
+  "kinds": [
+    {"case": "eternal-light-stub", "entry": "Eternal Light", "at_rev": 11, "kind": "being", "template": null, "part_of": [null], "note": "as a stub: only what mentions it"},
+    {"case": "eternal-light-full", "entry": "Eternal Light", "at_rev": null, "kind": "being", "template": null, "part_of": [null], "note": "with its present (Church-retelling) facts"},
+    {"case": "white-talon-stub", "entry": "White Talon", "at_rev": 8, "kind": "sphere", "template": "order", "part_of": ["Tsardom of Moscavia"]},
+    {"case": "white-talon-full", "entry": "White Talon", "at_rev": null, "kind": "sphere", "template": "order", "part_of": ["Tsardom of Moscavia"]},
+    {"case": "church-control", "entry": "Church of the Eternal Light", "at_rev": null, "kind": "sphere", "template": "religion", "part_of": [null, "Tsardom of Moscavia"]},
+    {"case": "runeweaving-control", "entry": "Runeweaving", "at_rev": null, "kind": "sphere", "template": "field", "part_of": [null]},
+    {"case": "patriarch-control", "entry": "Patriarch", "at_rev": null, "kind": "lore", "template": null, "part_of": [null, "Church of the Eternal Light"]}
+  ]
+}

@@ -25,6 +25,11 @@ reference at another thing, keeping its words.
 world (or the same call) already has that name: one name invented twice
 is one stub with two mentions. `existing_id` is the same reuse rule on its
 own, and `clean_aka` the tidying a list of other names gets.
+
+A new name may carry `same_as`, the things the world already has it could
+be (`SameOffer`, curation's "same as X?"), and the owner's answer,
+`same_target_id`: the name is then that thing's, and no stub is made for
+it (`create.accept_preview`).
 """
 
 from __future__ import annotations
@@ -38,8 +43,9 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.world.kinds import AKA_TAGS, HERITAGE_KINDS, KINDS
-from talemate.world.names import ARTICLES, find_names
+from talemate.world.names import ARTICLES, Aliases, find_names
 from talemate.world.refs import REF_PATTERN, ref
+from talemate.world.sameness import SameCandidate
 from talemate.world.store import Revision
 from talemate.world.view import WorldView
 
@@ -48,6 +54,7 @@ log = structlog.get_logger("talemate.worldplay.links")
 __all__ = [
     "LinkSpan",
     "NewName",
+    "SameOffer",
     "clean_aka",
     "existing_id",
     "is_new",
@@ -63,18 +70,57 @@ __all__ = [
 FALLBACK_KIND = "lore"
 
 
+class SameOffer(SameCandidate):
+    """A thing a new name could be the same as (`world.sameness`), as the
+    preview shows it: its name and kind, its line in the "Entries near this
+    one" list (`create.filing_line`: kind and tag, other name, where it's filed, stub, its
+    summary or first fact), so two of one name can be told apart, whether
+    it has facts of its own (only then is a verdict asked), and whether
+    it's a stub."""
+
+    name: str
+    kind: str
+    line: str
+    has_facts: bool
+    stub: bool = False
+
+
+class NameFiling(BaseModel):
+    """Where a new name's stub is filed on accept (its reply's `"in"`): an
+    entry the world has (`target_id`), the entry being written
+    (`this_entry`, resolved to its id on accept, whatever the owner
+    renamed it to), or, by `name`, another new name of the same accept.
+    Ticked: it's written when the name itself becomes a stub (ruling
+    F12)."""
+
+    target_id: str | None = None
+    this_entry: bool = False
+    name: str | None = None
+    role: str | None = None
+    ticked: bool = True
+
+
 class NewName(BaseModel):
     """A proper name a generation used that may not exist yet: its name in
     full, its kind, and any other names (`aka` entries) for it. `written`
     holds the other ways the text writes it that aren't other names: the
     name without its article ("Night of Feathers" for "The Night of
     Feathers"), or the part of it the text uses ("Vladislav I" for "Tsar
-    Vladislav I")."""
+    Vladislav I").
+
+    `tag` is the stub's tag (what it is: "fortification"), and `filing`
+    the one filing its stub is given (`NameFiling`), when ticked."""
 
     name: str
     kind: str
     aka: list[dict] = []
     written: list[str] = []
+    # the things it could be the same as, best first; and the owner's
+    # answer: None (the default) is "new", a stub on accept
+    same_as: list[SameOffer] = []
+    same_target_id: str | None = None
+    tag: str | None = None
+    filing: NameFiling | None = None
 
 
 def _norm(text: str) -> str:
@@ -122,11 +168,14 @@ def _capitalised(written: str) -> bool:
 _Span = tuple[int, int, str]
 
 
-def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
+def _explicit_spans(
+    text: str, chosen: dict[str, str], lowercase: Collection[str] = ()
+) -> list[_Span]:
     """Every whole-word occurrence of a picked or new name (normalised key
     to thing id) in `text`, a hyphenated word counting as one. A name
     written with a capital matches only text written with one, so a stub
-    "Hope" never links "I hope"."""
+    "Hope" never links "I hope"; one the owner selected on a draft
+    (`lowercase`, normalised keys: "the north pass") matches as written."""
 
     spans: list[_Span] = []
     for key, thing_id in chosen.items():
@@ -139,7 +188,9 @@ def _explicit_spans(text: str, chosen: dict[str, str]) -> list[_Span]:
             re.IGNORECASE,
         )
         for hit in pattern.finditer(text):
-            if _norm(hit.group(0)) != key or not _capitalised(hit.group(0)):
+            if _norm(hit.group(0)) != key:
+                continue
+            if key not in lowercase and not _capitalised(hit.group(0)):
                 continue
             spans.append((hit.start(), hit.end(), thing_id))
     return spans
@@ -151,16 +202,30 @@ def _link_plain(
     chosen: dict[str, str],
     owner: str | None,
     as_new: Collection[str],
+    lowercase: Collection[str] = (),
+    aliases: Aliases | None = None,
+    made: AbstractSet[str] = frozenset(),
 ) -> str:
     """Link the names in `text`, which holds no references. A name that
     means `owner` stays plain, and so does a match for a name treated as
-    new (`as_new`) unless it's chosen."""
+    new (`as_new`) unless it's chosen. `lowercase`: the chosen names
+    written without a capital (`_explicit_spans`); `aliases`, the view's
+    `alias_table` when the caller built it. `made`: the ids of the new
+    names' stubs, which a match written without a capital (a stub stored
+    lowercase-led, "al-Qadir", found as written) never links: a new name
+    links lowercase only as the owner selected it (ruling F26)."""
 
     matched: list[_Span] = []
-    for match in find_names(view, text):
+    for match in find_names(view, text, aliases=aliases):
         thing_id = chosen.get(_norm(match.text))
         if thing_id is None and not match.suggested and not is_new(match.text, as_new):
             thing_id = match.candidates[0].id
+        if (
+            thing_id in made
+            and _norm(match.text) not in lowercase
+            and not _capitalised(match.text)
+        ):
+            thing_id = None
         if thing_id == owner:
             thing_id = None
         # a suggestion left alone, or the owner's own name, still holds its
@@ -171,7 +236,7 @@ def _link_plain(
     # leaves that name to its own match
     explicit = [
         span
-        for span in _explicit_spans(text, chosen)
+        for span in _explicit_spans(text, chosen, lowercase)
         if not any(
             m_start <= span[0]
             and span[1] <= m_end
@@ -234,6 +299,8 @@ def link_text(
     owner: str | None = None,
     as_new: Collection[str] = (),
     spans: Collection[LinkSpan] = (),
+    lowercase: Collection[str] = (),
+    aliases: Aliases | None = None,
 ) -> str:
     """`text` with every name in it linked to its thing, keeping the words
     written as the reference's shown text (a trailing `'s` stays outside
@@ -251,6 +318,10 @@ def link_text(
     - a name the owner treats as new (`as_new`, by `is_new`) never links
       to the thing the world already has by that name: only a pick or a
       new name for it links it.
+    - a pick or new name links only where the text writes it with a
+      capital, unless it's one the owner selected on a draft
+      (`lowercase`, the draft's `selected_names`, ruling F26): those link
+      as written.
 
     - `spans` (code-point offsets into `text`) come first: each links its
       words to its `ref`, or keeps them plain when it has none, and
@@ -258,7 +329,9 @@ def link_text(
       span, or one crossing a reference, raises `ValueError`.
 
     Text inside an existing reference isn't touched, so linking twice
-    changes nothing."""
+    changes nothing. `aliases` is `names.alias_table(view)`, for a caller
+    linking many texts against one view: building it loads the whole
+    world (I1)."""
 
     if spans:
         out: list[str] = []
@@ -272,6 +345,8 @@ def link_text(
                     new_names=new_names,
                     owner=owner,
                     as_new=as_new,
+                    lowercase=lowercase,
+                    aliases=aliases,
                 )
             )
             words = text[start:stop]
@@ -285,6 +360,8 @@ def link_text(
                 new_names=new_names,
                 owner=owner,
                 as_new=as_new,
+                lowercase=lowercase,
+                aliases=aliases,
             )
         )
         return "".join(out)
@@ -292,6 +369,9 @@ def link_text(
     chosen = {_norm(name): thing_id for name, thing_id in (new_names or {}).items()}
     chosen.update({_norm(name): thing_id for name, thing_id in (picks or {}).items()})
     chosen.pop("", None)
+    # the owner's own selections link as written, capital or not
+    allowed = {_norm(name) for name in lowercase}
+    made = frozenset((new_names or {}).values())
     if owner is not None:
         chosen = {
             key: thing_id for key, thing_id in chosen.items() if thing_id != owner
@@ -301,11 +381,22 @@ def link_text(
     end = 0
     for existing in REF_PATTERN.finditer(text):
         out.append(
-            _link_plain(view, text[end : existing.start()], chosen, owner, as_new)
+            _link_plain(
+                view,
+                text[end : existing.start()],
+                chosen,
+                owner,
+                as_new,
+                allowed,
+                aliases,
+                made,
+            )
         )
         out.append(existing.group(0))
         end = existing.end()
-    out.append(_link_plain(view, text[end:], chosen, owner, as_new))
+    out.append(
+        _link_plain(view, text[end:], chosen, owner, as_new, allowed, aliases, made)
+    )
     return "".join(out)
 
 
@@ -359,7 +450,8 @@ class _Known(NamedTuple):
 
 def _known_things(view: WorldView) -> list[_Known]:
     known = []
-    for state in view.things():
+    # names only: no facts loaded
+    for state in view.things(facts=False):
         keys = [name_key(view.name_of(state.id) or "")]
         aka = state.fields.get("aka")
         for entry in aka if isinstance(aka, list) else []:
@@ -480,9 +572,9 @@ def make_stubs(
     of another species, race or mix, or held whole by just one's name
     ("Owl-folk" for the Owl-folk of Moscavia). Any other name becomes a
     thing of its kind (`lore` for a kind we don't know) with its name,
-    other names and `stub={"ignored": False}`; a lowercase leading "the"
-    isn't part of a new stub's name ("the Kremlin" makes "Kremlin"), though
-    it still maps as written.
+    other names, its tag and `stub={"ignored": False}`; a lowercase
+    leading "the" isn't part of a new stub's name
+    ("the Kremlin" makes "Kremlin"), though it still maps as written.
 
     A name the owner treats as new (`fresh`, by `is_new`) never reuses a
     thing `view` has, only one an earlier name in `names` made."""
@@ -512,9 +604,14 @@ def make_stubs(
         name = " ".join(words[1:]) if len(words) > 1 and words[0] == "the" else written
         taken = {k for thing in known for k in thing.keys}
         aka = clean_aka(new.aka, name, taken)
-        thing_id = rev.create_thing(
-            kind, fields={"name": name, "aka": aka, "stub": {"ignored": False}}
-        )
+        fields: dict[str, object] = {
+            "name": name,
+            "aka": aka,
+            "stub": {"ignored": False},
+        }
+        if new.tag:
+            fields["tag"] = new.tag
+        thing_id = rev.create_thing(kind, fields=fields)
         others = [str(entry["name"]) for entry in aka]
         thing = _Known(id=thing_id, kind=kind, keys=[key, *map(name_key, others)])
         known.append(thing)

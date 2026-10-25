@@ -59,11 +59,11 @@ async def test_generate_section_passes_other_categories_as_background(world):
 async def test_generate_section_background_includes_core_fields(world):
     """A place's single `description` section covers every one of its fact
     categories, so there are no "other" facts to carry as background --
-    but its core fields (here, its own `kind` and `name`) still are."""
+    but its core fields (here, its tag and `name`) still are."""
 
     with world.revision(Source.manual(note="setup")) as rev:
         lowmere = rev.create_thing(
-            "place", fields={"name": "Lowmere", "kind": "harbor town"}
+            "place", fields={"name": "Lowmere", "tag": "harbor town"}
         )
         rev.add_fact(lowmere, "description", "Half its streets are flooded.")
 
@@ -212,13 +212,11 @@ def test_inherited_categories():
         "species": ("physical", "variation"),
         "race": ("physical", "variation"),
         "mix": ("physical", "variation"),
-        "culture": ("dress",),
     }
     assert prose_gen.inherited_categories("personality") == {
         "species": ("instinct",),
         "race": ("instinct",),
         "mix": ("instinct",),
-        "culture": ("customs", "belief"),
     }
 
 
@@ -234,14 +232,15 @@ async def test_character_description_includes_inherited_physical(
     facts = requests[0]["facts"]
     assert facts == ["Blue eyes.", "White plumage.", "Wings in place of arms."]
     assert "Yellow eyes." not in facts
-    # the instinct and customs facts belong to personality: background only
+    # the instinct fact belongs to personality: background only; the
+    # culture's customs aren't inherited (cultures left the lineage)
     background = requests[0]["background"]
     assert "Hunts at dusk." in background
-    assert "Name their boats." in background
+    assert "Name their boats." not in background
     assert "Yellow eyes." not in background
 
 
-async def test_personality_includes_instinct_and_customs(
+async def test_personality_includes_instinct_not_customs(
     world, heritage_world, monkeypatch
 ):
     requests = _capture_requests(monkeypatch)
@@ -251,7 +250,8 @@ async def test_personality_includes_instinct_and_customs(
     )
 
     facts = requests[0]["facts"]
-    assert facts == ["Quiet and observant.", "Hunts at dusk.", "Name their boats."]
+    # the culture's customs no longer pass down: cultures left the lineage
+    assert facts == ["Quiet and observant.", "Hunts at dusk."]
     # the heritage line keeps identity in view; the body does not (acceptance
     # probe: docs/superpowers/probes/2026-10-21-personality-and-actions.md)
     assert "Heritage: Snowy, Owl-folk." in requests[0]["background"]
@@ -291,7 +291,8 @@ async def test_description_background_still_includes_inherited_body(
     """The description section's background is unchanged by the
     personality fix -- it still carries whatever the character inherits
     that isn't mapped to description's own facts (here, the species'
-    instinct and the culture's customs)."""
+    instinct; the culture's customs aren't inherited since cultures left
+    the lineage)."""
 
     requests = _capture_requests(monkeypatch)
     await prose_gen.generate_section(
@@ -300,7 +301,7 @@ async def test_description_background_still_includes_inherited_body(
 
     background = requests[0]["background"]
     assert "Hunts at dusk." in background
-    assert "Name their boats." in background
+    assert "Name their boats." not in background
 
 
 async def test_species_page_prose_uses_all_facts(world, heritage_world, monkeypatch):
@@ -393,3 +394,29 @@ async def test_species_fact_splits_the_cached_stretch(
     assert cached is not None
     assert cached.stretch_end is not None
     assert cached.stretch_end.instant == WorldDate.of(1000).instant
+
+
+async def test_place_description_leaves_out_statements_and_timeline(world):
+    """Ruling P18: a place is described from its place facts, never from
+    its statements or timeline, which its timeline shows."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        tsardom = rev.create_thing(
+            "place",
+            fields={"name": "Moscavia", "tag": "country"},
+        )
+        rev.add_fact(tsardom, "description", "A northern realm of pine forest.")
+        rev.add_fact(tsardom, "statement", "Only owl-folk may hold land.")
+        rev.add_fact(
+            tsardom, "timeline", "Crowned the first Tsar.", valid_from=WorldDate.of(990)
+        )
+
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue("Moscavia is a northern realm.")
+        await prose_gen.generate_section(world, tsardom, "description", None, client)
+
+    prompt = str(client.prompt_history[0]["prompt"])
+    assert "A northern realm of pine forest." in prompt
+    assert "Only owl-folk may hold land." not in prompt
+    assert "Crowned the first Tsar." not in prompt

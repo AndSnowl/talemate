@@ -37,3 +37,47 @@ def parse_refs(text: str) -> list[str]:
     for match in REF_PATTERN.finditer(text):
         seen.setdefault(match.group(1), None)
     return list(seen)
+
+
+# markdown emphasis as a model writes it into a fact (hubs round 1, P2):
+# `***x***`, then `**x**`/`__x__`, then `*x*`/`_x_`. A marker opens only after
+# a non-word character and before a non-space, and closes only after a
+# non-space and before a non-word character, so a lone asterisk ("Sir
+# *Bob"), arithmetic ("2*3*4", "a * b * c") and snake_case stay as they
+# are. Emphasis never crosses a line break.
+_EMPHASIS = [
+    re.compile(r"(?<![\w*])\*\*\*(?=[^\s*])([^\n*]*?[^\s*])\*\*\*(?![\w*])"),
+    re.compile(r"(?<![\w*])\*\*(?=[^\s*])([^\n]*?[^\s*])\*\*(?![\w*])"),
+    re.compile(r"(?<!\w)__(?=[^\s_])([^\n]*?[^\s_])__(?!\w)"),
+    re.compile(r"(?<![\w*])\*(?=[^\s*])([^\n*]*?[^\s*])\*(?![\w*])"),
+    re.compile(r"(?<!\w)_(?=[^\s_])([^\n_]*?[^\s_])_(?!\w)"),
+]
+# a reference stands in as this while emphasis is scrubbed: no marker
+# character, and never written by a model
+_HOLD = "\ue000{}\ue001"
+_HELD = re.compile("\ue000(\\d+)\ue001")
+
+
+def scrub_emphasis(text: str) -> str:
+    """`text` without markdown emphasis (`*x*`, `**x**`, `_x_`, `__x__`),
+    keeping the words inside it: "*Boyar Council*" is "Boyar Council".
+    A reference token is never touched, nor are the words it shows, though
+    emphasis around one goes ("*[[thing:...|Boyar Council]]*"). For fact
+    text only: a scene's or prose's emphasis is the writer's own."""
+
+    tokens: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        tokens.append(match.group(0))
+        return _HOLD.format(len(tokens) - 1)
+
+    held = REF_PATTERN.sub(hold, text)
+    for pattern in _EMPHASIS:
+        held = pattern.sub(r"\1", held)
+
+    def back(match: re.Match[str]) -> str:
+        # a placeholder the text held already (no reference of ours) stays
+        index = int(match.group(1))
+        return tokens[index] if index < len(tokens) else match.group(0)
+
+    return _HELD.sub(back, held)

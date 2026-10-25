@@ -5,11 +5,12 @@ human-readable entries for the delete dialog:
 
 - other things' facts that reference it (`[[thing:<id>]]`), on any story
   date;
-- other things' `thing`, `things` and `shares` fields that point at it
+- other things' `thing` and `things` fields that point at it
   (a character's `heritage`, a race's `species`, a mix's `parents`, ...),
-  on any story date (a value set once and since replaced still renders as
-  unknown on the dates it held);
-- scenes that use it as the player, a character, the place or pulled-in
+  and their `filings` into it or `within` it, on any story date (a value
+  set once and since replaced still renders as unknown on the dates it
+  held);
+- scenes that use it as the player, a character, the place, pulled-in
   lore.
 """
 
@@ -25,16 +26,18 @@ log = structlog.get_logger("talemate.worldplay.references")
 __all__ = ["thing_references"]
 
 
-def _points_at(field_type: str, value: object, thing_id: str) -> bool:
+def _points_at(field_type: str, value: object, thing_id: str, field: str = "") -> bool:
+    if field == "filings":
+        # filed in it, or within it (`filing.Filing`)
+        return isinstance(value, list) and any(
+            isinstance(filing, dict)
+            and thing_id in (filing.get("target"), filing.get("within"))
+            for filing in value
+        )
     if field_type == "thing":
         return value == thing_id
     if field_type == "things" and isinstance(value, list):
         return thing_id in value
-    if field_type == "shares" and isinstance(value, list):
-        return any(
-            isinstance(share, dict) and share.get("thing_id") == thing_id
-            for share in value
-        )
     return False
 
 
@@ -63,7 +66,9 @@ def _field_entries(world: World, thing_id: str) -> list[dict]:
             for entry in world.timeline(state.id)
             if entry.change == "field"
             and entry.field is not None
-            and _points_at(types.get(entry.field, ""), entry.value, thing_id)
+            and _points_at(
+                types.get(entry.field, ""), entry.value, thing_id, entry.field
+            )
         }
         for field in sorted(fields):
             entries.append(

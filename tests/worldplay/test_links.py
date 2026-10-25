@@ -486,3 +486,60 @@ def test_new_names_never_link_inside_a_hyphenated_word(world):
         made = make_stubs(rev, view, [NewName(name="Owl", kind="lore")])
         linked = link_text(view, "Owl-folk and an Owl.", new_names=made)
     assert linked == f"Owl-folk and an {ref(made['Owl'], 'Owl')}."
+
+
+def test_link_text_lowercase_picks_link_as_written(world):
+    """Words the owner selected on a draft (ruling F16, `lowercase`: F26)
+    are a pick or a new name written as they were, often without a capital
+    ("the north pass"): they link wherever the text writes them; any other
+    pick still needs a capital. A capitalised pick still never
+    links the same words written lowercase ("Hope" is not "I hope")."""
+
+    _owls, tsardom, _hope = _moscavia_world(world)
+    view = world.view(None)
+    text = "Riders guard the north pass; the North Pass is cold. I hope so."
+    # a pick alone needs a capital
+    out = link_text(view, text, picks={"the north pass": tsardom})
+    assert out == (
+        f"Riders guard the north pass; "
+        f"{ref(tsardom, 'the North Pass')} is cold. I hope so."
+    )
+    out = link_text(
+        view, text, picks={"the north pass": tsardom}, lowercase=["the north pass"]
+    )
+    assert out == (
+        f"Riders guard {ref(tsardom, 'the north pass')}; "
+        f"{ref(tsardom, 'the North Pass')} is cold. I hope so."
+    )
+    out = link_text(view, text, new_names={"Hope": "h1"})
+    assert out == text
+
+
+def test_link_text_links_a_lowercase_led_stub_as_written(world):
+    """A stub stored lowercase-led ("river Vilya") links where a fact
+    writes it exactly so; another case stays plain, and a new name made
+    for this text (`new_names`) still links lowercase only as selected
+    (ruling F26)."""
+
+    with world.revision(Source.manual()) as rev:
+        vilya = rev.create_thing(
+            "place", fields={"name": "river Vilya", "stub": {"ignored": False}}
+        )
+    view = world.view(None)
+    text = "Above the river Vilya, the river vilya froze."
+    assert link_text(view, text) == (
+        f"Above the {ref(vilya, 'river Vilya')}, the river vilya froze."
+    )
+    assert link_text(view, text, new_names={"river Vilya": vilya}) == text
+
+
+def test_link_text_never_links_an_all_lowercase_stub(world):
+    """A stub named all lowercase ("hope", "watch") never links the
+    common word: only a capital, or a name with one, links as written."""
+
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("lore", fields={"name": "hope", "stub": {"ignored": False}})
+        rev.create_thing("lore", fields={"name": "watch", "stub": {"ignored": False}})
+    view = world.view(None)
+    text = "I hope so; they stand the watch."
+    assert link_text(view, text) == text

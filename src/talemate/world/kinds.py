@@ -3,12 +3,34 @@
 A `KindSpec` names a kind's fields and the fact categories it accepts.
 `KINDS` is the whole catalog; adding a kind later is one entry here.
 
-Every kind also has two fields of its own:
+Every kind also has fields of its own:
 - `aka`, its other names: a list of `{"name": str, "tag": "proper" |
   "common", "everyday": bool}`, with at most one everyday name, which must
   be a common one. The main name (`name`) is always the most proper;
 - `stub`, present while the thing is a stub (a name mentioned but not made
-  yet): `{"ignored": bool}`.
+  yet): `{"ignored": bool}`;
+- `tag` (text), the one word saying what the entry is ("river", "custom",
+  "ruler"): lowercase and singular, normalised when written
+  (`normalise_field`);
+- `filings`: a list of `{"target": <32-hex>, "role": str|null, "since":
+  date|null, "until": date|null, "within": <32-hex>|null, "exceptions":
+  [fact id...], "show_under": str|null}`, the entries it is filed in
+  (`filing.py` reads them); `show_under` is the group it shows under on
+  the target's page, a tag (stored normalised), else the entry's own.
+  `within` is a part of the target (never the target itself), and no
+  target may appear twice. What needs the world to check (a filing into
+  itself, a `within` that doesn't sit in its target, a cycle) is
+  `filing.check_filings`, which the store runs on every write;
+- `hint` (text): the prompt hint it was written with, if any
+  (`create.hint_names`), stored when its draft is accepted;
+- `agent` (bool): whether it acts as an agent (has its own stance and can
+  act), which the prompt hint it was written with sets by default
+  (`HINT_AGENT`).
+
+A `being` (a god, a spirit, a legendary creature) has an `existence`:
+`real` (it acts in the world like a character: it can be cast in scenes
+and be filed with a role), `believed` (only ever spoken of) or `undecided` (treated
+as believed until the owner decides), `DEFAULT_EXISTENCE` when unset.
 """
 
 import re
@@ -23,7 +45,7 @@ log = structlog.get_logger("talemate.world.kinds")
 
 _THING_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
-FieldType = Literal["text", "date", "thing", "shares", "json", "number", "things"]
+FieldType = Literal["text", "date", "thing", "json", "number", "things"]
 
 
 class FieldSpec(BaseModel):
@@ -38,9 +60,31 @@ class KindSpec(BaseModel):
 
 
 # the fields every kind has, after its own
-_SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (("aka", "json"), ("stub", "json"))
+_SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (
+    ("aka", "json"),
+    ("stub", "json"),
+    ("tag", "text"),
+    ("filings", "json"),
+    ("hint", "text"),
+    ("agent", "json"),
+)
 
 AKA_TAGS: tuple[str, ...] = ("proper", "common")
+
+# a being's `existence` values, and what an unset one reads as
+EXISTENCE_VALUES: tuple[str, ...] = ("real", "believed", "undecided")
+DEFAULT_EXISTENCE = "undecided"
+
+# whether an entry written with a prompt hint acts as an agent (has its
+# own stance and can act) by default; an entry with no hint, or one not
+# listed, doesn't
+HINT_AGENT: dict[str, bool] = {
+    "religion": True,
+    "nation": True,
+    "order": True,
+    "culture": False,
+    "field": False,
+}
 
 
 def _fields(*pairs: tuple[str, FieldType]) -> list[FieldSpec]:
@@ -57,7 +101,6 @@ KINDS: dict[str, KindSpec] = {
         fields=_fields(
             ("name", "text"),
             ("born", "date"),
-            ("culture", "thing"),
             ("voice", "json"),
             ("color", "text"),
             ("heritage", "thing"),
@@ -69,6 +112,7 @@ KINDS: dict[str, KindSpec] = {
             "ability",
             "relationship",
             "speech",
+            "ties",
         ],
     ),
     "species": KindSpec(
@@ -106,27 +150,24 @@ KINDS: dict[str, KindSpec] = {
     ),
     "place": KindSpec(
         name="place",
-        fields=_fields(
-            ("name", "text"),
-            ("kind", "text"),
-            ("parent", "thing"),
-            ("cultures", "shares"),
-        ),
-        categories=["description", "history", "law", "general"],
-    ),
-    "culture": KindSpec(
-        name="culture",
-        fields=_fields(
-            ("name", "text"),
-            ("language", "json"),
-        ),
-        categories=["customs", "food", "dress", "belief", "general"],
+        # what it is ("river", "city") is its tag
+        fields=_fields(("name", "text")),
+        # its timeline, summary (`about`) and statement facts too, which a
+        # prompt never writes (`UNPROMPTED_CATEGORIES`)
+        categories=[
+            "description",
+            "history",
+            "law",
+            "general",
+            "statement",
+            "timeline",
+            "about",
+        ],
     ),
     "item": KindSpec(
         name="item",
         fields=_fields(
             ("name", "text"),
-            ("owner", "thing"),
         ),
         categories=["description", "history", "power", "general"],
     ),
@@ -136,19 +177,71 @@ KINDS: dict[str, KindSpec] = {
             ("name", "text"),
             ("when", "date"),
             ("until", "date"),
-            ("place", "thing"),
         ),
         categories=["summary", "consequence", "general"],
     ),
+    # `belief`: what a faith, culture or order teaches, held by the entry
+    # itself (`entries.held_by`); offered only under those prompt hints
     "lore": KindSpec(
         name="lore",
         fields=_fields(("name", "text")),
-        categories=["general"],
+        categories=["general", "belief"],
+    ),
+    # a god, a spirit, a legendary creature; it acts in the world only
+    # while its `existence` is real (`entries.acts_in_world`)
+    "being": KindSpec(
+        name="being",
+        fields=_fields(
+            ("name", "text"),
+            ("existence", "text"),
+            ("born", "date"),
+        ),
+        # `ties`: a real being's exceptions to its filings, as a character's
+        categories=["nature", "deeds", "worship", "ties", "general"],
     ),
 }
 
 
 HERITAGE_KINDS: tuple[str, ...] = ("species", "race", "mix")
+
+# the fact categories a place holds that a prompt never writes it: its
+# timeline, its summary (`about`, `entries.summary_fact`) and statements
+UNPROMPTED_CATEGORIES: tuple[str, ...] = ("timeline", "about", "statement")
+
+
+# where a fact goes on a kind that lacks its category: a kind's plain and
+# dated fallbacks, where they differ from "general" (a place's `history`
+# when dated, a character's `background`), then a catch-all, then the
+# kind's first
+_FALLBACK_CATEGORIES: dict[str, tuple[str, str]] = {
+    "place": ("general", "history"),
+    "character": ("background", "background"),
+}
+_CATCH_ALL_CATEGORIES: tuple[str, ...] = ("general", "about")
+
+
+def moved_category(kind: str, category: str, dated: bool) -> str:
+    """The category a fact in `category` takes on a `kind` thing (a stub
+    whose kind changes, a fact moved onto another entry): its own when the
+    kind has it; else the kind's fallback (`dated` for a fact with a start
+    date), a catch-all, or the kind's first category."""
+
+    categories = get_kind(kind).categories
+    if category in categories:
+        return category
+    plain, when = _FALLBACK_CATEGORIES.get(kind, ("general", "general"))
+    fallback = when if dated else plain
+    if fallback in categories:
+        return fallback
+    return next((c for c in _CATCH_ALL_CATEGORIES if c in categories), categories[0])
+
+
+def kinds_can_be_one(a: str, b: str) -> bool:
+    """Whether a thing of kind `a` and one of kind `b` can be one entry:
+    only the same kind. A merge folds only these (ruling C17), and an
+    entry's same-thing candidates are only these (ruling C34)."""
+
+    return a == b
 
 
 def get_kind(name: str) -> KindSpec:
@@ -167,6 +260,22 @@ def _field_spec(kind: KindSpec, field: str) -> FieldSpec:
     raise ValueError(f"{kind.name!r} has no field {field!r}")
 
 
+def normalise_tag(value: str) -> str:
+    """A tag as stored: its first comma-separated part (ruling F8),
+    stripped and lowercased."""
+
+    return value.split(",", 1)[0].strip().lower()
+
+
+def normalise_field(field: str, value: object) -> object:
+    """`value` as it's stored in `field`: a `tag` string is normalised
+    (`normalise_tag`); everything else is kept as given."""
+
+    if field == "tag" and isinstance(value, str):
+        return normalise_tag(value)
+    return value
+
+
 def validate_field(kind: KindSpec, field: str, value: object) -> None:
     """Raise `ValueError` if `field` isn't on `kind`, or `value` doesn't fit
     its type."""
@@ -176,6 +285,8 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
     if spec.type == "text":
         if not isinstance(value, str):
             raise ValueError(f"{field!r} must be a string")
+        if field == "existence" and value not in EXISTENCE_VALUES:
+            raise ValueError(f"{field!r} must be one of {EXISTENCE_VALUES}")
     elif spec.type == "date":
         if isinstance(value, WorldDate):
             return
@@ -189,20 +300,6 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
     elif spec.type == "thing":
         if not isinstance(value, str) or not _THING_ID_RE.match(value):
             raise ValueError(f"{field!r} must be a 32-hex thing id")
-    elif spec.type == "shares":
-        if not isinstance(value, list):
-            raise ValueError(f"{field!r} must be a list of shares")
-        for share in value:
-            if (
-                not isinstance(share, dict)
-                or not isinstance(share.get("thing_id"), str)
-                or not _THING_ID_RE.match(share.get("thing_id", ""))
-                or not isinstance(share.get("share"), (int, float))
-            ):
-                raise ValueError(
-                    f"{field!r} entries must be "
-                    '{"thing_id": <32-hex>, "share": <number>}'
-                )
     elif spec.type == "number":
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{field!r} must be a number")
@@ -225,6 +322,11 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
             _validate_aka(field, value)
         elif field == "stub":
             _validate_stub(field, value)
+        elif field == "agent":
+            if not isinstance(value, bool):
+                raise ValueError(f"{field!r} must be a bool")
+        elif field == "filings":
+            _validate_filings(field, value)
         # otherwise any JSON-serializable value is accepted
 
 
@@ -279,3 +381,75 @@ def _validate_stub(field: str, value: object) -> None:
         or not isinstance(value["ignored"], bool)
     ):
         raise ValueError(f'{field!r} must be {{"ignored": bool}}')
+
+
+def _validate_world_date_or_null(field: str, key: str, value: object) -> None:
+    if value is None or isinstance(value, WorldDate):
+        return
+    if isinstance(value, dict):
+        try:
+            WorldDate(**value)
+        except Exception as exc:
+            raise ValueError(f"{field!r} {key} must be a valid date") from exc
+        return
+    raise ValueError(f"{field!r} {key} must be a WorldDate, its dict form, or null")
+
+
+FILING_KEYS: tuple[str, ...] = (
+    "target",
+    "role",
+    "since",
+    "until",
+    "within",
+    "exceptions",
+    "show_under",
+)
+
+
+def _validate_filings(field: str, value: object) -> None:
+    """A list of filings, each with a 32-hex `target` and, optionally, the
+    other `FILING_KEYS`; no target twice, and `within` never its target."""
+
+    shape = (
+        f"{field!r} entries must be "
+        '{"target": <32-hex>, "role": str|null, "since": WorldDate|null, '
+        '"until": WorldDate|null, "within": <32-hex>|null, '
+        '"exceptions": [fact id...], "show_under": str|null}'
+    )
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list of filings")
+    targets: list[str] = []
+    for filing in value:
+        if (
+            not isinstance(filing, dict)
+            or "target" not in filing
+            or not set(filing) <= set(FILING_KEYS)
+            or not isinstance(filing["target"], str)
+            or not _THING_ID_RE.match(filing["target"])
+            or not (filing.get("role") is None or isinstance(filing["role"], str))
+            or not (
+                filing.get("show_under") is None
+                or isinstance(filing["show_under"], str)
+            )
+            or not (
+                filing.get("within") is None
+                or (
+                    isinstance(filing["within"], str)
+                    and _THING_ID_RE.match(filing["within"])
+                )
+            )
+            or not isinstance(filing.get("exceptions", []), list)
+            or not all(isinstance(e, str) for e in filing.get("exceptions", []))
+        ):
+            raise ValueError(shape)
+        if filing.get("within") == filing["target"]:
+            raise ValueError(f"{field!r}: within must be a part of the target")
+        _validate_world_date_or_null(field, "since", filing.get("since"))
+        _validate_world_date_or_null(field, "until", filing.get("until"))
+        since, until = filing.get("since"), filing.get("until")
+        if since is not None and until is not None:
+            if WorldDate.model_validate(until) <= WorldDate.model_validate(since):
+                raise ValueError(f"{field!r}: until must be after since")
+        targets.append(filing["target"])
+    if len(set(targets)) != len(targets):
+        raise ValueError(f"{field!r} must not file into the same target twice")

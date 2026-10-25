@@ -22,7 +22,7 @@ from talemate.cultures.models import (
 )
 from talemate.cultures.store import WorldStore, world_dir_for_scene
 from talemate.prompts.base import Prompt
-from talemate.scene_message import NarratorMessage
+from talemate.scene_message import NarratorMessage, reset_message_id
 from talemate.shared_context import SharedContext
 from talemate.world_state.schema import CharacterState, ObjectState
 
@@ -488,6 +488,9 @@ async def test_stale_additions_checkpoint_after_reload(
         {ADDITIONS: "Taelrik | customs | Ferrymen spit over the rail before landing."},
     )
     set_snapshot(scene, "A room at Quillister House in Veldhaer")
+    # message ids are process-wide: start from 1, as a reload does, so the
+    # checkpoint is past them whatever ran before on this worker
+    reset_message_id()
     narrate(scene, "The ferry was late again.")
     narrate(scene, "Rain hammered the river.")
     agent.set_scene_states(additions_checked_id=500)

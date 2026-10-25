@@ -249,7 +249,9 @@ async def _preview(plugin, client, *responses: str, **data) -> tuple[dict, str]:
 
     before = len(client.prompt_history)
     await _send(plugin, "preview_thing", *responses, **data)
-    return _last(plugin, "preview_thing"), str(client.prompt_history[before]["prompt"])
+    # the draft page's data to accept (Filing, Task 6)
+    preview = _last(plugin, "preview_thing")["preview"]
+    return preview, str(client.prompt_history[before]["prompt"])
 
 
 async def _accept(plugin, preview: dict, into_stub: str | None = None) -> dict:
@@ -380,8 +382,10 @@ async def test_connections_end_to_end(plugin, client, loadable):
     assert sorted(stubs) == ["Aldric", "Kalmara"]
     aldric_id = stubs["Aldric"]["id"]
     assert stubs["Kalmara"]["mentions"] == 2
+    # her own name reads as "this page" there (ruling H7), linking nothing
     assert _linked(vasha, ALDRIC_FACT) == [
-        ("Vasha's brother ", None, False),
+        ("Vasha", None, False),
+        ("'s brother ", None, False),
         ("Aldric", aldric_id, True),
         (" keeps the ferry at ", None, False),
         ("Kalmara", kalmara_id, True),
@@ -492,9 +496,11 @@ async def test_connections_end_to_end(plugin, client, loadable):
     # nothing for lookups, linking or making stubs
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
-        # species, Tsardom, Vasha, the town; the scene's plan; Aldric's and
-        # Kalmara's stub previews
-        "creative_instruction_2048": 7,
+        # species, Tsardom, Vasha, the town; Aldric's and Kalmara's stub
+        # previews
+        "creative_instruction_3072": 6,
+        # the scene's plan
+        "creative_instruction_2048": 1,
         # one section each, two for Vasha (her species' instincts give her
         # a personality); none at start, the previews' prose is current
         "analyze": 7,

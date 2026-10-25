@@ -16,22 +16,36 @@ context and calls `connect`; a scene that never gets a
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
 import talemate.emit.async_signals as async_signals
 from talemate.agents.base import DynamicInstruction
 from talemate.prompts import Prompt
-from talemate.world import heritage
+from talemate.world import entries, heritage
+from talemate.world.curation import CurationSettings
 from talemate.world.dates import WorldDate
+from talemate.world.filing import filed_index, filings_of, tag_of
 from talemate.world.kinds import HERITAGE_KINDS
-from talemate.world.names import everyday_name
+from talemate.world.names import everyday_name, find_names
+from talemate.world.repeats import overlap
 from talemate.world.scenes import SceneRecord
 from talemate.world.store import World
-from talemate.world.view import WorldView
+from talemate.world.timelines import TimelineLine, dated_line, entry_timeline
+from talemate.world.view import FactState, ThingState, WorldView
 
-from .characters import WORLD_DERIVED_FIELDS, character_from_world
+from .characters import (
+    WORLD_DERIVED_FIELDS,
+    character_from_world,
+    filing_exceptions,
+    filing_lines,
+    held_text,
+    lined_filings,
+)
+from .held import timeline_text
 
 log = structlog.get_logger("talemate.worldplay.context")
 
@@ -46,6 +60,43 @@ _BODY_CATEGORIES = ("physical", "variation")
 _INSTINCT_CATEGORIES = ("instinct",)
 
 SECTION_TITLE = "World"
+
+# a touched entry's lines (filing spec, "Scene context"; probe 5): up to
+# this many of its own facts, its latest this many timeline lines, and at
+# most this many lines in all
+TOUCHED_FACTS = 5
+TOUCHED_TIMELINE = 3
+TOUCHED_LINES = 8
+
+# filing roles too broad to say who a scene is about (ruling F4): a
+# setup that says "a member of the Order" touches no member of it. The
+# probe's own list ("member", "part", "practitioner", "of this culture")
+# and the like
+GENERIC_ROLES: frozenset[str] = frozenset(
+    {
+        "in",
+        "of",
+        "part",
+        "member",
+        "members",
+        "practitioner",
+        "follower",
+        "believer",
+        "adherent",
+        "faithful",
+        "citizen",
+        "subject",
+        "resident",
+        "inhabitant",
+        "native",
+        "people",
+        "folk",
+        "branch of",
+        "of this culture",
+        "took place in",
+        "owned by",
+    }
+)
 
 
 def scene_date(record: SceneRecord, scene_ts: str) -> WorldDate:
@@ -106,6 +157,22 @@ def _traits(
     return body, instincts
 
 
+def _present(record: SceneRecord) -> list[dict[str, Any]]:
+    """The scene's character entries that are here: the player (first,
+    when the characters don't list them) and every active character."""
+
+    entries = [
+        entry
+        for entry in record.state.get("characters") or []
+        if isinstance(entry, dict)
+    ]
+    if record.player_thing_id and not any(
+        entry.get("thing_id") == record.player_thing_id for entry in entries
+    ):
+        entries.insert(0, {"thing_id": record.player_thing_id, "active": True})
+    return [entry for entry in entries if entry.get("active", True)]
+
+
 def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
     """The scene's player and active characters that have a heritage, each
     as `{"name", "heritage", "body", "instincts"}`, all as of `view`: a
@@ -119,20 +186,9 @@ def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
         for thing in world.scenes().local_things(record.id)
         if thing["kind"] == LOCAL_CHARACTER_KIND and isinstance(thing["data"], dict)
     }
-    entries = [
-        entry
-        for entry in record.state.get("characters") or []
-        if isinstance(entry, dict)
-    ]
-    if record.player_thing_id and not any(
-        entry.get("thing_id") == record.player_thing_id for entry in entries
-    ):
-        entries.insert(0, {"thing_id": record.player_thing_id, "active": True})
 
     cast: list[dict] = []
-    for entry in entries:
-        if not entry.get("active", True):
-            continue
+    for entry in _present(record):
         thing_id = entry.get("thing_id")
         if thing_id:
             state = view.thing(thing_id)
@@ -160,34 +216,416 @@ def _cast(world: World, record: SceneRecord, view: WorldView) -> list[dict]:
     return cast
 
 
-def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
-    """The "World" instruction's content: the scene's goal, its current
-    place, whatever lore has been pulled into it, and who is here by
-    heritage (`_cast`), all as of `at`. The
-    place is the world thing `record.state["place_thing_id"]` or, when the
-    scene invented its place, the scene-local place thing
-    `record.state["place_local_id"]` (its name and facts); the lore entries
-    are `record.state["pulled_in"]`.
+def _facts(view: WorldView, state: ThingState, facts: list[FactState]) -> list[str]:
+    """`facts` (of `state`) as a scene is told them: rendered, a held one
+    as belief (`held_text`)."""
 
-    A place or lore entry with an everyday name is shown "<main> (usually
-    called <everyday>)", and the block then opens with a line asking for
-    everyday names in narration and dialogue: the connections probe
-    (docs/superpowers/probes/2026-10-21-connections.md, probe 4) found the
-    plain heading kept the full name every time."""
+    return [held_text(view, fact, state) for fact in facts]
+
+
+def _may_be_touched(state: ThingState) -> bool:
+    """Whether the thing can be touched: anything but a being that isn't
+    real (believed or undecided), which is only spoken of -- its facts
+    reach the scene through whatever refers to it."""
+
+    return state.kind != "being" or entries.acts_in_world(state)
+
+
+def _role_words(role: str | None) -> str:
+    return " ".join((role or "").split()).casefold()
+
+
+# what joins the parts of a compound role ("senior member and Chief
+# Scribe", "courier, archivist"); a strong joint (";", "/", "&") always
+# splits, a weak one ("and", ",") only before any "of ..." phrase
+_STRONG_JOINT_RE = re.compile(r"\s*[;/&]\s*")
+_WEAK_JOINT_RE = re.compile(r"\s*(?:,|\band\b)\s*", re.IGNORECASE)
+_OF_RE = re.compile(r"\bof\b", re.IGNORECASE)
+
+# a word that is no title on its own: a pronoun, or a common modifier of
+# one ("senior", "retired", "acting")
+_NOT_A_TITLE: frozenset[str] = frozenset(
+    {
+        "he",
+        "she",
+        "they",
+        "it",
+        "him",
+        "her",
+        "them",
+        "his",
+        "hers",
+        "their",
+        "senior",
+        "junior",
+        "former",
+        "retired",
+        "acting",
+        "interim",
+        "honorary",
+        "emeritus",
+        "elder",
+        "young",
+        "old",
+        "new",
+        "chief",
+        "head",
+        "first",
+        "second",
+        "deputy",
+        "assistant",
+        "sworn",
+        "lay",
+    }
+)
+# endings of a lone word that reads as an adjective or participle
+_ADJECTIVE_ENDINGS = ("ed", "ing", "ous", "ive", "ful", "less", "able", "ible", "ish")
+
+
+def _role_parts(words: str) -> list[str]:
+    """A compound role's parts: split at every ";", "/" or "&", and at
+    "and" or "," only before the first "of" of its piece ("Keeper of
+    Bread and Salt" is one title; "Chief Scribe and Keeper of Seals" is
+    two)."""
+
+    parts: list[str] = []
+    for piece in _STRONG_JOINT_RE.split(words):
+        found = _OF_RE.search(piece)
+        head, tail = (
+            (piece[: found.start()], piece[found.start() :]) if found else (piece, "")
+        )
+        bits = _WEAK_JOINT_RE.split(head)
+        bits[-1] = bits[-1] + tail
+        parts += [bit.strip() for bit in bits if bit.strip()]
+    return parts
+
+
+def _is_title(part: str) -> bool:
+    """Whether a role's part can stand as a title on its own: never a lone
+    pronoun or modifier ("she", "retired")."""
+
+    words = part.split()
+    if len(words) != 1:
+        return True
+    word = words[0]
+    return word not in _NOT_A_TITLE and not word.endswith(_ADJECTIVE_ENDINGS)
+
+
+def _words_named(words: str, text: str) -> bool:
+    if not words or words in GENERIC_ROLES:
+        return False
+    pattern = r"(?<!\w)" + r"\s+".join(map(re.escape, words.split())) + r"(?!\w)"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
+def role_named(role: str | None, text: str) -> bool:
+    """Whether `text` names the filing's `role` (ruling F4): the role's
+    words, whole and in order, any case and spacing ("Chief Scribe" in
+    "...to the chief scribe of..."; never "ward" in "toward", nor
+    "scribe" in "scribes"). A compound role is named by any of its parts
+    ("senior member and Chief Scribe" by "the Chief Scribe": the Task 12
+    Skyfall session, where the model's roles for the Chief Scribe were
+    compound 2 of 2, docs/superpowers/probes/2026-10-24-filing-flow.md),
+    split as `_role_parts` does and only into titles (`_is_title`: never
+    a lone pronoun or modifier such as "she" or "retired"). A generic
+    role or part (`GENERIC_ROLES`), or none, is never named."""
+
+    words = _role_words(role)
+    if _words_named(words, text):
+        return True
+    parts = _role_parts(words)
+    return len(parts) > 1 and any(
+        _is_title(part) and _words_named(part, text) for part in parts
+    )
+
+
+def _named_in(view: WorldView, text: str) -> list[str]:
+    """The live entries `text` names in full (`find_names`, never a mere
+    suggestion), each once, in order."""
+
+    found: list[str] = []
+    for match in find_names(view, text):
+        if match.suggested or not match.candidates:
+            continue
+        thing_id = match.candidates[0].id
+        if thing_id not in found:
+            found.append(thing_id)
+    return found
+
+
+def touched_entries(
+    view: WorldView, record: SceneRecord, *, reach: int = 2
+) -> list[str]:
+    """The entries the scene touches (filing spec, "Scene context"), each
+    once, in this order:
+
+    - what the scene's place is filed in, followed upward `reach` steps
+      (the world's `timeline_reach`; a place filed in several brings each
+      in);
+    - what each present character is filed in (and the part it's within);
+    - what the setup names: the pulled-in entries (the prompt's picks),
+      then any entry the goal or premise names in full;
+    - (ruling F4) a character, or a real being, filed in one of those or
+      in the place whose filing role the goal or premise names
+      (`role_named`): the Chief Scribe the scene is about.
+
+    Never the place itself, a present character (their sheet covers
+    them), a being that isn't real (`_may_be_touched`), or one gone at the
+    view."""
+
+    place_id = record.state.get("place_thing_id")
+    place_id = place_id if isinstance(place_id, str) else None
+    present = [
+        entry["thing_id"]
+        for entry in _present(record)
+        if isinstance(entry.get("thing_id"), str)
+    ]
+    skip = {*present, *([place_id] if place_id else [])}
+    touched: list[str] = []
+
+    def touch(thing_id: str | None) -> None:
+        if thing_id is None or thing_id in skip or thing_id in touched:
+            return
+        state = view.thing(thing_id)
+        if state is not None and _may_be_touched(state):
+            touched.append(thing_id)
+
+    if place_id and view.thing(place_id) is not None:
+        frontier, seen = [place_id], {place_id}
+        for _ in range(reach):
+            above: list[str] = []
+            for thing_id in frontier:
+                for filing in filings_of(view, thing_id):
+                    touch(filing.target)
+                    if filing.target not in seen:
+                        seen.add(filing.target)
+                        above.append(filing.target)
+            frontier = above
+    for thing_id in present:
+        for filing in filings_of(view, thing_id):
+            touch(filing.target)
+            touch(filing.within)
+    for thing_id in record.state.get("pulled_in") or []:
+        if isinstance(thing_id, str):
+            touch(thing_id)
+    setup = "\n".join(part for part in (record.goal, record.premise) if part)
+    for thing_id in _named_in(view, setup) if setup.strip() else []:
+        touch(thing_id)
+    if setup.strip():
+        index = filed_index(view)
+        for target_id in [*([place_id] if place_id else []), *list(touched)]:
+            for state, filing in index.get(target_id, []):
+                if entries.acts_in_world(state) and role_named(filing.role, setup):
+                    touch(state.id)
+    return touched
+
+
+def _summary_fact(state: ThingState) -> FactState | None:
+    """The fact a touched entry leads with (as probe 5 read it): its
+    summary (`entries.summary_fact`), else its first written `summary` or
+    `description` fact, else its first undated fact."""
+
+    fact = entries.summary_fact(state)
+    if fact is not None:
+        return fact
+    for category in ("summary", "description"):
+        found = [f for f in state.facts if f.category == category]
+        if found:
+            return min(found, key=lambda f: f.created)
+    undated = [f for f in state.facts if f.valid_from is None]
+    return min(undated, key=lambda f: f.created) if undated else None
+
+
+def _same_event(a: str, b: str, threshold: float) -> bool:
+    """Whether two timeline texts tell the same event: either holds at
+    least `threshold` of the other's content words."""
+
+    return max(overlap(a, b), overlap(b, a)) >= threshold
+
+
+def _latest_lines(
+    world: World,
+    view: WorldView,
+    thing_id: str,
+    elsewhere: set[str],
+    shown: set[str],
+    settings: CurationSettings,
+    things: list[ThingState],
+) -> list[str]:
+    """The entry's latest `TOUCHED_TIMELINE` timeline lines, oldest first,
+    each "In <year>: <text>" or, once ended, "From <year> to <year>:
+    <text>" (ruling C18), a held one as belief: its own dated facts and
+    what it gathers (`timelines.entry_timeline`, out to the world's
+    `timeline_reach`), less the lines of the things `elsewhere` (shown in
+    the block another way) and of facts `shown` already. The same event
+    told twice (from two entries: word overlap at the world's
+    `date_threshold`) counts once, the entry's own telling kept, and
+    neither is told again in the block."""
+
+    lines = [
+        line
+        for line in entry_timeline(
+            view,
+            thing_id,
+            reach=settings.timeline_reach,
+            threshold=settings.date_threshold,
+            things=things,
+            disagreements=False,
+        )
+        if line.fact_id not in shown and (line.here or line.owner_id not in elsewhere)
+    ]
+    kept: list[TimelineLine] = []
+    # the other tellings of a kept line's event: told, too
+    told: list[str] = []
+    for line in reversed(lines):
+        twice = next(
+            (
+                i
+                for i, other in enumerate(kept)
+                if _same_event(line.text, other.text, settings.date_threshold)
+            ),
+            None,
+        )
+        if twice is not None:
+            if line.here and not kept[twice].here:
+                line, kept[twice] = kept[twice], line
+            told.append(line.fact_id)
+            continue
+        if len(kept) == TOUCHED_TIMELINE:
+            break
+        kept.append(line)
+    kept.sort(
+        key=lambda line: (line.date.instant, line.fact.created if line.fact else 0)
+    )
+    shown.update(told)
+    for line in kept:
+        shown.add(line.fact_id)
+    return [
+        dated_line(world.calendar, line.date, timeline_text(view, line), line.until)
+        for line in kept
+    ]
+
+
+def _touched_entry(
+    world: World,
+    view: WorldView,
+    thing_id: str,
+    elsewhere: set[str],
+    shown: set[str],
+    settings: CurationSettings,
+    things: list[ThingState],
+) -> dict[str, Any] | None:
+    """One touched entry of the block, `{"name", "kind", "tag", "everyday",
+    "lines"}` (probe 5's shape): its summary (`_summary_fact`), a person's
+    filing lines as its sheet has them (`filing_lines`: "Chief Scribe of
+    the Order, but: ..."), up to `TOUCHED_FACTS` of its own undated
+    facts, the most-linked first, then its latest timeline lines
+    (`_latest_lines`), at most `TOUCHED_LINES` in all (the own facts give
+    way to the timeline), each held fact worded as held; a fact `shown`
+    already in the block isn't told again. A person's exceptions that its
+    filing lines tell are never told again as facts, with their "Departs
+    from <link>" sentence (Filing Task 11); one no line tells (a filing
+    with no role) stays a fact.
+    `None` for an entry with nothing to say."""
+
+    state = view.thing(thing_id)
+    if state is None:
+        return None
+    person = entries.acts_in_world(state)
+    filed = filing_lines(view, world.calendar, thing_id) if person else []
+    # the exceptions those lines tell: never told again as facts
+    told = (
+        {
+            fact.fact_id
+            for filing in lined_filings(view, thing_id)
+            for fact in filing_exceptions(view, state, filing)
+        }
+        if person
+        else set()
+    )
+    head = _summary_fact(state)
+    if head is not None and (head.fact_id in shown or head.fact_id in told):
+        head = None
+    own = sorted(
+        (
+            fact
+            for fact in state.facts
+            if fact.valid_from is None
+            and fact.fact_id not in shown
+            and (head is None or fact.fact_id != head.fact_id)
+            and not entries.is_summary_fact(fact)
+            and fact.fact_id not in told
+        ),
+        key=lambda fact: (-len(set(fact.refs)), fact.created),
+    )[:TOUCHED_FACTS]
+    for fact in [*([head] if head else []), *own]:
+        shown.add(fact.fact_id)
+    timeline = _latest_lines(world, view, thing_id, elsewhere, shown, settings, things)
+    room = TOUCHED_LINES - len(timeline) - (1 if head else 0) - len(filed)
+    lines = [
+        *_facts(view, state, [head] if head else []),
+        *filed,
+        *_facts(view, state, own[: max(room, 0)]),
+        *timeline,
+    ][:TOUCHED_LINES]
+    if not lines:
+        return None
+    return {
+        "name": view.name_of(thing_id) or "",
+        "kind": state.kind,
+        "tag": tag_of(state),
+        "everyday": everyday_name(state),
+        "lines": lines,
+    }
+
+
+def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str:
+    """The "World" instruction's content (probe 5's v2 block): the scene's
+    goal, its current place, what the scene touches (`touched_entries`,
+    each `_touched_entry`) and who is here by heritage (`_cast`), all as
+    of `at`. The place is the world thing `record.state["place_thing_id"]`
+    (its facts, a held one as belief) or, when the scene invented its
+    place, the scene-local place thing `record.state["place_local_id"]`
+    (its name and facts). The agent flag no longer changes it.
+
+    A touched entry's timeline leaves out the lines of the place, of who
+    is here and of the other touched entries (each told where it is
+    shown), and no fact is told twice in the block.
+
+    A place or touched entry with an everyday name is shown with
+    "usually called <everyday>", and the block then opens with a line
+    asking for everyday names in narration and dialogue: the connections
+    probe (docs/superpowers/probes/2026-10-21-connections.md, probe 4)
+    found the plain heading kept the full name every time."""
 
     view = world.view(at)
+    things = view.things()
+    settings = world.curation()
 
-    place = None
     place_thing_id = record.state.get("place_thing_id")
     place_local_id = record.state.get("place_local_id")
-    if place_thing_id:
-        place_state = view.thing(place_thing_id)
-        if place_state is not None:
-            place = {
-                "name": view.name_of(place_thing_id) or "",
-                "everyday": everyday_name(place_state),
-                "facts": [view.render(fact.text) for fact in place_state.facts],
-            }
+    place_state = view.thing(place_thing_id) if place_thing_id else None
+
+    touched = touched_entries(view, record, reach=settings.timeline_reach)
+
+    present = {
+        entry["thing_id"]
+        for entry in _present(record)
+        if isinstance(entry.get("thing_id"), str)
+    }
+    shown: set[str] = set()
+    place = None
+    if place_state is not None and place_thing_id:
+        shown |= {fact.fact_id for fact in place_state.facts}
+        place = {
+            "name": view.name_of(place_thing_id) or "",
+            "everyday": everyday_name(place_state),
+            "facts": _facts(
+                view,
+                place_state,
+                sorted(place_state.facts, key=lambda fact: fact.created),
+            ),
+        }
     elif place_local_id:
         local = next(
             (
@@ -206,18 +644,18 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
                 "facts": [str(fact) for fact in data.get("facts") or []],
             }
 
-    lore = []
-    for lore_thing_id in record.state.get("pulled_in") or []:
-        lore_state = view.thing(lore_thing_id)
-        if lore_state is None:
-            continue
-        lore.append(
-            {
-                "name": view.name_of(lore_thing_id) or "",
-                "everyday": everyday_name(lore_state),
-                "facts": [view.render(fact.text) for fact in lore_state.facts],
-            }
+    touched_block: list[dict[str, Any]] = []
+    for thing_id in touched:
+        elsewhere = {
+            *present,
+            *([place_thing_id] if isinstance(place_thing_id, str) else []),
+            *(other for other in touched if other != thing_id),
+        }
+        entry = _touched_entry(
+            world, view, thing_id, elsewhere, shown, settings, things
         )
+        if entry is not None:
+            touched_block.append(entry)
 
     return str(
         Prompt.get(
@@ -225,9 +663,10 @@ def world_context_block(world: World, record: SceneRecord, at: WorldDate) -> str
             vars={
                 "goal": record.goal,
                 "place": place,
-                "lore": lore,
+                "touched": touched_block,
                 "everyday": any(
-                    entry["everyday"] for entry in [*([place] if place else []), *lore]
+                    entry["everyday"]
+                    for entry in [*([place] if place else []), *touched_block]
                 ),
                 "cast": _cast(world, record, view),
             },

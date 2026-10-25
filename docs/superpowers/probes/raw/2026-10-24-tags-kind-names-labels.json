@@ -1,0 +1,20 @@
+{
+ "probe": "tags-kind-names",
+ "date": "2026-10-24",
+ "note": "Labels committed before any model call. Each case is an untagged stub in a fresh scratch world (present year 1000), expanded through create.preview_thing with the stub's suggested prompt (as the app's Expand does), 2 versions each, prose skipped. A reply's tag is scored: 'kind' when its raw tag is a kind's name (lore, event, place, …) or an aka tag, so clean_tag drops it; 'none' when no tag; 'tagged' otherwise. 'fits' lists tags I'd accept as fitting (hand labels; a tagged reply outside the list is read by hand in the findings).",
+ "world": {
+  "tsardom": {"kind": "place", "name": "Tsardom of Moscavia", "tag": "nation", "facts": ["A northern realm of owl-folk, ruled by a Tsar from Velikoye.", "The Tsar rules with the Boyar Council at his side.", "The Tsardom was forged in the First Consolidation of 612, when the river princedoms swore to one crown.", "In 994 the Blinding turned every human of Moscavian blood into owl-folk in a single night."]},
+  "velikoye": {"kind": "place", "name": "Velikoye", "tag": "capital", "in": "tsardom", "facts": ["The fortified capital on the Khorol River.", "Every fledgling of Velikoye undergoes the Rite of First Flight from the bell tower.", "Velikoye's walls still bear the scars of the Siege of Velikoye in 871."]},
+  "academy": {"kind": "place", "name": "Academy of Northern Lights", "tag": "academy", "in": "velikoye", "facts": ["Its cartographers divide the world into the Corners of the Earth, four in all."]}
+ },
+ "cases": {
+  "boyar":   {"kind": "lore",  "name": "Boyar Council", "fits": ["council", "governing council", "assembly", "advisory council", "institution", "government body", "noble council", "legislature"]},
+  "rite":    {"kind": "lore",  "name": "Rite of First Flight", "fits": ["rite", "custom", "ritual", "rite of passage", "tradition", "ceremony"]},
+  "corners": {"kind": "lore",  "name": "Corners of the Earth", "fits": ["cosmology", "geography", "doctrine", "concept", "map", "cartography", "worldview", "geographic concept", "division", "belief"]},
+  "blinding":{"kind": "event", "name": "The Blinding", "fits": ["cataclysm", "catastrophe", "transformation", "curse", "disaster", "calamity", "magical cataclysm"]},
+  "consolidation": {"kind": "event", "name": "First Consolidation", "fits": ["unification", "founding", "treaty", "union", "political union", "founding event", "consolidation"]},
+  "siege":   {"kind": "event", "name": "Siege of Velikoye", "fits": ["siege", "battle", "war", "military campaign", "assault"]}
+ },
+ "runs": 2,
+ "prompt_line_if_needed": "The tag is never the kind's own name (lore, event, place, …): say what sort of {{ kind }} it is, such as custom, law, battle, festival."
+}

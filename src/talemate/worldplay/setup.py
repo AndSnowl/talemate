@@ -16,9 +16,8 @@ to play.
   per stub) and `start_scene` accepts the previews before writing the
   scene, so the scene plays the full entries. Cancelling leaves the stubs
   as they were. A stub the index merely finds is neither shown nor pulled
-  in. A culture stub can't be expanded yet, and a race or mix stub has no
-  species or parents to fill it from: those stay stubs, and so does one
-  whose preview fails.
+  in. A race or mix stub has no species or parents to fill it from: those
+  stay stubs, and so does one whose preview fails.
 - `continue_setup` plans the next scene from where an earlier one ended.
 
 What the scene-setup probe (docs/superpowers/probes/2026-10-19-world-create-
@@ -71,10 +70,12 @@ from talemate.world.kinds import HERITAGE_KINDS
 # `NameCandidate` and `NameMatch` are re-exported: they were scene setup's
 from talemate.world.names import NameCandidate, NameMatch, find_names  # noqa: F401
 from talemate.world.scenes import MessageRecord, SceneRecord, scene_end
+from talemate.world.entries import acts_in_world
 from talemate.world.store import World
 from talemate.world.view import ThingState, WorldView
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
+from talemate.worldplay.held import held_text
 from talemate.worldplay.context import LOCAL_PLACE_KIND
 from talemate.worldplay.create import (
     CREATE_KINDS,
@@ -84,6 +85,7 @@ from talemate.worldplay.create import (
     json_objects,
     preview_thing,
 )
+from talemate.worldplay.links import name_key
 from talemate.worldplay.mentions import suggested_prompt
 from talemate.worldplay.persistence import LOCAL_CHARACTER_KIND
 
@@ -135,8 +137,9 @@ class SetupRef(BaseModel):
 
 class SceneSetup(BaseModel):
     """A planned scene: who (the player and the other characters), where,
-    when, what it's about and how it opens. `pulled_in` is the lore the
-    scene draws on; `invented` names everything made up for it. `prompt`
+    when, what it's about and how it opens. `pulled_in` is what the prompt
+    names that the scene touches (places too, but its own); `invented`
+    names everything made up for it. `prompt`
     (the owner's storyline) and `summary` (of the scene it continues, if
     any) become the scene's premise."""
 
@@ -203,19 +206,28 @@ def _dedupe(ids: list[str]) -> list[str]:
     return list(dict.fromkeys(ids))
 
 
+def _cast_kind(state: ThingState) -> str:
+    """The kind a thing is grouped and cast as: a real being is one of the
+    characters (`acts_in_world`)."""
+
+    return "character" if acts_in_world(state) else state.kind
+
+
 def _world_things(view: WorldView, thing_ids: list[str]) -> list[tuple[str, list]]:
     """`thing_ids` rendered at the view's date, grouped by kind, as
-    `(label, [{"name", "facts"}])` for the template."""
+    `(label, [{"name", "facts"}])` for the template; a real being among
+    the characters."""
 
     groups: dict[str, list[dict[str, Any]]] = {}
     for thing_id in thing_ids:
         state = view.thing(thing_id)
         if state is None:
             continue
-        groups.setdefault(state.kind, []).append(
+        groups.setdefault(_cast_kind(state), []).append(
             {
                 "name": view.name_of(thing_id) or "",
-                "facts": [view.render(fact.text) for fact in state.facts],
+                # a held fact as belief ("<Holder> holds that ...")
+                "facts": [held_text(view, fact, state) for fact in state.facts],
             }
         )
     order = list(_KIND_LABELS)
@@ -366,13 +378,18 @@ def _resolve(
     choices come first: a name treated as new (`new_names`, normalised) is
     invented, and a picked thing the owner's text, its name or its first
     name matches is that thing. Then a thing with that full name, or the
-    only thing of that kind with that first name. `None` means invented."""
+    only thing of that kind with that first name. `None` means invented.
+    A real being is one of the characters (`_cast_kind`)."""
 
     key = _norm(name)
     if not key or _is_new(key, new_names):
         return None
+    # a scan of every thing per name resolved: a scene names a handful, so
+    # it stays cheap at the owner's scale (final review: left as it is)
     things = {
-        state.id: _norm(view.name_of(state.id) or "") for state in view.things(kind)
+        state.id: _norm(view.name_of(state.id) or "")
+        for state in view.things()
+        if _cast_kind(state) == kind
     }
 
     for text, thing_id in picks.items():
@@ -393,6 +410,34 @@ def _resolve(
     return by_first[0] if len(by_first) == 1 else None
 
 
+def _unreal_being(
+    view: WorldView,
+    name: str,
+    picks: dict[str, str],
+    new_names: frozenset[str] = frozenset(),
+) -> bool:
+    """Whether `name` means a being that isn't real (believed, or
+    undecided): picked for it, or its name or one of its other names
+    (ignoring case and a leading article, `name_key`). The owner's
+    treating the name as new wins."""
+
+    if not _norm(name) or _is_new(_norm(name), new_names):
+        return False
+    key = name_key(name)
+    picked = {thing_id for text, thing_id in picks.items() if name_key(text) == key}
+    for state in view.things("being"):
+        if acts_in_world(state):
+            continue
+        names = [view.name_of(state.id) or ""] + [
+            entry["name"]
+            for entry in state.fields.get("aka") or []
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        ]
+        if state.id in picked or key in {name_key(other) for other in names}:
+            return True
+    return False
+
+
 def _ref(
     view: WorldView,
     value: object,
@@ -400,12 +445,19 @@ def _ref(
     picks: dict[str, str],
     new_names: frozenset[str] = frozenset(),
 ) -> SetupRef | None:
+    """The setup entry the reply's `value` is: a world thing of `kind`, or
+    one invented. A character naming a being that isn't real is no entry
+    at all: it's never cast, nor invented in its place."""
+
     name, facts, heritage_name = _entry(value)
     if not name:
         return None
     thing_id = _resolve(view, name, kind, picks, new_names)
     if thing_id is not None:
         return SetupRef(thing_id=thing_id)
+    if kind == "character" and _unreal_being(view, name, picks, new_names):
+        log.info("setup.being_not_cast", name=name)
+        return None
     local = LocalThing(name=name, facts=facts)
     if kind == "character":
         local.heritage_id = _heritage_id(view, heritage_name)
@@ -474,7 +526,7 @@ def _setup_from_reply(
         _add_ref(cast, ref, unless=player)
     for thing_id in picks.values():
         state = view.thing(thing_id)
-        if state is not None and state.kind == "character":
+        if state is not None and acts_in_world(state):
             _add_ref(cast, SetupRef(thing_id=thing_id), unless=player)
 
     place = _ref(view, reply.get("place"), "place", picks, new_names)
@@ -512,8 +564,8 @@ def _setup_from_reply(
 # --- stubs ---------------------------------------------------------------------
 
 
-# stub kinds setup never fills: a culture can't be expanded yet, and a
-# race needs its species and a mix its parents, which a stub has none of
+# stub kinds setup never fills: a race needs its species and a mix its
+# parents, which a stub has none of
 _UNFILLED_STUB_KINDS = ("race", "mix")
 
 
@@ -535,17 +587,24 @@ def stubs_to_fill(world: World, setup: SceneSetup) -> list[str]:
     """The stubs `setup` uses that can be filled out, each once, in setup
     order: the player, the characters, the place, then the pulled-in lore
     (picked, or named in the reply; a stub the index merely found isn't
-    pulled in). Ignored stubs too: using one revives it. A culture stub
-    can't be expanded yet, and a race or mix stub has no species or
-    parents to fill it from: those are left out (logged) and stay stubs."""
+    pulled in). Ignored stubs too: using one revives it. A race or mix
+    stub has no species or parents to fill it from: those are left out
+    (logged) and stay stubs."""
 
     view = world.view()
     refs = [setup.player, *setup.characters]
     if setup.place is not None:
         refs.append(setup.place)
     thing_ids = [ref.thing_id for ref in refs if ref.thing_id is not None]
+    # a place is filled only as the scene's place: a place pulled in stays
+    # as it is, as it did before it was pulled in
+    pulled_in = [
+        thing_id
+        for thing_id in setup.pulled_in
+        if (state := view.thing(thing_id)) is None or state.kind != "place"
+    ]
     stub_ids = []
-    for thing_id in _dedupe([*thing_ids, *setup.pulled_in]):
+    for thing_id in _dedupe([*thing_ids, *pulled_in]):
         state = view.thing(thing_id)
         if state is None or not state.is_stub:
             continue
@@ -566,7 +625,9 @@ async def _stub_previews(
     world: World, setup: SceneSetup, client: Any
 ) -> list[CreatePreview]:
     """A preview filling out each stub `setup` uses (`stubs_to_fill`), made
-    from the stub's suggested prompt and what its mentions say. A stub
+    from the stub's suggested prompt and what its mentions say, with no
+    same-thing verdict and only its own facts ticked (`_own_facts_only`,
+    ruling C25). A stub
     whose preview fails is logged and left a stub; the plan goes on. With
     no `client` (the browser tests' fixed setup) no stub is previewed."""
 
@@ -589,6 +650,7 @@ async def _stub_previews(
                 {},
                 client,
                 stub_id=stub_id,
+                ask_same=False,
             )
         except Exception as exc:
             log.warning(
@@ -598,12 +660,29 @@ async def _stub_previews(
                 error=str(exc),
             )
             continue
-        previews.append(preview)
+        previews.append(_own_facts_only(preview))
     return previews
 
 
+def _own_facts_only(preview: CreatePreview) -> CreatePreview:
+    """A stub preview as scene planning accepts it, with no owner to tick
+    anything (ruling C25): only its own facts are written. Its elsewhere
+    items, its "In" rows, the entries it would file into it and the facts
+    it would move here are unticked, so starting the scene adds, files
+    and moves nothing on another entry."""
+
+    for item in preview.elsewhere:
+        item.ticked = False
+    for rows in (preview.filings, preview.file_into, preview.move_here):
+        for row in rows:
+            row.ticked = False
+    return preview
+
+
 def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
-    """Write each stub preview into its stub, keeping the id. A stub
+    """Write each stub preview into its stub, keeping the id, with only
+    its own facts (`_own_facts_only` again: the client's ticks are never
+    trusted). A stub
     deleted since planning refuses the start before anything is written;
     one already filled out (by hand, in the meantime) is left as it is."""
 
@@ -620,7 +699,9 @@ def _accept_stub_previews(world: World, previews: list[CreatePreview]) -> None:
             continue
         todo.append(preview)
     for preview in todo:
-        accept_preview(world, preview)
+        # the setup came back from the client: its ticks are untrusted, so
+        # only the stub's own facts are written again (ruling C25)
+        accept_preview(world, _own_facts_only(preview))
 
 
 # --- planning ------------------------------------------------------------------
@@ -655,6 +736,9 @@ async def plan_scene(
     for thing_id in chosen:
         if view.thing(thing_id) is None:
             raise KeyError(f"no such thing: {thing_id}")
+    player_state = view.thing(player) if player else None
+    if player_state is not None and not acts_in_world(player_state):
+        raise ValueError(f"{view.name_of(player_state.id)} can't be played")
 
     hits = (
         _index_hits(world, prompt, start, embedding_function) if reply is None else []
@@ -691,11 +775,17 @@ async def plan_scene(
         prompt=prompt,
         new_names=frozenset(_norm(name) for name in new_names or [] if name.strip()),
     )
+    # what the prompt names is pulled in: the scene touches it (filing
+    # spec, "Scene context"), a place too unless it's the scene's own;
+    # characters (real beings too) never are, nor a being that isn't real:
+    # its facts reach the scene through what refers to it
+    own_place = setup.place.thing_id if setup.place is not None else None
     setup.pulled_in = [
         thing_id
         for thing_id in _dedupe([*shown, *_stubs_named(view, setup)])
         if (state := view.thing(thing_id)) is not None
-        and state.kind not in ("character", "place")
+        and state.kind not in ("character", "being")
+        and thing_id != own_place
     ]
     setup.stub_previews = await _stub_previews(world, setup, client)
     log.info(
@@ -743,10 +833,22 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
     are written to the world first, each into its stub
     (`_accept_stub_previews`), so the scene uses the full entries."""
 
+    if setup.player.thing_id is not None:
+        played = world.view(setup.start).thing(setup.player.thing_id)
+        if played is None or not acts_in_world(played):
+            raise ValueError(f"{setup.player.thing_id} can't be played")
     _accept_stub_previews(world, setup.stub_previews)
 
+    view = world.view(setup.start)
     refs: list[SetupRef] = []
     for ref in [setup.player, *setup.characters]:
+        if ref.thing_id is not None:
+            # a setup edited by the client may name a being that isn't real
+            # (or a thing deleted since): it's never cast
+            cast = view.thing(ref.thing_id)
+            if cast is None or not acts_in_world(cast):
+                log.info("setup.not_cast", thing_id=ref.thing_id)
+                continue
         if not any(_same(ref, other) for other in refs):
             refs.append(ref)
 
@@ -801,10 +903,14 @@ async def start_scene(world: World, setup: SceneSetup, client: Any) -> str:
             }
         )
 
+    # the final place shows as the place, never again as pulled in: a
+    # setup edited or continued after planning may have made a place it
+    # pulled in its place
+    place_id = setup.place.thing_id if setup.place is not None else None
     state: dict[str, object] = {
         "intro": setup.intro,
         "characters": entries,
-        "pulled_in": list(setup.pulled_in),
+        "pulled_in": [thing_id for thing_id in setup.pulled_in if thing_id != place_id],
     }
     if setup.place is not None:
         if setup.place.thing_id is not None:
@@ -853,7 +959,8 @@ def _carried(
     """`(player, characters, place, extras)` carried over from `record`:
     the player, the characters still active, the place and the extras. A
     world thing that's since been deleted is dropped, the same way
-    `pulled_in` is filtered against `view`."""
+    `pulled_in` is filtered against `view`, as is a being that's no longer
+    real (`acts_in_world`)."""
 
     local = {thing["local_id"]: thing for thing in local_things}
 
@@ -887,7 +994,8 @@ def _carried(
     for entry in record.state.get("characters") or []:
         thing_id = entry.get("thing_id")
         if thing_id:
-            if view.thing(thing_id) is None:
+            carried = view.thing(thing_id)
+            if carried is None or not acts_in_world(carried):
                 continue
             ref = SetupRef(thing_id=thing_id)
             is_player = thing_id == record.player_thing_id

@@ -55,8 +55,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-
-const FIELD_LABELS = { parent: 'inside', owner: 'owner', place: 'place', culture: 'culture', cultures: 'cultures' };
+import { referenceFieldLabel } from './entryPage.js';
 
 const ROLE_LABELS = { player: 'the player', character: 'a character', place: 'the place', lore: 'pulled-in lore' };
 
@@ -84,7 +83,7 @@ export default {
     },
     methods: {
         fieldLabel(field) {
-            return FIELD_LABELS[field] || field;
+            return referenceFieldLabel(field);
         },
         cancel() {
             if (!this.busy) {

@@ -25,16 +25,26 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from talemate.path import WORLDS_DIR
 
 from . import schema
 from .calendar import Calendar
 from .dates import Precision, WorldDate
-from .kinds import KindSpec, get_kind, validate_field
+from .kinds import (
+    KINDS,
+    KindSpec,
+    get_kind,
+    moved_category,
+    normalise_field,
+    normalise_tag,
+    validate_field,
+)
+from .curation import CurationSettings
 from .refs import parse_refs
-from .view import WorldView
+from .filing import check_filings, stored_filings_value
+from .view import FactState, WorldView, _fact_state_from_row
 
 if TYPE_CHECKING:
     from .prose import ProseCache
@@ -303,11 +313,26 @@ class Revision:
     ) -> None:
         """Add a field value at `valid_from`. If a live value of that field
         already has the same `valid_from`, it's retired first (a
-        correction)."""
+        correction). A `tag` is normalised first (`kinds.normalise_field`);
+        `filings` are also checked against the world
+        (`filing.check_filings`)."""
 
         kind = self._require_thing(thing_id)
         kind_spec = get_kind(kind)
+        value = normalise_field(field, value)
         validate_field(kind_spec, field, value)
+        if field == "filings":
+            # what needs the world: no filing into itself, no cycle, a
+            # `within` that sits in its target; read at this revision
+            errors = check_filings(
+                WorldView(self._conn, None, self.rev),
+                thing_id,
+                cast("list[object]", value),
+            )
+            if errors:
+                raise ValueError("; ".join(errors))
+            # the full exact shape, a blank role as None
+            value = stored_filings_value(cast("list[object]", value))
 
         value_json = _encode_value(kind_spec, field, value)
         from_instant, from_precision = _date_parts(valid_from)
@@ -319,6 +344,109 @@ class Revision:
             "(thing_id, field, value_json, valid_from, from_precision, rev_added) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (thing_id, field, value_json, from_instant, from_precision, self.rev),
+        )
+
+    @_require_open
+    def retag(self, old: str, new: str) -> list[str]:
+        """Make every `tag` value `old` (as normalised) `new`, at its own
+        date, and return the things changed, in id order. A live thing's
+        values are corrected as `set_field` corrects one. A removed
+        thing's values -- those its removal retired -- get a new value too,
+        so undoing the removal brings it back with the new tag (the undo
+        finds the slot written after the removal and leaves it alone).
+        A filing that shows under `old` (`show_under`) shows under `new`
+        the same way, every other key of its value kept."""
+
+        old_tag, new_tag = normalise_tag(old), normalise_tag(new)
+        rows = self._retag_rows("tag")
+        changed: list[str] = []
+        for row in rows:
+            value = json.loads(row["value_json"])
+            if not isinstance(value, str) or normalise_tag(value) != old_tag:
+                continue
+            thing_id = cast(str, row["thing_id"])
+            kind_spec = get_kind(self._thing_kind(thing_id))
+            if row["thing_removed"] is None:
+                if row["rev_removed"] is not None:
+                    continue
+                self.set_field(
+                    thing_id,
+                    "tag",
+                    new_tag,
+                    _decode_date(row["valid_from"], row["from_precision"]),
+                )
+            else:
+                self._conn.execute(
+                    "INSERT INTO field_values (thing_id, field, value_json, "
+                    "valid_from, from_precision, rev_added) "
+                    "VALUES (?, 'tag', ?, ?, ?, ?)",
+                    (
+                        thing_id,
+                        _encode_value(kind_spec, "tag", new_tag),
+                        row["valid_from"],
+                        row["from_precision"],
+                        self.rev,
+                    ),
+                )
+            if thing_id not in changed:
+                changed.append(thing_id)
+        for row in self._retag_rows("filings"):
+            thing_id = cast(str, row["thing_id"])
+            value = json.loads(row["value_json"])
+            if not isinstance(value, list):
+                continue
+            hits = [
+                isinstance(filing, dict)
+                and isinstance(filing.get("show_under"), str)
+                and normalise_tag(filing["show_under"]) == old_tag
+                for filing in value
+            ]
+            if not any(hits):
+                continue
+            renamed = [
+                {**filing, "show_under": new_tag} if hit else filing
+                for filing, hit in zip(value, hits)
+            ]
+            if row["thing_removed"] is None:
+                # only the group a filing shows under changes: nothing for
+                # `check_filings` to look at, so written as stored
+                self._retire_field_value(
+                    thing_id, "filings", cast("int | None", row["valid_from"])
+                )
+            self._conn.execute(
+                "INSERT INTO field_values (thing_id, field, value_json, "
+                "valid_from, from_precision, rev_added) "
+                "VALUES (?, 'filings', ?, ?, ?, ?)",
+                (
+                    thing_id,
+                    json.dumps(renamed),
+                    row["valid_from"],
+                    row["from_precision"],
+                    self.rev,
+                ),
+            )
+            if thing_id not in changed:
+                changed.append(thing_id)
+        return sorted(changed)
+
+    def _retag_rows(self, field: str) -> list[sqlite3.Row]:
+        """`retag`'s rows of `field`: each thing's live values, and a
+        removed thing's values its removal retired, with `thing_removed`
+        (the thing's removal, if any)."""
+
+        return list(
+            self._conn.execute(
+                "SELECT fv.thing_id, fv.value_json, fv.valid_from, "
+                "fv.from_precision, fv.rev_removed, "
+                "(SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
+                " ORDER BY t.row_id DESC LIMIT 1) AS thing_removed "
+                "FROM field_values fv WHERE fv.field = ? "
+                "AND (fv.rev_removed IS NULL OR fv.rev_removed = "
+                " (SELECT t.rev_removed FROM things t WHERE t.id = fv.thing_id "
+                "  ORDER BY t.row_id DESC LIMIT 1)) "
+                "ORDER BY fv.thing_id, fv.row_id",
+                (field,),
+            ).fetchall()
         )
 
     @_require_open
@@ -397,9 +525,11 @@ class Revision:
         valid_from: object = _UNSET,
         valid_until: object = _UNSET,
         overrides: list[str] | None = None,
+        origin: object = _UNSET,
     ) -> None:
         """Retire the live version of `fact_id` and add a new version with
-        the same `fact_id`, copying over any part left unspecified. `text`
+        the same `fact_id`, copying over any part left unspecified.
+        `origin` (a dict, or `None`) replaces its origin. `text`
         and `category` are never legitimately `None`, so `None` there means
         "unspecified"; `valid_from`/`valid_until` use a sentinel instead,
         since `None` is a legitimate value for them (an open end).
@@ -426,7 +556,14 @@ class Revision:
             else overrides
         )
 
-        kind = self._thing_kind(live["thing_id"])
+        owner = live["thing_id"]
+        origin_json = (
+            live["origin_json"]
+            if origin is _UNSET
+            else (json.dumps(origin) if origin is not None else None)
+        )
+
+        kind = self._thing_kind(owner)
         kind_spec = get_kind(kind)
         if new_category not in kind_spec.categories:
             raise ValueError(f"{kind!r} has no fact category {new_category!r}")
@@ -450,14 +587,14 @@ class Revision:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 fact_id,
-                live["thing_id"],
+                owner,
                 new_category,
                 new_text,
                 from_instant,
                 from_precision,
                 until_instant,
                 until_precision,
-                live["origin_json"],
+                origin_json,
                 self.rev,
             ),
         )
@@ -497,45 +634,21 @@ class Revision:
             (self.rev, thing_id),
         )
 
-    @_require_open
-    def change_stub_kind(self, thing_id: str, kind: str) -> None:
-        """Give a stub another kind: its thing row is retired and a row of
-        `kind` with the same id is added, so undo reverses it like any other
-        write. Its field values and facts are kept as they are. Raises
-        `ValueError` unless the thing is a stub (a live `stub` value at any
-        date), and when a live field or fact category of it doesn't exist on
-        `kind`."""
+    def _is_stub(self, thing_id: str) -> bool:
+        """Whether the thing has a live `stub` value at any date."""
 
-        new_spec = _kind_for(kind)
-        old_kind = self._require_thing(thing_id)
-        if (
+        return (
             self._conn.execute(
                 "SELECT 1 FROM field_values "
                 "WHERE thing_id = ? AND field = 'stub' AND rev_removed IS NULL",
                 (thing_id,),
             ).fetchone()
-            is None
-        ):
-            raise ValueError(f"only a stub's kind can be changed: {thing_id}")
-        if kind == old_kind:
-            return
+            is not None
+        )
 
-        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
-        new_types = {spec.name: spec.type for spec in new_spec.fields}
-        for (field,) in self._conn.execute(
-            "SELECT DISTINCT field FROM field_values "
-            "WHERE thing_id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ):
-            if new_types.get(field) != old_types[field]:
-                raise ValueError(f"{kind!r} has no {old_types[field]} field {field!r}")
-        for (category,) in self._conn.execute(
-            "SELECT DISTINCT category FROM facts "
-            "WHERE thing_id = ? AND rev_removed IS NULL",
-            (thing_id,),
-        ):
-            if category not in new_spec.categories:
-                raise ValueError(f"{kind!r} has no fact category {category!r}")
+    def _rekind(self, thing_id: str, kind: str) -> None:
+        """Retire the thing's row and add one of `kind` with the same id, so
+        undo reverses it like any other write."""
 
         self._conn.execute(
             "UPDATE things SET rev_removed = ? WHERE id = ? AND rev_removed IS NULL",
@@ -545,6 +658,57 @@ class Revision:
             "INSERT INTO things (id, kind, rev_added) VALUES (?, ?, ?)",
             (thing_id, kind, self.rev),
         )
+
+    @_require_open
+    def change_stub_kind(self, thing_id: str, kind: str) -> None:
+        """Give a stub another kind, any kind: its thing row is retired and
+        a row of `kind` with the same id is added, so undo reverses it like
+        any other write. Its facts are kept by id: one in a category `kind`
+        lacks takes the category `kinds.moved_category` gives (a new
+        version of the fact, as `correct_fact` writes: a lore `general`
+        fact is a character's `background`). Its field
+        values are kept, but those of a field `kind` lacks (or has with
+        another type) are retired with it -- a stub's place `kind` text,
+        say. Raises `ValueError` unless the thing is a stub (a live `stub`
+        value at any date)."""
+
+        new_spec = _kind_for(kind)
+        old_kind = self._require_thing(thing_id)
+        if not self._is_stub(thing_id):
+            raise ValueError(f"only a stub's kind can be changed: {thing_id}")
+        if kind == old_kind:
+            return
+
+        old_types = {spec.name: spec.type for spec in get_kind(old_kind).fields}
+        new_types = {spec.name: spec.type for spec in new_spec.fields}
+        self._conn.execute(
+            "UPDATE field_values SET rev_removed = ? "
+            "WHERE thing_id = ? AND rev_removed IS NULL "
+            "AND field IN (SELECT value FROM json_each(?))",
+            (
+                self.rev,
+                thing_id,
+                json.dumps(
+                    [
+                        field
+                        for field, type_ in old_types.items()
+                        if new_types.get(field) != type_
+                    ]
+                ),
+            ),
+        )
+        self._rekind(thing_id, kind)
+        facts = self._conn.execute(
+            "SELECT fact_id, category, valid_from FROM facts "
+            "WHERE thing_id = ? AND rev_removed IS NULL",
+            (thing_id,),
+        ).fetchall()
+        for fact_id, category, valid_from in facts:
+            if category not in new_spec.categories:
+                self.correct_fact(
+                    fact_id,
+                    category=moved_category(kind, category, valid_from is not None),
+                )
 
 
 class World:
@@ -682,6 +846,23 @@ class World:
     def set_calendar(self, calendar: Calendar) -> None:
         self._set_meta("calendar", calendar.model_dump_json())
 
+    def curation(self) -> CurationSettings:
+        """The world's curation knobs; the defaults until `set_curation`
+        is called, or when the stored value can't be read (logged)."""
+
+        try:
+            stored = self._meta("curation")
+        except KeyError:
+            return CurationSettings()
+        try:
+            return CurationSettings.model_validate_json(stored)
+        except ValidationError as exc:
+            log.warning("world.curation_unreadable", stored=stored, error=str(exc))
+            return CurationSettings()
+
+    def set_curation(self, settings: CurationSettings) -> None:
+        self._set_meta("curation", settings.model_dump_json())
+
     def present(self) -> WorldDate:
         """The world's "present": the in-world date its owner is working
         at when no scene says otherwise (creating things before any scene
@@ -699,12 +880,88 @@ class World:
         row = self._conn.execute("SELECT MAX(rev) FROM revisions").fetchone()
         return row[0] or 0
 
+    def unknown_structure(self) -> builtins.list[str]:
+        """The kinds and fields this world's rows use that no kind has any
+        more -- a world made before Filing (its spheres, `part_of`,
+        `ties`), which the views can't read. Empty for a world this
+        version made: every write is checked against its kind. A field
+        counts as known when any kind its thing has ever had includes it:
+        a stub whose kind changed keeps its retired row of the old kind
+        (`_rekind`), and its fields may be of either. One pass over the
+        distinct kinds and (thing, field) pairs, any revision."""
+
+        found: builtins.list[str] = []
+        kinds_of: dict[str, set[str]] = {}
+        for thing_id, kind in self._conn.execute(
+            "SELECT DISTINCT id, kind FROM things"
+        ):
+            kinds_of.setdefault(thing_id, set()).add(kind)
+        found += sorted(
+            {kind for kinds in kinds_of.values() for kind in kinds} - set(KINDS)
+        )
+        known = {
+            kind: {spec.name for spec in kind_spec.fields}
+            for kind, kind_spec in KINDS.items()
+        }
+        for thing_id, field in self._conn.execute(
+            "SELECT DISTINCT thing_id, field FROM field_values ORDER BY field"
+        ):
+            kinds = kinds_of.get(thing_id, set())
+            if (
+                field not in found
+                and kinds
+                and kinds <= set(KINDS)
+                and not any(field in known[kind] for kind in kinds)
+            ):
+                found.append(field)
+        return found
+
     def view(self, at: WorldDate | None = None, rev: int | None = None) -> WorldView:
         """A snapshot of the world at `(at, rev)`. `at=None` means the
         latest telling; `rev=None` is resolved to `head_rev()` now, so the
         view stays pinned even as later revisions are written."""
 
         return WorldView(self._conn, at, rev if rev is not None else self.head_rev())
+
+    def live_facts(self, thing_id: str | None = None) -> builtins.list[FactState]:
+        """The facts of `thing_id` (of every thing, if `None`) live at the
+        head revision, on every story date, ended ones too: what `view()`
+        shows on one date at a time. Ordered by creation."""
+
+        rev = self.head_rev()
+        rows = self._conn.execute(
+            """
+            SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
+                   f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+                   f.origin_json,
+                   (SELECT MIN(f0.row_id) FROM facts f0
+                    WHERE f0.fact_id = f.fact_id) AS created
+            FROM facts f
+            JOIN things t ON t.id = f.thing_id
+              AND t.rev_added <= :rev
+              AND (t.rev_removed IS NULL OR t.rev_removed > :rev)
+            WHERE f.rev_added <= :rev
+              AND (f.rev_removed IS NULL OR f.rev_removed > :rev)
+              AND (:thing_id IS NULL OR f.thing_id = :thing_id)
+            ORDER BY created
+            """,
+            {"rev": rev, "thing_id": thing_id},
+        ).fetchall()
+        facts = []
+        for row in rows:
+            state = _fact_state_from_row(row)
+            state.overrides = self._fact_overrides(row["row_id"])
+            facts.append(state)
+        return facts
+
+    def _fact_overrides(self, row_id: int) -> builtins.list[str]:
+        return [
+            r[0]
+            for r in self._conn.execute(
+                "SELECT fact_id FROM fact_overrides WHERE row_id = ? ORDER BY rowid",
+                (row_id,),
+            )
+        ]
 
     def timeline(
         self, thing_id: str, rev: int | None = None

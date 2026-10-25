@@ -101,8 +101,8 @@ def _measure(name, lo, hi, unit="ft"):
 @pytest.fixture
 def heritage_world(world):
     """Three species, two races, a Half-orc mix of Lowlander and Orc, the
-    Riverfolk culture, and two characters: Vasha (Snowy) and Brenna
-    (Half-orc, Riverfolk)."""
+    Riverfolk culture (lore tagged culture), and two characters: Vasha
+    (Snowy) and Brenna (Half-orc, filed in the Riverfolk)."""
 
     with world.revision(Source.manual(note="heritage")) as rev:
         human = rev.create_thing(
@@ -148,14 +148,20 @@ def heritage_world(world):
         half_orc = rev.create_thing(
             "mix", fields={"name": "Half-orc", "parents": [lowlander, orc]}
         )
-        riverfolk = rev.create_thing("culture", fields={"name": "Riverfolk"})
-        customs = rev.add_fact(riverfolk, "customs", "Name their boats.")
+        riverfolk = rev.create_thing(
+            "lore", fields={"name": "Riverfolk", "tag": "culture", "hint": "culture"}
+        )
+        customs = rev.add_fact(riverfolk, "general", "Name their boats.")
         vasha = rev.create_thing(
             "character", fields={"name": "Vasha", "heritage": snowy}
         )
         brenna = rev.create_thing(
             "character",
-            fields={"name": "Brenna", "heritage": half_orc, "culture": riverfolk},
+            fields={
+                "name": "Brenna",
+                "heritage": half_orc,
+                "filings": [{"target": riverfolk, "role": "of this culture"}],
+            },
         )
 
     return HeritageWorld(

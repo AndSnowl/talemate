@@ -245,7 +245,7 @@ def _random_step(
             rev.set_field(rnd.choice(things), "name", f"x{step}", rnd.choice(DATES))
     elif op < 0.63:
         with world.revision(source) as rev:
-            rev.set_field(rnd.choice(things), "culture", rnd.choice(things), None)
+            rev.set_field(rnd.choice(things), "heritage", rnd.choice(things), None)
     elif op < 0.70 and facts:
         with world.revision(source) as rev:
             rev.remove_fact(rnd.choice(facts))

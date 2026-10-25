@@ -12,13 +12,21 @@ trailing `'s` allowed and longer names tried first:
   "Tsar Alexei II" is "Alexei", never "Tsar";
 - one capitalised word of five or more letters from a multi-word main
   name ("Moscavia" for "Tsardom of Moscavia"), but no title word. That's
-  only a *suggested* match, offered after any real one.
+  only a *suggested* match, offered after any real one;
+- an adjective form of a one-word main or other name of four letters or
+  more ("Moscavian" for Moscavia, "Kalmaran" for Kalmara) of a place,
+  species or race (`ADJECTIVE_KINDS`; "Julian" never means Julia):
+  the name, or the name less a final vowel, with one of
+  `ADJECTIVE_ENDINGS`. It ranks after the other names.
 
 A stub whose name is a common word ("Hope") mustn't link the "hope" in
 "I hope", so a stub, like another name ("the Pier") or a suggestion,
 matches only text written with a capital letter (a leading article may
-stay lowercase: "the Drowned Stag"). A stub the owner ignored isn't
-matched at all. The main name (and a character's first name) of an
+stay lowercase: "the Drowned Stag"). A main or other name stored with a
+lowercase first word but a capitalised word in it ("river Vilya") also
+matches text writing it exactly as stored, case and all; one with no
+capital at all ("hope") never matches as written. A stub the owner ignored isn't
+matched at all. An adjective form needs a capital too. The main name (and a character's first name) of an
 entry that isn't a stub matches in any case, as scene setup always has.
 
 `unknown_proper_phrases` finds the capitalised phrases no match covers
@@ -29,16 +37,17 @@ are left out.
 """
 
 import re
+from collections.abc import Sequence
 from typing import Literal
 
 import structlog
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .view import ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.names")
 
-Via = Literal["name", "aka", "first_name", "partial"]
+Via = Literal["name", "aka", "first_name", "adjective", "partial"]
 
 # leading words never matched on their own as a character's first name,
 # and stripped from the front of an unknown phrase
@@ -59,6 +68,15 @@ TITLE_WORDS = set(
 
 # the shortest word of a longer name that's suggested on its own
 PARTIAL_MIN_LETTERS = 5
+
+# the endings an adjective form adds to a name, or to the name less a
+# final vowel; and the shortest name that has adjective forms ("Uz" has
+# none)
+ADJECTIVE_ENDINGS = ("n", "an", "ian", "ish", "ese")
+ADJECTIVE_MIN_LETTERS = 4
+# the kinds whose names have adjective forms
+ADJECTIVE_KINDS = frozenset({"place", "species", "race"})
+_VOWELS = "aeiou"
 
 # lowercase words an unknown phrase may run across ("Night of Feathers")
 _CONNECTORS = {"of", "the"}
@@ -117,7 +135,13 @@ _SENTENCE_OPENERS = set(
 _ABBREVIATIONS = {"St"}
 
 # how a candidate ranks among others for the same text: lower is better
-_RANKS: dict[str, int] = {"name": 0, "aka": 1, "first_name": 2, "partial": 9}
+_RANKS: dict[str, int] = {
+    "name": 0,
+    "aka": 1,
+    "first_name": 2,
+    "adjective": 8,
+    "partial": 9,
+}
 # added to the ranks of things that only share a longer name's first word
 _FIRST_WORD_RANK = 3
 
@@ -141,6 +165,10 @@ class NameCandidate(BaseModel):
     kind: str
     stub: bool = False
     via: Via = "name"
+    # the main or other name as stored, when it starts lowercase but has a
+    # capitalised word ("river Vilya", `_as_written`): text writing it
+    # exactly so matches whatever the capital rule says. Never sent
+    as_stored: str | None = Field(default=None, exclude=True)
 
 
 class NameMatch(BaseModel):
@@ -209,6 +237,26 @@ def _partial_words(name: str, kind: str) -> list[str]:
     ]
 
 
+def adjective_forms(name: str) -> list[str]:
+    """The adjective forms of a one-word name of `ADJECTIVE_MIN_LETTERS` or
+    more ("Moscavian", "Moscavish", ... for "Moscavia"), each once, never
+    the name itself. Empty for a longer or shorter name."""
+
+    words = name.split()
+    if len(words) != 1 or _letters(name) < ADJECTIVE_MIN_LETTERS:
+        return []
+    stems = [name]
+    if name[-1].casefold() in _VOWELS:
+        stems.append(name[:-1])
+    forms: list[str] = []
+    for stem in stems:
+        for ending in ADJECTIVE_ENDINGS:
+            form = stem + ending
+            if _norm(form) != _norm(name) and form not in forms:
+                forms.append(form)
+    return forms
+
+
 def _title_key(word: str) -> str:
     return word.casefold().rstrip(".")
 
@@ -230,32 +278,103 @@ def _first_name(words: list[str]) -> str | None:
 Aliases = dict[str, list[tuple[int, NameCandidate]]]
 
 
-def _aliases(view: WorldView) -> Aliases:
+def _aliases(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
     """Every matchable alias (normalised) and the things it names, each
-    with its rank."""
+    with its rank: the view's things', then `extra`'s (things not in the
+    view, named by their own `name` field)."""
+
+    return alias_table(view, extra)
+
+
+def _add_alias(
+    aliases: Aliases, alias: str, state: ThingState, name: str, via: Via
+) -> None:
+    """Add `alias` (normalised) to `aliases`, naming `state` (shown as
+    `name`), matched `via`."""
+
+    key = _norm(alias)
+    if not key:
+        return
+    tidy = " ".join(alias.split())
+    candidate = NameCandidate(
+        id=state.id,
+        name=name,
+        kind=state.kind,
+        stub=state.is_stub,
+        via=via,
+        as_stored=(tidy if via in ("name", "aka") and _as_written(tidy) else None),
+    )
+    aliases.setdefault(key, []).append((_RANKS[via], candidate))
+
+
+def _as_written(name: str) -> bool:
+    """Whether `name` matches text writing it exactly as stored: it starts
+    lowercase but has a capitalised word, so it still reads as a proper
+    name ("river Vilya"). One with no capital at all ("hope", "watch")
+    keeps the capital rule, so a common word never matches."""
+
+    return not _capitalised(name) and any(word[:1].isupper() for word in name.split())
+
+
+def own_alias_table(state: ThingState, name: str) -> Aliases:
+    """A `find_names` table of just `state`'s own names: its main name
+    (`name`, as its page shows it) and its other names, matched by the
+    same rules as in `alias_table`. Its page uses it to find where its
+    text names it ("this page", ruling H7); nothing in the world is
+    loaded."""
+
+    aliases: Aliases = {}
+    tidy = " ".join(name.split())
+    if not tidy:
+        return aliases
+    _add_alias(aliases, tidy, state, tidy, "name")
+    for entry in _aka_entries(state):
+        other = entry.get("name")
+        if isinstance(other, str):
+            _add_alias(aliases, other, state, tidy, "aka")
+    return aliases
+
+
+def alias_table(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
+    """`find_names`' table of every name in `view` (and `extra`), built
+    once: it loads every thing in the world, so a caller linking many
+    texts against one unchanging view builds it once and passes it as
+    `find_names(..., aliases=)` (I1). Stale once the view's names change:
+    a view inside an open revision that renames or adds things needs a
+    new one."""
 
     aliases: Aliases = {}
 
     def add(alias: str, state: ThingState, name: str, via: Via) -> None:
-        key = _norm(alias)
-        if not key:
-            return
-        candidate = NameCandidate(
-            id=state.id, name=name, kind=state.kind, stub=state.is_stub, via=via
-        )
-        aliases.setdefault(key, []).append((_RANKS[via], candidate))
+        _add_alias(aliases, alias, state, name, via)
 
-    for state in view.things():
+    # names only: no facts loaded
+    pool = [(state, False) for state in view.things(facts=False)]
+    pool += [(state, True) for state in extra]
+    for state, drafted in pool:
         if state.stub_ignored:
             continue
-        name = " ".join((view.name_of(state.id) or "").split())
+        own = state.fields.get("name") if drafted else None
+        written = own if isinstance(own, str) else view.name_of(state.id)
+        name = " ".join((written or "").split())
         if not name:
             continue
         add(name, state, name, "name")
-        for entry in _aka_entries(state):
-            other = entry.get("name")
-            if isinstance(other, str):
-                add(other, state, name, "aka")
+        others = [
+            other
+            for entry in _aka_entries(state)
+            if isinstance(other := entry.get("name"), str)
+        ]
+        for other in others:
+            add(other, state, name, "aka")
+        if state.kind in ADJECTIVE_KINDS:
+            adjectives = {
+                _norm(form)
+                for written in [name, *others]
+                for form in adjective_forms(" ".join(written.split()))
+            }
+            for form in sorted(adjectives):
+                add(form, state, name, "adjective")
         words = name.split()
         first = _first_name(words) if state.kind == "character" else None
         if first is not None:
@@ -300,18 +419,41 @@ def _capitalised(written: str) -> bool:
 
 def _needs_capital(candidate: NameCandidate) -> bool:
     """Only a main name (or a character's first name) of a thing that
-    isn't a stub matches in any case; a stub, another name ("the Pier")
-    or a partial needs a capital."""
+    isn't a stub matches in any case; a stub, another name ("the Pier"),
+    an adjective form or a partial needs a capital."""
 
-    return candidate.stub or candidate.via in ("aka", "partial")
+    return candidate.stub or candidate.via in ("aka", "adjective", "partial")
 
 
-def find_names(view: WorldView, text: str) -> list[NameMatch]:
+def find_names(
+    view: WorldView,
+    text: str,
+    *,
+    extra: Sequence[ThingState] = (),
+    aliases: Aliases | None = None,
+) -> list[NameMatch]:
     """Every name of the view's things in `text`, as they're named at the
     view's date, in order. Longer names are tried first, so overlapping
-    names match once ("Maren Vos" never also as "Maren")."""
+    names match once ("Maren Vos" never also as "Maren"). `extra` are
+    things matched as if the view had them (an entry still being drafted,
+    named by its `name` and `aka` fields). `aliases`, `alias_table`'s
+    for the view (`extra` then unused), saves building it again."""
 
-    aliases = _aliases(view)
+    if aliases is None:
+        aliases = _aliases(view, extra)
+    return _find(text, aliases)
+
+
+def find_own_names(text: str, own: Aliases) -> list[NameMatch]:
+    """`find_names` for one entry's own names alone (`own`, its
+    `own_alias_table`): where `text` names it."""
+
+    return _find(text, own)
+
+
+def _find(text: str, aliases: Aliases) -> list[NameMatch]:
+    """`find_names`' matching, against `aliases`."""
+
     folded = text.casefold()
 
     # (start, end, end with any `'s`, written, candidates)
@@ -330,10 +472,11 @@ def find_names(view: WorldView, text: str) -> list[NameMatch]:
                 # a case mapping regex and casefold disagree on: not a match
                 continue
             capital = _capitalised(written)
+            exact = " ".join(written.split())
             candidates = [
                 c
                 for c in _candidates(aliases, alias)
-                if capital or not _needs_capital(c)
+                if capital or not _needs_capital(c) or c.as_stored == exact
             ]
             if candidates:
                 found.append((hit.start(1), hit.end(1), hit.end(), written, candidates))

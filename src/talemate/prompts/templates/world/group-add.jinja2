@@ -1,0 +1,50 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+{% if tag -%}
+You add new entries to one group on a page of a fantasy world's records: the "{{ tag }}" group of {{ page }}. The owner asked for: {{ prompt }}
+
+Write what the owner asked for, as many as they asked for: one when they ask for one ("a guild", "an inn"), and never more than 3. Each new entry is tagged "{{ tag }}" and filed in {{ page }}. Each is a named thing with a proper name that fits the world, never a role, topic or practice without a name of its own. Keep each consistent with {{ page }} and the world, and never write again an entry the world already has (they are listed below).
+{%- else -%}
+You add new entries to a page of a fantasy world's records: {{ page }}. The owner asked for: {{ prompt }}
+
+Write what the owner asked for, as many as they asked for: one when they ask for one ("a guild", "an inn"), and never more than 3. Each new entry is filed in {{ page }}, with its own tag saying what kind of entry it is ("guild", "custom", "river"). Each is a named thing with a proper name that fits the world, never a role, topic or practice without a name of its own. Keep each consistent with {{ page }} and the world, and never write again an entry the world already has (they are listed below).
+{%- endif %}
+
+{{ page }} ({{ page_kind }}{% if page_tag %}, {{ page_tag }}{% endif %}):
+{% for text in page_facts -%}
+- {{ text }}
+{% endfor %}
+{%- if tag %}
+Already in its "{{ tag }}" group: {% if members %}{{ members | join("; ") }}{% else %}nothing yet{% endif %}.
+{%- endif %}
+{%- if filed %}
+Also filed in {{ page }}: {{ filed | join("; ") }}.
+{%- endif %}
+{%- if nearby %}
+Other entries near it: {{ nearby | join("; ") }}.
+{%- endif %}
+
+The world's calendar: it is now {{ now_label }}, year {{ now_year }}.
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{% if tag -%}
+{"entries": [{"name": "...", "kind": "lore", "tag": "{{ tag }}", "line": "One claim saying what it is, in a full sentence."}]}
+{%- else -%}
+{"entries": [{"name": "...", "kind": "lore", "tag": "guild", "line": "One claim saying what it is, in a full sentence."}]}
+{%- endif %}
+
+- "name": the entry's proper name, in full.
+- "kind": one of character, place, species, race, event, item, lore (a faith, order, guild, council, custom, law or field of knowledge is lore).
+{%- if tag %}
+- "tag": "{{ tag }}".
+{%- else %}
+- "tag": its own, a short word saying what kind of entry it is.
+{%- endif %}
+- "line": one sentence saying what it is and how it belongs in {{ page }}.
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

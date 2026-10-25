@@ -279,3 +279,40 @@ def test_get_prefers_the_latest_starting_overlap(world):
     assert cache.get(thing_id, "description", WorldDate.of(1004)).text == "Newer."
     assert cache.get(thing_id, "description", WorldDate.of(1001)).text == "Older."
     assert cache.stale(thing_id, "description", None) is False
+
+
+def test_stale_ignores_categories_the_section_does_not_read(world):
+    """`ignore_categories`: a new fact, a removed one, or one moved out of
+    an ignored category -- of the thing itself -- is no change when its
+    category is ignored; the `also` ids are checked in full."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        dawn = rev.create_thing("place", {"name": "The White Dawn"})
+        rev.add_fact(dawn, "about", "The state church.")
+        decree = rev.add_fact(
+            dawn, "timeline", "Issued a decree.", valid_from=WorldDate.of(1001)
+        )
+        elder = rev.create_thing("place", {"name": "The Elder Dawn"})
+    cache = world.prose()
+    cache.put(dawn, "description", None, None, "The church of the dawn.")
+    ignore = ("statement", "timeline")
+
+    with world.revision(Source.manual(note="unread")) as rev:
+        rev.add_fact(dawn, "statement", "Snow is pure.")
+        rev.add_fact(dawn, "timeline", "A synod.", valid_from=WorldDate.of(1010))
+        rev.remove_fact(decree)
+    assert cache.stale(dawn, "description", None) is True
+    assert cache.stale(dawn, "description", None, ignore_categories=ignore) is False
+
+    # a change to an `also` id counts, whatever its category
+    with world.revision(Source.manual(note="elder")) as rev:
+        rev.add_fact(elder, "timeline", "Split.", valid_from=WorldDate.of(1012))
+    assert (
+        cache.stale(dawn, "description", None, [elder], ignore_categories=ignore)
+        is True
+    )
+
+    # a read category counts
+    with world.revision(Source.manual(note="read")) as rev:
+        rev.add_fact(dawn, "about", "Kept by the elders.")
+    assert cache.stale(dawn, "description", None, ignore_categories=ignore) is True

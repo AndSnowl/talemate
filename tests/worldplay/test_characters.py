@@ -664,3 +664,257 @@ def test_since_lines_after_a_dated_heritage_change_past_the_cache(
     assert since_lines(world, kit, WorldDate.of(401)) == [
         "Owl-folk: Wings in place of arms."
     ]
+
+
+# --- filing lines (filing spec; the Spheres tie-line format) ---------------------
+
+
+def test_sheet_filing_lines(world, spheres_world):
+    """A character's sheet has one line per live filing with a role, in
+    the Spheres tie-line format: the role capitalised "of" the entry,
+    "(since <year>)" when dated, and "but: " with its exceptions (the
+    filing's own, in the order written; ruling C6's mid-sentence rule),
+    joined with "; "; a filing within a part reads "<Role> in <entry>,
+    within <part>" (ruling C12). A filing with no role gives no line, nor
+    one that has ended or hasn't begun."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="more filings")) as rev:
+        rev.set_field(
+            s.brenna,
+            "filings",
+            [
+                {
+                    "target": s.council,
+                    "role": "elder",
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.tsardom,
+                    "role": "trooper",
+                    "since": WorldDate.of(1012, 5, 1).model_dump(mode="json"),
+                    "until": None,
+                    "within": s.kremova,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.guild,
+                    "role": "apprentice",
+                    "since": WorldDate.of(990).model_dump(mode="json"),
+                    "until": WorldDate.of(1000).model_dump(mode="json"),
+                    "within": None,
+                    "exceptions": [],
+                },
+                {
+                    "target": s.dawn_peak,
+                    "role": None,
+                    "since": None,
+                    "until": None,
+                    "within": None,
+                    "exceptions": [],
+                },
+            ],
+            None,
+        )
+
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert vasha.base_attributes["ties"] == (
+        "Practitioner of the White Dawn (since 1010), but: doesn't believe "
+        "snowy owl-folk are superior; means to marry a human"
+    )
+    assert "Departs" not in vasha.sheet
+    assert "[[thing:" not in vasha.sheet
+
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    assert brenna.base_attributes["ties"] == (
+        "Elder of the Council of Elders\n"
+        "Trooper in Tsardom of Moscavia, within Kremova (since 1012)"
+    )
+
+    # before the filing began, there's none
+    young = character_from_world(world, s.vasha, WorldDate.of(1005), is_player=False)
+    assert "ties" not in young.base_attributes
+
+
+def test_filing_line_to_a_deleted_or_nameless_entry_is_left_out(world, spheres_world):
+    """A filing stores its entry's id, so one into an entry since deleted,
+    or with no name at the scene's date, is left out (never
+    "⟨unknown⟩"), its exceptions with it."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="nameless")) as rev:
+        rev.remove_field_value(s.council, "name", None)
+    brenna = character_from_world(world, s.brenna, WorldDate.of(1020), is_player=False)
+    assert "ties" not in brenna.base_attributes
+    assert "⟨unknown⟩" not in brenna.sheet
+
+    with world.revision(Source.manual(note="gone")) as rev:
+        rev.remove_thing(s.dawn)
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert "ties" not in vasha.base_attributes
+
+
+def test_exception_text_without_departs_suffix():
+    from talemate.worldplay.characters import exception_text
+
+    dawn, item = "a" * 32, "b" * 32
+    assert (
+        exception_text(
+            f"Doesn't believe it. Departs from a teaching of [[thing:{dawn}|The Dawn]]"
+        )
+        == "Doesn't believe it."
+    )
+    assert (
+        exception_text(f"Means to marry. Departs from [[thing:{item}]]")
+        == "Means to marry."
+    )
+    # only the trailing link sentence goes; a reference elsewhere stays
+    assert exception_text(
+        f"Skips [[thing:{item}|the vigil]] at Departs from Peak."
+    ) == (f"Skips [[thing:{item}|the vigil]] at Departs from Peak.")
+    assert exception_text("Sleeps through prayers.") == "Sleeps through prayers."
+
+
+def test_exception_text_strips_what_creation_appends():
+    """Round trip: the link sentence `create.filing_exception_fact`
+    appends to an exception (for an entry filed in the target, and for a
+    fact of it, whose item name is a whole sentence) is exactly what
+    `exception_text` takes off."""
+
+    from talemate.worldplay.characters import exception_text
+    from talemate.worldplay.create import PreviewException, filing_exception_fact
+
+    dawn, item = "a" * 32, "b" * 32
+    for exception in (
+        PreviewException(
+            text="Means to marry a human", item="The Doctrine", thing_id=item
+        ),
+        PreviewException(
+            text="Thinks all folk equal.",
+            item="Snowy owl-folk are the purest of the folk.",
+            fact_id="c" * 32,
+        ),
+    ):
+        text, _origin = filing_exception_fact(
+            exception.text, dawn, "The White Dawn", exception
+        )
+        assert "Departs from" in text
+        assert exception_text(text) == exception.text.rstrip(".") + "."
+
+
+def _add_exceptions(world, s, *texts):
+    """Vasha's exceptions `texts`, filed under her filing in the Dawn as
+    character creation files them (origin `tie`, id in `exceptions`)."""
+
+    from talemate.world.filing import filings_of
+
+    with world.revision(Source.manual(note="more")) as rev:
+        ids = [
+            rev.add_fact(s.vasha, "ties", text, origin={"tie": s.dawn})
+            for text in texts
+        ]
+        (filing,) = filings_of(world.view(), s.vasha, live=False)
+        rev.set_field(
+            s.vasha,
+            "filings",
+            [
+                {
+                    **filing.model_dump(mode="json"),
+                    "exceptions": [*filing.exceptions, *ids],
+                }
+            ],
+            None,
+        )
+
+
+def test_filing_line_keeps_names_and_capitals_opening_an_exception(
+    world, spheres_world
+):
+    """An exception opening with a name -- a reference, or the character's
+    own (left unlinked by creation) -- or with "I" or a word in capitals
+    keeps its case after "but: "; any other opens lowercase."""
+
+    s = spheres_world
+    _add_exceptions(
+        world,
+        s,
+        f"Vasha skips [[thing:{s.separation}|the doctrine]]'s fast.",
+        f"[[thing:{s.kremova}]] is where she breaks "
+        f"[[thing:{s.separation}|the doctrine]].",
+        f"I'll not bow, she says of [[thing:{s.separation}|the doctrine]].",
+        f"NEVER kneels at [[thing:{s.separation}|the doctrine]]'s reading.",
+    )
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert vasha.base_attributes["ties"].endswith(
+        "but: doesn't believe snowy owl-folk are superior; means to marry a "
+        "human; Vasha skips the doctrine's fast; Kremova is where she breaks "
+        "the doctrine; I'll not bow, she says of the doctrine; NEVER kneels at the "
+        "doctrine's reading"
+    )
+
+
+def test_exception_opening_with_a_world_name_keeps_its_capital(world, spheres_world):
+    """The first letter after "but:" keeps its case when the text opens
+    with a world name, linked or not (Brenna, another character, left
+    plain); the character's own name doesn't protect a leading word ("The
+    Grey Wanderer" and "The vigil..."); a plain verb is lowercased."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="names")) as rev:
+        rev.set_field(s.vasha, "name", "The Grey Wanderer", None)
+    _add_exceptions(
+        world,
+        s,
+        f"Brenna taught her to doubt [[thing:{s.separation}|the doctrine]].",
+        f"The vigil at [[thing:{s.separation}|the doctrine]]'s feast bores her.",
+        f"Skips [[thing:{s.separation}|the doctrine]]'s fast.",
+    )
+    vasha = character_from_world(world, s.vasha, WorldDate.of(1020), is_player=False)
+    assert vasha.base_attributes["ties"].endswith(
+        "; Brenna taught her to doubt the doctrine; the vigil at the "
+        "doctrine's feast bores her; skips the doctrine's fast"
+    )
+
+
+def test_filing_line_for_a_role_that_says_how(world, spheres_world):
+    """A role that ends with a preposition takes no "of" ("Ward under the
+    Council of Elders"), and one that opens "of" ("of this culture", the
+    spec's culture role) reads "Of <entry>"; within a part, either keeps
+    its own form before ", within <part>"."""
+
+    from talemate.worldplay.characters import filing_lines
+
+    s = spheres_world
+    with world.revision(Source.manual(note="roles")) as rev:
+        rev.set_field(
+            s.brenna,
+            "filings",
+            [
+                {"target": s.council, "role": "ward under"},
+                {"target": s.tsardom, "role": "of this culture"},
+                {"target": s.kremova, "role": "acting as"},
+            ],
+            None,
+        )
+        oleg = rev.create_thing(
+            "character",
+            {
+                "name": "Oleg",
+                "filings": [
+                    {"target": s.tsardom, "role": "born in", "within": s.kremova}
+                ],
+            },
+        )
+    view = world.view(WorldDate.of(1020))
+    assert filing_lines(view, world.calendar, s.brenna) == [
+        "Ward under the Council of Elders",
+        "Of Tsardom of Moscavia",
+        # "as", "through", "over"... say how too (the In row reads it so)
+        "Acting as Kremova",
+    ]
+    assert filing_lines(view, world.calendar, oleg) == [
+        "Born in Tsardom of Moscavia, within Kremova"
+    ]

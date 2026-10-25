@@ -1,8 +1,13 @@
 // The kinds the World tab shows, with their fact categories (mirroring
-// `talemate.world.kinds.KINDS`). Cultures are listed but made through the
-// culture skill, so they can't be opened or created here. Races and mixes
-// (`nested`) aren't listed at the top level: they're reached from their
-// species page. The Stubs tab (`STUBS_TAB`) sits below the kinds.
+// `talemate.world.kinds.KINDS`). Races and mixes (`nested`) aren't listed
+// at the top level: they're reached from their species page; Cultures
+// (`viaSkill`) is listed but made through the culture skill. The Stubs,
+// Tags and Settings tabs (`STUBS_TAB`, `TAGS_TAB`, `SETTINGS_TAB`) sit
+// below the kinds.
+//
+// Beings (`talemate.world.kinds`, curation goal 8): a being's `existence`
+// (`EXISTENCE`), and whether it acts in the world like a character
+// (`actsInWorld`: only a real one is cast, played or counted as a person).
 
 const HERITAGE_CATEGORIES = ['origin', 'physical', 'instinct', 'variation', 'general'];
 
@@ -66,6 +71,17 @@ export const WORLD_KINDS = [
         categories: ['general'],
     },
     {
+        // a god, a spirit, a legendary creature: real (it acts in the world
+        // like a character), believed or undecided (`EXISTENCE`)
+        kind: 'being',
+        label: 'Beings',
+        singular: 'being',
+        icon: 'mdi-star-four-points-outline',
+        categories: ['nature', 'deeds', 'worship', 'general'],
+    },
+    {
+        // not a world kind: a pointer to the cultures feature (World Editor →
+        // Cultures), whose cultures are made through the culture skill
         kind: 'culture',
         label: 'Cultures',
         singular: 'culture',
@@ -84,15 +100,20 @@ export const TOP_KINDS = WORLD_KINDS.filter((k) => !k.nested);
 // the World tab's list of stubs, below the kinds
 export const STUBS_TAB = { kind: 'stubs', label: 'Stubs', icon: 'mdi-help-circle-outline' };
 
+// the World tab's tags (rename and merge), below the stubs
+export const TAGS_TAB = { kind: 'tags', label: 'Tags', icon: 'mdi-tag-multiple-outline' };
+
+// the World tab's settings (curation), below the tags
+export const SETTINGS_TAB = { kind: 'settings', label: 'Settings', icon: 'mdi-tune-variant' };
+
 // the kinds a stub's kind can be changed to: races and mixes are made from
 // their species page, so a stub isn't guessed as one
-export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'culture'];
+export const STUB_KINDS = ['character', 'species', 'place', 'event', 'item', 'lore', 'being'];
 
-// Why a stub of `kind` can't be expanded here (null when it can): a culture
-// waits for the cultures slice; a race or mix needs its species (or
-// parents), which only its species page's create box gives it.
+// Why a stub of `kind` can't be expanded here (null when it can): a race
+// or mix needs its species (or parents), which only its species page's
+// create box gives it.
 const NO_EXPAND_NOTES = {
-    culture: 'Cultures arrive in the next slice',
     race: 'Make it from its species page',
     mix: 'Make it from its species page',
 };
@@ -104,6 +125,11 @@ export function expandNote(kind) {
 // Whether a stub of `kind` can be expanded from its card or the Stubs tab.
 export function canExpand(kind) {
     return !expandNote(kind);
+}
+
+// What expanding a stub of `kind` is called.
+export function expandLabel(_kind) {
+    return 'Expand';
 }
 
 // the kinds a character's heritage can be (`talemate.world.kinds.HERITAGE_KINDS`)
@@ -135,4 +161,83 @@ export function overrideCategory(kind, category) {
 
 export function kindInfo(kind) {
     return WORLD_KINDS.find((k) => k.kind === kind);
+}
+
+// --- beings -------------------------------------------------------------------
+
+// `talemate.world.kinds.EXISTENCE_VALUES`, and what an unset one reads as
+export const EXISTENCE = ['real', 'believed', 'undecided'];
+export const DEFAULT_EXISTENCE = 'undecided';
+
+// A being's existence (`fields.existence` of its payload, or `existence`
+// of its listing), the default when unset.
+export function existenceOf(thing) {
+    const value = thing?.existence ?? thing?.fields?.existence;
+    return EXISTENCE.includes(value) ? value : DEFAULT_EXISTENCE;
+}
+
+// Whether `thing` (a payload or a listing) acts in the world like a
+// character: a character, or a real being (`entries.acts_in_world`). Only
+// these are cast in scenes, played, or counted as persons.
+export function actsInWorld(thing) {
+    return thing?.kind === 'character' || (thing?.kind === 'being' && existenceOf(thing) === 'real');
+}
+
+// --- same thing? ----------------------------------------------------------------
+
+// A stub row's "same as" onto a thing of another kind (ruling C34: a
+// stub's kind is only a guess, so its row offers every kind): the small
+// "(a lore)" note beside its choice; '' for the same kind, or none known.
+export function otherKindNote(rowKind, offer) {
+    const kind = offer?.kind;
+    if (!rowKind || !kind || rowKind === kind) {
+        return '';
+    }
+    return `(${/^[aeiou]/i.test(kind) ? 'an' : 'a'} ${kind})`;
+}
+
+// A same-thing offer's candidate line ("Name (kind, tag; in Y; stub): its
+// summary") without its name and kind, which show beside it: "in Y: its
+// summary", or just the summary. A line of another shape is shown as it
+// is.
+export function offerSummary(offer) {
+    let line = (offer?.line || '').trim();
+    if (offer?.name && line.startsWith(offer.name)) {
+        line = line.slice(offer.name.length).trim();
+    }
+    // its parenthesis, which may hold others ("in Velikoye (runs through)")
+    let close = -1;
+    if (line.startsWith('(')) {
+        let depth = 0;
+        for (let i = 0; i < line.length; i += 1) {
+            depth += line[i] === '(' ? 1 : line[i] === ')' ? -1 : 0;
+            if (depth === 0) {
+                close = i;
+                break;
+            }
+        }
+    }
+    const rest = close > 0 ? line.slice(close + 1) : '';
+    if (close < 0 || (rest && !rest.startsWith(':'))) {
+        return line;
+    }
+    // the kind (and its tag) first; "stub" is shown apart
+    const bits = line.slice(1, close).split(';').map((bit) => bit.trim()).slice(1).filter((bit) => bit && bit !== 'stub');
+    const summary = rest.slice(1).trim();
+    if (!bits.length) {
+        return summary;
+    }
+    return summary ? `${bits.join('; ')}: ${summary}` : bits.join('; ');
+}
+
+// --- inline editors -------------------------------------------------------------
+
+// Whether Esc (`event`, its keydown) closes an inline editor: not when it
+// closes a picker of it first (a select or autocomplete it came from) or
+// an open menu or popover.
+export function escapeCloses(event) {
+    if (event?.target?.closest?.('.v-select, .v-autocomplete, .v-combobox')) {
+        return false;
+    }
+    return typeof document === 'undefined' || !document.querySelector('.v-overlay--active');
 }

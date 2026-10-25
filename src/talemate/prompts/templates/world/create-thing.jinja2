@@ -20,6 +20,37 @@ stub's "Mentioned elsewhere" and "About those"; `named` is
 `[(written, label, facts)]`, "Named in this prompt". A label carries the
 entry's everyday name: "Tsardom of Moscavia (place, usually called
 Moscavia)".
+
+A character gets the homes block: `homes` is `[(heading, about,
+[(label, line)])]`, the entries it may be filed in (picked or found in the
+prompt, mentioning a stub being expanded, or what a picked place is filed
+in) each with its items -- its own facts, then what's filed in it --
+labelled S1...; its "in" items then carry "exceptions" (Spheres Task 6's
+wording, moved from the gone "ties" onto "in"). An entry shown there isn't
+also "Named in this prompt".
+
+Filing (wording from docs/superpowers/probes/2026-10-23-filing.md, probe 1
+v1, with v2's names-rule parenthesis and v2's belief rule, ruling F9):
+every branch with `nearby` -- the entries near this one (filing nearness,
+ruling F6), each "Name (kind, tag; usually called X; in A (role), B;
+stub): its summary or first fact" -- gets "in" and "file_into" in its
+example object and their rules; every branch asks for its "tag", with
+or without `nearby` (Filing Task 12: a prompt that names no entry has no
+near list, and without the rule the model wrote the kind, "lore", as its
+tag), species and race too (hubs round 1, P3: the acceptance world's 8
+were all untagged; the rule's wording is the other branches', unprobed
+for them), and `tags` (`["city (7)", ...]`) is the tags in use. The rule
+ends saying the tag is never the kind's own name (Task 2 follow-up,
+docs/superpowers/probes/2026-10-24-tags-kind-names.md: event stubs came
+back tagged "event"), for lore and event only (ruling H6: the probe
+covered just those, and its examples fit no other kind). Species and race "names" items carry a "tag" too. `hint` is a prompt hint's text (prompts/templates/world/
+hints/). The generic branch also gets the "elsewhere" list and its rules,
+verbatim from docs/superpowers/probes/2026-10-22-curation.md, "Wording, if
+the owner goes ahead" (create-thing, v3: with the relation-claim rule);
+the heritage-character branch doesn't. The probe's held-by rule isn't
+here (probe 4 fell back to tagging by hand), though the example carries
+"held_by": null as probed. "belief" is offered first in `categories`
+under the religion, culture or order hint.
 -#}
 <|SECTION:TASK|>
 {% if kind == "species" -%}
@@ -82,6 +113,10 @@ Already decided (use these as they are):
 - {{ label }}: {{ value }}
 {% endfor %}{% endif %}
 {%- endif %}
+{%- if hint %}
+
+Prompt hint, picked by the owner: {{ hint }} Write what fits the prompt and the world; leave out what doesn't.
+{%- endif %}
 {%- if mentions %}
 
 Mentioned elsewhere in the world (keep these true):
@@ -108,13 +143,37 @@ Named in this prompt (these already exist in the world: use them as they are, an
 {% endfor %}
 {%- endfor %}
 {%- endif %}
+{%- if homes %}
+
+Entries in the world the character may belong in (faiths, orders, cultures, fields of knowledge), each with what it holds, labelled S1, S2...:
+{% for heading, about, items in homes -%}
+{{ heading }}:
+{% if about %}- {{ about }}
+{% endif -%}
+{% for label, line in items -%}
+- {{ label }}: {{ line }}
+{% endfor -%}
+{% endfor %}
+{%- endif %}
+{%- if nearby %}
+
+Entries near this one in the world:
+{% for line in nearby -%}
+- {{ line }}
+{% endfor %}
+{%- endif %}
+{%- if tags %}
+
+Tags in use in the world (each entry has one tag saying what it is), with how many entries carry each:
+{{ tags | join(", ") }}
+{%- endif %}
 
 The world's calendar: it is now {{ now_label }}, year {{ now_year }}{% if era %} of the {{ era }}{% endif %}. The months are {{ month_names | join(", ") }}.
 <|CLOSE_SECTION|>
 <|SECTION:FORMAT|>
 Reply with only one JSON object, shaped exactly like this example:
 {% if kind == "species" -%}
-{"name": "...", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "origin", "text": "One claim, in a full sentence."}, {"category": "general", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", "lifespan": 0, "adult_age": 0, "measures": [{"name": "height", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "origin", "text": "One claim, in a full sentence."}, {"category": "general", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "tag": "...", "aka": []}]}
 
 - "name": the species' name.{% if has_name %} Use the name already decided: "{{ name }}".{% else %} Invent one if the prompt doesn't give it.{% endif %}
 - "lifespan": how long they typically live, in years, as a number.
@@ -124,7 +183,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "facts": between {{ min_facts }} and {{ max_facts }} facts, one claim each. "category" is one of: {{ categories | join(", ") }}. physical: the body; instinct: inborn tendencies; variation: how members differ from each other; origin: where they come from.
 - Leave "since" out: these facts describe the species for as long as it has existed, and are never dated.
 {%- elif kind == "race" -%}
-{"name": "...", "measures": [{"name": "{{ example_measure }}", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "physical", "text": "One claim, in a full sentence."}, {"category": "variation", "text": "Another claim."}], "no_longer_true": [], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", "measures": [{"name": "{{ example_measure }}", "min": 0, "max": 0, "unit": "ft"}], "aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "physical", "text": "One claim, in a full sentence."}, {"category": "variation", "text": "Another claim."}], "no_longer_true": [], "names": [{"name": "...", "kind": "place", "tag": "...", "aka": []}]}
 
 - "name": the race's name.{% if has_name %} Use the name already decided: "{{ name }}".{% else %} Use the prompt's name if it gives one.{% endif %}
 - "lifespan", "adult_age" and "measures": give each only where this race differs from {{ species_name }} (a measure narrower or outside the species' range); leave out any that is the same, it is inherited. lifespan and adult_age are years, as numbers; each measure is {"name", "min", "max", "unit"}, using the species' measure names.
@@ -133,7 +192,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "no_longer_true": after the facts, the labels of the species facts that are untrue for this race now that your facts hold, such as ["F4"]. An inherited fact your facts only add detail to stays true and isn't listed; an empty list is fine when nothing changes.
 - Leave "since" out: these facts describe the race for as long as it has existed, and are never dated.
 {%- elif heritage_label -%}
-{"name": "...", "age": 34, "aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", "age": 34, "aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "overrides": []}, {"category": "background", "text": "Another claim.", "since": "YEAR"}], "names": [{"name": "...", "kind": "place", "tag": "...", "in": null, "aka": []}]{% if nearby %}, "in": [{"entry": "<an entry's name>", "role": "a few words"{% if homes %}, "exceptions": [{"text": "One sentence.", "rejects": "S1"}]{% endif %}}], "file_into": [{"entry": "<an entry's name>", "role": null}]{% endif %}}
 
 - "name": the character's name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 - "age": how old the character is now, in years, as a number.
@@ -142,7 +201,7 @@ Reply with only one JSON object, shaped exactly like this example:
 - "since" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than {{ now_year }}; "YEAR" in the example stands for that number. Leave it out otherwise: never a phrase like "childhood" or "ten years ago".
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- else -%}
-{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"}, {"category": "{{ categories[-1] }}", "text": "Another claim."}], "names": [{"name": "...", "kind": "place", "aka": []}]}
+{"name": "...", {% if kind == "character" %}"age": 34, {% endif %}"aka": [{"name": "...", "tag": "common", "everyday": true}], "tag": "...", "facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence.", "since": "YEAR"{% if nearby %}, "held_by": null{% endif %}}, {"category": "{{ categories[-1] }}", "text": "Another claim."{% if nearby %}, "held_by": null{% endif %}}], "names": [{"name": "...", "kind": "place", "tag": "...", "in": null, "aka": []}]{% if nearby %}, "in": [{"entry": "<an entry's name>", "role": "a few words"{% if homes %}, "exceptions": [{"text": "One sentence.", "rejects": "S1"}]{% endif %}}], "file_into": [{"entry": "<an entry's name>", "role": null}]{% endif %}{% if nearby %}, "elsewhere": [{"entry": "<an entry's name>", "text": "A claim mainly about that entry, in a full sentence.", "held_by": null}]{% endif %}}
 
 - "name": the {{ kind }}'s name.{% if has_name %} Use the name already decided.{% else %} Invent one if the prompt doesn't give it.{% endif %}
 {% if kind == "character" -%}
@@ -153,7 +212,25 @@ Reply with only one JSON object, shaped exactly like this example:
 - Leave "since" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.
 {%- endif %}
 - "aka": other names for this {{ kind }} itself, if it has any, each {"name", "tag", "everyday"}. "tag" is "proper" for another formal name, or "common" for what people in the world actually call it day to day (a short form, a nickname). Set "everyday" true on the one common name people use most, false on the rest. "name" stays the most formal name. An empty list is fine.
-- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, culture, event, item, lore (a group, order or faction is lore; so is a law, code, script or language); "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "tag", "in", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); "tag" what it is, as for the {{ kind }} (never "proper" or "common": those are only for other names); "in" the name of the entry it belongs in (this {{ kind }}, an entry listed above, or another of your names), or null; "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the "names": it stays a fact of the {{ kind }}.
+{%- if nearby and not heritage_label %}
+- Keep "facts" to claims mainly about the {{ kind }} itself: a claim mainly about another entry goes in "elsewhere".
+- "elsewhere": after the names, what you would add about other entries, each {"entry", "text", "held_by"}: "entry" the entry's name as the list of entries near this one writes it, or a new name you also list in "names"; "text" one claim in a full sentence. Never the {{ kind }} itself. An empty list is fine.
+- A claim that ties another entry to the {{ kind }} ("it is taught at X", "unlike X, it...", "X uses it") is the {{ kind }}'s own: it goes in "facts". "elsewhere" is only for what another entry's page should say even if the {{ kind }} didn't exist.
+{%- endif %}
+- "tag": one or two words for what the {{ kind }} is, such as river, ruler, custom, institution, regiment, capital or doctrine.{% if tags %} Use a tag from the tags in use when one fits; make a new one only when none does.{% endif %}{% if kind in ("lore", "event") %} The tag is never the kind's own name (lore, event, place, …): say what sort of {{ kind }} it is, such as custom, law, battle, festival.{% endif %}
+{%- if nearby %}
+- "in": the entries listed above that the {{ kind }} belongs in, each {"entry", "role"}: "entry" the entry's name as the list writes it; "role" a few words for how it belongs there ("flows through", "sovereign", "practitioner", "branch of", "taught here"), or null. A thing can be in several entries: a road in each realm it crosses, a temple in its city and in the faith it serves. Only entries from the list; an empty list is fine.
+- "file_into": the entries listed above that belong in this {{ kind }}: its parts, members, branches or what it holds, each {"entry", "role"}, "role" how that entry belongs in this {{ kind }}, or null. Never an entry you put in "in". Only entries from the list; an empty list is fine.
+{%- endif %}
+{%- if "belief" in categories %}
+- "belief": every fact that says what the {{ kind }} teaches, holds or believes ("it teaches that...", "the faithful hold that...", "its doctrine says...") is a "belief", never "general". Plain truth of the world -- its rites as practised, its clergy, places, ranks and history -- goes in the other categories.
+{%- endif %}
+{%- if homes %}
+- "exceptions": in an "in" item, only where this character departs from that entry, each {"text", "rejects"}: "text" one sentence on what they reject or do differently, and "rejects" the label of the item it departs from, such as "S3". The character already holds everything else the entry holds, so never restate it, in an exception or in the facts. Most entries have no exception or one.
+- Write each exception only there, never again as one of the facts.
+{%- endif %}
 
 No commentary, no markdown fences, just the JSON object.
 <|CLOSE_SECTION|>

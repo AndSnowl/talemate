@@ -33,6 +33,10 @@ log = structlog.get_logger("talemate.world.view")
 # either clock
 UNKNOWN_NAME = "⟨unknown⟩"
 
+# the row id of a `things` row's thing's first row (its creation order),
+# as a correlated subquery over the outer `things` row
+_FIRST_THING_ROW = "SELECT MIN(t0.row_id) FROM things t0 WHERE t0.id = things.id"
+
 # an instant past the proleptic-Gregorian range (years 1-9999), used as
 # "+infinity" for at=None so the ordinary <=/> comparisons just work
 _FAR_FUTURE = 10**15
@@ -55,6 +59,7 @@ def _decode_field_value(kind_spec: KindSpec, field: str, value_json: str) -> obj
 
 
 def _fact_state_from_row(row: sqlite3.Row) -> "FactState":
+    origin_json = row["origin_json"]
     return FactState(
         fact_id=row["fact_id"],
         category=row["category"],
@@ -63,6 +68,8 @@ def _fact_state_from_row(row: sqlite3.Row) -> "FactState":
         valid_until=_decode_date(row["valid_until"], row["until_precision"]),
         source_rev=row["rev_added"],
         refs=parse_refs(row["text"]),
+        origin=json.loads(origin_json) if origin_json is not None else None,
+        created=row["created"],
     )
 
 
@@ -75,6 +82,10 @@ class FactState(BaseModel):
     source_rev: int
     refs: list[str]
     overrides: list[str] = []
+    origin: dict[str, object] | None = None
+    # the fact's creation order: the row id of its first version, so a
+    # correction keeps its place (fact ids are random)
+    created: int = 0
 
 
 class ThingState(BaseModel):
@@ -82,6 +93,9 @@ class ThingState(BaseModel):
     kind: str
     fields: dict[str, object]
     facts: list[FactState]
+    # the thing's creation order: the row id of its first `things` row, so
+    # a kind change keeps its place (thing ids are random)
+    created: int = 0
 
     @property
     def is_stub(self) -> bool:
@@ -208,7 +222,7 @@ class WorldView:
         thing_id: str | None = None,
     ) -> dict[str, list[FactState]]:
         """`thing_id -> [FactState, ...]`, ordered by `valid_from` (NULL
-        first), then `fact_id`. Joined against `things` (narrowed to
+        first), then written order (`created`), then `fact_id`. Joined against `things` (narrowed to
         `kind` or `thing_id` when given) rather than an `IN (...)` list of
         `thing_ids`, which is only used here to seed the empty result for
         things with no facts."""
@@ -225,14 +239,17 @@ class WorldView:
             f"""
             SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
                    f.from_precision, f.valid_until, f.until_precision, f.rev_added,
-                   fo.fact_id AS override_fact_id
+                   f.origin_json, fo.fact_id AS override_fact_id,
+                   (SELECT MIN(f0.row_id) FROM facts f0
+                    WHERE f0.fact_id = f.fact_id) AS created
             FROM facts f
             JOIN things t ON t.id = f.thing_id AND {things_filter}
             LEFT JOIN fact_overrides fo ON fo.row_id = f.row_id
             WHERE f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
               AND (f.valid_from IS NULL OR f.valid_from <= ?)
               AND (f.valid_until IS NULL OR f.valid_until > ?)
-            ORDER BY f.thing_id, f.valid_from ASC, f.fact_id ASC, fo.rowid ASC
+            ORDER BY f.thing_id, f.valid_from ASC, created ASC, f.fact_id ASC,
+                     fo.rowid ASC
             """,
             (*things_params, self.rev, self.rev, at_instant, at_instant),
         ).fetchall()
@@ -254,7 +271,9 @@ class WorldView:
 
         things_filter, things_params = self._live_things_filter("", thing_id=thing_id)
         row = self._conn.execute(
-            f"SELECT kind FROM things WHERE {things_filter}", things_params
+            f"SELECT kind, ({_FIRST_THING_ROW}) AS created "
+            f"FROM things WHERE {things_filter}",
+            things_params,
         ).fetchone()
         if row is None:
             return None
@@ -262,28 +281,37 @@ class WorldView:
         kind = row["kind"]
         fields = self._fetch_fields([thing_id], thing_id=thing_id)[thing_id]
         facts = self._fetch_facts([thing_id], thing_id=thing_id)[thing_id]
-        return ThingState(id=thing_id, kind=kind, fields=fields, facts=facts)
+        return ThingState(
+            id=thing_id, kind=kind, fields=fields, facts=facts, created=row["created"]
+        )
 
-    def things(self, kind: str | None = None) -> list[ThingState]:
+    def things(
+        self, kind: str | None = None, *, facts: bool = True
+    ) -> list[ThingState]:
         """Every thing that exists at `rev`, optionally restricted to one
-        `kind`, ordered by id."""
+        `kind`, ordered by id. Without `facts`, each has its fields only
+        (`facts` empty): what a caller after names alone reads, at a
+        fraction of the cost (I1)."""
 
         things_filter, things_params = self._live_things_filter("", kind=kind)
         rows = self._conn.execute(
-            f"SELECT id, kind FROM things WHERE {things_filter} ORDER BY id",
+            f"SELECT id, kind, ({_FIRST_THING_ROW}) AS created "
+            f"FROM things WHERE {things_filter} ORDER BY id",
             things_params,
         ).fetchall()
 
         kinds = {row["id"]: row["kind"] for row in rows}
+        created = {row["id"]: row["created"] for row in rows}
         fields_by_id = self._fetch_fields(list(kinds), kind=kind)
-        facts_by_id = self._fetch_facts(list(kinds), kind=kind)
+        facts_by_id = self._fetch_facts(list(kinds), kind=kind) if facts else {}
 
         return [
             ThingState(
                 id=thing_id,
                 kind=thing_kind,
                 fields=fields_by_id[thing_id],
-                facts=facts_by_id[thing_id],
+                facts=facts_by_id.get(thing_id, []),
+                created=created[thing_id],
             )
             for thing_id, thing_kind in kinds.items()
         ]
@@ -292,6 +320,23 @@ class WorldView:
         """The thing's `name` field at `at`, or `None` if it has none."""
 
         return self._name_at(thing_id, self._at_instant())
+
+    def field_since(self, thing_id: str, field: str) -> WorldDate | None:
+        """The story date the thing's `field` holds its current value from
+        at `(at, rev)`: the `valid_from` of the row `thing()` reads it from.
+        `None` when that value is undated, or the field has none."""
+
+        row = self._conn.execute(
+            "SELECT valid_from, from_precision FROM field_values "
+            "WHERE thing_id = ? AND field = ? "
+            "AND rev_added <= ? AND (rev_removed IS NULL OR rev_removed > ?) "
+            "AND (valid_from IS NULL OR valid_from <= ?) "
+            "ORDER BY valid_from DESC, row_id DESC LIMIT 1",
+            (thing_id, field, self.rev, self.rev, self._at_instant()),
+        ).fetchone()
+        if row is None:
+            return None
+        return _decode_date(row["valid_from"], row["from_precision"])
 
     def _is_live(self, thing_id: str) -> bool:
         things_filter, things_params = self._live_things_filter("", thing_id=thing_id)
@@ -380,7 +425,7 @@ class WorldView:
     ) -> list[tuple[str, FactState]]:
         """The `(owner thing id, fact)` pairs for visible facts that
         reference `thing_id`, ordered by `valid_from` (NULL first), then
-        `fact_id`. With `any_date`, every fact live at `rev` counts,
+        written order (`created`), then `fact_id`. With `any_date`, every fact live at `rev` counts,
         whatever story dates it's true between (ended facts too)."""
 
         at_instant = self._at_instant()
@@ -393,15 +438,92 @@ class WorldView:
         rows = self._conn.execute(
             f"""
             SELECT f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
-                   f.from_precision, f.valid_until, f.until_precision, f.rev_added
+                   f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+                   f.origin_json,
+                   (SELECT MIN(f0.row_id) FROM facts f0
+                    WHERE f0.fact_id = f.fact_id) AS created
             FROM facts f
             JOIN fact_refs fr ON fr.row_id = f.row_id
             WHERE fr.thing_id = :thing_id
               AND f.rev_added <= :rev AND (f.rev_removed IS NULL OR f.rev_removed > :rev)
               {dated}
-            ORDER BY f.valid_from ASC, f.fact_id ASC
+            ORDER BY f.valid_from ASC, created ASC, f.fact_id ASC
             """,
             {"thing_id": thing_id, "rev": self.rev, "at": at_instant},
         ).fetchall()
 
         return [(row["thing_id"], _fact_state_from_row(row)) for row in rows]
+
+    _ANY_DATE_FACT = """
+        SELECT f.row_id, f.thing_id, f.fact_id, f.category, f.text, f.valid_from,
+               f.from_precision, f.valid_until, f.until_precision, f.rev_added,
+               f.origin_json,
+               (SELECT MIN(f0.row_id) FROM facts f0
+                WHERE f0.fact_id = f.fact_id) AS created
+        FROM facts f
+        JOIN things t ON t.id = f.thing_id AND {things}
+        WHERE f.rev_added <= ? AND (f.rev_removed IS NULL OR f.rev_removed > ?)
+          AND {where}
+        ORDER BY created
+    """
+
+    def _with_overrides(self, row: sqlite3.Row) -> FactState:
+        state = _fact_state_from_row(row)
+        state.overrides = [
+            r[0]
+            for r in self._conn.execute(
+                "SELECT fact_id FROM fact_overrides WHERE row_id = ? ORDER BY rowid",
+                (row["row_id"],),
+            )
+        ]
+        return state
+
+    def fact(self, fact_id: str) -> tuple[str, FactState] | None:
+        """`(owner id, fact)` for the fact `fact_id` live at `rev`, of a
+        live owner, whatever story dates it's true between (an ended fact
+        too), with its overrides; `None` for none."""
+
+        things, params = self._live_things_filter("t.")
+        row = self._conn.execute(
+            self._ANY_DATE_FACT.format(things=things, where="f.fact_id = ?"),
+            (*params, self.rev, self.rev, fact_id),
+        ).fetchone()
+        return (row["thing_id"], self._with_overrides(row)) if row else None
+
+    def overriding(self, fact_ids: list[str]) -> list[tuple[str, FactState]]:
+        """`(owner id, fact)` for every fact live at `rev` (of a live owner,
+        on any story date) that overrides one of `fact_ids`, in creation
+        order, with all its overrides."""
+
+        if not fact_ids:
+            return []
+        things, params = self._live_things_filter("t.")
+        rows = self._conn.execute(
+            self._ANY_DATE_FACT.format(
+                things=things,
+                where="f.row_id IN (SELECT row_id FROM fact_overrides "
+                "WHERE fact_id IN (SELECT value FROM json_each(?)))",
+            ),
+            (*params, self.rev, self.rev, json.dumps(list(fact_ids))),
+        ).fetchall()
+        return [(row["thing_id"], self._with_overrides(row)) for row in rows]
+
+    def rejecting(self, fact_ids: list[str]) -> list[tuple[str, FactState]]:
+        """`(owner id, fact)` for every fact live at `rev` (of a live owner,
+        on any story date) whose origin's `rejects_fact` is one of
+        `fact_ids` (an exception to an entry's fact), in creation
+        order, with its overrides."""
+
+        if not fact_ids:
+            return []
+        things, params = self._live_things_filter("t.")
+        rows = self._conn.execute(
+            self._ANY_DATE_FACT.format(
+                things=things,
+                where="f.origin_json IS NOT NULL AND "
+                "json_extract(f.origin_json, '$.rejects_fact') IN "
+                "(SELECT value FROM json_each(?))",
+            ),
+            (*params, self.rev, self.rev, json.dumps(list(fact_ids))),
+        ).fetchall()
+        return [(row["thing_id"], self._with_overrides(row)) for row in rows]

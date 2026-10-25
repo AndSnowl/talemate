@@ -229,7 +229,8 @@ async def _create(plugin, kind, prompt, fields, *responses) -> dict:
         prompt=prompt,
         fields=fields,
     )
-    preview = _last(plugin, "preview_thing")
+    # the draft page's data to accept (Filing, Task 6)
+    preview = _last(plugin, "preview_thing")["preview"]
     await _send(plugin, "accept_preview", preview=preview)
     return _last(plugin, "accept_preview")
 
@@ -446,8 +447,10 @@ async def test_heritage_end_to_end(plugin, client, loadable):
     # at creation, the species edit and the scene's setup and start
     kinds = Counter(call["kind"] for call in client.prompt_history)
     assert kinds == {
-        # species, race, character; the scene's plan
-        "creative_instruction_2048": 4,
+        # species, race, character
+        "creative_instruction_3072": 3,
+        # the scene's plan
+        "creative_instruction_2048": 1,
         # one section each for the species and race, two for Eira at
         # creation, the species after the ruff, Eira's two at 499
         "analyze": 7,

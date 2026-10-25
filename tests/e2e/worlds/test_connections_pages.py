@@ -10,6 +10,7 @@ preview files.
 
 from __future__ import annotations
 
+
 from playwright.sync_api import expect
 
 from e2e.seed import seed_fm_world
@@ -116,7 +117,7 @@ def test_stub_links_tab_and_aka(app, page):
 
 
 YELENA = {"kind": "character", "name": "Yelena", "stub": "live"}
-OLD_RITE = {"kind": "culture", "name": "Old Rite", "stub": "live"}
+OLD_RITE = {"kind": "lore", "name": "Old Rite", "stub": "live"}
 VASHA = {
     "kind": "character",
     "name": "Vasha",
@@ -166,20 +167,13 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     assert "Vasha" in mention.inner_text()
     assert "Raised by her mother Yelena" in mention.inner_text()
 
-    # Vasha's page: a culture stub can't be expanded yet
+    # Vasha's page
     mention.get_by_text("Vasha").click()
     vasha = page.get_by_test_id("thing-page")
     vasha.get_by_test_id("thing-name").filter(has_text="Vasha").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
     fact = _fact(vasha, "Raised by her mother")
-    card = _stub_card(
-        page, fact.get_by_test_id("linked-stub").filter(has_text="Old Rite")
-    )
-    assert card.get_by_role("button", name="Expand").is_disabled()
-    assert "Cultures arrive in the next slice" in card.inner_text()
-    page.mouse.move(0, 0)
-    card.wait_for(state="hidden", timeout=TIMEOUT_MS)
 
     # expanding Yelena: her kind's create box, from the stub
     card = _stub_card(
@@ -200,7 +194,7 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     # fact links to it
     fixed_preview(YELENA_PREVIEW)
     box.get_by_role("button", name="Create").click()
-    preview = page.get_by_test_id("create-preview")
+    preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
     preview.get_by_role("button", name="Accept").click()
     yelena = page.get_by_test_id("thing-page")
@@ -219,6 +213,40 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     fact.get_by_test_id("linked-ref").filter(has_text="Yelena").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
+
+
+def test_stubs_list_shows_the_tag(app, page):
+    """Hubs round 1, P3 (feedback line 8): a stub's tag shows in the Stubs
+    list ("no tag" for none), on its link's hover card and in the expand
+    box's header."""
+
+    name = _world_name("Vasel")
+    tagged = {**YELENA, "fields": {"tag": "ferrywoman"}}
+    seed_fm_world(app.root, name, present_year=1026, things=[tagged, OLD_RITE, VASHA])
+    _open_world(page, name)
+    _world_tab(page)
+
+    rows = _stubs_tab(page).get_by_test_id("stub-row")
+    yelena = rows.filter(has_text="Yelena")
+    yelena.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(yelena.get_by_test_id("stub-row-tag")).to_have_text("ferrywoman")
+    expect(
+        rows.filter(has_text="Old Rite").get_by_test_id("stub-row-tag")
+    ).to_have_text("no tag")
+
+    page.get_by_test_id("kind-character").click()
+    vasha = _open_thing(page, "Vasha")
+    fact = _fact(vasha, "Raised by her mother")
+    card = _stub_card(
+        page, fact.get_by_test_id("linked-stub").filter(has_text="Yelena")
+    )
+    expect(card.get_by_test_id("stub-tag")).to_have_text("ferrywoman")
+    card.get_by_role("button", name="Expand").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_test_id("from-stub").filter(has_text="Yelena").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(box.get_by_test_id("from-stub-tag")).to_have_text("ferrywoman")
 
 
 def test_setup_cards_show_stub_previews(app, page, fixed_setup, fixed_preview):
@@ -252,7 +280,7 @@ KALMARA_PREVIEW = {
 
 
 def test_expanding_over_a_preview_asks_first(app, page, fixed_preview):
-    """Expanding a stub while a preview waits to be accepted asks before
+    """Expanding a stub while a draft waits to be accepted asks before
     dropping it: keeping it changes nothing; discarding it expands."""
 
     name = _world_name("Kalmara")
@@ -265,7 +293,7 @@ def test_expanding_over_a_preview_asks_first(app, page, fixed_preview):
     box.get_by_label("Describe it").fill("a river port")
     fixed_preview(KALMARA_PREVIEW)
     box.get_by_role("button", name="Create").click()
-    preview = page.get_by_test_id("create-preview")
+    preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
 
     def expand_yelena():
@@ -276,10 +304,10 @@ def test_expanding_over_a_preview_asks_first(app, page, fixed_preview):
         assert "Kalmara" in dialog.inner_text()
         return dialog
 
-    expand_yelena().get_by_role("button", name="Keep the preview").click()
+    expand_yelena().get_by_role("button", name="Keep the draft").click()
     page.get_by_test_id("expand-ask").wait_for(state="hidden", timeout=TIMEOUT_MS)
     page.get_by_test_id("kind-place").click()
-    preview = page.get_by_test_id("create-preview")
+    preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert "A river port." in preview.inner_text()
 
@@ -288,4 +316,4 @@ def test_expanding_over_a_preview_asks_first(app, page, fixed_preview):
     box.get_by_test_id("from-stub").filter(has_text="Yelena").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-    assert page.get_by_test_id("create-preview").count() == 0
+    assert page.get_by_test_id("draft-page").count() == 0

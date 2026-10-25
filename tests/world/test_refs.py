@@ -133,3 +133,18 @@ def test_store_accepts_shown_text_refs(world):
     with pytest.raises(ValueError):
         with world.revision(Source.manual()) as rev:
             rev.add_fact(v, "background", ref("0" * 32, "Nowhere"))
+
+
+def test_source_has_no_invisible_placeholders():
+    """M6: the private-use placeholders `scrub_emphasis` holds references
+    out with are written as escapes, never as the invisible characters
+    themselves, which an editor could strip without anyone seeing."""
+
+    from pathlib import Path
+
+    import talemate.world.refs as refs_module
+
+    source = Path(refs_module.__file__).read_text(encoding="utf-8")
+    hidden = [char for char in source if 0xE000 <= ord(char) <= 0xF8FF]
+    assert hidden == []
+    assert refs_module._HOLD == "{}"

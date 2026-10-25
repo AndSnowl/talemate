@@ -18,16 +18,30 @@ heritage's numbers, and a deleted ancestor simply drops out of the lineage.
 
 from __future__ import annotations
 
+import re
+
 import structlog
 
 from talemate.character import Character
 from talemate.util import replace_smart_quotes
 from talemate.world import heritage
-from talemate.world.dates import WorldDate
+from talemate.world.calendar import Calendar
+from talemate.world.dates import Precision, WorldDate
+from talemate.world.filing import Filing, filings_of
 from talemate.world.prose import CachedProse, stretches
+from talemate.world.refs import REF_PATTERN
 from talemate.world.store import World
 from talemate.world.timeline import TimelineEntry
-from talemate.world.view import ThingState, WorldView
+from talemate.world.view import FactState, ThingState, WorldView
+from talemate.worldplay.held import (  # noqa: F401 -- re-exported
+    ROLE_PREPOSITIONS,
+    _mid_sentence,
+    _opens_with_a_name,
+    attributes_itself,
+    filed_as,
+    held_text,
+    mid_sentence_name,
+)
 from talemate.worldplay.prose_gen import inherited_categories, lineage_ids
 
 log = structlog.get_logger("talemate.worldplay.characters")
@@ -37,6 +51,21 @@ log = structlog.get_logger("talemate.worldplay.characters")
 _DESCRIPTION_CATEGORIES = ("appearance", "background")
 
 _FAR_FUTURE = 10**15
+
+# how character creation ends an exception's `ties` fact, linking what it
+# departs from: an entry filed in the target, or (for one of the target's
+# facts, or the target as a whole) the target
+DEPARTS_FROM = "Departs from"
+DEPARTS_FROM_TEACHING = "Departs from a teaching of"
+
+_DEPARTS_SUFFIX = re.compile(
+    r"\s*(?:%s|%s)\s+%s\s*$"
+    % (
+        re.escape(DEPARTS_FROM_TEACHING),
+        re.escape(DEPARTS_FROM),
+        REF_PATTERN.pattern,
+    )
+)
 
 # the `Character` fields `character_from_world` derives from the world;
 # every other field is per-scene state (color, avatar, voice, details, ...)
@@ -186,12 +215,15 @@ def _change_lines(
     cached_facts = (
         _facts_at_rev(world, thing_id, entry.rev) if entry is not None else {}
     )
+    # each fact as it is now, for its held-by (`held_text`)
+    live = {fact.fact_id: fact for fact in world.live_facts(thing_id)}
 
     def dated_by_at(date: WorldDate | None) -> bool:
         return date is None or date.instant <= at_instant
 
     calendar = world.calendar
     view = world.view(at)
+    owner = view.thing(thing_id)
     keyed: list[tuple[int, str]] = []
     for fact_id, (start, end) in _facts_at_rev(
         world, thing_id, world.head_rev()
@@ -223,7 +255,10 @@ def _change_lines(
         )
         end_news = ended and _not_yet_known(entry, end_date, end_rev)
 
-        text = prefix + view.render(start.text or "")
+        text = view.render(start.text or "")
+        if owner is not None and fact_id in live:
+            text = held_text(view, live[fact_id], owner, text)
+        text = prefix + text
         if start_news and start.date is not None and end_date is not None and ended:
             line = (
                 f"From {calendar.format(start.date)} until "
@@ -252,7 +287,7 @@ def since_lines(world: World, thing_id: str, at: WorldDate | None) -> list[str]:
 
     The description facts the thing inherits as of `at`
     (`prose_gen.inherited_categories`: a species', race's or mix's
-    `physical` and `variation` facts, a culture's dress) get lines too,
+    `physical` and `variation` facts) get lines too,
     worded the same and prefixed with their source's name, e.g. `"Since
     500: Owl-folk: live to about 60 years."`. Overridden ones get none.
     Own lines come before inherited ones of the same date. A layer that
@@ -339,6 +374,89 @@ def _speech_facts(view: WorldView, state: ThingState) -> tuple[list[str], list[s
     return dialogue_instructions, example_dialogue
 
 
+def exception_text(text: str) -> str:
+    """An exception fact's raw text less the "Departs from <link>" (or
+    "Departs from a teaching of <link>") sentence character creation ends
+    it with: that link is for the world's pages, not for reading."""
+
+    return _DEPARTS_SUFFIX.sub("", text).strip()
+
+
+def filing_exceptions(
+    view: WorldView, state: ThingState, filing: Filing
+) -> list[FactState]:
+    """The character's exceptions to a filing, in the order written: its
+    own facts the filing lists (`exceptions`), and those filed under its
+    entry (origin `tie`, as character creation writes them)."""
+
+    listed = set(filing.exceptions)
+    return sorted(
+        (
+            fact
+            for fact in state.facts
+            if fact.fact_id in listed or (fact.origin or {}).get("tie") == filing.target
+        ),
+        key=lambda fact: fact.created,
+    )
+
+
+def lined_filings(view: WorldView, thing_id: str) -> list[Filing]:
+    """The character's filings that `filing_lines` gives a line: with a
+    role, into an entry with a name at the view's date."""
+
+    return [
+        filing
+        for filing in filings_of(view, thing_id)
+        if (filing.role or "").strip() and view.name_of(filing.target)
+    ]
+
+
+def filing_lines(view: WorldView, calendar: Calendar, thing_id: str) -> list[str]:
+    """One line per filing of the character's with a role that holds at
+    `view.at`, in the Spheres tie-line format, e.g. "Practitioner of the
+    White Dawn (since 1010), but: doesn't believe snowy owl-folk are
+    superior": the role capitalised "of" the entry (`held.filed_as`: a
+    role that ends with a preposition takes none), or, for a filing
+    within a part of it, "in" the entry and ", within <part>" ("Trooper in
+    the Tsar's Army, within the White Talon (since 1012)", ruling C12);
+    "(since <year>)" when it has a since, given as its year however
+    precise; and its exceptions (`filing_exceptions`) joined with "; ",
+    each read mid-sentence (ruling C6's names keep their capitals). A
+    filing without a role gives no line, nor one into an entry since
+    deleted or with no name at the view's date (never "⟨unknown⟩")."""
+
+    state = view.thing(thing_id)
+    if state is None:
+        return []
+    lines: list[str] = []
+    for filing in lined_filings(view, thing_id):
+        role = (filing.role or "").strip()
+        name = view.name_of(filing.target) or ""
+        within = view.name_of(filing.within) if filing.within is not None else None
+        words = role.casefold().split()
+        plain = words[0] != "of" and words[-1] not in ROLE_PREPOSITIONS
+        if within and plain:
+            # "Trooper in the Tsar's Army, within the White Talon" (C12)
+            line = f"{role[0].upper()}{role[1:]} in {mid_sentence_name(name)}"
+        else:
+            line = filed_as(role, name)
+        if within:
+            line += f", within {mid_sentence_name(within)}"
+        if filing.since is not None:
+            year = WorldDate(instant=filing.since.instant, precision=Precision.YEAR)
+            line += f" (since {calendar.format(year)})"
+        texts = [
+            _mid_sentence(view, raw, view.render(raw))
+            for fact in filing_exceptions(view, state, filing)
+            if (raw := exception_text(fact.text))
+        ]
+        texts = [text for text in texts if text]
+        if texts:
+            line += ", but: " + "; ".join(texts)
+        lines.append(line)
+    return lines
+
+
 def age_in_years(born: WorldDate, at: WorldDate) -> int:
     """Full years elapsed from `born` to `at`, allowing for the birthday
     not having happened yet this year (a naive `at.year - born.year`
@@ -400,6 +518,12 @@ def character_from_world(
         )
         if stage is not None:
             base_attributes["life_stage"] = stage
+
+    # the sheet's "ties" attribute keeps its name: its lines are the
+    # character's filings with a role now
+    ties = filing_lines(view, world.calendar, thing_id)
+    if ties:
+        base_attributes["ties"] = "\n".join(ties)
 
     personality_entry = _cached_section(world, thing_id, "personality", at)
     if personality_entry is not None and personality_entry.text:

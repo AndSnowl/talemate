@@ -19,8 +19,10 @@ way, imports this module -- lazily, inside `World.prose()` -- the same way
 `store.py` avoids importing `index.py` at the top level).
 """
 
+import hashlib
+import json
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Protocol
 
 import structlog
@@ -32,6 +34,20 @@ from .timeline import TimelineEntry
 
 log = structlog.get_logger("talemate.world.prose")
 
+
+def content_key(*parts: object) -> str:
+    """A stable fingerprint of `parts` (JSON-encoded, in order), for a
+    section cached by its content rather than by story-time stretch --
+    a group's synopsis (`worldplay.groups.group_synopsis`) has no "as of"
+    date of its own, only "now", so staleness there is "the content that
+    made it has changed" rather than "something changed within this
+    stretch": equal input gives an equal key; two different ones, for any
+    practical purpose, never collide."""
+
+    blob = json.dumps(parts, sort_keys=False, default=str, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 # an instant past the proleptic-Gregorian range (years 1-9999), used as
 # "+infinity" for at=None, mirroring view.py's _FAR_FUTURE
 _FAR_FUTURE = 10**15
@@ -39,14 +55,39 @@ _FAR_FUTURE = 10**15
 _FAR_PAST = -_FAR_FUTURE
 
 # fields no prose reads: other names and the stub marker change what links
-# and how a thing is found, never what its prose says
-_UNRENDERED_FIELDS = ("aka", "stub")
+# and how a thing is found, never what its prose says (it reads facts,
+# name, born, kind)
+UNRENDERED_FIELDS: tuple[str, ...] = (
+    "aka",
+    "stub",
+    # where an entry is filed links it and feeds scene context, never prose
+    "filings",
+    # what it is (its group on a page), the hint it was written with and
+    # whether it acts as an agent: no prose reads them
+    "tag",
+    "hint",
+    "agent",
+    # a being's existence changes who it acts as, not what it is
+    "existence",
+)
+_UNRENDERED_FIELDS = UNRENDERED_FIELDS
 
 # a fact version as prose reads it: category, text with its links' shown
-# words, dates with their precisions, and what it overrides
+# words, dates with their precisions, what it overrides, and who holds it
+# (its origin's `held_by`, which words it "<Holder> holds that ...")
 _FactKey = tuple[
-    str, str, int | None, str | None, int | None, str | None, tuple[str, ...]
+    str, str, int | None, str | None, int | None, str | None, tuple[str, ...], str
 ]
+
+
+def _held_key(origin_json: str | None) -> str:
+    """The fact's held-by as its prose key reads it: unset, cleared
+    (`null`), or the holder's id."""
+
+    origin = json.loads(origin_json) if origin_json else None
+    if not isinstance(origin, dict) or "held_by" not in origin:
+        return "unset"
+    return json.dumps(origin["held_by"])
 
 
 def _shown_text(text: str) -> str:
@@ -303,14 +344,18 @@ class ProseCache:
                     ),
                 )
 
-    def _changed_in_stretch_since(self, thing_id: str, cached: CachedProse) -> bool:
+    def _changed_in_stretch_since(
+        self, thing_id: str, cached: CachedProse, ignore: Collection[str] = ()
+    ) -> bool:
         """Whether a field value or fact of `thing_id` visible somewhere in
         the cached stretch was added, or retired (removed, corrected or
         undone), after `cached.rev`. "Visible in the stretch" means its span
         overlaps the stretch, not just that its start falls inside it: a
         fact that started before the stretch and runs through it is in that
         stretch's prose too. A retired row is gone from the timeline, so the
-        timeline check in `stale` can't see it; this catches both."""
+        timeline check in `stale` can't see it; this catches both. A fact
+        row of a category in `ignore` (one the section doesn't read) is no
+        change."""
 
         start = (
             cached.stretch_start.instant if cached.stretch_start is not None else None
@@ -321,11 +366,14 @@ class ProseCache:
         starts_before_end = "(valid_from IS NULL OR ? IS NULL OR valid_from < ?)"
         ends_after_start = "(valid_until IS NULL OR ? IS NULL OR valid_until > ?)"
 
+        ignored = sorted(ignore)
+        skip = ", ".join("?" for _ in ignored)
         facts = self._conn.execute(
             "SELECT DISTINCT fact_id FROM facts WHERE thing_id = ? "
             "AND (rev_added > ? OR rev_removed > ?) "
-            f"AND {starts_before_end} AND {ends_after_start}",
-            (thing_id, cached.rev, cached.rev, end, end, start, start),
+            f"AND {starts_before_end} AND {ends_after_start}"
+            + (f" AND category NOT IN ({skip})" if ignored else ""),
+            (thing_id, cached.rev, cached.rev, end, end, start, start, *ignored),
         ).fetchall()
         if {row["fact_id"] for row in facts} - self._link_only_facts(thing_id, cached):
             return True
@@ -355,6 +403,7 @@ class ProseCache:
                     row["valid_until"],
                     row["until_precision"],
                     tuple(sorted(o["fact_id"] for o in overrides)),
+                    _held_key(row["origin_json"]),
                 )
             )
         return sorted(keys, key=repr)
@@ -386,13 +435,16 @@ class ProseCache:
                 same.add(found["fact_id"])
         return same
 
-    def _changed_since(self, thing_id: str, cached: CachedProse) -> bool:
+    def _changed_since(
+        self, thing_id: str, cached: CachedProse, ignore: Collection[str] = ()
+    ) -> bool:
         """Whether `thing_id` itself changed in the cached stretch since
         `cached.rev`, by the same two checks `stale` runs for the cached
         thing: a newer timeline change inside the stretch, or a row visible
         in it added or retired since. Changes no prose can show don't
         count: other names (`aka`), the stub marker, and a fact edit that
-        only links or re-points words (`_link_only_facts`). An id that no
+        only links or re-points words (`_link_only_facts`), and a fact of a
+        category in `ignore`. An id that no
         longer exists counts as changed."""
 
         try:
@@ -403,14 +455,16 @@ class ProseCache:
         entries = [
             entry
             for entry in entries
-            if entry.field not in _UNRENDERED_FIELDS and entry.fact_id not in link_only
+            if entry.field not in _UNRENDERED_FIELDS
+            and entry.fact_id not in link_only
+            and entry.category not in ignore
         ]
         newest = _newest_rev_in_stretch(
             entries, cached.stretch_start, cached.stretch_end
         )
         if cached.rev < newest:
             return True
-        return self._changed_in_stretch_since(thing_id, cached)
+        return self._changed_in_stretch_since(thing_id, cached, ignore)
 
     def stale(
         self,
@@ -418,16 +472,24 @@ class ProseCache:
         section: str,
         at: WorldDate | None,
         also: Sequence[str] = (),
+        ignore_categories: Collection[str] = (),
     ) -> bool:
         """`True` if there's no cached entry for the stretch containing
         `at`, its `rev` predates the newest timeline change inside that
         stretch, or a row visible in that stretch was added or retired
         after its `rev` -- for `thing_id` itself or for any id in `also`
         (a thing's lineage, most callers pass -- see `heritage.lineage`).
-        An `also` id that no longer exists counts as changed."""
+        An `also` id that no longer exists counts as changed.
+
+        `ignore_categories` are fact categories the section doesn't read
+        (a place's statements and timeline, for its description): a
+        change to one of `thing_id`'s own facts in them is no change. The
+        `also` ids are checked in full."""
 
         cached = self.get(thing_id, section, at)
         if cached is None:
             return True
 
-        return any(self._changed_since(id_, cached) for id_ in (thing_id, *also))
+        if self._changed_since(thing_id, cached, ignore_categories):
+            return True
+        return any(self._changed_since(id_, cached) for id_ in also)

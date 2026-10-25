@@ -68,7 +68,8 @@ def test_world_context_block_lists_heritage_bodies(world, heritage_world):
     instincts, resolved in code as of the scene's date -- a world
     character's with its own overrides applied, an invented one's from
     the heritage it was given. A character with no heritage isn't listed,
-    and neither is a culture's lore."""
+    and a culture is no heritage: the one Vasha is filed in is touched,
+    in the block on its own, never in her heritage line."""
 
     h = heritage_world
     with world.revision(Source.manual(note="later")) as rev:
@@ -115,7 +116,7 @@ def test_world_context_block_lists_heritage_bodies(world, heritage_world):
     assert "Wings in place of arms." in vasha
     assert "Yellow eyes." not in vasha
     assert "Hunts at dusk." in vasha
-    assert "Name their boats." not in block
+    assert "Name their boats." not in vasha
     assert "winter ruff" not in block
 
     assert rill.startswith("- Rill (Snowy, a race of Owl-folk)")
@@ -376,8 +377,9 @@ EVERYDAY_LINE = (
 
 
 def test_context_block_uses_everyday_name(world):
-    """A place or lore entry with an everyday name is shown "<main>
-    (usually called <everyday>)", and the block opens with the line asking
+    """A place or touched entry with an everyday name is shown "<main>
+    (usually called <everyday>)" ("<main> (<tag or kind>, usually called
+    <everyday>)" for a touched one), and the block opens with the line asking
     for everyday names (connections probe, recommendation (d))."""
 
     aka = [
@@ -400,7 +402,7 @@ def test_context_block_uses_everyday_name(world):
     assert lines[0] == "[world]"
     assert lines[1] == EVERYDAY_LINE
     assert "Place: Barrowford\n" in block
-    assert "Tsardom of Moscavia (usually called Moscavia)\n" in block
+    assert "Tsardom of Moscavia (lore, usually called Moscavia)\n" in block
 
     # with no everyday name anywhere, no line
     with world.revision(Source.manual(note="no aka")) as rev:
@@ -426,3 +428,506 @@ def test_context_block_everyday_name_of_the_place(world):
     block = world_context_block(world, scenes.get(scene_id), WorldDate.of(310))
     assert "Place: Tsardom of Moscavia (usually called Moscavia)" in block
     assert EVERYDAY_LINE in block
+
+
+# --- touched entries, from filings (filing spec, "Scene context"; probe 5) -------
+
+TOUCHED_LEAD = (
+    "What this scene touches: keep what these say true, and bring it in only "
+    "where the scene calls for it."
+)
+
+SCRIBE_GOAL = "Deliver a sealed letter to the Chief Scribe of the Talon-Scribe Order."
+SCRIBE_PREMISE = "Vasha walks toward the Academy; a member of the Order lets her in."
+
+
+def _scene(world, at, *, goal="", premise="", **state):
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", at, goal=goal, premise=premise)
+    scenes.update(scene_id, state=state)
+    return world_context_block(world, scenes.get(scene_id), at)
+
+
+def _present(*thing_ids):
+    return [{"thing_id": thing_id, "active": True} for thing_id in thing_ids]
+
+
+def _headings(block):
+    """The touched entries' headings, in order."""
+
+    body = block.split(TOUCHED_LEAD, 1)[1] if TOUCHED_LEAD in block else ""
+    return [
+        line
+        for line in body.splitlines()
+        if line and not line.startswith(("- ", "[end"))
+    ]
+
+
+def _scribe_scene(world, s, **kwargs):
+    return _scene(
+        world,
+        WorldDate.of(1000),
+        goal=SCRIBE_GOAL,
+        premise=SCRIBE_PREMISE,
+        place_thing_id=s.academy,
+        characters=_present(s.vasha),
+        **kwargs,
+    )
+
+
+def test_scene_touched_by_filings(world, scribe_world):
+    """What the scene touches: what its place is filed in, followed up to
+    the timeline reach (the Academy is in Velikoye and Runic Magic,
+    Velikoye in the Tsardom); what each present character is filed in
+    (Vasha, a courier of the Postal Authority); what the setup names (the
+    Order, in the goal); and (ruling F4) a character filed in one of
+    those, or in the place, whose role the goal or premise names as whole
+    words: Anastasiya, the Order's Chief Scribe. Not Ilya, a "member" (a
+    generic role, though the premise says "member"), nor Oleg, the
+    Order's "ward" (the premise's "toward" isn't the word), nor Vasha
+    herself (her sheet covers her), nor the place."""
+
+    s = scribe_world
+    block = _scribe_scene(world, s)
+
+    assert _headings(block) == [
+        "Velikoye (city)",
+        "Runic Magic (field)",
+        "Tsardom of Moscavia (nation, usually called Moscavia)",
+        "Northern Postal Authority (service)",
+        "Talon-Scribe Order (order)",
+        "Anastasiya Koroleva (character)",
+    ]
+    assert "- A tawny-brown owl-folk with burnt-orange eyes." in block
+    # Wattle Row's opening, told by Velikoye and by Wattle Row (gathered
+    # by Velikoye and, two steps up, by the Tsardom), shows once: as
+    # Velikoye's own line (probe 5's note: dedupe by text overlap)
+    assert block.count("Wattle Row opened its first workshops") == 1
+    assert (
+        "Velikoye (city)\n"
+        "- The river capital.\n"
+        "- In 998: Wattle Row opened its first workshops.\n"
+    ) in block
+    assert (
+        "Tsardom of Moscavia (nation, usually called Moscavia)\n"
+        "- A northern realm of owl-folk.\n"
+        "- In 990: Crowned the first Tsar.\n\n"
+    ) in block
+    assert "Ilya" not in block and "Oleg" not in block
+    assert "A snowy owl-folk." not in block
+    assert block.count("A courtyard of training stones.") == 1
+
+    # the role rule is whole words, either case: "chief scribes" isn't
+    # "Chief Scribe"
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Bring the chief scribes their ink.",
+        place_thing_id=s.academy,
+        characters=_present(s.vasha),
+        pulled_in=[s.order],
+    )
+    assert "Anastasiya" not in block
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Bring the CHIEF SCRIBE her ink.",
+        place_thing_id=s.academy,
+        pulled_in=[s.order],
+    )
+    assert "Anastasiya Koroleva (character)" in block
+
+    # filed in the place itself counts too; a filing that has ended, or a
+    # character who isn't here, doesn't touch anything
+    with world.revision(Source.manual(note="the place")) as rev:
+        rev.set_field(
+            s.ilya,
+            "filings",
+            [_in_record(s.academy, "gatekeeper")],
+            None,
+        )
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Get past the gatekeeper.",
+        place_thing_id=s.academy,
+    )
+    assert "Ilya (character)" in block
+    # ended by the scene's date, the filing touches nothing
+    with world.revision(Source.manual(note="ended")) as rev:
+        rev.set_field(
+            s.ilya,
+            "filings",
+            [_in_record(s.academy, "gatekeeper", until=WorldDate.of(990))],
+            None,
+        )
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Get past the gatekeeper.",
+        place_thing_id=s.academy,
+    )
+    assert "Ilya" not in block
+    block = _scene(
+        world,
+        WorldDate.of(1000),
+        goal="Get past the gatekeeper.",
+        place_thing_id=s.academy,
+        characters=[{"thing_id": s.vasha, "active": False}],
+    )
+    assert "Northern Postal Authority" not in block
+
+
+def _in_record(target, role=None, since=None, until=None, exceptions=()):
+    return {
+        "target": target,
+        "role": role,
+        "since": since.model_dump(mode="json") if since else None,
+        "until": until.model_dump(mode="json") if until else None,
+        "within": None,
+        "exceptions": list(exceptions),
+    }
+
+
+def test_generic_roles_never_touch():
+    """The role rule ignores generic roles, listed in one constant, and an
+    empty one; it matches the rest as whole words, any case."""
+
+    from talemate.worldplay.context import GENERIC_ROLES, role_named
+
+    for role in ("member", "part", "in", "practitioner", "of this culture"):
+        assert role in GENERIC_ROLES
+        assert not role_named(role, f"Every {role} of the Order is here.")
+    assert not role_named(None, "anything")
+    assert not role_named("  ", "anything")
+    assert role_named("Chief Scribe", "the chief  scribe reads it")
+    assert not role_named("scribe", "the scribes read it")
+    assert not role_named("ward", "she walks toward it")
+
+
+def test_a_compound_role_is_named_by_its_parts():
+    """A role that joins several ("senior member and Chief Scribe", the
+    role Skyfall gave Anastasiya Koroleva 2 of 2 in the Task 12 session,
+    docs/superpowers/probes/2026-10-24-filing-flow.md) is named when the
+    setup names one of its parts, as whole words; a generic part still
+    touches no one."""
+
+    from talemate.worldplay.context import role_named
+
+    goal = "Vasha must deliver a sealed letter to the Chief Scribe."
+    assert role_named("senior member and Chief Scribe", goal)
+    assert role_named("Chief Scribe and member", goal)
+    assert role_named("courier, archivist", "the archivist sorts it")
+    assert role_named("courier; Chief Scribe", goal)
+    assert not role_named("member and follower", "a member of the Order")
+    assert not role_named("senior member and Chief Scribe", "the scribes read it")
+
+
+@pytest.mark.parametrize(
+    "role, text",
+    [
+        # an "and" or comma inside an "of ..." phrase joins its objects,
+        # not two roles
+        ("Keeper of Bread and Salt", "She brings the salt to the hall."),
+        ("Master of Coin and Ships", "The ships sail at dawn."),
+        ("Warden of the North and East", "They ride east at dusk."),
+        ("Warden of the North, East and West", "They ride west."),
+        # a part must be a title, not a lone adjective or pronoun
+        ("captain, retired", "Long retired, the old man waits."),
+        ("he/she", "She waits at the gate."),
+        ("senior, acting", "The acting envoy waits."),
+    ],
+)
+def test_a_compound_role_splits_only_into_titles(role, text):
+    """Fix round 1 (Task 12 review): the compound-role splitter never
+    splits inside an "of ..." phrase, and a part that is a lone adjective
+    or pronoun is never named on its own."""
+
+    from talemate.worldplay.context import role_named
+
+    assert not role_named(role, text)
+
+
+def test_a_compound_role_still_splits_before_an_of_phrase():
+    from talemate.worldplay.context import role_named
+
+    assert role_named(
+        "Chief Scribe and Keeper of Seals", "a letter for the keeper of seals"
+    )
+    assert role_named("Chief Scribe and Keeper of Seals", "the Chief Scribe reads")
+    assert role_named("Keeper of Bread and Salt", "the Keeper of Bread and Salt")
+
+
+def test_scene_block_wording(world):
+    """Probe 5's block, each touched entry headed "<name> (<tag or kind>)"
+    under the lead line: its summary, then up to 5 of its own facts, the
+    most-linked first (a held one worded as held), then its latest 3
+    timeline lines ("In <year>: ..."; "From <year> to <year>: ..." once
+    ended, ruling C18), the same event told twice counted once (the
+    Shrine's telling of the Doctrine gives way to the Dawn's own), and at
+    most 8 lines in all: the timeline keeps its 3, the own facts give way.
+    The goal, place and cast blocks are as before."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="dawn")) as rev:
+        peak = rev.create_thing("place", fields={"name": "Dawn Peak"})
+        rev.add_fact(peak, "description", "A bare summit.")
+        kremova = rev.create_thing("place", fields={"name": "Kremova"})
+        dawn = rev.create_thing(
+            "lore", fields={"name": "The White Dawn", "tag": "religion"}
+        )
+        rev.add_fact(dawn, "general", "The White Dawn is the state church.")
+        rev.add_fact(dawn, "general", "Its priests wear white.")
+        rev.add_fact(dawn, "general", f"Its seat is in {ref(kremova)}.")
+        rev.add_fact(
+            dawn,
+            "general",
+            f"Pilgrims climb from {ref(kremova)} to {ref(peak)}.",
+        )
+        rev.add_fact(dawn, "belief", "Snowy owl-folk are the purest of the folk.")
+        rev.add_fact(dawn, "general", "Bells ring at first light.")
+        rev.add_fact(dawn, "general", "It keeps no images.")
+        rev.add_fact(
+            dawn,
+            "general",
+            "Held the old spire.",
+            valid_from=WorldDate.of(1001),
+            valid_until=WorldDate.of(1010),
+        )
+        rev.add_fact(
+            dawn,
+            "general",
+            "Declared the Night of Feathers a purification.",
+            valid_from=WorldDate.of(994),
+        )
+        rev.add_fact(
+            dawn,
+            "general",
+            "Issued the Doctrine of Separation.",
+            valid_from=WorldDate.of(1019),
+        )
+        shrine = rev.create_thing(
+            "lore",
+            fields={"name": "The Shrine", "filings": [_in_record(dawn)]},
+        )
+        rev.add_fact(
+            shrine,
+            "general",
+            "The White Dawn issued the Doctrine of Separation at the shrine.",
+            valid_from=WorldDate.of(1019),
+        )
+
+    block = _scene(
+        world,
+        WorldDate.of(1020),
+        goal="Keep the vigil.",
+        place_thing_id=peak,
+        pulled_in=[dawn],
+    )
+    assert block == (
+        "[world]\n"
+        "Goal: Keep the vigil.\n"
+        "Place: Dawn Peak\n"
+        "- A bare summit.\n"
+        "\n"
+        f"{TOUCHED_LEAD}\n"
+        "The White Dawn (religion)\n"
+        "- The White Dawn is the state church.\n"
+        "- Pilgrims climb from Kremova to Dawn Peak.\n"
+        "- Its seat is in Kremova.\n"
+        "- Its priests wear white.\n"
+        "- The White Dawn holds: Snowy owl-folk are the purest of the folk.\n"
+        "- In 994: Declared the Night of Feathers a purification.\n"
+        "- From 1001 to 1010: Held the old spire.\n"
+        "- In 1019: Issued the Doctrine of Separation.\n"
+        "\n"
+        "[end of world]"
+    )
+
+
+def test_scene_place_and_touched_entries_show_once(world, scribe_world):
+    """The scene's place shows once, as the place, though the setup names
+    it (pulled in); an entry touched two ways (Velikoye, filed above the
+    place and pulled in) is one block, and no fact is told twice."""
+
+    s = scribe_world
+    block = _scribe_scene(world, s, pulled_in=[s.academy, s.velikoye, s.order])
+    assert block.count("The Academy") == 1
+    assert "The Academy (" not in block
+    assert block.count("Velikoye (city)") == 1
+    assert block.count("The river capital.") == 1
+    assert block.count("Talon-Scribe Order (order)") == 1
+
+    # the place pulled in, with nothing else touched: the place alone
+    block = _scene(
+        world, WorldDate.of(1000), place_thing_id=s.tsardom, pulled_in=[s.tsardom]
+    )
+    assert "Place: Tsardom of Moscavia (usually called Moscavia)\n" in block
+    assert TOUCHED_LEAD not in block
+    assert block.count("A northern realm of owl-folk.") == 1
+
+
+def test_touched_person_tells_its_filing_lines(world, scribe_world):
+    """A person the scene touches (the Chief Scribe, by the role rule) is
+    told with its filing lines, as its sheet has them ("Chief Scribe of
+    Talon-Scribe Order, but: she still carves the old runes"), right
+    after its summary; the exception facts a line tells aren't told again
+    as facts, and never with their "Departs from <link>" sentence, which
+    is for the world's pages (Filing Task 11, parked Task 4 item M7)."""
+
+    from talemate.world.refs import ref
+
+    s = scribe_world
+    with world.revision(Source.manual(note="a but")) as rev:
+        but = rev.add_fact(
+            s.anastasiya,
+            "ties",
+            "She still carves the old runes. Departs from a teaching of "
+            + ref(s.order, "Talon-Scribe Order"),
+            origin={"tie": s.order},
+        )
+        # a "but..." of a filing with no role gets no line: told as a fact
+        aside = rev.add_fact(
+            s.anastasiya,
+            "ties",
+            "She keeps her own rune stones.",
+            origin={"tie": s.runes},
+        )
+        rev.set_field(
+            s.anastasiya,
+            "filings",
+            [
+                _in_record(s.order, "Chief Scribe", exceptions=[but]),
+                _in_record(s.runes, exceptions=[aside]),
+            ],
+            None,
+        )
+    block = _scribe_scene(world, s)
+    assert "- She keeps her own rune stones.\n" in block
+    assert (
+        "Anastasiya Koroleva (character)\n"
+        "- A tawny-brown owl-folk with burnt-orange eyes.\n"
+        "- Chief Scribe of Talon-Scribe Order, but: she still carves the "
+        "old runes\n"
+    ) in block
+    assert "Departs from" not in block
+    assert block.count("still carves the old runes") == 1
+
+
+def test_untouched_entry_not_in_context(world):
+    """An entry nothing touches never shows: one unlinked from the place,
+    the cast and the setup, one merely mentioned by the place's facts, and
+    a believed being even when named (it's only spoken of). With nothing
+    touched there's no lead line."""
+
+    from talemate.world.refs import ref
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        place = rev.create_thing("place", fields={"name": "Veldhaer"})
+        rev.add_fact(place, "description", "A harbor town built on stilts.")
+        treaty = rev.create_thing("lore", fields={"name": "The River Treaty"})
+        rev.add_fact(treaty, "general", "Signed after the flood of 301.")
+        rev.add_fact(place, "history", f"Bound by {ref(treaty)}.")
+        other = rev.create_thing("lore", fields={"name": "Far Mountains"})
+        rev.add_fact(other, "general", "Snow all year.")
+        mother = rev.create_thing(
+            "being", fields={"name": "Sea Mother", "existence": "believed"}
+        )
+        rev.add_fact(mother, "nature", "A goddess of the deep.")
+        maren = rev.create_thing("character", fields={"name": "Maren"})
+        rev.add_fact(maren, "background", "A ferrywoman.")
+
+    block = _scene(
+        world,
+        WorldDate.of(310),
+        goal="Find the envoy",
+        place_thing_id=place,
+        characters=_present(maren),
+        pulled_in=[mother],
+    )
+    assert block == (
+        "[world]\n"
+        "Goal: Find the envoy\n"
+        "Place: Veldhaer\n"
+        "- A harbor town built on stilts.\n"
+        "- Bound by The River Treaty.\n"
+        "[end of world]"
+    )
+
+
+def test_scene_timeline_gathers_what_is_filed(world, spheres_world):
+    """A touched entry's timeline lines gather what's filed in it: Dawn
+    Peak's raising, filed in the Dawn, is among the Dawn's latest lines,
+    held as belief when it's held; with Dawn Peak the scene's place, its
+    fact is told once, as the place's."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="later")) as rev:
+        rev.add_fact(
+            s.dawn_peak,
+            "general",
+            "The shrine on the peak was raised by the dawn's own light.",
+            valid_from=WorldDate.of(1015),
+            origin={"held_by": s.dawn},
+        )
+    at = WorldDate.of(1020)
+    block = _scene(world, at, place_thing_id=s.kremova, characters=_present(s.vasha))
+    assert (
+        "- In 994: Declared the Night of Feathers a purification.\n"
+        "- In 1015: The White Dawn holds that the shrine on the peak was raised "
+        "by the dawn's own light.\n"
+        "- In 1019: Issued the Doctrine of Separation.\n"
+    ) in block
+
+    block = _scene(world, at, place_thing_id=s.dawn_peak, characters=_present(s.vasha))
+    assert block.count("shrine on the peak") == 1
+    assert "- In 1015:" not in block
+
+
+@pytest.mark.asyncio
+async def test_no_extra_model_calls_on_turn(world, spheres_world):
+    """Filings in play cost no model call: the World instruction (narrator
+    and conversation) carries the touched entries, and a time passage
+    rebuilds Vasha's sheet with her filing line, all from what's stored."""
+
+    s = spheres_world
+    scenes = world.scenes()
+    scene_id = scenes.create("Test Scene", WorldDate.of(1020), goal="Keep the vigil")
+    scenes.update(
+        scene_id,
+        state={"place_thing_id": s.kremova, "characters": _present(s.vasha)},
+    )
+    record = scenes.get(scene_id)
+
+    scene = MockScene()
+    bootstrap_scene(scene)
+    character = character_from_world(world, s.vasha, record.start, is_player=False)
+    conversation = instance.get_agent("conversation")
+    actor = Actor(character=character, agent=conversation)
+    actor.scene = scene
+    scene.actors.append(actor)
+    scene.active_characters.append(character.name)
+    scene.character_data[character.name] = character
+    scene.world_context = WorldSceneContext(world=world, record=record)
+    connect(scene)
+
+    emission = ConversationAgentEmission(
+        agent=conversation, character=character, response=""
+    )
+    await async_signals.get("agent.conversation.inject_instructions").send(emission)
+    [instruction] = [i for i in emission.dynamic_instructions if i.title == "World"]
+    assert _headings(instruction.content) == [
+        "Tsardom of Moscavia (place, usually called Moscavia)",
+        "The White Dawn (lore)",
+    ]
+
+    world_state = instance.get_agent("world_state")
+    await world_state.advance_time("P30D")
+    assert (
+        scene.get_character("Vasha")
+        .base_attributes["ties"]
+        .startswith("Practitioner of the White Dawn (since 1010), but: ")
+    )
+
+    assert scene.mock_client.prompt_history == []

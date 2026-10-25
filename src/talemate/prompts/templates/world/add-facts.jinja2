@@ -1,0 +1,55 @@
+{#-
+Extractors:
+  - response: AsIsExtractor()
+
+A few more facts for an entry the world has ("+ Add facts...", "+ Add
+event...", `worldplay.facts.draft_facts`). New wording, unprobed (Filing
+Task 12 measures it). `facts` are the entry's own facts, rendered; `year`
+is set for an event, and every fact is dated to it.
+
+The reply also gives the "names" its facts use (ruling H8): the example's
+"names" list and the two names rules are create-thing's generic branch's,
+verbatim (docs/superpowers/probes/2026-10-25-add-facts-names.md), and so
+is its "tag" rule (ruling H9: the names' tags came back as long phrases
+without it), the kind-name line for a lore or event entry only. `tags`
+isn't passed, so the tags-in-use clause stays out.
+-#}
+<|SECTION:TASK|>
+You add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.
+
+The entry: {{ name }} ({{ kind }}{% if tag %}, {{ tag }}{% endif %})
+{% if summary -%}
+{{ summary }}
+{% endif %}
+{% if facts -%}
+What the records already say about it (never repeat these):
+{% for text in facts -%}
+- {{ text }}
+{% endfor %}
+{% endif %}
+{% if year -%}
+What happened in {{ year }}, as the owner asks:
+{% else -%}
+The owner asks for:
+{% endif -%}
+{{ prompt }}
+
+Rules:
+- Write 1 to 5 facts, each one claim in a full sentence, about {{ name }}.
+- Keep them consistent with what the records already say.
+- Use only these categories: {{ categories | join(", ") }}.
+{% if not year -%}
+- "since" is optional: give it only when a fact started at a known time, as a bare year no later than {{ now_year }}.
+{% endif -%}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence."}], "names": [{"name": "...", "kind": "place", "tag": "...", "in": null, "aka": []}]}
+
+- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "tag", "in", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); "tag" what it is, as for the {{ kind }} (never "proper" or "common": those are only for other names); "in" the name of the entry it belongs in (this {{ kind }}, an entry listed above, or another of your names), or null; "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the "names": it stays a fact of the {{ kind }}.
+- "tag": one or two words for what the {{ kind }} is, such as river, ruler, custom, institution, regiment, capital or doctrine.{% if tags %} Use a tag from the tags in use when one fits; make a new one only when none does.{% endif %}{% if kind in ("lore", "event") %} The tag is never the kind's own name (lore, event, place, …): say what sort of {{ kind }} it is, such as custom, law, battle, festival.{% endif %}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

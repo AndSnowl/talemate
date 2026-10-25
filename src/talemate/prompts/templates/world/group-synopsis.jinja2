@@ -1,0 +1,25 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+Write the synopsis of one group on a page of a fantasy world's records: the {{ group }} filed in {{ page }}. It stands above the group's list and tells the reader at a glance what the group holds and how its members relate to each other and to {{ page }}.
+
+Use only what the entries below say. Never add a name, date, number, rank or claim they don't give, and never guess at what a stub (an entry with little written yet) is.
+
+{{ page }}: {{ page_summary }}
+
+The {{ group }} filed in {{ page }}, each with its role there and what its entry says:
+{% for member in members -%}
+{{ member.label }}:
+{% for text in member.facts -%}
+- {{ text }}
+{% endfor %}
+{%- endfor %}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"synopsis": "Two or three sentences."}
+
+Two or three sentences, at most 70 words, naming each member once. No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}

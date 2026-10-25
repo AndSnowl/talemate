@@ -19,8 +19,8 @@ prompt that expands a stub and for what the create box shows the owner:
   mentioning entry. An entry with an everyday name is headed "Owl-folk
   (species, usually called Owls)", as the probe's recommendation (d) names
   things in create prompts;
-- `suggested_prompt`: the name and its mentioning facts, as the create
-  box's starting prompt for a stub.
+- `suggested_prompt`: the name, the stub's own facts and filings, and its
+  mentioning facts, as the create box's starting prompt for a stub.
 """
 
 from __future__ import annotations
@@ -28,9 +28,11 @@ from __future__ import annotations
 import structlog
 from pydantic import BaseModel
 
+from talemate.world.filing import filings_of
 from talemate.world.kinds import HERITAGE_KINDS, get_kind
 from talemate.world.names import everyday_name
-from talemate.world.view import WorldView
+from talemate.world.view import ThingState, WorldView
+from talemate.worldplay.held import filed_as, held_text
 
 log = structlog.get_logger("talemate.worldplay.mentions")
 
@@ -62,7 +64,8 @@ _ABBREVIATIONS = {"St", "Mt", "Mr", "Mrs", "Ms", "Dr"}
 
 
 class Mention(BaseModel):
-    """A fact of another entry that references the thing, rendered."""
+    """A fact of another entry that references the thing, rendered (a
+    held one worded as held, `held.held_text`)."""
 
     owner_id: str
     owner_name: str
@@ -99,11 +102,12 @@ def mentions(view: WorldView, thing_id: str) -> list[Mention]:
 
     found: list[Mention] = []
     owners: dict[str, tuple[str, str, str | None] | None] = {}
+    states: dict[str, ThingState | None] = {}
     for owner_id, fact in view.referencing(thing_id, any_date=True):
         if owner_id == thing_id:
             continue
         if owner_id not in owners:
-            state = view.thing(owner_id)
+            state = states[owner_id] = view.thing(owner_id)
             owners[owner_id] = (
                 (view.name_of(owner_id) or "", state.kind, everyday_name(state))
                 if state
@@ -120,7 +124,8 @@ def mentions(view: WorldView, thing_id: str) -> list[Mention]:
                 owner_everyday=owner[2],
                 fact_id=fact.fact_id,
                 category=fact.category,
-                text=view.render(fact.text),
+                # a belief worded as held (final review I2)
+                text=held_text(view, fact, states[owner_id]),
             )
         )
     return found
@@ -144,8 +149,8 @@ def _by_entry(found: list[Mention]) -> list[list[Mention]]:
 
 
 def _key_facts(view: WorldView, owner_id: str, skip: set[str]) -> list[str]:
-    """Up to `KEY_FACTS` of the entry's facts at the view's date, rendered,
-    in its key category order, leaving out the fact ids in `skip`. A
+    """Up to `KEY_FACTS` of the entry's facts at the view's date, rendered
+    (a held one worded as held), in its key category order, leaving out the fact ids in `skip`. A
     species', race's or mix's origin facts are never cut: they're history,
     often of the very place being expanded (the connections flow run lost a
     "capital in Moscow" origin fact to the cap, and the country expanded
@@ -161,12 +166,17 @@ def _key_facts(view: WorldView, owner_id: str, skip: set[str]) -> list[str]:
     rank = {category: i for i, category in enumerate(order)}
     facts = sorted(
         (fact for fact in state.facts if fact.fact_id not in skip),
-        key=lambda fact: rank.get(fact.category, len(order)),
+        # written order within a category, never the random fact ids'
+        key=lambda fact: (
+            rank.get(fact.category, len(order)),
+            fact.created,
+            fact.fact_id,
+        ),
     )
     kept = facts[:KEY_FACTS]
     if state.kind in HERITAGE_KINDS:
         kept += [fact for fact in facts[KEY_FACTS:] if fact.category == "origin"]
-    return [view.render(fact.text) for fact in kept]
+    return [held_text(view, fact, state) for fact in kept]
 
 
 def gather_mentions(view: WorldView, thing_id: str) -> MentionContext:
@@ -252,17 +262,44 @@ def _cut(text: str, limit: int, start: int) -> str:
     return text[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
+def _home_line(view: WorldView, thing_id: str) -> str:
+    """What the thing is filed in, a sentence a filing (`held.filed_as`):
+    "Rite of the White Dawn." for one with a role, "Part of the White
+    Dawn." without; "" when it's filed nowhere."""
+
+    return " ".join(
+        f"{filed_as(filing.role, name)}."
+        for filing in filings_of(view, thing_id)
+        if (name := view.name_of(filing.target))
+    )
+
+
 def suggested_prompt(view: WorldView, stub_id: str) -> str:
-    """The create box's starting prompt for a stub: "<name>: " and its
-    mentioning facts, rendered and joined (the most-mentioning entries
-    first), cut at `PROMPT_MAX` characters on a sentence's end. Just the
-    name when nothing mentions it."""
+    """The create box's starting prompt for a stub: "<name>: ", the stub's
+    own facts, what it's filed
+    in (`_home_line`), then its mentioning facts, rendered and joined
+    (the most-mentioning entries first), cut at `PROMPT_MAX` characters on
+    a sentence's end. Just the name when there's none of these.
+
+    Its own facts and filings lead (the spheres Task 10 session): led by
+    a character's mention alone, a rite's prompt was written around her."""
 
     name = view.name_of(stub_id) or ""
+    state = view.thing(stub_id)
+    own = [
+        _sentence(held_text(view, fact, state))
+        for fact in sorted(
+            state.facts if state else [], key=lambda f: (f.created, f.fact_id)
+        )
+    ]
     texts = [
-        _sentence(mention.text)
-        for group in _by_entry(mentions(view, stub_id))
-        for mention in group
+        *own,
+        _home_line(view, stub_id),
+        *(
+            _sentence(mention.text)
+            for group in _by_entry(mentions(view, stub_id))
+            for mention in group
+        ),
     ]
     texts = [text for text in texts if text]
     if not texts:

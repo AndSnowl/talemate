@@ -1,0 +1,25 @@
+{
+ "probe": "add-facts-names",
+ "date": "2026-10-25",
+ "note": "Labels committed before any model call. Ruling H8 (hubs round 2, hiccup 2): '+ Add facts' on the Tsardom of Moscavia wrote 'Tsar Ivan III' and 'Tsar Alexei II' as plain words, no stubs. The case is the owner's own: a copy (sqlite backup API) of the acceptance world 78d0ebd6c3414cac85702147d369e012, with the owner's add-facts revision and the two hand stubs after it undone (revs 12-14), so the world is as it was when the owner asked. The owner's prompt wasn't logged (backend.log 11:39:57 has only action=add_facts), so the prompt is the fallback the controller gave. Each call goes through the app's own worldplay.facts.draft_facts, one at a time, against Skyfall at http://192.168.0.5:5001. 3 calls before the change (template without names), 3 after.",
+ "world_source": "/tmp/fantasymate-acceptance-hubs2/worlds/78d0ebd6c3414cac85702147d369e012",
+ "undo_revs": [
+  14,
+  13,
+  12
+ ],
+ "entry": {
+  "id": "8cf089cd67844b429d6d131843cdf8dd",
+  "name": "Tsardom of Moscavia"
+ },
+ "prompt": "the current Tsar and how he came to the throne",
+ "calls_per_run": 3,
+ "scoring": {
+  "new_proper_name": "A proper name a drafted fact writes that the world (at the undone copy) has no entry or other name for: a person, place, people, named event, named group or named object. A title on its own ('the Tsar'), an office or rank ('High Chancellor'), a people's adjective on its own ('Moscavian'), a date, and the entry's own names don't count. A titled person counts once ('Tsar Ivan III'). Counted by hand from the facts, with names.unknown_proper_phrases recorded per fact as a starting list.",
+  "stub_proposed": "A row of the draft's new names (the 'New names' rows a ticked accept would make stubs of). Before the change there is no such list, so 0.",
+  "covered": "A new proper name some proposed stub covers (by its name, one of its written forms, or its aka).",
+  "false_stub": "A proposed stub that is no new proper name by the rule above (a title, an office, a description, a name the world has).",
+  "pass_hint": "Not a bar (3 calls). The after run should cover most new proper names with no false stubs; a title or office row is a F5 failure.",
+  "long_tag": "Ruling H9 follow-up: a proposed stub's tag of more than 2 words (split on whitespace, as stored after clean_tag). Compared between run 'after' (H8) and run 'after-h9' (with create-thing's tag rule), 3 calls each, same prompt and world; false stubs counted as above."
+ }
+}

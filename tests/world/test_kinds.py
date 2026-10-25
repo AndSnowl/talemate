@@ -11,21 +11,27 @@ def test_kinds_table():
     assert [f.name for f in character.fields] == [
         "name",
         "born",
-        "culture",
         "voice",
         "color",
         "heritage",
         "aka",
         "stub",
+        "tag",
+        "filings",
+        "hint",
+        "agent",
     ]
     assert [f.type for f in character.fields] == [
         "text",
         "date",
-        "thing",
         "json",
         "text",
         "thing",
         "json",
+        "json",
+        "text",
+        "json",
+        "text",
         "json",
     ]
     assert character.categories == [
@@ -35,6 +41,7 @@ def test_kinds_table():
         "ability",
         "relationship",
         "speech",
+        "ties",
     ]
 
     with pytest.raises(KeyError):
@@ -46,6 +53,10 @@ def test_every_kind_has_aka_and_stub():
         types = {f.name: f.type for f in kind.fields}
         assert types["aka"] == "json", kind.name
         assert types["stub"] == "json", kind.name
+        assert types["agent"] == "json", kind.name
+        assert types["tag"] == "text", kind.name
+        assert types["filings"] == "json", kind.name
+        assert types["hint"] == "text", kind.name
 
 
 def test_aka_shape_validated():
@@ -113,6 +124,10 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
+        "tag",
+        "filings",
+        "hint",
+        "agent",
     ]
     assert [f.type for f in species.fields] == [
         "text",
@@ -121,6 +136,10 @@ def test_species_race_mix_kinds():
         "number",
         "json",
         "json",
+        "json",
+        "text",
+        "json",
+        "text",
         "json",
     ]
     assert species.categories == _HERITAGE_CATEGORIES
@@ -134,6 +153,10 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
+        "tag",
+        "filings",
+        "hint",
+        "agent",
     ]
     assert [f.type for f in race.fields] == [
         "text",
@@ -142,6 +165,10 @@ def test_species_race_mix_kinds():
         "number",
         "json",
         "json",
+        "json",
+        "text",
+        "json",
+        "text",
         "json",
     ]
     assert race.categories == _HERITAGE_CATEGORIES
@@ -155,6 +182,10 @@ def test_species_race_mix_kinds():
         "measures",
         "aka",
         "stub",
+        "tag",
+        "filings",
+        "hint",
+        "agent",
     ]
     assert [f.type for f in mix.fields] == [
         "text",
@@ -163,6 +194,10 @@ def test_species_race_mix_kinds():
         "number",
         "json",
         "json",
+        "json",
+        "text",
+        "json",
+        "text",
         "json",
     ]
     assert mix.categories == _HERITAGE_CATEGORIES
@@ -209,3 +244,36 @@ def test_measures_shape():
             "measures",
             [{"name": "height", "min": 1.5, "unit": "m"}],
         )
+
+
+def test_agent_is_unrendered():
+    """An entry's agent flag is no input to its prose (ruling P21)."""
+
+    from talemate.world.prose import UNRENDERED_FIELDS
+
+    assert "agent" in UNRENDERED_FIELDS
+
+
+def test_agent_is_a_bool_field_on_every_kind():
+    """`agent` is a plain field any entry can have (Filing): a bool."""
+
+    for kind in KINDS.values():
+        validate_field(kind, "agent", True)
+        validate_field(kind, "agent", False)
+        with pytest.raises(ValueError):
+            validate_field(kind, "agent", "true")
+        with pytest.raises(ValueError):
+            validate_field(kind, "agent", 1)
+
+
+def test_the_old_structure_is_gone():
+    """No sphere or culture kind, and none of the fields filing replaced."""
+
+    assert "sphere" not in KINDS
+    assert "culture" not in KINDS
+    gone = {"part_of", "ties", "parent", "cultures", "culture", "language"}
+    gone |= {"template", "drawers", "owner", "place", "drops"}
+    for kind in KINDS.values():
+        assert not gone & {f.name for f in kind.fields}, kind.name
+    # the tag says what a place is: no `kind` text field of its own
+    assert "kind" not in {f.name for f in get_kind("place").fields}

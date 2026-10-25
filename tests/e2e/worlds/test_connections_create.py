@@ -70,7 +70,7 @@ def _place_box(page):
 
 def _create_and_wait(page, box):
     box.get_by_role("button", name="Create").click()
-    preview = page.get_by_test_id("create-preview")
+    preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
     return preview
 
@@ -102,6 +102,37 @@ def _search_and_pick(page, query: str, name: str):
     text = result.inner_text()
     result.click()
     return text
+
+
+MODE_IDS = {"link": "mode-link-only", "name": "mode-add-name"}
+
+
+def _choose_mode(
+    page,
+    mode: str | None = None,
+    *,
+    rename_to: str | None = None,
+    default: str | None = None,
+):
+    """The mode chooser after a link's target is picked (P4, ruling H2):
+    `default` ("link" or "name") is the one marked; then "Rename to…"
+    `rename_to`, else `mode`, else the marked one is chosen."""
+
+    chooser = page.get_by_test_id("name-mode")
+    chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    if default is not None:
+        expect(chooser.get_by_test_id(MODE_IDS[default])).to_have_class(
+            re.compile(r"v-list-item--active")
+        )
+    if rename_to is not None:
+        chooser.get_by_test_id("mode-rename-option").filter(
+            has_text=re.compile(f"^{re.escape(rename_to)}$")
+        ).click()
+    elif mode is not None:
+        chooser.get_by_test_id(MODE_IDS[mode]).click()
+    else:
+        chooser.locator(".v-list-item--active").click()
+    chooser.wait_for(state="hidden", timeout=TIMEOUT_MS)
 
 
 def test_expand_stub_prefills_and_fills_it(app, page, fixed_preview):
@@ -253,7 +284,7 @@ def test_add_reference_menu_inserts_pick(app, page):
     _world_tab(page)
     page.get_by_test_id("kind-character").click()
     vasha = _open_thing(page, "Vasha")
-    vasha.get_by_role("button", name="Add fact").click()
+    vasha.get_by_role("button", name="Add fact", exact=True).click()
     form = vasha.get_by_test_id("fact-form")
     text = form.get_by_label("Fact", exact=True)
     text.fill("Sailed north with ")
@@ -285,7 +316,7 @@ def test_reference_menu_undo_redo_select_all_delete_and_shift_bypass(app, page):
     _world_tab(page)
     page.get_by_test_id("kind-character").click()
     vasha = _open_thing(page, "Vasha")
-    vasha.get_by_role("button", name="Add fact").click()
+    vasha.get_by_role("button", name="Add fact", exact=True).click()
     form = vasha.get_by_test_id("fact-form")
     text = form.get_by_label("Fact", exact=True)
     text.click()
@@ -399,6 +430,7 @@ def test_repoint_link_keeps_words(app, page):
     card.wait_for(state="visible", timeout=TIMEOUT_MS)
     card.get_by_role("button", name="Re-point…").click()
     _search_and_pick(page, "holt", "Maren Holt")
+    _choose_mode(page)
 
     # that one reference, now meaning the other Maren; the known name
     # written plain stays plain
@@ -408,6 +440,12 @@ def test_repoint_link_keeps_words(app, page):
     link = fact.get_by_test_id("linked-ref")
     expect(link).to_have_count(1)
     expect(link).to_have_text("Maren")
+    # the words are the same before the reply lands: its card names the
+    # thing the link means now
+    link.hover()
+    expect(page.get_by_test_id("link-card").locator(".link-name")).to_have_text(
+        "Maren Holt", timeout=TIMEOUT_MS
+    )
     link.click()
     _opened(page, "Maren Holt")
 

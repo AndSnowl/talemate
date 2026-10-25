@@ -11,12 +11,15 @@ Place: {{ place.name }}{% if place.everyday %} (usually called {{ place.everyday
 - {{ fact }}
 {% endfor -%}
 {% endif -%}
-{% for entry in lore %}
-{{ entry.name }}{% if entry.everyday %} (usually called {{ entry.everyday }}){% endif %}
-{% for fact in entry.facts -%}
-- {{ fact }}
+{% if touched %}
+What this scene touches: keep what these say true, and bring it in only where the scene calls for it.
+{% for entry in touched -%}
+{{ entry.name }} ({{ entry.tag or entry.kind }}{% if entry.everyday %}, usually called {{ entry.everyday }}{% endif %})
+{% for line in entry.lines -%}
+- {{ line }}
 {% endfor %}
 {% endfor -%}
+{% endif -%}
 {% if cast %}
 Who is here, by heritage (keep every description and action true to these bodies and instincts):
 {% for member in cast -%}

@@ -20,6 +20,9 @@ Fixtures:
 - ``fixed_preview``: a function that writes that file (``seed.set_fixed_preview``);
   it's removed after the test, so no later test sees a stale preview.
 - ``fixed_setup``: the same for the scene setup (``seed.set_fixed_setup``).
+- ``fixed_facts``, ``fixed_group_synopsis``, ``fixed_group_add``: the same
+  for "+ Add facts…"/"+ Add event…", a group's synopsis and a group's
+  "+ Add" (``seed.set_fixed_reply``), each the model's reply.
 - ``browser_page``: a fresh browser context and blank page, closed after the test.
 - ``page``: ``browser_page`` opened on the app, onboarding wizard dismissed,
   with ``page.console_errors`` collecting console messages of type ``error``.
@@ -38,11 +41,15 @@ from pathlib import Path
 import pytest
 
 from e2e.seed import (
+    FIXED_FACTS_FILE,
+    FIXED_GROUP_ADD_FILE,
+    FIXED_GROUP_SYNOPSIS_FILE,
     FIXED_PREVIEW_FILE,
     FIXED_SETUP_FILE,
     SOCKET_HOOK_JS,
     dismiss_onboarding,
     set_fixed_preview,
+    set_fixed_reply,
     set_fixed_setup,
 )
 
@@ -102,12 +109,18 @@ def browser(chromium_path):
 def app(tmp_path_factory, chromium_path):
     # chromium_path first: without a browser, skip before starting an app.
     root = tmp_path_factory.mktemp("app")
-    # The backend's `preview_thing` and scene setups answer from these files
-    # instead of a model (seed.set_fixed_preview/set_fixed_setup write them).
+    # The backend's `preview_thing` and scene setups answer from these
+    # files instead of a model (seed.set_fixed_preview and set_fixed_setup
+    # write them).
     # Set only for the backend's start: it inherits the environment then.
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("TALEMATE_TEST_FIXED_PREVIEW", str(root / FIXED_PREVIEW_FILE))
         mp.setenv("TALEMATE_TEST_FIXED_SETUP", str(root / FIXED_SETUP_FILE))
+        mp.setenv("TALEMATE_TEST_FIXED_FACTS", str(root / FIXED_FACTS_FILE))
+        mp.setenv(
+            "TALEMATE_TEST_FIXED_GROUP_SYNOPSIS", str(root / FIXED_GROUP_SYNOPSIS_FILE)
+        )
+        mp.setenv("TALEMATE_TEST_FIXED_GROUP_ADD", str(root / FIXED_GROUP_ADD_FILE))
         info = talemate_app.start(root=root)
     try:
         yield info
@@ -131,6 +144,26 @@ def fixed_setup(app):
         yield lambda reply: set_fixed_setup(app.root, reply)
     finally:
         path.unlink(missing_ok=True)
+
+
+def _fixed_reply_fixture(file_name: str):
+    """A fixture writing the app's fixed reply file `file_name`
+    (`seed.set_fixed_reply`), removed after the test."""
+
+    @pytest.fixture()
+    def fixture(app):
+        path = Path(app.root) / file_name
+        try:
+            yield lambda reply: set_fixed_reply(app.root, file_name, reply)
+        finally:
+            path.unlink(missing_ok=True)
+
+    return fixture
+
+
+fixed_facts = _fixed_reply_fixture(FIXED_FACTS_FILE)
+fixed_group_synopsis = _fixed_reply_fixture(FIXED_GROUP_SYNOPSIS_FILE)
+fixed_group_add = _fixed_reply_fixture(FIXED_GROUP_ADD_FILE)
 
 
 @pytest.fixture()

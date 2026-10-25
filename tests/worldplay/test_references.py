@@ -45,27 +45,39 @@ def test_facts_of_other_things_that_reference_it(world):
     ]
 
 
+def _in(target, role=None, within=None):
+    return {"target": target, "role": role, "within": within}
+
+
 def test_fields_that_point_at_it(world):
+    """Fields that point at it, and filings into it or within it (an
+    item's owner is one: "owned by"), on any story date."""
+
     vasha, oskar, harbour, _ = _seed(world)
     with world.revision(Source.manual()) as rev:
-        quay = rev.create_thing("place", {"name": "The Quay", "parent": harbour})
-        old_town = rev.create_thing(
-            "place",
-            {"name": "Old Town", "cultures": [{"thing_id": harbour, "share": 1}]},
+        quay = rev.create_thing(
+            "place", {"name": "The Quay", "filings": [_in(harbour)]}
         )
-        lantern = rev.create_thing("item", {"name": "Lantern", "owner": harbour})
-    # a field that pointed at it once, then moved on, still counts
+        old_town = rev.create_thing("place", {"name": "Old Town"})
+        rev.set_field(harbour, "filings", [_in(old_town)], None)
+        lantern = rev.create_thing(
+            "item", {"name": "Lantern", "filings": [_in(harbour, "owned by")]}
+        )
+        rev.set_field(vasha, "filings", [_in(old_town, "pilot", within=harbour)], None)
+    # a filing into it once, then moved on, still counts
     with world.revision(Source.manual()) as rev:
-        rev.set_field(lantern, "owner", oskar, WorldDate.of(320))
+        rev.set_field(lantern, "filings", [_in(oskar, "owned by")], WorldDate.of(320))
 
     found = thing_references(world, harbour)["fields"]
 
     assert sorted(found, key=lambda entry: entry["thing_name"]) == [
-        {"thing_id": lantern, "thing_name": "Lantern", "field": "owner"},
-        {"thing_id": old_town, "thing_name": "Old Town", "field": "cultures"},
-        {"thing_id": quay, "thing_name": "The Quay", "field": "parent"},
+        {"thing_id": lantern, "thing_name": "Lantern", "field": "filings"},
+        {"thing_id": quay, "thing_name": "The Quay", "field": "filings"},
+        {"thing_id": vasha, "thing_name": "Vasha", "field": "filings"},
     ]
-    assert thing_references(world, vasha)["fields"] == []
+    assert thing_references(world, oskar)["fields"] == [
+        {"thing_id": lantern, "thing_name": "Lantern", "field": "filings"}
+    ]
 
 
 def test_scenes_that_use_it(world):
@@ -113,4 +125,22 @@ def test_references_count_parents_and_heritage(world):
     ]
     assert thing_references(world, half_orc)["fields"] == [
         {"thing_id": brenna, "thing_name": "Brenna", "field": "heritage"},
+    ]
+
+
+def test_scene_role_of_pulled_in_entries(world, spheres_world):
+    """An entry a scene pulled in (a faith, or a place named in the
+    prompt) is labelled "lore"; the scene's place stays "place"."""
+
+    s = spheres_world
+    scene_id = world.scenes().create(
+        "Vigil",
+        WorldDate.of(1020),
+        state={"place_thing_id": s.dawn_peak, "pulled_in": [s.tsardom, s.dawn]},
+    )
+    entry = {"scene_id": scene_id, "name": "Vigil"}
+    assert thing_references(world, s.tsardom)["scenes"] == [{**entry, "role": "lore"}]
+    assert thing_references(world, s.dawn)["scenes"] == [{**entry, "role": "lore"}]
+    assert thing_references(world, s.dawn_peak)["scenes"] == [
+        {**entry, "role": "place"}
     ]

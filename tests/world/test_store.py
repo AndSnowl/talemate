@@ -342,3 +342,119 @@ def test_present_defaults_to_year_one_and_round_trips(tmp_path):
         assert reopened.present() == WorldDate.of(1000)
     finally:
         reopened.close()
+
+
+def test_correct_fact_replaces_the_origin(world):
+    """`correct_fact(origin=...)` replaces a fact's origin, keeping the
+    rest; undo brings the old one back."""
+
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", {"name": "A"})
+        fact_id = rev.add_fact(
+            a, "general", "Ended once.", valid_until=WorldDate.of(20), origin={"x": 1}
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.correct_fact(fact_id, origin={"tie": a})
+    [fact] = world.live_facts(a)
+    assert (fact.fact_id, fact.text, fact.valid_until) == (
+        fact_id,
+        "Ended once.",
+        WorldDate.of(20),
+    )
+    assert fact.origin == {"tie": a}
+    world.undo([world.head_rev()])
+    assert world.live_facts(a)[0].origin == {"x": 1}
+
+
+def test_live_facts_lists_every_date(world):
+    with world.revision(Source.manual()) as rev:
+        a = rev.create_thing("lore", {"name": "A"})
+        rev.add_fact(a, "general", "Now.")
+        rev.add_fact(a, "general", "Then.", valid_until=WorldDate.of(5))
+        rev.add_fact(a, "general", "Later.", valid_from=WorldDate.of(500))
+    assert sorted(f.text for f in world.live_facts(a)) == ["Later.", "Now.", "Then."]
+    assert len(world.view(WorldDate.of(100)).thing(a).facts) == 1
+
+
+def test_fact_origin_read_back(world):
+    with world.revision(Source.manual(note="an order")) as rev:
+        order_id = rev.create_thing(
+            "lore", fields={"name": "The Order of Ash", "agent": True}
+        )
+        fact_id = rev.add_fact(
+            order_id,
+            "general",
+            "Founded in the ash of the old capital.",
+            origin={"tie": order_id},
+        )
+
+    view = world.view()
+    thing = view.thing(order_id)
+    fact = next(f for f in thing.facts if f.fact_id == fact_id)
+    assert fact.origin == {"tie": order_id}
+
+
+def test_fact_without_origin_is_none(world):
+    with world.revision(Source.manual(note="plain fact")) as rev:
+        lore_id = rev.create_thing("lore", fields={"name": "The Long Winter"})
+        fact_id = rev.add_fact(lore_id, "general", "It lasted three years.")
+
+    view = world.view()
+    thing = view.thing(lore_id)
+    fact = next(f for f in thing.facts if f.fact_id == fact_id)
+    assert fact.origin is None
+
+
+def test_unknown_structure_names_what_a_world_made_before_filing_uses(world):
+    """A fresh world's rows use only kinds and fields this version has; a
+    world made before Filing names its sphere kind and its part_of and
+    ties fields (final review I3)."""
+
+    with world.revision(Source.manual(note="setup")) as rev:
+        for kind in ("character", "place", "lore", "being", "event"):
+            rev.create_thing(kind, {"name": kind.title(), "tag": "custom"})
+    assert world.unknown_structure() == []
+
+    conn = world._conn
+    with conn:
+        conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES ('s1', 'sphere', 1)"
+        )
+        conn.execute(
+            "INSERT INTO things (id, kind, rev_added) VALUES ('c1', 'character', 1)"
+        )
+        for field in ("part_of", "ties", "name"):
+            conn.execute(
+                "INSERT INTO field_values (thing_id, field, value_json, rev_added)"
+                " VALUES ('c1', ?, '[]', 1)",
+                (field,),
+            )
+    assert world.unknown_structure() == ["sphere", "part_of", "ties"]
+
+
+def test_unknown_structure_is_empty_after_a_stub_changes_kind(world):
+    """A stub whose kind changed keeps its retired row of the old kind:
+    none of its fields reads as a world made before Filing (a being's
+    `existence` kept as a character, a character's `voice` set on a stub
+    that was a place)."""
+
+    with world.revision(Source.manual(note="stubs")) as rev:
+        god = rev.create_thing(
+            "being",
+            {"name": "Veles", "existence": "believed", "stub": {"ignored": False}},
+        )
+        inn = rev.create_thing("place", {"name": "Oskar", "stub": {"ignored": False}})
+    with world.revision(Source.manual(note="rekind")) as rev:
+        rev.change_stub_kind(god, "character")
+        rev.change_stub_kind(inn, "character")
+        rev.set_field(inn, "voice", {"provider": "x"}, None)
+    assert world.unknown_structure() == []
+
+    # an old world is still refused: a field no kind it ever had includes
+    with world._conn as conn:
+        conn.execute(
+            "INSERT INTO field_values (thing_id, field, value_json, rev_added)"
+            " VALUES (?, 'part_of', '[]', 1)",
+            (inn,),
+        )
+    assert world.unknown_structure() == ["part_of"]

@@ -1,11 +1,12 @@
-"""Heritage resolution: what a thing inherits from its race, mix, species
-and culture.
+"""Heritage resolution: what a thing inherits from its race, mix and
+species.
 
 `lineage` walks a thing's layers, most specific first: the thing itself,
 then its `heritage` (a race or mix), a mix's own layer followed by each
-parent's chain in turn, a race's `species`, and last a character's
-`culture`. Each thing appears once, so a cycle in mix parents terminates,
-and a missing or deleted target is skipped.
+parent's chain in turn, and a race's `species`. Each thing appears once, so
+a cycle in mix parents terminates, and a missing or deleted target is
+skipped. A culture is no layer: a character is filed in it rather than
+inheriting from it.
 
 Facts and numbers are resolved from those layers in code. A fact is
 dropped from the inherited set when it's listed in `overrides` by facts
@@ -18,6 +19,7 @@ Every read goes through the given `WorldView`, so a dated heritage change
 or a deleted ancestor follows the view's `(at, rev)`.
 """
 
+from collections.abc import Callable
 from typing import Literal
 
 import structlog
@@ -30,7 +32,7 @@ log = structlog.get_logger("talemate.world.heritage")
 LifeStage = Literal["child", "adolescent", "adult", "elder"]
 
 # the fields that lead from a thing to the next, less specific heritage
-# layer; a character's `culture` is followed separately, after them all
+# layer
 _HERITAGE_LINKS = ("heritage", "species")
 
 
@@ -105,15 +107,7 @@ def _heritage_chain(view: WorldView, thing_id: str, seen: set[str]) -> list[Thin
 
 
 def _lineage_states(view: WorldView, thing_id: str) -> list[ThingState]:
-    seen: set[str] = set()
-    states = _heritage_chain(view, thing_id, seen)
-    if states and states[0].kind == "character":
-        culture_id = _link(states[0], "culture")
-        if culture_id is not None and culture_id not in seen:
-            culture = view.thing(culture_id)
-            if culture is not None:
-                states.append(culture)
-    return states
+    return _heritage_chain(view, thing_id, set())
 
 
 def lineage(view: WorldView, thing_id: str) -> list[Layer]:
@@ -126,42 +120,40 @@ def lineage(view: WorldView, thing_id: str) -> list[Layer]:
     ]
 
 
-def _reachable(states: list[ThingState], avoiding: set[str]) -> set[str]:
-    """The layer ids reachable from the thing (`states[0]`) by the
-    heritage links among `states`, never stepping onto a layer in
-    `avoiding` (nothing, when the thing itself is in it). The thing
-    reaches its culture directly."""
+def _reachable(
+    states: list[ThingState],
+    avoiding: set[str],
+    next_ids: Callable[[ThingState], list[str]],
+) -> set[str]:
+    """The layer ids reachable from the thing (`states[0]`) by the links
+    `next_ids` gives among `states`, never stepping onto a layer in
+    `avoiding` (nothing, when the thing itself is in it)."""
 
     if not states or states[0].id in avoiding:
         return set()
     by_id = {state.id: state for state in states}
     root = states[0]
-    culture = _link(root, "culture") if root.kind == "character" else None
 
     reached = {root.id}
     stack = [root]
     while stack:
         state = stack.pop()
-        next_ids = _next_ids(state)
-        if state is root and culture is not None:
-            next_ids.append(culture)
-        for next_id in next_ids:
+        for next_id in next_ids(state):
             if next_id in by_id and next_id not in avoiding and next_id not in reached:
                 reached.add(next_id)
                 stack.append(by_id[next_id])
     return reached
 
 
-def _inherited_with_layers(
-    view: WorldView, thing_id: str
-) -> tuple[list[tuple[FactState, Layer]], list[tuple[InheritedFact, Layer]]]:
-    """The thing's own facts and its inherited ones, each with its layer."""
+def overriders(
+    states: list[ThingState], next_ids: Callable[[ThingState], list[str]]
+) -> dict[str, str]:
+    """`fact_id -> the fact_id overriding it` for the facts of `states` (a
+    thing, then the layers it inherits from, most specific first, linked
+    by `next_ids`) that are dropped from what `states[0]` inherits: those
+    whose layer the thing can't reach without passing through a layer with
+    a fact overriding them. The most specific overriding fact is named."""
 
-    states = _lineage_states(view, thing_id)
-    layers = [
-        Layer(thing_id=state.id, kind=state.kind, name=_name(state), depth=depth)
-        for depth, state in enumerate(states)
-    ]
     fact_layer = {fact.fact_id: state.id for state in states for fact in state.facts}
 
     # fact_id -> the layers (other than its own) with a fact overriding
@@ -181,10 +173,24 @@ def _inherited_with_layers(
     # specific layer, or a route the thing can bypass (a Quarter-orc's
     # direct Lowlander parent, past Half-orc) doesn't drop it, while two
     # parents that both override their shared species' fact do
-    overriders: dict[str, str] = {}
+    dropped: dict[str, str] = {}
     for target, layer_ids in overriding_layers.items():
-        if fact_layer[target] not in _reachable(states, set(layer_ids)):
-            overriders[target] = first_overrider[target]
+        if fact_layer[target] not in _reachable(states, set(layer_ids), next_ids):
+            dropped[target] = first_overrider[target]
+    return dropped
+
+
+def _inherited_with_layers(
+    view: WorldView, thing_id: str
+) -> tuple[list[tuple[FactState, Layer]], list[tuple[InheritedFact, Layer]]]:
+    """The thing's own facts and its inherited ones, each with its layer."""
+
+    states = _lineage_states(view, thing_id)
+    layers = [
+        Layer(thing_id=state.id, kind=state.kind, name=_name(state), depth=depth)
+        for depth, state in enumerate(states)
+    ]
+    dropped = overriders(states, _next_ids)
 
     own: list[tuple[FactState, Layer]] = []
     inherited_facts: list[tuple[InheritedFact, Layer]] = []
@@ -198,7 +204,7 @@ def _inherited_with_layers(
                 source_id=state.id,
                 source_kind=state.kind,
                 source_name=layer.name,
-                overridden_by=overriders.get(fact.fact_id),
+                overridden_by=dropped.get(fact.fact_id),
             )
             inherited_facts.append((item, layer))
     return own, inherited_facts

@@ -18,7 +18,8 @@ from talemate.world.index import WorldIndex
 from talemate.world.scenes import MessageRecord
 from talemate.world.store import Source
 from talemate.worldplay.context import world_context_block
-from talemate.worldplay.create import current_date
+from talemate.world.filing import filings_of
+from talemate.worldplay.create import FileIntoRow, current_date
 from talemate.worldplay.persistence import (
     close_world_scene,
     save_world_scene,
@@ -32,6 +33,7 @@ from talemate.worldplay.setup import (
     match_names,
     plan_scene,
     start_scene,
+    stubs_to_fill,
 )
 
 from conftest import (
@@ -888,8 +890,8 @@ async def test_continue_setup_drops_carried_thing_that_was_deleted(world):
 
 def _stubs(world, *, ignored: bool = False):
     """Stubs a scene can use: Aldric (a character), Frosthollow (a place),
-    the Order of the Heron (lore) and the Saltfolk (a culture, which
-    can't be expanded yet). Returns their ids by short name."""
+    the Order of the Heron (lore) and the Saltfolk (a race, which has no
+    species to fill it from). Returns their ids by short name."""
 
     marker = {"ignored": ignored}
     with world.revision(Source.manual(note="stubs")) as rev:
@@ -903,7 +905,7 @@ def _stubs(world, *, ignored: bool = False):
             "lore", fields={"name": "Order of the Heron", "stub": dict(marker)}
         )
         salt = rev.create_thing(
-            "culture", fields={"name": "Saltfolk", "stub": dict(marker)}
+            "race", fields={"name": "Saltfolk", "stub": dict(marker)}
         )
     return {"aldric": aldric, "frost": frost, "order": order, "salt": salt}
 
@@ -957,7 +959,7 @@ async def _plan_with_stubs(world, ids, stubs, client):
 async def test_plan_scene_previews_named_stub(world):
     """Each stub the setup uses -- a character (picked and named by the
     model), the place and picked lore -- gets one preview, made from its
-    own kind and name; a culture stub is left alone; nothing is written."""
+    own kind and name; a race stub is left alone; nothing is written."""
 
     ids = _river_world(world)
     stubs = _stubs(world)
@@ -985,7 +987,7 @@ async def test_plan_scene_previews_named_stub(world):
         "A snowbound village on the weir."
     )
     assert previews[stubs["order"]].kind == "lore"
-    # the culture stub can't be expanded yet: no preview, and no failure
+    # the race stub has no species to fill it from: no preview, no failure
     assert stubs["salt"] not in previews
 
     # planning wrote nothing: the stubs are still stubs
@@ -1014,7 +1016,7 @@ async def test_start_scene_fills_stub_and_keeps_id(world):
     assert view.thing(stubs["frost"]).facts[0].text == (
         "A snowbound village on the weir."
     )
-    # the culture stub stays as it was
+    # the race stub stays as it was
     assert view.thing(stubs["salt"]).is_stub
 
     record = world.scenes().get(scene_id)
@@ -1235,3 +1237,201 @@ async def test_a_failed_stub_preview_leaves_that_stub(world):
         setup = await _plan_with_stubs(world, ids, stubs, MockClient("test"))
 
     assert [p.stub_id for p in setup.stub_previews] == [stubs["frost"], stubs["order"]]
+
+
+@pytest.mark.parametrize("forged", [False, True])
+async def test_starting_a_scene_writes_only_the_stubs_own_facts(world, forged):
+    """Ruling C25: a stub the scene fills is previewed and accepted with no
+    owner to tick anything, so it writes only its own facts. Its elsewhere
+    items, its "In" rows, its "File into this" rows and the facts that
+    could move here arrive unticked and are never written; no same-thing
+    verdict is asked (nobody sees it). Every other entry keeps exactly the
+    facts it had (the curation flow probe: a scene start wrote 5 facts
+    onto 4 entries and moved 2 of the Church's out)."""
+
+    ids = _river_world(world)
+    with world.revision(Source.manual(note="weir")) as rev:
+        weir = rev.create_thing("place", fields={"name": "The Weir"})
+        rev.add_fact(weir, "description", "Snow lies deep in the hollow below.")
+        rev.add_fact(weir, "general", "Frosthollow's ice-fishers mend nets all winter.")
+        # a same-thing candidate for Frosthollow, with facts of its own
+        inn = rev.create_thing("place", fields={"name": "Frosthollow Inn"})
+        rev.add_fact(inn, "description", "A warm inn by the road.")
+        frost = rev.create_thing(
+            "place",
+            fields={
+                "name": "Frosthollow",
+                "stub": {"ignored": False},
+                "filings": [
+                    {
+                        "target": weir,
+                        "role": None,
+                        "since": None,
+                        "until": None,
+                        "within": None,
+                        "exceptions": [],
+                    }
+                ],
+            },
+        )
+    before = {
+        thing.id: sorted(f.fact_id for f in thing.facts)
+        for thing in world.view().things()
+        if thing.id != frost
+    }
+    frost_reply = json.dumps(
+        {
+            "name": "Frosthollow",
+            "facts": [
+                {"category": "description", "text": "A snowbound village on the weir."}
+            ],
+            "names": [],
+            "elsewhere": [
+                {
+                    "entry": "The Drowned Stag",
+                    "text": "The Drowned Stag sells Frosthollow ice.",
+                },
+                {"entry": "The Weir", "text": "The Weir freezes solid each winter."},
+            ],
+            "in": [{"entry": "Frosthollow Inn", "role": "beside it"}],
+            "file_into": [{"entry": "Frosthollow Inn", "role": None}],
+        }
+    )
+    reply = {
+        "player": "Maren Vos",
+        "place": {"name": "Frosthollow", "world": True},
+        "goal": "Buy ice.",
+        "intro": "Snow drifts against the door.",
+    }
+    client = MockClient("test")
+    async with MockClientContext():
+        _queue(frost_reply, "Frosthollow sits under snow.")
+        setup = await plan_scene(
+            world,
+            "Maren buys ice in Frosthollow",
+            {"Frosthollow": frost},
+            ids["vos"],
+            START,
+            client,
+            reply=reply,
+        )
+    [preview] = setup.stub_previews
+    assert preview.elsewhere and not any(e.ticked for e in preview.elsewhere)
+    # the Weir's ice-fishers line names Frosthollow: it could move here
+    assert preview.move_here and not any(m.ticked for m in preview.move_here)
+    assert preview.filings and not any(f.ticked for f in preview.filings)
+    # no verdict call: the create and its prose only
+    assert len(client.prompt_history) == 2
+    assert preview.verdict is None
+
+    setup = SceneSetup.model_validate(json.loads(setup.model_dump_json()))
+    if forged:
+        # final review minor 4: the start trusts no client's ticks -- a
+        # setup sent back with its rows ticked writes only its own facts
+        [sent] = setup.stub_previews
+        for item in sent.elsewhere:
+            item.ticked = True
+        for rows in (sent.move_here, sent.filings, sent.file_into):
+            for row in rows:
+                row.ticked = True
+        sent.file_into.append(
+            FileIntoRow(thing_id=inn, name="Frosthollow Inn", ticked=True)
+        )
+    async with MockClientContext():
+        await start_scene(world, setup, MockClient("test"))
+
+    view = world.view()
+    after = {
+        thing.id: sorted(f.fact_id for f in thing.facts)
+        for thing in view.things()
+        if thing.id != frost
+    }
+    assert after == before
+    assert [view.render(f.text) for f in view.thing(frost).facts] == [
+        "A snowbound village on the weir."
+    ]
+    assert [f.target for f in filings_of(view, frost)] == [weir]
+    assert filings_of(view, inn) == []
+
+
+# --- filed entries -------------------------------------------------------------
+
+VIGIL_REPLY = {
+    "player": "Vasha",
+    "place": {"name": "Dawn Peak", "world": True},
+    "goal": "Keep the vigil.",
+    "intro": "Snow on the peak.",
+}
+
+
+async def test_plan_scene_pulls_in_a_named_place(world, spheres_world):
+    """A place the prompt names (the Tsardom, the Marches, Kremova; the
+    scene at Dawn Peak) is pulled in, so the scene touches it (filing
+    spec: what the prompt names is touched), but never the scene's own place, and a named place stub
+    isn't previewed (places only ever are as the scene's place)."""
+
+    s = spheres_world
+    with world.revision(Source.manual(note="stub")) as rev:
+        marches = rev.create_thing(
+            "place",
+            fields={"name": "The Marches", "stub": {"ignored": False}},
+        )
+    setup = await plan_scene(
+        world,
+        "Vasha keeps the vigil at Dawn Peak, far from the Tsardom, the Marches "
+        "and Kremova",
+        {
+            "Dawn Peak": s.dawn_peak,
+            "the Tsardom": s.tsardom,
+            "the Marches": marches,
+            "Kremova": s.kremova,
+        },
+        s.vasha,
+        WorldDate.of(1020),
+        None,
+        reply=VIGIL_REPLY,
+    )
+
+    assert setup.place == SetupRef(thing_id=s.dawn_peak)
+    assert setup.pulled_in == [s.tsardom, marches, s.kremova]
+    assert stubs_to_fill(world, setup) == []
+
+    # the scene's own place is never pulled in
+    setup = await plan_scene(
+        world,
+        "Vasha rides through the Tsardom",
+        {"the Tsardom": s.tsardom},
+        s.vasha,
+        WorldDate.of(1020),
+        None,
+        reply={**VIGIL_REPLY, "place": None},
+    )
+    assert setup.place == SetupRef(thing_id=s.tsardom)
+    assert setup.pulled_in == []
+
+
+async def test_start_scene_leaves_its_place_out_of_pulled_in(world, spheres_world):
+    """A setup edited (or continued) after planning whose place became a
+    place it also pulled in starts with that place as its place only:
+    never pulled in too (Task 7 parked item (a))."""
+
+    s = spheres_world
+    setup = await plan_scene(
+        world,
+        "Vasha keeps the vigil at Dawn Peak, far from the Tsardom",
+        {"Dawn Peak": s.dawn_peak, "the Tsardom": s.tsardom},
+        s.vasha,
+        WorldDate.of(1020),
+        None,
+        reply=VIGIL_REPLY,
+    )
+    assert setup.pulled_in == [s.tsardom]
+    # the owner moves the scene to the Tsardom
+    setup.place = SetupRef(thing_id=s.tsardom)
+
+    async with MockClientContext():
+        scene_id = await start_scene(world, setup, None)
+
+    record = world.scenes().get(scene_id)
+    assert record.state["place_thing_id"] == s.tsardom
+    assert record.state["pulled_in"] == []

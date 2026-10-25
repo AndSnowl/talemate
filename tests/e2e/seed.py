@@ -366,6 +366,10 @@ def _year(value):
     return WorldDate.of(value) if value is not None else None
 
 
+def _dumped(value):
+    return WorldDate.of(value).model_dump(mode="json") if value is not None else None
+
+
 def _refs(text, ids):
     # "[[@Name|shown]]" links an earlier thing by name, keeping "shown"
     return re.sub(
@@ -380,6 +384,8 @@ world = World.create(spec["name"], root=WORLDS_DIR)
 try:
     world.set_present(WorldDate.of(spec["present_year"]))
     ids = {}
+    # a fact's text as written in the spec -> its fact id
+    fact_ids = {}
     with world.revision(Source.manual(note="e2e seed")) as rev:
         for thing in spec["things"]:
             fields = {"name": thing["name"], **(thing.get("fields") or {})}
@@ -394,15 +400,37 @@ try:
                     if isinstance(names, list)
                     else ids[names]
                 )
+            # the entries it's filed in: earlier things, by name
+            if thing.get("filings"):
+                fields["filings"] = [
+                    {
+                        "target": ids[filing["target"]],
+                        "role": filing.get("role"),
+                        "since": _dumped(filing.get("since")),
+                        "until": _dumped(filing.get("until")),
+                        "within": ids[filing["within"]]
+                        if filing.get("within")
+                        else None,
+                        "exceptions": [],
+                        "show_under": filing.get("show_under"),
+                    }
+                    for filing in thing["filings"]
+                ]
             thing_id = rev.create_thing(thing["kind"], fields)
             ids[thing["name"]] = thing_id
             for fact in thing.get("facts") or []:
-                rev.add_fact(
+                fact_ids[fact["text"]] = rev.add_fact(
                     thing_id,
                     fact["category"],
                     _refs(fact["text"], ids),
                     valid_from=_year(fact.get("since")),
                     valid_until=_year(fact.get("until")),
+                    # an exception's tie names its entry, an earlier thing
+                    origin=(
+                        {**fact["origin"], "tie": ids[fact["origin"]["tie"]]}
+                        if "tie" in (fact.get("origin") or {})
+                        else fact.get("origin")
+                    ),
                 )
     for scene in spec["scenes"]:
         world.scenes().create(
@@ -411,7 +439,7 @@ try:
             premise=scene.get("premise", ""),
             player_thing_id=ids.get(scene.get("player")),
         )
-    result = {"id": world.id, "path": str(world.path), "things": ids}
+    result = {"id": world.id, "path": str(world.path), "things": ids, "facts": fact_ids}
 finally:
     world.close()
 print(RESULT_PREFIX + json.dumps(result))
@@ -424,6 +452,8 @@ class SeededFmWorld:
     path: Path
     # thing name -> thing id
     things: dict[str, str]
+    # a fact's text, as the spec wrote it -> its fact id
+    facts: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
 def seed_fm_world(
@@ -438,8 +468,12 @@ def seed_fm_world(
 
     ``things`` items are ``{"kind", "name", "born": year|None, "fields":
     {field: value}|None, "links": {field: name | [names]}|None, "stub":
-    "live"|"ignored"|None, "facts": [{"category", "text", "since":
-    year|None, "until": year|None}]}``, written in one revision, in order.
+    "live"|"ignored"|None, "filings": [{"target": name, "role", "since":
+    year|None, "until": year|None, "within": name|None}]|None, "facts":
+    [{"category", "text", "since": year|None, "until": year|None,
+    "origin": dict|None}]}``, written in one revision, in order. An
+    origin's ``"tie"`` (an exception's) names the entry it's filed under,
+    written as its id.
     A link names things listed before it (e.g. a race's ``{"species":
     "Owl-folk"}``) and is written as their ids; so does a reference in a
     fact's text, written ``[[@Name|shown text]]``. ``stub`` makes the thing
@@ -458,7 +492,10 @@ def seed_fm_world(
         },
     )
     return SeededFmWorld(
-        id=result["id"], path=Path(result["path"]), things=result["things"]
+        id=result["id"],
+        path=Path(result["path"]),
+        things=result["things"],
+        facts=result.get("facts", {}),
     )
 
 
@@ -473,6 +510,25 @@ def set_fixed_preview(root: Path, preview: dict) -> None:
     "facts": [{"category", "text", "since"?}], "prose": {section: text},
     "fields"?}`` (the request's kind, prompt and fields fill the rest)."""
     (Path(root) / FIXED_PREVIEW_FILE).write_text(json.dumps(preview))
+
+
+# The app's `worlds` router answers "+ Add facts…"/"+ Add event…"
+# (`add_facts`, `add_event`), a group's "✎ Synopsis" (`group_synopsis`) and
+# a group's "+ Add" (`group_add`) from these files (in the app root), read
+# through the real parsers as the model's reply; the `app` fixture points
+# the backend's TALEMATE_TEST_FIXED_FACTS, TALEMATE_TEST_FIXED_GROUP_SYNOPSIS
+# and TALEMATE_TEST_FIXED_GROUP_ADD at them.
+FIXED_FACTS_FILE = "e2e-fixed-facts.json"
+FIXED_GROUP_SYNOPSIS_FILE = "e2e-fixed-group-synopsis.json"
+FIXED_GROUP_ADD_FILE = "e2e-fixed-group-add.json"
+
+
+def set_fixed_reply(root: Path, file_name: str, reply: dict) -> None:
+    """Make the app's next replies of that kind ``reply``, the model's
+    reply: ``{"facts": [{"category", "text"}]}`` for facts and events,
+    ``{"synopsis": text}`` for a synopsis, ``{"entries": [{"name", "kind",
+    "tag", "line"}]}`` for a group's "+ Add"."""
+    (Path(root) / file_name).write_text(json.dumps(reply))
 
 
 # The app's `worlds` router answers `plan_scene` and `continue_scene` from
