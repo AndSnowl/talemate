@@ -3456,15 +3456,24 @@ class WorldsPlugin(Plugin):
         self, world: World, payload: _Selection
     ) -> tuple[str, CreatePreview, str]:
         """`(draft key, current version, words)` for a selection in a
-        draft's fact (its `index`), refusing one that cuts through a link."""
+        draft's fact (its `index`), refusing one that cuts through a link
+        or runs through a link to a deleted thing (P5: the draft writes no
+        text to replace it)."""
 
         key = payload.draft_key or ""
         preview = self._current_preview(key)
         index = payload.index if payload.index is not None else -1
         if not 0 <= index < len(preview.facts):
             raise ValueError(f"the draft has no fact {payload.index}")
-        text = preview.facts[index].text
-        text, start, end = _raw_span(world.view(), text, payload.start, payload.end)
+        stored = preview.facts[index].text
+        text, start, end = _raw_span(world.view(), stored, payload.start, payload.end)
+        if text != stored:
+            # a draft keeps its picks by name and writes no text here, so a
+            # dead link's words can't be taken out of it (P5)
+            raise ValueError(
+                "these words were a link to a deleted entry: use them once the"
+                " draft is accepted"
+            )
         return key, preview, " ".join(text[start:end].split())
 
     @staticmethod

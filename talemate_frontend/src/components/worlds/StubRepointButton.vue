@@ -67,7 +67,8 @@ export default {
         },
         repoint({ mode, useName }) {
             this.sent = true;
-            this.worlds.repointStub(this.stub.id, this.chosen.id, useName, mode === 'link' ? 'link' : null);
+            // the mode always sent: the server's default is never relied on
+            this.worlds.repointStub(this.stub.id, this.chosen.id, useName, mode);
         },
     },
 };

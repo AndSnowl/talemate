@@ -1183,7 +1183,8 @@ export const useWorldsStore = defineStore('worlds', {
         // names become the target's other names and the stub goes
         // `useName` (the hard re-point): one of the target's names, which
         // every link's words become
-        // `mode` 'link' ("Link only", ruling H2): no names taught
+        // `mode` (`NameModeMenu`'s, always sent by the button): 'link'
+        // ("Link only", ruling H2) teaches no names
         repointStub(stubId, targetId, useName = null, mode = null) {
             this.stubRepointed = null;
             this.pending = { ...this.pending, repoint_stub: true };

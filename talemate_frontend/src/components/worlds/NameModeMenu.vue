@@ -12,7 +12,7 @@
                 <v-list-item
                     prepend-icon="mdi-link-variant"
                     title="Link only"
-                    :subtitle="`“${shownWords}” stays as written`"
+                    :subtitle="linkOnlyNote"
                     role="menuitem"
                     :active="defaultMode === 'link'"
                     color="accent"
@@ -61,7 +61,8 @@ import { wordsAreAName } from './draftPage.js';
 // names (its name, then its other names, `fetchNames`), one of which takes
 // the words' place. The default (marked) is "Add as another name" when the
 // words look like a proper name (`wordsAreAName`, from the text `before`
-// them; always for a stub's words, `nameDefault`), else "Link only".
+// them; always for a stub's words, `nameDefault`, whose "Link only" warns
+// the name is lost), else "Link only".
 // `choose` emits `{mode, useName}` (`mode` 'link', 'name' or 'rename').
 // On a draft (ruling F16) the words are a pick keyed by name: renaming
 // waits for the accept. If the target's names can't be had (it's gone),
@@ -90,6 +91,10 @@ export default {
         },
         names() {
             return this.thing ? this.worlds.namesOf[this.thing.id] || null : null;
+        },
+        // a stub's words are a name: linking only loses it (ruling H2)
+        linkOnlyNote() {
+            return this.nameDefault ? `“${this.shownWords}” won't be known as a name of ${this.thing?.name || 'it'}` : `“${this.shownWords}” stays as written`;
         },
         defaultMode() {
             return this.nameDefault || wordsAreAName(this.words, this.before, this.names || []) ? 'name' : 'link';

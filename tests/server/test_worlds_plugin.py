@@ -5750,6 +5750,7 @@ async def test_selection_through_dead_link_allowed(plugin):
         f"Founded in the Old {ref(s.tsardom, 'Tsardom')} by {ref(s.dmitry)}."
     )
     s.world.undo([s.world.head_rev()])
+    assert s.world.view().fact(fact)[1].text == stored
 
     # through its edge, plain words beside
     start = rendered.index("in the Old")
@@ -5782,6 +5783,107 @@ async def test_selection_through_dead_link_allowed(plugin):
     assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
     assert len(_errors(plugin)) == before + 1
     assert s.world.head_rev() == head
+
+
+async def test_dead_link_beside_an_astral_character(plugin):
+    """P5 with ruling F18: offsets count UTF-16 code units, so a dead link
+    after an owl (two units) is found where the page says it is."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        gone = rev.create_thing("place", {"name": "Old Tsardom"})
+        fact = rev.add_fact(
+            s.court, "general", f"🦉 Founded in {ref(gone, 'the Old Tsardom')}."
+        )
+    with s.world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    stored = s.world.view().fact(fact)[1].text
+    rendered = "🦉 Founded in the Old Tsardom."
+    # the owl is one code point but two code units
+    start = rendered.index("Old Tsardom") + 1
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("Old Tsardom"),
+        target_id=s.tsardom,
+    )
+    assert s.world.view().fact(fact)[1].text == (
+        f"🦉 Founded in the {ref(s.tsardom, 'Old Tsardom')}."
+    )
+    s.world.undo([s.world.head_rev()])
+    assert s.world.view().fact(fact)[1].text == stored
+
+
+async def test_ignored_stub_inside_a_dead_link_range_refuses(plugin):
+    """P5: a selection over a dead link and an ignored stub's link (shown
+    plain, still a link) is refused, writing nothing."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        gone = rev.create_thing("place", {"name": "Old Tsardom"})
+        hope = rev.create_thing("lore", {"name": "Hope", "stub": {"ignored": True}})
+        fact = rev.add_fact(
+            s.court,
+            "general",
+            f"In {ref(gone, 'the Old Tsardom')} {ref(hope, 'Hope')} lives.",
+        )
+    with s.world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    rendered = "In the Old Tsardom Hope lives."
+    start = rendered.index("the Old")
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=rendered.index(" lives"),
+        target_id=s.tsardom,
+    )
+    assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
+    assert len(_errors(plugin)) == before + 1
+    assert s.world.head_rev() == head
+
+
+async def test_draft_selection_through_dead_link_refused(plugin, client):
+    """P5 on a draft: the draft path writes no text, so a selection that
+    runs through a link to a deleted thing is refused with a plain note,
+    the draft unchanged."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        gone = rev.create_thing("place", {"name": "Old Tsardom"})
+    with s.world.revision(Source.manual()) as rev:
+        rev.remove_thing(gone)
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", "Riders guard it."), prompt="x"
+    )
+    key = draft["draft_key"]
+    plugin._current_preview(key).facts[
+        0
+    ].text = f"Riders guard {ref(gone, 'the Old Tsardom')}."
+    start = "Riders guard the Old Tsardom.".index("Old Tsardom")
+    before = len(_errors(plugin))
+    for action, extra in (
+        ("link_text", {"target_id": s.tsardom}),
+        ("make_stub_from_text", {"kind": "place"}),
+    ):
+        await _act(
+            plugin,
+            action,
+            draft_key=key,
+            index=0,
+            start=start,
+            end=start + len("Old Tsardom"),
+            **extra,
+        )
+        assert "deleted" in _errors(plugin)[-1]["error"]["message"]
+    assert len(_errors(plugin)) == before + 2
+    assert plugin._current_preview(key).picks == {}
+    assert plugin._current_preview(key).new_names == []
 
 
 async def test_make_stub_over_dead_link_replaces_it(plugin):

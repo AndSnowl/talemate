@@ -1292,7 +1292,7 @@ export default {
         // words kept
         repointLink(fact, { index, to, mode = null, useName = null }) {
             const occurrence = refOccurrence(fact.text, fact.segments, index);
-            if (occurrence !== null && (to !== fact.segments[index].ref || useName)) {
+            if (occurrence !== null && to !== fact.segments[index].ref) {
                 this.worlds.repointRef(fact.fact_id, occurrence, to, { mode, useName });
             }
         },

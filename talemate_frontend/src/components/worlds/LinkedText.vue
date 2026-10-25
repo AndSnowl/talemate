@@ -68,6 +68,7 @@
         :words="repointing === null ? '' : shown[repointing]?.text || ''"
         :before="repointing === null ? '' : shown.slice(0, repointing).map((segment) => segment.text).join('')"
         :thing="chosen"
+        :name-default="repointing !== null && !!shown[repointing]?.stub"
         @choose="repointAs"
     /></span>
 </template>

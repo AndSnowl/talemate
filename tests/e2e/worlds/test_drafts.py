@@ -728,6 +728,7 @@ def test_hard_repoint(app, page):
         "action": "repoint_stub",
         "stub_id": world.things["the Old Capital"],
         "target_id": world.things["Velikoye"],
+        "mode": "rename",
         "use_name": "the capital",
     }
     tab.get_by_test_id("stub-repointed").wait_for(state="visible", timeout=TIMEOUT_MS)
@@ -923,19 +924,27 @@ MARSH = {
         {
             "category": "general",
             "text": "Pure-line Moscavians nest by [[@The Night Court|the court]].",
-        }
+        },
+        {"category": "general", "text": "Herons fish at [[@Old Weir|the weir]]."},
     ],
 }
 
+WEIR = {"kind": "place", "name": "Old Weir", "stub": "live"}
+
 
 def test_repoint_mode_picker(app, page):
-    """P4: once a link's target is picked, the owner chooses how it takes
-    the words -- "Add as another name" (the default) or "Rename to…" one
-    of its names -- on a selection's "Link to an entry…" and a link card's
-    "Re-point…" alike."""
+    """P4 and ruling H2: once a link's target is picked, the owner chooses
+    how it takes the words -- "Link only", "Add as another name" or
+    "Rename to…" one of its names -- on a selection's "Link to an entry…"
+    and a link card's "Re-point…" alike. "Add as another name" is the
+    default for words that look like a proper name and for a stub's link
+    (whose "Link only" warns the name is lost); other words default to
+    "Link only"."""
 
     name = _world_name("Modes")
-    world = seed_fm_world(app.root, name, present_year=1020, things=[*WORLD, MARSH])
+    world = seed_fm_world(
+        app.root, name, present_year=1020, things=[*WORLD, WEIR, MARSH]
+    )
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
@@ -989,6 +998,22 @@ def test_repoint_mode_picker(app, page):
     expect(
         _fact(marsh, "nest by the capital.").get_by_test_id("linked-ref")
     ).to_have_text(["Pure-line Moscavians", "the capital"])
+
+    # a stub's link: its words are a name, so adding one is the default,
+    # and "Link only" says the name would be lost
+    _fact(marsh, "Herons fish").get_by_test_id("linked-stub").hover()
+    stub_card = page.get_by_test_id("stub-card")
+    stub_card.wait_for(state="visible", timeout=TIMEOUT_MS)
+    stub_card.get_by_role("button", name="Re-point…").click()
+    _search_and_pick(page, "veli", "Velikoye")
+    chooser = page.get_by_test_id("name-mode")
+    chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(chooser.get_by_test_id("mode-link-only")).to_contain_text(
+        "“the weir” won't be known as a name of Velikoye"
+    )
+    _choose_mode(page, default="name")
+    sent = _wait_sent(page, "repoint_ref")
+    assert (sent["to_id"], sent["mode"]) == (world.things["Velikoye"], "name")
 
     # the Tsardom goes by the words now
     page.get_by_test_id("kind-place").click()
