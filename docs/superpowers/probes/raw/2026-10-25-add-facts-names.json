@@ -1,0 +1,464 @@
+{
+ "probe": "add-facts-names",
+ "runs": {
+  "before": {
+   "template_names_lines": [],
+   "rows": [
+    {
+     "call": 1,
+     "facts": [
+      {
+       "text": "The current Tsar of Moscavia is Aldric V, a Snowy Owl-folk of distinguished lineage who ascended to the throne following the death of his father, Tsar Vasily IV, in the winter of 999.",
+       "category": "general",
+       "unknown_phrases": [
+        "Tsar",
+        "Aldric V",
+        "Tsar Vasily IV"
+       ]
+      },
+      {
+       "text": "Aldric V was crowned in a ceremony at the Temple of the Pale Light within Novogrudok's inner citadel, anointed under the shimmering curtain of the northern aurora in keeping with ancient tradition.",
+       "category": "history",
+       "unknown_phrases": [
+        "Aldric V",
+        "Temple"
+       ]
+      },
+      {
+       "text": "As Tsar, Aldric V presides over the Council of Feathers and holds the final authority in matters of war, diplomacy, and the interpretation of Moscavian law, though he is bound by custom to consider the counsel of his senior advisors.",
+       "category": "law",
+       "unknown_phrases": [
+        "Tsar",
+        "Aldric V"
+       ]
+      },
+      {
+       "text": "Tsar Aldric V has ruled with a reputation for deliberation and quiet resolve, qualities valued among the Snowy Owl-folk, and his reign has seen a strengthening of the Border Watch outposts along the southern steppe frontier.",
+       "category": "general",
+       "unknown_phrases": [
+        "Tsar Aldric V"
+       ]
+      }
+     ],
+     "new_names": [],
+     "seconds": 8.0,
+     "error": null
+    },
+    {
+     "call": 2,
+     "facts": [
+      {
+       "text": "The current Tsar of Moscavia is Tsar Vsevolod III, known as the Pale, who ascended to the throne in the year 1002 following the death of his father, Tsar Dmitri II, during a devastating blizzard that swept across the northern territories and claimed the lives of hundreds of Snowy Owl-folk.",
+       "category": "history",
+       "unknown_phrases": [
+        "Tsar",
+        "Tsar Vsevolod III",
+        "Pale",
+        "Tsar Dmitri II"
+       ]
+      },
+      {
+       "text": "Tsar Vsevolod III was not the eldest son of Tsar Dmitri II, but he was chosen by the Council of Feathers over his older brother, Prince Yaroslav, because the council judged Vsevolod to possess a deeper spiritual attunement to the Pale Light and a more measured temperament suited to the long winters ahead.",
+       "category": "history",
+       "unknown_phrases": [
+        "Tsar Vsevolod III",
+        "Tsar Dmitri II",
+        "Prince Yaroslav",
+        "Vsevolod"
+       ]
+      },
+      {
+       "text": "Tsar Vsevolod III has ruled with a philosophy of quiet endurance and slow reform, strengthening the Border Watch along the eastern steppe frontier while cautiously expanding trade with the southern merchant republics beyond Moscavian borders.",
+       "category": "general",
+       "unknown_phrases": [
+        "Tsar Vsevolod III"
+       ]
+      }
+     ],
+     "new_names": [],
+     "seconds": 6.6,
+     "error": null
+    },
+    {
+     "call": 3,
+     "facts": [
+      {
+       "text": "Tsar Aldric the White ascended to the throne of Moscavia in the year 997, three years after the Transformation, following the death of the previous Tsar, who perished during the civil unrest that erupted as the realm struggled to reorganize itself around its newly transformed population.",
+       "category": "history",
+       "unknown_phrases": [
+        "Tsar Aldric",
+        "Transformation",
+        "Tsar"
+       ]
+      },
+      {
+       "text": "Aldric, a former general of the old human Moscavian army who had survived the Transformation as one of the first Snowy Owl-folk, claimed the throne by right of martial authority and political acumen, unifying the fractious border lords under a single crown through a combination of diplomacy and decisive military action against rebel Eared Owl-folk clans who refused to acknowledge the new order.",
+       "category": "history",
+       "unknown_phrases": [
+        "Transformation"
+       ]
+      },
+      {
+       "text": "Tsar Aldric is described as a tall, imposing Snowy Owl-folk with pure white plumage and piercing pale eyes, known for his deep voice and his habit of ruling from the highest tower of Novogrudok's palace, where he can survey the entire city and the frozen countryside beyond.",
+       "category": "description",
+       "unknown_phrases": [
+        "Tsar Aldric"
+       ]
+      },
+      {
+       "text": "Under Aldric's reign, the Council of Feathers was formally established as the Tsardom's chief governing body, tasked with translating the Tsar's decrees into practical law and mediating disputes between the Snowy Owl-folk heartland and the more independent-minded Eared Owl-folk frontier communities.",
+       "category": "law",
+       "unknown_phrases": [
+        "Under Aldric"
+       ]
+      },
+      {
+       "text": "Tsar Aldric rules Moscavia with a philosophy rooted in the Pale Light's teachings, holding that the Transformation was a divine covenant between the people and the northern sky, and that the Tsar's duty is to maintain the spiritual purity and territorial integrity of the realm through strength tempered by reverence.",
+       "category": "general",
+       "unknown_phrases": [
+        "Tsar Aldric",
+        "Transformation"
+       ]
+      }
+     ],
+     "new_names": [],
+     "seconds": 11.3,
+     "error": null
+    }
+   ],
+   "calls": [
+    {
+     "kind": "creative_instruction_2048",
+     "prompt": "## Task\nYou add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.\n\nThe entry: Tsardom of Moscavia (place, country)\nThe Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nWhat the records already say about it (never repeat these):\n- The military of Moscavia is divided between the White Talon Guard, which serves as the Tsardom's elite strike force, and the Border Watch, which maintains a network of outposts along the frontiers.\n- The Tsardom of Moscavia is ruled from the fortified capital of Novogrudok, the White City, which serves as the political, religious, and military heart of the realm.\n- The Snowy Owl-folk form the ruling and cultural core of the Tsardom of Moscavia, with their capital at Novogrudok and their traditions shaping the identity of the realm.\n- The transformation of 994 affected the entire Tsardom of Moscavia, converting every qualifying human resident into an Owl-folk, and the Tsardom has since reorganized its governance, military, and daily life around its new owl-shaped population.\n- Eared Owl-folk are most numerous in the border territories of the Tsardom of Moscavia, where mixed Moscavian bloodlines are common, and they serve prominently in the Border Watch and frontier trade.\n- The military of the Tsardom consists of the White Talon Guard, an elite force of Snowy Owl-folk warriors trained in aerial combat and winter survival, and the Border Watch, a network of outposts manned by hardy Eared Owl-folk who patrol the frontiers against raiders and poachers.\n- Religious observance in Moscavia centers on the cult of the Pale Light, a faith that reveres the transformation of 994 as a divine act of renewal and regards the northern aurora as the voice of the divine in the sky.\n- Agriculture in Moscavia relies on hardy grains such as rye and barley, cultivated in the shorter growing season of the southern steppe and forest margins, supplemented by hunting, fishing, and the herding of reindeer and mountain goats.\n- The climate of Moscavia is harshly cold for most of the year, with snow cover lasting from October through April in the northern reaches, and temperatures dropping below freezing even in the summer months across the tundra regions.\n- Bordering territories where mixed-blood Owl-folk are more common tend to be more cosmopolitan, with trade posts and market towns where Eared Owl-folk and Snowy Owl-folk mingle with non-Moscavian travelers.\n- The core territories of Moscavia are dominated by Snowy Owl-folk, whose unbroken lineage since 994 has created a distinct cultural identity centered on silence, patience, and reverence for the long winter nights.\n- The Tsardom's laws are administered by the Tsar's Council of Feathers, a governing body composed of senior Snowy Owl-folk who deliberate on matters of trade, territorial disputes, and the welfare of both Snowy and Eared Owl-folk within Moscavian borders.\n- In the winter of 994, a cataclysmic transformation engulfed every human in Moscavia and its borderlands who could trace at least one grandparent to Moscavian blood, turning them into the Moscavian Owl-folk — large, intelligent owls that retained their human minds and memories.\n- The Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nThe owner asks for:\nthe current Tsar and how he came to the throne\n\nRules:\n- Write 1 to 5 facts, each one claim in a full sentence, about Tsardom of Moscavia.\n- Keep them consistent with what the records already say.\n- Use only these categories: description, history, law, general.\n- \"since\" is optional: give it only when a fact started at a known time, as a bare year no later than 1000.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\"}]}\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"facts\": [ { \"category\": \"general\", \"text\": \"The current Tsar of Moscavia is Aldric V, a Snowy Owl-folk of distinguished lineage who ascended to the throne following the death of his father, Tsar Vasily IV, in the winter of 999.\" }, { \"category\": \"history\", \"text\": \"Aldric V was crowned in a ceremony at the Temple of the Pale Light within Novogrudok's inner citadel, anointed under the shimmering curtain of the northern aurora in keeping with ancient tradition.\" }, { \"category\": \"law\", \"text\": \"As Tsar, Aldric V presides over the Council of Feathers and holds the final authority in matters of war, diplomacy, and the interpretation of Moscavian law, though he is bound by custom to consider the counsel of his senior advisors.\" }, { \"category\": \"general\", \"text\": \"Tsar Aldric V has ruled with a reputation for deliberation and quiet resolve, qualities valued among the Snowy Owl-folk, and his reign has seen a strengthening of the Border Watch outposts along the southern steppe frontier.\" } ] }",
+     "seconds": 8.0
+    },
+    {
+     "kind": "creative_instruction_2048",
+     "prompt": "## Task\nYou add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.\n\nThe entry: Tsardom of Moscavia (place, country)\nThe Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nWhat the records already say about it (never repeat these):\n- The military of Moscavia is divided between the White Talon Guard, which serves as the Tsardom's elite strike force, and the Border Watch, which maintains a network of outposts along the frontiers.\n- The Tsardom of Moscavia is ruled from the fortified capital of Novogrudok, the White City, which serves as the political, religious, and military heart of the realm.\n- The Snowy Owl-folk form the ruling and cultural core of the Tsardom of Moscavia, with their capital at Novogrudok and their traditions shaping the identity of the realm.\n- The transformation of 994 affected the entire Tsardom of Moscavia, converting every qualifying human resident into an Owl-folk, and the Tsardom has since reorganized its governance, military, and daily life around its new owl-shaped population.\n- Eared Owl-folk are most numerous in the border territories of the Tsardom of Moscavia, where mixed Moscavian bloodlines are common, and they serve prominently in the Border Watch and frontier trade.\n- The military of the Tsardom consists of the White Talon Guard, an elite force of Snowy Owl-folk warriors trained in aerial combat and winter survival, and the Border Watch, a network of outposts manned by hardy Eared Owl-folk who patrol the frontiers against raiders and poachers.\n- Religious observance in Moscavia centers on the cult of the Pale Light, a faith that reveres the transformation of 994 as a divine act of renewal and regards the northern aurora as the voice of the divine in the sky.\n- Agriculture in Moscavia relies on hardy grains such as rye and barley, cultivated in the shorter growing season of the southern steppe and forest margins, supplemented by hunting, fishing, and the herding of reindeer and mountain goats.\n- The climate of Moscavia is harshly cold for most of the year, with snow cover lasting from October through April in the northern reaches, and temperatures dropping below freezing even in the summer months across the tundra regions.\n- Bordering territories where mixed-blood Owl-folk are more common tend to be more cosmopolitan, with trade posts and market towns where Eared Owl-folk and Snowy Owl-folk mingle with non-Moscavian travelers.\n- The core territories of Moscavia are dominated by Snowy Owl-folk, whose unbroken lineage since 994 has created a distinct cultural identity centered on silence, patience, and reverence for the long winter nights.\n- The Tsardom's laws are administered by the Tsar's Council of Feathers, a governing body composed of senior Snowy Owl-folk who deliberate on matters of trade, territorial disputes, and the welfare of both Snowy and Eared Owl-folk within Moscavian borders.\n- In the winter of 994, a cataclysmic transformation engulfed every human in Moscavia and its borderlands who could trace at least one grandparent to Moscavian blood, turning them into the Moscavian Owl-folk — large, intelligent owls that retained their human minds and memories.\n- The Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nThe owner asks for:\nthe current Tsar and how he came to the throne\n\nRules:\n- Write 1 to 5 facts, each one claim in a full sentence, about Tsardom of Moscavia.\n- Keep them consistent with what the records already say.\n- Use only these categories: description, history, law, general.\n- \"since\" is optional: give it only when a fact started at a known time, as a bare year no later than 1000.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\"}]}\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"facts\": [ { \"category\": \"history\", \"text\": \"The current Tsar of Moscavia is Tsar Vsevolod III, known as the Pale, who ascended to the throne in the year 1002 following the death of his father, Tsar Dmitri II, during a devastating blizzard that swept across the northern territories and claimed the lives of hundreds of Snowy Owl-folk.\" }, { \"category\": \"history\", \"text\": \"Tsar Vsevolod III was not the eldest son of Tsar Dmitri II, but he was chosen by the Council of Feathers over his older brother, Prince Yaroslav, because the council judged Vsevolod to possess a deeper spiritual attunement to the Pale Light and a more measured temperament suited to the long winters ahead.\" }, { \"category\": \"general\", \"text\": \"Tsar Vsevolod III has ruled with a philosophy of quiet endurance and slow reform, strengthening the Border Watch along the eastern steppe frontier while cautiously expanding trade with the southern merchant republics beyond Moscavian borders.\" } ] }",
+     "seconds": 6.6
+    },
+    {
+     "kind": "creative_instruction_2048",
+     "prompt": "## Task\nYou add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.\n\nThe entry: Tsardom of Moscavia (place, country)\nThe Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nWhat the records already say about it (never repeat these):\n- The military of Moscavia is divided between the White Talon Guard, which serves as the Tsardom's elite strike force, and the Border Watch, which maintains a network of outposts along the frontiers.\n- The Tsardom of Moscavia is ruled from the fortified capital of Novogrudok, the White City, which serves as the political, religious, and military heart of the realm.\n- The Snowy Owl-folk form the ruling and cultural core of the Tsardom of Moscavia, with their capital at Novogrudok and their traditions shaping the identity of the realm.\n- The transformation of 994 affected the entire Tsardom of Moscavia, converting every qualifying human resident into an Owl-folk, and the Tsardom has since reorganized its governance, military, and daily life around its new owl-shaped population.\n- Eared Owl-folk are most numerous in the border territories of the Tsardom of Moscavia, where mixed Moscavian bloodlines are common, and they serve prominently in the Border Watch and frontier trade.\n- The military of the Tsardom consists of the White Talon Guard, an elite force of Snowy Owl-folk warriors trained in aerial combat and winter survival, and the Border Watch, a network of outposts manned by hardy Eared Owl-folk who patrol the frontiers against raiders and poachers.\n- Religious observance in Moscavia centers on the cult of the Pale Light, a faith that reveres the transformation of 994 as a divine act of renewal and regards the northern aurora as the voice of the divine in the sky.\n- Agriculture in Moscavia relies on hardy grains such as rye and barley, cultivated in the shorter growing season of the southern steppe and forest margins, supplemented by hunting, fishing, and the herding of reindeer and mountain goats.\n- The climate of Moscavia is harshly cold for most of the year, with snow cover lasting from October through April in the northern reaches, and temperatures dropping below freezing even in the summer months across the tundra regions.\n- Bordering territories where mixed-blood Owl-folk are more common tend to be more cosmopolitan, with trade posts and market towns where Eared Owl-folk and Snowy Owl-folk mingle with non-Moscavian travelers.\n- The core territories of Moscavia are dominated by Snowy Owl-folk, whose unbroken lineage since 994 has created a distinct cultural identity centered on silence, patience, and reverence for the long winter nights.\n- The Tsardom's laws are administered by the Tsar's Council of Feathers, a governing body composed of senior Snowy Owl-folk who deliberate on matters of trade, territorial disputes, and the welfare of both Snowy and Eared Owl-folk within Moscavian borders.\n- In the winter of 994, a cataclysmic transformation engulfed every human in Moscavia and its borderlands who could trace at least one grandparent to Moscavian blood, turning them into the Moscavian Owl-folk — large, intelligent owls that retained their human minds and memories.\n- The Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nThe owner asks for:\nthe current Tsar and how he came to the throne\n\nRules:\n- Write 1 to 5 facts, each one claim in a full sentence, about Tsardom of Moscavia.\n- Keep them consistent with what the records already say.\n- Use only these categories: description, history, law, general.\n- \"since\" is optional: give it only when a fact started at a known time, as a bare year no later than 1000.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\"}]}\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"facts\": [ { \"category\": \"history\", \"text\": \"Tsar Aldric the White ascended to the throne of Moscavia in the year 997, three years after the Transformation, following the death of the previous Tsar, who perished during the civil unrest that erupted as the realm struggled to reorganize itself around its newly transformed population.\" }, { \"category\": \"history\", \"text\": \"Aldric, a former general of the old human Moscavian army who had survived the Transformation as one of the first Snowy Owl-folk, claimed the throne by right of martial authority and political acumen, unifying the fractious border lords under a single crown through a combination of diplomacy and decisive military action against rebel Eared Owl-folk clans who refused to acknowledge the new order.\" }, { \"category\": \"description\", \"text\": \"Tsar Aldric is described as a tall, imposing Snowy Owl-folk with pure white plumage and piercing pale eyes, known for his deep voice and his habit of ruling from the highest tower of Novogrudok's palace, where he can survey the entire city and the frozen countryside beyond.\" }, { \"category\": \"law\", \"text\": \"Under Aldric's reign, the Council of Feathers was formally established as the Tsardom's chief governing body, tasked with translating the Tsar's decrees into practical law and mediating disputes between the Snowy Owl-folk heartland and the more independent-minded Eared Owl-folk frontier communities.\" }, { \"category\": \"general\", \"text\": \"Tsar Aldric rules Moscavia with a philosophy rooted in the Pale Light's teachings, holding that the Transformation was a divine covenant between the people and the northern sky, and that the Tsar's duty is to maintain the spiritual purity and territorial integrity of the realm through strength tempered by reverence.\" } ] }",
+     "seconds": 11.3
+    }
+   ]
+  },
+  "after": {
+   "template_names_lines": [
+    "- \"names\": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the {{ kind }} (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this {{ kind }}, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.",
+    "- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the {{ kind }}."
+   ],
+   "rows": [
+    {
+     "call": 1,
+     "facts": [
+      {
+       "text": "Tsar Aldric III of the House of Novogrudok ascended to the throne in the year 1002, following the sudden death of his father Tsar Aldric II from a wasting illness that had plagued the royal court for over a season.",
+       "category": "history",
+       "unknown_phrases": [
+        "Tsar Aldric III of the House",
+        "Tsar Aldric II"
+       ]
+      },
+      {
+       "text": "The transition of power was not contested, as Aldric III was the only surviving son of Aldric II and had already been groomed for rule since the age of majority, serving as Commander of the White Talon Guard and acting regent during his father's final decline.",
+       "category": "history",
+       "unknown_phrases": [
+        "Aldric III",
+        "Aldric II",
+        "Commander"
+       ]
+      },
+      {
+       "text": "Upon his coronation, Tsar Aldric III reformed the Council of Feathers to include two seats reserved for senior Eared Owl-folk commanders of the Border Watch, a move intended to bridge the growing cultural divide between the core territories and the frontier provinces.",
+       "category": "law",
+       "unknown_phrases": [
+        "Tsar Aldric III"
+       ]
+      }
+     ],
+     "new_names": [
+      {
+       "name": "Aldric III",
+       "kind": "character",
+       "tag": "tsar of moscavia",
+       "written": [],
+       "aka": [
+        {
+         "name": "Aldric the Younger",
+         "tag": "proper",
+         "everyday": false
+        }
+       ],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      },
+      {
+       "name": "Aldric II",
+       "kind": "character",
+       "tag": "former tsar of moscavia",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      },
+      {
+       "name": "House of Novogrudok",
+       "kind": "lore",
+       "tag": "royal dynasty",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": [
+        "Novogrudok"
+       ]
+      }
+     ],
+     "seconds": 13.8,
+     "error": null
+    },
+    {
+     "call": 2,
+     "facts": [
+      {
+       "text": "Tsar Aldric Whitefeather ascended to the throne of Moscavia in the year 998, four years after the Transformation of 994, when the previous Tsar — his grandfather, Boris the Elder — passed from old age and illness.",
+       "category": "history",
+       "unknown_phrases": [
+        "Tsar Aldric Whitefeather",
+        "Transformation",
+        "Tsar",
+        "Boris the Elder"
+       ]
+      },
+      {
+       "text": "Aldric was not the eldest surviving member of the ruling bloodline, but he was chosen by the Council of Feathers over his uncles and cousins because he was the only Snowy Owl-folk in the direct line who had already completed the full training of the White Talon Guard, demonstrating both physical prowess and the disciplined silence valued by the core Moscavian culture.",
+       "category": "history",
+       "unknown_phrases": []
+      },
+      {
+       "text": "Tsar Aldric Whitefeather is known for his imposing stature among Snowy Owl-folk — standing nearly two meters tall with a wingspan that casts a shadow wide enough to darken a doorway — and for his deep, resonant hoot that can carry across the frozen squares of Novogrudok without echo.",
+       "category": "description",
+       "unknown_phrases": [
+        "Tsar Aldric Whitefeather"
+       ]
+      },
+      {
+       "text": "Under Aldric's rule, the Council of Feathers was reorganized to include a formal voice for the Eared Owl-folk border lords, a concession meant to address longstanding tensions over resource allocation between the core territories and the frontier outposts.",
+       "category": "law",
+       "unknown_phrases": [
+        "Under Aldric"
+       ]
+      },
+      {
+       "text": "The current Tsar maintains a tradition of spending the longest night of winter — the Yule vigil — alone atop the highest tower of Novogrudok's White Citadel, watching the aurora borealis in silent communion with the Pale Light, a practice he inherited from his grandfather and has vowed to pass to his heirs.",
+       "category": "general",
+       "unknown_phrases": [
+        "Tsar",
+        "Yule",
+        "Citadel"
+       ]
+      }
+     ],
+     "new_names": [
+      {
+       "name": "Aldric Whitefeather",
+       "kind": "character",
+       "tag": "the current tsar of moscavia",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      },
+      {
+       "name": "Boris the Elder",
+       "kind": "character",
+       "tag": "the previous tsar of moscavia",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      },
+      {
+       "name": "Transformation of 994",
+       "kind": "event",
+       "tag": "the cataclysmic event that created the moscavian owl-folk",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      }
+     ],
+     "seconds": 23.3,
+     "error": null
+    },
+    {
+     "call": 3,
+     "facts": [
+      {
+       "text": "Tsar Aldric Vane, a Snowy Owl-folk of impeccable lineage, ascended to the throne of Moscavia in the year 1002 following the death of his predecessor, Tsar Konstantin IV, who perished during a border skirmish with the Free Cities of the Southern Reach.",
+       "category": "history",
+       "unknown_phrases": [
+        "Tsar Aldric Vane",
+        "Tsar Konstantin IV",
+        "Free Cities of the Southern Reach"
+       ]
+      },
+      {
+       "text": "Aldric's claim to the throne was contested briefly by Lady Maren Ashkova, a powerful noble of the northern tundra provinces, but the Council of Feathers ruled in his favor after a deliberation lasting seventeen days, citing the unbroken patrilineal succession of the Vane dynasty since the founding of Novogrudok.",
+       "category": "history",
+       "unknown_phrases": [
+        "Lady Maren Ashkova",
+        "Vane"
+       ]
+      },
+      {
+       "text": "Tsar Aldric Vane is known for his quiet, deliberate manner of governance — befitting a Snowy Owl-folk — and for his deep devotion to the cult of the Pale Light, which he has championed as a unifying faith across all territories of the Tsardom.",
+       "category": "description",
+       "unknown_phrases": [
+        "Tsar Aldric Vane"
+       ]
+      }
+     ],
+     "new_names": [
+      {
+       "name": "Tsar Aldric Vane",
+       "kind": "character",
+       "tag": "ruler",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": [
+        "Tsar's Council of Feathers"
+       ]
+      },
+      {
+       "name": "Tsar Konstantin IV",
+       "kind": "character",
+       "tag": "former ruler",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": [
+        "Tsar's Council of Feathers"
+       ]
+      },
+      {
+       "name": "Lady Maren Ashkova",
+       "kind": "character",
+       "tag": "noble",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      },
+      {
+       "name": "Vane dynasty",
+       "kind": "lore",
+       "tag": "dynasty",
+       "written": [],
+       "aka": [],
+       "filing": {
+        "target_id": null,
+        "this_entry": true,
+        "name": null,
+        "role": null,
+        "ticked": true
+       },
+       "same_as": []
+      },
+      {
+       "name": "Free Cities of the Southern Reach",
+       "kind": "place",
+       "tag": "foreign territory",
+       "written": [],
+       "aka": [],
+       "filing": null,
+       "same_as": []
+      }
+     ],
+     "seconds": 13.9,
+     "error": null
+    }
+   ],
+   "calls": [
+    {
+     "kind": "creative_instruction_2048",
+     "prompt": "## Task\nYou add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.\n\nThe entry: Tsardom of Moscavia (place, country)\nThe Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nWhat the records already say about it (never repeat these):\n- The military of Moscavia is divided between the White Talon Guard, which serves as the Tsardom's elite strike force, and the Border Watch, which maintains a network of outposts along the frontiers.\n- The Tsardom of Moscavia is ruled from the fortified capital of Novogrudok, the White City, which serves as the political, religious, and military heart of the realm.\n- The Snowy Owl-folk form the ruling and cultural core of the Tsardom of Moscavia, with their capital at Novogrudok and their traditions shaping the identity of the realm.\n- The transformation of 994 affected the entire Tsardom of Moscavia, converting every qualifying human resident into an Owl-folk, and the Tsardom has since reorganized its governance, military, and daily life around its new owl-shaped population.\n- Eared Owl-folk are most numerous in the border territories of the Tsardom of Moscavia, where mixed Moscavian bloodlines are common, and they serve prominently in the Border Watch and frontier trade.\n- The military of the Tsardom consists of the White Talon Guard, an elite force of Snowy Owl-folk warriors trained in aerial combat and winter survival, and the Border Watch, a network of outposts manned by hardy Eared Owl-folk who patrol the frontiers against raiders and poachers.\n- Religious observance in Moscavia centers on the cult of the Pale Light, a faith that reveres the transformation of 994 as a divine act of renewal and regards the northern aurora as the voice of the divine in the sky.\n- Agriculture in Moscavia relies on hardy grains such as rye and barley, cultivated in the shorter growing season of the southern steppe and forest margins, supplemented by hunting, fishing, and the herding of reindeer and mountain goats.\n- The climate of Moscavia is harshly cold for most of the year, with snow cover lasting from October through April in the northern reaches, and temperatures dropping below freezing even in the summer months across the tundra regions.\n- Bordering territories where mixed-blood Owl-folk are more common tend to be more cosmopolitan, with trade posts and market towns where Eared Owl-folk and Snowy Owl-folk mingle with non-Moscavian travelers.\n- The core territories of Moscavia are dominated by Snowy Owl-folk, whose unbroken lineage since 994 has created a distinct cultural identity centered on silence, patience, and reverence for the long winter nights.\n- The Tsardom's laws are administered by the Tsar's Council of Feathers, a governing body composed of senior Snowy Owl-folk who deliberate on matters of trade, territorial disputes, and the welfare of both Snowy and Eared Owl-folk within Moscavian borders.\n- In the winter of 994, a cataclysmic transformation engulfed every human in Moscavia and its borderlands who could trace at least one grandparent to Moscavian blood, turning them into the Moscavian Owl-folk — large, intelligent owls that retained their human minds and memories.\n- The Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nThe owner asks for:\nthe current Tsar and how he came to the throne\n\nRules:\n- Write 1 to 5 facts, each one claim in a full sentence, about Tsardom of Moscavia.\n- Keep them consistent with what the records already say.\n- Use only these categories: description, history, law, general.\n- \"since\" is optional: give it only when a fact started at a known time, as a bare year no later than 1000.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": "  \"facts\": [\n    {\"category\": \"history\", \"text\": \"Tsar Aldric III of the House of Novogrudok ascended to the throne in the year 1002, following the sudden death of his father Tsar Aldric II from a wasting illness that had plagued the royal court for over a season.\"},\n    {\"category\": \"history\", \"text\": \"The transition of power was not contested, as Aldric III was the only surviving son of Aldric II and had already been groomed for rule since the age of majority, serving as Commander of the White Talon Guard and acting regent during his father's final decline.\"},\n    {\"category\": \"law\", \"text\": \"Upon his coronation, Tsar Aldric III reformed the Council of Feathers to include two seats reserved for senior Eared Owl-folk commanders of the Border Watch, a move intended to bridge the growing cultural divide between the core territories and the frontier provinces.\"}\n  ],\n  \"names\": [\n    {\"name\": \"Aldric III\", \"kind\": \"character\", \"tag\": \"Tsar of Moscavia\", \"in\": \"Tsardom of Moscavia\", \"aka\": [\"Aldric the Younger\"]},\n    {\"name\": \"Aldric II\", \"kind\": \"character\", \"tag\": \"former Tsar of Moscavia\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n    {\"name\": \"House of Novogrudok\", \"kind\": \"lore\", \"tag\": \"royal dynasty\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n    {\"name\": \"White Talon Guard\", \"kind\": \"lore\", \"tag\": \"military order\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n    {\"name\": \"Council of Feathers\", \"kind\": \"lore\", \"tag\": \"governing body\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n    {\"name\": \"Border Watch\", \"kind\": \"lore\", \"tag\": \"military force\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}\n  ]\n}",
+     "seconds": 13.8
+    },
+    {
+     "kind": "creative_instruction_2048",
+     "prompt": "## Task\nYou add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.\n\nThe entry: Tsardom of Moscavia (place, country)\nThe Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nWhat the records already say about it (never repeat these):\n- The military of Moscavia is divided between the White Talon Guard, which serves as the Tsardom's elite strike force, and the Border Watch, which maintains a network of outposts along the frontiers.\n- The Tsardom of Moscavia is ruled from the fortified capital of Novogrudok, the White City, which serves as the political, religious, and military heart of the realm.\n- The Snowy Owl-folk form the ruling and cultural core of the Tsardom of Moscavia, with their capital at Novogrudok and their traditions shaping the identity of the realm.\n- The transformation of 994 affected the entire Tsardom of Moscavia, converting every qualifying human resident into an Owl-folk, and the Tsardom has since reorganized its governance, military, and daily life around its new owl-shaped population.\n- Eared Owl-folk are most numerous in the border territories of the Tsardom of Moscavia, where mixed Moscavian bloodlines are common, and they serve prominently in the Border Watch and frontier trade.\n- The military of the Tsardom consists of the White Talon Guard, an elite force of Snowy Owl-folk warriors trained in aerial combat and winter survival, and the Border Watch, a network of outposts manned by hardy Eared Owl-folk who patrol the frontiers against raiders and poachers.\n- Religious observance in Moscavia centers on the cult of the Pale Light, a faith that reveres the transformation of 994 as a divine act of renewal and regards the northern aurora as the voice of the divine in the sky.\n- Agriculture in Moscavia relies on hardy grains such as rye and barley, cultivated in the shorter growing season of the southern steppe and forest margins, supplemented by hunting, fishing, and the herding of reindeer and mountain goats.\n- The climate of Moscavia is harshly cold for most of the year, with snow cover lasting from October through April in the northern reaches, and temperatures dropping below freezing even in the summer months across the tundra regions.\n- Bordering territories where mixed-blood Owl-folk are more common tend to be more cosmopolitan, with trade posts and market towns where Eared Owl-folk and Snowy Owl-folk mingle with non-Moscavian travelers.\n- The core territories of Moscavia are dominated by Snowy Owl-folk, whose unbroken lineage since 994 has created a distinct cultural identity centered on silence, patience, and reverence for the long winter nights.\n- The Tsardom's laws are administered by the Tsar's Council of Feathers, a governing body composed of senior Snowy Owl-folk who deliberate on matters of trade, territorial disputes, and the welfare of both Snowy and Eared Owl-folk within Moscavian borders.\n- In the winter of 994, a cataclysmic transformation engulfed every human in Moscavia and its borderlands who could trace at least one grandparent to Moscavian blood, turning them into the Moscavian Owl-folk — large, intelligent owls that retained their human minds and memories.\n- The Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nThe owner asks for:\nthe current Tsar and how he came to the throne\n\nRules:\n- Write 1 to 5 facts, each one claim in a full sentence, about Tsardom of Moscavia.\n- Keep them consistent with what the records already say.\n- Use only these categories: description, history, law, general.\n- \"since\" is optional: give it only when a fact started at a known time, as a bare year no later than 1000.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"facts\": [ { \"category\": \"history\", \"text\": \"Tsar Aldric Whitefeather ascended to the throne of Moscavia in the year 998, four years after the Transformation of 994, when the previous Tsar — his grandfather, Boris the Elder — passed from old age and illness.\" }, { \"category\": \"history\", \"text\": \"Aldric was not the eldest surviving member of the ruling bloodline, but he was chosen by the Council of Feathers over his uncles and cousins because he was the only Snowy Owl-folk in the direct line who had already completed the full training of the White Talon Guard, demonstrating both physical prowess and the disciplined silence valued by the core Moscavian culture.\" }, { \"category\": \"description\", \"text\": \"Tsar Aldric Whitefeather is known for his imposing stature among Snowy Owl-folk — standing nearly two meters tall with a wingspan that casts a shadow wide enough to darken a doorway — and for his deep, resonant hoot that can carry across the frozen squares of Novogrudok without echo.\" }, { \"category\": \"law\", \"text\": \"Under Aldric's rule, the Council of Feathers was reorganized to include a formal voice for the Eared Owl-folk border lords, a concession meant to address longstanding tensions over resource allocation between the core territories and the frontier outposts.\" }, { \"category\": \"general\", \"text\": \"The current Tsar maintains a tradition of spending the longest night of winter — the Yule vigil — alone atop the highest tower of Novogrudok's White Citadel, watching the aurora borealis in silent communion with the Pale Light, a practice he inherited from his grandfather and has vowed to pass to his heirs.\" } ], \"names\": [ { \"name\": \"Aldric Whitefeather\", \"kind\": \"character\", \"tag\": \"the current Tsar of Moscavia\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Boris the Elder\", \"kind\": \"character\", \"tag\": \"the previous Tsar of Moscavia, Aldric's grandfather\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"White Talon Guard\", \"kind\": \"lore\", \"tag\": \"Moscavian elite military force\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Council of Feathers\", \"kind\": \"lore\", \"tag\": \"Moscavian governing body\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Eared Owl-folk\", \"kind\": \"race\", \"tag\": \"a branch of the Moscavian Owl-folk\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Snowy Owl-folk\", \"kind\": \"race\", \"tag\": \"the ruling and cultural core of Moscavia\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Transformation of 994\", \"kind\": \"event\", \"tag\": \"the cataclysmic event that created the Moscavian Owl-folk\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Novogrudok\", \"kind\": \"place\", \"tag\": \"the fortified capital of Moscavia\", \"in\": \"Tsardom of Moscavia\", \"aka\": [ \"the White City\" ] }, { \"name\": \"Pale Light\", \"kind\": \"lore\", \"tag\": \"the dominant religion of Moscavia\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] } ] }",
+     "seconds": 23.3
+    },
+    {
+     "kind": "creative_instruction_2048",
+     "prompt": "## Task\nYou add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.\n\nThe entry: Tsardom of Moscavia (place, country)\nThe Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nWhat the records already say about it (never repeat these):\n- The military of Moscavia is divided between the White Talon Guard, which serves as the Tsardom's elite strike force, and the Border Watch, which maintains a network of outposts along the frontiers.\n- The Tsardom of Moscavia is ruled from the fortified capital of Novogrudok, the White City, which serves as the political, religious, and military heart of the realm.\n- The Snowy Owl-folk form the ruling and cultural core of the Tsardom of Moscavia, with their capital at Novogrudok and their traditions shaping the identity of the realm.\n- The transformation of 994 affected the entire Tsardom of Moscavia, converting every qualifying human resident into an Owl-folk, and the Tsardom has since reorganized its governance, military, and daily life around its new owl-shaped population.\n- Eared Owl-folk are most numerous in the border territories of the Tsardom of Moscavia, where mixed Moscavian bloodlines are common, and they serve prominently in the Border Watch and frontier trade.\n- The military of the Tsardom consists of the White Talon Guard, an elite force of Snowy Owl-folk warriors trained in aerial combat and winter survival, and the Border Watch, a network of outposts manned by hardy Eared Owl-folk who patrol the frontiers against raiders and poachers.\n- Religious observance in Moscavia centers on the cult of the Pale Light, a faith that reveres the transformation of 994 as a divine act of renewal and regards the northern aurora as the voice of the divine in the sky.\n- Agriculture in Moscavia relies on hardy grains such as rye and barley, cultivated in the shorter growing season of the southern steppe and forest margins, supplemented by hunting, fishing, and the herding of reindeer and mountain goats.\n- The climate of Moscavia is harshly cold for most of the year, with snow cover lasting from October through April in the northern reaches, and temperatures dropping below freezing even in the summer months across the tundra regions.\n- Bordering territories where mixed-blood Owl-folk are more common tend to be more cosmopolitan, with trade posts and market towns where Eared Owl-folk and Snowy Owl-folk mingle with non-Moscavian travelers.\n- The core territories of Moscavia are dominated by Snowy Owl-folk, whose unbroken lineage since 994 has created a distinct cultural identity centered on silence, patience, and reverence for the long winter nights.\n- The Tsardom's laws are administered by the Tsar's Council of Feathers, a governing body composed of senior Snowy Owl-folk who deliberate on matters of trade, territorial disputes, and the welfare of both Snowy and Eared Owl-folk within Moscavian borders.\n- In the winter of 994, a cataclysmic transformation engulfed every human in Moscavia and its borderlands who could trace at least one grandparent to Moscavian blood, turning them into the Moscavian Owl-folk — large, intelligent owls that retained their human minds and memories.\n- The Tsardom of Moscavia is a vast northern realm stretching across frozen tundra, dense boreal forests, and rolling steppe lands, ruled from the fortified capital of Novogrudok.\n\nThe owner asks for:\nthe current Tsar and how he came to the throne\n\nRules:\n- Write 1 to 5 facts, each one claim in a full sentence, about Tsardom of Moscavia.\n- Keep them consistent with what the records already say.\n- Use only these categories: description, history, law, general.\n- \"since\" is optional: give it only when a fact started at a known time, as a bare year no later than 1000.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"facts\": [ { \"category\": \"history\", \"text\": \"Tsar Aldric Vane, a Snowy Owl-folk of impeccable lineage, ascended to the throne of Moscavia in the year 1002 following the death of his predecessor, Tsar Konstantin IV, who perished during a border skirmish with the Free Cities of the Southern Reach.\" }, { \"category\": \"history\", \"text\": \"Aldric's claim to the throne was contested briefly by Lady Maren Ashkova, a powerful noble of the northern tundra provinces, but the Council of Feathers ruled in his favor after a deliberation lasting seventeen days, citing the unbroken patrilineal succession of the Vane dynasty since the founding of Novogrudok.\" }, { \"category\": \"description\", \"text\": \"Tsar Aldric Vane is known for his quiet, deliberate manner of governance — befitting a Snowy Owl-folk — and for his deep devotion to the cult of the Pale Light, which he has championed as a unifying faith across all territories of the Tsardom.\" } ], \"names\": [ { \"name\": \"Tsar Aldric Vane\", \"kind\": \"character\", \"tag\": \"ruler\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Tsar Konstantin IV\", \"kind\": \"character\", \"tag\": \"former ruler\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Lady Maren Ashkova\", \"kind\": \"character\", \"tag\": \"noble\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Council of Feathers\", \"kind\": \"lore\", \"tag\": \"governing body\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Vane dynasty\", \"kind\": \"lore\", \"tag\": \"dynasty\", \"in\": \"Tsardom of Moscavia\", \"aka\": [] }, { \"name\": \"Free Cities of the Southern Reach\", \"kind\": \"place\", \"tag\": \"foreign territory\", \"in\": null, \"aka\": [] } ] }",
+     "seconds": 13.9
+    }
+   ]
+  }
+ },
+ "model": "Skyfall-31B-v4.2-i1-Q4_K_M"
+}
