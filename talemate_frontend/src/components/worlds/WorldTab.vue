@@ -125,7 +125,7 @@ import ThingPage from './ThingPage.vue';
 // Species, Places, Events, Items, Lore, Beings; races and mixes are reached
 // from their species page; Cultures are made through the culture skill),
 // each name opening its page; a place sits
-// indented under the first place it's filed in (`kindList`), and a kind's
+// indented under its most precise filed place (`kindList`), and a kind's
 // stubs come last, dimmed, "not made yet". Stubs, Tags and Settings sit at
 // the bottom. A kind's heading opens its create box on the page side.
 // Expanding a stub (`expanding`) switches to its kind, whose create box

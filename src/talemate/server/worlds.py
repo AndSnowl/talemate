@@ -2410,8 +2410,8 @@ class WorldsPlugin(Plugin):
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
-            # the entries it's filed in now (the World tab shows a place
-            # under the first place it's in)
+            # the entries it's filed in now (the World tab nests a place
+            # under its most precise one, client-side)
             entry["filed_in"] = [
                 filing.target
                 for filing in filings_of(view, state.id)

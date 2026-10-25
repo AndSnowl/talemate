@@ -1,8 +1,8 @@
 // The entry page's pure logic (mockup v3, screens A, B, D and E): its
 // "In" rows' dates, Connected's groups (folded, filtered, the first few
 // rows then "show all"), the tag picker's choices, the Timeline's
-// "Events ▾" filter and the World tab's list (places under the first
-// place they're filed in). No Vue, no store: the node checks
+// "Events ▾" filter and the World tab's list (places under their most
+// precise filed place). No Vue, no store: the node checks
 // (checks/worlds.check.mjs) load this file.
 
 import { formatDate } from './worldDates.js';
@@ -177,12 +177,49 @@ export function timelineShown(lines, mode, eventIds = []) {
     return (lines || []).filter((line) => events.has(line.owner_id));
 }
 
+// A listed thing's first listed home (`filed_in`'s first id that's in
+// `byId`), or null for none. This is the plain, single-step walk that
+// `ancestorsAbove` climbs to find what a home itself sits in; it never
+// calls `mostPreciseHome`, so a cycle between two homes can't recurse.
+function firstListedHome(id, byId) {
+    const thing = byId.get(id);
+    return (thing?.filed_in || []).find((homeId) => byId.has(homeId)) ?? null;
+}
+
+// Every listed id that `id`'s home chain reaches, climbing `firstListedHome`
+// (`held.ancestorsAbove`): cycle-safe, a seen-set stops a loop of homes
+// each filed in the next.
+function ancestorsAbove(id, byId) {
+    const seen = new Set();
+    let current = firstListedHome(id, byId);
+    while (current && !seen.has(current)) {
+        seen.add(current);
+        current = firstListedHome(current, byId);
+    }
+    return seen;
+}
+
+// The most precise of a thing's listed homes (`held.mostPreciseHome`,
+// final review §6): among `filedIn`'s listed ids, drop any home that
+// another of them already sits in (its own `filed_in` chain, climbed
+// cycle-safe by `ancestorsAbove`); of what's left, the first filed. null
+// for no listed home.
+export function mostPreciseHome(filedIn, byId) {
+    const homes = (filedIn || []).filter((id) => byId.has(id));
+    if (homes.length <= 1) {
+        return homes[0] ?? null;
+    }
+    const remaining = homes.filter((home) => (
+        !homes.some((other) => other !== home && ancestorsAbove(other, byId).has(home))
+    ));
+    return remaining[0] ?? homes[0];
+}
+
 // The World tab's list of one kind, for `query` (its name holds it, any
 // case; all with none): `[{thing, depth}]` in the listing's order, entries
-// before stubs, and for places each one under the first place it's filed
-// in (`filed_in`) that's listed too, indented (`depth`), however deep. A
-// place in no listed place, or one that would close a loop, sits at the
-// top.
+// before stubs, and for places each one under its most precise listed
+// home (`mostPreciseHome`), indented (`depth`), however deep. A place in
+// no listed place, or one that would close a loop, sits at the top.
 export function kindList(things, query = '', { nest = false } = {}) {
     const clean = query.trim().toLowerCase();
     const listed = (things || []).filter((thing) => !clean || thing.name.toLowerCase().includes(clean));
@@ -191,7 +228,7 @@ export function kindList(things, query = '', { nest = false } = {}) {
         return ordered.map((thing) => ({ thing, depth: 0 }));
     }
     const byId = new Map(ordered.map((thing) => [thing.id, thing]));
-    const parentOf = (thing) => (thing.filed_in || []).find((id) => byId.has(id)) || null;
+    const parentOf = (thing) => mostPreciseHome(thing.filed_in, byId);
     const children = new Map();
     const roots = [];
     for (const thing of ordered) {

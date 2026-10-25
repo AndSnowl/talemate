@@ -2118,7 +2118,7 @@ check('"Events ▾": every dated fact, or the event entries\' lines only', () =>
     assert.deepEqual(timelineShown(null, 'events'), []);
 });
 
-check('the World tab lists a kind, its stubs last; a place under the first place it is in', () => {
+check('the World tab lists a kind, its stubs last; a place under its most precise place', () => {
     const things = [
         { id: 'k', name: 'Khorol River', filed_in: ['t', 'v'] },
         { id: 'w', name: 'Wattle Row', stub: { ignored: false }, filed_in: ['v'] },
@@ -2129,17 +2129,69 @@ check('the World tab lists a kind, its stubs last; a place under the first place
     const flat = kindList(things).map((row) => [row.thing.id, row.depth]);
     assert.deepEqual(flat, [['k', 0], ['v', 0], ['t', 0], ['g', 0], ['w', 0]]);
     const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
-    // the river under the Tsardom (its first place), Velikoye too, and
-    // the stub Wattle Row under Velikoye; a place in no listed place on top
-    assert.deepEqual(nested, [['t', 0], ['k', 1], ['v', 1], ['w', 2], ['g', 0]]);
-    // the search keeps what holds it, any case; a place goes under the
-    // first of its places still listed, else on top
+    // the river is filed in both the Tsardom and Velikoye, but Velikoye
+    // already sits in the Tsardom, so the Tsardom drops out and the river
+    // nests under Velikoye (its most precise place), two deep; the stub
+    // Wattle Row too; a place in no listed place on top
+    assert.deepEqual(nested, [['t', 0], ['v', 1], ['k', 2], ['w', 2], ['g', 0]]);
+    // the search keeps what holds it, any case; a place goes under its
+    // most precise place still listed, else on top
     assert.deepEqual(kindList(things, 'ROW', { nest: true }).map((row) => [row.thing.id, row.depth]), [['w', 0]]);
     assert.deepEqual(kindList(things, 'e', { nest: true }).map((row) => [row.thing.id, row.depth]), [['v', 0], ['k', 1], ['w', 1], ['g', 0]]);
     // a loop of places never hangs: each sits on top
     const loop = [{ id: 'a', name: 'A', filed_in: ['b'] }, { id: 'b', name: 'B', filed_in: ['a'] }];
     assert.deepEqual(kindList(loop, '', { nest: true }).map((row) => [row.thing.id, row.depth]), [['a', 0], ['b', 0]]);
     assert.deepEqual(kindList(undefined), []);
+});
+
+check('the most precise place: drops a home another home already sits in', () => {
+    // the Postal Headquarters (feedback/2026-10-24-hubs1/world-review.md §6):
+    // filed in Novograd, then the Tsardom, then the Great Stone Halls. The
+    // Halls sit in Novograd, which sits in the Tsardom, so both drop out
+    // and only the Halls (the most precise) remain.
+    const things = [
+        { id: 'hq', name: 'Postal Headquarters', filed_in: ['novograd', 'tsardom', 'halls'] },
+        { id: 'novograd', name: 'Novograd', filed_in: ['tsardom'] },
+        { id: 'tsardom', name: 'Tsardom of Moscavia', filed_in: [] },
+        { id: 'halls', name: 'Great Stone Halls', filed_in: ['novograd'] },
+    ];
+    const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
+    assert.deepEqual(nested, [['tsardom', 0], ['novograd', 1], ['halls', 2], ['hq', 3]]);
+
+    // a cycle among the homes themselves doesn't hang: X and Y each sit in
+    // the other, so dropping homes leaves none and the first filed (X)
+    // would win, but X and Y's own loop (same as the plain loop case
+    // above) puts everything reaching it on top too
+    const selfCycle = [
+        { id: 'e', name: 'Entry', filed_in: ['x', 'y'] },
+        { id: 'x', name: 'X', filed_in: ['y'] },
+        { id: 'y', name: 'Y', filed_in: ['x'] },
+    ];
+    assert.deepEqual(
+        kindList(selfCycle, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        [['e', 0], ['x', 0], ['y', 0]],
+    );
+
+    // two unrelated homes (neither sits in the other): the first filed wins
+    const unrelated = [
+        { id: 'e', name: 'Entry', filed_in: ['p', 'q'] },
+        { id: 'p', name: 'P', filed_in: [] },
+        { id: 'q', name: 'Q', filed_in: [] },
+    ];
+    assert.deepEqual(
+        kindList(unrelated, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        [['p', 0], ['e', 1], ['q', 0]],
+    );
+
+    // one home: unchanged
+    const single = [
+        { id: 'e', name: 'Entry', filed_in: ['p'] },
+        { id: 'p', name: 'P', filed_in: [] },
+    ];
+    assert.deepEqual(
+        kindList(single, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        [['p', 0], ['e', 1]],
+    );
 });
 
 check('the page lists its facts without its summary or a person\'s "but…"s', () => {
