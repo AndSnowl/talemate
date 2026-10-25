@@ -285,6 +285,46 @@ def _aliases(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
     return alias_table(view, extra)
 
 
+def _add_alias(
+    aliases: Aliases, alias: str, state: ThingState, name: str, via: Via
+) -> None:
+    """Add `alias` (normalised) to `aliases`, naming `state` (shown as
+    `name`), matched `via`."""
+
+    key = _norm(alias)
+    if not key:
+        return
+    tidy = " ".join(alias.split())
+    candidate = NameCandidate(
+        id=state.id,
+        name=name,
+        kind=state.kind,
+        stub=state.is_stub,
+        via=via,
+        as_stored=(tidy if via in ("name", "aka") and not _capitalised(tidy) else None),
+    )
+    aliases.setdefault(key, []).append((_RANKS[via], candidate))
+
+
+def own_alias_table(state: ThingState, name: str) -> Aliases:
+    """A `find_names` table of just `state`'s own names: its main name
+    (`name`, as its page shows it) and its other names, matched by the
+    same rules as in `alias_table`. Its page uses it to find where its
+    text names it ("this page", ruling H7); nothing in the world is
+    loaded."""
+
+    aliases: Aliases = {}
+    tidy = " ".join(name.split())
+    if not tidy:
+        return aliases
+    _add_alias(aliases, tidy, state, tidy, "name")
+    for entry in _aka_entries(state):
+        other = entry.get("name")
+        if isinstance(other, str):
+            _add_alias(aliases, other, state, tidy, "aka")
+    return aliases
+
+
 def alias_table(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
     """`find_names`' table of every name in `view` (and `extra`), built
     once: it loads every thing in the world, so a caller linking many
@@ -296,21 +336,7 @@ def alias_table(view: WorldView, extra: Sequence[ThingState] = ()) -> Aliases:
     aliases: Aliases = {}
 
     def add(alias: str, state: ThingState, name: str, via: Via) -> None:
-        key = _norm(alias)
-        if not key:
-            return
-        tidy = " ".join(alias.split())
-        candidate = NameCandidate(
-            id=state.id,
-            name=name,
-            kind=state.kind,
-            stub=state.is_stub,
-            via=via,
-            as_stored=(
-                tidy if via in ("name", "aka") and not _capitalised(tidy) else None
-            ),
-        )
-        aliases.setdefault(key, []).append((_RANKS[via], candidate))
+        _add_alias(aliases, alias, state, name, via)
 
     # names only: no facts loaded
     pool = [(state, False) for state in view.things(facts=False)]
@@ -405,6 +431,19 @@ def find_names(
 
     if aliases is None:
         aliases = _aliases(view, extra)
+    return _find(text, aliases)
+
+
+def find_own_names(text: str, own: Aliases) -> list[NameMatch]:
+    """`find_names` for one entry's own names alone (`own`, its
+    `own_alias_table`): where `text` names it."""
+
+    return _find(text, own)
+
+
+def _find(text: str, aliases: Aliases) -> list[NameMatch]:
+    """`find_names`' matching, against `aliases`."""
+
     folded = text.casefold()
 
     # (start, end, end with any `'s`, written, candidates)

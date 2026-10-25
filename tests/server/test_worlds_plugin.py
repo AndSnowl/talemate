@@ -1786,6 +1786,12 @@ def _plain(text):
     return {"text": text, "ref": None, "stub": False}
 
 
+def _self(text):
+    """A run of the page's own name, "this page" (ruling H7)."""
+
+    return {"text": text, "ref": None, "stub": False, "self": True}
+
+
 async def test_payload_segments_and_stub_fields(plugin):
     s = await _open_stub_world(plugin)
     world = s.world
@@ -1808,11 +1814,12 @@ async def test_payload_segments_and_stub_fields(plugin):
     ]
     # an ignored stub is hidden: its words stay, as plain text
     assert facts[s.clings]["segments"] == [_plain("Clings to Hope.")]
-    # prose is matched by name, never linked to the thing itself, and makes
-    # nothing
+    # prose is matched by name, never linked to the thing itself (its own
+    # name reads as "this page", ruling H7), and makes nothing
     assert thing["prose_segments"] == {
         "description": [
-            _plain("Maren sails from "),
+            _self("Maren"),
+            _plain(" sails from "),
             {"text": "The Harbour", "ref": s.harbour, "stub": False},
             _plain(" toward "),
             {"text": "Moscavia", "ref": s.tsardom, "stub": True},
@@ -7858,3 +7865,169 @@ async def test_prose_links_a_lowercase_led_stub_as_written(plugin):
         {"text": "river Vilya", "ref": vilya, "stub": True},
         _plain("; the river vilya sleeps."),
     ]
+
+
+async def _open_guard_world(plugin):
+    """The owner's White Talon Guard (other name "the Guard"), named in its
+    own facts and prose, linked from Novogrudok's."""
+
+    await plugin.handle({"type": "worlds", "action": "create_world", "name": "Rus"})
+    world = plugin.world
+    s = SimpleNamespace(world=world)
+    with world.revision(Source.manual(note="seed")) as rev:
+        s.city = rev.create_thing("place", {"name": "Novogrudok"})
+        s.guard = rev.create_thing(
+            "lore",
+            {
+                "name": "White Talon Guard",
+                "aka": [{"name": "the Guard", "tag": "common", "everyday": False}],
+            },
+        )
+        s.rides = rev.add_fact(
+            s.guard,
+            "general",
+            f"The White Talon Guard rides from {ref(s.city, 'Novogrudok')}; "
+            "the Guard never sleeps, and the white talon guard is feared.",
+        )
+        s.sworn = rev.add_fact(
+            s.guard,
+            "general",
+            "The White Talon Guard swore its oath.",
+            valid_from=WorldDate.of(1001),
+        )
+        rev.add_fact(
+            s.city, "general", f"{ref(s.guard, 'White Talon Guard')} keeps it."
+        )
+    start, end = prose_gen.stretch_containing(world, s.guard, None)
+    world.prose().put(
+        s.guard,
+        "description",
+        start,
+        end,
+        "The White Talon Guard rides out; the guard waits.",
+    )
+    return s
+
+
+async def test_own_names_are_highlighted_as_this_page(plugin):
+    """Ruling H7: on its own page an entry's main and other names, never
+    linked there, read as "this page" (`self`) in its facts, prose and
+    timeline; the words are unchanged and nothing is written."""
+
+    s = await _open_guard_world(plugin)
+    head = s.world.head_rev()
+
+    thing = await _get_thing(plugin, s.guard)
+    facts = {f["fact_id"]: f for f in thing["facts"]}
+    rides = facts[s.rides]
+    assert rides["segments"] == [
+        _plain("The "),
+        _self("White Talon Guard"),
+        _plain(" rides from "),
+        {"text": "Novogrudok", "ref": s.city, "stub": False},
+        _plain("; "),
+        _self("the Guard"),
+        _plain(" never sleeps, and the "),
+        _self("white talon guard"),
+        _plain(" is feared."),
+    ]
+    assert "".join(seg["text"] for seg in rides["segments"]) == rides["rendered"]
+    assert thing["prose_segments"]["description"] == [
+        _plain("The "),
+        _self("White Talon Guard"),
+        # an other name still needs its capital
+        _plain(" rides out; the guard waits."),
+    ]
+    (line,) = [line for line in thing["entry_timeline"] if line["fact_id"] == s.sworn]
+    assert line["segments"] == [
+        _plain("The "),
+        _self("White Talon Guard"),
+        _plain(" swore its oath."),
+    ]
+    # another page links it as ever, never as "this page"
+    city = await _get_thing(plugin, s.city)
+    (fact,) = city["facts"]
+    assert fact["segments"][0] == {
+        "text": "White Talon Guard",
+        "ref": s.guard,
+        "stub": False,
+    }
+    assert not any(seg.get("self") for seg in fact["segments"])
+    assert s.world.head_rev() == head
+
+
+async def test_saving_a_fact_on_its_own_page_writes_no_self_link(plugin, monkeypatch):
+    """The "this page" highlight is display only: a fact edited and saved
+    as its page shows it is stored with no link to its own entry."""
+
+    s = await _open_guard_world(plugin)
+    monkeypatch.setattr(plugin, "_client", lambda: None)
+    thing = await _get_thing(plugin, s.guard)
+    (sworn,) = [f for f in thing["facts"] if f["fact_id"] == s.sworn]
+    shown = "".join(seg["text"] for seg in sworn["segments"])
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "correct_fact",
+            "thing_id": s.guard,
+            "fact_id": s.sworn,
+            "text": shown.replace("oath", "first oath"),
+        }
+    )
+    saved = s.world.view().thing(s.guard)
+    (fact,) = [f for f in saved.facts if "first oath" in f.text]
+    assert fact.text == "The White Talon Guard swore its first oath."
+    assert s.guard not in fact.refs
+
+
+async def test_a_draft_shows_its_own_name_as_this_page(plugin, client):
+    """Ruling H7 on a draft: its own current name reads as "this page" in
+    its facts, timeline and prose, a renamed draft by its new name."""
+
+    await _open_filing_world(plugin)
+    reply = _draft_reply(
+        "The Frostwing Host", "The Frostwing Host guards the Khorol River."
+    )
+    draft = await _preview(plugin, client, reply, prompt="a host")
+    (fact,) = [f for f in draft["facts"] if f["draft"]]
+    assert _self("The Frostwing Host") in fact["segments"]
+    assert "".join(seg["text"] for seg in fact["segments"]) == fact["text"]
+
+    preview = draft["preview"]
+    renamed = {
+        **preview,
+        "name": "Pale Wing",
+        "facts": [
+            {
+                **preview["facts"][0],
+                "text": "Pale Wing, once the Frostwing Host, rode in 1001.",
+                "since": WorldDate.of(1001).model_dump(),
+            }
+        ],
+        "prose": {"description": "Pale Wing rides north."},
+    }
+    await _act(plugin, "draft_render", draft_key=draft["draft_key"], preview=renamed)
+    rendered = _last(plugin, "draft_render")["data"]
+    (row,) = rendered["facts"]
+    selves = [seg["text"] for seg in row["segments"] if seg.get("self")]
+    assert selves == ["Pale Wing"]
+    assert rendered["prose_segments"]["description"][0] == _self("Pale Wing")
+    (line,) = [line for line in rendered["entry_timeline"] if line["here"]]
+    assert _self("Pale Wing") in line["segments"]
+
+
+async def test_added_facts_show_the_entry_s_own_name_as_this_page(plugin, client):
+    """Facts drafted by "+ Add facts..." on an entry's page read its own
+    name as "this page" (ruling H7), as its written facts do."""
+
+    s = await _open_filing_world(plugin)
+    name = s.world.view().name_of(s.court)
+    reply = json.dumps(
+        {"facts": [{"category": "general", "text": f"{name} meets at dusk."}]}
+    )
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "add_facts", thing_id=s.court, prompt="when it meets")
+        await _drain(plugin)
+    (fact,) = _last(plugin, "add_facts")["data"]["facts"]
+    assert _self(name) in fact["segments"]

@@ -372,6 +372,8 @@ from talemate.world.names import (
     Aliases,
     alias_table,
     find_names,
+    find_own_names,
+    own_alias_table,
     unknown_proper_phrases,
 )
 from talemate.world.prose import UNRENDERED_FIELDS
@@ -1218,6 +1220,51 @@ def _stub_out(state: ThingState) -> dict | None:
     return {"ignored": state.stub_ignored} if state.is_stub else None
 
 
+def _mark_self(runs: list[dict], own: Aliases) -> list[dict]:
+    """`runs` (linked runs for the wire) with the page's own names in
+    their plain runs split out as `{text, ref: None, stub: False, self:
+    True}`: on its own page an entry's names, never linked there, read as
+    "this page" (ruling H7). `own` is `names.own_alias_table` of the
+    page's entry. Display only: the words, and so every offset into
+    them, are unchanged, and a `self` run links nothing."""
+
+    if not own:
+        return runs
+    out: list[dict] = []
+    for run in runs:
+        if run.get("ref") is not None or run.get("fresh") or run.get("self"):
+            out.append(run)
+            continue
+        text = run["text"]
+        end = 0
+        for match in find_own_names(text, own):
+            if match.start > end:
+                out.append({**run, "text": text[end : match.start]})
+            out.append({"text": match.text, "ref": None, "stub": False, "self": True})
+            end = match.end
+        if end == 0:
+            out.append(run)
+        elif end < len(text):
+            out.append({**run, "text": text[end:]})
+    return out
+
+
+def _mark_own_page(page: dict, own: Aliases) -> None:
+    """Mark the page's own names as "this page" (`_mark_self`) in the
+    runs it shows as its own: its facts and what it inherits, the "but..."
+    exceptions of its "In" rows, its prose and its timeline."""
+
+    for row in [*page.get("facts", []), *page.get("inherited", [])]:
+        row["segments"] = _mark_self(row["segments"], own)
+    for row in page.get("in", []):
+        for exception in row.get("exceptions", []):
+            exception["segments"] = _mark_self(exception["segments"], own)
+    for section, runs in page.get("prose_segments", {}).items():
+        page["prose_segments"][section] = _mark_self(runs, own)
+    for line in page.get("entry_timeline", []):
+        line["segments"] = _mark_self(line["segments"], own)
+
+
 class _Links:
     """Linked text in one view, for the wire: runs of rendered text as
     `{text, ref, stub}`, `ref` the thing a run links to and `stub` whether
@@ -1905,7 +1952,18 @@ class WorldsPlugin(Plugin):
             "now": _date_out(calendar, current_date(world)),
         }
 
-    def _thing_payload(self, world: World, thing_id: str, at: WorldDate | None) -> dict:
+    def _thing_payload(
+        self,
+        world: World,
+        thing_id: str,
+        at: WorldDate | None,
+        *,
+        mark_own: bool = True,
+    ) -> dict:
+        """The thing's page at `at`. Its own names read as "this page" in
+        its own runs (`_mark_own_page`, ruling H7), unless `mark_own` is
+        false (a draft marks its own current names instead)."""
+
         view = world.view(at)
         state = view.thing(thing_id)
         if state is None:
@@ -2003,7 +2061,7 @@ class WorldsPlugin(Plugin):
             for entry in world.timeline(thing_id)
         ]
 
-        return {
+        page = {
             "id": thing_id,
             "kind": state.kind,
             "name": view.name_of(thing_id) or "",
@@ -2047,6 +2105,9 @@ class WorldsPlugin(Plugin):
                 ),
             },
         }
+        if mark_own:
+            _mark_own_page(page, own_alias_table(state, page["name"]))
+        return page
 
     @staticmethod
     def _life_stage(
@@ -2743,7 +2804,7 @@ class WorldsPlugin(Plugin):
         links = _Links(view, aliases)
         stub = view.thing(preview.stub_id) if preview.stub_id else None
         if stub is not None and stub.is_stub:
-            page = self._thing_payload(world, stub.id, None)
+            page = self._thing_payload(world, stub.id, None, mark_own=False)
         else:
             stub = None
             page = {
@@ -3001,7 +3062,7 @@ class WorldsPlugin(Plugin):
             key=lambda line: line["date"]["instant"] if line["date"] else -1,
         )
         sections = prose_gen.sections_for(preview.kind)
-        return {
+        drafted = {
             **page,
             "id": owner,
             "draft": True,
@@ -3064,6 +3125,16 @@ class WorldsPlugin(Plugin):
                 for index, row in enumerate(preview.elsewhere)
             ],
         }
+        # its own current names read as "this page" (ruling H7), as an
+        # accepted entry's do; its "For other pages" rows are others'
+        itself = ThingState(
+            id=owner or "",
+            kind=preview.kind,
+            fields={"name": preview.name, "aka": list(preview.aka)},
+            facts=[],
+        )
+        _mark_own_page(drafted, own_alias_table(itself, preview.name))
+        return drafted
 
     def _check_repeat_moves(
         self, preview: CreatePreview, key: str | None, notes: list[str]
@@ -3749,11 +3820,18 @@ class WorldsPlugin(Plugin):
         """A fact draft for the wire: the draft itself (`draft`, sent back
         to `accept_facts`) and each fact as the page shows it, linked as it
         would be (`facts`: `{index, category, rendered, segments, since,
-        ticked, repeat_of}`)."""
+        ticked, repeat_of}`), the entry's own names "this page" (ruling
+        H7), as on its page."""
 
         view = world.view()
         links = _Links(view)
         calendar = world.calendar
+        state = view.thing(draft.thing_id)
+        own = (
+            own_alias_table(state, view.name_of(draft.thing_id) or "")
+            if state is not None
+            else {}
+        )
         return {
             "thing_id": draft.thing_id,
             "draft": draft.model_dump(mode="json"),
@@ -3762,8 +3840,11 @@ class WorldsPlugin(Plugin):
                     "index": index,
                     "category": fact.category,
                     "rendered": fact.text,
-                    "segments": links.segments(
-                        link_text(view, fact.text, owner=draft.thing_id)
+                    "segments": _mark_self(
+                        links.segments(
+                            link_text(view, fact.text, owner=draft.thing_id)
+                        ),
+                        own,
                     ),
                     "since": _date_out(calendar, fact.since),
                     "ticked": fact.ticked,

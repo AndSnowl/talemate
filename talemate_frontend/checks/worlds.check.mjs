@@ -2555,6 +2555,14 @@ check('a draft fact rewritten here, or added, has no server index: its words sho
     assert.equal(freshSegments([{ text: 'Pale Wing', ref: null, stub: false }], [{ name: 'Pale Wing', same_target_id: 'pw' }])[0].fresh, undefined);
 });
 
+check("the page's own name (a self run) stays itself, and an edit takes no link from it", () => {
+    // ruling H7: display only, the words unchanged
+    const own = { text: 'Pale Wing', ref: null, stub: false, self: true };
+    assert.deepEqual(freshSegments([own], [{ name: 'Pale Wing' }]), [own]);
+    const segments = [own, { text: ' rides north.', ref: null, stub: false }];
+    assert.deepEqual(factEditState(segments, 'Pale Wing rides north.'), { text: 'Pale Wing rides north.', links: [] });
+});
+
 check('a repeat: Keep new, Keep existing, Keep both or Move existing here', () => {
     let edited = { ...HOST, ...settleRepeat(HOST, 1, 'move') };
     assert.deepEqual([edited.facts[1].ticked, edited.facts[1].moveRepeat], [false, true]);

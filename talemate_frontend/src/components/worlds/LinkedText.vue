@@ -53,6 +53,11 @@
         class="linked-stub fresh"
         data-testid="linked-new"
         :title="`A new ${segment.kind || 'name'}: a stub once accepted`"
+    >{{ segment.text }}</span><span
+        v-else-if="segment.self"
+        class="linked-self"
+        data-testid="linked-self"
+        title="this page"
     >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template><ReferenceMenu
         v-if="repoint"
         v-model="repointOpen"
@@ -86,7 +91,9 @@ import StubCard from './StubCard.vue';
 // in the stub colour, with the stub's card on hover (not made yet, its
 // kind, its mentions, Expand and Ignore), and clicking it expands it (a
 // race or mix stub, which can't be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
-// only made on accept. With no segments, `text` shows as it is.
+// only made on accept. A `self` run is the page's own name (ruling H7):
+// in the link colour, titled "this page", not clickable, since it links
+// nothing. With no segments, `text` shows as it is.
 //
 // With `repoint` (an own fact on its thing's page), an entry link gets a
 // hover card too, and both cards offer "Re-point…": a search
@@ -217,6 +224,11 @@ export default {
     color: rgb(var(--v-theme-link));
     text-decoration: underline;
     text-underline-offset: 2px;
+}
+
+.linked-self {
+    color: rgb(var(--v-theme-link));
+    cursor: default;
 }
 
 .linked-stub {

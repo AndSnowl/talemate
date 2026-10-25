@@ -382,8 +382,10 @@ async def test_connections_end_to_end(plugin, client, loadable):
     assert sorted(stubs) == ["Aldric", "Kalmara"]
     aldric_id = stubs["Aldric"]["id"]
     assert stubs["Kalmara"]["mentions"] == 2
+    # her own name reads as "this page" there (ruling H7), linking nothing
     assert _linked(vasha, ALDRIC_FACT) == [
-        ("Vasha's brother ", None, False),
+        ("Vasha", None, False),
+        ("'s brother ", None, False),
         ("Aldric", aldric_id, True),
         (" keeps the ferry at ", None, False),
         ("Kalmara", kalmara_id, True),

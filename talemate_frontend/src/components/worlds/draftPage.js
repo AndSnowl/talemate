@@ -109,7 +109,8 @@ export function previewSegments(text, newNames = []) {
 }
 
 // `segments` (a draft fact's, linked by the server) with the draft's new
-// names marked `fresh` in their plain runs; a name a new name has (its
+// names marked `fresh` in their plain runs (a `self` run, the page's own
+// name, kept as it is); a name a new name has (its
 // same-as answered) is left plain, since it links an entry then. A name
 // the owner selected (`selected`, the draft's `selected_names`, ruling
 // F26) is found in any case, as accept will link it.
@@ -118,7 +119,7 @@ export function freshSegments(segments, newNames = [], selected = []) {
     const fresh = (newNames || [])
         .filter((row) => !row.same_target_id)
         .map((row) => (owned.has(nameKey(row.name)) ? { ...row, anyCase: true } : row));
-    return (segments || []).flatMap((segment) => (segment.ref || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
+    return (segments || []).flatMap((segment) => (segment.ref || segment.self || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
 }
 
 // A "For other pages" row's segments: as the server rendered it
