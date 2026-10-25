@@ -1,6 +1,6 @@
 <template>
-    <div class="suggestion-row" :data-testid="testid">
-        <div class="d-flex align-center ga-2">
+    <div class="suggestion-row" :class="{ 'no-tick': !tickable }" :data-testid="testid">
+        <div class="suggestion-line d-flex align-center ga-2">
             <v-checkbox-btn
                 v-if="tickable"
                 :model-value="ticked"
@@ -36,9 +36,11 @@ import './suggestions.css';
 // (`end`), a second line under the text for placement controls and
 // notes (`under`), a repeat's match indented with a left rule (`match`)
 // and a form under all of that (`after`). `tick(Boolean)` is emitted,
-// never applied here. `dropped` defaults to the row being unticked, so a
-// caller only sets it when a row that's still ticked should still read
-// as dropped (or the reverse). The dashed row separator sits on the
+// never applied here. `dropped` is null by default and then follows
+// `ticked` (an unticked row reads as dropped), so a caller only sets it
+// when a row that's still ticked should still read as dropped (or the
+// reverse). Without a tick (`tickable` off) `under` and `match` aren't
+// indented past one. The dashed row separator sits on the
 // root's bottom edge, after `match` and `after`, so a row and whatever
 // is shown under it read as one.
 export default {
@@ -81,5 +83,10 @@ export default {
     margin-left: 34px;
     padding-left: 10px;
     border-left: 2px solid rgb(var(--v-theme-border));
+}
+
+.no-tick > .suggestion-under,
+.no-tick > .suggestion-match-rule {
+    margin-left: 0;
 }
 </style>

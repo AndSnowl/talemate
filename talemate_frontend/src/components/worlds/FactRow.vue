@@ -3,6 +3,7 @@
          and "added here" on a second line, a repeat's match under it -->
     <SuggestionRow
         v-if="draft"
+        class="fact-host"
         :ticked="fact.ticked !== false"
         :tick-label="'Write ' + fact.text"
         testid="draft-fact"
@@ -131,7 +132,8 @@ export default {
 
 <style scoped>
 /* the separator goes under the whole row, so a fact and what's shown
-   under it (a repeat's match, its form) read as one */
+   under it (a repeat's match, its form) read as one. `fact-host` is also
+   the draft row's marker: the fact menu finds its row by it */
 .fact-host {
     border-bottom: 1px dashed rgb(var(--v-theme-border));
 }

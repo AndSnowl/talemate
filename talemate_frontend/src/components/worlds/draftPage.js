@@ -283,6 +283,11 @@ function changedAt(rows, index, change) {
 
 // a fact's tick
 export function tickFact(edited, index, ticked) {
+    // a repeat's tick is "Keep both" or "Keep existing" (never back to
+    // "Keep new" or "Move existing here", which take its buttons)
+    if (edited.facts?.[index]?.repeat_of) {
+        return settleRepeat(edited, index, ticked ? 'both' : 'existing');
+    }
     return { facts: changedAt(edited.facts, index, { ticked }) };
 }
 
@@ -383,6 +388,19 @@ export function settleElsewhereRepeat(edited, index, how) {
             replaces_repeat: how === 'new',
         }),
     };
+}
+
+// "For other pages" rows `indices` ticked or unticked (a row's tick, or a
+// group's Tick all): a repeating one's tick is "Keep both" or "Keep
+// existing", never back to "Keep new" (`replaces_repeat` cleared)
+export function tickElsewhere(rows, indices, ticked) {
+    const picked = new Set(indices);
+    return (rows || []).map((row, index) => {
+        if (!picked.has(index)) {
+            return row;
+        }
+        return row.repeat_of ? { ...row, ticked, replaces_repeat: false } : { ...row, ticked };
+    });
 }
 
 // Which of `settleElsewhereRepeat`'s ways a repeating elsewhere row is

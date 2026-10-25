@@ -82,8 +82,8 @@
 </template>
 
 <script>
-import { elsewhereGroups, elsewhereSame, rowChanged, rowsTicked, useWorldsStore } from '@/stores/worlds.js';
-import { elsewhereRepeatChoice, elsewhereSegments, settleElsewhereRepeat } from './draftPage.js';
+import { elsewhereGroups, elsewhereSame, rowChanged, useWorldsStore } from '@/stores/worlds.js';
+import { elsewhereRepeatChoice, elsewhereSegments, settleElsewhereRepeat, tickElsewhere } from './draftPage.js';
 import { formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
@@ -158,10 +158,10 @@ export default {
             return group.rows.some((index) => this.rows[index].ticked !== false);
         },
         tick(index, ticked) {
-            this.$emit('update', rowsTicked(this.rows, [index], ticked));
+            this.$emit('update', tickElsewhere(this.rows, [index], ticked));
         },
         tickGroup(group, ticked) {
-            this.$emit('update', rowsTicked(this.rows, group.rows, ticked));
+            this.$emit('update', tickElsewhere(this.rows, group.rows, ticked));
         },
         // a repeat settled: Keep new, Keep existing or Keep both
         settle(index, how) {

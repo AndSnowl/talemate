@@ -1217,7 +1217,7 @@ def test_repeat_choices(app, page, fixed_preview):
     borders = freeze.evaluate(
         """host => [
             getComputedStyle(host).borderBottomStyle,
-            getComputedStyle(host.firstElementChild).borderBottomStyle,
+            getComputedStyle(host.querySelector('.suggestion-line')).borderBottomStyle,
         ]"""
     )
     assert borders == ["dashed", "none"]
@@ -1357,6 +1357,23 @@ def test_repeat_match_sits_above_separator(app, page, fixed_preview):
     )
     carts = _draft_fact(draft, "Carts cross").bounding_box()
     assert carts["y"] >= match_box["y"] + match_box["height"] - 0.5
+    assert page.console_errors == []
+
+
+def test_draft_fact_right_click_opens_menu(app, page, fixed_preview):
+    """A right-click on a draft fact opens its fact menu, as on a page,
+    and the menu's Select all selects the fact's words."""
+
+    _seeded(app, page, "DraftMenu")
+    fixed_preview(_host("It flies at night.", "It hunts by moonlight."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    hunts = _draft_fact(draft, "moonlight")
+    hunts.locator(".fact-date").click(button="right")
+    menu = page.get_by_test_id("fact-menu")
+    menu.wait_for(state="visible", timeout=TIMEOUT_MS)
+    menu.get_by_role("menuitem", name="Select all", exact=True).click()
+    selected = page.evaluate("() => window.getSelection().toString()")
+    assert selected.strip() == "It hunts by moonlight."
     assert page.console_errors == []
 
 

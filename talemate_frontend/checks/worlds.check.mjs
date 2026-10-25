@@ -115,6 +115,7 @@ import {
     repeatChoice,
     settleElsewhereRepeat,
     settleRepeat,
+    tickElsewhere,
     tickFact,
     tickFileInto,
     tickMoveHere,
@@ -2645,6 +2646,31 @@ check('settleElsewhereRepeat sets replaces_repeat and ticks', () => {
     // retargeted, a Keep new no longer has a fact to replace
     const moved = retarget(kept, 1, { id: 'ts', name: 'Tsardom', kind: 'place' }).elsewhere[1];
     assert.deepEqual([moved.repeat_of, moved.replaces_repeat], [null, false]);
+});
+
+check('a repeat ticked or unticked by its tick is Keep both or Keep existing, never Keep new', () => {
+    // a page fact: Keep new, unticked, then ticked again
+    let edited = { ...HOST, ...settleRepeat(HOST, 1, 'new') };
+    edited = { ...edited, ...tickFact(edited, 1, false) };
+    assert.equal(repeatChoice(edited.facts[1]), 'existing');
+    edited = { ...edited, ...tickFact(edited, 1, true) };
+    assert.deepEqual([edited.facts[1].ticked, edited.facts[1].replaces_repeat], [true, false]);
+    assert.equal(repeatChoice(edited.facts[1]), 'both');
+    // Move existing here, then its tick: the move goes
+    edited = { ...edited, ...settleRepeat(edited, 1, 'move') };
+    edited = { ...edited, ...tickFact(edited, 1, true) };
+    assert.equal(repeatChoice(edited.facts[1]), 'both');
+    assert.equal(edited.move_here.filter((row) => row.repeat).length, 0);
+    // a fact with no repeat: only its tick
+    assert.deepEqual(tickFact(HOST, 0, false).facts[0], { ...HOST.facts[0], ticked: false });
+    // an elsewhere row: Keep new, unticked, ticked again (or Tick all)
+    const repeating = { ...HOST.elsewhere[0], repeat_of: { fact_id: 'f9', owner_id: 'vel', owner_name: 'Velikoye', text: 'x' }, ticked: true, replaces_repeat: true };
+    let rows = tickElsewhere([HOST.elsewhere[0], repeating], [1], false);
+    assert.equal(elsewhereRepeatChoice(rows[1]), 'existing');
+    rows = tickElsewhere(rows, [0, 1], true);
+    assert.deepEqual([rows[1].ticked, rows[1].replaces_repeat], [true, false]);
+    assert.equal(elsewhereRepeatChoice(rows[1]), 'both');
+    assert.deepEqual(rows[0], { ...HOST.elsewhere[0], ticked: true });
 });
 
 check('P6: a rewritten draft fact shows as the server rendered it, once the words match', () => {

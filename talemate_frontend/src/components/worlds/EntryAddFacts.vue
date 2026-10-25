@@ -159,7 +159,7 @@ import PreviewRepeats from './PreviewRepeats.vue';
 import PreviewStubs from './PreviewStubs.vue';
 import SuggestionBar from './SuggestionBar.vue';
 import SuggestionRow from './SuggestionRow.vue';
-import { changeNewName, factDraftSegments, repeatChoice, settleRepeat } from './draftPage.js';
+import { changeNewName, factDraftSegments, repeatChoice, settleRepeat, tickFact } from './draftPage.js';
 import { factsKey, smallVersionRows } from './smallDrafts.js';
 
 // "+ Add facts…" and (`event`) "+ Add event…" on the entry page: a prompt
@@ -321,7 +321,7 @@ export default {
         },
         tick(index, ticked) {
             const edited = this.draft.edited;
-            this.worlds.editSmall(this.draft.key, { facts: edited.facts.map((fact, i) => (i === index ? { ...fact, ticked } : fact)) });
+            this.worlds.editSmall(this.draft.key, tickFact(edited, index, ticked));
         },
         discard() {
             this.worlds.discardSmall(this.draft.key);
