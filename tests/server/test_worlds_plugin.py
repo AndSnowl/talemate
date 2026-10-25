@@ -6930,6 +6930,41 @@ async def test_draft_timeline_follows_edits(plugin, client):
     assert s.world.head_rev() == head
 
 
+async def test_renamed_draft_prose_stale(plugin, client):
+    """P7: the prose was written under the draft's name; accepted under
+    another (the owner renamed it on the draft), it's cached as stale, so
+    the page offers to write it again. Accepted under the same name, it's
+    fresh."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", "It flies."), prompt="a host"
+    )
+    await _act(
+        plugin,
+        "accept_preview",
+        preview={**draft["preview"], "name": "Frostwing Guard"},
+        draft_key=draft["draft_key"],
+    )
+    guard = _last(plugin, "accept_preview")["data"]
+    assert guard["name"] == "Frostwing Guard"
+    assert "The prose." in guard["prose"]["description"]["text"]
+    assert guard["prose"]["description"]["stale"] is True
+
+    draft = await _preview(
+        plugin, client, _draft_reply("Ashen Watch", "It watches."), prompt="a watch"
+    )
+    await _act(
+        plugin,
+        "accept_preview",
+        preview=draft["preview"],
+        draft_key=draft["draft_key"],
+    )
+    watch = _last(plugin, "accept_preview")["data"]
+    assert watch["prose"]["description"]["stale"] is False
+    assert s.world.head_rev() > 0
+
+
 async def test_accept_facts_waits_for_a_stub_draft(plugin, client):
     """A stub being drafted takes facts through its draft: `accept_facts`
     on it is refused, writing nothing, until the draft is accepted or

@@ -2904,6 +2904,16 @@ class WorldsPlugin(Plugin):
             kept.append(row)
         preview.move_here = kept
 
+    def _prose_name(self, preview: CreatePreview, key: str | None) -> str | None:
+        """The name the preview's prose was written under, from the
+        server's own copies (P7): the name of the version of the draft
+        this session holds with that prose; `None` without one."""
+
+        for version in self._drafts.get(key or "") or []:
+            if version.prose == preview.prose:
+                return version.name
+        return None
+
     def _check_selected_names(self, preview: CreatePreview, key: str | None) -> None:
         """Keep only the `selected_names` (ruling F26: words that link
         without a capital) and `pick_names` (P4: words taught as other
@@ -2943,6 +2953,7 @@ class WorldsPlugin(Plugin):
             same_target_id=payload.same_target_id,
             notes=notes,
             prose=prose,
+            prose_name=self._prose_name(payload.preview, payload.draft_key),
         )
         if payload.draft_key is not None:
             # written: the draft and its versions are done

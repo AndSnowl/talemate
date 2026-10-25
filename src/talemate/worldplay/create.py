@@ -3448,11 +3448,15 @@ def accept_preview(
     same_target_id: str | None = None,
     notes: list[str] | None = None,
     prose: list[str] | None = None,
+    prose_name: str | None = None,
 ) -> str:
     """Write `preview` in one revision, then cache its prose for the
     current stretch. Returns the thing id. `notes` gains what the owner
     should know (what was left out, and why); `prose` the other things
-    whose prose input changed, for the caller to regenerate.
+    whose prose input changed, for the caller to regenerate. `prose_name`
+    is the name the prose was written under (the draft's, as the server
+    made it): accepted under another, the prose is cached reading stale
+    (P7).
 
     One writer that tags and files (Filing, Task 4):
 
@@ -3508,8 +3512,10 @@ def accept_preview(
     if same_target_id is not None:
         if into_stub is not None:
             raise ValueError("a preview goes into a stub or onto an entry, not both")
-        return _accept_same(world, preview, same_target_id, notes, prose)
-    return _accept_new(world, preview, into_stub, notes, prose)
+        return _accept_same(
+            world, preview, same_target_id, notes, prose, prose_name=prose_name
+        )
+    return _accept_new(world, preview, into_stub, notes, prose, prose_name=prose_name)
 
 
 def _accept_new(
@@ -3519,9 +3525,12 @@ def _accept_new(
     notes: list[str] | None,
     prose: list[str] | None,
     fold: Any = None,
+    *,
+    prose_name: str | None = None,
 ) -> str:
     """`accept_preview` making or filling a thing (not `_accept_same`);
-    `fold` as `_write_preview` has it."""
+    `fold` as `_write_preview` has it, `prose_name` as `accept_preview`
+    has it."""
 
     if into_stub is not None and preview.stub_id not in (None, into_stub):
         raise ValueError(
@@ -3568,10 +3577,13 @@ def _accept_new(
     # fact unticked (it describes one never written) or a fact moved here
     # (it never read that one): then it's cached as of before the accept,
     # so it reads stale, and the thing goes in `prose` to be written again
-    # (final review I2)
+    # (final review I2) -- or the owner renamed the draft: it was written
+    # under the old name (P7)
     start, end = prose_gen.stretch_containing(world, thing_id, None)
     cache = world.prose()
-    rev = before if moved or any(not fact.ticked for fact in preview.facts) else None
+    renamed = prose_name is not None and name_key(prose_name) != name_key(preview.name)
+    stale = moved or renamed or any(not fact.ticked for fact in preview.facts)
+    rev = before if stale else None
     if moved and prose is not None and thing_id not in prose:
         prose.append(thing_id)
     for section in prose_gen.sections_for(preview.kind):
@@ -4199,6 +4211,8 @@ def _accept_same(
     target_id: str,
     notes: list[str] | None,
     prose: list[str] | None,
+    *,
+    prose_name: str | None = None,
 ) -> str:
     """Accept `preview` as the thing `target_id` (spec goal 4), in one
     revision, and return the id it went onto. Nothing new is made for the
@@ -4256,9 +4270,13 @@ def _accept_same(
             )
     if target.is_stub:
         if stub is None:
-            return _accept_new(world, preview, target_id, notes, prose)
+            return _accept_new(
+                world, preview, target_id, notes, prose, prose_name=prose_name
+            )
         fold = plan_repoint(world, target_id, stub.id, as_kind=preview.kind)
-        return _accept_new(world, preview, None, notes, prose, fold=fold)
+        return _accept_new(
+            world, preview, None, notes, prose, fold=fold, prose_name=prose_name
+        )
     plan = plan_repoint(world, stub.id, target_id) if stub is not None else None
     elsewhere = live_elsewhere(
         view, preview.elsewhere, {stub.id} if stub is not None else set(), notes
