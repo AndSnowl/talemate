@@ -155,6 +155,7 @@
 // No `@/` imports: the node checks (checks/worlds.check.mjs) load this file.
 
 import { defineStore } from 'pinia';
+import { toRaw } from 'vue';
 
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
@@ -693,6 +694,15 @@ function worldState() {
 // the function actions send with; set by `connect`
 let send = null;
 
+// P6: the draft edits that change what the server renders of it (what's
+// linked, dated or ticked): the others ("In" rows, tags, ticks of other
+// rows) aren't sent for rendering
+const RENDERED_KEYS = ['facts', 'picks', 'new_names', 'selected_names', 'treated_as_new', 'elsewhere', 'prose', 'name', 'aka'];
+// how long after the last such edit the draft is rendered
+const RENDER_DELAY_MS = 250;
+// each store's waiting render
+const renderTimers = new WeakMap();
+
 export const useWorldsStore = defineStore('worlds', {
     state: () => ({
         connected: false,
@@ -1098,20 +1108,40 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // the owner's edits to the draft (`changes` merged into `edited`),
-        // then rendered by the server as accept will write them
+        // then rendered by the server as accept will write them, when
+        // they're of what's linked or dated (`RENDERED_KEYS`)
         editDraft(changes) {
             if (this.draft) {
                 this.draft = { ...this.draft, edited: { ...this.draft.edited, ...changes } };
-                this.renderDraft();
+                if (Object.keys(changes).some((key) => RENDERED_KEYS.includes(key))) {
+                    this.renderDraft();
+                }
             }
         },
 
         // P6: the server links the owner's copy of the draft as accept
-        // will (`draft_render`, writing nothing): its facts, prose and
-        // timeline (`draft.rendered`). Each request is numbered (`seq`);
-        // only the answer to the newest is kept. A copy the owner hasn't
-        // changed is the server's page as it is.
+        // will (`draft_render`, writing nothing): its facts, other pages'
+        // facts, prose and timeline (`draft.rendered`). Asked for
+        // `RENDER_DELAY_MS` after the last edit (`flushDraftRender` asks
+        // at once); each request is numbered (`seq`) and only the answer
+        // to the newest is kept. A copy the owner hasn't changed is the
+        // server's page as it is.
         renderDraft() {
+            // keyed by the raw store: a component reaches it through
+            // another proxy than the timer does
+            const key = toRaw(this);
+            clearTimeout(renderTimers.get(key));
+            renderTimers.set(key, setTimeout(() => this.flushDraftRender(), RENDER_DELAY_MS));
+        },
+
+        // the render `renderDraft` has waiting, asked for now
+        flushDraftRender() {
+            const key = toRaw(this);
+            if (!renderTimers.has(key)) {
+                return;
+            }
+            clearTimeout(renderTimers.get(key));
+            renderTimers.delete(key);
             const draft = this.draft;
             if (!draft) {
                 return;
@@ -2027,6 +2057,10 @@ export const useWorldsStore = defineStore('worlds', {
                         const { draft_key: _key, seq: _seq, ...rendered } = data;
                         this.draft = { ...this.draft, rendered };
                     }
+                    break;
+                // a render that failed (a draft forgotten): the page keeps
+                // what it shows; nothing else is touched
+                case 'draft_render_failed':
                     break;
                 case 'make_stub_from_text':
                 case 'link_text':

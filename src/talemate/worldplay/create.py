@@ -1536,9 +1536,9 @@ def repeat_flags(
     holds most of its words at the world's `repeat_threshold` or above
     (`repeats.find_repeats`), as `{fact_id, owner_id, owner_name, text,
     score, summary}` (`summary`: whether it's its entry's summary, which
-    is never replaced or moved), or `None`; and whether it starts ticked -- unticked only when
-    the overlap reaches `repeat_untick_threshold` and the text has at least
-    `UNTICK_MIN_WORDS` content words."""
+    is never replaced or moved), or `None`; and whether it starts ticked
+    -- unticked only when the overlap reaches `repeat_untick_threshold`
+    and the text has at least `UNTICK_MIN_WORDS` content words."""
 
     flags: list[tuple[dict | None, bool]] = [(None, True)] * len(texts)
     owners = list(dict.fromkeys(owner_ids))

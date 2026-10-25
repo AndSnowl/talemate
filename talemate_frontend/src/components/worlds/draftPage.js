@@ -59,19 +59,33 @@ function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// Whether `words` are written with a capital past a leading article, as
+// accept's linking wants a pick or new name written (`links.link_text`).
+function capitalised(words) {
+    let tokens = words.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length > 1 && ARTICLES.includes(tokens[0].toLowerCase())) {
+        tokens = tokens.slice(1);
+    }
+    return /^[^\p{L}]*\p{Lu}/u.test(tokens[0] || '');
+}
+
 // A text as `LinkedText` segments: the names it invents (`newNames`, a
 // draft's `new_names`: each name, the ways the text writes it and its
 // other names) marked `fresh`, since they become stubs on accept; the rest
-// plain. Earliest match first, then the longest.
+// plain. Found as accept links them: in any case, where the text writes
+// them with a capital past a leading article ("the Boyar Council" for
+// "The Boyar Council"); one the owner selected (`anyCase`) as written.
+// Earliest match first, then the longest.
 export function previewSegments(text, newNames = []) {
     const spans = [];
     for (const found of newNames) {
         const spellings = [found.name, ...(found.written || []), ...(found.aka || []).map((entry) => entry.name)];
         for (const spelling of spellings.filter(Boolean)) {
-            const flags = found.anyCase ? 'giu' : 'gu';
-            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, flags);
+            const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(spelling)}(?![\\p{L}\\p{N}])`, 'giu');
             for (const match of text.matchAll(pattern)) {
-                spans.push({ start: match.index, end: match.index + match[0].length, kind: found.kind });
+                if (found.anyCase || capitalised(match[0])) {
+                    spans.push({ start: match.index, end: match.index + match[0].length, kind: found.kind });
+                }
             }
         }
     }
@@ -105,6 +119,18 @@ export function freshSegments(segments, newNames = [], selected = []) {
         .filter((row) => !row.same_target_id)
         .map((row) => (owned.has(nameKey(row.name)) ? { ...row, anyCase: true } : row));
     return (segments || []).flatMap((segment) => (segment.ref || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
+}
+
+// A "For other pages" row's segments: as the server rendered it
+// (`rendered`, the draft's `elsewhere`: `[{index, text, segments}]`) when
+// it rendered these words, else its new names highlighted here
+// (`previewSegments`).
+export function elsewhereSegments(row, index, rendered = [], newNames = []) {
+    const found = (rendered || []).find((entry) => entry.index === index);
+    if (found && found.text === row.text) {
+        return found.segments;
+    }
+    return previewSegments(row.text || '', newNames);
 }
 
 function same(a, b) {

@@ -6825,11 +6825,22 @@ async def test_draft_render_links_edited_facts(plugin, client):
             "Frostwing Host",
             "It answers to the Boyar Council.",
             names=[{"name": "The Boyar Council", "kind": "lore"}],
+            elsewhere=[
+                {
+                    "entry": "Velikoye",
+                    "text": "Velikoye pays the Frostwing Host for the Boyar Council.",
+                }
+            ],
         ),
         prompt="a host",
     )
     (fact,) = [f for f in draft["facts"] if f["draft"]]
     assert _fresh_runs(fact["segments"]) == ["the Boyar Council"]
+    # "For other pages" too, the draft's own name a stub-to-be there
+    (other,) = draft["elsewhere"]
+    assert other["index"] == 0
+    assert "the Boyar Council" in _fresh_runs(other["segments"])
+    assert any("Frostwing Host" in run for run in _fresh_runs(other["segments"]))
     head = s.world.head_rev()
 
     preview = draft["preview"]
@@ -6847,6 +6858,9 @@ async def test_draft_render_links_edited_facts(plugin, client):
     )
     rendered = _last(plugin, "draft_render")["data"]
     assert (rendered["draft_key"], rendered["seq"]) == (draft["draft_key"], 3)
+    assert [row["text"] for row in rendered["elsewhere"]] == [
+        "Velikoye pays the Frostwing Host for the Boyar Council."
+    ]
     (row,) = rendered["facts"]
     assert (row["index"], row["text"]) == (
         0,
@@ -6858,17 +6872,22 @@ async def test_draft_render_links_edited_facts(plugin, client):
     assert _fresh_runs(row["segments"]) == ["the Boyar Council"]
     assert "".join(seg["text"] for seg in row["segments"]) == row["text"]
 
-    # marked the same as the Night Court, the name links there instead
+    # marked the same as the Night Court, the name links there instead,
+    # in the facts and the prose alike
     same = {
         **rewritten,
         "new_names": [
             {**preview["new_names"][0], "same_target_id": s.court},
         ],
+        "prose": {"description": "It serves the Boyar Council."},
     }
     await _act(plugin, "draft_render", draft_key=draft["draft_key"], preview=same)
-    (row,) = _last(plugin, "draft_render")["data"]["facts"]
+    rendered = _last(plugin, "draft_render")["data"]
+    (row,) = rendered["facts"]
     assert _fresh_runs(row["segments"]) == []
     assert s.court in [seg["ref"] for seg in row["segments"]]
+    prose = rendered["prose_segments"]["description"]
+    assert s.court in [seg["ref"] for seg in prose]
     assert s.world.head_rev() == head
 
     # accepted, the rewritten fact links just as it was shown
@@ -6880,6 +6899,22 @@ async def test_draft_render_links_edited_facts(plugin, client):
     linked = {seg["text"]: seg for seg in written["segments"] if seg["ref"]}
     assert linked["Velikoye"]["ref"] == s.velikoye
     assert linked["the Boyar Council"]["stub"] is True
+
+
+async def test_draft_render_fails_quietly(plugin, client):
+    """A render that can't be made (a draft the server no longer holds)
+    answers `draft_render_failed`, not an error: nothing the page has
+    pending is cleared, and nothing is shown."""
+
+    await _open_filing_world(plugin)
+    errors = len(_errors(plugin))
+    preview = {"kind": "lore", "prompt": "x", "name": "Gone", "facts": [], "prose": {}}
+    await _act(
+        plugin, "draft_render", draft_key="new:lore:gone", seq=4, preview=preview
+    )
+    failed = _last(plugin, "draft_render_failed")
+    assert failed["data"] == {"draft_key": "new:lore:gone", "seq": 4}
+    assert len(_errors(plugin)) == errors
 
 
 async def test_draft_timeline_follows_edits(plugin, client):

@@ -81,11 +81,13 @@ through `signal_operation_failed` (an `operation_done` envelope with
   says one of its facts repeats that fact; the `selected_names` kept only
   as the server's copy recorded them), and answers `notes`. Accepted
   under another name than the one its prose was written under (the
-  owner renamed the draft, P7), its prose is cached stale. An "In" row may name a `new_name` instead of a
-  `target_id` (the owner's "+ in..." on a name the world hasn't): accept
-  makes that stub and files the entry in it, in the one revision. A
-  fact's `until` (the owner's "End this") is written as its end. It schedules prose for each entry the world has whose prose
-  reads what it took (an elsewhere fact, a fact moved off it).
+  owner renamed the draft, P7), its prose is cached stale. An "In" row
+  may name a `new_name` instead of a `target_id` (the owner's "+ in..."
+  on a name the world hasn't): accept makes that stub and files the entry
+  in it, in the one revision. A fact's `until` (the owner's "End this")
+  is written as its end. It schedules prose for each entry the world has
+  whose prose reads what it took (an elsewhere fact, a fact moved off
+  it, a fact "Keep new" removed).
 - Stubs: `make_stub {thing_id, fact_id, text, kind}` makes a stub named
   `text` (or reuses the thing that already has that name, reviving an
   ignored stub) and links that phrase in the fact (its first plain
@@ -1259,15 +1261,21 @@ class _Links:
         return self._out([run for run in runs if run.text])
 
     def draft_segments(
-        self, written: str, fresh: dict[str, str], *, links: bool = True
+        self,
+        written: str,
+        fresh: dict[str, str],
+        *,
+        keep: Collection[str] | None = None,
     ) -> list[dict]:
         """A draft's text as linked runs, from `written`, the text as
         `link_text` links it with each of the draft's new names linked to a
         stand-in id (`_draft_new_names`; `fresh` maps each stand-in to its
         kind): a run linking a stand-in is the stub it will be on accept,
-        `fresh` (with its `kind`), linking nothing yet. With `links` off,
-        every other link reads as its plain words (prose, whose links
-        `prose_segments` found already)."""
+        `fresh` (with its `kind`), linking nothing yet. With `keep`, only
+        links to those ids stay links and every other reads as its plain
+        words (prose, whose links `prose_segments` found already: `keep`
+        holds the entries the draft's new names were marked the same
+        as)."""
 
         out: list[dict] = []
 
@@ -1281,11 +1289,10 @@ class _Links:
         def words(text: str) -> None:
             if not text:
                 return
-            if links:
-                for run in self.segments(text):
-                    add(run)
-            else:
-                add({"text": self.view.render(text), "ref": None, "stub": False})
+            for run in self.segments(text):
+                if keep is not None and run["ref"] not in keep:
+                    run = {"text": run["text"], "ref": None, "stub": False}
+                add(run)
 
         end = 0
         for match in REF_PATTERN.finditer(written):
@@ -2622,14 +2629,32 @@ class WorldsPlugin(Plugin):
         names link, its new names show `fresh`, and the timeline holds the
         dated facts accept will write. As at accept, only the selected
         names a version held here recorded link without a capital, and
-        the stub expanded is the server's copy's."""
+        the stub expanded is the server's copy's. Its "For other pages"
+        rows come as `elsewhere: [{index, text, segments}]`.
 
-        payload = DraftRenderPayload(**data)
-        world = self._require_world()
-        held = self._current_preview(payload.draft_key)
-        preview = payload.preview.model_copy(update={"stub_id": held.stub_id})
-        self._check_selected_names(preview, payload.draft_key)
-        page = self._draft_payload(world, preview)
+        A render that can't be made (a draft no longer held, a copy that
+        doesn't parse) answers `draft_render_failed {draft_key, seq}`
+        instead of an error: the page keeps what it shows, and nothing it
+        has pending is touched."""
+
+        try:
+            payload = DraftRenderPayload(**data)
+            world = self._require_world()
+            held = self._current_preview(payload.draft_key)
+            preview = payload.preview.model_copy(update={"stub_id": held.stub_id})
+            self._check_selected_names(preview, payload.draft_key)
+            page = self._draft_payload(world, preview)
+        except Exception as exc:
+            log.warning(
+                "worlds.draft_render_failed",
+                draft_key=data.get("draft_key"),
+                error=str(exc),
+            )
+            self._reply(
+                "draft_render_failed",
+                {"draft_key": data.get("draft_key"), "seq": data.get("seq")},
+            )
+            return
         self._reply(
             "draft_render",
             {
@@ -2644,6 +2669,7 @@ class WorldsPlugin(Plugin):
                     for fact in page["facts"]
                     if fact.get("draft")
                 ],
+                "elsewhere": page["elsewhere"],
                 "prose_segments": page["prose_segments"],
                 "entry_timeline": page["entry_timeline"],
             },
@@ -2660,7 +2686,9 @@ class WorldsPlugin(Plugin):
         tick), and the dated facts accept will write (its ticked ones) on
         the timeline. Its new names are linked as accept links them, to
         the stubs they'll be, and shown `fresh` (`_draft_new_names`), in
-        its facts, timeline and prose alike. `id` is the stub's, or
+        its facts, timeline and prose alike; `elsewhere` holds its "For
+        other pages" facts (`{index, text, segments}`), each linked onto
+        its target as accept links it, the entry's own names included. `id` is the stub's, or
         `null`; `draft` is true."""
 
         view = world.view()
@@ -2722,6 +2750,48 @@ class WorldsPlugin(Plugin):
                 fresh,
             )
 
+        # the entries new names were marked the same as: linked in prose
+        same_targets = {
+            thing_id for thing_id in new_names.values() if thing_id not in fresh
+        }
+        # "For other pages" facts link the entry itself too, as accept's
+        # do (its revision's view has it); a new entry's names stand in
+        # for it, shown `fresh`
+        own_names: dict[str, str] = {}
+        own_fresh = dict(fresh)
+        if owner is None:
+            itself = hashlib.sha256(b"draft-self").hexdigest()[:32]
+            own_fresh[itself] = preview.kind
+            for form in [
+                preview.name,
+                *(
+                    str(entry["name"])
+                    for entry in preview.aka
+                    if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+                ),
+            ]:
+                tidy = " ".join(form.split())
+                if tidy:
+                    own_names.setdefault(tidy, itself)
+
+        def elsewhere_linked(row: ElsewhereFact) -> list[dict]:
+            # linked onto its target, as `write_elsewhere` links it
+            target = row.target_id
+            if target is None and row.new is not None:
+                target = new_names.get(" ".join(row.new.name.split()))
+            return links.draft_segments(
+                link_text(
+                    view,
+                    row.text,
+                    picks=preview.picks,
+                    new_names={**own_names, **new_names},
+                    owner=target,
+                    as_new=preview.treated_as_new,
+                    lowercase=preview.selected_names,
+                ),
+                own_fresh,
+            )
+
         def prose_linked(text: str) -> list[dict]:
             # as the accepted page links it (`prose_segments`), the new
             # names, stubs then, marked in the words it leaves plain
@@ -2738,7 +2808,7 @@ class WorldsPlugin(Plugin):
                             lowercase=preview.selected_names,
                         ),
                         fresh,
-                        links=False,
+                        keep=same_targets,
                     )
                     if run["ref"] is None
                     else [run]
@@ -2880,6 +2950,10 @@ class WorldsPlugin(Plugin):
             },
             "in": [*page["in"], *drafted_in],
             "entry_timeline": timeline,
+            "elsewhere": [
+                {"index": index, "text": row.text, "segments": elsewhere_linked(row)}
+                for index, row in enumerate(preview.elsewhere)
+            ],
         }
 
     def _check_repeat_moves(

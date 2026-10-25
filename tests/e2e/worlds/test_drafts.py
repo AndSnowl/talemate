@@ -1053,10 +1053,22 @@ def test_draft_edit_keeps_highlights(app, page, fixed_preview):
                 },
             ],
             "names": [{"name": "The Boyar Council", "kind": "lore"}],
+            "elsewhere": [
+                {
+                    "entry": "Velikoye",
+                    "text": "Velikoye pays the Frostwing Host for the Boyar Council.",
+                }
+            ],
             "prose": {"description": "A host sworn to the Boyar Council."},
         }
     )
     draft = _draft(page, "lore", "The Tsar's winged army.")
+    # "For other pages" as accept will link it onto Velikoye: the new
+    # name, and this entry itself
+    other = draft.get_by_test_id("elsewhere-row").filter(has_text="pays the")
+    expect(other.get_by_test_id("linked-new")).to_have_text(
+        ["the Frostwing Host", "the Boyar Council"]
+    )
     council = _draft_fact(draft, COUNCIL)
     expect(council.get_by_test_id("linked-new")).to_have_text("the Boyar Council")
     prose = draft.get_by_test_id("draft-prose")

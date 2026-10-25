@@ -26,7 +26,7 @@
                         @update:model-value="tick(index, $event)"
                     ></v-checkbox-btn>
                     <span class="flex-grow-1" :class="{ dropped: rows[index].ticked === false }">
-                        <LinkedText :segments="previewSegments(rows[index].text, newNames)" :text="rows[index].text" />
+                        <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames)" :text="rows[index].text" />
                         <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
                     </span>
                     <span v-if="rows[index].since" class="fact-date">{{ formatDate(worlds.calendar, rows[index].since) }}</span>
@@ -74,7 +74,8 @@
 </template>
 
 <script>
-import { elsewhereGroups, elsewhereSame, previewSegments, rowChanged, rowsTicked, useWorldsStore } from '@/stores/worlds.js';
+import { elsewhereGroups, elsewhereSame, rowChanged, rowsTicked, useWorldsStore } from '@/stores/worlds.js';
+import { elsewhereSegments } from './draftPage.js';
 import { formatDate } from './worldDates.js';
 import { kindInfo } from './worldKinds.js';
 import LinkedText from './LinkedText.vue';
@@ -102,6 +103,10 @@ export default {
         type: { type: String, required: true },
         // the preview's new names, shown as such in the texts
         newNames: { type: Array, default: () => [] },
+        // the rows as the server linked them (P6: the draft's
+        // `elsewhere`, `[{index, text, segments}]`), used while the words
+        // match
+        rendered: { type: Array, default: () => [] },
         // this page's own facts' texts ("+ also here" is off for them)
         alsoHere: { type: Array, default: () => [] },
         // ids never offered as a target (the page's own)
@@ -121,7 +126,7 @@ export default {
     },
     methods: {
         formatDate,
-        previewSegments,
+        elsewhereSegments,
         startRetarget(index, event) {
             this.retargetIndex = index;
             this.retargetAt = [event.clientX, event.clientY];

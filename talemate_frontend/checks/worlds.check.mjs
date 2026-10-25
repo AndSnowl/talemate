@@ -101,6 +101,7 @@ import {
     filingKey,
     removeFiling,
     draftFactRows,
+    elsewhereSegments,
     freshSegments,
     holdFact,
     moveFactTo,
@@ -1531,7 +1532,9 @@ check('a preview marks the names it invents, whole words only', () => {
     assert.equal(segments.map((s) => s.text).join(''), text);
     assert.deepEqual(
         segments.filter((s) => s.fresh).map((s) => [s.text, s.kind]),
-        [['Tsardom of Moscavia', 'place'], ['Night of Feathers', 'event'], ['Moscavia', 'place']],
+        // "The Night of Feathers" found in any case, its article with it,
+        // as accept links it (P6)
+        [['Tsardom of Moscavia', 'place'], ['the Night of Feathers', 'event'], ['Moscavia', 'place']],
     );
     assert.deepEqual(previewSegments('No names here.', names), [{ text: 'No names here.', ref: null, stub: false }]);
     assert.deepEqual(previewSegments('', names), []);
@@ -2529,10 +2532,12 @@ check('P6: a draft edit asks the server to render the draft; only the newest ans
     const { store, sent } = hostDraft();
     const key = store.draft.key;
     store.editDraft({ facts: store.draft.edited.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies over Velikoye.' } : f)) });
+    store.flushDraftRender();
     const first = sent.filter((m) => m.action === 'draft_render').at(-1);
     assert.equal(first.draft_key, key);
     assert.equal(first.preview.facts[0].text, 'It flies over Velikoye.');
     store.editDraft({ name: 'The Frostwing Riders' });
+    store.flushDraftRender();
     const second = sent.filter((m) => m.action === 'draft_render').at(-1);
     assert.ok(second.seq > first.seq);
     const timeline = [{ fact_id: null, date: dateOf(990), segments: [{ text: 'It was raised.', ref: null, stub: false }], here: true }];
@@ -2549,7 +2554,54 @@ check('P6: a draft edit asks the server to render the draft; only the newest ans
     store.handleMessage(reply('use_version', draftOf(HOST)));
     assert.equal(store.draft.rendered, null);
     assert.equal(store.draft.edited.name, 'The Frostwing Riders');
+    store.flushDraftRender();
     assert.equal(sent.filter((m) => m.action === 'draft_render').length, asked + 1);
+});
+
+check('P6: draft renders are debounced, skipped for edits that link nothing, and fail quietly', () => {
+    const { store, sent } = hostDraft();
+    const key = store.draft.key;
+    const renders = () => sent.filter((m) => m.action === 'draft_render');
+    // edits close together are one render, of the latest copy, once due
+    store.editDraft({ facts: store.draft.edited.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies.' } : f)) });
+    store.editDraft({ facts: store.draft.edited.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies low.' } : f)) });
+    assert.equal(renders().length, 0);
+    store.flushDraftRender();
+    assert.equal(renders().length, 1);
+    assert.equal(renders()[0].preview.facts[0].text, 'It flies low.');
+    store.flushDraftRender();
+    assert.equal(renders().length, 1);
+    // an "In" row, a tag or a File into tick links nothing: no render
+    store.editDraft(changeFiling(store.draft.edited, 'ts', { ticked: true }));
+    store.editDraft({ tag: 'army' });
+    store.editDraft(tickFileInto(store.draft.edited, 'wt', true));
+    store.flushDraftRender();
+    assert.equal(renders().length, 1);
+    // a failed render is dropped: no error, nothing else cleared
+    store.addDraftFacts('its drills');
+    store.handleMessage(reply('draft_render_failed', { draft_key: key, seq: renders()[0].seq }));
+    assert.equal(store.draft.adding, 'add_facts');
+    assert.equal(store.draft.rendered, null);
+    assert.equal(store.previewError, null);
+});
+
+check('P6: before the server renders it, a rewritten fact highlights new names as accept links them', () => {
+    const page = draftOf(HOST);
+    const names = [{ name: 'The Frostwing Banner', kind: 'item' }, { name: 'bells', kind: 'item' }];
+    const edited = { ...HOST, new_names: names, facts: HOST.facts.map((f, i) => (i === 0 ? { ...f, text: 'It flies under the Frostwing Banner; bells ring.' } : f)) };
+    const fresh = draftFactRows(page, edited)[0].segments.filter((seg) => seg.fresh).map((seg) => seg.text);
+    // any case, as long as it's written with a capital past its article
+    assert.deepEqual(fresh, ['the Frostwing Banner']);
+});
+
+check('P6: For other pages rows show as the server rendered them, once the words match', () => {
+    const row = { target_id: 'vel', target_name: 'Velikoye', text: 'It pays the Boyar Council.' };
+    const linked = [{ text: 'It pays ', ref: null, stub: false }, { text: 'the Boyar Council', ref: null, stub: false, fresh: true, kind: 'lore' }, { text: '.', ref: null, stub: false }];
+    assert.deepEqual(elsewhereSegments(row, 0, [{ index: 0, text: row.text, segments: linked }], []), linked);
+    // other words since: the client's own highlighting
+    const names = [{ name: 'The Boyar Council', kind: 'lore' }];
+    const own = elsewhereSegments({ ...row, text: 'It fears the Boyar Council.' }, 0, [{ index: 0, text: row.text, segments: linked }], names);
+    assert.deepEqual(own.filter((seg) => seg.fresh).map((seg) => seg.text), ['the Boyar Council']);
 });
 
 check('For other pages: a row retargeted, "+ also here"; In, File into this and new names', () => {
@@ -2771,7 +2823,9 @@ check("a draft's kind changed: its facts' categories follow, other pages' don't"
 check("the owner's selections are highlighted in any case (ruling F26)", () => {
     const names = [{ name: 'bells', kind: 'item' }];
     const plain = [{ text: 'The Bells ring; bells sound.', ref: null, stub: false }];
-    assert.deepEqual(freshSegments(plain, names).filter((seg) => seg.fresh).map((seg) => seg.text), ['bells']);
+    // unselected, a lowercase name links only where it's written with a
+    // capital, as accept links it
+    assert.deepEqual(freshSegments(plain, names).filter((seg) => seg.fresh).map((seg) => seg.text), ['Bells']);
     assert.deepEqual(freshSegments(plain, names, ['bells']).filter((seg) => seg.fresh).map((seg) => seg.text), ['Bells', 'bells']);
 });
 

@@ -423,6 +423,7 @@
                     :rows="edited.elsewhere || []"
                     type="create"
                     :new-names="edited.new_names || []"
+                    :rendered="(worlds.draft.rendered || worlds.draft.page).elsewhere || []"
                     :also-here="ownTexts"
                     :exclude="ownIds"
                     @update="edit({ elsewhere: $event })"
