@@ -1254,3 +1254,162 @@ def test_repeat_choices(app, page, fixed_preview):
     expect(_fact(vel, FREEZES)).to_have_count(0)
     expect(_fact(vel, BELLS)).to_have_count(0)
     assert page.console_errors == []
+
+
+# --- "+ Add facts" as a versioned small draft (polish-1, Task 9) ------------
+
+
+def _velikoye(app, page, stem: str):
+    world = _seeded(app, page, stem)
+    page.get_by_test_id("kind-place").click()
+    return world, _open_thing(page, "Velikoye")
+
+
+def _ask_facts(scope, prompt: str):
+    """ "+ Add facts…", `prompt` asked: the fact draft, once it shows."""
+
+    scope.get_by_test_id("add-facts").click()
+    scope.get_by_test_id("add-facts-form").get_by_label("What to add").fill(prompt)
+    scope.get_by_test_id("add-draft").click()
+    found = scope.get_by_test_id("fact-draft")
+    found.get_by_test_id("fact-draft-bar").wait_for(state="visible", timeout=TIMEOUT_MS)
+    return found
+
+
+def _facts_reply(*texts) -> dict:
+    return {"facts": [{"category": "general", "text": text} for text in texts]}
+
+
+def test_add_facts_regenerate_and_versions(app, page, fixed_facts):
+    """ "+ Add facts" on a saved page has a page draft's feature set: the
+    prompt kept in its bar, Regenerate from it as edited, "Version n of
+    m", and each version's ticks kept; Write sends its key."""
+
+    world, thing = _velikoye(app, page, "AddVersions")
+    fixed_facts(_facts_reply("Its walls are white.", "Its market sells furs."))
+    found = _ask_facts(thing, "its walls")
+    rows = found.get_by_test_id("fact-draft-row")
+    expect(rows).to_have_count(2)
+    versions = found.get_by_test_id("fact-draft-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+    rows.nth(1).get_by_role("checkbox").uncheck()
+    expect(found.get_by_test_id("fact-draft-accept")).to_have_text("Write 1")
+    # "Write N" again at the foot of the list
+    expect(found.get_by_test_id("fact-draft-foot")).to_contain_text("Write 1")
+
+    # the prompt, kept and edited in the bar, then Regenerate
+    prompt = found.get_by_test_id("add-prompt").locator("textarea").first
+    expect(prompt).to_have_value("its walls")
+    prompt.fill("its walls at dusk")
+    fixed_facts(_facts_reply("Its walls glow at dusk."))
+    found.get_by_test_id("fact-draft-regenerate").click()
+    expect(versions).to_contain_text("Version 2 of 2")
+    expect(rows).to_have_count(1)
+    expect(rows.nth(0)).to_contain_text("Its walls glow at dusk.")
+    sent = _sent(page, "add_facts")[-1]
+    assert sent["regenerate"] is True
+    assert sent["prompt"] == "its walls at dusk"
+
+    # version 1 again, as the owner left it
+    versions.click()
+    page.get_by_test_id("fact-draft-version").filter(has_text="v1").click()
+    expect(versions).to_contain_text("Version 1 of 2")
+    expect(rows).to_have_count(2)
+    expect(rows.nth(1).get_by_role("checkbox")).not_to_be_checked()
+    expect(rows.nth(0).get_by_role("checkbox")).to_be_checked()
+
+    found.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "accept_facts")
+    assert sent["draft_key"] == f"facts:{world.things['Velikoye']}"
+    assert [f["ticked"] for f in sent["draft"]["facts"]] == [True, False]
+    _fact(thing, "Its walls are white.").wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(thing, "Its market sells furs.")).to_have_count(0)
+    expect(thing.get_by_test_id("fact-draft")).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_add_facts_repeat_keep_new(app, page, fixed_facts):
+    """A drafted fact that repeats one the world holds shows its match
+    under its row with the four choices; Keep new writes it and removes
+    the existing one. (The add-facts ask flags repeats of the page's own
+    facts: `draft_facts` checks against `owners=[thing_id]`.)"""
+
+    _world, thing = _velikoye(app, page, "AddRepeat")
+    again = "The Khorol freezes solid every winter, bank to bank."
+    fixed_facts(_facts_reply(again, "Its market sells furs."))
+    found = _ask_facts(thing, "the river")
+    row = found.get_by_test_id("fact-draft-row").filter(has_text="bank to bank")
+    match = row.get_by_test_id("fact-draft-repeat")
+    expect(match).to_contain_text(FREEZES)
+    expect(match.get_by_test_id("repeat-choice")).to_have_text(
+        ["Keep new", "Keep existing", "Keep both", "Move existing here"]
+    )
+    match.get_by_role("button", name="Keep new").click()
+    expect(row.get_by_role("checkbox")).to_be_checked()
+    expect(match.get_by_test_id("repeat-removing")).to_be_visible()
+    found.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "accept_facts")
+    assert sent["draft"]["facts"][0]["replaces_repeat"] is True
+    _fact(thing, again).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(thing, FREEZES)).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_nested_add_facts_on_draft(app, page, fixed_preview, fixed_facts):
+    """On a draft page, "+ Add facts" is its own small draft nested under
+    Facts: the page draft waits for it (Accept off, with why), and its
+    Write puts only the ticked facts into a new version of the page
+    draft."""
+
+    _seeded(app, page, "Nested")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    bar = draft.get_by_test_id("draft-bar")
+    versions = bar.get_by_test_id("draft-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+    fixed_facts(
+        _facts_reply("It roosts in the bell towers.", "Its captains wear white.")
+    )
+    nested = _ask_facts(draft, "where it sleeps")
+    expect(nested.get_by_test_id("fact-draft-row")).to_have_count(2)
+    # under the Facts heading, indented
+    heading = draft.get_by_test_id("facts-heading").bounding_box()
+    box = nested.bounding_box()
+    assert box["y"] > heading["y"] and box["x"] > heading["x"]
+    accept = bar.get_by_role("button", name="Accept")
+    expect(accept).to_be_disabled()
+    expect(accept).to_have_attribute("title", "write or discard the added facts first")
+
+    nested.get_by_test_id("fact-draft-row").nth(1).get_by_role("checkbox").uncheck()
+    nested.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "write_nested_facts")
+    assert [f["ticked"] for f in sent["draft"]["facts"]] == [True, False]
+    expect(versions).to_contain_text("Version 2 of 2")
+    _draft_fact(draft, "It roosts in the bell towers.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(_draft_fact(draft, "Its captains wear white.")).to_have_count(0)
+    expect(_draft_fact(draft, "It flies at night.")).to_have_count(1)
+    expect(draft.get_by_test_id("fact-draft")).to_have_count(0)
+    expect(accept).to_be_enabled()
+    assert page.console_errors == []
+
+
+def test_add_facts_prompt_box_is_roomy(app, page):
+    """ "+ Add facts"'s prompt is a textarea, two lines tall at least,
+    that grows with what's typed."""
+
+    _world, thing = _velikoye(app, page, "Roomy")
+    thing.get_by_test_id("add-facts").click()
+    field = thing.get_by_test_id("add-facts-form").get_by_test_id("add-prompt")
+    box = field.locator("textarea").first
+    assert box.evaluate("e => e.tagName") == "TEXTAREA"
+    height = box.bounding_box()["height"]
+    assert height >= 40
+    box.fill("its laws\nwho keeps them\nhow they are judged\nwhat they forbid")
+    page.wait_for_function(
+        "([e, h]) => e.getBoundingClientRect().height > h",
+        arg=[box.element_handle(), height],
+        timeout=TIMEOUT_MS,
+    )
+    assert page.console_errors == []

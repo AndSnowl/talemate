@@ -251,7 +251,10 @@
                         <ThingAka />
                     </template>
 
-                    <div class="d-flex align-center mt-4 mb-1">
+                    <!-- "+ Add facts…"'s form and draft wrap onto their own
+                         line under the heading (a draft page's nested draft
+                         indented) -->
+                    <div class="d-flex align-center flex-wrap mt-4 mb-1" data-testid="facts-heading">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
                         <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
@@ -264,11 +267,6 @@
                     </div>
 
                     <template v-if="draft">
-                        <div v-if="worlds.nestedDraft?.pending" class="d-flex align-center ga-2 text-caption text-muted mb-1" data-testid="draft-adding">
-                            <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
-                            Drafting more facts…
-                            <v-btn variant="text" size="small" data-testid="draft-adding-discard" @click="worlds.discardSmall(worlds.nestedDraft.key)">Discard</v-btn>
-                        </div>
                         <!-- a stub's facts so far, written already -->
                         <div v-for="fact in thing.facts" :key="fact.fact_id" class="stub-fact text-muted" data-testid="draft-stub-fact">
                             <LinkedText :segments="fact.segments" :text="fact.rendered" />

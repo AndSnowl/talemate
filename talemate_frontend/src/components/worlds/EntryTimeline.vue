@@ -1,6 +1,6 @@
 <template>
     <div class="entry-timeline" data-testid="entry-timeline">
-        <div class="d-flex align-center ga-2">
+        <div class="d-flex align-center flex-wrap ga-2">
             <span class="text-overline text-muted">Timeline</span>
             <v-menu location="bottom start">
                 <template #activator="{ props }">
@@ -68,7 +68,8 @@ import LinkedText from './LinkedText.vue';
 // running lines that say much the same with different years are flagged
 // ("disagrees with 217"); the flag's menu picks one, ending or removing
 // the other (`pick_date`). The `actions` slot holds the page's "+ Add
-// event…", the default slot its draft.
+// event…" (its form and draft wrap onto their own line under the
+// heading); the default slot anything to show above the lines.
 export default {
     name: 'EntryTimeline',
     components: { LinkedText },
