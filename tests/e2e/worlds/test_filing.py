@@ -917,6 +917,56 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     assert page.console_errors == []
 
 
+def test_added_facts_bring_new_names(app, page, fixed_facts):
+    """Ruling H8: "+ Add facts" shows the names its facts bring as ticked
+    New names rows (kind, tag); Accept makes stubs of the ticked ones and
+    links them, an unticked one staying plain words."""
+
+    world, thing = _open_velikoye(page, app, _world_name("Names"))
+    fixed_facts(
+        {
+            "facts": [
+                {"category": "general", "text": "Tsar Ivan III rebuilt its walls."},
+                {"category": "general", "text": "Tsar Alexei II first fortified it."},
+            ],
+            "names": [
+                {"name": "Tsar Ivan III", "kind": "character", "tag": "ruler"},
+                {"name": "Tsar Alexei II", "kind": "character", "tag": "ruler"},
+            ],
+        }
+    )
+    thing.get_by_test_id("add-facts").click()
+    thing.get_by_test_id("add-facts-form").get_by_label("What to add").fill("its Tsars")
+    thing.get_by_test_id("add-draft").click()
+    draft = thing.get_by_test_id("fact-draft")
+    rows = draft.get_by_test_id("new-name-row")
+    expect(rows).to_have_count(2)
+    expect(rows.nth(0)).to_contain_text("Tsar Ivan III")
+    expect(rows.nth(0).get_by_test_id("new-name-tag").locator("input")).to_have_value(
+        "ruler"
+    )
+    # ticked, a name shows as the stub it will be; unticked, plain
+    facts = draft.get_by_test_id("fact-draft-row")
+    expect(facts.nth(1).get_by_test_id("linked-new")).to_have_text("Tsar Alexei II")
+    rows.nth(1).get_by_test_id("new-name-tick").get_by_role("checkbox").uncheck()
+    expect(rows.nth(1).get_by_test_id("new-name-plain")).to_be_visible()
+    expect(facts.nth(1).get_by_test_id("linked-new")).to_have_count(0)
+    expect(facts.nth(0).get_by_test_id("linked-new")).to_have_text("Tsar Ivan III")
+    draft.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "accept_facts")
+    assert [n["ticked"] for n in sent["draft"]["new_names"]] == [True, False]
+    _fact(thing, "Tsar Ivan III rebuilt its walls.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(
+        _fact(thing, "Tsar Ivan III rebuilt its walls.").get_by_test_id("linked-stub")
+    ).to_have_text("Tsar Ivan III")
+    expect(
+        _fact(thing, "Tsar Alexei II first fortified it.").get_by_test_id("linked-stub")
+    ).to_have_count(0)
+    assert page.console_errors == []
+
+
 def test_tags_rename_merge(app, page):
     things = [
         TSARDOM,

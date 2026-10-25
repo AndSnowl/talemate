@@ -6,6 +6,10 @@ A few more facts for an entry the world has ("+ Add facts...", "+ Add
 event...", `worldplay.facts.draft_facts`). New wording, unprobed (Filing
 Task 12 measures it). `facts` are the entry's own facts, rendered; `year`
 is set for an event, and every fact is dated to it.
+
+The reply also gives the "names" its facts use (ruling H8): the example's
+"names" list and the two names rules are create-thing's generic branch's,
+verbatim (docs/superpowers/probes/2026-10-25-add-facts-names.md).
 -#}
 <|SECTION:TASK|>
 You add a few facts to an entry in a fantasy world's records, from the owner's short prompt. Write only what the prompt asks for; keep everything the owner wrote.
@@ -37,7 +41,10 @@ Rules:
 <|CLOSE_SECTION|>
 <|SECTION:FORMAT|>
 Reply with only one JSON object, shaped exactly like this example:
-{"facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence."}]}
+{"facts": [{"category": "{{ categories[0] }}", "text": "One claim, in a full sentence."}], "names": [{"name": "...", "kind": "place", "tag": "...", "in": null, "aka": []}]}
+
+- "names": after the facts, every proper name your facts use, other than this {{ kind }}'s own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {"name", "kind", "tag", "in", "aka"}: "name" in full, as your facts write it; "kind" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); "tag" what it is, as for the {{ kind }} (never "proper" or "common": those are only for other names); "in" the name of the entry it belongs in (this {{ kind }}, an entry listed above, or another of your names), or null; "aka" any other names your facts use for the same thing. Proper names only: never a description such as "the postmaster", "a war" or "his mother", nor a title on its own such as "the Tsar" or "the High Bishop", nor a people's adjective such as "Moscavian" on its own -- but "Yelena" in "his mother Yelena" is a name. An empty list is fine.
+- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the "names": it stays a fact of the {{ kind }}.
 
 No commentary, no markdown fences, just the JSON object.
 <|CLOSE_SECTION|>

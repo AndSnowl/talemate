@@ -240,10 +240,14 @@ through `signal_operation_failed` (an `operation_done` envelope with
 - Prompt additions: `add_facts {thing_id, prompt}` and `add_event
   {thing_id, prompt, year}` (`worldplay.facts`) run in the background and
   answer `{thing_id, draft, facts}` (or `add_facts_failed` /
-  `add_event_failed`), writing nothing; `accept_facts {draft, at}` writes
-  the ticked ones in one revision and answers with the entry plus
-  `fact_ids`. With `draft_key` (a draft page) the facts join the draft's
-  current version and the draft answers; a result that comes after
+  `add_event_failed`), writing nothing; the draft's `new_names` are the
+  names its facts use that the world hasn't (ruling H8: ticked rows, each
+  `{name, kind, tag, filing, same_as, same_target_id, ticked}`).
+  `accept_facts {draft, at}` writes the ticked facts, and a stub for each
+  ticked new name they still use, linked, in one revision and answers
+  with the entry plus `fact_ids`. With `draft_key` (a draft page) the
+  facts join the draft's current version, their new names its own New
+  names, and the draft answers; a result that comes after
   another version became current joins none and answers
   `add_facts_failed`/`add_event_failed` with `{draft_key, stale: true}`.
   `TALEMATE_TEST_FIXED_FACTS` (browser tests) names a file
@@ -421,6 +425,7 @@ from talemate.worldplay.create import (
 from talemate.worldplay.create import _new_names as listed_stub_names
 from talemate.worldplay.decide import Verdict
 from talemate.worldplay.facts import (
+    DraftAddition,
     FactDraft,
     accept_facts,
     draft_facts,
@@ -3750,8 +3755,8 @@ class WorldsPlugin(Plugin):
                 action,
                 f"{action}_failed",
                 "Error drafting facts",
-                success_data=lambda facts: self._draft_added(
-                    world, key, preview, facts
+                success_data=lambda added: self._draft_added(
+                    world, key, preview, added
                 ),
                 failure_data={"draft_key": key},
             )
@@ -3803,9 +3808,12 @@ class WorldsPlugin(Plugin):
         return versions[self._current.get(key, len(versions) - 1)]
 
     def _draft_added(
-        self, world: World, key: str, preview: CreatePreview, facts: list[PreviewFact]
+        self, world: World, key: str, preview: CreatePreview, added: DraftAddition
     ) -> dict:
-        preview.facts.extend(facts)
+        # the facts, and the new names they bring, join the draft's own
+        # (ruling H8)
+        preview.facts.extend(added.facts)
+        preview.new_names.extend(added.new_names)
         return self._draft_out(world, key)
 
     def _stub_drafted(self, thing_id: str) -> bool:

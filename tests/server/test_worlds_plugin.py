@@ -5273,6 +5273,63 @@ async def test_add_facts(plugin, client):
     assert "It meets after moonrise." not in texts
 
 
+async def test_added_facts_make_stubs_for_the_names_they_bring(plugin, client):
+    """Ruling H8: "+ Add facts" lists the new names its facts use as
+    ticked rows (kind, tag); accept makes their stubs and links them, in
+    the facts' one revision. An unticked row makes none."""
+
+    s = await _open_filing_world(plugin)
+    reply = json.dumps(
+        {
+            "facts": [
+                {
+                    "category": "general",
+                    "text": "Tsar Ivan III was crowned in Velikoye in 998.",
+                },
+                {"category": "general", "text": "Tsar Alexei II was his father."},
+            ],
+            "names": [
+                {
+                    "name": "Tsar Ivan III",
+                    "kind": "character",
+                    "tag": "ruler",
+                    "in": "Tsardom of Moscavia",
+                },
+                {"name": "Tsar Alexei II", "kind": "character", "tag": "ruler"},
+                {"name": "the Tsar", "kind": "office", "tag": "title"},
+            ],
+        }
+    )
+    async with MockClientContext():
+        client_responses.get().append(reply)
+        await _act(plugin, "add_facts", thing_id=s.tsardom, prompt="the Tsar")
+        await _drain(plugin)
+    assert '"names": [{"name": "..."' in str(client.prompt_history[-1]["prompt"])
+    draft = _last(plugin, "add_facts")["data"]["draft"]
+    assert [
+        (n["name"], n["kind"], n["tag"], n["ticked"]) for n in draft["new_names"]
+    ] == [
+        ("Tsar Ivan III", "character", "ruler", True),
+        ("Tsar Alexei II", "character", "ruler", True),
+    ]
+    head = s.world.head_rev()
+    draft["new_names"][1]["ticked"] = False
+    await _act(plugin, "accept_facts", draft=draft)
+    page = _last(plugin, "accept_facts")["data"]
+    assert s.world.head_rev() == head + 1
+    view = s.world.view()
+    (ivan,) = [t for t in view.things() if view.name_of(t.id) == "Tsar Ivan III"]
+    assert ivan.is_stub and ivan.fields["tag"] == "ruler"
+    assert [f["target"] for f in ivan.fields["filings"]] == [s.tsardom]
+    assert not [t for t in view.things() if view.name_of(t.id) == "Tsar Alexei II"]
+    texts = [f["text"] for f in page["facts"]]
+    assert (
+        f"{ref(ivan.id, 'Tsar Ivan III')} was crowned in "
+        f"{ref(s.velikoye, 'Velikoye')} in 998." in texts
+    )
+    assert "Tsar Alexei II was his father." in texts
+
+
 async def test_add_event(plugin, client):
     s = await _open_filing_world(plugin)
     reply = json.dumps(
@@ -6751,6 +6808,57 @@ async def test_add_facts_and_event_on_a_draft(plugin, client):
     assert {"It drills at dawn.", "It was raised."} <= {
         f["text"] for f in host["facts"]
     }
+
+
+async def test_added_facts_on_a_draft_join_its_new_names(plugin, client):
+    """Ruling H8 on a draft: the names "+ Add facts" brings join the
+    draft's own New names (shown fresh), writing nothing; the draft's
+    accept makes the stubs."""
+
+    s = await _open_filing_world(plugin)
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Frostwing Host", "It flies at night."),
+        prompt="a host",
+    )
+    head = s.world.head_rev()
+    key = draft["draft_key"]
+    async with MockClientContext():
+        client_responses.get().append(
+            json.dumps(
+                {
+                    "facts": [
+                        {
+                            "category": "general",
+                            "text": "It drills on the Field of Talons.",
+                        }
+                    ],
+                    "names": [
+                        {"name": "Field of Talons", "kind": "place", "tag": "field"}
+                    ],
+                }
+            )
+        )
+        await _act(plugin, "add_facts", draft_key=key, prompt="its drills")
+        await _drain(plugin)
+    added = _last(plugin, "add_facts")["data"]
+    assert [n["name"] for n in added["preview"]["new_names"]] == ["Field of Talons"]
+    fact = next(f for f in added["facts"] if "drills" in f["text"])
+    assert any(
+        run.get("fresh") and run["text"] == "Field of Talons"
+        for run in fact["segments"]
+    )
+    assert s.world.head_rev() == head
+
+    await _act(plugin, "accept_preview", preview=added["preview"], draft_key=key)
+    host = _last(plugin, "accept_preview")["data"]
+    view = s.world.view()
+    (field,) = [t for t in view.things() if view.name_of(t.id) == "Field of Talons"]
+    assert field.is_stub
+    assert f"It drills on the {ref(field.id, 'Field of Talons')}." in [
+        f["text"] for f in host["facts"]
+    ]
 
 
 async def test_draft_facts_for_a_version_left_join_none(plugin, client):

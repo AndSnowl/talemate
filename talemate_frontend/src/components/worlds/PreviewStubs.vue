@@ -1,9 +1,19 @@
 <template>
     <div v-if="rows.length" class="mt-3" data-testid="draft-new-names">
-        <div class="heading">New names <span class="text-muted">· in this draft: stubs once it's accepted</span></div>
+        <div class="heading">New names <span class="text-muted">· {{ note }}</span></div>
         <div v-for="row in rows" :key="row.name" class="stub-row d-flex align-center flex-wrap ga-2" data-testid="new-name-row">
-            <span class="stub-name">{{ row.name }}</span>
-            <template v-if="row.same_target_id">
+            <v-checkbox-btn
+                v-if="tickable"
+                :model-value="row.ticked !== false"
+                density="compact"
+                class="flex-grow-0"
+                data-testid="new-name-tick"
+                :aria-label="'Make a stub of ' + row.name"
+                @update:model-value="change(row, { ticked: $event })"
+            ></v-checkbox-btn>
+            <span class="stub-name" :class="{ dropped: tickable && row.ticked === false }">{{ row.name }}</span>
+            <span v-if="tickable && row.ticked === false" class="text-caption text-muted" data-testid="new-name-plain">no stub: its words stay plain</span>
+            <template v-else-if="row.same_target_id">
                 <span class="text-caption text-muted" data-testid="new-name-same">same as <b>{{ nameOf(row.same_target_id) }}</b>: no stub, it links that entry</span>
                 <v-btn icon="mdi-close" variant="text" size="x-small" density="comfortable" :aria-label="'Not the same: ' + row.name" @click="change(row, { same_target_id: null })"></v-btn>
             </template>
@@ -71,12 +81,16 @@ import SameThingAsk from './SameThingAsk.vue';
 // the world may have, or a search: then it links that entry and no stub is
 // made), "in…" (where its stub is filed: a search, or "this entry" as the
 // model said) and rename, greyed out: re-rolling a name comes later, with
-// languages. A change emits `change(name, changes)`.
+// languages. A change emits `change(name, changes)`. `tickable` (a "+ Add
+// facts…" draft, ruling H8) gives each row a tick, `ticked: false` making
+// no stub; `note` says when the stubs are made.
 export default {
     name: 'PreviewStubs',
     components: { ReferenceMenu, SameThingAsk },
     props: {
         rows: { type: Array, required: true },
+        tickable: { type: Boolean, default: false },
+        note: { type: String, default: "in this draft: stubs once it's accepted" },
     },
     emits: ['change'],
     setup() {
@@ -147,6 +161,11 @@ export default {
     font-weight: 600;
     color: rgb(var(--v-theme-foreign));
     text-decoration: underline dashed;
+}
+
+.stub-name.dropped {
+    color: rgb(var(--v-theme-muted));
+    text-decoration: line-through;
 }
 
 .kind {

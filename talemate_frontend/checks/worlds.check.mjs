@@ -103,6 +103,7 @@ import {
     removeFiling,
     draftFactRows,
     elsewhereSegments,
+    factDraftSegments,
     freshSegments,
     holdFact,
     moveFactTo,
@@ -3013,6 +3014,30 @@ check('a Connected row moved: its tag, or the group its filing shows under', () 
     // where it is: nothing
     assert.equal(rowMove({ id: 'vasha', show_under: 'native' }, 'native', 'native'), null);
     assert.equal(rowMove({ id: 'vasha' }, 'river', 'river'), null);
+});
+
+check('H8: a fact draft\'s new names: ticked rows, edited and sent back; only ticked ones show fresh', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    store.openThing('v', dateOf(1000));
+    store.addFacts('the current Tsar');
+    const names = [
+        { name: 'Tsar Ivan III', kind: 'character', tag: 'ruler', written: [], aka: [], ticked: true },
+        { name: 'Tsar Alexei II', kind: 'character', tag: 'ruler', written: [], aka: [], ticked: true },
+    ];
+    const text = 'Tsar Ivan III succeeded Tsar Alexei II.';
+    const draft = { thing_id: 'v', prompt: 'the current Tsar', year: null, facts: [{ category: 'general', text, ticked: true }], new_names: names };
+    const facts = [{ index: 0, rendered: text, segments: [{ text, ref: null, stub: false }], ticked: true }];
+    store.handleMessage(reply('add_facts', { thing_id: 'v', draft, facts }));
+    store.changeFactDraftName('tsar alexei ii', { ticked: false });
+    store.changeFactDraftName('Tsar Ivan III', { tag: 'tsar', kind: 'character' });
+    assert.deepEqual(store.factDraft.draft.new_names.map((n) => [n.name, n.tag, n.ticked]), [['Tsar Ivan III', 'tsar', true], ['Tsar Alexei II', 'ruler', false]]);
+    const shown = factDraftSegments(store.factDraft.facts[0].segments, store.factDraft.draft.new_names);
+    assert.deepEqual(shown.filter((seg) => seg.fresh).map((seg) => seg.text), ['Tsar Ivan III']);
+    store.acceptFacts();
+    assert.deepEqual(sent.at(-1).draft.new_names.map((n) => [n.name, n.ticked]), [['Tsar Ivan III', true], ['Tsar Alexei II', false]]);
+    // a draft with no names (an older reply) shows its facts as they are
+    assert.deepEqual(factDraftSegments(facts[0].segments, undefined), facts[0].segments);
 });
 
 check('H5: a row moved into a group that exists through show_under shows under it, never retagged', () => {

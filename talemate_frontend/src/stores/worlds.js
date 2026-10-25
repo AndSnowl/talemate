@@ -98,7 +98,9 @@
 // and "+ Add" (`groupAdd`, then `acceptGroupAdd` or `discardGroupAdd`)
 // are kept per page and tag (`groupKey`) in `synopses` and `groupAdds`.
 // "+ Add facts…" and "+ Add event…" (`addFacts`, `addEvent`) draft a few
-// facts into `factDraft`, which `acceptFacts` writes as the owner left it.
+// facts into `factDraft`, with the new names they bring (ticked rows,
+// `changeFactDraftName`, ruling H8), which `acceptFacts` writes as the
+// owner left it.
 //
 // History (the thing page's back arrow): `section` is the World tab's
 // open section (a kind's list, or 'stubs'), and a page is `{section,
@@ -159,7 +161,7 @@ import { toRaw } from 'vue';
 
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
-import { acceptable, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
+import { acceptable, changeNewName, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
 
 const ROUTER = 'worlds';
@@ -1486,6 +1488,17 @@ export const useWorldsStore = defineStore('worlds', {
                 draft: { ...found.draft, facts },
                 facts: found.facts.map((row) => (row.index === index ? { ...row, ticked } : row)),
             };
+        },
+
+        // a fact draft's new name `name`: its tick, kind, tag, "same as…"
+        // or "in…" (`change`), sent back with the draft (ruling H8)
+        changeFactDraftName(name, change) {
+            const found = this.factDraft;
+            if (!found?.draft) {
+                return;
+            }
+            const draft = { ...found.draft, ...changeNewName(found.draft, name, change) };
+            this.factDraft = { ...found, draft };
         },
 
         discardFacts() {

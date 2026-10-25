@@ -122,6 +122,13 @@ export function freshSegments(segments, newNames = [], selected = []) {
     return (segments || []).flatMap((segment) => (segment.ref || segment.self || !fresh.length ? [segment] : previewSegments(segment.text, fresh)));
 }
 
+// A "+ Add facts…" draft fact's segments (as the server linked it) with
+// the draft's ticked new names (`newNames`, ruling H8) marked `fresh`:
+// those become stubs when it's written; an unticked one stays plain.
+export function factDraftSegments(segments, newNames = []) {
+    return freshSegments(segments, (newNames || []).filter((row) => row.ticked !== false));
+}
+
 // A "For other pages" row's segments: as the server rendered it
 // (`rendered`, the draft's `elsewhere`: `[{index, text, segments}]`) when
 // it rendered these words, else its new names highlighted here

@@ -63,11 +63,17 @@
                         :aria-label="'Write ' + row.rendered"
                         @update:model-value="worlds.tickDraftFact(row.index, $event)"
                     ></v-checkbox-btn>
-                    <span class="flex-grow-1" :class="{ dropped: row.ticked === false }"><LinkedText :segments="row.segments" :text="row.rendered" /></span>
+                    <span class="flex-grow-1" :class="{ dropped: row.ticked === false }"><LinkedText :segments="segmentsOf(row)" :text="row.rendered" /></span>
                     <v-chip size="x-small" label variant="tonal" color="muted">{{ row.category }}</v-chip>
                     <span v-if="row.repeat_of" class="text-caption text-muted" data-testid="fact-draft-repeat">≈ already {{ row.repeat_of.owner_name ? 'on ' + row.repeat_of.owner_name : 'in the world' }}</span>
                 </div>
                 <div v-if="!draft.facts.length" class="text-caption text-muted">Nothing new from that.</div>
+                <PreviewStubs
+                    :rows="draft.draft?.new_names || []"
+                    tickable
+                    note="ticked: stubs once written"
+                    @change="(name, change) => worlds.changeFactDraftName(name, change)"
+                />
                 <div class="d-flex ga-2 mt-2">
                     <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!ticked" :loading="!!draft.accepting" data-testid="fact-draft-accept" @click="worlds.acceptFacts()">Write {{ ticked }}</v-btn>
                     <v-btn variant="outlined" size="small" :disabled="!!draft.accepting" data-testid="fact-draft-discard" @click="worlds.discardFacts()">Discard</v-btn>
@@ -81,18 +87,23 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { dateParts } from './worldDates.js';
 import LinkedText from './LinkedText.vue';
+import PreviewStubs from './PreviewStubs.vue';
+import { factDraftSegments } from './draftPage.js';
 
 // "+ Add facts…" and (`event`) "+ Add event…" on the entry page: a prompt
 // (and an event's year) asks for a few facts for the entry (`add_facts`,
 // `add_event`: every fact of an event dated its year), which come back as
 // a small draft to tick (`worlds.factDraft`); Accept writes the ticked
 // ones (`accept_facts`), Discard drops them. Nothing is written before.
+// The names the facts bring that the world hasn't are "New names" rows
+// (`PreviewStubs`, ticked: a stub each when written, ruling H8), and show
+// in the stub colour while ticked.
 // On a draft page (`onDraft`) the facts join the draft itself
 // (`addDraftFacts`: the draft's current version, on the server), to tick
 // there with the rest; one addition at a time, the buttons off meanwhile.
 export default {
     name: 'EntryAddFacts',
-    components: { LinkedText },
+    components: { LinkedText, PreviewStubs },
     props: {
         thing: { type: Object, required: true },
         event: { type: Boolean, default: false },
@@ -136,6 +147,9 @@ export default {
         },
     },
     methods: {
+        segmentsOf(row) {
+            return factDraftSegments(row.segments, this.draft?.draft?.new_names);
+        },
         start() {
             const now = this.thing.at || this.worlds.currentWorld?.now;
             this.year = this.event && now ? dateParts(now).year : null;
