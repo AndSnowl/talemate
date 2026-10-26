@@ -236,6 +236,12 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     orc.get_by_role("button", name="Back").click()
     page.get_by_test_id("kind-species").click()
     human = _open_thing(page, "Human")
+    # the species page's own content width and Description column, taken
+    # before the race box exists so there's only one match
+    content_width = human.bounding_box()["width"]
+    species_description_x = human.get_by_text(
+        "description (generated)", exact=True
+    ).bounding_box()["x"]
     human.get_by_role("button", name="New race").click()
     race_box = human.get_by_test_id("create-box")
     assert "Race of Human" in race_box.inner_text()
@@ -252,6 +258,19 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     race_preview.get_by_text("Tall hill people.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
+
+    # the race draft spans the species page's content width, and its
+    # Description column lines up under the species page's own (Races and
+    # Mixes sit below both columns, at the entry's full width, not in the
+    # left column alone)
+    draft_width = race_box.bounding_box()["width"]
+    assert abs(content_width - draft_width) <= 2
+
+    draft_description_x = race_preview.get_by_text(
+        "description (generated)", exact=True
+    ).bounding_box()["x"]
+    assert abs(species_description_x - draft_description_x) <= 2
+
     race_preview.get_by_test_id("draft-bar").get_by_role(
         "button", name="Accept"
     ).click()

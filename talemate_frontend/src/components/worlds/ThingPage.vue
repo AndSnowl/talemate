@@ -390,7 +390,6 @@
                             @save="saveForm"
                             @cancel="form = null"
                         />
-                        <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
                         <NamedStubs :stubs="thing.named_stubs || []" />
                     </template>
                 </v-col>
@@ -442,6 +441,11 @@
                     </template>
                 </v-col>
             </v-row>
+
+            <!-- a species' Races and Mixes, below the two columns at the
+                 entry's full width (so a race or mix draft gets the same
+                 width and two-column layout as any entry page) -->
+            <HeritageSections v-if="!draft && thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
 
             <template v-if="draft">
                 <!-- 4. For other pages -->
