@@ -154,6 +154,7 @@ from talemate.world.filing import (
     check_filings,
     filed_index,
     filings_of,
+    show_under_holds,
     sits_in,
     tag_of,
     tags_in_use,
@@ -167,6 +168,7 @@ from talemate.world.kinds import (
     get_kind,
     kinds_can_be_one,
     moved_category,
+    normalise_tag,
     validate_field,
 )
 from talemate.world.refs import parse_refs, ref, scrub_emphasis
@@ -407,6 +409,9 @@ class PreviewFiling(BaseModel):
     # a person's part of the target it belongs in, kept from the owner's
     within: str | None = None
     exceptions: list[PreviewException] = Field(default_factory=list)
+    # the group it shows under on the target's page (a tag), written at
+    # accept only where it holds then (`show_under_holds`)
+    show_under: str | None = None
     ticked: bool = False
 
     @model_validator(mode="after")
@@ -3982,6 +3987,16 @@ def _write_entry_filings(
                 linked_text(exception.text), target, row.target_name, exception
             )
             exception_ids.append(rev.add_fact(thing_id, "ties", text, origin=origin))
+        show_under = normalise_tag(row.show_under or "") or None
+        if show_under is not None and not show_under_holds(
+            world.view(), target, show_under
+        ):
+            notes.append(
+                f'shows under "{show_under}" isn\'t a group on'
+                f" {world.view().name_of(target) or row.target_name},"
+                " so it shows under its own tag"
+            )
+            show_under = None
         filings.append(
             Filing(
                 target=target,
@@ -3990,6 +4005,7 @@ def _write_entry_filings(
                 # a part that was the folded stub is the filled one
                 within=redirect.get(row.within, row.within) if row.within else None,
                 exceptions=exception_ids,
+                show_under=show_under,
             )
         )
     write_filings(rev, world, thing_id, filings, notes)

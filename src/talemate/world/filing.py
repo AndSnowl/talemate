@@ -510,6 +510,16 @@ def tags_in_use(view: WorldView, *, show_under: bool = True) -> list[tuple[str, 
     return sorted(counts.items(), key=lambda item: (-item[1], item[0]))
 
 
+def show_under_holds(view: WorldView, target_id: str, tag: str) -> bool:
+    """Whether a filing into `target_id` can show under `tag` (already
+    normalised): one of the target's groups (`connected`), or a tag the
+    view's entries use (`tags_in_use`)."""
+
+    if any(group.tag == tag for group in connected(view, target_id)):
+        return True
+    return any(used == tag for used, _ in tags_in_use(view))
+
+
 def roles_in_use(view: WorldView) -> list[tuple[str, int]]:
     """Every role the view's entries' filings carry (stripped), with how
     many filings carry it, most used first, then by role: the role
