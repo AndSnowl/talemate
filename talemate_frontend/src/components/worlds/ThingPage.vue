@@ -466,6 +466,7 @@
                  width and two-column layout as any entry page -->
             <CreateBox
                 v-if="!draft && thing.kind === 'species' && heritageCreating"
+                class="mt-4"
                 :kind="heritageCreating"
                 :preset="heritagePreset"
                 cancellable
@@ -476,7 +477,7 @@
                  stubs, moved below the draft: a second row, its own
                  left column the same width as the main row's, so "+ New
                  mix" stays by its heading instead of the full width -->
-            <v-row v-if="heritageTailBelow">
+            <v-row v-if="heritageTailBelow" class="mt-4">
                 <v-col cols="12" md="6">
                     <HeritageSections
                         :species-id="thing.id"
