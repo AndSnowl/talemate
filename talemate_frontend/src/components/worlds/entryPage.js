@@ -17,8 +17,8 @@ export const OTHER_HEADING = 'Other';
 // The other names a page's (or a draft's) header lists beside its name
 // (final review M8: the spec's header shows "the other names"): every
 // other name but the everyday one, which reads "usually called …"
-// instead, each with its index into `aka` (a draft's can be removed there
-// before accept: accepted, an other name becomes a link word).
+// instead, each with its index into `aka` (read-only: both edit them
+// under Other names, `ThingAka`).
 export function headerNames(aka) {
     return (aka || []).flatMap((entry, index) => (
         entry && !entry.everyday && String(entry.name ?? '').trim()

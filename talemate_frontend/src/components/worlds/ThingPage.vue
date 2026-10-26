@@ -73,7 +73,7 @@
                 <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
                 <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
-                <!-- its other names (a draft's can be removed before accept) -->
+                <!-- its other names (edited under Other names) -->
                 <span v-if="otherNames.length" class="d-inline-flex align-center flex-wrap ga-1" data-testid="thing-other-names">
                     <span class="text-caption text-muted">also</span>
                     <v-chip
@@ -82,10 +82,7 @@
                         size="x-small"
                         label
                         variant="outlined"
-                        :closable="draft"
-                        :close-label="'Remove other name ' + other.name"
                         data-testid="thing-other-name"
-                        @click:close="removeDraftName(other.index)"
                     >{{ other.name }}</v-chip>
                 </span>
                 <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
@@ -256,9 +253,23 @@
                             </v-btn-toggle>
                             <span class="text-caption text-muted">{{ existenceNote }}</span>
                         </div>
-                        <ThingNumbers v-if="isHeritage" />
-                        <ThingAka />
                     </template>
+                    <!-- a page's or a draft's: the page writes, a draft keeps -->
+                    <ThingNumbers
+                        v-if="isHeritage"
+                        :key="'numbers-' + editorKey"
+                        :fields="numberFields"
+                        :numbers="thing.numbers"
+                        :busy="editorBusy"
+                        @set="setNumber"
+                    />
+                    <ThingAka
+                        :key="'aka-' + editorKey"
+                        :aka="akaList"
+                        :main-name="thing.name"
+                        :busy="editorBusy"
+                        @save="saveAka"
+                    />
 
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
                          line under the heading (a draft page's nested draft
@@ -510,7 +521,7 @@
 </template>
 
 <script>
-import { akaRemoved, countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
+import { countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, STUB_KINDS, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
 import { headerNames } from './entryPage.js';
@@ -531,6 +542,8 @@ import {
     removeFiling,
     repeatChoice,
     retarget,
+    setDraftAka,
+    setDraftNumber,
     settleRepeat,
     tickFact,
     tickFileInto,
@@ -591,6 +604,11 @@ const FIELD_LABELS = {
     parents: 'Parents',
     origin: 'Origin',
 };
+
+// what a draft without own fields, or a thing without other names, passes
+// (one each: a new one every time would read as a change)
+const NO_FIELDS = Object.freeze({});
+const NO_AKA = Object.freeze([]);
 
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'override_fact'];
 
@@ -663,9 +681,12 @@ function cut(text, length = 28) {
 // (`PreviewStubs`) and File into this, with Accept and Discard again at
 // their foot. While a nested "+ Add facts" draft is out or held
 // (`draftLocked`), every way to accept it waits, "Fill the stub …
-// instead" too. What the page alone has (the as-of
-// date, the timeline strip, other names, numbers, prose regeneration,
-// merge and delete) is left out.
+// instead" too. A heritage draft's numbers and its other names are the
+// page's editors (`ThingNumbers`, `ThingAka`), kept in the draft
+// (`setDraftNumber`, `setDraftAka`); the header lists its other names
+// read-only, as the page's does. What the page alone has (the as-of
+// date, the timeline strip, prose regeneration, merge and delete) is
+// left out.
 export default {
     name: 'ThingPage',
     components: {
@@ -767,6 +788,7 @@ export default {
                 tag: edited.tag,
                 hint: edited.hint,
                 aka: edited.aka || [],
+                numbers: draft.rendered?.numbers || page.numbers,
                 in: [...kept, ...own],
                 facts: (page.facts || []).filter((fact) => !fact.draft),
                 inherited: [],
@@ -890,6 +912,21 @@ export default {
         },
         otherNames() {
             return headerNames(this.thing?.aka);
+        },
+        // what the numbers and other names editors show: a draft's own
+        // fields are its copy's (`thing.numbers` resolved as rendered)
+        numberFields() {
+            return (this.draft ? this.edited?.fields : this.thing?.fields) || NO_FIELDS;
+        },
+        akaList() {
+            return this.thing?.aka || NO_AKA;
+        },
+        editorBusy() {
+            return this.draft ? this.draftBusy : !!this.worlds.pending.set_field;
+        },
+        // they start over on another thing, or another version of the draft
+        editorKey() {
+            return this.draft ? 'draft-' + (this.worlds.draft?.version ?? '') : this.thing?.id;
         },
         stubOfPage() {
             const thing = this.thing;
@@ -1036,10 +1073,20 @@ export default {
         edit(changes) {
             this.worlds.editDraft(changes);
         },
-        // a draft's other name removed before accept (accepted, it'd be
-        // a link word)
-        removeDraftName(index) {
-            this.edit({ aka: akaRemoved(this.edited.aka || [], index) });
+        // numbers and other names: the page writes them, a draft keeps them
+        setNumber(field, value) {
+            if (this.draft) {
+                this.edit(setDraftNumber(this.edited, field, value));
+            } else {
+                this.worlds.setField(field, value);
+            }
+        },
+        saveAka(aka) {
+            if (this.draft) {
+                this.edit(setDraftAka(this.edited, aka));
+            } else {
+                this.worlds.setAka(aka);
+            }
         },
         setDraftKind(kind) {
             if (kind && kind !== this.edited.kind) {

@@ -172,7 +172,8 @@ def _select(page, locator, words: str, nth: int = 0) -> None:
 
 def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_preview):
     """Final review M8: the header lists the other names, on a draft and
-    on the accepted page; on the draft one can be removed before accept
+    on the accepted page, read-only as on the page; on the draft one is
+    removed before accept in Other names, the saved page's editor
     (accepted, an other name becomes a link word)."""
 
     _seeded(app, page, "Names")
@@ -189,7 +190,15 @@ def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_pre
     names = draft.get_by_test_id("thing-other-name")
     expect(names).to_have_count(2)
     expect(draft.get_by_test_id("thing-other-names")).to_contain_text("the Winged")
-    draft.get_by_role("button", name="Remove other name the Winged").click()
+    expect(
+        draft.get_by_test_id("thing-other-names").get_by_role("button")
+    ).to_have_count(0)
+    winged = (
+        draft.get_by_test_id("aka-editor")
+        .get_by_test_id("aka-row")
+        .filter(has_text="the Winged")
+    )
+    winged.get_by_role("button", name="Remove other name").click()
     expect(names).to_have_count(1)
     draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     sent = _wait_sent(page, "accept_preview")
@@ -199,6 +208,37 @@ def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_pre
         state="visible", timeout=TIMEOUT_MS
     )
     expect(thing.get_by_test_id("thing-other-name")).to_have_text(["the Frostwings"])
+
+
+def test_species_draft_edits_numbers(app, page, fixed_preview):
+    """A species draft has the saved page's numbers: its Adult at is set
+    before Accept, and written on it."""
+
+    _seeded(app, page, "Numbers")
+    fixed_preview(
+        {
+            "name": "Frost Owls",
+            "facts": [{"category": "physical", "text": "Frost Owls are white."}],
+            "prose": {"description": "White owl-folk."},
+        }
+    )
+    draft = _draft(page, "species", "Owl-folk of the frozen north.")
+    adult = draft.get_by_test_id("numbers-adult_age")
+    expect(adult).to_contain_text("not set")
+    adult.get_by_role("button", name="Edit adult at").click()
+    adult.get_by_label("Adult at").fill("20")
+    adult.get_by_role("button", name="Save").click()
+    expect(adult).to_contain_text("20")
+    expect(adult).not_to_contain_text("not set")
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    sent = _wait_sent(page, "accept_preview")
+    assert sent["preview"]["fields"]["adult_age"] == 20
+    thing = page.get_by_test_id("thing-page")
+    thing.get_by_test_id("thing-name").filter(has_text="Frost Owls").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(thing.get_by_test_id("numbers-adult_age")).to_contain_text("20")
 
 
 def test_draft_versions_and_discard(app, page, fixed_preview):

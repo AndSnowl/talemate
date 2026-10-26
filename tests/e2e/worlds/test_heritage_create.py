@@ -11,6 +11,8 @@ anything.
 
 from __future__ import annotations
 
+from playwright.sync_api import expect
+
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
     _open_thing,
@@ -338,3 +340,65 @@ def test_mix_drafted_in_place_keeps_the_character(app, page, fixed_preview):
     assert "New character" in box.inner_text()
     assert character_prompt.input_value() == prompt
     assert box.get_by_role("button", name="Create", exact=True).is_enabled()
+
+
+OWLFOLK = {
+    "kind": "species",
+    "name": "Owlfolk",
+    "fields": {"lifespan": 80, "adult_age": 15},
+    "facts": [{"category": "physical", "text": "Owlfolk have feathered arms."}],
+}
+
+
+def test_race_draft_edits_numbers_and_other_names(app, page, fixed_preview):
+    """A race draft has the saved page's numbers and Other names: an
+    unset lifespan shows the species', dimmed as inherited; the owner's
+    own lifespan and other name are written on Accept."""
+
+    name = _world_name("Owlholt")
+    seed_fm_world(app.root, name, present_year=1000, things=[OWLFOLK])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    owlfolk = _open_thing(page, "Owlfolk")
+    owlfolk.get_by_role("button", name="New race").click()
+    race_box = owlfolk.get_by_test_id("create-box")
+    race_box.get_by_label("Describe it").fill("Snowy owlfolk of the north.")
+    fixed_preview(
+        {
+            "name": "Snowy Owlfolk",
+            "facts": [{"category": "physical", "text": "Snowy Owlfolk are white."}],
+            "prose": {"description": "White owl-folk of the north."},
+        }
+    )
+    race_box.get_by_role("button", name="Create").click()
+    draft = race_box.get_by_test_id("draft-page")
+    draft.get_by_text("White owl-folk of the north.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
+    lifespan = draft.get_by_test_id("numbers-lifespan")
+    expect(lifespan).to_contain_text("80 years")
+    expect(lifespan).to_contain_text("inherited")
+    lifespan.get_by_role("button", name="Edit lifespan").click()
+    lifespan.get_by_label("Lifespan").fill("60")
+    lifespan.get_by_role("button", name="Save").click()
+    expect(lifespan).to_contain_text("60 years")
+    expect(lifespan).not_to_contain_text("inherited")
+
+    aka = draft.get_by_test_id("aka-editor")
+    aka.get_by_role("button", name="Add other name").click()
+    aka.get_by_label("Other name").fill("Snowy Owls")
+    aka.get_by_role("button", name="Add", exact=True).click()
+    expect(aka.get_by_test_id("aka-row")).to_have_count(1)
+    expect(aka.get_by_test_id("aka-row")).to_contain_text("Snowy Owls")
+    expect(aka.get_by_test_id("aka-row")).to_contain_text("common")
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    owlfolk.get_by_test_id("thing-name").filter(has_text="Snowy Owlfolk").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    saved = owlfolk.get_by_test_id("numbers-lifespan")
+    expect(saved).to_contain_text("60 years")
+    expect(saved).not_to_contain_text("inherited")
+    expect(owlfolk.get_by_test_id("aka-editor")).to_contain_text("Snowy Owls")
