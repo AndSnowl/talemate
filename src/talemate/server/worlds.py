@@ -2070,6 +2070,8 @@ class WorldsPlugin(Plugin):
                 "category": item.fact.category,
                 "rendered": view.render(item.fact.text),
                 "segments": links.segments(item.fact.text),
+                "valid_from": _date_out(calendar, item.fact.valid_from),
+                "valid_until": _date_out(calendar, item.fact.valid_until),
                 "source_id": item.source_id,
                 "source_kind": item.source_kind,
                 "source_name": item.source_name,

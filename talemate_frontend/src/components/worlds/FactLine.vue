@@ -1,16 +1,16 @@
 <template>
     <!-- the fact's one line: its words (and whom it's held by) on the
-         left, its category, dates, menu and Edit/End buttons at the right
-         edge -->
-    <div class="fact d-flex align-center ga-2" :data-testid="draft ? null : 'fact-row'">
+         left, its category, dates, menu and Edit/End buttons (or what
+         `actions` puts there) at the right edge -->
+    <div class="fact d-flex align-center ga-2" :data-testid="draft || actions !== 'full' ? null : 'fact-row'">
         <span class="flex-grow-1" :class="textClass">
             <LinkedText
                 class="fact-text"
                 :class="{ 'suggestion-dropped': dropped }"
                 :segments="fact.segments"
                 :text="fact.text"
-                :repoint="!draft"
-                selectable
+                :repoint="!draft && actions === 'full'"
+                :selectable="actions === 'full'"
                 :exclude="exclude"
                 @repoint="$emit('repoint', $event)"
                 @select="$emit('select', $event)"
@@ -29,20 +29,34 @@
         </span>
         <v-chip v-if="fact.category" size="x-small" label variant="tonal" color="muted">{{ fact.category }}</v-chip>
         <span class="fact-date">{{ spanLabel(worlds.calendar, fact.valid_from, fact.valid_until) }}</span>
-        <FactRowActions
-            :fact="fact"
-            :draft="draft"
-            :exclude="exclude"
-            @edit="$emit('edit')"
-            @dates="$emit('dates')"
-            @end="$emit('end')"
-            @remove="$emit('remove')"
-            @move="$emit('move', $event)"
-            @copy="$emit('copy', $event)"
-            @held="$emit('held', $event)"
-        />
-        <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="$emit('edit')"></v-btn>
-        <v-btn v-if="!fact.valid_until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End fact" @click="$emit('end')"></v-btn>
+        <template v-if="actions === 'full'">
+            <FactRowActions
+                :fact="fact"
+                :draft="draft"
+                :exclude="exclude"
+                @edit="$emit('edit')"
+                @dates="$emit('dates')"
+                @end="$emit('end')"
+                @remove="$emit('remove')"
+                @move="$emit('move', $event)"
+                @copy="$emit('copy', $event)"
+                @held="$emit('held', $event)"
+            />
+            <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit fact" @click="$emit('edit')"></v-btn>
+            <v-btn v-if="!fact.valid_until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End fact" @click="$emit('end')"></v-btn>
+        </template>
+        <span v-else class="fact-actions-room d-flex justify-end">
+            <!-- another line's (an inherited fact's, a small draft's): as
+                 wide as the menu and Edit/End buttons, so its category and
+                 dates sit where a page fact's do -->
+            <v-btn
+                v-if="actions === 'override'"
+                variant="text"
+                size="x-small"
+                data-testid="override-button"
+                @click="$emit('override')"
+            >Override</v-btn>
+        </span>
     </div>
 </template>
 
@@ -61,6 +75,12 @@ import LinkedText from './LinkedText.vue';
 // draft (`draft`) the holder has a × to clear it (`held(null)`), the words
 // read as dropped once unticked (`dropped`), and the page's actions go to
 // the draft.
+// `actions` is what sits at the right edge: `full` (the default) the menu
+// and the Edit and End buttons; `override` an "Override" button
+// (`override`), for an inherited fact; `none` nothing, for a small
+// draft's row. Either of the last two keeps the buttons' room, so the
+// category and dates line up with a page fact's, and its words can't be
+// re-pointed or selected for the selection menu.
 export default {
     name: 'FactLine',
     components: { FactRowActions, LinkedText },
@@ -70,8 +90,13 @@ export default {
         dropped: { type: Boolean, default: false },
         exclude: { type: Array, default: () => [] },
         textClass: { type: String, default: '' },
+        actions: {
+            type: String,
+            default: 'full',
+            validator: (value) => ['full', 'override', 'none'].includes(value),
+        },
     },
-    emits: ['repoint', 'select', 'edit', 'dates', 'end', 'remove', 'move', 'copy', 'held'],
+    emits: ['override', 'repoint', 'select', 'edit', 'dates', 'end', 'remove', 'move', 'copy', 'held'],
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -96,6 +121,13 @@ export default {
     color: rgb(var(--v-theme-muted));
     min-width: 80px;
     text-align: right;
+}
+
+/* the room of the menu and the Edit and End buttons: three x-small
+   icon buttons (20px) and the two 8px gaps between them */
+.fact-actions-room {
+    flex: none;
+    width: calc(3 * 20px + 2 * 8px);
 }
 
 .held {

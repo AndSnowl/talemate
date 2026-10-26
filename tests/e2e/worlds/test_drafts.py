@@ -242,7 +242,7 @@ def test_species_draft_edits_numbers(app, page, fixed_preview):
 
 
 def test_draft_add_fact_by_hand_writes_on_accept(app, page, fixed_preview):
-    """"+ Add fact" on a draft: the saved page's own button and form
+    """ "+ Add fact" on a draft: the saved page's own button and form
     (`ThingFactForm`), in the Facts heading. Nothing is sent until Accept;
     the fact joins the draft as a ticked, local row."""
 
@@ -1486,6 +1486,18 @@ def test_add_facts_regenerate_and_versions(app, page, fixed_facts):
     found = _ask_facts(thing, "its walls")
     rows = found.get_by_test_id("fact-draft-row")
     expect(rows).to_have_count(2)
+    # each row is the page's fact line, without its buttons: its category
+    # and dates where a page fact's are (on a wide screen; at 1280 the
+    # Facts column is narrower than a row's fixed parts)
+    viewport = page.viewport_size
+    page.set_viewport_size({"width": 1920, "height": viewport["height"]})
+    for part in (".v-chip--label", ".fact-date"):
+        box = rows.nth(0).locator(part).bounding_box()
+        page_box = _fact(thing, BELLS).locator(part).bounding_box()
+        assert (box["x"], box["width"]) == (page_box["x"], page_box["width"]), part
+    expect(rows.nth(0).locator(".fact-date")).to_have_text("always")
+    expect(rows.get_by_test_id("fact-menu-button")).to_have_count(0)
+    page.set_viewport_size(viewport)
     versions = found.get_by_test_id("fact-draft-versions")
     expect(versions).to_contain_text("Version 1 of 1")
     rows.nth(1).get_by_role("checkbox").uncheck()

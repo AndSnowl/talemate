@@ -977,6 +977,8 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "category": "physical",
             "rendered": "Lowlanders are short.",
             "segments": [{"text": "Lowlanders are short.", "ref": None, "stub": False}],
+            "valid_from": None,
+            "valid_until": None,
             "source_id": h.lowlander,
             "source_kind": "race",
             "source_name": "Lowlander",
@@ -990,6 +992,8 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "segments": [
                 {"text": "Humans have bare skin.", "ref": None, "stub": False}
             ],
+            "valid_from": None,
+            "valid_until": None,
             "source_id": h.human,
             "source_kind": "species",
             "source_name": "Human",

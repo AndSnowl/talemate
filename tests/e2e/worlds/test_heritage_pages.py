@@ -123,6 +123,27 @@ def test_species_page_and_inheritance(app, page):
     )
     assert "inherited" not in race_lifespan.inner_text()
 
+    # an inherited fact is drawn as an own fact is (the one fact line):
+    # its words, category chip (the label chip: its source chip is the
+    # other) and date in the same places, its Override button where an
+    # own fact's buttons are. Measured on a wide screen: at 1280 the
+    # Facts column is narrower than a row's chip, date and buttons, so
+    # every row (an own fact's too) runs past it by its longest word
+    viewport = page.viewport_size
+    page.set_viewport_size({"width": 1920, "height": viewport["height"]})
+    own = _fact(snowy, "White plumage")
+    wings = _inherited(snowy, "Wings in place of arms")
+    wings.wait_for(state="visible", timeout=TIMEOUT_MS)
+    for part in (".fact-text", ".v-chip--label", ".fact-date"):
+        assert (
+            wings.locator(part).first.bounding_box()["x"]
+            == own.locator(part).first.bounding_box()["x"]
+        ), part
+    page.set_viewport_size(viewport)
+    assert wings.locator(".fact-date").inner_text() == "always"
+    assert wings.get_by_test_id("override-button").is_visible()
+    assert wings.get_by_test_id("fact-menu-button").count() == 0
+
     # Vasha's page: heritage links, his life stage, inherited facts dimmed
     # with where they came from
     snowy.get_by_role("button", name="Back").click()
@@ -152,7 +173,7 @@ def test_species_page_and_inheritance(app, page):
     eyes.get_by_text("replaced by its own fact").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-    assert eyes.locator("s").inner_text() == "Yellow eyes."
+    assert eyes.locator(".suggestion-dropped").inner_text() == "Yellow eyes."
     assert eyes.get_by_test_id("override-button").count() == 0
     assert _inherited(vasha, "White plumage").get_by_test_id("override-button").count()
 
