@@ -42,6 +42,11 @@ import { kindInfo } from './worldKinds.js';
 // draft gets the same two-column layout as any entry page) is the
 // caller's: `creating` is the kind it's showing (or none), and "+ New
 // race"/"+ New mix" only ask for it (`create`).
+//
+// Two instances split the sections around the box, so nothing but the
+// section being created sits next to it: `until` (a kind) keeps this
+// instance to the sections up to and including it, `from` to the ones
+// after it. Neither prop: every section (the plain, idle page).
 export default {
     name: 'HeritageSections',
     props: {
@@ -50,13 +55,15 @@ export default {
         mixes: { type: Array, required: true },
         // the kind the caller's create box is showing, if any
         creating: { type: String, default: null },
+        until: { type: String, default: null },
+        from: { type: String, default: null },
     },
     emits: ['create'],
     setup() {
         return { worlds: useWorldsStore() };
     },
     computed: {
-        sections() {
+        allSections() {
             return [
                 {
                     key: 'races',
@@ -73,6 +80,18 @@ export default {
                     items: this.mixes,
                 },
             ];
+        },
+        sections() {
+            const all = this.allSections;
+            if (this.until) {
+                const index = all.findIndex((section) => section.kind === this.until);
+                return index === -1 ? all : all.slice(0, index + 1);
+            }
+            if (this.from) {
+                const index = all.findIndex((section) => section.kind === this.from);
+                return index === -1 ? [] : all.slice(index + 1);
+            }
+            return all;
         },
     },
 };

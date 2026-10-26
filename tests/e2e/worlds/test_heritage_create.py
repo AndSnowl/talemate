@@ -267,12 +267,15 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
 
-    # the draft sits right under Races/Mixes, not under Stubs this entry
-    # named (which moves below the draft too, so nothing is between them)
+    # the draft sits right under Races, not under Mixes or Stubs this
+    # entry named (both of which move below the draft too, so nothing but
+    # Races is between them)
     races_bottom = races_heading.bounding_box()
     races_bottom = races_bottom["y"] + races_bottom["height"]
     create_box_top = race_box.bounding_box()["y"]
     assert create_box_top >= races_bottom
+    mixes_top = human.get_by_test_id("mixes-section").bounding_box()["y"]
+    assert create_box_top <= mixes_top
     named_stubs = human.get_by_test_id("named-stubs")
     if named_stubs.count():
         assert create_box_top <= named_stubs.bounding_box()["y"]
@@ -298,6 +301,67 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert "Human" in human.get_by_test_id("field-species").inner_text()
+
+
+ELF = {
+    "kind": "species",
+    "name": "Elf",
+    "fields": {"lifespan": 400, "adult_age": 50},
+    "facts": [{"category": "physical", "text": "Elves have pointed ears."}],
+}
+
+
+def test_new_mix_draft_from_species_page_sits_after_mixes(app, page, fixed_preview):
+    """A mix drafted from a species page (no existing mix for the pair)
+    sits right under Mixes; Races, above Mixes, stays where it was --
+    only the section being created moves with the draft."""
+
+    name = _world_name("Ironmere")
+    seed_fm_world(
+        app.root,
+        name,
+        present_year=1000,
+        things=[HUMAN, LOWLANDER, ORC, HALF_ORC, ELF],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    human = _open_thing(page, "Human")
+
+    human.get_by_role("button", name="New mix").click()
+    mix_box = human.get_by_test_id("create-box")
+    assert "Human" in _parent(mix_box, 1).inner_text()
+    _pick(page, mix_box, "Second parent", "Elf")
+
+    fixed_preview(
+        {
+            "name": "Half-elf",
+            "facts": [
+                {
+                    "category": "physical",
+                    "text": "Half-elves have faintly pointed ears.",
+                }
+            ],
+            "prose": {"description": "Half-elves favor neither parent strongly."},
+        }
+    )
+    mix_box.get_by_role("button", name="Create").click()
+    mix_preview = mix_box.get_by_test_id("draft-page")
+    mix_preview.get_by_text("Half-elves favor neither parent strongly.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
+    # Races stays above Mixes, in the left column; the draft sits right
+    # under Mixes, not under Races (which never moved)
+    races_section = human.get_by_test_id("races-section")
+    mixes_section = human.get_by_test_id("mixes-section")
+    races_bottom = races_section.bounding_box()
+    races_bottom = races_bottom["y"] + races_bottom["height"]
+    mixes_box = mixes_section.bounding_box()
+    assert mixes_box["y"] >= races_bottom
+    mixes_bottom = mixes_box["y"] + mixes_box["height"]
+    create_box_top = mix_box.bounding_box()["y"]
+    assert create_box_top >= mixes_bottom
 
 
 def test_race_draft_inherited_facts_on_the_saved_pages_line(app, page, fixed_preview):

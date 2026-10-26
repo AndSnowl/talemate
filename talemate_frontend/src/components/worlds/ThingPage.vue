@@ -390,12 +390,17 @@
                             @save="saveForm"
                             @cancel="form = null"
                         />
+                        <!-- up to and including the section being created
+                             (or all of them, idle): what follows moves
+                             below the draft instead, so nothing but the
+                             section being created sits next to it -->
                         <HeritageSections
                             v-if="thing.kind === 'species'"
                             :species-id="thing.id"
                             :races="thing.races"
                             :mixes="thing.mixes"
                             :creating="heritageCreating"
+                            :until="heritageCreating"
                             @create="heritageCreating = $event"
                         />
                         <!-- while a race/mix is drafted below the row, Stubs
@@ -403,7 +408,7 @@
                              it: otherwise it sits between Races/Mixes and
                              the draft, reading as if the draft belonged to
                              it instead -->
-                        <NamedStubs v-if="!namedStubsBelow" :stubs="thing.named_stubs || []" />
+                        <NamedStubs v-if="!heritageTailBelow" :stubs="thing.named_stubs || []" />
                     </template>
                 </v-col>
 
@@ -466,8 +471,19 @@
                 cancellable
                 @cancel="heritageCreating = null"
             />
+            <!-- whatever came after the section being created (Mixes,
+                 drafting a race; nothing, drafting a mix), moved below it -->
+            <HeritageSections
+                v-if="heritageTailBelow"
+                :species-id="thing.id"
+                :races="thing.races"
+                :mixes="thing.mixes"
+                :creating="heritageCreating"
+                :from="heritageCreating"
+                @create="heritageCreating = $event"
+            />
             <!-- Stubs this entry named, after the draft it moved with -->
-            <NamedStubs v-if="namedStubsBelow" :stubs="thing.named_stubs || []" />
+            <NamedStubs v-if="heritageTailBelow" :stubs="thing.named_stubs || []" />
 
             <template v-if="draft">
                 <!-- 4. For other pages -->
@@ -905,10 +921,11 @@ export default {
         heritagePreset() {
             return this.heritageCreating === 'mix' ? { parents: [this.thing.id] } : { species: this.thing.id };
         },
-        // while a race/mix is drafted below the row, Named stubs (the
-        // left column's last section) moves below it too, so nothing
-        // sits between Races/Mixes and the draft it opened
-        namedStubsBelow() {
+        // while a race/mix is drafted below the row, what follows the
+        // section being created (the other Races/Mixes section, then
+        // Named stubs) moves below the draft too, so nothing but the
+        // section being created sits next to it
+        heritageTailBelow() {
             return !this.draft && this.thing?.kind === 'species' && !!this.heritageCreating;
         },
         existence() {
