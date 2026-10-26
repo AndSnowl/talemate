@@ -290,7 +290,9 @@ def test_race_draft_inherited_facts_on_the_saved_pages_line(app, page, fixed_pre
     in front."""
 
     name = _world_name("Ironmere")
-    seed_fm_world(app.root, name, present_year=1000, things=[HUMAN, LOWLANDER])
+    famine = {"category": "physical", "text": "Humans grew taller.", "since": 900}
+    human_dated = {**HUMAN, "facts": [*HUMAN["facts"], famine]}
+    seed_fm_world(app.root, name, present_year=1000, things=[human_dated])
     _open_world(page, name)
     _world_tab(page)
     page.get_by_test_id("kind-species").click()
@@ -316,8 +318,12 @@ def test_race_draft_inherited_facts_on_the_saved_pages_line(app, page, fixed_pre
     assert ears.get_by_test_id("inherited-source").inner_text() == "Human"
     category = ears.locator(".fact .v-chip").filter(has_text="physical")
     expect(category).to_be_visible()
-    date = ears.locator(".fact-date")
-    expect(date).to_have_text("always")
+    expect(ears.locator(".fact-date")).to_have_text("always")
+    # a dated one shows its dates, as on a saved page
+    taller = draft.get_by_test_id("preview-inherited").filter(
+        has_text="Humans grew taller."
+    )
+    expect(taller.locator(".fact-date")).to_have_text("900 →")
 
     # its words, category and date sit where the draft's own fact's do
     # (as the saved page's test measures it: on a wide screen, the Facts
@@ -331,6 +337,12 @@ def test_race_draft_inherited_facts_on_the_saved_pages_line(app, page, fixed_pre
             == own.locator(part).first.bounding_box()["x"]
         ), part
     page.set_viewport_size(viewport)
+
+    # one dashed separator per row, the row's own (none on the line)
+    assert (
+        ears.locator(".fact").evaluate("e => getComputedStyle(e).borderBottomStyle")
+        == "none"
+    )
 
     # unticked, it reads as replaced, its line struck through
     ears.get_by_role("checkbox", name="Kept").uncheck()

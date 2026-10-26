@@ -1142,11 +1142,13 @@ export default {
             return this.edited.facts.findIndex((fact) => !fact.removed && (fact.overrides || []).includes(row.fact_id));
         },
         // ticked: inherited as it is; unticked: replaced by an own fact
-        // the inherited `row` as the fact line takes it: the page the
-        // server rendered for the draft sends it as a saved page does
-        // (its category, dates, linked words), the row itself until then
+        // the inherited `row` as its line takes it: as the server's page
+        // of the draft sends it (`draft.page.inherited`, as a saved page
+        // sends its own: category, dates, linked words), else the row
+        // itself. (`thing.inherited` is empty on a draft: it lists them
+        // here, not in ThingInherited.)
         inheritedLine(row) {
-            const sent = (this.thing.inherited || []).find((item) => item.fact_id === row.fact_id);
+            const sent = (this.worlds.draft?.page?.inherited || []).find((item) => item.fact_id === row.fact_id);
             return sent || { rendered: row.text, category: row.category, source_id: row.source_id, source_name: row.source };
         },
         setKept(row, kept) {

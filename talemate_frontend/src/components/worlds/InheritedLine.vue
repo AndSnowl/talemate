@@ -1,27 +1,29 @@
 <template>
     <!-- an inherited fact's one line: a fact line, its words dimmed, a
-         chip naming its source after them -->
-    <FactLine
-        class="inherited-line"
-        :class="{ overridden }"
-        :fact="line"
-        :actions="actions"
-        :dropped="overridden"
-        text-class="inherited-text"
-        @override="$emit('override')"
-    >
-        <template #notes>
-            <v-chip
-                size="x-small"
-                variant="outlined"
-                color="link"
-                class="inherited-source ml-2"
-                data-testid="inherited-source"
-                @click="worlds.openThing(fact.source_id)"
-            >{{ fact.source_name }}</v-chip>
-            <slot></slot>
-        </template>
-    </FactLine>
+         chip naming its source after them. Wrapped, so a parent's own
+         scoped `.fact` style (ThingPage's stub mentions) never reaches
+         the line -->
+    <div class="inherited-line" :class="{ overridden }">
+        <FactLine
+            :fact="line"
+            :actions="actions"
+            :dropped="overridden"
+            text-class="inherited-text"
+            @override="$emit('override')"
+        >
+            <template #notes>
+                <v-chip
+                    size="x-small"
+                    variant="outlined"
+                    color="link"
+                    class="inherited-source ml-2"
+                    data-testid="inherited-source"
+                    @click="worlds.openThing(fact.source_id)"
+                >{{ fact.source_name }}</v-chip>
+                <slot></slot>
+            </template>
+        </FactLine>
+    </div>
 </template>
 
 <script>
