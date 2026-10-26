@@ -241,6 +241,37 @@ def test_species_draft_edits_numbers(app, page, fixed_preview):
     expect(thing.get_by_test_id("numbers-adult_age")).to_contain_text("20")
 
 
+def test_draft_add_fact_by_hand_writes_on_accept(app, page, fixed_preview):
+    """"+ Add fact" on a draft: the saved page's own button and form
+    (`ThingFactForm`), in the Facts heading. Nothing is sent until Accept;
+    the fact joins the draft as a ticked, local row."""
+
+    _seeded(app, page, "Handwritten")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+
+    draft.get_by_role("button", name="Add fact", exact=True).click()
+    form = draft.get_by_test_id("fact-form")
+    form.get_by_label("Fact", exact=True).fill("It drills at dawn.")
+    form.get_by_role("button", name="Save").click()
+
+    dawn = _draft_fact(draft, "It drills at dawn.")
+    dawn.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert dawn.get_by_role("checkbox").is_checked()
+    # nothing sent yet: the fact only joined the draft's own edits
+    assert _sent(page, "add_fact") == []
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    host = _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]
+    assert [f["text"] for f in accepted["facts"]] == [
+        "It flies at night.",
+        "It drills at dawn.",
+    ]
+    _fact(host, "It drills at dawn.").wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert page.console_errors == []
+
+
 def test_draft_versions_and_discard(app, page, fixed_preview):
     _seeded(app, page, "Versions")
     fixed_preview(_host("It flies at night."))

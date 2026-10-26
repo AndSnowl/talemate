@@ -92,6 +92,7 @@ import {
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 import {
     acceptable,
+    addDraftFact,
     addFiling,
     alsoHere,
     categoryFor,
@@ -2589,6 +2590,19 @@ check('a draft fact rewritten here, or added, has no server index: its words sho
     // a linked run stays linked; a name answered "same as" isn't fresh
     assert.deepEqual(freshSegments([{ text: 'Pale Wing', ref: 'x', stub: false }], HOST.new_names), [{ text: 'Pale Wing', ref: 'x', stub: false }]);
     assert.equal(freshSegments([{ text: 'Pale Wing', ref: null, stub: false }], [{ name: 'Pale Wing', same_target_id: 'pw' }])[0].fresh, undefined);
+});
+
+check('addDraftFact appends a ticked local fact', () => {
+    const out = addDraftFact(HOST, { category: 'general', text: 'It drills at dawn.', valid_from: dateOf(410), valid_until: null });
+    assert.deepEqual(out.facts.at(-1), {
+        category: 'general', text: 'It drills at dawn.', since: dateOf(410), until: null, overrides: [], held_by: null, held_by_name: null, ticked: true, repeat_of: null, local: true,
+    });
+    // a category the kind doesn't have becomes the kind's default
+    assert.equal(addDraftFact(HOST, { category: 'nope', text: 'x' }).facts.at(-1).category, categoryFor(HOST.kind, 'nope'));
+    // shows as a local draft row: no server index, "edited" (its own words)
+    const edited = { ...HOST, ...addDraftFact(HOST, { category: 'general', text: 'It drills at dawn.' }) };
+    const rows = draftFactRows(draftOf(HOST), edited);
+    assert.deepEqual([rows.at(-1).serverIndex, rows.at(-1).edited, rows.at(-1).local], [null, true, true]);
 });
 
 check("the page's own name (a self run) stays itself, and an edit takes no link from it", () => {

@@ -279,10 +279,10 @@
                         <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
                         <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" :on-draft="draft" />
-                        <v-btn v-if="!draft && (!form || form.factId)" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
+                        <v-btn v-if="!form || form.factId || form.index != null" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
                     </div>
 
-                    <div v-if="form && !form.factId && !form.draft" class="mb-2">
+                    <div v-if="form && !form.factId && form.index == null" class="mb-2">
                         <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" />
                     </div>
 
@@ -528,6 +528,7 @@ import { headerNames } from './entryPage.js';
 import { formatNumber } from './worldNumbers.js';
 import { NEW_THING, factEditState, factLinkPayload, linkPayload, refOccurrence, repicks } from './nameHighlights.js';
 import {
+    addDraftFact,
     addFiling,
     alsoHere,
     changeFiling,
@@ -1141,7 +1142,7 @@ export default {
             const form = this.form;
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
             const change = {};
-            if (form.mode === 'edit') {
+            if (form.mode === 'edit' || form.mode === 'add') {
                 const text = form.text.trim();
                 if (!text) {
                     return;
@@ -1161,7 +1162,13 @@ export default {
                 change.since = year(form.fromYear);
             }
             change.until = year(form.untilYear);
-            this.edit(editFact(this.edited, form.index, change));
+            if (form.mode === 'add') {
+                // "+ Add fact" on a draft: a new local fact, not an edit
+                // to an existing row (nothing is written before Accept)
+                this.edit(addDraftFact(this.edited, { category: change.category, text: change.text, valid_from: change.since, valid_until: change.until }));
+            } else {
+                this.edit(editFact(this.edited, form.index, change));
+            }
             this.form = null;
         },
         // the page's fact as FactRow shows it
@@ -1257,7 +1264,18 @@ export default {
             return { ...state, links: state.links.map((link) => ({ ...link, was: link.ref })) };
         },
         startAdd() {
-            this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
+            this.form = {
+                mode: 'add',
+                ...(this.draft ? { draft: true } : {}),
+                category: this.categories[0],
+                text: '',
+                fromYear: null,
+                untilYear: null,
+                picks: {},
+                refs: {},
+                links: [],
+                stubs: [],
+            };
         },
         // `mode` 'dates': "Change dates", the dates alone
         startEdit(fact, mode = 'edit') {

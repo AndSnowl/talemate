@@ -490,6 +490,26 @@ export function alsoHere(edited, row) {
     return { facts: [...(edited.facts || []), fact] };
 }
 
+// "Add fact" on a draft: a fact the owner wrote by hand, ticked and local
+// like `alsoHere`'s, not yet linked by name (its words show plain, with
+// the draft's new names fresh, until the server renders it or it's
+// written on Accept).
+export function addDraftFact(edited, { category, text, valid_from = null, valid_until = null } = {}) {
+    const fact = {
+        category: categoryFor(edited.kind, category),
+        text,
+        since: valid_from ?? null,
+        until: valid_until ?? null,
+        overrides: [],
+        held_by: null,
+        held_by_name: null,
+        ticked: true,
+        repeat_of: null,
+        local: true,
+    };
+    return { facts: [...(edited.facts || []), fact] };
+}
+
 // an "elsewhere" row's target changed to `target` (`{id, name, kind}`): no
 // longer a repeat of what the old target says, nor replacing it
 export function retarget(edited, index, target) {
