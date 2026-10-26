@@ -1,9 +1,9 @@
 # Polish 2 (drafts edit like pages): the owner's acceptance checklist
 
-Date: 2026-10-26. Branch `feature/polish-2-drafts`. Tasks 1-7 are built; this
-is what the owner should try before calling it accepted. The plain suite
-(7620 passed, 6 skipped), the full e2e suite (146 passed, `-n 4`, no
-flakes this run) and ruff on the changed Python are all clean as of this
+Date: 2026-10-26. Branch `feature/polish-2-drafts`. Tasks 1-7 and the final
+review's fixes are built; this is what the owner should try before calling
+it accepted. The plain suite (7621 passed, 6 skipped), the full e2e suite
+(147 passed, `-n 4`, no flakes this run) and ruff on the changed Python are all clean as of this
 branch.
 
 Try it in a world that has the Tsardom of Moscavia seeded, with a
@@ -42,9 +42,11 @@ test world, or the worked examples below.
 - [ ] **The "In" section on the Novgrad Academy page (saved) and on a new
   draft filed into Novgrad.** "In" is its own section, just above Facts,
   same text size as a fact row. "+ In…" sits at the right of the "In"
-  heading, the same pattern as "Facts" / "+ Add facts…". The row reads
-  "Located in Novgrad" — role first, then the place — not "Novgrad ·
-  located in". There is no "the AI's suggestions come unticked, yours
+  heading, the same pattern as "Facts" / "+ Add facts…", now a plain
+  accent-coloured "+ In…" text button (it was an outlined button with a
+  magnifier). A row reads "located in Novgrad", role first, as saved rows
+  already did (the mockup's draft wording "Novgrad · located in" was never
+  built). There is no "the AI's suggestions come unticked, yours
   ticked" subtitle under it; the AI's own suggested filings still arrive
   unticked, you just aren't told so in words any more. Each row's edit
   and delete sit at the row's own right edge, inside the half-width
@@ -67,7 +69,16 @@ test world, or the worked examples below.
   chip, same date position. Where an own fact has its ⋯ / Edit / End
   buttons, the inherited fact has "Override" in that same spot, and the
   small chip naming where it came from ("Owl-folk") sits after the words,
-  not off on its own.
+  not off on its own. Inherited facts now also show their dates
+  ("always", or e.g. "900 →") where an own fact's are.
+
+- [ ] **A race draft's inherited facts.** On the Highlander draft from
+  the Human species page, "Inherited (untick to replace)" lists each
+  inherited fact on the same line as the saved race page: the words
+  dimmed, the source chip ("Human") after them, the category chip and
+  dates lined up with the draft's own facts. The "Kept" tick sits in
+  front; untick one and its line is struck through, with "Replaced by"
+  under it.
 
 - [ ] **"+ Add facts" on a draft, narrow window (about 1280px).** The
   rows wrap onto more than one line, the same way a saved page's fact
@@ -82,11 +93,11 @@ test world, or the worked examples below.
 ## Changed on purpose (eyeball these — they're meant to look different from before)
 
 - The "In" section moved above Facts **on saved pages too**, with a new
-  look: smaller-no-longer text (same size as facts), "+ In…" at the
-  heading's right, rows reading "Located in Novgrad" instead of "Novgrad
-  · located in", and the "AI's suggestions come unticked, yours ticked"
-  subtitle removed. This is the one approved change to how a saved page
-  looks (owner rule 3).
+  look: rows the same text size as facts (still role first, "located in
+  Novgrad"), "+ In…" at the heading's right as an accent text button with
+  a plus (it was an outlined button with a magnifier), and the "AI's
+  suggestions come unticked, yours ticked" subtitle removed. This is the
+  one approved change to how a saved page looks (owner rule 3).
 - The draft header's "also known as" chips next to the name are read-only
   now — edit or remove other names in the Other names section instead.
 - "Other names" (add, edit, everyday/common, remove) now appears on
@@ -97,6 +108,15 @@ test world, or the worked examples below.
   "Override" sits where an own fact's ⋯/Edit/End buttons sit, and its
   source chip ("Owl-folk") moved to after the words instead of floating
   on its own.
+- Inherited facts on a saved page now have a date column ("always", or
+  the fact's dates), from the dates the page's inherited facts now carry.
+  At about 1280px the Facts column is narrow, so their words wrap onto
+  more lines and the Inherited block is taller than before.
+- A draft's inherited facts ("Inherited (untick to replace)") now look
+  like the saved page's: the same line (words dimmed, source chip after
+  them, category and dates at the right), with the Kept tick in front.
+  Before, they were plain text with the source chip where the category
+  goes, and no category or date.
 - The "+ Add facts" rows on a draft now wrap the same way saved fact rows
   do in a narrow (about 1280px) window — the panel gets taller there;
   before, these rows were wider and didn't wrap at that width.
@@ -106,19 +126,28 @@ test world, or the worked examples below.
 
 ## Screenshots for the owner
 
-After-shots from building this branch are kept in the session scratchpad
-(not committed), under
-`/tmp/claude-1000/-home-skeleton-Projects-Web-talemate/b21eef1e-9287-4ae6-8b4d-11b813ef0e0d/scratchpad/`:
-- `t6/` — the In section, saved Novgrad Academy and Velikoye pages, at
-  1280 and 1920.
-- `t7/` — Races/Mixes at the species page's full width, with and without
-  a race draft open, plus a non-species saved page for comparison, at
-  1280 and 1920.
+Before (`ae64af3e`, the branch's base) and after (the branch head) shots
+at 1280 and 1920 px are kept in the session scratchpad (not committed),
+under
+`/tmp/claude-1000/-home-skeleton-Projects-Web-talemate/b21eef1e-9287-4ae6-8b4d-11b813ef0e0d/scratchpad/`.
+Each file is `before-<name>-<width>.png` or `after-<name>-<width>.png`.
+- `t3/`: numbers and other names. `saved-species` (Human: numbers,
+  other names, facts), `saved-race` (Lowlander: inherited numbers and
+  facts), `draft-race`, `draft-species`, `draft-page` (a place draft's
+  facts), `add-facts` ("+ Add facts" on a saved page).
+- `t5/`: the fact line and inherited facts. The same screens, plus
+  `saved-place` (Novgrad Academy), `draft-race-inherited-unticked` (the
+  draft's inherited facts, one unticked), and clips of the Facts list
+  (`*-facts-*`) and the Inherited block (`*-inherited-*`).
+- `t6/`: the In section, saved Novgrad Academy and Velikoye pages.
+- `t7/`: Races and Mixes at the species page's full width, with and
+  without a race draft open, plus a non-species saved page.
 
-The task 3 (`t3/`, numbers/aka editors) and task 5 (`t5/r1/`, the shared
-fact line) screenshot folders that their own reports describe are no
-longer present at that path as of this check — the scratchpad appears to
-have been cleaned between sessions. Their task reports (in this folder's
-`task-3-report.md` and `task-5-report.md`) record the pixel-diff results
-at the time: saved pages were identical apart from the named, intended
-changes above.
+Pixel diffs, before against after:
+- The Facts list of the saved species, race and place pages is identical
+  at both widths.
+- The saved Inherited block differs, as intended (its date column, the
+  source chip after the words).
+- Whole saved pages differ only in height and position, from the In
+  section's move and new look and the Inherited block's date column.
+- The draft screens differ by design.
