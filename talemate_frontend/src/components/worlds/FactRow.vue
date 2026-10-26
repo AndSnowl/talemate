@@ -1,58 +1,25 @@
 <template>
-    <!-- one row for a page's fact and a draft's: a `SuggestionRow`, with
-         its tick on a draft only; whom it's held by and "added here" on a
-         second line, a repeat's match (drafts) under it -->
+    <!-- on a draft: the page's fact line (`FactLine`) with a tick in front
+         (`SuggestionRow`), a repeat's match under it -->
     <SuggestionRow
-        class="fact-host"
-        :tickable="draft"
-        :ticked="!draft || fact.ticked !== false"
+        v-if="draft"
+        class="fact-host fact-draft"
+        :ticked="fact.ticked !== false"
+        :dropped="false"
         :tick-label="'Write ' + fact.text"
-        :testid="draft ? 'draft-fact' : 'fact-row'"
+        testid="draft-fact"
         @tick="$emit('tick', $event)"
     >
-        <span :class="textClass">
-            <LinkedText
-                class="fact-text"
-                :segments="fact.segments"
-                :text="fact.text"
-                :repoint="!draft"
-                selectable
-                :exclude="exclude"
-                @repoint="$emit('repoint', $event)"
-                @select="$emit('select', $event)"
-            />
-            <slot name="notes"></slot>
-        </span>
-        <template #end>
-            <v-chip v-if="fact.category" size="x-small" label variant="tonal" color="muted" class="flex-0-0">{{ fact.category }}</v-chip>
-            <span class="fact-date">{{ spanLabel(worlds.calendar, fact.valid_from, fact.valid_until) }}</span>
-            <FactRowActions
-                :fact="fact"
-                :draft="draft"
-                :exclude="exclude"
-                @edit="$emit('edit')"
-                @dates="$emit('dates')"
-                @end="$emit('end')"
-                @remove="$emit('remove')"
-                @move="$emit('move', $event)"
-                @copy="$emit('copy', $event)"
-                @held="$emit('held', $event)"
-            />
-            <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" class="flex-0-0" aria-label="Edit fact" @click="$emit('edit')"></v-btn>
-            <v-btn v-if="!fact.valid_until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" class="flex-0-0" aria-label="End fact" @click="$emit('end')"></v-btn>
-        </template>
-        <template v-if="fact.held_by || fact.local" #under>
-            <span v-if="fact.held_by" class="held" data-testid="held-by-tag">held by {{ fact.held_by.name || 'another entry' }}<v-btn
-                v-if="draft"
-                icon="mdi-close"
-                variant="text"
-                size="x-small"
-                density="compact"
-                :aria-label="'Not held: ' + fact.text"
-                @click="$emit('held', null)"
-            ></v-btn></span>
-            <span v-if="fact.local" class="text-caption text-muted"><template v-if="fact.held_by"> · </template>added here</span>
-        </template>
+        <FactLine
+            :fact="fact"
+            draft
+            :dropped="fact.ticked === false"
+            :exclude="exclude"
+            :text-class="textClass"
+            v-on="lineListeners"
+        >
+            <template #notes><slot name="notes"></slot></template>
+        </FactLine>
         <template v-if="$slots.match" #match>
             <slot name="match"></slot>
         </template>
@@ -60,31 +27,38 @@
             <slot></slot>
         </template>
     </SuggestionRow>
+
+    <div v-else class="fact-host">
+        <FactLine
+            :fact="fact"
+            :exclude="exclude"
+            :text-class="textClass"
+            v-on="lineListeners"
+        >
+            <template #notes><slot name="notes"></slot></template>
+        </FactLine>
+        <slot></slot>
+    </div>
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
-import { spanLabel } from './worldDates.js';
-import FactRowActions from './FactRowActions.vue';
-import LinkedText from './LinkedText.vue';
+import FactLine from './FactLine.vue';
 import SuggestionRow from './SuggestionRow.vue';
 
-// One fact row, the same markup on an entry's page and on its draft (a
-// `SuggestionRow` both times, so the two can't drift): the words linked
-// (`LinkedText`; selected words open the selection menu, `select`; on a
-// page a link can be re-pointed, `repoint`), its category and dates, the
-// fact menu (`FactRowActions`: ⋯ or a right-click) and the Edit and End
-// buttons, then whom it's held by and "added here" on a second line. A
-// draft (`draft`) only adds to that: its tick (`tick`, the one dropped
-// look for an unticked fact), the holder's × to clear it, a repeat's match
-// (`match`), and nothing is sent: every action is emitted for the page to
-// apply to the draft. Its form goes in the default slot, notes after its
-// words in `notes`. `fact-host` marks the row for the fact menu's
-// right-click. `fact`: `{fact_id?, text, segments, category, valid_from,
+// One fact row, on an entry's page and on its draft: the same fact line
+// both times (`FactLine`, its words left, its category, dates, menu and
+// Edit/End buttons at the right edge). A draft (`draft`) only adds to it:
+// its tick (`tick`) in front, through `SuggestionRow` (the line takes the
+// row's full width, not its `end`), a repeat's match (`match`) under it,
+// and nothing is sent: every action is emitted for the page to apply to
+// the draft. Its form goes in the default slot, notes after its words in
+// `notes`. `fact-host` marks the row for the fact menu's right-click and
+// draws the dashed separator under the row and whatever is shown under
+// it. `fact`: `{fact_id?, text, segments, category, valid_from,
 // valid_until, held_by: {id, name} | null, ticked?, local?}`.
 export default {
     name: 'FactRow',
-    components: { FactRowActions, LinkedText, SuggestionRow },
+    components: { FactLine, SuggestionRow },
     props: {
         fact: { type: Object, required: true },
         draft: { type: Boolean, default: false },
@@ -92,30 +66,29 @@ export default {
         textClass: { type: String, default: '' },
     },
     emits: ['tick', 'repoint', 'select', 'edit', 'dates', 'end', 'remove', 'move', 'copy', 'held'],
-    setup() {
-        return { worlds: useWorldsStore() };
+    computed: {
+        // the line's actions, passed on as they are
+        lineListeners() {
+            const pass = (name) => (value) => this.$emit(name, value);
+            return Object.fromEntries(
+                ['repoint', 'select', 'edit', 'dates', 'end', 'remove', 'move', 'copy', 'held'].map((name) => [name, pass(name)]),
+            );
+        },
     },
-    methods: { spanLabel },
 };
 </script>
 
 <style scoped>
-.fact-date {
-    flex: none;
-    font-family: monospace;
-    font-size: 11px;
-    color: rgb(var(--v-theme-muted));
-    min-width: 80px;
-    text-align: right;
+/* the separator goes under the whole row, so a fact and what's shown
+   under it (a repeat's match, its form) read as one. `fact-host` is also
+   the row's marker: the fact menu finds its row by it */
+.fact-host {
+    border-bottom: 1px dashed rgb(var(--v-theme-border));
 }
 
-.held {
-    font-size: 11px;
-    color: rgb(var(--v-theme-foreign));
-}
-
-.summary-text {
-    font-size: 15px;
-    line-height: 1.5;
+/* on a draft the fact line fills the row right of the tick, so its
+   category, dates and buttons sit at the right edge as on the page */
+.fact-draft :deep(.suggestion-text) {
+    flex: 1 1 auto;
 }
 </style>
