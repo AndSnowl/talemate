@@ -267,6 +267,16 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
 
+    # the draft sits right under Races/Mixes, not under Stubs this entry
+    # named (which moves below the draft too, so nothing is between them)
+    races_bottom = races_heading.bounding_box()
+    races_bottom = races_bottom["y"] + races_bottom["height"]
+    create_box_top = race_box.bounding_box()["y"]
+    assert create_box_top >= races_bottom
+    named_stubs = human.get_by_test_id("named-stubs")
+    if named_stubs.count():
+        assert create_box_top <= named_stubs.bounding_box()["y"]
+
     # the race draft spans the species page's content width, and its
     # Description column lines up under the species page's own (Races and
     # Mixes sit below both columns, at the entry's full width, not in the

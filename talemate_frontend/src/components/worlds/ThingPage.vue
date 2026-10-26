@@ -398,7 +398,12 @@
                             :creating="heritageCreating"
                             @create="heritageCreating = $event"
                         />
-                        <NamedStubs :stubs="thing.named_stubs || []" />
+                        <!-- while a race/mix is drafted below the row, Stubs
+                             this entry named moves there too, right after
+                             it: otherwise it sits between Races/Mixes and
+                             the draft, reading as if the draft belonged to
+                             it instead -->
+                        <NamedStubs v-if="!namedStubsBelow" :stubs="thing.named_stubs || []" />
                     </template>
                 </v-col>
 
@@ -461,6 +466,8 @@
                 cancellable
                 @cancel="heritageCreating = null"
             />
+            <!-- Stubs this entry named, after the draft it moved with -->
+            <NamedStubs v-if="namedStubsBelow" :stubs="thing.named_stubs || []" />
 
             <template v-if="draft">
                 <!-- 4. For other pages -->
@@ -897,6 +904,12 @@ export default {
         // the race's species, or the mix's first parent: this species
         heritagePreset() {
             return this.heritageCreating === 'mix' ? { parents: [this.thing.id] } : { species: this.thing.id };
+        },
+        // while a race/mix is drafted below the row, Named stubs (the
+        // left column's last section) moves below it too, so nothing
+        // sits between Races/Mixes and the draft it opened
+        namedStubsBelow() {
+            return !this.draft && this.thing?.kind === 'species' && !!this.heritageCreating;
         },
         existence() {
             return existenceOf(this.thing);
