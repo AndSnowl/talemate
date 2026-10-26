@@ -13,7 +13,7 @@
 // is rebased the same way from what the client kept of it for the
 // session.
 //
-// Rows the owner adds (an "+ in…" filing, a fact "+ also here", a fact
+// Rows the owner adds (an "+ In…" filing, a fact "+ also here", a fact
 // moved onto another page, a "Move existing here") are `local`: kept
 // after the server's own. A server fact the owner removes (or moves) stays
 // in its place, `removed` and unticked, so the server's indices (what a
@@ -543,7 +543,7 @@ export function setFilingShowUnder(edited, key, tag) {
     return changeFiling(edited, key, { show_under: tag });
 }
 
-// "+ in… 🔎" on a draft: the owner's own filing, ticked, in an entry the
+// "+ In…" on a draft: the owner's own filing, ticked, in an entry the
 // world has (`{id, name}`) or, like the page's, a new stub of a typed name
 // (`{newName, kind, tag}`); one already there is ticked (and given the
 // role) instead
@@ -597,9 +597,11 @@ export function tickMoveHere(edited, factId, ticked) {
 
 // a race, mix or species draft's `lifespan`, `adult_age` or `measures`
 // (the draft's `fields`, as a saved page's `set_field` writes them, P6):
-// `null` clears it, back to what it inherits (`numbers`, Task 1).
+// `null` clears it, back to what it inherits (`numbers`, Task 1): the key
+// goes, since accept refuses a null number ("must be a number").
 export function setDraftNumber(edited, field, value) {
-    return { fields: { ...(edited.fields || {}), [field]: value } };
+    const { [field]: _old, ...rest } = edited.fields || {};
+    return { fields: value === null ? rest : { ...rest, [field]: value } };
 }
 
 // the draft's other names, after one of the list helpers above

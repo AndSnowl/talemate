@@ -446,6 +446,7 @@ from talemate.worldplay.create import (
     MoveHereFact,
     PreviewException,
     PreviewFact,
+    PreviewInherited,
     accept_preview,
     clean_tag,
     current_date,
@@ -1529,6 +1530,49 @@ def _draft_new_names(
 
 
 # --- curation -----------------------------------------------------------------
+
+
+def _draft_inherited_out(
+    view: WorldView,
+    links: _Links,
+    calendar: Calendar,
+    row: PreviewInherited,
+    preview: CreatePreview,
+) -> dict:
+    """One inherited fact of a draft, as a saved page's `inherited` sends
+    it (its category, dates, linked words and holder, from the fact as
+    the world has it now), so the draft draws it on the same fact line;
+    the words the preview was made with if the fact is gone.
+    `overridden_by` is the index of the draft's own fact that replaces
+    it, or `None`."""
+
+    found = view.fact(row.fact_id)
+    fact = found[1] if found is not None else None
+    source = view.thing(row.source_id)
+    return {
+        "fact_id": row.fact_id,
+        "category": row.category,
+        "rendered": view.render(fact.text) if fact is not None else row.text,
+        "segments": (
+            links.segments(fact.text)
+            if fact is not None
+            else [{"text": row.text, "ref": None, "stub": False}]
+        ),
+        "valid_from": _date_out(calendar, fact.valid_from) if fact else None,
+        "valid_until": _date_out(calendar, fact.valid_until) if fact else None,
+        "source_id": row.source_id,
+        "source_kind": source.kind if source is not None else None,
+        "source_name": row.source,
+        "overridden_by": next(
+            (
+                index
+                for index, own in enumerate(preview.facts)
+                if row.fact_id in own.overrides
+            ),
+            None,
+        ),
+        "held_by": _held_out(view, fact, source) if fact is not None else None,
+    }
 
 
 def _held_out(
@@ -3203,28 +3247,7 @@ class WorldsPlugin(Plugin):
             "hint": preview.hint,
             "facts": [*page["facts"], *facts],
             "inherited": [
-                {
-                    "fact_id": row.fact_id,
-                    "category": row.category,
-                    "rendered": row.text,
-                    "segments": [{"text": row.text, "ref": None, "stub": False}],
-                    "source_id": row.source_id,
-                    "source_kind": (
-                        state.kind
-                        if (state := view.thing(row.source_id)) is not None
-                        else None
-                    ),
-                    "source_name": row.source,
-                    "overridden_by": next(
-                        (
-                            index
-                            for index, fact in enumerate(preview.facts)
-                            if row.fact_id in fact.overrides
-                        ),
-                        None,
-                    ),
-                    "held_by": None,
-                }
+                _draft_inherited_out(view, links, calendar, row, preview)
                 for row in preview.inherited
             ],
             "prose": {

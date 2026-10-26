@@ -2897,7 +2897,11 @@ check("versions: the owner's edits kept per version for the session, restored wi
 
 check('draft numbers set and clear', () => {
     assert.deepEqual(setDraftNumber({ fields: { lifespan: 70 } }, 'adult_age', 18), { fields: { lifespan: 70, adult_age: 18 } });
-    assert.deepEqual(setDraftNumber({ fields: { lifespan: 70 } }, 'lifespan', null), { fields: { lifespan: null } });
+    // cleared: the key goes (a null would fail accept's "must be a
+    // number"), so the number is inherited or unset again
+    assert.deepEqual(setDraftNumber({ fields: { lifespan: 70, adult_age: 18 } }, 'lifespan', null), { fields: { adult_age: 18 } });
+    assert.deepEqual(setDraftNumber({ fields: { lifespan: 70 } }, 'lifespan', null), { fields: {} });
+    assert.deepEqual(setDraftNumber({}, 'lifespan', null), { fields: {} });
     assert.deepEqual(setDraftNumber({ fields: {} }, 'measures', [{ name: 'height', min: 5, max: 6, unit: 'ft' }]), {
         fields: { measures: [{ name: 'height', min: 5, max: 6, unit: 'ft' }] },
     });

@@ -1,5 +1,5 @@
 <template>
-    <div class="suggestion-row" :class="{ 'no-tick': !tickable }" :data-testid="testid">
+    <div class="suggestion-row" :class="{ 'no-tick': !tickable, 'suggestion-fill': fill }" :data-testid="testid">
         <div class="suggestion-line d-flex align-start ga-2">
             <v-checkbox-btn
                 v-if="tickable"
@@ -48,7 +48,9 @@ import './suggestions.css';
 // pushed to a wide pane's far edge. A second line under the text
 // for placement controls and notes (`under`), a repeat's match indented
 // with a left rule (`match`) and a form under all of that (`after`).
-// `tick(Boolean)` is emitted,
+// `fill`: the text takes the row's full width right of the tick (a fact
+// line there, its category and dates at the right edge as on a page),
+// for a row with no `end`. `tick(Boolean)` is emitted,
 // never applied here. `dropped` is null by default and then follows
 // `ticked` (an unticked row reads as dropped), so a caller only sets it
 // when a row that's still ticked should still read as dropped (or the
@@ -71,6 +73,7 @@ export default {
         // null: follows `ticked` (a prop default is resolved once, at
         // mount, so it can't be the default itself)
         dropped: { type: Boolean, default: null },
+        fill: { type: Boolean, default: false },
     },
     emits: ['tick'],
     computed: {
@@ -120,6 +123,10 @@ export default {
 
 .suggestion-end {
     flex: 0 0 auto;
+}
+
+.suggestion-fill .suggestion-text {
+    flex: 1 1 auto;
 }
 
 /* the owner's rule: in a list half the screen wide or less (an entry

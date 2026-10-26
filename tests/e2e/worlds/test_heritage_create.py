@@ -282,6 +282,62 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     assert "Human" in human.get_by_test_id("field-species").inner_text()
 
 
+def test_race_draft_inherited_facts_on_the_saved_pages_line(app, page, fixed_preview):
+    """A race draft's inherited facts are drawn on the saved page's
+    inherited line: the words, the source chip after them, then the
+    category and dates at the right edge, lined up with the draft's own
+    facts' (as a saved page lines them up with its own), the "Kept" tick
+    in front."""
+
+    name = _world_name("Ironmere")
+    seed_fm_world(app.root, name, present_year=1000, things=[HUMAN, LOWLANDER])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    human = _open_thing(page, "Human")
+    human.get_by_role("button", name="New race").click()
+    race_box = human.get_by_test_id("create-box")
+    race_box.get_by_label("Describe it").fill("Highlanders: tall, from the hills.")
+    fixed_preview(
+        {
+            "name": "Highlander",
+            "facts": [{"category": "physical", "text": "Highlanders are tall."}],
+            "prose": {"description": "Tall hill people."},
+        }
+    )
+    race_box.get_by_role("button", name="Create").click()
+    draft = race_box.get_by_test_id("draft-page")
+    draft.get_by_text("Tall hill people.").wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    ears = draft.get_by_test_id("preview-inherited").filter(
+        has_text="rounded ears and no tusks"
+    )
+    assert ears.get_by_role("checkbox", name="Kept").is_checked()
+    assert ears.get_by_test_id("inherited-source").inner_text() == "Human"
+    category = ears.locator(".fact .v-chip").filter(has_text="physical")
+    expect(category).to_be_visible()
+    date = ears.locator(".fact-date")
+    expect(date).to_have_text("always")
+
+    # its words, category and date sit where the draft's own fact's do
+    # (as the saved page's test measures it: on a wide screen, the Facts
+    # column at 1280 being narrower than a row's chip, date and buttons)
+    viewport = page.viewport_size
+    page.set_viewport_size({"width": 1920, "height": viewport["height"]})
+    own = draft.get_by_test_id("draft-fact").filter(has_text="Highlanders are tall.")
+    for part in (".fact-text", ".fact .v-chip--label", ".fact-date"):
+        assert (
+            ears.locator(part).first.bounding_box()["x"]
+            == own.locator(part).first.bounding_box()["x"]
+        ), part
+    page.set_viewport_size(viewport)
+
+    # unticked, it reads as replaced, its line struck through
+    ears.get_by_role("checkbox", name="Kept").uncheck()
+    expect(ears.locator(".suggestion-dropped")).to_have_count(1)
+    expect(ears.get_by_test_id("override-by")).to_be_visible()
+
+
 MOSCAVIAN = {
     "kind": "species",
     "name": "Moscavian Owls",

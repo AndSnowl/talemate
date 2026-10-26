@@ -8532,6 +8532,39 @@ async def test_heritage_draft_payload_inherits_numbers(plugin, client):
     assert h.world.head_rev() == head
 
 
+async def test_heritage_draft_inherited_rows_as_a_saved_page_sends_them(plugin, client):
+    """A race draft's `inherited` rows carry what a saved race page's do
+    (`get_thing`'s `inherited`): the fact's category, dates, linked words
+    and holder, so the draft draws them on the same fact line."""
+
+    h = await _open_heritage_world(plugin)
+    with h.world.revision(Source.manual(note="dated")) as rev:
+        h.scarred = rev.add_fact(
+            h.human,
+            "physical",
+            "Humans were scarred by the plague.",
+            valid_from=WorldDate.of(900),
+        )
+
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Highlanders", "Highlanders are tall.", tag="folk"),
+        kind="race",
+        prompt="tall humans of the hills",
+        fields={"species": h.human},
+    )
+    # Lowlander, saved, is a race of Human as the draft is
+    saved = await _get_thing(plugin, h.lowlander)
+    by_id = {row["fact_id"]: row for row in saved["inherited"]}
+    rows = {row["fact_id"]: row for row in draft["inherited"]}
+    assert set(rows) == {h.bare_skin, h.scarred}
+    for fact_id, row in rows.items():
+        assert row == by_id[fact_id]
+    assert rows[h.scarred]["valid_from"] is not None
+    assert rows[h.scarred]["category"] == "physical"
+
+
 async def _filing_draft_with_show_under(plugin, client, show_under):
     """The filing world with Yara, a native, filed in Velikoye (its
     page's "Natives" group), and a lore draft whose one "In" row, ticked,

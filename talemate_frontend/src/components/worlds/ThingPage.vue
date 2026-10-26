@@ -325,22 +325,22 @@
                         </FactRow>
 
                         <!-- what it inherits, each ticked as kept: unticking one
-                             the model missed marks it replaced by one of its own -->
+                             the model missed marks it replaced by one of its own.
+                             Each on the saved page's inherited line (`InheritedLine`) -->
                         <template v-if="edited.inherited && edited.inherited.length">
                             <div class="suggestion-heading mt-3">Inherited (untick to replace)</div>
                             <SuggestionRow
                                 v-for="row in edited.inherited"
                                 :key="row.fact_id"
+                                fill
                                 :ticked="overriderOf(row) < 0"
+                                :dropped="false"
                                 tick-label="Kept"
                                 :disabled="!edited.facts.length"
                                 testid="preview-inherited"
                                 @tick="setKept(row, $event)"
                             >
-                                <span class="inherited">{{ row.text }}</span>
-                                <template #end>
-                                    <v-chip size="x-small" label variant="tonal" color="muted" class="flex-0-0">{{ row.source }}</v-chip>
-                                </template>
+                                <InheritedLine :fact="inheritedLine(row)" actions="none" :overridden="overriderOf(row) >= 0" />
                                 <template v-if="overriderOf(row) >= 0" #under>
                                     <v-select
                                         :model-value="overriderOf(row)"
@@ -567,6 +567,7 @@ import EntryMentionedIn from './EntryMentionedIn.vue';
 import EntryTimeline from './EntryTimeline.vue';
 import FactRow from './FactRow.vue';
 import HeritageSections from './HeritageSections.vue';
+import InheritedLine from './InheritedLine.vue';
 import LinkedText from './LinkedText.vue';
 import MergeDialog from './MergeDialog.vue';
 import MoveHere from './MoveHere.vue';
@@ -710,6 +711,7 @@ export default {
         EntryTimeline,
         FactRow,
         HeritageSections,
+        InheritedLine,
         LinkedText,
         MergeDialog,
         MoveHere,
@@ -799,7 +801,7 @@ export default {
                 kind: edited.kind,
                 tag: edited.tag,
                 hint: edited.hint,
-                aka: edited.aka || [],
+                aka: edited.aka || NO_AKA,
                 numbers: draft.rendered?.numbers || page.numbers,
                 in: [...kept, ...own],
                 facts: (page.facts || []).filter((fact) => !fact.draft),
@@ -938,7 +940,7 @@ export default {
         },
         // they start over on another thing, or another version of the draft
         editorKey() {
-            return this.draft ? 'draft-' + (this.worlds.draft?.version ?? '') : this.thing?.id;
+            return this.draft ? 'draft-' + (this.worlds.draft?.key ?? '') + '-' + (this.worlds.draft?.version ?? '') : this.thing?.id;
         },
         stubOfPage() {
             const thing = this.thing;
@@ -1140,6 +1142,13 @@ export default {
             return this.edited.facts.findIndex((fact) => !fact.removed && (fact.overrides || []).includes(row.fact_id));
         },
         // ticked: inherited as it is; unticked: replaced by an own fact
+        // the inherited `row` as the fact line takes it: the page the
+        // server rendered for the draft sends it as a saved page does
+        // (its category, dates, linked words), the row itself until then
+        inheritedLine(row) {
+            const sent = (this.thing.inherited || []).find((item) => item.fact_id === row.fact_id);
+            return sent || { rendered: row.text, category: row.category, source_id: row.source_id, source_name: row.source };
+        },
         setKept(row, kept) {
             this.worlds.setPreviewOverride(row.fact_id, kept ? null : defaultOverrideIndex(this.edited, row));
         },
@@ -1500,10 +1509,6 @@ export default {
 .stub-fact {
     border-bottom: 1px dashed rgb(var(--v-theme-border));
     padding: 2px 0;
-}
-
-.inherited {
-    color: rgb(var(--v-theme-muted));
 }
 
 .override-by {

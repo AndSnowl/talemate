@@ -6,6 +6,7 @@
         class="fact-host fact-draft"
         :ticked="fact.ticked !== false"
         :dropped="false"
+        fill
         :tick-label="'Write ' + fact.text"
         testid="draft-fact"
         @tick="$emit('tick', $event)"
@@ -49,7 +50,7 @@ import SuggestionRow from './SuggestionRow.vue';
 // both times (`FactLine`, its words left, its category, dates, menu and
 // Edit/End buttons at the right edge). A draft (`draft`) only adds to it:
 // its tick (`tick`) in front, through `SuggestionRow` (the line takes the
-// row's full width, not its `end`), a repeat's match (`match`) under it,
+// row's full width, `fill`, not its `end`), a repeat's match (`match`) under it,
 // and nothing is sent: every action is emitted for the page to apply to
 // the draft. Its form goes in the default slot, notes after its words in
 // `notes`. `fact-host` marks the row for the fact menu's right-click and
@@ -84,11 +85,5 @@ export default {
    the row's marker: the fact menu finds its row by it */
 .fact-host {
     border-bottom: 1px dashed rgb(var(--v-theme-border));
-}
-
-/* on a draft the fact line fills the row right of the tick, so its
-   category, dates and buttons sit at the right edge as on the page */
-.fact-draft :deep(.suggestion-text) {
-    flex: 1 1 auto;
 }
 </style>

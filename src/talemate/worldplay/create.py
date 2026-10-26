@@ -3987,7 +3987,7 @@ def _write_entry_filings(
                 linked_text(exception.text), target, row.target_name, exception
             )
             exception_ids.append(rev.add_fact(thing_id, "ties", text, origin=origin))
-        # as `add_filing` takes it: any tag, a new one too (ruling R6)
+        # written as add_filing takes it: any tag, a new one too
         show_under = normalise_tag(row.show_under or "") or None
         filings.append(
             Filing(
