@@ -27,29 +27,30 @@
             <v-progress-linear v-if="merge && merge.pending" indeterminate color="accent" class="mt-3"></v-progress-linear>
 
             <template v-if="preview">
-                <div class="heading">Name</div>
+                <div class="suggestion-heading merge-heading">Name</div>
                 <v-radio-group v-model="mainName" density="compact" hide-details data-testid="merge-name">
                     <v-radio v-for="name in preview.names" :key="name" :label="name" :value="name"></v-radio>
                 </v-radio-group>
                 <div class="text-caption text-muted">The other name becomes an “also known as”.</div>
 
-                <div class="heading">Facts of {{ preview.from_name }}</div>
+                <div class="suggestion-heading merge-heading">Facts of {{ preview.from_name }}</div>
                 <div v-if="!fromFacts.length" class="text-body-2 text-muted">None of its own.</div>
-                <div v-for="fact in fromFacts" :key="fact.fact_id" class="fact" data-testid="merge-fact">
-                    <div class="d-flex align-center ga-2">
-                        <v-checkbox-btn
-                            v-model="ticked[fact.fact_id]"
-                            density="compact"
-                            class="flex-grow-0"
-                            :aria-label="'Move over ' + fact.text"
-                        ></v-checkbox-btn>
-                        <span :class="{ dropped: !ticked[fact.fact_id] }">{{ fact.text }}</span>
-                    </div>
-                    <div v-if="fact.repeat_of" class="note text-caption">already on {{ fact.repeat_of.owner_name || preview.into_name }}</div>
-                </div>
+                <SuggestionRow
+                    v-for="fact in fromFacts"
+                    :key="fact.fact_id"
+                    :ticked="!!ticked[fact.fact_id]"
+                    :tick-label="'Move over ' + fact.text"
+                    testid="merge-fact"
+                    @tick="ticked[fact.fact_id] = $event"
+                >
+                    {{ fact.text }}
+                    <template v-if="fact.repeat_of" #match>
+                        <div class="text-caption text-muted">already on {{ fact.repeat_of.owner_name || preview.into_name }}</div>
+                    </template>
+                </SuggestionRow>
 
                 <template v-if="preview.pairs.length">
-                    <div class="heading">These disagree: pick one</div>
+                    <div class="suggestion-heading merge-heading">These disagree: pick one</div>
                     <div v-for="pair in preview.pairs" :key="pair.key" class="pick" data-testid="merge-pair">
                         <v-radio-group v-model="keep[pair.key]" density="compact" hide-details>
                             <v-radio :label="pairLabel(preview.from_name, pair.a_text, pair.years && pair.years[0])" value="a"></v-radio>
@@ -67,14 +68,18 @@
                 </template>
 
                 <template v-if="preview.akas.length">
-                    <div class="heading">Other names from its links</div>
-                    <div v-for="aka in preview.akas" :key="aka" class="d-flex align-center ga-2" data-testid="merge-aka">
-                        <v-checkbox-btn v-model="akas[aka]" density="compact" class="flex-grow-0" :aria-label="'Add the other name ' + aka"></v-checkbox-btn>
-                        <span>{{ aka }}</span>
-                    </div>
+                    <div class="suggestion-heading merge-heading">Other names from its links</div>
+                    <SuggestionRow
+                        v-for="aka in preview.akas"
+                        :key="aka"
+                        :ticked="!!akas[aka]"
+                        :tick-label="'Add the other name ' + aka"
+                        testid="merge-aka"
+                        @tick="akas[aka] = $event"
+                    >{{ aka }}</SuggestionRow>
                 </template>
 
-                <div class="heading">Links</div>
+                <div class="suggestion-heading merge-heading">Links</div>
                 <div class="text-body-2 text-muted" data-testid="merge-moves">{{ movesLine }}</div>
                 <div v-for="note in preview.notes" :key="note" class="text-caption text-muted">{{ note }}</div>
 
@@ -89,6 +94,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import SuggestionRow from './SuggestionRow.vue';
 
 function plural(count, one, many = `${one}s`) {
     return `${count} ${count === 1 ? one : many}`;
@@ -102,9 +108,12 @@ function plural(count, one, many = `${one}s`) {
 // one or keep both (keep both to start with: nothing is lost unasked),
 // and what the loser gets (removed or ended); the other names its links'
 // words would add, each ticked; and what moves over. Merge sends the
-// owner's picks (`accept_merge`); the merged entry's page opens.
+// owner's picks (`accept_merge`); the merged entry's page opens. The
+// facts and the other names are ticks to keep, so they're `SuggestionRow`s
+// (an unticked one looks dropped as everywhere else).
 export default {
     name: 'MergeDialog',
+    components: { SuggestionRow },
     props: {
         modelValue: { type: Boolean, default: false },
         // the open page's payload: the entry merged away
@@ -215,26 +224,9 @@ export default {
 </script>
 
 <style scoped>
-.heading {
+.merge-heading {
     margin-top: 14px;
     margin-bottom: 4px;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: rgb(var(--v-theme-muted));
-}
-
-.fact {
-    padding: 2px 0;
-}
-
-.dropped {
-    color: rgb(var(--v-theme-muted));
-}
-
-.note {
-    margin-left: 34px;
-    color: rgb(var(--v-theme-muted));
 }
 
 .pick {

@@ -103,7 +103,12 @@ fact already holds (the world's `repeat_threshold`) is shown with that
 match, and arrives unticked only at `repeat_untick_threshold` or above.
 An elsewhere item repeating its target is shown the same way. Accept
 writes the ticked own facts, and each ticked elsewhere fact onto its
-target (a stub for a new name), in the same revision.
+target (a stub for a new name), in the same revision. "Keep new" (P8)
+on an elsewhere row works as it does for an own fact: its
+`replaces_repeat` ticked has the fact it repeats removed from its
+target (`write_repeat_choices`, called once per target after that
+target's elsewhere facts are written, since elsewhere rows never carry
+a `move_here` move).
 
 Same thing? (spec goal 4, the curation probe's same-thing verdict, ruling
 C2). The preview offers the things the world has that the entry could be
@@ -332,7 +337,7 @@ class PreviewFact(BaseModel):
     # unticked
     ticked: bool = True
     # "Keep new" (P8): ticked, it replaces the fact it repeats
-    # (`repeat_of`), which accept removes (`_write_keep_new`)
+    # (`repeat_of`), which accept removes (`write_repeat_choices`)
     replaces_repeat: bool = False
 
 
@@ -354,6 +359,9 @@ class ElsewhereFact(BaseModel):
     held_by: str | None = None
     ticked: bool = True
     repeat_of: dict | None = None
+    # "Keep new" (P8): ticked, it replaces the fact it repeats on its
+    # target (`repeat_of`), which accept removes (`write_repeat_choices`)
+    replaces_repeat: bool = False
 
 
 class PreviewInherited(BaseModel):
@@ -3714,12 +3722,15 @@ def _write_preview(
 ]:
     """`accept_preview`'s one revision, making stubs for `new_names` and
     the new names of `elsewhere` (`_row_stubs`), whose facts it writes
-    onto their targets. With `fold` (a `repoint.RepointPlan` of another
-    stub onto `stub`), that stub is re-pointed onto the one being filled
-    first, in the same revision, and every pick, holder or row naming it
-    means the filled one; its names stay other names of it.
+    onto their targets, each target's "Keep new" row then having the
+    fact it repeats removed (`write_elsewhere_repeats`). With `fold` (a
+    `repoint.RepointPlan` of another stub onto `stub`), that stub is
+    re-pointed onto the one being filled first, in the same revision,
+    and every pick, holder or row naming it means the filled one; its
+    names stay other names of it.
     Returns the thing's id, `make_stubs`' mapping, the notes, the facts
-    moved here and the facts removed for "Keep new" (each `(old owner,
+    moved here and the facts removed for "Keep new" (its own and its
+    elsewhere rows', each `(old owner,
     fact)`, as they were). A stub made here that
     no fact ends up linking to (the name was written in a way linking
     doesn't take, as "al-Qadir" in lowercase) would be an orphan:
@@ -3881,8 +3892,7 @@ def _write_preview(
         _write_file_into(rev, world, preview.file_into, thing_id, redirect, notes)
         # the facts that move here, after the entry's own (whose overrides
         # name them as they are)
-        moved = _write_move_here(rev, world, view, preview, thing_id, notes)
-        removed = _write_keep_new(rev, view, preview, moved, notes)
+        moved, removed = _write_move_here(rev, world, view, preview, thing_id, notes)
         linked |= write_elsewhere(
             rev,
             linking,
@@ -3894,6 +3904,7 @@ def _write_preview(
             lowercase=preview.selected_names,
             aliases=alias_table(linking) if elsewhere else None,
         )
+        removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, thing_id)
         orphans = {
             stub_id
@@ -4067,7 +4078,7 @@ def _write_move_here(
     preview: CreatePreview,
     thing_id: str,
     notes: list[str],
-) -> list[tuple[str, FactState]]:
+) -> tuple[list[tuple[str, FactState]], list[tuple[str, FactState]]]:
     """Move each ticked "Could move here" row's fact onto `thing_id`, in
     `rev` (`repoint.copy_facts`, ruling R1): a new fact with its dates,
     origin and holder, the original removed; its links to the entry
@@ -4075,8 +4086,10 @@ def _write_move_here(
     must be near this one (`move_here_sources`, worked out again), its
     fact still that entry's (`before`, the world before the accept) and
     no summary, and its text must name this entry (`names_draft`); any
-    other moves nothing, with a note. Returns `(old owner, fact)` for each
-    moved."""
+    other moves nothing, with a note. Then the draft's repeat choices
+    ("Move existing here" rows, "Keep new" facts) are settled
+    (`write_repeat_choices`). Returns `(moved, removed)`, each `(old
+    owner, fact)`."""
 
     # imported here: `worldplay.repoint` imports this module
     from talemate.worldplay.repoint import copy_facts
@@ -4085,43 +4098,25 @@ def _write_move_here(
     sources: set[str] | None = None
     moved: list[tuple[str, FactState]] = []
     for row in preview.move_here:
-        if not row.ticked or row.from_id == thing_id:
+        if not row.ticked or row.repeat or row.from_id == thing_id:
             continue
-        if sources is None and not row.repeat:
+        if sources is None:
             sources = move_here_sources(before, preview)
         found = before.fact(row.fact_id)
         name = before.name_of(row.from_id) or row.from_id
-        if row.repeat:
-            repeats = {
-                (fact.repeat_of.get("fact_id"), fact.repeat_of.get("owner_id"))
-                for fact in preview.facts
-                if fact.repeat_of
-            }
-            if (row.fact_id, row.from_id) not in repeats:
-                notes.append(
-                    f"{name}'s fact \"{_clip(row.text, 60)}\" isn't one this "
-                    "draft repeats, so it doesn't move here"
-                )
-                continue
-        elif row.from_id not in sources:
+        if row.from_id not in sources:
             notes.append(
                 f"{name}'s fact \"{_clip(row.text, 60)}\" isn't near "
                 f"{preview.name}, so it doesn't move here"
             )
             continue
         if found is None or found[0] != row.from_id:
-            notes.append(
-                f'{name}\'s fact "{_clip(row.text, 60)}" was moved or removed '
-                "since the preview, so it doesn't move here"
-            )
+            notes.append(_gone_note(name, row.text))
             continue
         if entries.is_summary_fact(found[1]):
-            notes.append(
-                f'{name}\'s summary "{_clip(row.text, 60)}" is its own, so it '
-                "doesn't move here"
-            )
+            notes.append(_summary_note(name, row.text))
             continue
-        if not row.repeat and not names_draft(before, found[1].text, draft):
+        if not names_draft(before, found[1].text, draft):
             notes.append(
                 f"{name}'s fact \"{_clip(row.text, 60)}\" doesn't name "
                 f"{preview.name}, so it doesn't move here"
@@ -4138,33 +4133,99 @@ def _write_move_here(
             thing_id,
             plain_self_links=True,
         )
-    return moved
+    repeats_moved, removed = write_repeat_choices(
+        rev, world, before, preview.facts, preview.move_here, thing_id, notes
+    )
+    return moved + repeats_moved, removed
 
 
-def _write_keep_new(
+def _gone_note(name: str, text: str) -> str:
+    return (
+        f'{name}\'s fact "{_clip(text, 60)}" was moved or removed '
+        "since the preview, so it doesn't move here"
+    )
+
+
+def _summary_note(name: str, text: str) -> str:
+    return f"{name}'s summary \"{_clip(text, 60)}\" is its own, so it doesn't move here"
+
+
+def write_repeat_choices(
     rev: Any,
+    world: World,
     before: WorldView,
-    preview: CreatePreview,
-    moved: Sequence[tuple[str, FactState]],
+    rows: Sequence[Any],
+    move_here: Sequence[MoveHereFact],
+    thing_id: str,
     notes: list[str],
-) -> list[tuple[str, FactState]]:
-    """ "Keep new" (P8): remove, in `rev`, the fact each ticked draft fact
-    marked `replaces_repeat` repeats (its `repeat_of`), as removing a
-    fact does (`remove_fact`). The router has checked the repeat against
-    the draft's own versions (`_check_repeat_moves`); here a fact that's
-    no longer its entry's (`before`, the world before the accept), an
-    entry's summary (H4: edited on its page) or one moved here already
-    isn't removed, with a note. Returns `(owner,
-    fact)` for each removed, as it was."""
+) -> tuple[list[tuple[str, FactState]], list[tuple[str, FactState]]]:
+    """Settle, in `rev`, the repeat choices a draft's `rows` (anything
+    with `ticked`, `replaces_repeat` and `repeat_of`: `PreviewFact`,
+    `ElsewhereFact`) carry, for any accept: each ticked `repeat` row of
+    `move_here` ("Move existing here") moves the world's fact onto
+    `thing_id` (`repoint.copy_facts`, ruling R1), then each ticked row
+    marked `replaces_repeat` ("Keep new", P8) has the fact it repeats
+    removed (`remove_fact`). The router has checked both against the
+    draft's own held versions (`_check_repeat_moves`); here a move row
+    must still be what one of `rows` says it repeats, and a fact that's
+    no longer its entry's (`before`, the world before the accept) or an
+    entry's summary (H4: edited on its page) is left alone, with a note.
+    One moved already, by this or an earlier write of `rev`, is neither
+    moved nor removed again. Returns `(moved, removed)`, each `(old
+    owner, fact)` as it was."""
+
+    # imported here: `worldplay.repoint` imports this module
+    from talemate.worldplay.repoint import copy_facts
+
+    live = world.view()
+
+    def taken(fact_id: str) -> bool:
+        # moved or removed by `rev` already (an earlier "Could move here")
+        return before.fact(fact_id) is not None and live.fact(fact_id) is None
+
+    repeats = {
+        (row.repeat_of.get("fact_id"), row.repeat_of.get("owner_id"))
+        for row in rows
+        if row.repeat_of
+    }
+    moved: list[tuple[str, FactState]] = []
+    for row in move_here:
+        if not (row.ticked and row.repeat) or row.from_id == thing_id:
+            continue
+        name = before.name_of(row.from_id) or row.from_id
+        if (row.fact_id, row.from_id) not in repeats:
+            notes.append(
+                f"{name}'s fact \"{_clip(row.text, 60)}\" isn't one this "
+                "draft repeats, so it doesn't move here"
+            )
+            continue
+        found = before.fact(row.fact_id)
+        if found is None or found[0] != row.from_id:
+            notes.append(_gone_note(name, row.text))
+            continue
+        if entries.is_summary_fact(found[1]):
+            notes.append(_summary_note(name, row.text))
+            continue
+        if taken(row.fact_id) or any(f.fact_id == row.fact_id for _o, f in moved):
+            continue
+        moved.append((row.from_id, found[1]))
+    if moved:
+        copy_facts(
+            rev,
+            world.view(),
+            [fact.fact_id for _owner, fact in moved],
+            thing_id,
+            plain_self_links=True,
+        )
 
     removed: list[tuple[str, FactState]] = []
-    taken = {fact.fact_id for _owner, fact in moved}
-    for fact in preview.facts:
-        repeat = fact.repeat_of or {}
-        if not (fact.ticked and fact.replaces_repeat and repeat.get("fact_id")):
+    done = {fact.fact_id for _owner, fact in moved}
+    for row in rows:
+        repeat = row.repeat_of or {}
+        if not (row.ticked and row.replaces_repeat and repeat.get("fact_id")):
             continue
         fact_id, owner_id = str(repeat["fact_id"]), str(repeat.get("owner_id"))
-        if fact_id in taken or any(f.fact_id == fact_id for _o, f in removed):
+        if fact_id in done or taken(fact_id):
             continue
         found = before.fact(fact_id)
         if found is None or found[0] != owner_id:
@@ -4183,6 +4244,55 @@ def _write_keep_new(
             continue
         rev.remove_fact(fact_id)
         removed.append((owner_id, found[1]))
+        done.add(fact_id)
+    return moved, removed
+
+
+def write_elsewhere_repeats(
+    rev: Any,
+    world: World,
+    before: WorldView,
+    elsewhere: Sequence[ElsewhereFact],
+    notes: list[str],
+) -> list[tuple[str, FactState]]:
+    """Settle each ticked elsewhere row's "Keep new" (`replaces_repeat`),
+    once `write_elsewhere` has already put every row's fact onto its
+    target: one `write_repeat_choices` call per target (grouping `rows`
+    by `target_id`), each with no `move_here` (an elsewhere row never
+    carries a "Move existing here" move). A row's `repeat_of` is only
+    ever its own target's fact (`flag_elsewhere_repeats` flags one
+    against the target alone, never another entry's); its `owner_id`
+    must match this row's `target_id`, checked again here rather than
+    trusted, since the router's vouching (`_check_page_repeats`) is
+    only that some held version flagged that fact repeated somewhere,
+    not that it was this row's own target. One retargeted (the owner's
+    "retarget" clears `repeat_of`; only a forged one keeps it) or with
+    no target at all (a new name: it can own no fact) replaces nothing,
+    with a note, same wording as a row no held version flagged.
+    Calling this after every target's own elsewhere facts are written
+    means a target always ends with its new fact and without the one it
+    replaced, never a moment with neither, and never some other
+    entry's fact removed instead. Returns the facts removed, each `(old
+    owner, fact)` as it was."""
+
+    by_target: dict[str, list[ElsewhereFact]] = {}
+    for item in elsewhere:
+        if not (item.ticked and item.replaces_repeat and item.repeat_of):
+            continue
+        owner_id = str(item.repeat_of.get("owner_id") or "")
+        if item.target_id is None or owner_id != item.target_id:
+            shown = _clip(str(item.repeat_of.get("text") or ""), 60)
+            notes.append(
+                f"\"{shown}\" isn't a fact this draft repeats, so it isn't removed"
+            )
+            continue
+        by_target.setdefault(item.target_id, []).append(item)
+    removed: list[tuple[str, FactState]] = []
+    for target_id, rows in by_target.items():
+        _moved, target_removed = write_repeat_choices(
+            rev, world, before, rows, [], target_id, notes
+        )
+        removed.extend(target_removed)
     return removed
 
 
@@ -4486,9 +4596,10 @@ def _write_same(
     then the preview's name and entry material (`_merge_entry`), the
     stubs, the facts, the filings (with their exceptions), the entries
     filed into it, the facts moved here (and those "Keep new" replaces,
-    removed) and the elsewhere facts. Returns the stubs' mapping, the
-    notes, the facts moved and the facts removed; `_UnlinkedNames` as
-    `_write_preview`'s."""
+    removed) and the elsewhere facts, each elsewhere target's own "Keep
+    new" row then settled too (`write_elsewhere_repeats`). Returns the
+    stubs' mapping, the notes, the facts moved and the facts removed;
+    `_UnlinkedNames` as `_write_preview`'s."""
 
     target_id = target.id
     stub_id = plan.stub_id if plan is not None else None
@@ -4578,8 +4689,7 @@ def _write_same(
         )
         _file_new_names(rev, world, view, rows, made, target_id, notes)
         _write_file_into(rev, world, preview.file_into, target_id, redirect, notes)
-        moved = _write_move_here(rev, world, view, preview, target_id, notes)
-        removed = _write_keep_new(rev, view, preview, moved, notes)
+        moved, removed = _write_move_here(rev, world, view, preview, target_id, notes)
         linked |= write_elsewhere(
             rev,
             linking,
@@ -4591,6 +4701,7 @@ def _write_same(
             lowercase=preview.selected_names,
             aliases=alias_table(linking) if elsewhere else None,
         )
+        removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, target_id)
         orphans = {
             thing_id

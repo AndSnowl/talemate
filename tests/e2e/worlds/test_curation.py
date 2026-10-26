@@ -191,7 +191,7 @@ def test_preview_sections_and_accept_counts(app, page, fixed_preview):
     founded.get_by_role("button", name="Keep both").click()
     expect(counts).to_have_text("writes 3 facts here, 3 elsewhere, 1 new stub")
 
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     _opened(page, "The Divine Right of the Tsar")
     accepted = _sent(page, "accept_preview")[-1]["preview"]
     assert [f["ticked"] for f in accepted["facts"]] == [True, True, True]
@@ -292,7 +292,7 @@ def test_same_thing_fill_existing(app, page, fixed_preview):
     # yes: the material goes onto Ashenmere, nothing new is made
     candidate.get_by_role("button", name="Same as this").click()
     expect(counts).to_contain_text("writes 2 facts onto Ashenmere")
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     thing = _opened(page, "Ashenmere")
     sent = _sent(page, "accept_preview")[-1]
     assert sent["same_target_id"] == ashenmere

@@ -1,4 +1,6 @@
 <template>
+    <!-- `display: contents`: the button sits in its heading's row; the
+         form and the draft wrap onto their own line under it -->
     <div class="entry-add-facts">
         <v-btn
             v-if="!asking && !draft"
@@ -7,26 +9,27 @@
             color="accent"
             prepend-icon="mdi-creation"
             :data-testid="event ? 'add-event' : 'add-facts'"
-            :disabled="onDraft && !!worlds.draft?.adding"
-            :loading="onDraft && worlds.draft?.adding === (event ? 'add_event' : 'add_facts')"
+            :disabled="!!blocked"
+            :title="blocked"
             @click="start"
         >{{ event ? '+ Add event…' : '+ Add facts…' }}</v-btn>
-        <div v-if="onDraft && worlds.draft?.addError && !asking" class="text-caption text-error" data-testid="fact-draft-error">{{ worlds.draft.addError }}</div>
 
-        <div v-if="asking && !draft" class="ask pa-2" :data-testid="event ? 'add-event-form' : 'add-facts-form'" @keydown.esc="asking = false">
-            <div class="d-flex align-center flex-wrap ga-2">
-                <v-text-field
+        <div v-if="asking && !draft" class="panel ask pa-2" :data-testid="event ? 'add-event-form' : 'add-facts-form'" @keydown.esc="asking = false">
+            <div class="d-flex align-start ga-2">
+                <v-textarea
                     v-model="prompt"
                     :label="event ? 'What happened' : 'What to add'"
                     :placeholder="event ? 'the river froze and the ferries stopped…' : 'how it is governed, who serves it…'"
+                    auto-grow
+                    rows="2"
                     density="compact"
                     variant="outlined"
                     hide-details
                     autofocus
                     class="flex-grow-1"
                     data-testid="add-prompt"
-                    @keydown.enter="ask"
-                ></v-text-field>
+                    @keydown.enter.exact="onEnter"
+                ></v-textarea>
                 <v-text-field
                     v-if="event"
                     v-model.number="year"
@@ -38,72 +41,150 @@
                     class="year"
                     data-testid="add-year"
                 ></v-text-field>
-                <v-btn color="accent" variant="flat" size="small" :disabled="!canAsk || (onDraft && !!worlds.draft?.adding)" data-testid="add-draft" @click="ask">Draft</v-btn>
+            </div>
+            <div class="d-flex ga-2 mt-2">
+                <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-creation" :disabled="!canAsk || !!blocked" data-testid="add-draft" @click="ask">Draft</v-btn>
                 <v-btn variant="text" size="small" @click="asking = false">Cancel</v-btn>
             </div>
         </div>
 
-        <!-- the drafted facts, for the owner to tick: nothing is written before Accept -->
-        <div v-if="draft" class="draft pa-2" data-testid="fact-draft">
-            <div v-if="draft.pending" class="d-flex align-center ga-2 text-caption text-muted">
-                <v-progress-circular indeterminate size="16" width="2" color="accent"></v-progress-circular>
-                Drafting “{{ draft.prompt }}”…
-            </div>
-            <template v-else-if="draft.error">
-                <div class="text-caption text-error" data-testid="fact-draft-error">{{ draft.error }}</div>
-                <v-btn variant="text" size="small" class="mt-1" @click="worlds.discardFacts()">Close</v-btn>
+        <!-- the drafted facts, for the owner to tick: nothing is written
+             before Write (on a draft page, nothing reaches the world
+             before the page draft's Accept) -->
+        <div v-if="draft" ref="panel" class="panel" :class="{ nested: onDraft }" data-testid="fact-draft">
+            <!-- its first ask: nothing held yet -->
+            <template v-if="!draft.versions.length">
+                <div v-if="draft.pending" class="d-flex align-center ga-2 text-caption text-muted">
+                    <v-progress-circular indeterminate size="16" width="2" color="accent"></v-progress-circular>
+                    Drafting “{{ draft.prompt }}”…
+                    <v-btn variant="text" size="small" data-testid="fact-draft-discard" @click="discard">Discard</v-btn>
+                </div>
+                <template v-else>
+                    <div class="text-caption text-error" data-testid="fact-draft-error">{{ draft.error }}</div>
+                    <div class="d-flex ga-2 mt-1">
+                        <v-btn variant="outlined" size="small" prepend-icon="mdi-refresh" data-testid="fact-draft-regenerate" :disabled="!!yearInvalid" :title="yearInvalid" @click="worlds.regenerateSmall(draft.key)">Try again</v-btn>
+                        <v-btn variant="text" size="small" data-testid="fact-draft-discard" @click="discard">Close</v-btn>
+                    </div>
+                </template>
             </template>
+
             <template v-else>
-                <div class="text-caption text-muted mb-1">{{ event ? `Dated ${draft.year}. ` : '' }}Tick what to write here.</div>
-                <div v-for="row in draft.facts" :key="row.index" class="d-flex align-center ga-2" data-testid="fact-draft-row">
-                    <v-checkbox-btn
-                        :model-value="row.ticked !== false"
-                        density="compact"
-                        class="flex-grow-0"
-                        :aria-label="'Write ' + row.rendered"
-                        @update:model-value="worlds.tickDraftFact(row.index, $event)"
-                    ></v-checkbox-btn>
-                    <span class="flex-grow-1" :class="{ dropped: row.ticked === false }"><LinkedText :segments="segmentsOf(row)" :text="row.rendered" /></span>
-                    <v-chip size="x-small" label variant="tonal" color="muted">{{ row.category }}</v-chip>
-                    <span v-if="row.repeat_of" class="text-caption text-muted" data-testid="fact-draft-repeat">≈ already {{ row.repeat_of.owner_name ? 'on ' + row.repeat_of.owner_name : 'in the world' }}</span>
-                </div>
-                <div v-if="!draft.facts.length" class="text-caption text-muted">Nothing new from that.</div>
+                <SuggestionBar
+                    :label="dated ? 'Event draft' : 'Facts draft'"
+                    :versions="versionRows"
+                    :version="draft.version"
+                    :prompt="draft.prompt"
+                    :year="dated ? draft.year : undefined"
+                    :prompt-label="dated ? 'What happened' : 'What to add'"
+                    prompt-testid="add-prompt"
+                    :busy="busy"
+                    :locked="draft.pending ? 'drafting another version…' : null"
+                    :regenerate-locked="yearInvalid"
+                    :primary-label="'Write ' + ticked"
+                    :can-primary="ticked > 0"
+                    :primary-loading="!!draft.accepting"
+                    testid="fact-draft-bar"
+                    :testids="barIds"
+                    @update:prompt="worlds.setSmallPrompt(draft.key, $event)"
+                    @update:year="worlds.setSmallPrompt(draft.key, draft.prompt, $event)"
+                    @regenerate="worlds.regenerateSmall(draft.key)"
+                    @use-version="worlds.useSmallVersion(draft.key, $event)"
+                    @discard="discard"
+                    @primary="worlds.acceptSmall(draft.key)"
+                >
+                    <template #status>
+                        <template v-if="draft.pending">
+                            <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
+                            <span class="text-caption text-muted">Drafting another version…</span>
+                        </template>
+                        <span v-else-if="draft.error" class="text-caption text-error" data-testid="fact-draft-error">{{ draft.error }}</span>
+                        <span v-else class="text-caption text-muted">{{ statusLine }}</span>
+                    </template>
+                </SuggestionBar>
+
+                <SuggestionRow
+                    v-for="row in draft.rows"
+                    :key="row.index"
+                    :ticked="isTicked(row)"
+                    :tick-label="'Write ' + row.rendered"
+                    :disabled="rowsOff"
+                    testid="fact-draft-row"
+                    @tick="tick(row.index, $event)"
+                >
+                    <LinkedText :segments="segmentsOf(row)" :text="row.rendered" />
+                    <template #end>
+                        <v-chip size="x-small" label variant="tonal" color="muted">{{ row.category }}</v-chip>
+                    </template>
+                    <template v-if="repeatOf(row)" #match>
+                        <div data-testid="fact-draft-repeat">
+                            <PreviewRepeats
+                                :repeat="repeatOf(row)"
+                                :choice="repeatChoice(draft.edited.facts[row.index])"
+                                :disabled="rowsOff"
+                                :unavailable="unavailableFor(row)"
+                                @settle="worlds.editSmall(draft.key, settleRepeat(draft.edited, row.index, $event))"
+                            />
+                        </div>
+                    </template>
+                </SuggestionRow>
+                <div v-if="!draft.rows.length" class="text-caption text-muted">Nothing new from that.</div>
                 <PreviewStubs
-                    :rows="draft.draft?.new_names || []"
+                    :rows="draft.edited?.new_names || []"
                     tickable
-                    note="ticked: stubs once written"
-                    @change="(name, change) => worlds.changeFactDraftName(name, change)"
+                    @change="(name, change) => worlds.editSmall(draft.key, changeNewName(draft.edited, name, change))"
                 />
-                <div class="d-flex ga-2 mt-2">
-                    <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-check" :disabled="!ticked" :loading="!!draft.accepting" data-testid="fact-draft-accept" @click="worlds.acceptFacts()">Write {{ ticked }}</v-btn>
-                    <v-btn variant="outlined" size="small" :disabled="!!draft.accepting" data-testid="fact-draft-discard" @click="worlds.discardFacts()">Discard</v-btn>
-                </div>
+                <SuggestionBar
+                    foot
+                    class="mt-2"
+                    :busy="busy"
+                    :locked="draft.pending ? 'drafting another version…' : null"
+                    :primary-label="'Write ' + ticked"
+                    :can-primary="ticked > 0"
+                    :primary-loading="!!draft.accepting"
+                    testid="fact-draft-foot"
+                    :testids="footIds"
+                    @discard="discard"
+                    @primary="worlds.acceptSmall(draft.key)"
+                />
             </template>
         </div>
     </div>
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
+import { eventYearValid, useWorldsStore } from '@/stores/worlds.js';
 import { dateParts } from './worldDates.js';
 import LinkedText from './LinkedText.vue';
+import PreviewRepeats from './PreviewRepeats.vue';
 import PreviewStubs from './PreviewStubs.vue';
-import { factDraftSegments } from './draftPage.js';
+import SuggestionBar from './SuggestionBar.vue';
+import SuggestionRow from './SuggestionRow.vue';
+import { changeNewName, factDraftSegments, repeatChoice, settleRepeat, tickFact } from './draftPage.js';
+import { factsKey, smallVersionRows } from './smallDrafts.js';
 
 // "+ Add facts…" and (`event`) "+ Add event…" on the entry page: a prompt
 // (and an event's year) asks for a few facts for the entry (`add_facts`,
 // `add_event`: every fact of an event dated its year), which come back as
-// a small draft to tick (`worlds.factDraft`); Accept writes the ticked
-// ones (`accept_facts`), Discard drops them. Nothing is written before.
-// The names the facts bring that the world hasn't are "New names" rows
-// (`PreviewStubs`, ticked: a stub each when written, ruling H8), and show
-// in the stub colour while ticked.
-// On a draft page (`onDraft`) the facts join the draft itself
-// (`addDraftFacts`: the draft's current version, on the server), to tick
-// there with the rest; one addition at a time, the buttons off meanwhile.
+// a small draft held on the server (`worlds.smallDrafts`, `facts:<id>`)
+// with a page draft's feature set (plan "polish-1"): its bar
+// (`SuggestionBar`: "Facts draft" / "Event draft", "Version n of m ▾",
+// the prompt (and year) kept and editable, Regenerate from it, Discard,
+// "Write N"), its rows to tick (`SuggestionRow`), a repeat's match and its
+// four choices under its row (`PreviewRepeats`, `settleRepeat`), and the
+// names the facts bring that the world hasn't as "New stubs" rows
+// (`PreviewStubs`, ticked: a stub each when written, ruling H8, shown in
+// the stub colour while ticked). "Write N" comes again at the list's
+// foot. Write writes the ticked ones (`accept_facts`); nothing is written
+// before.
+// On a draft page (`onDraft`) the facts come as the page draft's own
+// nested fact draft (`askNestedFacts`), shown the same way, indented
+// under the Facts heading (the Facts heading's instance shows it, an
+// event's too); Write puts the ticked ones into a new version of the page
+// draft (`write_nested_facts`). One at a time: the page draft waits
+// meanwhile (`nestedHeld`).
 export default {
     name: 'EntryAddFacts',
-    components: { LinkedText, PreviewStubs },
+    components: { LinkedText, PreviewRepeats, PreviewStubs, SuggestionBar, SuggestionRow },
     props: {
         thing: { type: Object, required: true },
         event: { type: Boolean, default: false },
@@ -113,42 +194,144 @@ export default {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { asking: false, prompt: '', year: null };
+        return {
+            asking: false,
+            prompt: '',
+            year: null,
+            barIds: {
+                versions: 'fact-draft-versions',
+                version: 'fact-draft-version',
+                regenerate: 'fact-draft-regenerate',
+                discard: 'fact-draft-discard',
+                primary: 'fact-draft-accept',
+            },
+            footIds: { discard: 'fact-draft-discard-foot', primary: 'fact-draft-accept-foot' },
+        };
     },
     computed: {
-        // the page's draft of this kind, if there is one
+        // the draft this one shows: on a draft page its nested draft (in
+        // the Facts heading's instance, an event's too), else the page's
+        // fact or event draft of this kind, if there is one
         draft() {
             if (this.onDraft) {
+                return this.event ? null : this.worlds.nestedDraft;
+            }
+            const found = this.worlds.smallDrafts[factsKey(this.thing.id)];
+            return found && found.kind === (this.event ? 'event' : 'facts') ? found : null;
+        },
+        // the page's one fact-or-event draft (on a draft page, its one
+        // nested draft), whichever of the two buttons asked it
+        slot() {
+            return this.onDraft ? this.worlds.nestedDraft : this.worlds.smallDrafts[factsKey(this.thing.id)] || null;
+        },
+        // why this button can't ask now, or null: the other button's
+        // draft holds the one slot (asking would replace it)
+        blocked() {
+            const slot = this.slot;
+            if (!slot || slot === this.draft) {
                 return null;
             }
-            const found = this.worlds.factDraft;
-            return found && found.thingId === this.thing.id && found.mode === (this.event ? 'event' : 'facts') ? found : null;
+            if (this.onDraft) {
+                return 'write or discard the added facts first';
+            }
+            return `write or discard the ${slot.kind === 'event' ? 'event' : 'facts'} draft first`;
+        },
+        // the entry the draft's facts are for: a draft page's stub (none
+        // for a new entry), else this page
+        ownId() {
+            return this.onDraft ? this.worlds.draft?.edited?.stub_id || null : this.thing.id;
+        },
+        // an event's draft (its facts all dated its year)
+        dated() {
+            return this.draft?.mode === 'event';
+        },
+        versionRows() {
+            return smallVersionRows(this.draft?.versions, this.draft?.version);
+        },
+        // mid-request: a Write or a version switch out
+        busy() {
+            return !!(this.draft?.accepting || this.draft?.switching);
+        },
+        // the rows take no edit while the draft is out or being written
+        rowsOff() {
+            return this.busy || !!this.draft?.pending;
+        },
+        statusLine() {
+            const where = this.onDraft ? 'Write puts the ticked facts into the draft.' : 'Tick what to write here.';
+            if (this.yearInvalid) {
+                return `${where} To regenerate, ${this.yearInvalid}.`;
+            }
+            return this.dated ? `Dated ${this.draft.year}. ${where}` : where;
         },
         canAsk() {
             if (!this.prompt.trim()) {
                 return false;
             }
-            return !this.event || (Number.isInteger(this.year) && this.year >= 1 && this.year <= 9999);
+            return !this.event || eventYearValid(this.year);
+        },
+        // why an event draft can't regenerate from its bar's year, or null
+        yearInvalid() {
+            return this.dated && !eventYearValid(this.draft.year) ? 'the year must be a whole number from 1 to 9999' : null;
         },
         ticked() {
-            return (this.draft?.facts || []).filter((row) => row.ticked !== false).length;
+            return (this.draft?.rows || []).filter((row) => this.isTicked(row)).length;
         },
     },
     watch: {
         'thing.id'() {
             this.asking = false;
         },
-        // asked: the form gives way to its draft
-        draft(now) {
+        // asked (here or by the other button): the form gives way to the
+        // draft
+        slot(now) {
             if (now) {
                 this.asking = false;
                 this.prompt = '';
             }
         },
+        // a draft page's nested event draft, asked from the Timeline far
+        // below, is shown here under Facts: brought into view
+        draft(now, before) {
+            if (now && !before && this.onDraft && now.mode === 'event') {
+                this.$nextTick(() => this.$refs.panel?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }));
+            }
+        },
     },
     methods: {
+        changeNewName,
+        repeatChoice,
+        settleRepeat,
         segmentsOf(row) {
-            return factDraftSegments(row.segments, this.draft?.draft?.new_names);
+            return factDraftSegments(row.segments, this.draft?.edited?.new_names);
+        },
+        // a row's tick as the owner left it
+        isTicked(row) {
+            return this.draft?.edited?.facts?.[row.index]?.ticked !== false;
+        },
+        // the fact a row repeats, as the draft holds it, or null
+        repeatOf(row) {
+            return this.draft?.edited?.facts?.[row.index]?.repeat_of || null;
+        },
+        // "Move existing here" can't apply to a repeat of this entry's
+        // own fact (the server skips such a move)
+        unavailableFor(row) {
+            const repeat = this.repeatOf(row);
+            return repeat?.owner_id && repeat.owner_id === this.ownId ? { move: 'already on this page' } : {};
+        },
+        // Enter asks (Shift+Enter a new line), not while an IME composes
+        onEnter(event) {
+            if (event.isComposing) {
+                return;
+            }
+            event.preventDefault();
+            this.ask();
+        },
+        tick(index, ticked) {
+            const edited = this.draft.edited;
+            this.worlds.editSmall(this.draft.key, tickFact(edited, index, ticked));
+        },
+        discard() {
+            this.worlds.discardSmall(this.draft.key);
         },
         start() {
             const now = this.thing.at || this.worlds.currentWorld?.now;
@@ -159,14 +342,13 @@ export default {
             if (!this.canAsk) {
                 return;
             }
+            const year = this.event ? this.year : null;
             if (this.onDraft) {
-                this.worlds.addDraftFacts(this.prompt.trim(), this.event ? this.year : null);
-                this.asking = false;
-                this.prompt = '';
-            } else if (this.event) {
-                this.worlds.addEvent(this.prompt.trim(), this.year);
+                // shown under Facts (an event's too); the form closes as
+                // the draft comes (the `slot` watcher)
+                this.worlds.askNestedFacts(this.prompt.trim(), year);
             } else {
-                this.worlds.addFacts(this.prompt.trim());
+                this.worlds.askFacts(this.event ? 'event' : 'facts', this.prompt.trim(), year);
             }
         },
     },
@@ -174,19 +356,29 @@ export default {
 </script>
 
 <style scoped>
-.ask,
-.draft {
+.entry-add-facts {
+    display: contents;
+}
+
+/* its own line under the heading */
+.panel {
+    flex: 0 0 100%;
+    order: 1;
+    margin: 4px 0;
+}
+
+/* a draft page's nested draft, indented under Facts */
+.panel.nested {
+    flex-basis: calc(100% - 16px);
+    margin-left: 16px;
+}
+
+.ask {
     border: 1px dashed rgb(var(--v-theme-accent));
     border-radius: 6px;
-    margin: 4px 0;
 }
 
 .year {
     max-width: 110px;
-}
-
-.dropped {
-    color: rgb(var(--v-theme-muted));
-    text-decoration: line-through;
 }
 </style>

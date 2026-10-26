@@ -283,6 +283,11 @@ function changedAt(rows, index, change) {
 
 // a fact's tick
 export function tickFact(edited, index, ticked) {
+    // a repeat's tick is "Keep both" or "Keep existing" (never back to
+    // "Keep new" or "Move existing here", which take its buttons)
+    if (edited.facts?.[index]?.repeat_of) {
+        return settleRepeat(edited, index, ticked ? 'both' : 'existing');
+    }
     return { facts: changedAt(edited.facts, index, { ticked }) };
 }
 
@@ -371,6 +376,42 @@ export function repeatChoice(fact) {
     return fact?.replaces_repeat ? 'new' : 'both';
 }
 
+// A "For other pages" row that repeats what its target says, settled one
+// of three ways (P8): 'new' ("Keep new": ticked, and the target's fact it
+// repeats removed on accept, `replaces_repeat`), 'existing' ("Keep
+// existing": unticked) or 'both' ("Keep both": ticked, the target's left
+// as it is). Never 'move': the fact it repeats is on that page already.
+export function settleElsewhereRepeat(edited, index, how) {
+    return {
+        elsewhere: changedAt(edited.elsewhere, index, {
+            ticked: how === 'new' || how === 'both',
+            replaces_repeat: how === 'new',
+        }),
+    };
+}
+
+// "For other pages" rows `indices` ticked or unticked (a row's tick, or a
+// group's Tick all): a repeating one's tick is "Keep both" or "Keep
+// existing", never back to "Keep new" (`replaces_repeat` cleared)
+export function tickElsewhere(rows, indices, ticked) {
+    const picked = new Set(indices);
+    return (rows || []).map((row, index) => {
+        if (!picked.has(index)) {
+            return row;
+        }
+        return row.repeat_of ? { ...row, ticked, replaces_repeat: false } : { ...row, ticked };
+    });
+}
+
+// Which of `settleElsewhereRepeat`'s ways a repeating elsewhere row is
+// settled in now (one at the untick threshold comes unticked: 'existing').
+export function elsewhereRepeatChoice(row) {
+    if (row?.ticked === false) {
+        return 'existing';
+    }
+    return row?.replaces_repeat ? 'new' : 'both';
+}
+
 // "+ also here": an "elsewhere" row's fact is one of this page's too
 export function alsoHere(edited, row) {
     const fact = {
@@ -387,7 +428,8 @@ export function alsoHere(edited, row) {
     return { facts: [...(edited.facts || []), fact] };
 }
 
-// an "elsewhere" row's target changed to `target` (`{id, name, kind}`)
+// an "elsewhere" row's target changed to `target` (`{id, name, kind}`): no
+// longer a repeat of what the old target says, nor replacing it
 export function retarget(edited, index, target) {
     const row = edited.elsewhere[index];
     return {
@@ -396,6 +438,7 @@ export function retarget(edited, index, target) {
             target_name: target.name,
             new: null,
             repeat_of: null,
+            replaces_repeat: false,
             category: categoryFor(target.kind, row.category),
         }),
     };

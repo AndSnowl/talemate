@@ -23,7 +23,8 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { connectedCount, groupKey } from './entryPage.js';
+import { connectedCount } from './entryPage.js';
+import { groupDraftKey } from './smallDrafts.js';
 import ConnectedGroup from './ConnectedGroup.vue';
 import GroupAddForm from './GroupAddForm.vue';
 
@@ -58,7 +59,7 @@ export default {
             return `${count} ${count === 1 ? 'entry' : 'entries'}, grouped by their tags`;
         },
         drafting() {
-            return !!this.worlds.groupAdds[groupKey(this.thing.id, null)];
+            return !!this.worlds.smallDrafts[groupDraftKey(this.thing.id, null)];
         },
     },
     watch: {

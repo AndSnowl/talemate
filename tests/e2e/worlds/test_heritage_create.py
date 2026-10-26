@@ -136,7 +136,7 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
     kept.uncheck()
     replaced_by = ears.get_by_test_id("override-by")
     assert "tusks of half an inch" in replaced_by.inner_text()
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
 
     # back to the character, with the new mix as its heritage and the
     # prompt as it was
@@ -151,7 +151,7 @@ def test_two_parents_without_mix_drafts_mix_first(app, page, fixed_preview):
     box.get_by_role("button", name="Create").click()
     gorra = box.get_by_test_id("draft-page")
     gorra.get_by_text("Gorra is broad.").wait_for(state="visible", timeout=TIMEOUT_MS)
-    gorra.get_by_role("button", name="Accept").click()
+    gorra.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     thing = page.get_by_test_id("thing-page")
     thing.get_by_test_id("thing-name").filter(has_text="Gorra").wait_for(
         state="visible", timeout=TIMEOUT_MS
@@ -198,7 +198,7 @@ def test_two_parents_with_mix_uses_it(app, page, fixed_preview):
     assert inherited.filter(has_text="Half-orcs have small tusks.").count() == 1
     assert inherited.filter(has_text="Lowlanders are short").count() == 1
 
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     thing = page.get_by_test_id("thing-page")
     thing.get_by_test_id("thing-name").filter(has_text="Gorra").wait_for(
         state="visible", timeout=TIMEOUT_MS
@@ -250,7 +250,9 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     race_preview.get_by_text("Tall hill people.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-    race_preview.get_by_role("button", name="Accept").click()
+    race_preview.get_by_test_id("draft-bar").get_by_role(
+        "button", name="Accept"
+    ).click()
 
     # accepting opens the new race, of Human
     human.get_by_test_id("thing-name").filter(has_text="Highlander").wait_for(
@@ -323,7 +325,7 @@ def test_mix_drafted_in_place_keeps_the_character(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert character_prompt.input_value() == prompt
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
 
     # back to the same character box: the mix picked, the prompt kept, no
     # page opened

@@ -173,7 +173,7 @@ def test_expand_stub_prefills_and_fills_it(app, page, fixed_preview):
     fixed_preview(_preview("Tsardom of Moscavia", "A cold realm of the north."))
     preview = _create_and_wait(page, box)
     assert _sent(page, "preview_thing")[-1]["stub_id"] == tsardom
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     thing = _opened(page, "Tsardom of Moscavia")
     assert thing.get_by_test_id("stub-panel").count() == 0
     assert _sent(page, "accept_preview")[-1]["preview"]["stub_id"] == tsardom
@@ -230,7 +230,7 @@ def test_prompt_names_highlight_and_repick_adds_aka(app, page, fixed_preview):
     preview = _create_and_wait(page, box)
     picks = _sent(page, "preview_thing")[-1]["picks"]
     assert picks == {"Moscavia": tsardom, "Owl-folk": world.things["Owl-folk"]}
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     thing = _opened(page, "Vasel Landing")
 
     # the re-pick taught the stub the name as written: common, not everyday

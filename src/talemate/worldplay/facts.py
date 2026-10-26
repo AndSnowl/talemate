@@ -47,13 +47,16 @@ from talemate.world.dates import WorldDate
 from talemate.world.kinds import get_kind
 from talemate.world.refs import parse_refs, scrub_emphasis
 from talemate.world.store import Source, World
+from talemate.world.view import FactState
 from talemate.worldplay import prose_gen
 from talemate.worldplay.ai import world_ai_call
 from talemate.worldplay.create import (
     TITLE_WORDS,
     CreatePreview,
+    MoveHereFact,
     PreviewFact,
     _aka_entries,
+    _moved_from_prose,
     _file_new_names,
     _new_names,
     _raw_aka_and_names,
@@ -68,7 +71,9 @@ from talemate.worldplay.create import (
     name_filings,
     offer_same,
     parse_create_reply,
+    prose_reads,
     repeat_flags,
+    write_repeat_choices,
 )
 from talemate.worldplay.held import held_text
 from talemate.worldplay.links import NewName, link_text, name_key
@@ -105,13 +110,21 @@ class FactDraft(BaseModel):
     """A small draft of facts for an entry (`thing_id`), from the owner's
     `prompt`; `year`, the year an event's facts are dated to, or `None`.
     `new_names`: the names its facts use that the world hasn't. The owner
-    ticks, edits or drops them before `accept_facts`."""
+    ticks, edits or drops them before `accept_facts`. `move_here`: the
+    owner's "Move existing here" rows (`repeat`) on facts that repeat the
+    world's, as a page draft's.
 
-    thing_id: str
+    `thing_id` is `None` for a page draft's nested draft (its "+ Add
+    facts" while the entry is still in draft): `accept_facts` refuses it,
+    since the router's `write_nested_facts` writes its facts into the
+    page draft instead of the world."""
+
+    thing_id: str | None = None
     prompt: str
     year: int | None = None
     facts: list[PreviewFact] = Field(default_factory=list)
     new_names: list[DraftName] = Field(default_factory=list)
+    move_here: list[MoveHereFact] = Field(default_factory=list)
 
 
 class DraftAddition(NamedTuple):
@@ -361,6 +374,11 @@ class _Unlinked(Exception):
         self.keys = keys
 
 
+class _NothingWritten(Exception):
+    """A fact draft whose only rows were repeat moves, none of which
+    applied: the empty revision is rolled back."""
+
+
 def _checked_names(
     view: Any, draft: FactDraft, texts: list[str], own_names: list[str]
 ) -> list[NewName]:
@@ -394,7 +412,10 @@ def _checked_names(
 
 
 def accept_facts(
-    world: World, draft: FactDraft, notes: list[str] | None = None
+    world: World,
+    draft: FactDraft,
+    notes: list[str] | None = None,
+    prose: list[str] | None = None,
 ) -> list[str]:
     """Write the draft's ticked facts onto its entry in one revision and
     return their ids: each in its category (`create.default_category`'s
@@ -407,15 +428,29 @@ def accept_facts(
     the owner marked it the same as), filed as its row says, and the
     facts link it (ruling H8). A stub no fact ends up linking (a name
     written only in lowercase, ruling F26) isn't made: the revision is
-    made again without it. `notes` gets what was left out."""
+    made again without it. `notes` gets what was left out.
 
+    Its repeat choices are settled in the same revision
+    (`create.write_repeat_choices`): a ticked fact marked
+    `replaces_repeat` ("Keep new") is written and the fact it repeats
+    removed; a ticked `repeat` row of `move_here` ("Move existing here")
+    moves the world's fact onto the entry. `prose` gets the entries whose
+    prose read a fact moved or removed, and the entry itself when its
+    prose reads a fact moved onto it."""
+
+    if draft.thing_id is None:
+        raise ValueError("a page draft's facts are written into the draft")
     view = world.view()
     state = view.thing(draft.thing_id)
     if state is None:
         raise KeyError(f"no such entry: {draft.thing_id}")
     categories = get_kind(state.kind).categories
     kept = [fact for fact in draft.facts if fact.ticked and fact.text.strip()]
-    if not kept:
+    # the rows whose repeat choices are settled: all but a blank ticked one
+    # (never written, so it replaces nothing)
+    rows = [fact for fact in draft.facts if not fact.ticked or fact.text.strip()]
+    moves = [row for row in draft.move_here if row.ticked and row.repeat]
+    if not kept and not moves:
         return []
     texts = [scrub_emphasis(" ".join(fact.text.split())) for fact in kept]
     own_names = _own_names(view.name_of(draft.thing_id) or "", state.fields.get("aka"))
@@ -423,17 +458,27 @@ def accept_facts(
     out = notes if notes is not None else []
     while True:
         try:
-            written = _write_facts(
-                world, draft, state.kind, kept, texts, names, categories, out
+            written, moved, removed = _write_facts(
+                world, draft, state.kind, kept, texts, names, categories, out, rows
             )
             break
         except _Unlinked as unlinked:
             names = [n for n in names if name_key(n.name) not in unlinked.keys]
+        except _NothingWritten:
+            return []
+    if prose is not None:
+        changed = _moved_from_prose(view, [*moved, *removed], draft.thing_id)
+        # the entry itself, when its prose reads a fact moved onto it
+        if any(prose_reads(state.kind, fact.category) for _o, fact in moved):
+            changed.append(draft.thing_id)
+        prose.extend(t for t in changed if t not in prose)
     log.info(
         "facts.accept",
         thing_id=draft.thing_id,
         facts=len(written),
         new_names=len(names),
+        moved_here=len(moved),
+        replaced=len(removed),
     )
     return written
 
@@ -447,9 +492,12 @@ def _write_facts(
     names: list[NewName],
     categories: Sequence[str],
     notes: list[str],
-) -> list[str]:
+    rows: Sequence[PreviewFact],
+) -> tuple[list[str], list[tuple[str, FactState]], list[tuple[str, FactState]]]:
     """`accept_facts`' one revision; raises `_Unlinked` (rolling it back)
-    when a stub made for `names` is linked by no fact."""
+    when a stub made for `names` is linked by no fact, and
+    `_NothingWritten` when it would write nothing. Returns the written
+    fact ids and `write_repeat_choices`' `(moved, removed)`."""
 
     view = world.view()
     written: list[str] = []
@@ -489,4 +537,10 @@ def _write_facts(
         if orphans:
             raise _Unlinked(orphans)
         _file_new_names(rev, world, view, names, made, draft.thing_id, notes)
-    return written
+        # after the retry point above, so a rolled-back try adds no notes
+        moved, removed = write_repeat_choices(
+            rev, world, view, rows, draft.move_here, draft.thing_id, notes
+        )
+        if not (written or moved or removed):
+            raise _NothingWritten()
+    return written, moved, removed

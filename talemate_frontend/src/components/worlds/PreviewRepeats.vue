@@ -43,7 +43,12 @@ const CHOICES = [
 // (`repeatChoice`): a repeat at or above the repeat threshold comes
 // unticked, as "Keep existing". The existing fact can't be removed or
 // moved when it's its entry's summary (`repeat.summary`, H4): that's
-// edited on its page, and those two choices say so.
+// edited on its page, and those two choices say so. A choice can also be
+// refused for a reason that's about where this row is, not the existing
+// fact (e.g. an elsewhere row's "Move existing here", already on that
+// page): `unavailable`, `{ [how]: reason }`, folded into the same
+// `refusal()`. It always sits in its row's `SuggestionRow` `match` slot,
+// which indents it (ruling R11).
 export default {
     name: 'PreviewRepeats',
     props: {
@@ -52,6 +57,9 @@ export default {
         // 'new', 'existing', 'both' or 'move'
         choice: { type: String, default: 'existing' },
         disabled: { type: Boolean, default: false },
+        // reasons a choice can't apply here, by `how` (e.g. `{ move:
+        // 'already on that page' }`)
+        unavailable: { type: Object, default: () => ({}) },
     },
     emits: ['settle'],
     data() {
@@ -60,6 +68,9 @@ export default {
     methods: {
         // why a choice that takes the existing fact away can't, or null
         refusal(option) {
+            if (this.unavailable[option.how]) {
+                return this.unavailable[option.how];
+            }
             if (!option.takesExisting) {
                 return null;
             }
@@ -74,7 +85,6 @@ export default {
 
 <style scoped>
 .repeat-match {
-    margin-left: 34px;
     padding-bottom: 4px;
     color: rgb(var(--v-theme-muted));
 }

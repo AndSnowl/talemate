@@ -2,12 +2,21 @@
     <div class="thing-page" :data-testid="draft ? 'draft-page' : 'thing-page'">
         <!-- a draft: its bar, and what it could be instead -->
         <template v-if="draft && thing">
-            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" @accept="acceptDraft()" />
+            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" :locked="draftLocked" @accept="acceptDraft()" />
             <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
                 <div class="d-flex align-center flex-wrap ga-2">
                     <span>There is a stub named “{{ matchingStub.name }}” already.</span>
                     <v-spacer></v-spacer>
-                    <v-btn color="accent" variant="flat" size="small" :loading="worlds.draft.accepting" :disabled="!edited.name.trim()" @click="acceptDraft(matchingStub.id)">Fill the stub “{{ matchingStub.name }}” instead</v-btn>
+                    <v-btn
+                        color="accent"
+                        variant="flat"
+                        size="small"
+                        :loading="worlds.draft.accepting"
+                        :disabled="!edited.name.trim() || !!draftLocked"
+                        :title="draftLocked"
+                        data-testid="fill-stub-instead"
+                        @click="acceptDraft(matchingStub.id)"
+                    >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
                 </div>
             </v-alert>
             <v-alert v-if="worlds.previewError" type="error" variant="tonal" density="compact" class="mb-2">{{ worlds.previewError }}</v-alert>
@@ -251,7 +260,10 @@
                         <ThingAka />
                     </template>
 
-                    <div class="d-flex align-center mt-4 mb-1">
+                    <!-- "+ Add facts…"'s form and draft wrap onto their own
+                         line under the heading (a draft page's nested draft
+                         indented) -->
+                    <div class="d-flex align-center flex-wrap mt-4 mb-1" data-testid="facts-heading">
                         <span class="text-overline text-muted">{{ showInherited ? 'Own facts' : 'Facts' }}</span>
                         <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
@@ -264,10 +276,6 @@
                     </div>
 
                     <template v-if="draft">
-                        <div v-if="worlds.draft.adding" class="d-flex align-center ga-2 text-caption text-muted mb-1" data-testid="draft-adding">
-                            <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
-                            Drafting more facts…
-                        </div>
                         <!-- a stub's facts so far, written already -->
                         <div v-for="fact in thing.facts" :key="fact.fact_id" class="stub-fact text-muted" data-testid="draft-stub-fact">
                             <LinkedText :segments="fact.segments" :text="fact.rendered" />
@@ -290,12 +298,13 @@
                             @copy="edit(copyFactTo(edited, row.index, $event))"
                             @held="edit(holdFact(edited, row.index, $event))"
                         >
-                            <PreviewRepeats
-                                v-if="row.fact.repeat_of"
-                                :repeat="row.fact.repeat_of"
-                                :choice="repeatChoice(row.fact)"
-                                @settle="edit(settleRepeat(edited, row.index, $event))"
-                            />
+                            <template v-if="row.fact.repeat_of" #match>
+                                <PreviewRepeats
+                                    :repeat="row.fact.repeat_of"
+                                    :choice="repeatChoice(row.fact)"
+                                    @settle="edit(settleRepeat(edited, row.index, $event))"
+                                />
+                            </template>
                             <div v-if="form && form.draft && form.index === row.index" class="my-2">
                                 <ThingFactForm :form="form" :categories="categories" :removable="false" @save="saveForm" @cancel="form = null" />
                             </div>
@@ -304,31 +313,34 @@
                         <!-- what it inherits, each ticked as kept: unticking one
                              the model missed marks it replaced by one of its own -->
                         <template v-if="edited.inherited && edited.inherited.length">
-                            <div class="text-caption text-muted text-uppercase mt-3">Inherited (untick to replace)</div>
-                            <div v-for="row in edited.inherited" :key="row.fact_id" class="fact inherited d-flex align-center ga-2" data-testid="preview-inherited">
-                                <v-checkbox-btn
-                                    :model-value="overriderOf(row) < 0"
-                                    aria-label="Kept"
-                                    density="compact"
-                                    class="flex-grow-0"
-                                    :disabled="!edited.facts.length"
-                                    @update:model-value="setKept(row, $event)"
-                                ></v-checkbox-btn>
-                                <span class="flex-grow-1" :class="{ replaced: overriderOf(row) >= 0 }">{{ row.text }}</span>
-                                <v-select
-                                    v-if="overriderOf(row) >= 0"
-                                    :model-value="overriderOf(row)"
-                                    :items="ownFactItems"
-                                    label="Replaced by"
-                                    density="compact"
-                                    variant="outlined"
-                                    hide-details
-                                    class="override-by"
-                                    data-testid="override-by"
-                                    @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
-                                ></v-select>
-                                <v-chip size="x-small" label variant="tonal" color="muted">{{ row.source }}</v-chip>
-                            </div>
+                            <div class="suggestion-heading mt-3">Inherited (untick to replace)</div>
+                            <SuggestionRow
+                                v-for="row in edited.inherited"
+                                :key="row.fact_id"
+                                :ticked="overriderOf(row) < 0"
+                                tick-label="Kept"
+                                :disabled="!edited.facts.length"
+                                testid="preview-inherited"
+                                @tick="setKept(row, $event)"
+                            >
+                                <span class="inherited">{{ row.text }}</span>
+                                <template #end>
+                                    <v-chip size="x-small" label variant="tonal" color="muted" class="flex-0-0">{{ row.source }}</v-chip>
+                                </template>
+                                <template v-if="overriderOf(row) >= 0" #under>
+                                    <v-select
+                                        :model-value="overriderOf(row)"
+                                        :items="ownFactItems"
+                                        label="Replaced by"
+                                        density="compact"
+                                        variant="outlined"
+                                        hide-details
+                                        class="override-by"
+                                        data-testid="override-by"
+                                        @update:model-value="worlds.setPreviewOverride(row.fact_id, $event)"
+                                    ></v-select>
+                                </template>
+                            </SuggestionRow>
                         </template>
                     </template>
 
@@ -432,23 +444,37 @@
                 />
                 <!-- 5. Could move here -->
                 <MoveHere :draft="edited" @tick="tickMove" />
-                <!-- 6. New names -->
+                <!-- 6. New stubs -->
                 <PreviewStubs :rows="edited.new_names || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
                 <!-- 7. File into this -->
                 <div v-if="(edited.file_into || []).length" class="mt-3" data-testid="draft-file-into">
-                    <div class="heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>
-                    <div v-for="row in edited.file_into" :key="row.thing_id" class="d-flex align-center ga-2" data-testid="file-into-row">
-                        <v-checkbox-btn
-                            :model-value="!!row.ticked"
-                            density="compact"
-                            class="flex-grow-0"
-                            :aria-label="'File ' + row.name + ' into this'"
-                            @update:model-value="edit(tickFileInto(edited, row.thing_id, $event))"
-                        ></v-checkbox-btn>
-                        <span class="file-into-name" :class="{ dropped: !row.ticked }">{{ row.name }}</span>
-                        <span v-if="row.role" class="role">{{ row.role }}</span>
-                    </div>
+                    <div class="suggestion-heading">File into this <span class="text-muted">· entries that look like they belong in it</span></div>
+                    <SuggestionRow
+                        v-for="row in edited.file_into"
+                        :key="row.thing_id"
+                        :ticked="!!row.ticked"
+                        :tick-label="'File ' + row.name + ' into this'"
+                        testid="file-into-row"
+                        @tick="edit(tickFileInto(edited, row.thing_id, $event))"
+                    >
+                        <span class="file-into-name">{{ row.name }}</span>
+                        <span v-if="row.role" class="role ml-2">{{ row.role }}</span>
+                    </SuggestionRow>
                 </div>
+                <!-- Accept again at the foot of the draft's lists -->
+                <SuggestionBar
+                    foot
+                    class="mt-3"
+                    :busy="draftBusy"
+                    :locked="draftLocked"
+                    primary-label="Accept"
+                    :can-primary="!!edited.name.trim()"
+                    :primary-loading="!!worlds.draft.accepting"
+                    testid="draft-foot"
+                    :testids="{ primary: 'draft-accept-foot', discard: 'draft-discard-foot' }"
+                    @discard="worlds.discardPreview()"
+                    @primary="acceptDraft()"
+                />
             </template>
 
             <!-- what's filed in it and what names it: a stub's draft shows
@@ -528,6 +554,8 @@ import PreviewStubs from './PreviewStubs.vue';
 import SameThingAsk from './SameThingAsk.vue';
 import SelectionMenu from './SelectionMenu.vue';
 import StubCard from './StubCard.vue';
+import SuggestionBar from './SuggestionBar.vue';
+import SuggestionRow from './SuggestionRow.vue';
 import TagChip from './TagChip.vue';
 import ThingAka from './ThingAka.vue';
 import ThingDeleteDialog from './ThingDeleteDialog.vue';
@@ -631,8 +659,11 @@ function cut(text, length = 28) {
 // (`DraftBar`) and, in the spec's order around the shared sections,
 // "Same thing?" after In, the repeats' "Move existing here" on its facts
 // (`PreviewRepeats`) and what it inherits, then For other pages
-// (`PreviewElsewhere`), Could move here (`MoveHere`), New names
-// (`PreviewStubs`) and File into this. What the page alone has (the as-of
+// (`PreviewElsewhere`), Could move here (`MoveHere`), New stubs
+// (`PreviewStubs`) and File into this, with Accept and Discard again at
+// their foot. While a nested "+ Add facts" draft is out or held
+// (`draftLocked`), every way to accept it waits, "Fill the stub …
+// instead" too. What the page alone has (the as-of
 // date, the timeline strip, other names, numbers, prose regeneration,
 // merge and delete) is left out.
 export default {
@@ -654,6 +685,8 @@ export default {
         PreviewRepeats,
         PreviewStubs,
         SameThingAsk,
+        SuggestionBar,
+        SuggestionRow,
         SelectionMenu,
         StubCard,
         ThingAka,
@@ -794,6 +827,16 @@ export default {
                     || this.worlds.referenceTargets.find((target) => target.id === same)?.name
                 : null;
             return this.edited ? countsLine(previewCounts(this.edited), onto) : '';
+        },
+        // while the page draft's nested "+ Add facts" draft is open or
+        // held, its own Accept, Regenerate and version switch wait for it
+        draftLocked() {
+            return this.worlds.nestedHeld ? 'write or discard the added facts first' : null;
+        },
+        // mid-request, as DraftBar's: a Regenerate, accept or version
+        // switch out
+        draftBusy() {
+            return this.worlds.previewPending || !!this.worlds.draft?.accepting || !!this.worlds.pending.use_version;
         },
         existence() {
             return existenceOf(this.thing);
@@ -1371,34 +1414,22 @@ export default {
     padding: 2px 0;
 }
 
-.heading {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: rgb(var(--v-theme-muted));
-}
-
-.dropped {
-    color: rgb(var(--v-theme-muted));
-}
-
 .inherited {
     color: rgb(var(--v-theme-muted));
 }
 
-.replaced {
-    text-decoration: line-through;
-    color: rgb(var(--v-theme-muted));
-}
-
 .override-by {
-    flex: none;
     width: 220px;
 }
 
 .file-into-name {
     font-weight: 600;
     color: rgb(var(--v-theme-link));
+}
+
+/* an unticked row's name greys with the rest of its row */
+.suggestion-dropped .file-into-name {
+    color: inherit;
 }
 
 .role {

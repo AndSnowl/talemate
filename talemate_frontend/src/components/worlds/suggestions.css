@@ -1,0 +1,18 @@
+/* Shared look for every suggestion-to-tick list (plan "polish-1",
+   Task 7): a dropped (unticked) row's text and a section's heading ("For
+   other pages", "New names", "Could move here", …). Imported unscoped
+   from SuggestionRow.vue: the one copy of each (the lists' own copies went with Task 11). A name coloured
+   in its own component (a stub's, an entry's) greys with its dropped row
+   by `color: inherit` under `.suggestion-dropped` there. */
+
+.suggestion-dropped {
+    color: rgb(var(--v-theme-muted));
+    text-decoration: line-through;
+}
+
+.suggestion-heading {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgb(var(--v-theme-muted));
+}

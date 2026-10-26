@@ -196,7 +196,7 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     box.get_by_role("button", name="Create").click()
     preview = page.get_by_test_id("draft-page")
     preview.wait_for(state="visible", timeout=TIMEOUT_MS)
-    preview.get_by_role("button", name="Accept").click()
+    preview.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     yelena = page.get_by_test_id("thing-page")
     yelena.get_by_test_id("thing-name").filter(has_text="Yelena").wait_for(
         state="visible", timeout=TIMEOUT_MS

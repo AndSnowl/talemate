@@ -2,13 +2,14 @@
 every page shares.
 
 A new or expanded entry opens as its real page, marked as a draft, and
-nothing is written until Accept: the draft bar (Version n of m ▾,
-↻ Regenerate, Edit prompt, Discard, Accept), its "In" rows and "File into
+nothing is written until Accept: the draft bar (its prompt, always on
+screen and editable; Version n of m ▾, ↻ Regenerate, Discard, Accept),
+its "In" rows and "File into
 this" (the model's unticked, ruling F7; the owner's own ticked), its
 facts (linked as accept will link them, P6) with a repeat's four choices
 (Keep new, Keep existing, Keep both, Move existing here, P8), "For other
 pages" with a target to change and "+ also here", "Could move here", and
-New names. The
+New stubs. The
 fact menu (⋯ or right-click: Move to…, Copy to…, Held by…, Edit, Change
 dates, End this, Remove) and the selection menu (Make a stub, Make a stub
 and expand now, Link to an entry…, "Ask about this" for later) work on
@@ -32,8 +33,12 @@ from talemate.world.dates import WorldDate
 
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_connections_create import (
+    KALMARA,
     _choose_mode,
+    _create_and_wait,
     _opened,
+    _place_box,
+    _preview,
     _search_and_pick,
     _wait_sent,
 )
@@ -186,7 +191,7 @@ def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_pre
     expect(draft.get_by_test_id("thing-other-names")).to_contain_text("the Winged")
     draft.get_by_role("button", name="Remove other name the Winged").click()
     expect(names).to_have_count(1)
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     sent = _wait_sent(page, "accept_preview")
     assert [entry["name"] for entry in sent["preview"]["aka"]] == ["the Frostwings"]
     thing = page.get_by_test_id("thing-page")
@@ -231,29 +236,59 @@ def test_draft_versions_and_discard(app, page, fixed_preview):
     assert not night.get_by_role("checkbox").is_checked()
     expect(draft.get_by_test_id("accept-counts")).to_have_text("writes 0 facts here")
 
-    # Edit prompt: back to the box, the prompt kept; Create makes version 3
-    bar.get_by_role("button", name="Edit prompt").click()
-    box = page.get_by_test_id("create-box")
-    prompt = box.get_by_label("Describe it")
+    # the bar holds the prompt, editable directly; Regenerate makes version 3
+    assert bar.get_by_role("button", name="Edit prompt").count() == 0
+    prompt = bar.get_by_test_id("draft-prompt").locator("textarea").first
     expect(prompt).to_have_value("The Tsar's winged army.")
     prompt.fill("The Tsar's winged army, at night.")
     fixed_preview(_host("It sleeps by day."))
-    box.get_by_role("button", name="Create").click()
+    bar.get_by_role("button", name="Regenerate").click()
     expect(versions).to_contain_text("Version 3 of 3")
     sent = _sent(page, "preview_thing")[-1]
     assert sent["draft_key"] == "new:lore:frostwing host"
     assert sent["prompt"] == "The Tsar's winged army, at night."
 
-    # Discard: the draft goes, nothing is written
+    # Discard: the draft goes, nothing is written; the create box's form
+    # comes back with the (edited) prompt as it was left in the bar
     bar.get_by_test_id("draft-discard").click()
     sent = _wait_sent(page, "discard_preview")
     assert sent["draft_key"] == "new:lore:frostwing host"
     expect(page.get_by_test_id("draft-page")).to_have_count(0)
-    page.get_by_test_id("create-box").wait_for(state="visible", timeout=TIMEOUT_MS)
+    box = page.get_by_test_id("create-box")
+    box.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(box.get_by_label("Describe it")).to_have_value(
+        "The Tsar's winged army, at night."
+    )
     expect(
         page.get_by_test_id("thing-card").filter(has_text="Frostwing")
     ).to_have_count(0)
     assert _sent(page, "accept_preview") == []
+    assert page.console_errors == []
+
+
+def test_draft_prompt_in_bar_regenerates(app, page, fixed_preview):
+    """The page draft's bar holds its prompt directly (no "Edit prompt",
+    no separate box to swap to): editing it there and clicking Regenerate
+    sends the edited prompt back with the draft's key."""
+
+    _seeded(app, page, "PromptInBar")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    bar = draft.get_by_test_id("draft-bar")
+    versions = bar.get_by_test_id("draft-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+
+    prompt = bar.get_by_test_id("draft-prompt").locator("textarea").first
+    expect(prompt).to_have_value("The Tsar's winged army.")
+    assert bar.get_by_role("button", name="Edit prompt").count() == 0
+
+    prompt.fill("The Tsar's winged army, at dusk.")
+    fixed_preview(_host("It hunts by moonlight."))
+    bar.get_by_role("button", name="Regenerate").click()
+    sent = _wait_sent(page, "preview_thing")
+    assert sent["draft_key"] == "new:lore:frostwing host"
+    assert sent["prompt"] == "The Tsar's winged army, at dusk."
+    expect(versions).to_contain_text("Version 2 of 2")
     assert page.console_errors == []
 
 
@@ -309,7 +344,7 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     assert not talon.get_by_role("checkbox").is_checked()
     talon.get_by_role("checkbox").check()
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     host = _opened(page, "The Frostwing Host")
     accepted = _sent(page, "accept_preview")[-1]
     assert accepted["draft_key"] == "new:lore:frostwing host"
@@ -396,7 +431,7 @@ def test_repeat_move_that_one_here(app, page, fixed_preview):
     assert not freeze.get_by_role("checkbox").is_checked()
     expect(counts).to_have_text("writes 1 fact here, moves 1 in")
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     road = _opened(page, "Khorol Ice Road")
     accepted = _sent(page, "accept_preview")[-1]["preview"]
     assert [f["ticked"] for f in accepted["facts"]] == [True, False, False]
@@ -454,7 +489,7 @@ def test_retarget_other_page_and_also_here(app, page, fixed_preview):
         "writes 2 facts here, 2 elsewhere"
     )
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     host = _opened(page, "The Frostwing Host")
     accepted = _sent(page, "accept_preview")[-1]["preview"]
     assert [(e["target_id"], e["text"]) for e in accepted["elsewhere"]] == [
@@ -577,7 +612,7 @@ def test_selection_make_stub_and_link(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     host = _opened(page, "The Frostwing Host")
     row = _fact(host, "Riders of the")
     expect(row.get_by_test_id("linked-stub")).to_have_count(2)
@@ -776,7 +811,7 @@ def test_draft_in_new_name_and_kind(app, page, fixed_preview):
     page.get_by_role("option", name="character", exact=True).click()
     expect(fact.locator(".v-chip")).to_have_text("appearance")
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     host = _opened(page, "The Frostwing Host")
     accepted = _sent(page, "accept_preview")[-1]["preview"]
     assert accepted["kind"] == "character"
@@ -879,7 +914,7 @@ def test_draft_fact_end_and_dates(app, page, fixed_preview):
     form.get_by_role("button", name="End").click()
     expect(fact).to_contain_text("990")
     expect(fact).to_contain_text("1010")
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     _opened(page, "The Frostwing Host")
     (written,) = _sent(page, "accept_preview")[-1]["preview"]["facts"]
     assert written["since"]["instant"] < written["until"]["instant"]
@@ -1109,7 +1144,7 @@ def test_draft_edit_keeps_highlights(app, page, fixed_preview):
     raised.get_by_role("checkbox").click()
     expect(row).to_contain_text("995")
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     host = _opened(page, "The Frostwing Host")
     fact = _fact(host, "It guards Velikoye")
     expect(fact.get_by_test_id("linked-ref")).to_have_text("Velikoye")
@@ -1186,7 +1221,7 @@ def test_repeat_choices(app, page, fixed_preview):
     borders = freeze.evaluate(
         """host => [
             getComputedStyle(host).borderBottomStyle,
-            getComputedStyle(host.querySelector('.fact')).borderBottomStyle,
+            getComputedStyle(host.querySelector('.suggestion-line')).borderBottomStyle,
         ]"""
     )
     assert borders == ["dashed", "none"]
@@ -1205,7 +1240,7 @@ def test_repeat_choices(app, page, fixed_preview):
     expect(bells.get_by_test_id("repeat-moving")).to_be_visible()
     expect(counts).to_have_text("writes 2 facts here, moves 1 in, replaces 1")
 
-    draft.get_by_role("button", name="Accept").click()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     road = _opened(page, "Khorol Ice Road")
     accepted = _sent(page, "accept_preview")[-1]["preview"]
     assert [f.get("replaces_repeat", False) for f in accepted["facts"]] == [
@@ -1222,4 +1257,396 @@ def test_repeat_choices(app, page, fixed_preview):
     _fact(vel, GATE).wait_for(state="visible", timeout=TIMEOUT_MS)
     expect(_fact(vel, FREEZES)).to_have_count(0)
     expect(_fact(vel, BELLS)).to_have_count(0)
+    assert page.console_errors == []
+
+
+AGAIN = "The Khorol freezes solid every winter, bank to bank."
+
+
+def test_elsewhere_row_controls_under_text_and_repeat_choices(app, page, fixed_preview):
+    """An elsewhere row's placement controls ("→ page ▾", "+ also here")
+    sit on a second line under its text (owner, mockup B). A row that
+    repeats what its target says hangs its match under it with the four
+    choices, Move existing here shown off (already on that page); Keep
+    new writes it and removes the target's fact on Accept."""
+
+    world = _seeded(app, page, "ElsewhereRepeat")
+    fixed_preview(
+        _host(
+            "The Host is entirely owl-folk.",
+            elsewhere=[
+                {"entry": "Velikoye", "text": ON_VELIKOYE},
+                {"entry": "Velikoye", "text": AGAIN},
+            ],
+        )
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    other = draft.get_by_test_id("preview-elsewhere")
+    bridges = other.get_by_test_id("elsewhere-row").filter(has_text=ON_VELIKOYE)
+    tick = bridges.get_by_role("checkbox").bounding_box()
+    for testid in ("elsewhere-target", "elsewhere-also"):
+        box = bridges.get_by_test_id(testid).bounding_box()
+        assert box["y"] >= tick["y"] + tick["height"] - 1, testid
+
+    again = other.get_by_test_id("elsewhere-row").filter(has_text="bank to bank")
+    match = again.get_by_test_id("fact-match")
+    expect(match).to_contain_text(FREEZES)
+    expect(match.get_by_test_id("repeat-choice")).to_have_text(
+        ["Keep new", "Keep existing", "Keep both", "Move existing here"]
+    )
+    move = match.get_by_role("button", name="Move existing here")
+    expect(move).to_be_disabled()
+    expect(move).to_have_attribute("title", "already on that page")
+    # unticked, it looks dropped; ticked again by Keep new, it doesn't
+    expect(again.locator(".suggestion-dropped")).to_have_count(1)
+    match.get_by_role("button", name="Keep new").click()
+    expect(again.get_by_role("checkbox").first).to_be_checked()
+    expect(again.locator(".suggestion-dropped")).to_have_count(0)
+    expect(match.get_by_test_id("repeat-removing")).to_be_visible()
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]
+    [row] = [e for e in accepted["elsewhere"] if e["text"] == AGAIN]
+    assert row["ticked"] is True and row["replaces_repeat"] is True
+    assert row["repeat_of"]["fact_id"] == world.facts[FREEZES]
+
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
+    _fact(vel, AGAIN).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(vel, FREEZES)).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_repeat_match_sits_above_separator(app, page, fixed_preview):
+    """A draft fact's repeat hangs under its own row, on the row's left
+    rule, and the dotted separator comes after the match: never between
+    a fact and its match."""
+
+    world = _seeded(app, page, "MatchRule")
+    fixed_preview(
+        {
+            "name": "Khorol Ice Road",
+            "facts": [
+                {
+                    "category": "description",
+                    "text": "The Khorol freezes from November to April.",
+                    "ticked": False,
+                    "repeat_of": {
+                        "fact_id": world.facts[FREEZES],
+                        "owner_id": world.things["Velikoye"],
+                        "owner_name": "Velikoye",
+                        "text": FREEZES,
+                        "score": 0.8,
+                    },
+                },
+                {"category": "description", "text": "Carts cross the ice in winter."},
+            ],
+            "prose": {"description": "The winter road."},
+        }
+    )
+    draft = _draft(page, "place", "The road over the frozen river.")
+    freeze = _draft_fact(draft, "November to April")
+    match = freeze.get_by_test_id("fact-match")
+    expect(match).to_be_visible()
+    # the match sits in the row's match slot, on its left rule
+    rule = match.evaluate("m => getComputedStyle(m.parentElement).borderLeftStyle")
+    assert rule == "solid"
+    # the row's separator runs under the match; the next row starts after it
+    assert freeze.evaluate("r => getComputedStyle(r).borderBottomStyle") == "dashed"
+    row_box = freeze.bounding_box()
+    match_box = match.bounding_box()
+    assert (
+        match_box["y"] + match_box["height"] <= row_box["y"] + row_box["height"] + 0.5
+    )
+    carts = _draft_fact(draft, "Carts cross").bounding_box()
+    assert carts["y"] >= match_box["y"] + match_box["height"] - 0.5
+    assert page.console_errors == []
+
+
+def test_draft_fact_right_click_opens_menu(app, page, fixed_preview):
+    """A right-click on a draft fact opens its fact menu, as on a page,
+    and the menu's Select all selects the fact's words."""
+
+    _seeded(app, page, "DraftMenu")
+    fixed_preview(_host("It flies at night.", "It hunts by moonlight."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    hunts = _draft_fact(draft, "moonlight")
+    hunts.locator(".fact-date").click(button="right")
+    menu = page.get_by_test_id("fact-menu")
+    menu.wait_for(state="visible", timeout=TIMEOUT_MS)
+    menu.get_by_role("menuitem", name="Select all", exact=True).click()
+    selected = page.evaluate("() => window.getSelection().toString()")
+    assert selected.strip() == "It hunts by moonlight."
+    assert page.console_errors == []
+
+
+# --- "+ Add facts" as a versioned small draft (polish-1, Task 9) ------------
+
+
+def _velikoye(app, page, stem: str):
+    world = _seeded(app, page, stem)
+    page.get_by_test_id("kind-place").click()
+    return world, _open_thing(page, "Velikoye")
+
+
+def _ask_facts(scope, prompt: str):
+    """ "+ Add facts…", `prompt` asked: the fact draft, once it shows."""
+
+    scope.get_by_test_id("add-facts").click()
+    scope.get_by_test_id("add-facts-form").get_by_label("What to add").fill(prompt)
+    scope.get_by_test_id("add-draft").click()
+    found = scope.get_by_test_id("fact-draft")
+    found.get_by_test_id("fact-draft-bar").wait_for(state="visible", timeout=TIMEOUT_MS)
+    return found
+
+
+def _facts_reply(*texts) -> dict:
+    return {"facts": [{"category": "general", "text": text} for text in texts]}
+
+
+def test_add_facts_regenerate_and_versions(app, page, fixed_facts):
+    """ "+ Add facts" on a saved page has a page draft's feature set: the
+    prompt kept in its bar, Regenerate from it as edited, "Version n of
+    m", and each version's ticks kept; Write sends its key."""
+
+    world, thing = _velikoye(app, page, "AddVersions")
+    fixed_facts(_facts_reply("Its walls are white.", "Its market sells furs."))
+    found = _ask_facts(thing, "its walls")
+    rows = found.get_by_test_id("fact-draft-row")
+    expect(rows).to_have_count(2)
+    versions = found.get_by_test_id("fact-draft-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+    rows.nth(1).get_by_role("checkbox").uncheck()
+    expect(found.get_by_test_id("fact-draft-accept")).to_have_text("Write 1")
+    # "Write N" again at the foot of the list
+    expect(found.get_by_test_id("fact-draft-foot")).to_contain_text("Write 1")
+
+    # the prompt, kept and edited in the bar, then Regenerate
+    prompt = found.get_by_test_id("add-prompt").locator("textarea").first
+    expect(prompt).to_have_value("its walls")
+    prompt.fill("its walls at dusk")
+    fixed_facts(_facts_reply("Its walls glow at dusk."))
+    found.get_by_test_id("fact-draft-regenerate").click()
+    expect(versions).to_contain_text("Version 2 of 2")
+    expect(rows).to_have_count(1)
+    expect(rows.nth(0)).to_contain_text("Its walls glow at dusk.")
+    sent = _sent(page, "add_facts")[-1]
+    assert sent["regenerate"] is True
+    assert sent["prompt"] == "its walls at dusk"
+
+    # version 1 again, as the owner left it
+    versions.click()
+    page.get_by_test_id("fact-draft-version").filter(has_text="v1").click()
+    expect(versions).to_contain_text("Version 1 of 2")
+    expect(rows).to_have_count(2)
+    expect(rows.nth(1).get_by_role("checkbox")).not_to_be_checked()
+    expect(rows.nth(0).get_by_role("checkbox")).to_be_checked()
+
+    found.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "accept_facts")
+    assert sent["draft_key"] == f"facts:{world.things['Velikoye']}"
+    assert [f["ticked"] for f in sent["draft"]["facts"]] == [True, False]
+    _fact(thing, "Its walls are white.").wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(thing, "Its market sells furs.")).to_have_count(0)
+    expect(thing.get_by_test_id("fact-draft")).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_add_facts_repeat_keep_new(app, page, fixed_facts):
+    """A drafted fact that repeats one the world holds shows its match
+    under its row with the four choices; Keep new writes it and removes
+    the existing one. (The add-facts ask flags repeats of the page's own
+    facts: `draft_facts` checks against `owners=[thing_id]`.)"""
+
+    _world, thing = _velikoye(app, page, "AddRepeat")
+    again = "The Khorol freezes solid every winter, bank to bank."
+    fixed_facts(_facts_reply(again, "Its market sells furs."))
+    found = _ask_facts(thing, "the river")
+    row = found.get_by_test_id("fact-draft-row").filter(has_text="bank to bank")
+    match = row.get_by_test_id("fact-draft-repeat")
+    expect(match).to_contain_text(FREEZES)
+    expect(match.get_by_test_id("repeat-choice")).to_have_text(
+        ["Keep new", "Keep existing", "Keep both", "Move existing here"]
+    )
+    # a repeat of this page's own fact can't move here: shown off, with why
+    move = match.get_by_role("button", name="Move existing here")
+    expect(move).to_be_disabled()
+    expect(move).to_have_attribute("title", "already on this page")
+    # the page holds one fact-or-event draft: "+ Add event…" waits for it
+    add_event = thing.get_by_test_id("entry-timeline").get_by_test_id("add-event")
+    expect(add_event).to_be_disabled()
+    expect(add_event).to_have_attribute(
+        "title", "write or discard the facts draft first"
+    )
+    match.get_by_role("button", name="Keep new").click()
+    expect(row.get_by_role("checkbox")).to_be_checked()
+    expect(match.get_by_test_id("repeat-removing")).to_be_visible()
+    found.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "accept_facts")
+    assert sent["draft"]["facts"][0]["replaces_repeat"] is True
+    _fact(thing, again).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_fact(thing, FREEZES)).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_nested_add_facts_on_draft(app, page, fixed_preview, fixed_facts):
+    """On a draft page, "+ Add facts" is its own small draft nested under
+    Facts: the page draft waits for it (Accept off, with why), and its
+    Write puts only the ticked facts into a new version of the page
+    draft."""
+
+    _seeded(app, page, "Nested")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    bar = draft.get_by_test_id("draft-bar")
+    versions = bar.get_by_test_id("draft-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+    fixed_facts(
+        _facts_reply("It roosts in the bell towers.", "Its captains wear white.")
+    )
+    nested = _ask_facts(draft, "where it sleeps")
+    expect(nested.get_by_test_id("fact-draft-row")).to_have_count(2)
+    # under the Facts heading, indented
+    heading = draft.get_by_test_id("facts-heading").bounding_box()
+    box = nested.bounding_box()
+    assert box["y"] > heading["y"] and box["x"] > heading["x"]
+    add_event = draft.get_by_test_id("entry-timeline").get_by_test_id("add-event")
+    expect(add_event).to_be_disabled()
+    expect(add_event).to_have_attribute(
+        "title", "write or discard the added facts first"
+    )
+    accept = bar.get_by_role("button", name="Accept")
+    expect(accept).to_be_disabled()
+    expect(accept).to_have_attribute("title", "write or discard the added facts first")
+    # and Accept again at the foot of the draft, the same
+    foot_accept = draft.get_by_test_id("draft-accept-foot")
+    expect(foot_accept).to_be_disabled()
+    expect(foot_accept).to_have_attribute(
+        "title", "write or discard the added facts first"
+    )
+
+    nested.get_by_test_id("fact-draft-row").nth(1).get_by_role("checkbox").uncheck()
+    nested.get_by_test_id("fact-draft-accept").click()
+    sent = _wait_sent(page, "write_nested_facts")
+    assert [f["ticked"] for f in sent["draft"]["facts"]] == [True, False]
+    expect(versions).to_contain_text("Version 2 of 2")
+    _draft_fact(draft, "It roosts in the bell towers.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(_draft_fact(draft, "Its captains wear white.")).to_have_count(0)
+    expect(_draft_fact(draft, "It flies at night.")).to_have_count(1)
+    expect(draft.get_by_test_id("fact-draft")).to_have_count(0)
+    expect(accept).to_be_enabled()
+    assert page.console_errors == []
+
+
+def test_add_facts_prompt_box_is_roomy(app, page):
+    """ "+ Add facts"'s prompt is a textarea, two lines tall at least,
+    that grows with what's typed."""
+
+    _world, thing = _velikoye(app, page, "Roomy")
+    thing.get_by_test_id("add-facts").click()
+    field = thing.get_by_test_id("add-facts-form").get_by_test_id("add-prompt")
+    box = field.locator("textarea").first
+    assert box.evaluate("e => e.tagName") == "TEXTAREA"
+    height = box.bounding_box()["height"]
+    assert height >= 40
+    box.fill("its laws\nwho keeps them\nhow they are judged\nwhat they forbid")
+    page.wait_for_function(
+        "([e, h]) => e.getBoundingClientRect().height > h",
+        arg=[box.element_handle(), height],
+        timeout=TIMEOUT_MS,
+    )
+    assert page.console_errors == []
+
+
+# hold the `add_facts` asks the page sends while `window.__e2eHold` is
+# set (an ask stays out, as a slow model would leave it), and send them
+# on `window.__e2eRelease()`
+HOLD_ASKS_JS = """
+() => {
+    window.__e2eHeld = [];
+    const send = WebSocket.prototype.send;
+    WebSocket.prototype.send = function (data) {
+        let action = null;
+        try {
+            action = JSON.parse(data).action;
+        } catch (e) {}
+        if (window.__e2eHold && action === 'add_facts') {
+            window.__e2eHeld.push([this, data]);
+            return;
+        }
+        return send.call(this, data);
+    };
+    window.__e2eRelease = () => {
+        window.__e2eHold = false;
+        for (const [socket, data] of window.__e2eHeld.splice(0)) {
+            socket.send(data);
+        }
+    };
+}
+"""
+
+
+def test_fill_stub_instead_waits_for_added_facts(app, page, fixed_preview, fixed_facts):
+    """ "Fill the stub … instead" accepts the page draft too: while its
+    nested "+ Add facts" ask is still out (nothing held yet), and once
+    held, it's off with why, so no accept leaves the added facts
+    behind."""
+
+    name = _world_name("FillWaits")
+    seed_fm_world(app.root, name, present_year=1026, things=[KALMARA])
+    page.evaluate(SEND_SPY_JS)
+    page.evaluate(HOLD_ASKS_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.get_by_label("Describe it").fill("A riverside town of reed-cutters.")
+    fixed_preview(_preview("Kalmara", "Reed-cutters work its shallows."))
+    draft = _create_and_wait(page, box)
+    fill = draft.get_by_test_id("fill-stub-instead")
+    expect(fill).to_be_enabled()
+
+    fixed_facts(_facts_reply("Its ferries stop in winter."))
+    page.evaluate("() => { window.__e2eHold = true; }")
+    draft.get_by_test_id("add-facts").click()
+    draft.get_by_test_id("add-facts-form").get_by_label("What to add").fill(
+        "its ferries"
+    )
+    draft.get_by_test_id("add-draft").click()
+    nested = draft.get_by_test_id("fact-draft")
+    expect(nested).to_contain_text("Drafting")
+    expect(fill).to_be_disabled()
+    expect(fill).to_have_attribute("title", "write or discard the added facts first")
+
+    page.evaluate("() => window.__e2eRelease()")
+    nested.get_by_test_id("fact-draft-bar").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(fill).to_be_disabled()
+    nested.get_by_test_id("fact-draft-discard").click()
+    expect(fill).to_be_enabled()
+    assert _sent(page, "accept_preview") == []
+    assert page.console_errors == []
+
+
+def test_draft_accept_at_the_foot(app, page, fixed_preview):
+    """A page draft's Accept comes again at the foot of the draft (with
+    Discard), and accepts it as the bar's does."""
+
+    _seeded(app, page, "FootAccept")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    foot = draft.get_by_test_id("draft-foot")
+    expect(foot.get_by_test_id("draft-accept-foot")).to_have_text("Accept")
+    expect(foot.get_by_test_id("draft-discard-foot")).to_be_enabled()
+    # below the draft's own bar
+    assert (
+        foot.bounding_box()["y"] > draft.get_by_test_id("draft-bar").bounding_box()["y"]
+    )
+    foot.get_by_test_id("draft-accept-foot").click()
+    sent = _wait_sent(page, "accept_preview")
+    assert sent["preview"]["name"] == "The Frostwing Host"
+    _opened(page, "The Frostwing Host")
     assert page.console_errors == []

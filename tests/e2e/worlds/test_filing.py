@@ -575,7 +575,7 @@ def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
     )
     natives.get_by_test_id("group-add-button").click()
     form = natives.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("a native")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill("a native")
     form.get_by_test_id("group-add-draft").click()
     sent = _wait_sent(page, "group_add")
     assert (sent["tag"], sent["show_under"]) == ("native", True)
@@ -803,7 +803,9 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     institutions = _group(thing, "Institutions")
     institutions.get_by_test_id("group-add-button").click()
     form = institutions.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("two more guilds")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill(
+        "two more guilds"
+    )
     form.get_by_test_id("group-add-draft").click()
     sent = _wait_sent(page, "group_add")
     assert (sent["tag"], sent["prompt"]) == ("institution", "two more guilds")
@@ -841,7 +843,7 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     connected = thing.get_by_test_id("entry-connected")
     connected.get_by_test_id("connected-add").click()
     form = connected.get_by_test_id("group-add").first
-    form.get_by_test_id("group-add-prompt").locator("input").fill("a landmark")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill("a landmark")
     form.get_by_test_id("group-add-draft").click()
     page.wait_for_function(
         "() => window.__e2eSent.filter((m) => JSON.parse(m).action === 'group_add').length === 2"
@@ -868,7 +870,7 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     institutions = _group(thing, "Institutions")
     institutions.get_by_test_id("group-add-button").click()
     form = institutions.get_by_test_id("group-add")
-    form.get_by_test_id("group-add-prompt").locator("input").fill("the stair")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill("the stair")
     form.get_by_test_id("group-add-draft").click()
     expect(form.get_by_test_id("group-add-row")).to_have_count(1)
     form.get_by_test_id("group-add-accept").click()
@@ -917,9 +919,87 @@ def test_group_add_rows(app, page, fixed_group_add, fixed_facts):
     assert page.console_errors == []
 
 
+def test_group_add_regenerate_keeps_prompt(app, page, fixed_group_add):
+    """A group's "+ Add" has a page draft's feature set (plan "polish-1"):
+    an edited row's name, the prompt kept and editable in the bar,
+    Regenerate from it, "Version n of m", each version's edits kept, and
+    Add sends the accepted draft's key."""
+
+    world, thing = _open_velikoye(page, app, _world_name("GroupAddVersions"))
+    fixed_group_add(
+        {
+            "entries": [
+                {
+                    "name": "The Icewrights",
+                    "kind": "lore",
+                    "tag": "institution",
+                    "line": "A guild of ice-road pilots.",
+                },
+                {
+                    "name": "The Owl Post",
+                    "kind": "lore",
+                    "tag": "institution",
+                    "line": "Carries the Tsar's letters.",
+                },
+            ]
+        }
+    )
+    institutions = _group(thing, "Institutions")
+    institutions.get_by_test_id("group-add-button").click()
+    form = institutions.get_by_test_id("group-add")
+    form.get_by_test_id("group-add-prompt").locator("textarea").first.fill(
+        "two more guilds"
+    )
+    form.get_by_test_id("group-add-draft").click()
+    _wait_sent(page, "group_add")
+    rows = form.get_by_test_id("group-add-row")
+    expect(rows).to_have_count(2)
+    versions = form.get_by_test_id("group-add-versions")
+    expect(versions).to_contain_text("Version 1 of 1")
+    rows.nth(0).locator(".draft-name input").fill("The Ice Guild")
+
+    # the prompt, kept and edited in the bar, then Regenerate
+    prompt = form.get_by_test_id("group-add-prompt").locator("textarea").first
+    expect(prompt).to_have_value("two more guilds")
+    prompt.fill("one more guild")
+    fixed_group_add(
+        {
+            "entries": [
+                {
+                    "name": "The Stair Wardens",
+                    "kind": "lore",
+                    "tag": "institution",
+                    "line": "Keeps the bluff stair.",
+                }
+            ]
+        }
+    )
+    form.get_by_test_id("group-add-regenerate").click()
+    expect(versions).to_contain_text("Version 2 of 2")
+    sent = _sent(page, "group_add")[-1]
+    assert sent["regenerate"] is True
+    assert sent["prompt"] == "one more guild"
+    expect(rows).to_have_count(1)
+    expect(rows.nth(0).locator(".draft-name input")).to_have_value("The Stair Wardens")
+
+    # version 1 again, the edited name back
+    versions.click()
+    page.get_by_test_id("group-add-version").filter(has_text="v1").click()
+    expect(versions).to_contain_text("Version 1 of 2")
+    expect(rows).to_have_count(2)
+    expect(rows.nth(0).locator(".draft-name input")).to_have_value("The Ice Guild")
+
+    form.get_by_test_id("group-add-accept").click()
+    sent = _wait_sent(page, "accept_group_add")
+    assert sent["draft_key"] == f"group:{world.things['Velikoye']}:institution"
+    assert [r["name"] for r in sent["rows"]] == ["The Ice Guild", "The Owl Post"]
+    expect(_row(_group(thing, "Institutions"), "The Ice Guild")).to_be_visible()
+    assert page.console_errors == []
+
+
 def test_added_facts_bring_new_names(app, page, fixed_facts):
     """Ruling H8: "+ Add facts" shows the names its facts bring as ticked
-    New names rows (kind, tag); Accept makes stubs of the ticked ones and
+    New stubs rows (kind, tag); Accept makes stubs of the ticked ones and
     links them, an unticked one staying plain words."""
 
     world, thing = _open_velikoye(page, app, _world_name("Names"))

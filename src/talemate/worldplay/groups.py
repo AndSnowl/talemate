@@ -146,6 +146,20 @@ class GroupAddRow(BaseModel):
     show_under: str | None = None
 
 
+class GroupAddDraft(BaseModel):
+    """One version of a group-add draft, as the server holds it (the
+    small-draft store, `server.world_drafts`): the page (`thing_id`), the
+    group (`tag`, `None` for the page's own "+ Add"), the owner's `prompt`,
+    whether the group exists through `show_under`, and the drafted
+    `rows`."""
+
+    thing_id: str
+    tag: str | None
+    prompt: str
+    show_under: bool = False
+    rows: list[GroupAddRow]
+
+
 # --- synopsis ---------------------------------------------------------------
 
 
