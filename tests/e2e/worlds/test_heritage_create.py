@@ -274,11 +274,19 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     races_bottom = races_bottom["y"] + races_bottom["height"]
     create_box_top = race_box.bounding_box()["y"]
     assert create_box_top >= races_bottom
-    mixes_top = human.get_by_test_id("mixes-section").bounding_box()["y"]
-    assert create_box_top <= mixes_top
+    mixes_section = human.get_by_test_id("mixes-section")
+    mixes_box = mixes_section.bounding_box()
+    assert create_box_top <= mixes_box["y"]
     named_stubs = human.get_by_test_id("named-stubs")
     if named_stubs.count():
         assert create_box_top <= named_stubs.bounding_box()["y"]
+
+    # Mixes moved below the draft keeps the left column's width: its
+    # heading and "+ New mix" don't jump to the full-width draft's far
+    # right edge
+    assert mixes_box["x"] + mixes_box["width"] <= species_description_x
+    new_mix_box = mixes_section.get_by_role("button", name="New mix").bounding_box()
+    assert new_mix_box["x"] + new_mix_box["width"] <= species_description_x
 
     # the race draft spans the species page's content width, and its
     # Description column lines up under the species page's own (Races and

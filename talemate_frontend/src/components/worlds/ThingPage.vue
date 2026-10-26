@@ -472,18 +472,23 @@
                 @cancel="heritageCreating = null"
             />
             <!-- whatever came after the section being created (Mixes,
-                 drafting a race; nothing, drafting a mix), moved below it -->
-            <HeritageSections
-                v-if="heritageTailBelow"
-                :species-id="thing.id"
-                :races="thing.races"
-                :mixes="thing.mixes"
-                :creating="heritageCreating"
-                :from="heritageCreating"
-                @create="heritageCreating = $event"
-            />
-            <!-- Stubs this entry named, after the draft it moved with -->
-            <NamedStubs v-if="heritageTailBelow" :stubs="thing.named_stubs || []" />
+                 drafting a race; nothing, drafting a mix) and Named
+                 stubs, moved below the draft: a second row, its own
+                 left column the same width as the main row's, so "+ New
+                 mix" stays by its heading instead of the full width -->
+            <v-row v-if="heritageTailBelow">
+                <v-col cols="12" md="6">
+                    <HeritageSections
+                        :species-id="thing.id"
+                        :races="thing.races"
+                        :mixes="thing.mixes"
+                        :creating="heritageCreating"
+                        :from="heritageCreating"
+                        @create="heritageCreating = $event"
+                    />
+                    <NamedStubs :stubs="thing.named_stubs || []" />
+                </v-col>
+            </v-row>
 
             <template v-if="draft">
                 <!-- 4. For other pages -->
