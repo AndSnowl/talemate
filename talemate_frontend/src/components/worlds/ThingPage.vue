@@ -145,6 +145,20 @@
         </div>
 
         <template v-else>
+            <!-- a draft with candidates: the same thing as one of them?
+                 (about its name, so right under it) -->
+            <SameThingAsk
+                v-if="draft && !edited.stub_id && edited.same_as && edited.same_as.length"
+                class="mb-3"
+                :name="edited.name"
+                :kind="edited.kind"
+                :offers="edited.same_as"
+                :verdict="edited.verdict"
+                :chosen="edited._same || null"
+                :exclude="ownIds"
+                @choose="edit({ _same: $event })"
+            />
+
             <template v-if="!draft">
                 <v-alert
                     v-if="worlds.stubRepointed && worlds.stubRepointed.target.id === thing.id"
@@ -179,28 +193,6 @@
                     <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
                 </div>
             </template>
-
-            <!-- 1. In -->
-            <EntryIn
-                :thing="thing"
-                :draft="draft"
-                @add="(target, filing) => edit(addFiling(edited, target, draftFiling(filing)))"
-                @change="(key, change) => edit(changeFiling(edited, key, draftFiling(change)))"
-                @remove="edit(removeFiling(edited, $event))"
-            />
-
-            <!-- 2. Same thing? (a draft with candidates) -->
-            <SameThingAsk
-                v-if="draft && !edited.stub_id && edited.same_as && edited.same_as.length"
-                class="mt-2"
-                :name="edited.name"
-                :kind="edited.kind"
-                :offers="edited.same_as"
-                :verdict="edited.verdict"
-                :chosen="edited._same || null"
-                :exclude="ownIds"
-                @choose="edit({ _same: $event })"
-            />
 
             <!-- the entry's summary fact heads the page -->
             <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
@@ -269,6 +261,17 @@
                         :main-name="thing.name"
                         :busy="editorBusy"
                         @save="saveAka"
+                    />
+
+                    <!-- In, a section of its own just above Facts (a draft's
+                         rows kept in the draft) -->
+                    <EntryIn
+                        :thing="thing"
+                        :draft="draft"
+                        @add="addDraftFiling"
+                        @change="(key, change) => edit(changeFiling(edited, key, draftFiling(change)))"
+                        @show-under="(key, tag) => edit(setFilingShowUnder(edited, key, tag))"
+                        @remove="edit(removeFiling(edited, $event))"
                     />
 
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
@@ -537,6 +540,7 @@ import {
     copyFactTo,
     draftFactRows,
     editFact,
+    filingKey,
     holdFact,
     moveFactTo,
     removeFact as removeDraftFact,
@@ -545,6 +549,7 @@ import {
     retarget,
     setDraftAka,
     setDraftNumber,
+    setFilingShowUnder,
     settleRepeat,
     tickFact,
     tickFileInto,
@@ -647,8 +652,9 @@ function cut(text, length = 28) {
 //
 // The entry page (mockup v3, screens A, B and D): under the header (name,
 // kind, the tag chip with its picker, its everyday name, the prompt hint
-// it was written with) come its "In" rows (`EntryIn`), its summary fact,
-// its facts ("+ Add facts…", `EntryAddFacts`), then what's filed in it
+// it was written with) come its summary fact, then beside its prose its
+// "In" rows (`EntryIn`, a section just above Facts in the left column)
+// and its facts ("+ Add facts…", `EntryAddFacts`), then what's filed in it
 // grouped by tag (`EntryConnected`), what names it ("Mentioned in",
 // folded) and its Timeline ("Events ▾", "+ Add event…").
 //
@@ -676,7 +682,8 @@ function cut(text, length = 28) {
 // Timeline; every change goes to the draft (`worlds.editDraft` and
 // draftPage.js), nothing is written before Accept. It adds the draft bar
 // (`DraftBar`) and, in the spec's order around the shared sections,
-// "Same thing?" after In, the repeats' "Move existing here" on its facts
+// "Same thing?" right under the name (it's about the name), the
+// repeats' "Move existing here" on its facts
 // (`PreviewRepeats`) and what it inherits, then For other pages
 // (`PreviewElsewhere`), Could move here (`MoveHere`), New stubs
 // (`PreviewStubs`) and File into this, with Accept and Discard again at
@@ -1067,6 +1074,7 @@ export default {
         removeFiling,
         repeatChoice,
         retarget,
+        setFilingShowUnder,
         settleRepeat,
         tickFact,
         tickFileInto,
@@ -1101,6 +1109,17 @@ export default {
                 out.since = dateIn(out.since);
             }
             return out;
+        },
+        // "+ In…" on a draft: the filing, then the group it shows under
+        addDraftFiling(target, { showUnder = null, ...filing }) {
+            let next = { ...this.edited, ...addFiling(this.edited, target, this.draftFiling(filing)) };
+            if (showUnder) {
+                const key = filingKey(target.newName
+                    ? { target_id: null, new_name: { name: target.newName } }
+                    : { target_id: target.id });
+                next = { ...next, ...setFilingShowUnder(next, key, showUnder) };
+            }
+            this.edit({ filings: next.filings });
         },
         acceptDraft(intoStub = null) {
             this.worlds.acceptPreview(

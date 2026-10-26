@@ -21,6 +21,7 @@ from playwright.sync_api import expect
 
 from e2e.seed import seed_fm_world
 from e2e.worlds.test_connections_create import _opened, _wait_sent
+from e2e.worlds.test_drafts import _draft
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
@@ -436,6 +437,65 @@ def _picker(page):
     page, hidden)."""
 
     return page.locator('[data-testid="tag-picker"]:visible')
+
+
+NOVGRAD = {"kind": "place", "name": "Novgrad", "fields": {"tag": "city"}}
+
+ACADEMY = _entry(
+    "place",
+    "Novgrad Academy",
+    "institution",
+    [_in("Novgrad", role="located in", since=900)],
+    "A seat of higher learning.",
+)
+
+
+def _in_section_above_facts(page, scope) -> None:
+    """ "In" is a section of the left column, just above Facts: its
+    heading above the Facts heading and inside the Facts column, "+ In…"
+    in its heading's row, a row reading role first ("Located in
+    Novgrad"), and no subtitle about the AI's suggestions."""
+
+    heading = scope.get_by_test_id("in-heading")
+    heading.wait_for(state="visible", timeout=TIMEOUT_MS)
+    facts = scope.get_by_test_id("facts-heading").bounding_box()
+    box = heading.bounding_box()
+    assert box["y"] + box["height"] <= facts["y"]
+    assert box["x"] >= facts["x"] - 1
+    assert box["x"] + box["width"] <= facts["x"] + facts["width"] + 1
+    add = heading.get_by_test_id("in-add").bounding_box()
+    assert box["y"] <= add["y"] + add["height"] / 2 <= box["y"] + box["height"]
+    assert add["x"] + add["width"] > box["x"] + box["width"] - 4
+    row = scope.locator('[data-testid="in-row"], [data-testid="draft-in-row"]').filter(
+        has_text="Novgrad"
+    )
+    expect(row.locator(".filed-as")).to_have_text(
+        re.compile(r"^\s*located in\s+Novgrad\s*$", re.IGNORECASE)
+    )
+    expect(scope.get_by_text("AI's suggestions")).to_have_count(0)
+
+
+def test_in_section_above_facts(app, page, fixed_preview):
+    """On a saved page and on a draft alike."""
+
+    name = _world_name("InSection")
+    seed_fm_world(app.root, name, present_year=1020, things=[NOVGRAD, ACADEMY])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    _in_section_above_facts(page, _open_thing(page, "Novgrad Academy"))
+
+    fixed_preview(
+        {
+            "name": "Novgrad Observatory",
+            "facts": [{"category": "description", "text": "A tower of brass lenses."}],
+            "in": [{"entry": "Novgrad", "role": "located in"}],
+            "prose": {"description": "A brass tower over Novgrad."},
+        }
+    )
+    draft = _draft(page, "place", "Novgrad's observatory.")
+    _in_section_above_facts(page, draft)
+    assert page.console_errors == []
 
 
 def test_file_with_show_under_and_role_picker(app, page):

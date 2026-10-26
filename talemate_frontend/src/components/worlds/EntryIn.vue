@@ -1,13 +1,14 @@
 <template>
     <div class="entry-in" :data-testid="draft ? 'draft-in' : 'entry-in'">
-        <div class="d-flex align-center ga-2">
+        <!-- a section like Facts: its heading muted, "+ In…" at its right
+             (the column is half the page wide) -->
+        <div class="d-flex align-center mt-4 mb-1" data-testid="in-heading">
             <span class="text-overline text-muted">In</span>
-            <span v-if="draft" class="text-caption text-muted">the AI's suggestions come unticked, yours ticked</span>
             <v-spacer></v-spacer>
-            <v-btn v-if="!adding" variant="outlined" size="x-small" prepend-icon="mdi-magnify" data-testid="in-add" @click="startAdd">+ in…</v-btn>
+            <v-btn v-if="!adding" variant="text" size="small" color="accent" prepend-icon="mdi-plus" data-testid="in-add" @click="startAdd">In…</v-btn>
         </div>
 
-        <!-- "+ in… 🔎": an entry the world has, or a new stub of that name -->
+        <!-- "+ In…": an entry the world has, or a new stub of that name -->
         <div v-if="adding" class="in-form pa-2 mb-2" data-testid="in-add-form" @keydown.esc="escape($event)">
             <div class="d-flex align-center flex-wrap ga-2">
                 <v-autocomplete
@@ -34,7 +35,7 @@
                     <v-text-field v-model="adding.tag" label="Tag" density="compact" variant="outlined" hide-details class="in-small" data-testid="in-new-tag"></v-text-field>
                 </template>
                 <v-combobox v-model="adding.role" :items="roleItems" label="Role (optional)" :placeholder="ROLE_HINT" density="compact" variant="outlined" hide-details class="in-role" data-testid="in-role"></v-combobox>
-                <TagChip v-if="!draft" local testid="in-show-under" label="Shows under" prefix="shows under" :tag="adding.showUnder" :fallback="thing.tag" empty-text="Other" clear-text="its own tag" @pick="adding.showUnder = $event"></TagChip>
+                <TagChip local testid="in-show-under" label="Shows under" prefix="shows under" :tag="adding.showUnder" :fallback="thing.tag" empty-text="Other" clear-text="its own tag" @pick="adding.showUnder = $event"></TagChip>
                 <v-text-field v-model.number="adding.since" label="Since (year)" type="number" density="compact" variant="outlined" hide-details class="in-year" data-testid="in-since"></v-text-field>
                 <v-btn color="accent" variant="flat" size="small" :disabled="!addValid" :loading="!draft && !!worlds.pending.add_filing" @click="saveAdd">File it</v-btn>
                 <v-btn variant="text" size="small" @click="adding = null">Cancel</v-btn>
@@ -43,42 +44,48 @@
         </div>
 
         <div v-if="!rows.length && !adding" class="text-body-2 text-muted">Filed in nothing yet.</div>
-        <template v-for="row in rows" :key="keyOf(row)">
-            <div class="in-row d-flex align-center flex-wrap ga-2" :class="{ ended: !!row.until }" :data-testid="rowTestId(row)">
+        <!-- each row as a fact's: the same text size, the same dashed
+             separator under it and what's shown under it -->
+        <div v-for="row in rows" :key="keyOf(row)" class="in-host">
+            <div class="in-row d-flex align-center flex-wrap" :class="{ ended: !!row.until }" :data-testid="rowTestId(row)">
                 <!-- a draft's own row: ticked as it came (the AI's unticked) -->
                 <v-checkbox-btn
                     v-if="row.draft"
                     :model-value="!!row.ticked"
                     density="compact"
-                    class="flex-grow-0"
+                    class="flex-grow-0 in-tick"
                     :aria-label="'File in ' + row.target_name"
                     @update:model-value="$emit('change', keyOf(row), { ticked: $event })"
                 ></v-checkbox-btn>
-                <!-- "Native of Velikiy Ustyug": the role, then its target -->
-                <span class="filed-as"><span v-if="lead(row)" class="role" data-testid="in-role-text">{{ lead(row) }}</span> <span v-if="row.new_name" class="stub-name">{{ row.target_name }}</span><a v-else class="thing-link" :class="{ dropped: row.draft && !row.ticked }" href="#" data-testid="in-target-link" @click.prevent="worlds.openThing(row.target_id)">{{ row.target_name }}</a></span>
-                <span v-if="row.new_name" class="text-caption text-muted">new stub · {{ [row.new_name.kind, row.new_name.tag].filter(Boolean).join(', ') }}</span>
-                <span v-if="row.within_id" class="within">within <a class="thing-link" href="#" @click.prevent="worlds.openThing(row.within_id)">{{ row.within_name }}</a><span v-if="row.within_holds === false" class="within-stale" data-testid="in-within-stale"> (no longer part of {{ row.target_name }})</span></span>
-                <span v-if="dates(row)" class="when" data-testid="in-dates">{{ dates(row) }}</span>
-                <span v-if="draft && !row.draft" class="text-caption text-muted">· already filed</span>
-                <TagChip
-                    v-if="!draft"
-                    local
-                    testid="in-show-under"
-                    label="Shows under"
-                    prefix="shows under"
-                    :tag="row.show_under"
-                    :fallback="thing.tag"
-                    empty-text="Other"
-                    clear-text="its own tag"
-                    @pick="showUnder(row, $event)"
-                ></TagChip>
-                <v-spacer></v-spacer>
-                <template v-if="!draft || row.draft">
-                    <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit filing" data-testid="in-edit" @click="startEdit(row)"></v-btn>
-                    <v-btn v-if="!draft && !row.until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End this" data-testid="in-end" @click="startEnd(row)"></v-btn>
-                    <v-btn v-if="!draft && persons" icon="mdi-comment-alert-outline" variant="text" size="x-small" density="comfortable" aria-label="Add a but…" data-testid="in-add-but" @click="startBut(row)"></v-btn>
-                    <v-btn icon="mdi-delete-outline" variant="text" size="x-small" density="comfortable" aria-label="Remove filing" data-testid="in-remove" :disabled="!draft && !!worlds.pending.remove_filing" @click="remove(row)"></v-btn>
-                </template>
+                <!-- "Located in Novgrad": the role, then its target -->
+                <span class="in-text">
+                    <span class="filed-as"><span v-if="lead(row)" class="role" data-testid="in-role-text">{{ lead(row) }}</span> <span v-if="row.new_name" class="stub-name">{{ row.target_name }}</span><a v-else class="thing-link" :class="{ dropped: row.draft && !row.ticked }" href="#" data-testid="in-target-link" @click.prevent="worlds.openThing(row.target_id)">{{ row.target_name }}</a></span>
+                    <span v-if="row.new_name" class="note"> · new stub, {{ [row.new_name.kind, row.new_name.tag].filter(Boolean).join(', ') }}</span>
+                    <span v-if="row.within_id" class="note"> · within <a class="thing-link" href="#" @click.prevent="worlds.openThing(row.within_id)">{{ row.within_name }}</a><span v-if="row.within_holds === false" class="within-stale" data-testid="in-within-stale"> (no longer part of {{ row.target_name }})</span></span>
+                </span>
+                <!-- its date, group and buttons at the row's right -->
+                <span class="in-end d-flex align-center ga-2">
+                    <span v-if="dates(row)" class="when" data-testid="in-dates">{{ dates(row) }}</span>
+                    <span v-if="draft && !row.draft" class="note">already filed</span>
+                    <TagChip
+                        v-if="!draft || row.draft"
+                        local
+                        testid="in-show-under"
+                        label="Shows under"
+                        prefix="shows under"
+                        :tag="row.show_under"
+                        :fallback="thing.tag"
+                        empty-text="Other"
+                        clear-text="its own tag"
+                        @pick="showUnder(row, $event)"
+                    ></TagChip>
+                    <template v-if="!draft || row.draft">
+                        <v-btn icon="mdi-pencil" variant="text" size="x-small" density="comfortable" aria-label="Edit filing" data-testid="in-edit" @click="startEdit(row)"></v-btn>
+                        <v-btn v-if="!draft && !row.until" icon="mdi-timer-off-outline" variant="text" size="x-small" density="comfortable" aria-label="End this" data-testid="in-end" @click="startEnd(row)"></v-btn>
+                        <v-btn v-if="!draft && persons" icon="mdi-comment-alert-outline" variant="text" size="x-small" density="comfortable" aria-label="Add a but…" data-testid="in-add-but" @click="startBut(row)"></v-btn>
+                        <v-btn icon="mdi-delete-outline" variant="text" size="x-small" density="comfortable" aria-label="Remove filing" data-testid="in-remove" :disabled="!draft && !!worlds.pending.remove_filing" @click="remove(row)"></v-btn>
+                    </template>
+                </span>
             </div>
             <div v-for="but in row.exceptions" :key="but.fact_id" class="but" data-testid="in-but">
                 <i>but…</i> <LinkedText :segments="but.segments" />
@@ -119,7 +126,7 @@
                 <v-btn color="accent" variant="flat" size="small" :disabled="!butting.text.trim()" :loading="!!worlds.pending.add_exception" @click="saveBut(row)">Add</v-btn>
                 <v-btn variant="text" size="small" @click="butting = null">Cancel</v-btn>
             </div>
-        </template>
+        </div>
     </div>
 </template>
 
@@ -143,8 +150,12 @@ function yearOf(date) {
     return date ? dateParts(date).year : null;
 }
 
-// The entry page's "In" (mockup v3, screens A, B and D): one row per
-// filing (`thing.in`, ended ones too), with its target, role and dates
+// The entry page's "In" (mockup v3, screens A, B and D; laid out as in
+// the polish-2 mockup "in-section"): a section of the page's left column
+// just above Facts, its heading in the Facts heading's style with "+ In…"
+// at its right, and one row per filing (`thing.in`, ended ones too), as
+// a fact's row is (the same text size and dashed separator), with its
+// target, role and dates
 // ("since 979", "900–1015"), and for a person (a character or real being)
 // the part of the target it's "within" and its "but…" exceptions under it.
 // A part that has moved out of the target is marked "(no longer part of
@@ -164,10 +175,11 @@ function yearOf(date) {
 // On a draft (`draft`, the page's draft mode) nothing is sent: its own
 // rows (`draft: true`) carry their tick, the AI's coming unticked (ruling
 // F7); "+ in…" (an entry, or a stub of a typed name, made on accept),
-// edit (role, since, within) and remove are emitted for the draft
-// (`add(target, {role, since})`, `change(key, changes)`, `remove(key)`;
-// a row's key is its target's id, or `new:<name>`). A stub's filings so
-// far show as they are.
+// edit (role, since, within), "shows under" and remove are emitted for
+// the draft (`add(target, {role, since, showUnder})`, `change(key,
+// changes)`, `show-under(key, tag)`, `remove(key)`; a row's key is its
+// target's id, or `new:<name>`). The draft's only addition to the page's
+// rows is the tick. A stub's filings so far show as they are.
 export default {
     name: 'EntryIn',
     components: { LinkedText, TagChip },
@@ -176,7 +188,7 @@ export default {
         thing: { type: Object, required: true },
         draft: { type: Boolean, default: false },
     },
-    emits: ['add', 'change', 'remove'],
+    emits: ['add', 'change', 'remove', 'show-under'],
     setup() {
         return { worlds: useWorldsStore(), NEW, ROLE_HINT };
     },
@@ -263,7 +275,12 @@ export default {
         // the group the filing shows under on its target's page (null: the
         // entry's own tag)
         showUnder(row, tag) {
-            if ((tag || null) !== (row.show_under || null)) {
+            if ((tag || null) === (row.show_under || null)) {
+                return;
+            }
+            if (this.draft) {
+                this.$emit('show-under', this.keyOf(row), tag || null);
+            } else {
                 this.worlds.editFiling(row.target_id, { show_under: tag || null });
                 this.sent = true;
             }
@@ -314,17 +331,17 @@ export default {
                 return;
             }
             const filing = { role: (adding.role || '').trim() || null, since: this.year(adding.since) };
+            const showUnder = adding.showUnder || null;
             if (this.draft) {
                 const target = adding.target === NEW
                     ? { newName: this.newName, kind: adding.kind, tag: normaliseTag(adding.tag) || null }
                     : this.worlds.referenceTargets.find((item) => item.id === adding.target);
                 if (target) {
-                    this.$emit('add', target, filing);
+                    this.$emit('add', target, { ...filing, showUnder });
                 }
                 this.adding = null;
                 return;
             }
-            const showUnder = adding.showUnder || null;
             if (adding.target === NEW) {
                 this.worlds.addFiling({ newName: this.newName, kind: adding.kind, tag: normaliseTag(adding.tag) || null, ...filing, showUnder });
             } else {
@@ -406,13 +423,36 @@ export default {
 </script>
 
 <style scoped>
+/* a row and what's shown under it (its "but…"s, a form) read as one, the
+   dashed separator under them all, as under a fact */
+.in-host {
+    border-bottom: 1px dashed rgb(var(--v-theme-border));
+}
+
+/* a fact line's padding; the text is a fact's size (inherited, not set) */
 .in-row {
-    padding: 1px 0;
-    font-size: 14px;
+    padding: 2px 0;
+    column-gap: 8px;
 }
 
 .in-row.ended {
     opacity: 0.75;
+}
+
+.in-tick {
+    flex: none;
+}
+
+/* the words take the room; the date, group and buttons keep to the
+   row's right edge, dropping under the words when they can't fit */
+.in-text {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.in-end {
+    flex: none;
+    margin-left: auto;
 }
 
 .thing-link {
@@ -430,12 +470,10 @@ export default {
 }
 
 .role {
-    font-size: 12px;
-    font-style: italic;
     color: rgb(var(--v-theme-muted));
 }
 
-.within {
+.note {
     font-size: 12px;
     color: rgb(var(--v-theme-muted));
 }

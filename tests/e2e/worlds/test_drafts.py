@@ -445,6 +445,40 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     assert page.console_errors == []
 
 
+def test_draft_in_row_show_under(app, page, fixed_preview):
+    """A draft's In row has the saved page's "shows under" chip: the group
+    picked (a tag in use) is kept in the draft, nothing sent, and written
+    on Accept."""
+
+    world = _seeded(app, page, "ShowUnder")
+    fixed_preview(
+        _host(
+            "The Host is entirely owl-folk.",
+            **{"in": [{"entry": "Tsardom of Moscavia", "role": "the realm's army"}]},
+        )
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    row = draft.get_by_test_id("draft-in").get_by_test_id("draft-in-row")
+    row.get_by_role("checkbox").check()
+    chip = row.get_by_test_id("in-show-under")
+    chip.click()
+    picker = page.locator('[data-testid="tag-picker"]:visible')
+    picker.get_by_test_id("tag-search").locator("input").fill("regi")
+    picker.get_by_test_id("tag-option").filter(has_text="regiment").click()
+    expect(chip).to_have_text("shows under regiment")
+    assert _sent(page, "edit_filing") == []
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    host = _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]["filings"]
+    assert [(r["target_id"], r.get("show_under")) for r in accepted] == [
+        (world.things["Tsardom of Moscavia"], "regiment")
+    ]
+    tsardom = host.get_by_test_id("entry-in").get_by_test_id("in-row")
+    expect(tsardom.get_by_test_id("in-show-under")).to_have_text("shows under regiment")
+    assert page.console_errors == []
+
+
 def test_repeat_move_that_one_here(app, page, fixed_preview):
     world = _seeded(app, page, "Repeats")
     velikoye = world.things["Velikoye"]
