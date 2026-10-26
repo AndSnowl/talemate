@@ -1,5 +1,5 @@
 """The entry page (mockup v3, screens A, B, D and E): "In" rows with their
-roles, dates and "but…"s, "+ in… 🔎" (which can make a stub); Connected,
+roles, dates and "but…"s, "+ In…" (which can make a stub); Connected,
 what's filed in the entry grouped by tag, one line per row, each group
 folding, a long one with a filter, its synopsis, its first five rows and
 "show all", "✎ Synopsis" and "+ Add", and a row dragged to another group
@@ -328,7 +328,7 @@ def test_add_filing_and_role(app, page):
     entry_in = thing.get_by_test_id("entry-in")
     expect(entry_in.get_by_test_id("in-row")).to_have_count(2)
 
-    # "+ in… 🔎": an entry the world has, with a role and a year
+    # "+ In…": an entry the world has, with a role and a year
     entry_in.get_by_test_id("in-add").click()
     form = entry_in.get_by_test_id("in-add-form")
     form.get_by_test_id("in-target").locator("input").fill("Night Court")

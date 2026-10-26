@@ -8574,21 +8574,26 @@ async def test_draft_filing_show_under_written_on_accept(plugin, client):
     s, accepted = await _filing_draft_with_show_under(plugin, client, "native")
     (filing,) = filings_of(s.world.view(), accepted["id"])
     assert (filing.target, filing.show_under) == (s.velikoye, "native")
-    assert not any("isn't a group on" in note for note in accepted["notes"])
+    assert not any("shows under" in note for note in accepted["notes"])
 
 
 async def test_draft_filing_show_under_checked_at_accept(plugin, client):
-    """A `show_under` that's no group on the target nor a tag in use by
-    accept time isn't written: the entry is filed, under its own tag, and
-    a note says so."""
+    """Ruling R6: a `show_under` is written as `add_filing` takes it,
+    normalised, a tag no entry uses yet included (a new group); a blank
+    one is none, the entry under its own tag. Nothing is dropped, so no
+    note."""
 
-    s, accepted = await _filing_draft_with_show_under(plugin, client, "ghost")
+    s, accepted = await _filing_draft_with_show_under(
+        plugin, client, " Ferry Guild, river "
+    )
+    (filing,) = filings_of(s.world.view(), accepted["id"])
+    assert (filing.target, filing.show_under) == (s.velikoye, "ferry guild")
+    assert not any("shows under" in note for note in accepted["notes"])
+
+    s, accepted = await _filing_draft_with_show_under(plugin, client, "   ")
     (filing,) = filings_of(s.world.view(), accepted["id"])
     assert (filing.target, filing.show_under) == (s.velikoye, None)
-    assert any("isn't a group on" in note for note in accepted["notes"])
-    assert (
-        'shows under "ghost" isn\'t a group on Velikoye, so it shows under its own tag'
-    ) in accepted["notes"]
+    assert not any("shows under" in note for note in accepted["notes"])
 
 
 async def test_draft_timeline_follows_edits(plugin, client):

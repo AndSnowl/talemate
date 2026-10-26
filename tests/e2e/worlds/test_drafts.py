@@ -392,7 +392,7 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
         assert not row.get_by_role("checkbox").is_checked()
     tsardom.get_by_role("checkbox").check()
 
-    # the owner's own "+ in…" comes ticked, with the role given, as on a page
+    # the owner's own "+ In…" comes ticked, with the role given, as on a page
     filed.get_by_test_id("in-add").click()
     form = filed.get_by_test_id("in-add-form")
     form.get_by_test_id("in-target").locator("input").fill("Night Court")
@@ -446,9 +446,10 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
 
 
 def test_draft_in_row_show_under(app, page, fixed_preview):
-    """A draft's In row has the saved page's "shows under" chip: the group
-    picked (a tag in use) is kept in the draft, nothing sent, and written
-    on Accept."""
+    """A draft's In rows have the saved page's "shows under" chip, and its
+    "+ In…" form too: the group picked (a new tag included, ruling R6) is
+    kept in the draft, nothing sent, and written on Accept, for a row the
+    model suggested, an entry filed by hand and a new stub's row alike."""
 
     world = _seeded(app, page, "ShowUnder")
     fixed_preview(
@@ -458,24 +459,70 @@ def test_draft_in_row_show_under(app, page, fixed_preview):
         )
     )
     draft = _draft(page, "lore", "The Tsar's winged army.")
-    row = draft.get_by_test_id("draft-in").get_by_test_id("draft-in-row")
-    row.get_by_role("checkbox").check()
-    chip = row.get_by_test_id("in-show-under")
-    chip.click()
-    picker = page.locator('[data-testid="tag-picker"]:visible')
-    picker.get_by_test_id("tag-search").locator("input").fill("regi")
-    picker.get_by_test_id("tag-option").filter(has_text="regiment").click()
-    expect(chip).to_have_text("shows under regiment")
+    filed = draft.get_by_test_id("draft-in")
+    rows = filed.get_by_test_id("draft-in-row")
+
+    def pick(chip, typed, option=None):
+        chip.click()
+        picker = page.locator('[data-testid="tag-picker"]:visible')
+        picker.get_by_test_id("tag-search").locator("input").fill(typed)
+        if option:
+            picker.get_by_test_id("tag-option").filter(has_text=option).click()
+        else:
+            picker.get_by_test_id("tag-new").click()
+
+    # the model's row: a new tag
+    tsardom = rows.filter(has_text="Tsardom of Moscavia")
+    tsardom.get_by_role("checkbox").check()
+    pick(tsardom.get_by_test_id("in-show-under"), "Winged Army")
+    expect(tsardom.get_by_test_id("in-show-under")).to_have_text(
+        "shows under winged army"
+    )
+
+    # "+ In…" an entry the world has, a group in use picked in the form
+    filed.get_by_test_id("in-add").click()
+    form = filed.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("Night Court")
+    page.get_by_role("option", name="The Night Court").click()
+    pick(form.get_by_test_id("in-show-under"), "capi", option="capital")
+    expect(form.get_by_test_id("in-show-under")).to_have_text("shows under capital")
+    form.get_by_role("button", name="File it").click()
+    court = rows.filter(has_text="The Night Court")
+    expect(court.get_by_test_id("in-show-under")).to_have_text("shows under capital")
+
+    # "+ In…" a new stub, a new tag picked in the form
+    filed.get_by_test_id("in-add").click()
+    form = filed.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("The Owl Legion")
+    page.get_by_role("option", name="Make a stub “The Owl Legion”").click()
+    pick(form.get_by_test_id("in-show-under"), "Legion Wing")
+    form.get_by_role("button", name="File it").click()
+    legion = rows.filter(has_text="The Owl Legion")
+    expect(legion.get_by_test_id("in-show-under")).to_have_text(
+        "shows under legion wing"
+    )
     assert _sent(page, "edit_filing") == []
+    assert _sent(page, "add_filing") == []
 
     draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     host = _opened(page, "The Frostwing Host")
     accepted = _sent(page, "accept_preview")[-1]["preview"]["filings"]
-    assert [(r["target_id"], r.get("show_under")) for r in accepted] == [
-        (world.things["Tsardom of Moscavia"], "regiment")
+    assert [
+        (r["target_id"] or r["new_name"]["name"], r.get("show_under")) for r in accepted
+    ] == [
+        (world.things["Tsardom of Moscavia"], "winged army"),
+        (world.things["The Night Court"], "capital"),
+        ("The Owl Legion", "legion wing"),
     ]
-    tsardom = host.get_by_test_id("entry-in").get_by_test_id("in-row")
-    expect(tsardom.get_by_test_id("in-show-under")).to_have_text("shows under regiment")
+    saved = host.get_by_test_id("entry-in").get_by_test_id("in-row")
+    for name, group in [
+        ("Tsardom of Moscavia", "winged army"),
+        ("The Night Court", "capital"),
+        ("The Owl Legion", "legion wing"),
+    ]:
+        expect(
+            saved.filter(has_text=name).get_by_test_id("in-show-under")
+        ).to_have_text(f"shows under {group}")
     assert page.console_errors == []
 
 
@@ -891,7 +938,7 @@ GENERAL = "It flies at night."
 
 
 def test_draft_in_new_name_and_kind(app, page, fixed_preview):
-    """ "+ in…" on a draft makes a stub of a typed name, as on a page; the
+    """ "+ In…" on a draft makes a stub of a typed name, as on a page; the
     draft's kind can be changed, its facts' categories following."""
 
     _seeded(app, page, "Kinds")

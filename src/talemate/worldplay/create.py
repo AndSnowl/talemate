@@ -154,7 +154,6 @@ from talemate.world.filing import (
     check_filings,
     filed_index,
     filings_of,
-    show_under_holds,
     sits_in,
     tag_of,
     tags_in_use,
@@ -410,7 +409,8 @@ class PreviewFiling(BaseModel):
     within: str | None = None
     exceptions: list[PreviewException] = Field(default_factory=list)
     # the group it shows under on the target's page (a tag), written at
-    # accept only where it holds then (`show_under_holds`)
+    # accept normalised as `add_filing`'s is (a new tag too; a blank one
+    # is none)
     show_under: str | None = None
     ticked: bool = False
 
@@ -3987,16 +3987,8 @@ def _write_entry_filings(
                 linked_text(exception.text), target, row.target_name, exception
             )
             exception_ids.append(rev.add_fact(thing_id, "ties", text, origin=origin))
+        # as `add_filing` takes it: any tag, a new one too (ruling R6)
         show_under = normalise_tag(row.show_under or "") or None
-        if show_under is not None and not show_under_holds(
-            world.view(), target, show_under
-        ):
-            notes.append(
-                f'shows under "{show_under}" isn\'t a group on'
-                f" {world.view().name_of(target) or row.target_name},"
-                " so it shows under its own tag"
-            )
-            show_under = None
         filings.append(
             Filing(
                 target=target,

@@ -162,19 +162,19 @@ function yearOf(date) {
 // …)" (`within_holds` false; final review M3).
 // Each row can be edited (`edit_filing`: only what changes is sent),
 // ended ("End this": its `until`) or removed (`remove_filing`); a person's
-// gets "+ but…" (`add_exception`). "+ in… 🔎" searches the world's entries
+// gets "+ but…" (`add_exception`). "+ In…" searches the world's entries
 // and live stubs; a name the world hasn't makes a stub of it, with a kind
 // and tag, filed here (`add_filing {new_name}`).
 // A row reads the entry's way, as the character sheet does: "Native of
 // Velikiy Ustyug" (`roleLead`). The role field offers the roles in use
 // (`list_roles`), free text still allowed. Each row's "shows under" chip
 // (the tag picker) names the group it shows under on the target's page
-// (`show_under`), the entry's own tag while none is picked; "+ in…" can
+// (`show_under`), the entry's own tag while none is picked; "+ In…" can
 // pick one too.
 //
 // On a draft (`draft`, the page's draft mode) nothing is sent: its own
 // rows (`draft: true`) carry their tick, the AI's coming unticked (ruling
-// F7); "+ in…" (an entry, or a stub of a typed name, made on accept),
+// F7); "+ In…" (an entry, or a stub of a typed name, made on accept),
 // edit (role, since, within), "shows under" and remove are emitted for
 // the draft (`add(target, {role, since, showUnder})`, `change(key,
 // changes)`, `show-under(key, tag)`, `remove(key)`; a row's key is its
