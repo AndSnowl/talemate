@@ -184,7 +184,7 @@ import { toRaw } from 'vue';
 
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
-import { acceptable, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
+import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
 import {
     factsKey,
     groupDraftKey,
@@ -358,64 +358,12 @@ export function historyBack(history, isGone) {
     return { page: null, history: [] };
 }
 
-// An `aka` entry as the backend keeps it, `everyday` always set.
-function akaEntry(entry) {
-    return { name: entry.name, tag: entry.tag === 'proper' ? 'proper' : 'common', everyday: !!entry.everyday };
-}
-
-function cleanName(name) {
-    return (name || '').split(/\s+/).filter(Boolean).join(' ');
-}
-
-// `aka` with another name (tagged `tag`, not everyday); unchanged for a
-// blank name, or one it (or the main name `mainName`) already has.
-export function akaAdded(aka, name, tag = 'common', mainName = '') {
-    const clean = cleanName(name);
-    const taken = [mainName, ...aka.map((entry) => entry.name)].map((n) => cleanName(n).toLowerCase());
-    if (!clean || taken.includes(clean.toLowerCase())) {
-        return aka;
-    }
-    return [...aka.map(akaEntry), { name: clean, tag, everyday: false }];
-}
-
-// `aka` with entry `index` renamed and/or retagged (`{name?, tag?}`); a
-// name tagged proper is no longer the everyday one. A blank name, or one
-// another entry has, leaves it unchanged.
-export function akaChanged(aka, index, changes) {
-    const entries = aka.map(akaEntry);
-    const entry = { ...entries[index] };
-    if ('name' in changes) {
-        const clean = cleanName(changes.name);
-        const taken = entries.some((other, i) => i !== index && other.name.toLowerCase() === clean.toLowerCase());
-        if (!clean || taken) {
-            return aka;
-        }
-        entry.name = clean;
-    }
-    if ('tag' in changes) {
-        entry.tag = changes.tag;
-        if (entry.tag !== 'common') {
-            entry.everyday = false;
-        }
-    }
-    entries[index] = entry;
-    return entries;
-}
-
-// `aka` with entry `index` made the everyday name (only a common one can
-// be, and only one is), or no longer it if it was.
-export function akaEveryday(aka, index) {
-    const target = akaEntry(aka[index]);
-    const on = !target.everyday && target.tag === 'common';
-    return aka.map((entry, i) => ({ ...akaEntry(entry), everyday: on && i === index }));
-}
-
-export function akaRemoved(aka, index) {
-    return aka.filter((_entry, i) => i !== index).map(akaEntry);
-}
-
-// a draft's texts, its new names marked (the setup cards use it too)
-export { nameKey, previewSegments };
+// a draft's texts, its new names marked (the setup cards use it too); the
+// other-names list helpers live in draftPage.js (which this module
+// imports from, so they can't live here without a cycle) and are
+// re-exported so existing callers (ThingAka.vue, ThingPage.vue) are
+// unaffected
+export { nameKey, previewSegments, akaAdded, akaChanged, akaEveryday, akaRemoved };
 
 // replies to these clear their own spinner (`pending[action]`)
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'set_field', 'override_fact', 'make_stub', 'repoint_ref', 'set_held_by'];
@@ -736,9 +684,10 @@ function worldState() {
 let send = null;
 
 // P6: the draft edits that change what the server renders of it (what's
-// linked, dated or ticked): the others ("In" rows, tags, ticks of other
-// rows) aren't sent for rendering
-const RENDERED_KEYS = ['facts', 'picks', 'new_names', 'selected_names', 'treated_as_new', 'elsewhere', 'prose', 'name', 'aka'];
+// linked, dated, ticked or numbered, Task 1's `numbers`): the others
+// ("In" rows, including a `show_under`, tags, ticks of other rows) aren't
+// sent for rendering
+const RENDERED_KEYS = ['facts', 'picks', 'new_names', 'selected_names', 'treated_as_new', 'elsewhere', 'prose', 'name', 'aka', 'fields'];
 // how long after the last such edit the draft is rendered
 const RENDER_DELAY_MS = 250;
 // each store's waiting render
@@ -2464,9 +2413,15 @@ export const useWorldsStore = defineStore('worlds', {
                         this.synopses = Object.fromEntries(Object.entries(this.synopses).map(([key, value]) => [key, { ...value, pending: false }]));
                         this.smallDrafts = Object.fromEntries(Object.entries(this.smallDrafts)
                             .map(([key, value]) => [key, { ...value, accepting: false, switching: false }]));
-                        // or the draft's accept or selection
+                        // or the draft's accept or selection: a refused
+                        // accept dropped its waiting render
+                        // (`acceptPreview`'s `dropDraftRender`) without
+                        // sending it, so it's asked for again here
                         if (this.draft) {
                             this.draft = { ...this.draft, accepting: false, selecting: null };
+                            if (this.draft.edited !== this.draft.base) {
+                                this.renderDraft();
+                            }
                         }
                         this.stubExpandAfter = null;
                         if (this.namesWanted.length) {

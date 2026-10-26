@@ -279,6 +279,68 @@ function changedAt(rows, index, change) {
     return (rows || []).map((row, i) => (i === index ? { ...row, ...change } : row));
 }
 
+// --- other names (aka) ---------------------------------------------------
+//
+// Moved here from stores/worlds.js (which imports from this module, so
+// this module can't import back): the store re-exports these so its own
+// callers (ThingAka.vue, ThingPage.vue) keep working unchanged.
+
+// An `aka` entry as the backend keeps it, `everyday` always set.
+function akaEntry(entry) {
+    return { name: entry.name, tag: entry.tag === 'proper' ? 'proper' : 'common', everyday: !!entry.everyday };
+}
+
+function cleanName(name) {
+    return (name || '').split(/\s+/).filter(Boolean).join(' ');
+}
+
+// `aka` with another name (tagged `tag`, not everyday); unchanged for a
+// blank name, or one it (or the main name `mainName`) already has.
+export function akaAdded(aka, name, tag = 'common', mainName = '') {
+    const clean = cleanName(name);
+    const taken = [mainName, ...aka.map((entry) => entry.name)].map((n) => cleanName(n).toLowerCase());
+    if (!clean || taken.includes(clean.toLowerCase())) {
+        return aka;
+    }
+    return [...aka.map(akaEntry), { name: clean, tag, everyday: false }];
+}
+
+// `aka` with entry `index` renamed and/or retagged (`{name?, tag?}`); a
+// name tagged proper is no longer the everyday one. A blank name, or one
+// another entry has, leaves it unchanged.
+export function akaChanged(aka, index, changes) {
+    const entries = aka.map(akaEntry);
+    const entry = { ...entries[index] };
+    if ('name' in changes) {
+        const clean = cleanName(changes.name);
+        const taken = entries.some((other, i) => i !== index && other.name.toLowerCase() === clean.toLowerCase());
+        if (!clean || taken) {
+            return aka;
+        }
+        entry.name = clean;
+    }
+    if ('tag' in changes) {
+        entry.tag = changes.tag;
+        if (entry.tag !== 'common') {
+            entry.everyday = false;
+        }
+    }
+    entries[index] = entry;
+    return entries;
+}
+
+// `aka` with entry `index` made the everyday name (only a common one can
+// be, and only one is), or no longer it if it was.
+export function akaEveryday(aka, index) {
+    const target = akaEntry(aka[index]);
+    const on = !target.everyday && target.tag === 'common';
+    return aka.map((entry, i) => ({ ...akaEntry(entry), everyday: on && i === index }));
+}
+
+export function akaRemoved(aka, index) {
+    return aka.filter((_entry, i) => i !== index).map(akaEntry);
+}
+
 // --- the owner's edits, each a change to `edited` -----------------------------
 
 // a fact's tick
@@ -455,6 +517,12 @@ export function changeFiling(edited, key, change) {
     return { filings: (edited.filings || []).map((row) => (filingKey(row) === key ? { ...row, ...change } : row)) };
 }
 
+// an "In" row's "shows under" group (`show_under`, ruling H5): `tag`, or
+// `null` for the target's own tag.
+export function setFilingShowUnder(edited, key, tag) {
+    return changeFiling(edited, key, { show_under: tag });
+}
+
 // "+ in… 🔎" on a draft: the owner's own filing, ticked, in an entry the
 // world has (`{id, name}`) or, like the page's, a new stub of a typed name
 // (`{newName, kind, tag}`); one already there is ticked (and given the
@@ -505,6 +573,20 @@ export function tickFileInto(edited, thingId, ticked) {
 // a "Could move here" row's tick
 export function tickMoveHere(edited, factId, ticked) {
     return { move_here: (edited.move_here || []).map((row) => (row.fact_id === factId && !row.repeat ? { ...row, ticked } : row)) };
+}
+
+// a race, mix or species draft's `lifespan`, `adult_age` or `measures`
+// (the draft's `fields`, as a saved page's `set_field` writes them, P6):
+// `null` clears it, back to what it inherits (`numbers`, Task 1).
+export function setDraftNumber(edited, field, value) {
+    return { fields: { ...(edited.fields || {}), [field]: value } };
+}
+
+// the draft's other names, after one of the list helpers above
+// (`akaAdded`, `akaChanged`, `akaEveryday`, `akaRemoved`) made the new
+// list from `edited.aka`.
+export function setDraftAka(edited, aka) {
+    return { aka };
 }
 
 // a new name's kind, tag, "same as…" or "in…" (`change`)
