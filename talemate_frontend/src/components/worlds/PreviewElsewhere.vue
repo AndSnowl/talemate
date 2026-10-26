@@ -25,41 +25,43 @@
                 @tick="tick(index, $event)"
             >
                 <LinkedText :segments="elsewhereSegments(rows[index], index, rendered, newNames)" :text="rows[index].text" />
-                <template #end>
-                    <span v-if="rows[index].since" class="fact-date">{{ formatDate(worlds.calendar, rows[index].since) }}</span>
-                    <v-select
-                        :model-value="rows[index].category"
-                        :items="categoryOptions(group, rows[index])"
-                        density="compact"
-                        variant="outlined"
-                        hide-details
-                        class="category"
-                        data-testid="elsewhere-category"
-                        :aria-label="'Category of ' + rows[index].text"
-                        @update:model-value="change(index, { category: $event })"
-                    ></v-select>
+                <template v-if="rows[index].since" #end>
+                    <span class="fact-date">{{ formatDate(worlds.calendar, rows[index].since) }}</span>
                 </template>
-                <!-- where it goes, on a line of its own under its words,
-                     with whom it's held by -->
+                <!-- its category, where it goes and whom it's held by, on
+                     a line of its own under its words -->
                 <template #under>
-                    <v-btn
-                        variant="text"
-                        size="x-small"
-                        append-icon="mdi-menu-down"
-                        class="target"
-                        data-testid="elsewhere-target"
-                        :title="'Write it on another page than ' + group.name"
-                        @click="startRetarget(index, $event)"
-                    >→ {{ group.name }}</v-btn>
-                    <v-btn
-                        variant="text"
-                        size="x-small"
-                        prepend-icon="mdi-plus"
-                        data-testid="elsewhere-also"
-                        :disabled="alsoHere.includes(rows[index].text)"
-                        @click="$emit('also', rows[index])"
-                    >also here</v-btn>
-                    <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
+                    <div class="d-flex align-center flex-wrap ga-2">
+                        <v-select
+                            :model-value="rows[index].category"
+                            :items="categoryOptions(group, rows[index])"
+                            density="compact"
+                            variant="outlined"
+                            hide-details
+                            class="category"
+                            data-testid="elsewhere-category"
+                            :aria-label="'Category of ' + rows[index].text"
+                            @update:model-value="change(index, { category: $event })"
+                        ></v-select>
+                        <v-btn
+                            variant="text"
+                            size="x-small"
+                            append-icon="mdi-menu-down"
+                            class="target"
+                            data-testid="elsewhere-target"
+                            :title="'Write it on another page than ' + group.name"
+                            @click="startRetarget(index, $event)"
+                        >→ {{ group.name }}</v-btn>
+                        <v-btn
+                            variant="text"
+                            size="x-small"
+                            prepend-icon="mdi-plus"
+                            data-testid="elsewhere-also"
+                            :disabled="alsoHere.includes(rows[index].text)"
+                            @click="$emit('also', rows[index])"
+                        >also here</v-btn>
+                        <span v-if="rows[index].held_by_name" class="held" data-testid="held-by-tag">held by {{ rows[index].held_by_name }}</span>
+                    </div>
                 </template>
                 <template v-if="rows[index].repeat_of" #match>
                     <PreviewRepeats
@@ -101,8 +103,8 @@ import SuggestionRow from './SuggestionRow.vue';
 // (`also(row)`; off once this page has those words). A group
 // can be unticked (or ticked) at once; each row's category can be changed
 // among its entry's kind's (a timeline fact only when dated). Each row is
-// a `SuggestionRow`: its target and "+ also here" on a second line under
-// its words. A repeat of what the entry already says hangs its match
+// a `SuggestionRow`: its category, target and "+ also here" on a second
+// line under its words. A repeat of what the entry already says hangs its match
 // under the row (`PreviewRepeats`), settled Keep new (the entry's fact
 // removed on Accept), Keep existing or Keep both (`settleElsewhereRepeat`);
 // Move existing here is off, the fact being on that page already. An
@@ -224,7 +226,6 @@ export default {
 }
 
 .held {
-    margin-left: 6px;
     font-size: 11px;
     color: rgb(var(--v-theme-foreign));
 }

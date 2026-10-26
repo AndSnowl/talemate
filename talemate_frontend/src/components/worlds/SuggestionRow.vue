@@ -41,9 +41,11 @@ import './suggestions.css';
 // wraps first). The text and `end` share their own wrapping flex line
 // (`suggestion-body`), right of the tick: short text, `end` follows it
 // on the same line; long text, `end` drops under the text but still
-// right of the tick column, never under the tick itself — the owner's
-// rule: a control that belongs to the row's text follows it, it's
-// never pushed to a wide pane's far edge. A second line under the text
+// right of the tick column, never under the tick itself. Where `end`
+// sits goes by the row's own width (a container query, the owner's
+// rule): in a list half the screen wide or less it's at the right edge,
+// lined up row under row; in a wider one it follows the text, never
+// pushed to a wide pane's far edge. A second line under the text
 // for placement controls and notes (`under`), a repeat's match indented
 // with a left rule (`match`) and a form under all of that (`after`).
 // `tick(Boolean)` is emitted,
@@ -83,6 +85,9 @@ export default {
 .suggestion-row {
     padding: 2px 0;
     border-bottom: 1px dashed rgb(var(--v-theme-border));
+    /* the row measures its own width (the list's), not the screen's: see
+       the `@container` rule on `.suggestion-end` */
+    container: suggestion-row / inline-size;
 }
 
 /* the tick (outside this) never wraps; everything that belongs to the
@@ -115,6 +120,21 @@ export default {
 
 .suggestion-end {
     flex: 0 0 auto;
+}
+
+/* the owner's rule: in a list half the screen wide or less (an entry
+   page's Facts column, beside its Description), `end` goes to the row's
+   right edge, lined up row under row (still wrapping under a long text);
+   in a wider one (a draft's "For other pages", the full content width on
+   a big screen) it follows the text, never far from it. The row measures
+   its own width against the screen's: a fixed px threshold can't do it,
+   the page's content area being narrow on a small screen (measured: Facts
+   291px and the full width 594px at 1280px; 611px and 1234px at 1920px,
+   so the full width at 1280 is narrower than Facts at 1920) */
+@container suggestion-row (max-width: 50vw) {
+    .suggestion-end {
+        margin-left: auto;
+    }
 }
 
 .suggestion-under {
