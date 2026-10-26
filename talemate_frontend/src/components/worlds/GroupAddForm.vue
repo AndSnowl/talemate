@@ -77,7 +77,7 @@
                 testid="group-add-row"
                 @tick="change(index, { ticked: $event })"
             >
-                <div class="d-flex align-center ga-2">
+                <div class="d-flex align-center flex-wrap ga-2">
                     <v-text-field
                         :model-value="row.name"
                         density="compact"
@@ -88,7 +88,7 @@
                         :aria-label="'Name of ' + row.name"
                         @update:model-value="change(index, { name: $event })"
                     ></v-text-field>
-                    <span class="text-body-2">{{ row.line }}</span>
+                    <span class="text-body-2 draft-line">{{ row.line }}</span>
                 </div>
                 <template #under>
                     <v-chip size="x-small" label variant="tonal" color="muted">{{ row.kind }}</v-chip>
@@ -235,5 +235,13 @@ export default {
     flex: none;
     width: 220px;
     font-weight: 600;
+}
+
+/* a narrow "+ Add" card (many connected groups) can be too tight for
+   the name field plus its line on one row; this wraps the line onto
+   its own row instead of squeezing it down to one word per line */
+.draft-line {
+    flex: 1 1 100px;
+    min-width: 80px;
 }
 </style>

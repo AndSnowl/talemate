@@ -1,11 +1,11 @@
 <template>
     <div class="suggestion-row" :class="{ 'no-tick': !tickable }" :data-testid="testid">
-        <div class="suggestion-line d-flex align-center ga-2">
+        <div class="suggestion-line d-flex align-start ga-2">
             <v-checkbox-btn
                 v-if="tickable"
                 :model-value="ticked"
                 density="compact"
-                class="flex-grow-0"
+                class="flex-grow-0 suggestion-tick"
                 :aria-label="tickLabel"
                 :disabled="disabled"
                 :data-testid="tickTestid"
@@ -97,6 +97,15 @@ export default {
     row-gap: 2px;
     flex: 1 1 auto;
     min-width: 0;
+}
+
+/* `.suggestion-line` is top-aligned (a multi-line row's tick must sit
+   beside its first line, not centre on the whole block); this nudges
+   the tick's own, slightly taller touch target back onto that first
+   line's optical centre (measured against this row height and the
+   default text/field line-height the rows use) */
+.suggestion-tick {
+    margin-top: -1px;
 }
 
 .suggestion-text {
