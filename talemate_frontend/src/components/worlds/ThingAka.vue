@@ -79,16 +79,23 @@
 </template>
 
 <script>
-import { akaAdded, akaChanged, akaEveryday, akaRemoved, useWorldsStore } from '@/stores/worlds.js';
+import { akaAdded, akaChanged, akaEveryday, akaRemoved } from '@/stores/worlds.js';
 
-// The open thing's other names (`aka`): add, rename, tag (proper or
-// common), the everyday pick (one common name at most) and remove. Each
-// change writes the whole list (`set_field` "aka").
+// The other names (`aka`) of a page or a draft: add, rename, tag (proper
+// or common), the everyday pick (one common name at most) and remove.
+// Each change emits the whole list (`save`): the page writes it
+// (`set_field` "aka"), a draft keeps it (`setDraftAka`). The forms close
+// once `aka` changes after a save: the page's reply, or the draft's copy
+// at once.
 export default {
     name: 'ThingAka',
-    setup() {
-        return { worlds: useWorldsStore() };
+    props: {
+        aka: { type: Array, required: true },
+        // the name an other name can't repeat
+        mainName: { type: String, default: '' },
+        busy: { type: Boolean, default: false },
     },
+    emits: ['save'],
     data() {
         return {
             tags: ['proper', 'common'],
@@ -98,18 +105,10 @@ export default {
             editing: null,
         };
     },
-    computed: {
-        aka() {
-            return this.worlds.thing?.aka || [];
-        },
-        busy() {
-            return !!this.worlds.pending.set_field;
-        },
-    },
     watch: {
-        // the reply (or another thing): the forms are done
-        'worlds.thing'(thing, before) {
-            if (!thing || thing.id !== before?.id || this.adding?.sent || this.editing?.sent) {
+        // the reply: the forms are done
+        aka() {
+            if (this.adding?.sent || this.editing?.sent) {
                 this.adding = null;
                 this.editing = null;
             }
@@ -126,13 +125,13 @@ export default {
         // a list the backend should have: only sent when it changed
         save(aka) {
             if (aka !== this.aka) {
-                this.worlds.setAka(aka);
+                this.$emit('save', aka);
                 return true;
             }
             return false;
         },
         saveAdd() {
-            if (this.save(akaAdded(this.aka, this.adding.name, this.adding.tag, this.worlds.thing?.name))) {
+            if (this.save(akaAdded(this.aka, this.adding.name, this.adding.tag, this.mainName))) {
                 this.adding = { ...this.adding, sent: true };
             }
         },

@@ -73,7 +73,7 @@
                 <TagChip v-if="draft" :tag="edited.tag" local @pick="edit({ tag: $event })" />
                 <TagChip v-else :thing-id="thing.id" :tag="thing.tag" />
                 <span v-if="everydayName" class="text-caption text-muted" data-testid="thing-everyday">usually called “{{ everydayName }}”</span>
-                <!-- its other names (a draft's can be removed before accept) -->
+                <!-- its other names (edited under Other names) -->
                 <span v-if="otherNames.length" class="d-inline-flex align-center flex-wrap ga-1" data-testid="thing-other-names">
                     <span class="text-caption text-muted">also</span>
                     <v-chip
@@ -82,10 +82,7 @@
                         size="x-small"
                         label
                         variant="outlined"
-                        :closable="draft"
-                        :close-label="'Remove other name ' + other.name"
                         data-testid="thing-other-name"
-                        @click:close="removeDraftName(other.index)"
                     >{{ other.name }}</v-chip>
                 </span>
                 <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
@@ -148,6 +145,20 @@
         </div>
 
         <template v-else>
+            <!-- a draft with candidates: the same thing as one of them?
+                 (about its name, so right under it) -->
+            <SameThingAsk
+                v-if="draft && !edited.stub_id && edited.same_as && edited.same_as.length"
+                class="mb-3"
+                :name="edited.name"
+                :kind="edited.kind"
+                :offers="edited.same_as"
+                :verdict="edited.verdict"
+                :chosen="edited._same || null"
+                :exclude="ownIds"
+                @choose="edit({ _same: $event })"
+            />
+
             <template v-if="!draft">
                 <v-alert
                     v-if="worlds.stubRepointed && worlds.stubRepointed.target.id === thing.id"
@@ -182,28 +193,6 @@
                     <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
                 </div>
             </template>
-
-            <!-- 1. In -->
-            <EntryIn
-                :thing="thing"
-                :draft="draft"
-                @add="(target, filing) => edit(addFiling(edited, target, draftFiling(filing)))"
-                @change="(key, change) => edit(changeFiling(edited, key, draftFiling(change)))"
-                @remove="edit(removeFiling(edited, $event))"
-            />
-
-            <!-- 2. Same thing? (a draft with candidates) -->
-            <SameThingAsk
-                v-if="draft && !edited.stub_id && edited.same_as && edited.same_as.length"
-                class="mt-2"
-                :name="edited.name"
-                :kind="edited.kind"
-                :offers="edited.same_as"
-                :verdict="edited.verdict"
-                :chosen="edited._same || null"
-                :exclude="ownIds"
-                @choose="edit({ _same: $event })"
-            />
 
             <!-- the entry's summary fact heads the page -->
             <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
@@ -256,9 +245,34 @@
                             </v-btn-toggle>
                             <span class="text-caption text-muted">{{ existenceNote }}</span>
                         </div>
-                        <ThingNumbers v-if="isHeritage" />
-                        <ThingAka />
                     </template>
+                    <!-- a page's or a draft's: the page writes, a draft keeps -->
+                    <ThingNumbers
+                        v-if="isHeritage"
+                        :key="'numbers-' + editorKey"
+                        :fields="numberFields"
+                        :numbers="thing.numbers"
+                        :busy="editorBusy"
+                        @set="setNumber"
+                    />
+                    <ThingAka
+                        :key="'aka-' + editorKey"
+                        :aka="akaList"
+                        :main-name="thing.name"
+                        :busy="editorBusy"
+                        @save="saveAka"
+                    />
+
+                    <!-- In, a section of its own just above Facts (a draft's
+                         rows kept in the draft) -->
+                    <EntryIn
+                        :thing="thing"
+                        :draft="draft"
+                        @add="addDraftFiling"
+                        @change="(key, change) => edit(changeFiling(edited, key, draftFiling(change)))"
+                        @show-under="(key, tag) => edit(setFilingShowUnder(edited, key, tag))"
+                        @remove="edit(removeFiling(edited, $event))"
+                    />
 
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
                          line under the heading (a draft page's nested draft
@@ -268,10 +282,10 @@
                         <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
                         <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" :on-draft="draft" />
-                        <v-btn v-if="!draft && (!form || form.factId)" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
+                        <v-btn v-if="!form || form.factId || form.index != null" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
                     </div>
 
-                    <div v-if="form && !form.factId && !form.draft" class="mb-2">
+                    <div v-if="form && !form.factId && form.index == null" class="mb-2">
                         <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" />
                     </div>
 
@@ -311,22 +325,22 @@
                         </FactRow>
 
                         <!-- what it inherits, each ticked as kept: unticking one
-                             the model missed marks it replaced by one of its own -->
+                             the model missed marks it replaced by one of its own.
+                             Each on the saved page's inherited line (`InheritedLine`) -->
                         <template v-if="edited.inherited && edited.inherited.length">
                             <div class="suggestion-heading mt-3">Inherited (untick to replace)</div>
                             <SuggestionRow
                                 v-for="row in edited.inherited"
                                 :key="row.fact_id"
+                                fill
                                 :ticked="overriderOf(row) < 0"
+                                :dropped="false"
                                 tick-label="Kept"
                                 :disabled="!edited.facts.length"
                                 testid="preview-inherited"
                                 @tick="setKept(row, $event)"
                             >
-                                <span class="inherited">{{ row.text }}</span>
-                                <template #end>
-                                    <v-chip size="x-small" label variant="tonal" color="muted" class="flex-0-0">{{ row.source }}</v-chip>
-                                </template>
+                                <InheritedLine :fact="inheritedLine(row)" actions="none" :overridden="overriderOf(row) >= 0" />
                                 <template v-if="overriderOf(row) >= 0" #under>
                                     <v-select
                                         :model-value="overriderOf(row)"
@@ -376,8 +390,25 @@
                             @save="saveForm"
                             @cancel="form = null"
                         />
-                        <HeritageSections v-if="thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
-                        <NamedStubs :stubs="thing.named_stubs || []" />
+                        <!-- up to and including the section being created
+                             (or all of them, idle): what follows moves
+                             below the draft instead, so nothing but the
+                             section being created sits next to it -->
+                        <HeritageSections
+                            v-if="thing.kind === 'species'"
+                            :species-id="thing.id"
+                            :races="thing.races"
+                            :mixes="thing.mixes"
+                            :creating="heritageCreating"
+                            :until="heritageCreating"
+                            @create="heritageCreating = $event"
+                        />
+                        <!-- while a race/mix is drafted below the row, Stubs
+                             this entry named moves there too, right after
+                             it: otherwise it sits between Races/Mixes and
+                             the draft, reading as if the draft belonged to
+                             it instead -->
+                        <NamedStubs v-if="!heritageTailBelow" :stubs="thing.named_stubs || []" />
                     </template>
                 </v-col>
 
@@ -426,6 +457,37 @@
                             </div>
                         </template>
                     </template>
+                </v-col>
+            </v-row>
+
+            <!-- a race or mix draft (opened by Races'/Mixes' "+ New
+                 race"/"+ New mix", in the left column above), below the
+                 two columns at the entry's full width, so it gets the same
+                 width and two-column layout as any entry page -->
+            <CreateBox
+                v-if="!draft && thing.kind === 'species' && heritageCreating"
+                class="mt-4"
+                :kind="heritageCreating"
+                :preset="heritagePreset"
+                cancellable
+                @cancel="heritageCreating = null"
+            />
+            <!-- whatever came after the section being created (Mixes,
+                 drafting a race; nothing, drafting a mix) and Named
+                 stubs, moved below the draft: a second row, its own
+                 left column the same width as the main row's, so "+ New
+                 mix" stays by its heading instead of the full width -->
+            <v-row v-if="heritageTailBelow" class="mt-4">
+                <v-col cols="12" md="6">
+                    <HeritageSections
+                        :species-id="thing.id"
+                        :races="thing.races"
+                        :mixes="thing.mixes"
+                        :creating="heritageCreating"
+                        :from="heritageCreating"
+                        @create="heritageCreating = $event"
+                    />
+                    <NamedStubs :stubs="thing.named_stubs || []" />
                 </v-col>
             </v-row>
 
@@ -510,13 +572,14 @@
 </template>
 
 <script>
-import { akaRemoved, countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
+import { countsLine, dateIn, defaultOverrideIndex, listedFacts, moveInEdit, previewCounts, repointedNote, useWorldsStore } from '@/stores/worlds.js';
 import { ageAt, dateOf, dateParts, formatDate, spanLabel } from './worldDates.js';
 import { EXISTENCE, HERITAGE_KINDS, INHERITING_KINDS, STUB_KINDS, existenceOf, kindInfo, overrideCategory } from './worldKinds.js';
 import { headerNames } from './entryPage.js';
 import { formatNumber } from './worldNumbers.js';
 import { NEW_THING, factEditState, factLinkPayload, linkPayload, refOccurrence, repicks } from './nameHighlights.js';
 import {
+    addDraftFact,
     addFiling,
     alsoHere,
     changeFiling,
@@ -525,17 +588,22 @@ import {
     copyFactTo,
     draftFactRows,
     editFact,
+    filingKey,
     holdFact,
     moveFactTo,
     removeFact as removeDraftFact,
     removeFiling,
     repeatChoice,
     retarget,
+    setDraftAka,
+    setDraftNumber,
+    setFilingShowUnder,
     settleRepeat,
     tickFact,
     tickFileInto,
     tickMoveHere,
 } from './draftPage.js';
+import CreateBox from './CreateBox.vue';
 import DraftBar from './DraftBar.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
 import EntryConnected from './EntryConnected.vue';
@@ -544,6 +612,7 @@ import EntryMentionedIn from './EntryMentionedIn.vue';
 import EntryTimeline from './EntryTimeline.vue';
 import FactRow from './FactRow.vue';
 import HeritageSections from './HeritageSections.vue';
+import InheritedLine from './InheritedLine.vue';
 import LinkedText from './LinkedText.vue';
 import MergeDialog from './MergeDialog.vue';
 import MoveHere from './MoveHere.vue';
@@ -592,6 +661,11 @@ const FIELD_LABELS = {
     origin: 'Origin',
 };
 
+// what a draft without own fields, or a thing without other names, passes
+// (one each: a new one every time would read as a change)
+const NO_FIELDS = Object.freeze({});
+const NO_AKA = Object.freeze([]);
+
 const EDIT_ACTIONS = ['add_fact', 'correct_fact', 'end_fact', 'remove_fact', 'override_fact'];
 
 const THING_ID = /^[0-9a-f]{32}$/;
@@ -628,8 +702,9 @@ function cut(text, length = 28) {
 //
 // The entry page (mockup v3, screens A, B and D): under the header (name,
 // kind, the tag chip with its picker, its everyday name, the prompt hint
-// it was written with) come its "In" rows (`EntryIn`), its summary fact,
-// its facts ("+ Add facts…", `EntryAddFacts`), then what's filed in it
+// it was written with) come its summary fact, then beside its prose its
+// "In" rows (`EntryIn`, a section just above Facts in the left column)
+// and its facts ("+ Add facts…", `EntryAddFacts`), then what's filed in it
 // grouped by tag (`EntryConnected`), what names it ("Mentioned in",
 // folded) and its Timeline ("Events ▾", "+ Add event…").
 //
@@ -657,18 +732,23 @@ function cut(text, length = 28) {
 // Timeline; every change goes to the draft (`worlds.editDraft` and
 // draftPage.js), nothing is written before Accept. It adds the draft bar
 // (`DraftBar`) and, in the spec's order around the shared sections,
-// "Same thing?" after In, the repeats' "Move existing here" on its facts
+// "Same thing?" right under the name (it's about the name), the
+// repeats' "Move existing here" on its facts
 // (`PreviewRepeats`) and what it inherits, then For other pages
 // (`PreviewElsewhere`), Could move here (`MoveHere`), New stubs
 // (`PreviewStubs`) and File into this, with Accept and Discard again at
 // their foot. While a nested "+ Add facts" draft is out or held
 // (`draftLocked`), every way to accept it waits, "Fill the stub …
-// instead" too. What the page alone has (the as-of
-// date, the timeline strip, other names, numbers, prose regeneration,
-// merge and delete) is left out.
+// instead" too. A heritage draft's numbers and its other names are the
+// page's editors (`ThingNumbers`, `ThingAka`), kept in the draft
+// (`setDraftNumber`, `setDraftAka`); the header lists its other names
+// read-only, as the page's does. What the page alone has (the as-of
+// date, the timeline strip, prose regeneration, merge and delete) is
+// left out.
 export default {
     name: 'ThingPage',
     components: {
+        CreateBox,
         DraftBar,
         EntryAddFacts,
         EntryConnected,
@@ -677,6 +757,7 @@ export default {
         EntryTimeline,
         FactRow,
         HeritageSections,
+        InheritedLine,
         LinkedText,
         MergeDialog,
         MoveHere,
@@ -726,6 +807,9 @@ export default {
             selection: null,
             selecting: false,
             existenceValues: EXISTENCE,
+            // a species page's Races/Mixes: the kind its create box (below
+            // the two columns) is showing, if any
+            heritageCreating: null,
         };
     },
     computed: {
@@ -766,7 +850,8 @@ export default {
                 kind: edited.kind,
                 tag: edited.tag,
                 hint: edited.hint,
-                aka: edited.aka || [],
+                aka: edited.aka || NO_AKA,
+                numbers: draft.rendered?.numbers || page.numbers,
                 in: [...kept, ...own],
                 facts: (page.facts || []).filter((fact) => !fact.draft),
                 inherited: [],
@@ -838,6 +923,17 @@ export default {
         draftBusy() {
             return this.worlds.previewPending || !!this.worlds.draft?.accepting || !!this.worlds.pending.use_version;
         },
+        // the race's species, or the mix's first parent: this species
+        heritagePreset() {
+            return this.heritageCreating === 'mix' ? { parents: [this.thing.id] } : { species: this.thing.id };
+        },
+        // while a race/mix is drafted below the row, what follows the
+        // section being created (the other Races/Mixes section, then
+        // Named stubs) moves below the draft too, so nothing but the
+        // section being created sits next to it
+        heritageTailBelow() {
+            return !this.draft && this.thing?.kind === 'species' && !!this.heritageCreating;
+        },
         existence() {
             return existenceOf(this.thing);
         },
@@ -890,6 +986,21 @@ export default {
         },
         otherNames() {
             return headerNames(this.thing?.aka);
+        },
+        // what the numbers and other names editors show: a draft's own
+        // fields are its copy's (`thing.numbers` resolved as rendered)
+        numberFields() {
+            return (this.draft ? this.edited?.fields : this.thing?.fields) || NO_FIELDS;
+        },
+        akaList() {
+            return this.thing?.aka || NO_AKA;
+        },
+        editorBusy() {
+            return this.draft ? this.draftBusy : !!this.worlds.pending.set_field;
+        },
+        // they start over on another thing, or another version of the draft
+        editorKey() {
+            return this.draft ? 'draft-' + (this.worlds.draft?.key ?? '') + '-' + (this.worlds.draft?.version ?? '') : this.thing?.id;
         },
         stubOfPage() {
             const thing = this.thing;
@@ -1000,6 +1111,7 @@ export default {
             }
             if (!thing || thing.id !== before?.id) {
                 this.merging = false;
+                this.heritageCreating = null;
             }
         },
         editing(now) {
@@ -1029,6 +1141,7 @@ export default {
         removeFiling,
         repeatChoice,
         retarget,
+        setFilingShowUnder,
         settleRepeat,
         tickFact,
         tickFileInto,
@@ -1036,10 +1149,20 @@ export default {
         edit(changes) {
             this.worlds.editDraft(changes);
         },
-        // a draft's other name removed before accept (accepted, it'd be
-        // a link word)
-        removeDraftName(index) {
-            this.edit({ aka: akaRemoved(this.edited.aka || [], index) });
+        // numbers and other names: the page writes them, a draft keeps them
+        setNumber(field, value) {
+            if (this.draft) {
+                this.edit(setDraftNumber(this.edited, field, value));
+            } else {
+                this.worlds.setField(field, value);
+            }
+        },
+        saveAka(aka) {
+            if (this.draft) {
+                this.edit(setDraftAka(this.edited, aka));
+            } else {
+                this.worlds.setAka(aka);
+            }
         },
         setDraftKind(kind) {
             if (kind && kind !== this.edited.kind) {
@@ -1053,6 +1176,17 @@ export default {
                 out.since = dateIn(out.since);
             }
             return out;
+        },
+        // "+ In…" on a draft: the filing, then the group it shows under
+        addDraftFiling(target, { showUnder = null, ...filing }) {
+            let next = { ...this.edited, ...addFiling(this.edited, target, this.draftFiling(filing)) };
+            if (showUnder) {
+                const key = filingKey(target.newName
+                    ? { target_id: null, new_name: { name: target.newName } }
+                    : { target_id: target.id });
+                next = { ...next, ...setFilingShowUnder(next, key, showUnder) };
+            }
+            this.edit({ filings: next.filings });
         },
         acceptDraft(intoStub = null) {
             this.worlds.acceptPreview(
@@ -1069,6 +1203,15 @@ export default {
             return this.edited.facts.findIndex((fact) => !fact.removed && (fact.overrides || []).includes(row.fact_id));
         },
         // ticked: inherited as it is; unticked: replaced by an own fact
+        // the inherited `row` as its line takes it: as the server's page
+        // of the draft sends it (`draft.page.inherited`, as a saved page
+        // sends its own: category, dates, linked words), else the row
+        // itself. (`thing.inherited` is empty on a draft: it lists them
+        // here, not in ThingInherited.)
+        inheritedLine(row) {
+            const sent = (this.worlds.draft?.page?.inherited || []).find((item) => item.fact_id === row.fact_id);
+            return sent || { rendered: row.text, category: row.category, source_id: row.source_id, source_name: row.source };
+        },
         setKept(row, kept) {
             this.worlds.setPreviewOverride(row.fact_id, kept ? null : defaultOverrideIndex(this.edited, row));
         },
@@ -1094,7 +1237,7 @@ export default {
             const form = this.form;
             const year = (value) => (this.validYear(value) ? dateOf(value) : null);
             const change = {};
-            if (form.mode === 'edit') {
+            if (form.mode === 'edit' || form.mode === 'add') {
                 const text = form.text.trim();
                 if (!text) {
                     return;
@@ -1114,7 +1257,13 @@ export default {
                 change.since = year(form.fromYear);
             }
             change.until = year(form.untilYear);
-            this.edit(editFact(this.edited, form.index, change));
+            if (form.mode === 'add') {
+                // "+ Add fact" on a draft: a new local fact, not an edit
+                // to an existing row (nothing is written before Accept)
+                this.edit(addDraftFact(this.edited, { category: change.category, text: change.text, valid_from: change.since, valid_until: change.until }));
+            } else {
+                this.edit(editFact(this.edited, form.index, change));
+            }
             this.form = null;
         },
         // the page's fact as FactRow shows it
@@ -1210,7 +1359,18 @@ export default {
             return { ...state, links: state.links.map((link) => ({ ...link, was: link.ref })) };
         },
         startAdd() {
-            this.form = { mode: 'add', category: this.categories[0], text: '', fromYear: null, untilYear: null, picks: {}, refs: {}, links: [], stubs: [] };
+            this.form = {
+                mode: 'add',
+                ...(this.draft ? { draft: true } : {}),
+                category: this.categories[0],
+                text: '',
+                fromYear: null,
+                untilYear: null,
+                picks: {},
+                refs: {},
+                links: [],
+                stubs: [],
+            };
         },
         // `mode` 'dates': "Change dates", the dates alone
         startEdit(fact, mode = 'edit') {
@@ -1412,10 +1572,6 @@ export default {
 .stub-fact {
     border-bottom: 1px dashed rgb(var(--v-theme-border));
     padding: 2px 0;
-}
-
-.inherited {
-    color: rgb(var(--v-theme-muted));
 }
 
 .override-by {

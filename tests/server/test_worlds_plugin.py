@@ -977,6 +977,8 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "category": "physical",
             "rendered": "Lowlanders are short.",
             "segments": [{"text": "Lowlanders are short.", "ref": None, "stub": False}],
+            "valid_from": None,
+            "valid_until": None,
             "source_id": h.lowlander,
             "source_kind": "race",
             "source_name": "Lowlander",
@@ -990,6 +992,8 @@ async def test_thing_payload_inherited_and_numbers(plugin):
             "segments": [
                 {"text": "Humans have bare skin.", "ref": None, "stub": False}
             ],
+            "valid_from": None,
+            "valid_until": None,
             "source_id": h.human,
             "source_kind": "species",
             "source_name": "Human",
@@ -6828,6 +6832,7 @@ async def test_preview_thing_answers_a_draft_page(plugin, client):
             "target_id": s.tsardom,
             "target_name": "Tsardom of Moscavia",
             "role": "the realm's army",
+            "show_under": None,
             "since": None,
             "until": None,
             "within_id": None,
@@ -8463,6 +8468,165 @@ async def test_draft_render_fails_quietly(plugin, client):
     failed = _last(plugin, "draft_render_failed")
     assert failed["data"] == {"draft_key": "new:lore:gone", "seq": 4}
     assert len(_errors(plugin)) == errors
+
+
+async def test_heritage_draft_payload_inherits_numbers(plugin, client):
+    """A race or mix draft's `numbers` are what its saved page would
+    show: its own where set, else inherited along its species or parents
+    (`heritage.numbers`); `draft_render` follows an owner's edit to them.
+    A species draft shows its own only."""
+
+    h = await _open_heritage_world(plugin)
+    with h.world.revision(Source.manual(note="elves")) as rev:
+        elf = rev.create_thing(
+            "species", {"name": "Elf", "lifespan": 80, "adult_age": 20}
+        )
+    head = h.world.head_rev()
+
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Wood Elves", "Wood elves are quiet.", tag="folk"),
+        kind="race",
+        prompt="elves of the woods",
+        fields={"species": elf},
+    )
+    assert draft["numbers"]["lifespan"] == 80
+    assert draft["numbers"]["adult_age"] == 20
+
+    preview = draft["preview"]
+    edited = {**preview, "fields": {**preview["fields"], "lifespan": 60}}
+    await _act(
+        plugin, "draft_render", draft_key=draft["draft_key"], seq=2, preview=edited
+    )
+    rendered = _last(plugin, "draft_render")["data"]
+    assert rendered["numbers"]["lifespan"] == 60
+    assert rendered["numbers"]["adult_age"] == 20
+
+    # a mix averages its two parents, as a saved mix does
+    mix = await _preview(
+        plugin,
+        client,
+        _draft_reply("Orc-elf", "Orc-elves are rare.", tag="folk"),
+        kind="mix",
+        prompt="",
+        fields={"parents": [h.lowlander, h.orc]},
+    )
+    assert mix["numbers"]["lifespan"] == (75 + 60) / 2
+    assert mix["numbers"]["measures"]["height"]["min"] == 5
+
+    # a species has nothing above it
+    species = await _preview(
+        plugin,
+        client,
+        _draft_reply("Dwarf", "Dwarves dig.", tag="folk"),
+        kind="species",
+        prompt="diggers",
+        fields={},
+    )
+    assert species["numbers"] == {
+        "lifespan": None,
+        "adult_age": None,
+        "measures": {},
+    }
+    assert h.world.head_rev() == head
+
+
+async def test_heritage_draft_inherited_rows_as_a_saved_page_sends_them(plugin, client):
+    """A race draft's `inherited` rows carry what a saved race page's do
+    (`get_thing`'s `inherited`): the fact's category, dates, linked words
+    and holder, so the draft draws them on the same fact line."""
+
+    h = await _open_heritage_world(plugin)
+    with h.world.revision(Source.manual(note="dated")) as rev:
+        h.scarred = rev.add_fact(
+            h.human,
+            "physical",
+            "Humans were scarred by the plague.",
+            valid_from=WorldDate.of(900),
+        )
+
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("Highlanders", "Highlanders are tall.", tag="folk"),
+        kind="race",
+        prompt="tall humans of the hills",
+        fields={"species": h.human},
+    )
+    # Lowlander, saved, is a race of Human as the draft is
+    saved = await _get_thing(plugin, h.lowlander)
+    by_id = {row["fact_id"]: row for row in saved["inherited"]}
+    rows = {row["fact_id"]: row for row in draft["inherited"]}
+    assert set(rows) == {h.bare_skin, h.scarred}
+    for fact_id, row in rows.items():
+        assert row == by_id[fact_id]
+    assert rows[h.scarred]["valid_from"] is not None
+    assert rows[h.scarred]["category"] == "physical"
+
+
+async def _filing_draft_with_show_under(plugin, client, show_under):
+    """The filing world with Yara, a native, filed in Velikoye (its
+    page's "Natives" group), and a lore draft whose one "In" row, ticked,
+    files it in Velikoye showing under `show_under`."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual(note="natives")) as rev:
+        rev.create_thing(
+            "character",
+            {"name": "Yara", "tag": "native", "filings": [_filed(s.velikoye)]},
+        )
+    draft = await _preview(
+        plugin,
+        client,
+        _draft_reply("The Ferrymen", "They row the Khorol River."),
+        prompt="the ferrymen of Velikoye",
+    )
+    preview = {
+        **draft["preview"],
+        "filings": [
+            {
+                "target_id": s.velikoye,
+                "target_name": "Velikoye",
+                "ticked": True,
+                "show_under": show_under,
+            }
+        ],
+    }
+    await _act(
+        plugin, "draft_render", draft_key=draft["draft_key"], seq=2, preview=preview
+    )
+    await _act(plugin, "accept_preview", preview=preview, draft_key=draft["draft_key"])
+    return s, _last(plugin, "accept_preview")["data"]
+
+
+async def test_draft_filing_show_under_written_on_accept(plugin, client):
+    """A draft's ticked "In" row carries `show_under`; accept writes it on
+    the filing, so the entry shows under that group on the target."""
+
+    s, accepted = await _filing_draft_with_show_under(plugin, client, "native")
+    (filing,) = filings_of(s.world.view(), accepted["id"])
+    assert (filing.target, filing.show_under) == (s.velikoye, "native")
+    assert not any("shows under" in note for note in accepted["notes"])
+
+
+async def test_draft_filing_show_under_checked_at_accept(plugin, client):
+    """Ruling R6: a `show_under` is written as `add_filing` takes it,
+    normalised, a tag no entry uses yet included (a new group); a blank
+    one is none, the entry under its own tag. Nothing is dropped, so no
+    note."""
+
+    s, accepted = await _filing_draft_with_show_under(
+        plugin, client, " Ferry Guild, river "
+    )
+    (filing,) = filings_of(s.world.view(), accepted["id"])
+    assert (filing.target, filing.show_under) == (s.velikoye, "ferry guild")
+    assert not any("shows under" in note for note in accepted["notes"])
+
+    s, accepted = await _filing_draft_with_show_under(plugin, client, "   ")
+    (filing,) = filings_of(s.world.view(), accepted["id"])
+    assert (filing.target, filing.show_under) == (s.velikoye, None)
+    assert not any("shows under" in note for note in accepted["notes"])
 
 
 async def test_draft_timeline_follows_edits(plugin, client):

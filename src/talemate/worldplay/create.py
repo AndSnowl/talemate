@@ -167,6 +167,7 @@ from talemate.world.kinds import (
     get_kind,
     kinds_can_be_one,
     moved_category,
+    normalise_tag,
     validate_field,
 )
 from talemate.world.refs import parse_refs, ref, scrub_emphasis
@@ -407,6 +408,10 @@ class PreviewFiling(BaseModel):
     # a person's part of the target it belongs in, kept from the owner's
     within: str | None = None
     exceptions: list[PreviewException] = Field(default_factory=list)
+    # the group it shows under on the target's page (a tag), written at
+    # accept normalised as `add_filing`'s is (a new tag too; a blank one
+    # is none)
+    show_under: str | None = None
     ticked: bool = False
 
     @model_validator(mode="after")
@@ -3982,6 +3987,8 @@ def _write_entry_filings(
                 linked_text(exception.text), target, row.target_name, exception
             )
             exception_ids.append(rev.add_fact(thing_id, "ties", text, origin=origin))
+        # written as add_filing takes it: any tag, a new one too
+        show_under = normalise_tag(row.show_under or "") or None
         filings.append(
             Filing(
                 target=target,
@@ -3990,6 +3997,7 @@ def _write_entry_filings(
                 # a part that was the folded stub is the filled one
                 within=redirect.get(row.within, row.within) if row.within else None,
                 exceptions=exception_ids,
+                show_under=show_under,
             )
         )
     write_filings(rev, world, thing_id, filings, notes)

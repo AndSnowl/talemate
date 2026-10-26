@@ -56,7 +56,6 @@
 </template>
 
 <script>
-import { useWorldsStore } from '@/stores/worlds.js';
 import { formatNumber, ownMeasures, rangeText } from './worldNumbers.js';
 
 const NUMBER_FIELDS = [
@@ -68,14 +67,21 @@ function isNumber(value) {
     return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
-// A species, race or mix page's numbers: lifespan, adulthood and measures,
-// each editable (`set_field`). On a race or mix page an unset value shows
-// the one it inherits (`numbers`, resolved along its lineage), dimmed.
+// A species, race or mix's numbers: lifespan, adulthood and measures, each
+// editable. `fields` are its own values, `numbers` the resolved ones: on a
+// race or mix an unset value shows the one it inherits (resolved along its
+// lineage), dimmed. A save emits `set(field, value)`: the page writes it
+// (`set_field`), a draft keeps it (`setDraftNumber`). The editor closes
+// once `fields` change after a save: the page's reply, or the draft's
+// copy at once; a save that fails (`busy` ends, no new fields) keeps it.
 export default {
     name: 'ThingNumbers',
-    setup() {
-        return { worlds: useWorldsStore() };
+    props: {
+        fields: { type: Object, required: true },
+        numbers: { type: Object, default: null },
+        busy: { type: Boolean, default: false },
     },
+    emits: ['set'],
     data() {
         return {
             // the field being edited, its number draft, the measures draft
@@ -86,16 +92,12 @@ export default {
         };
     },
     computed: {
-        thing() {
-            return this.worlds.thing;
-        },
-        busy() {
-            return !!this.worlds.pending.set_field;
-        },
         rows() {
             return NUMBER_FIELDS.map(({ field, label, unit }) => {
-                const value = this.thing.numbers?.[field];
-                const own = this.thing.fields[field];
+                const own = this.fields[field];
+                // its own value as soon as it's set (a draft's numbers
+                // are rendered again a moment later)
+                const value = own ?? this.numbers?.[field];
                 return {
                     field,
                     label,
@@ -106,11 +108,12 @@ export default {
             });
         },
         measures() {
-            const own = new Set(ownMeasures(this.thing.fields).map((measure) => measure.name));
-            return Object.entries(this.thing.numbers?.measures || {}).map(([name, range]) => ({
+            const own = Object.fromEntries(ownMeasures(this.fields).map((m) => [m.name, m]));
+            const resolved = { ...(this.numbers?.measures || {}), ...own };
+            return Object.entries(resolved).map(([name, range]) => ({
                 name,
                 text: rangeText(range),
-                inherited: !own.has(name),
+                inherited: !(name in own),
             }));
         },
         measuresValid() {
@@ -120,14 +123,14 @@ export default {
         },
     },
     watch: {
-        thing(thing, before) {
-            // another thing, or the reply to this editor's own save
-            if (!thing || thing.id !== before?.id || this.sent) {
+        // the reply to this editor's own save
+        fields() {
+            if (this.sent) {
                 this.cancel();
             }
         },
         busy(now) {
-            // the save failed (no reply replaced the thing): keep the editor
+            // the save failed (no reply replaced the fields): keep the editor
             if (!now) {
                 this.sent = false;
             }
@@ -141,18 +144,18 @@ export default {
         },
         startNumber(row) {
             this.editing = row.field;
-            this.draft = row.own ?? this.thing.numbers?.[row.field] ?? null;
+            this.draft = row.own ?? this.numbers?.[row.field] ?? null;
         },
         saveNumber(field) {
             if (!isNumber(this.draft)) {
                 return;
             }
-            this.worlds.setField(field, this.draft);
+            this.$emit('set', field, this.draft);
             this.sent = true;
         },
         startMeasures() {
             this.editing = 'measures';
-            this.measuresDraft = ownMeasures(this.thing.fields).map((measure) => ({ ...measure }));
+            this.measuresDraft = ownMeasures(this.fields).map((measure) => ({ ...measure }));
         },
         addMeasure() {
             this.measuresDraft.push({ name: '', min: null, max: null, unit: 'ft' });
@@ -162,7 +165,7 @@ export default {
                 return;
             }
             const measures = this.measuresDraft.map((m) => ({ name: m.name.trim(), min: m.min, max: m.max, unit: m.unit.trim() }));
-            this.worlds.setField('measures', measures);
+            this.$emit('set', 'measures', measures);
             this.sent = true;
         },
     },

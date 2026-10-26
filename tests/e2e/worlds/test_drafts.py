@@ -172,7 +172,8 @@ def _select(page, locator, words: str, nth: int = 0) -> None:
 
 def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_preview):
     """Final review M8: the header lists the other names, on a draft and
-    on the accepted page; on the draft one can be removed before accept
+    on the accepted page, read-only as on the page; on the draft one is
+    removed before accept in Other names, the saved page's editor
     (accepted, an other name becomes a link word)."""
 
     _seeded(app, page, "Names")
@@ -189,7 +190,15 @@ def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_pre
     names = draft.get_by_test_id("thing-other-name")
     expect(names).to_have_count(2)
     expect(draft.get_by_test_id("thing-other-names")).to_contain_text("the Winged")
-    draft.get_by_role("button", name="Remove other name the Winged").click()
+    expect(
+        draft.get_by_test_id("thing-other-names").get_by_role("button")
+    ).to_have_count(0)
+    winged = (
+        draft.get_by_test_id("aka-editor")
+        .get_by_test_id("aka-row")
+        .filter(has_text="the Winged")
+    )
+    winged.get_by_role("button", name="Remove other name").click()
     expect(names).to_have_count(1)
     draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
     sent = _wait_sent(page, "accept_preview")
@@ -199,6 +208,68 @@ def test_header_lists_the_other_names_and_a_draft_drops_one(app, page, fixed_pre
         state="visible", timeout=TIMEOUT_MS
     )
     expect(thing.get_by_test_id("thing-other-name")).to_have_text(["the Frostwings"])
+
+
+def test_species_draft_edits_numbers(app, page, fixed_preview):
+    """A species draft has the saved page's numbers: its Adult at is set
+    before Accept, and written on it."""
+
+    _seeded(app, page, "Numbers")
+    fixed_preview(
+        {
+            "name": "Frost Owls",
+            "facts": [{"category": "physical", "text": "Frost Owls are white."}],
+            "prose": {"description": "White owl-folk."},
+        }
+    )
+    draft = _draft(page, "species", "Owl-folk of the frozen north.")
+    adult = draft.get_by_test_id("numbers-adult_age")
+    expect(adult).to_contain_text("not set")
+    adult.get_by_role("button", name="Edit adult at").click()
+    adult.get_by_label("Adult at").fill("20")
+    adult.get_by_role("button", name="Save").click()
+    expect(adult).to_contain_text("20")
+    expect(adult).not_to_contain_text("not set")
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    sent = _wait_sent(page, "accept_preview")
+    assert sent["preview"]["fields"]["adult_age"] == 20
+    thing = page.get_by_test_id("thing-page")
+    thing.get_by_test_id("thing-name").filter(has_text="Frost Owls").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    expect(thing.get_by_test_id("numbers-adult_age")).to_contain_text("20")
+
+
+def test_draft_add_fact_by_hand_writes_on_accept(app, page, fixed_preview):
+    """ "+ Add fact" on a draft: the saved page's own button and form
+    (`ThingFactForm`), in the Facts heading. Nothing is sent until Accept;
+    the fact joins the draft as a ticked, local row."""
+
+    _seeded(app, page, "Handwritten")
+    fixed_preview(_host("It flies at night."))
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+
+    draft.get_by_role("button", name="Add fact", exact=True).click()
+    form = draft.get_by_test_id("fact-form")
+    form.get_by_label("Fact", exact=True).fill("It drills at dawn.")
+    form.get_by_role("button", name="Save").click()
+
+    dawn = _draft_fact(draft, "It drills at dawn.")
+    dawn.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert dawn.get_by_role("checkbox").is_checked()
+    # nothing sent yet: the fact only joined the draft's own edits
+    assert _sent(page, "add_fact") == []
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    host = _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]
+    assert [f["text"] for f in accepted["facts"]] == [
+        "It flies at night.",
+        "It drills at dawn.",
+    ]
+    _fact(host, "It drills at dawn.").wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert page.console_errors == []
 
 
 def test_draft_versions_and_discard(app, page, fixed_preview):
@@ -321,7 +392,7 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
         assert not row.get_by_role("checkbox").is_checked()
     tsardom.get_by_role("checkbox").check()
 
-    # the owner's own "+ in…" comes ticked, with the role given, as on a page
+    # the owner's own "+ In…" comes ticked, with the role given, as on a page
     filed.get_by_test_id("in-add").click()
     form = filed.get_by_test_id("in-add-form")
     form.get_by_test_id("in-target").locator("input").fill("Night Court")
@@ -371,6 +442,87 @@ def test_draft_in_and_file_into_accept(app, page, fixed_preview):
     expect(
         talon_page.get_by_test_id("entry-in").get_by_test_id("in-row")
     ).to_contain_text(["The Frostwing Host"])
+    assert page.console_errors == []
+
+
+def test_draft_in_row_show_under(app, page, fixed_preview):
+    """A draft's In rows have the saved page's "shows under" chip, and its
+    "+ In…" form too: the group picked (a new tag included, ruling R6) is
+    kept in the draft, nothing sent, and written on Accept, for a row the
+    model suggested, an entry filed by hand and a new stub's row alike."""
+
+    world = _seeded(app, page, "ShowUnder")
+    fixed_preview(
+        _host(
+            "The Host is entirely owl-folk.",
+            **{"in": [{"entry": "Tsardom of Moscavia", "role": "the realm's army"}]},
+        )
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+    filed = draft.get_by_test_id("draft-in")
+    rows = filed.get_by_test_id("draft-in-row")
+
+    def pick(chip, typed, option=None):
+        chip.click()
+        picker = page.locator('[data-testid="tag-picker"]:visible')
+        picker.get_by_test_id("tag-search").locator("input").fill(typed)
+        if option:
+            picker.get_by_test_id("tag-option").filter(has_text=option).click()
+        else:
+            picker.get_by_test_id("tag-new").click()
+
+    # the model's row: a new tag
+    tsardom = rows.filter(has_text="Tsardom of Moscavia")
+    tsardom.get_by_role("checkbox").check()
+    pick(tsardom.get_by_test_id("in-show-under"), "Winged Army")
+    expect(tsardom.get_by_test_id("in-show-under")).to_have_text(
+        "shows under winged army"
+    )
+
+    # "+ In…" an entry the world has, a group in use picked in the form
+    filed.get_by_test_id("in-add").click()
+    form = filed.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("Night Court")
+    page.get_by_role("option", name="The Night Court").click()
+    pick(form.get_by_test_id("in-show-under"), "capi", option="capital")
+    expect(form.get_by_test_id("in-show-under")).to_have_text("shows under capital")
+    form.get_by_role("button", name="File it").click()
+    court = rows.filter(has_text="The Night Court")
+    expect(court.get_by_test_id("in-show-under")).to_have_text("shows under capital")
+
+    # "+ In…" a new stub, a new tag picked in the form
+    filed.get_by_test_id("in-add").click()
+    form = filed.get_by_test_id("in-add-form")
+    form.get_by_test_id("in-target").locator("input").fill("The Owl Legion")
+    page.get_by_role("option", name="Make a stub “The Owl Legion”").click()
+    pick(form.get_by_test_id("in-show-under"), "Legion Wing")
+    form.get_by_role("button", name="File it").click()
+    legion = rows.filter(has_text="The Owl Legion")
+    expect(legion.get_by_test_id("in-show-under")).to_have_text(
+        "shows under legion wing"
+    )
+    assert _sent(page, "edit_filing") == []
+    assert _sent(page, "add_filing") == []
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    host = _opened(page, "The Frostwing Host")
+    accepted = _sent(page, "accept_preview")[-1]["preview"]["filings"]
+    assert [
+        (r["target_id"] or r["new_name"]["name"], r.get("show_under")) for r in accepted
+    ] == [
+        (world.things["Tsardom of Moscavia"], "winged army"),
+        (world.things["The Night Court"], "capital"),
+        ("The Owl Legion", "legion wing"),
+    ]
+    saved = host.get_by_test_id("entry-in").get_by_test_id("in-row")
+    for name, group in [
+        ("Tsardom of Moscavia", "winged army"),
+        ("The Night Court", "capital"),
+        ("The Owl Legion", "legion wing"),
+    ]:
+        expect(
+            saved.filter(has_text=name).get_by_test_id("in-show-under")
+        ).to_have_text(f"shows under {group}")
     assert page.console_errors == []
 
 
@@ -786,7 +938,7 @@ GENERAL = "It flies at night."
 
 
 def test_draft_in_new_name_and_kind(app, page, fixed_preview):
-    """ "+ in…" on a draft makes a stub of a typed name, as on a page; the
+    """ "+ In…" on a draft makes a stub of a typed name, as on a page; the
     draft's kind can be changed, its facts' categories following."""
 
     _seeded(app, page, "Kinds")
@@ -1415,6 +1567,18 @@ def test_add_facts_regenerate_and_versions(app, page, fixed_facts):
     found = _ask_facts(thing, "its walls")
     rows = found.get_by_test_id("fact-draft-row")
     expect(rows).to_have_count(2)
+    # each row is the page's fact line, without its buttons: its category
+    # and dates where a page fact's are (on a wide screen; at 1280 the
+    # Facts column is narrower than a row's fixed parts)
+    viewport = page.viewport_size
+    page.set_viewport_size({"width": 1920, "height": viewport["height"]})
+    for part in (".v-chip--label", ".fact-date"):
+        box = rows.nth(0).locator(part).bounding_box()
+        page_box = _fact(thing, BELLS).locator(part).bounding_box()
+        assert (box["x"], box["width"]) == (page_box["x"], page_box["width"]), part
+    expect(rows.nth(0).locator(".fact-date")).to_have_text("always")
+    expect(rows.get_by_test_id("fact-menu-button")).to_have_count(0)
+    page.set_viewport_size(viewport)
     versions = found.get_by_test_id("fact-draft-versions")
     expect(versions).to_contain_text("Version 1 of 1")
     rows.nth(1).get_by_role("checkbox").uncheck()

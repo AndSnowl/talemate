@@ -162,7 +162,7 @@ through `signal_operation_failed` (an `operation_done` envelope with
   one; `discard_preview {draft_key}` drops every version, writing
   nothing, and answers `{draft_key}`; `draft_render {draft_key, seq?,
   preview}` (P6) answers `{draft_key, seq, facts: [{index, text,
-  segments}], prose_segments, entry_timeline}`: the owner's copy linked
+  segments}], prose_segments, entry_timeline, numbers}`: the owner's copy linked
   as accept will link it, writing nothing; a regeneration whose draft is
   discarded before its reply comes is dropped, unanswered. Opening
   another world drops them all. The client must always send `draft_key`
@@ -446,6 +446,7 @@ from talemate.worldplay.create import (
     MoveHereFact,
     PreviewException,
     PreviewFact,
+    PreviewInherited,
     accept_preview,
     clean_tag,
     current_date,
@@ -1531,6 +1532,49 @@ def _draft_new_names(
 # --- curation -----------------------------------------------------------------
 
 
+def _draft_inherited_out(
+    view: WorldView,
+    links: _Links,
+    calendar: Calendar,
+    row: PreviewInherited,
+    preview: CreatePreview,
+) -> dict:
+    """One inherited fact of a draft, as a saved page's `inherited` sends
+    it (its category, dates, linked words and holder, from the fact as
+    the world has it now), so the draft draws it on the same fact line;
+    the words the preview was made with if the fact is gone.
+    `overridden_by` is the index of the draft's own fact that replaces
+    it, or `None`."""
+
+    found = view.fact(row.fact_id)
+    fact = found[1] if found is not None else None
+    source = view.thing(row.source_id)
+    return {
+        "fact_id": row.fact_id,
+        "category": row.category,
+        "rendered": view.render(fact.text) if fact is not None else row.text,
+        "segments": (
+            links.segments(fact.text)
+            if fact is not None
+            else [{"text": row.text, "ref": None, "stub": False}]
+        ),
+        "valid_from": _date_out(calendar, fact.valid_from) if fact else None,
+        "valid_until": _date_out(calendar, fact.valid_until) if fact else None,
+        "source_id": row.source_id,
+        "source_kind": source.kind if source is not None else None,
+        "source_name": row.source,
+        "overridden_by": next(
+            (
+                index
+                for index, own in enumerate(preview.facts)
+                if row.fact_id in own.overrides
+            ),
+            None,
+        ),
+        "held_by": _held_out(view, fact, source) if fact is not None else None,
+    }
+
+
 def _held_out(
     view: WorldView, fact: FactState, owner: ThingState | None
 ) -> dict | None:
@@ -2070,6 +2114,8 @@ class WorldsPlugin(Plugin):
                 "category": item.fact.category,
                 "rendered": view.render(item.fact.text),
                 "segments": links.segments(item.fact.text),
+                "valid_from": _date_out(calendar, item.fact.valid_from),
+                "valid_until": _date_out(calendar, item.fact.valid_until),
                 "source_id": item.source_id,
                 "source_kind": item.source_kind,
                 "source_name": item.source_name,
@@ -2835,14 +2881,15 @@ class WorldsPlugin(Plugin):
     async def handle_draft_render(self, data: dict):
         """The draft as the owner left it, linked as accept will link it
         (P6), writing nothing: `{draft_key, seq, facts: [{index, text,
-        segments}], prose_segments, entry_timeline}` for `preview`, the
+        segments}], prose_segments, entry_timeline, numbers}` for `preview`, the
         client's copy with the owner's edits. Its facts, prose and
         timeline are `_draft_payload`'s for that copy: a rewritten fact's
         names link, its new names show `fresh`, and the timeline holds the
         dated facts accept will write. As at accept, only the selected
         names a version held here recorded link without a capital, and
         the stub expanded is the server's copy's. Its "For other pages"
-        rows come as `elsewhere: [{index, text, segments}]`.
+        rows come as `elsewhere: [{index, text, segments}]`, and its
+        `numbers` as its page shows them (its own, else inherited).
 
         A render that can't be made (a draft no longer held, a copy that
         doesn't parse) answers `draft_render_failed {draft_key, seq}`
@@ -2887,6 +2934,7 @@ class WorldsPlugin(Plugin):
                 "elsewhere": page["elsewhere"],
                 "prose_segments": page["prose_segments"],
                 "entry_timeline": page["entry_timeline"],
+                "numbers": page["numbers"],
             },
         )
 
@@ -3098,6 +3146,7 @@ class WorldsPlugin(Plugin):
                 "target_name": (view.name_of(row.target_id) if row.target_id else None)
                 or row.target_name,
                 "role": row.role,
+                "show_under": row.show_under,
                 "since": _date_out(calendar, row.since),
                 "until": None,
                 "within_id": row.within,
@@ -3172,12 +3221,22 @@ class WorldsPlugin(Plugin):
             key=lambda line: line["date"]["instant"] if line["date"] else -1,
         )
         sections = prose_gen.sections_for(preview.kind)
+        # what its page will show: its own numbers, the rest inherited
+        # along the species or parents its fields name (a saved entry's
+        # `heritage.numbers`)
+        numbers = heritage.numbers_of(
+            view,
+            ThingState(
+                id=owner or "", kind=preview.kind, fields=preview.fields, facts=[]
+            ),
+        )
         drafted = {
             **page,
             "id": owner,
             "draft": True,
             "kind": preview.kind,
             "name": preview.name,
+            "numbers": numbers.model_dump(),
             "fields": {
                 field: _value_out(calendar, value)
                 for field, value in preview.fields.items()
@@ -3188,28 +3247,7 @@ class WorldsPlugin(Plugin):
             "hint": preview.hint,
             "facts": [*page["facts"], *facts],
             "inherited": [
-                {
-                    "fact_id": row.fact_id,
-                    "category": row.category,
-                    "rendered": row.text,
-                    "segments": [{"text": row.text, "ref": None, "stub": False}],
-                    "source_id": row.source_id,
-                    "source_kind": (
-                        state.kind
-                        if (state := view.thing(row.source_id)) is not None
-                        else None
-                    ),
-                    "source_name": row.source,
-                    "overridden_by": next(
-                        (
-                            index
-                            for index, fact in enumerate(preview.facts)
-                            if row.fact_id in fact.overrides
-                        ),
-                        None,
-                    ),
-                    "held_by": None,
-                }
+                _draft_inherited_out(view, links, calendar, row, preview)
                 for row in preview.inherited
             ],
             "prose": {

@@ -10,16 +10,9 @@
                     size="small"
                     color="accent"
                     prepend-icon="mdi-plus"
-                    @click="creating = section.kind"
+                    @click="$emit('create', section.kind)"
                 >New {{ section.kind }}</v-btn>
             </div>
-            <CreateBox
-                v-if="creating === section.kind"
-                :kind="section.kind"
-                :preset="section.preset"
-                cancellable
-                @cancel="creating = null"
-            />
             <div v-if="!section.items.length" class="text-body-2 text-muted">No {{ section.label.toLowerCase() }} yet.</div>
             <div v-else class="cards">
                 <v-card
@@ -40,32 +33,37 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { kindInfo } from './worldKinds.js';
-import CreateBox from './CreateBox.vue';
 
 // A species page's Races and Mixes: the races of the species and every mix
 // descending from it (a mix shows on each of its species), each opening
 // its page. "+ New race" and "+ New mix" open a create box with this
 // species as the race's species or the mix's first parent; accepting opens
-// the new page.
+// the new page. The box itself (sized to the entry's full width, so a
+// draft gets the same two-column layout as any entry page) is the
+// caller's: `creating` is the kind it's showing (or none), and "+ New
+// race"/"+ New mix" only ask for it (`create`).
+//
+// Two instances split the sections around the box, so nothing but the
+// section being created sits next to it: `until` (a kind) keeps this
+// instance to the sections up to and including it, `from` to the ones
+// after it. Neither prop: every section (the plain, idle page).
 export default {
     name: 'HeritageSections',
-    components: { CreateBox },
     props: {
         speciesId: { type: String, required: true },
         races: { type: Array, required: true },
         mixes: { type: Array, required: true },
+        // the kind the caller's create box is showing, if any
+        creating: { type: String, default: null },
+        until: { type: String, default: null },
+        from: { type: String, default: null },
     },
+    emits: ['create'],
     setup() {
         return { worlds: useWorldsStore() };
     },
-    data() {
-        return {
-            // the kind whose create box is open, if any
-            creating: null,
-        };
-    },
     computed: {
-        sections() {
+        allSections() {
             return [
                 {
                     key: 'races',
@@ -73,7 +71,6 @@ export default {
                     label: 'Races',
                     icon: kindInfo('race').icon,
                     items: this.races,
-                    preset: { species: this.speciesId },
                 },
                 {
                     key: 'mixes',
@@ -81,15 +78,20 @@ export default {
                     label: 'Mixes',
                     icon: kindInfo('mix').icon,
                     items: this.mixes,
-                    preset: { parents: [this.speciesId] },
                 },
             ];
         },
-    },
-    watch: {
-        // another species page
-        speciesId() {
-            this.creating = null;
+        sections() {
+            const all = this.allSections;
+            if (this.until) {
+                const index = all.findIndex((section) => section.kind === this.until);
+                return index === -1 ? all : all.slice(0, index + 1);
+            }
+            if (this.from) {
+                const index = all.findIndex((section) => section.kind === this.from);
+                return index === -1 ? [] : all.slice(index + 1);
+            }
+            return all;
         },
     },
 };

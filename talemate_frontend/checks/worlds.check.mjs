@@ -92,6 +92,7 @@ import {
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
 import {
     acceptable,
+    addDraftFact,
     addFiling,
     alsoHere,
     categoryFor,
@@ -113,6 +114,9 @@ import {
     removeFact,
     retarget,
     repeatChoice,
+    setDraftAka,
+    setDraftNumber,
+    setFilingShowUnder,
     settleElsewhereRepeat,
     settleRepeat,
     tickElsewhere,
@@ -2588,6 +2592,19 @@ check('a draft fact rewritten here, or added, has no server index: its words sho
     assert.equal(freshSegments([{ text: 'Pale Wing', ref: null, stub: false }], [{ name: 'Pale Wing', same_target_id: 'pw' }])[0].fresh, undefined);
 });
 
+check('addDraftFact appends a ticked local fact', () => {
+    const out = addDraftFact(HOST, { category: 'general', text: 'It drills at dawn.', valid_from: dateOf(410), valid_until: null });
+    assert.deepEqual(out.facts.at(-1), {
+        category: 'general', text: 'It drills at dawn.', since: dateOf(410), until: null, overrides: [], held_by: null, held_by_name: null, ticked: true, repeat_of: null, local: true,
+    });
+    // a category the kind doesn't have becomes the kind's default
+    assert.equal(addDraftFact(HOST, { category: 'nope', text: 'x' }).facts.at(-1).category, categoryFor(HOST.kind, 'nope'));
+    // shows as a local draft row: no server index, "edited" (its own words)
+    const edited = { ...HOST, ...addDraftFact(HOST, { category: 'general', text: 'It drills at dawn.' }) };
+    const rows = draftFactRows(draftOf(HOST), edited);
+    assert.deepEqual([rows.at(-1).serverIndex, rows.at(-1).edited, rows.at(-1).local], [null, true, true]);
+});
+
 check("the page's own name (a self run) stays itself, and an edit takes no link from it", () => {
     // ruling H7: display only, the words unchanged
     const own = { text: 'Pale Wing', ref: null, stub: false, self: true };
@@ -2876,6 +2893,75 @@ check("versions: the owner's edits kept per version for the session, restored wi
     other.store.confirmCreate();
     assert.equal(other.sent.at(-2).action, 'discard_preview');
     assert.equal('draft_key' in other.sent.at(-1), false);
+});
+
+check('draft numbers set and clear', () => {
+    assert.deepEqual(setDraftNumber({ fields: { lifespan: 70 } }, 'adult_age', 18), { fields: { lifespan: 70, adult_age: 18 } });
+    // cleared: the key goes (a null would fail accept's "must be a
+    // number"), so the number is inherited or unset again
+    assert.deepEqual(setDraftNumber({ fields: { lifespan: 70, adult_age: 18 } }, 'lifespan', null), { fields: { adult_age: 18 } });
+    assert.deepEqual(setDraftNumber({ fields: { lifespan: 70 } }, 'lifespan', null), { fields: {} });
+    assert.deepEqual(setDraftNumber({}, 'lifespan', null), { fields: {} });
+    assert.deepEqual(setDraftNumber({ fields: {} }, 'measures', [{ name: 'height', min: 5, max: 6, unit: 'ft' }]), {
+        fields: { measures: [{ name: 'height', min: 5, max: 6, unit: 'ft' }] },
+    });
+});
+
+check("draft aka edits use the saved page's helpers", () => {
+    const edited = { name: 'Oskar', aka: [] };
+    let change = setDraftAka(edited, akaAdded(edited.aka, 'Oz', 'common', edited.name));
+    assert.deepEqual(change, { aka: [{ name: 'Oz', tag: 'common', everyday: false }] });
+    change = setDraftAka(edited, akaEveryday(change.aka, 0));
+    assert.deepEqual(change, { aka: [{ name: 'Oz', tag: 'common', everyday: true }] });
+    change = setDraftAka(edited, akaChanged(change.aka, 0, { name: 'Ozzy' }));
+    assert.deepEqual(change, { aka: [{ name: 'Ozzy', tag: 'common', everyday: true }] });
+    change = setDraftAka(edited, akaRemoved(change.aka, 0));
+    assert.deepEqual(change, { aka: [] });
+});
+
+check('filing show-under on a draft', () => {
+    const key = filingKey(HOST.filings[0]);
+    assert.deepEqual(setFilingShowUnder(HOST, key, 'ghost').filings[0], { ...HOST.filings[0], show_under: 'ghost' });
+    // null: back to the target's own tag
+    assert.deepEqual(setFilingShowUnder(HOST, key, null).filings[0], { ...HOST.filings[0], show_under: null });
+});
+
+check('draft numbers and other names are kept per version', () => {
+    const { store } = hostDraft();
+    store.editDraft(setDraftNumber(store.preview, 'lifespan', 70));
+    store.editDraft(setDraftAka(store.preview, akaAdded(store.preview.aka, 'the Host')));
+    assert.equal(store.preview.fields.lifespan, 70);
+    assert.deepEqual(store.preview.aka, [{ name: 'the Host', tag: 'common', everyday: false }]);
+    // version 2: the server's own copy, with neither
+    store.useVersion(2);
+    store.handleMessage(reply('use_version', draftOf(HOST, { version: 2, count: 2 })));
+    assert.equal(store.draft.version, 2);
+    assert.equal(store.preview.fields.lifespan ?? null, null);
+    assert.deepEqual(store.preview.aka, []);
+    // version 1 again: the owner's edits are still there
+    store.useVersion(1);
+    store.handleMessage(reply('use_version', draftOf(HOST, { version: 1, count: 2 })));
+    assert.equal(store.draft.version, 1);
+    assert.equal(store.preview.fields.lifespan, 70);
+    assert.deepEqual(store.preview.aka, [{ name: 'the Host', tag: 'common', everyday: false }]);
+});
+
+check('a refused accept renders the draft again', () => {
+    const { store, sent } = hostDraft();
+    const key = 'new:lore:frostwing host';
+    store.editDraft(tickFact(store.preview, 0, false));
+    const draftRenders = () => sent.filter((m) => m.action === 'draft_render');
+    const before = draftRenders().length;
+    // Accept drops the edit's waiting render before it ever goes out
+    // (`acceptPreview`'s `dropDraftRender`)
+    store.acceptPreview();
+    assert.equal(draftRenders().length, before);
+    store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'no' } });
+    assert.equal(store.draft.accepting, false);
+    // the preview-lag fix: it's asked for again
+    store.flushDraftRender();
+    assert.equal(draftRenders().length, before + 1);
+    assert.equal(draftRenders().at(-1).draft_key, key);
 });
 
 // a nested fact draft's reply: `facts` added to the page draft `key`

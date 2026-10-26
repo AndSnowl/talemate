@@ -276,10 +276,18 @@ def _resolve_numbers(
 
     if thing_id in path:
         return None
-    path = path | {thing_id}
     state = view.thing(thing_id)
     if state is None:
         return None
+    return _resolve_state_numbers(view, state, path | {thing_id})
+
+
+def _resolve_state_numbers(
+    view: WorldView, state: ThingState, path: frozenset[str]
+) -> Numbers:
+    """`state`'s numbers with unset ones filled from the layers above it
+    in `view`, `path` holding the chain being resolved (`state` among
+    it)."""
 
     lifespan = _number(state, "lifespan")
     adult_age = _number(state, "adult_age")
@@ -326,6 +334,14 @@ def numbers(view: WorldView, thing_id: str) -> Numbers:
     if resolved is None:
         return Numbers(lifespan=None, adult_age=None, measures={})
     return resolved
+
+
+def numbers_of(view: WorldView, state: ThingState) -> Numbers:
+    """`numbers` for a thing that needn't be in `view` (a draft): its own
+    `fields`, with what it leaves unset resolved along the species or
+    parents they name in `view`, as a saved one's would be."""
+
+    return _resolve_state_numbers(view, state, frozenset({state.id}))
 
 
 def life_stage(age: int, numbers: Numbers) -> tuple[LifeStage | None, bool]:

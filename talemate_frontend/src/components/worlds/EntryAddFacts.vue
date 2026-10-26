@@ -105,16 +105,15 @@
                 <SuggestionRow
                     v-for="row in draft.rows"
                     :key="row.index"
+                    class="fact-line-row"
                     :ticked="isTicked(row)"
+                    :dropped="false"
                     :tick-label="'Write ' + row.rendered"
                     :disabled="rowsOff"
                     testid="fact-draft-row"
                     @tick="tick(row.index, $event)"
                 >
-                    <LinkedText :segments="segmentsOf(row)" :text="row.rendered" />
-                    <template #end>
-                        <v-chip size="x-small" label variant="tonal" color="muted">{{ row.category }}</v-chip>
-                    </template>
+                    <FactLine :fact="lineOf(row)" draft actions="none" :dropped="!isTicked(row)" />
                     <template v-if="repeatOf(row)" #match>
                         <div data-testid="fact-draft-repeat">
                             <PreviewRepeats
@@ -154,7 +153,7 @@
 <script>
 import { eventYearValid, useWorldsStore } from '@/stores/worlds.js';
 import { dateParts } from './worldDates.js';
-import LinkedText from './LinkedText.vue';
+import FactLine from './FactLine.vue';
 import PreviewRepeats from './PreviewRepeats.vue';
 import PreviewStubs from './PreviewStubs.vue';
 import SuggestionBar from './SuggestionBar.vue';
@@ -169,7 +168,9 @@ import { factsKey, smallVersionRows } from './smallDrafts.js';
 // with a page draft's feature set (plan "polish-1"): its bar
 // (`SuggestionBar`: "Facts draft" / "Event draft", "Version n of m ▾",
 // the prompt (and year) kept and editable, Regenerate from it, Discard,
-// "Write N"), its rows to tick (`SuggestionRow`), a repeat's match and its
+// "Write N"), its rows to tick (`SuggestionRow`), each drawn as a page
+// fact is (`FactLine`, no buttons: its words, category and dates in a
+// page fact's places), a repeat's match and its
 // four choices under its row (`PreviewRepeats`, `settleRepeat`), and the
 // names the facts bring that the world hasn't as "New stubs" rows
 // (`PreviewStubs`, ticked: a stub each when written, ruling H8, shown in
@@ -184,7 +185,7 @@ import { factsKey, smallVersionRows } from './smallDrafts.js';
 // meanwhile (`nestedHeld`).
 export default {
     name: 'EntryAddFacts',
-    components: { LinkedText, PreviewRepeats, PreviewStubs, SuggestionBar, SuggestionRow },
+    components: { FactLine, PreviewRepeats, PreviewStubs, SuggestionBar, SuggestionRow },
     props: {
         thing: { type: Object, required: true },
         event: { type: Boolean, default: false },
@@ -301,8 +302,16 @@ export default {
         changeNewName,
         repeatChoice,
         settleRepeat,
-        segmentsOf(row) {
-            return factDraftSegments(row.segments, this.draft?.edited?.new_names);
+        // a row as the fact line takes it: linked as it would be, its new
+        // names in the stub colour while ticked
+        lineOf(row) {
+            return {
+                text: row.rendered,
+                segments: factDraftSegments(row.segments, this.draft?.edited?.new_names),
+                category: row.category,
+                valid_from: row.since,
+                valid_until: null,
+            };
         },
         // a row's tick as the owner left it
         isTicked(row) {
@@ -376,6 +385,12 @@ export default {
 .ask {
     border: 1px dashed rgb(var(--v-theme-accent));
     border-radius: 6px;
+}
+
+/* the fact line fills the row right of the tick, so its category and
+   dates sit at the right edge as a page fact's do */
+.fact-line-row :deep(.suggestion-text) {
+    flex: 1 1 auto;
 }
 
 .year {

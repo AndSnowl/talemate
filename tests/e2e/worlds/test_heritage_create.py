@@ -11,6 +11,8 @@ anything.
 
 from __future__ import annotations
 
+from playwright.sync_api import expect
+
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
     _open_thing,
@@ -234,6 +236,20 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     orc.get_by_role("button", name="Back").click()
     page.get_by_test_id("kind-species").click()
     human = _open_thing(page, "Human")
+    # the species page's own content width and Description column, taken
+    # before the race box exists so there's only one match
+    content_width = human.bounding_box()["width"]
+    species_description_x = human.get_by_text(
+        "description (generated)", exact=True
+    ).bounding_box()["x"]
+
+    # Races' heading and "+ New race" sit in the left column, not an
+    # entire column away from it: the button ends before the right
+    # column (Description) starts
+    races_heading = human.get_by_test_id("races-section")
+    new_race_box = races_heading.get_by_role("button", name="New race").bounding_box()
+    assert new_race_box["x"] + new_race_box["width"] <= species_description_x
+
     human.get_by_role("button", name="New race").click()
     race_box = human.get_by_test_id("create-box")
     assert "Race of Human" in race_box.inner_text()
@@ -250,6 +266,40 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     race_preview.get_by_text("Tall hill people.").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
+
+    # the draft sits right under Races, not under Mixes or Stubs this
+    # entry named (both of which move below the draft too, so nothing but
+    # Races is between them)
+    races_bottom = races_heading.bounding_box()
+    races_bottom = races_bottom["y"] + races_bottom["height"]
+    create_box_top = race_box.bounding_box()["y"]
+    assert create_box_top >= races_bottom
+    mixes_section = human.get_by_test_id("mixes-section")
+    mixes_box = mixes_section.bounding_box()
+    assert create_box_top <= mixes_box["y"]
+    named_stubs = human.get_by_test_id("named-stubs")
+    if named_stubs.count():
+        assert create_box_top <= named_stubs.bounding_box()["y"]
+
+    # Mixes moved below the draft keeps the left column's width: its
+    # heading and "+ New mix" don't jump to the full-width draft's far
+    # right edge
+    assert mixes_box["x"] + mixes_box["width"] <= species_description_x
+    new_mix_box = mixes_section.get_by_role("button", name="New mix").bounding_box()
+    assert new_mix_box["x"] + new_mix_box["width"] <= species_description_x
+
+    # the race draft spans the species page's content width, and its
+    # Description column lines up under the species page's own (Races and
+    # Mixes sit below both columns, at the entry's full width, not in the
+    # left column alone)
+    draft_width = race_box.bounding_box()["width"]
+    assert abs(content_width - draft_width) <= 2
+
+    draft_description_x = race_preview.get_by_text(
+        "description (generated)", exact=True
+    ).bounding_box()["x"]
+    assert abs(species_description_x - draft_description_x) <= 2
+
     race_preview.get_by_test_id("draft-bar").get_by_role(
         "button", name="Accept"
     ).click()
@@ -259,6 +309,135 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
         state="visible", timeout=TIMEOUT_MS
     )
     assert "Human" in human.get_by_test_id("field-species").inner_text()
+
+
+ELF = {
+    "kind": "species",
+    "name": "Elf",
+    "fields": {"lifespan": 400, "adult_age": 50},
+    "facts": [{"category": "physical", "text": "Elves have pointed ears."}],
+}
+
+
+def test_new_mix_draft_from_species_page_sits_after_mixes(app, page, fixed_preview):
+    """A mix drafted from a species page (no existing mix for the pair)
+    sits right under Mixes; Races, above Mixes, stays where it was --
+    only the section being created moves with the draft."""
+
+    name = _world_name("Ironmere")
+    seed_fm_world(
+        app.root,
+        name,
+        present_year=1000,
+        things=[HUMAN, LOWLANDER, ORC, HALF_ORC, ELF],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    human = _open_thing(page, "Human")
+
+    human.get_by_role("button", name="New mix").click()
+    mix_box = human.get_by_test_id("create-box")
+    assert "Human" in _parent(mix_box, 1).inner_text()
+    _pick(page, mix_box, "Second parent", "Elf")
+
+    fixed_preview(
+        {
+            "name": "Half-elf",
+            "facts": [
+                {
+                    "category": "physical",
+                    "text": "Half-elves have faintly pointed ears.",
+                }
+            ],
+            "prose": {"description": "Half-elves favor neither parent strongly."},
+        }
+    )
+    mix_box.get_by_role("button", name="Create").click()
+    mix_preview = mix_box.get_by_test_id("draft-page")
+    mix_preview.get_by_text("Half-elves favor neither parent strongly.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
+    # Races stays above Mixes, in the left column; the draft sits right
+    # under Mixes, not under Races (which never moved)
+    races_section = human.get_by_test_id("races-section")
+    mixes_section = human.get_by_test_id("mixes-section")
+    races_bottom = races_section.bounding_box()
+    races_bottom = races_bottom["y"] + races_bottom["height"]
+    mixes_box = mixes_section.bounding_box()
+    assert mixes_box["y"] >= races_bottom
+    mixes_bottom = mixes_box["y"] + mixes_box["height"]
+    create_box_top = mix_box.bounding_box()["y"]
+    assert create_box_top >= mixes_bottom
+
+
+def test_race_draft_inherited_facts_on_the_saved_pages_line(app, page, fixed_preview):
+    """A race draft's inherited facts are drawn on the saved page's
+    inherited line: the words, the source chip after them, then the
+    category and dates at the right edge, lined up with the draft's own
+    facts' (as a saved page lines them up with its own), the "Kept" tick
+    in front."""
+
+    name = _world_name("Ironmere")
+    famine = {"category": "physical", "text": "Humans grew taller.", "since": 900}
+    human_dated = {**HUMAN, "facts": [*HUMAN["facts"], famine]}
+    seed_fm_world(app.root, name, present_year=1000, things=[human_dated])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    human = _open_thing(page, "Human")
+    human.get_by_role("button", name="New race").click()
+    race_box = human.get_by_test_id("create-box")
+    race_box.get_by_label("Describe it").fill("Highlanders: tall, from the hills.")
+    fixed_preview(
+        {
+            "name": "Highlander",
+            "facts": [{"category": "physical", "text": "Highlanders are tall."}],
+            "prose": {"description": "Tall hill people."},
+        }
+    )
+    race_box.get_by_role("button", name="Create").click()
+    draft = race_box.get_by_test_id("draft-page")
+    draft.get_by_text("Tall hill people.").wait_for(state="visible", timeout=TIMEOUT_MS)
+
+    ears = draft.get_by_test_id("preview-inherited").filter(
+        has_text="rounded ears and no tusks"
+    )
+    assert ears.get_by_role("checkbox", name="Kept").is_checked()
+    assert ears.get_by_test_id("inherited-source").inner_text() == "Human"
+    category = ears.locator(".fact .v-chip").filter(has_text="physical")
+    expect(category).to_be_visible()
+    expect(ears.locator(".fact-date")).to_have_text("always")
+    # a dated one shows its dates, as on a saved page
+    taller = draft.get_by_test_id("preview-inherited").filter(
+        has_text="Humans grew taller."
+    )
+    expect(taller.locator(".fact-date")).to_have_text("900 →")
+
+    # its words, category and date sit where the draft's own fact's do
+    # (as the saved page's test measures it: on a wide screen, the Facts
+    # column at 1280 being narrower than a row's chip, date and buttons)
+    viewport = page.viewport_size
+    page.set_viewport_size({"width": 1920, "height": viewport["height"]})
+    own = draft.get_by_test_id("draft-fact").filter(has_text="Highlanders are tall.")
+    for part in (".fact-text", ".fact .v-chip--label", ".fact-date"):
+        assert (
+            ears.locator(part).first.bounding_box()["x"]
+            == own.locator(part).first.bounding_box()["x"]
+        ), part
+    page.set_viewport_size(viewport)
+
+    # one dashed separator per row, the row's own (none on the line)
+    assert (
+        ears.locator(".fact").evaluate("e => getComputedStyle(e).borderBottomStyle")
+        == "none"
+    )
+
+    # unticked, it reads as replaced, its line struck through
+    ears.get_by_role("checkbox", name="Kept").uncheck()
+    expect(ears.locator(".suggestion-dropped")).to_have_count(1)
+    expect(ears.get_by_test_id("override-by")).to_be_visible()
 
 
 MOSCAVIAN = {
@@ -338,3 +517,65 @@ def test_mix_drafted_in_place_keeps_the_character(app, page, fixed_preview):
     assert "New character" in box.inner_text()
     assert character_prompt.input_value() == prompt
     assert box.get_by_role("button", name="Create", exact=True).is_enabled()
+
+
+OWLFOLK = {
+    "kind": "species",
+    "name": "Owlfolk",
+    "fields": {"lifespan": 80, "adult_age": 15},
+    "facts": [{"category": "physical", "text": "Owlfolk have feathered arms."}],
+}
+
+
+def test_race_draft_edits_numbers_and_other_names(app, page, fixed_preview):
+    """A race draft has the saved page's numbers and Other names: an
+    unset lifespan shows the species', dimmed as inherited; the owner's
+    own lifespan and other name are written on Accept."""
+
+    name = _world_name("Owlholt")
+    seed_fm_world(app.root, name, present_year=1000, things=[OWLFOLK])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    owlfolk = _open_thing(page, "Owlfolk")
+    owlfolk.get_by_role("button", name="New race").click()
+    race_box = owlfolk.get_by_test_id("create-box")
+    race_box.get_by_label("Describe it").fill("Snowy owlfolk of the north.")
+    fixed_preview(
+        {
+            "name": "Snowy Owlfolk",
+            "facts": [{"category": "physical", "text": "Snowy Owlfolk are white."}],
+            "prose": {"description": "White owl-folk of the north."},
+        }
+    )
+    race_box.get_by_role("button", name="Create").click()
+    draft = race_box.get_by_test_id("draft-page")
+    draft.get_by_text("White owl-folk of the north.").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
+    lifespan = draft.get_by_test_id("numbers-lifespan")
+    expect(lifespan).to_contain_text("80 years")
+    expect(lifespan).to_contain_text("inherited")
+    lifespan.get_by_role("button", name="Edit lifespan").click()
+    lifespan.get_by_label("Lifespan").fill("60")
+    lifespan.get_by_role("button", name="Save").click()
+    expect(lifespan).to_contain_text("60 years")
+    expect(lifespan).not_to_contain_text("inherited")
+
+    aka = draft.get_by_test_id("aka-editor")
+    aka.get_by_role("button", name="Add other name").click()
+    aka.get_by_label("Other name").fill("Snowy Owls")
+    aka.get_by_role("button", name="Add", exact=True).click()
+    expect(aka.get_by_test_id("aka-row")).to_have_count(1)
+    expect(aka.get_by_test_id("aka-row")).to_contain_text("Snowy Owls")
+    expect(aka.get_by_test_id("aka-row")).to_contain_text("common")
+
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    owlfolk.get_by_test_id("thing-name").filter(has_text="Snowy Owlfolk").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    saved = owlfolk.get_by_test_id("numbers-lifespan")
+    expect(saved).to_contain_text("60 years")
+    expect(saved).not_to_contain_text("inherited")
+    expect(owlfolk.get_by_test_id("aka-editor")).to_contain_text("Snowy Owls")
