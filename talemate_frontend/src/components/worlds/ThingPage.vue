@@ -444,7 +444,7 @@
                 />
                 <!-- 5. Could move here -->
                 <MoveHere :draft="edited" @tick="tickMove" />
-                <!-- 6. New names -->
+                <!-- 6. New stubs -->
                 <PreviewStubs :rows="edited.new_names || []" @change="(name, change) => edit(changeNewName(edited, name, change))" />
                 <!-- 7. File into this -->
                 <div v-if="(edited.file_into || []).length" class="mt-3" data-testid="draft-file-into">
@@ -659,7 +659,7 @@ function cut(text, length = 28) {
 // (`DraftBar`) and, in the spec's order around the shared sections,
 // "Same thing?" after In, the repeats' "Move existing here" on its facts
 // (`PreviewRepeats`) and what it inherits, then For other pages
-// (`PreviewElsewhere`), Could move here (`MoveHere`), New names
+// (`PreviewElsewhere`), Could move here (`MoveHere`), New stubs
 // (`PreviewStubs`) and File into this, with Accept and Discard again at
 // their foot. While a nested "+ Add facts" draft is out or held
 // (`draftLocked`), every way to accept it waits, "Fill the stub …

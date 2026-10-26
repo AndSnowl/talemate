@@ -999,7 +999,7 @@ def test_group_add_regenerate_keeps_prompt(app, page, fixed_group_add):
 
 def test_added_facts_bring_new_names(app, page, fixed_facts):
     """Ruling H8: "+ Add facts" shows the names its facts bring as ticked
-    New names rows (kind, tag); Accept makes stubs of the ticked ones and
+    New stubs rows (kind, tag); Accept makes stubs of the ticked ones and
     links them, an unticked one staying plain words."""
 
     world, thing = _open_velikoye(page, app, _world_name("Names"))

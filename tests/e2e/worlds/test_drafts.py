@@ -9,7 +9,7 @@ this" (the model's unticked, ruling F7; the owner's own ticked), its
 facts (linked as accept will link them, P6) with a repeat's four choices
 (Keep new, Keep existing, Keep both, Move existing here, P8), "For other
 pages" with a target to change and "+ also here", "Could move here", and
-New names. The
+New stubs. The
 fact menu (⋯ or right-click: Move to…, Copy to…, Held by…, Edit, Change
 dates, End this, Remove) and the selection menu (Make a stub, Make a stub
 and expand now, Link to an entry…, "Ask about this" for later) work on

@@ -131,7 +131,6 @@
                 <PreviewStubs
                     :rows="draft.edited?.new_names || []"
                     tickable
-                    note="ticked: stubs once written"
                     @change="(name, change) => worlds.editSmall(draft.key, changeNewName(draft.edited, name, change))"
                 />
                 <SuggestionBar
@@ -172,7 +171,7 @@ import { factsKey, smallVersionRows } from './smallDrafts.js';
 // the prompt (and year) kept and editable, Regenerate from it, Discard,
 // "Write N"), its rows to tick (`SuggestionRow`), a repeat's match and its
 // four choices under its row (`PreviewRepeats`, `settleRepeat`), and the
-// names the facts bring that the world hasn't as "New names" rows
+// names the facts bring that the world hasn't as "New stubs" rows
 // (`PreviewStubs`, ticked: a stub each when written, ruling H8, shown in
 // the stub colour while ticked). "Write N" comes again at the list's
 // foot. Write writes the ticked ones (`accept_facts`); nothing is written

@@ -1,6 +1,6 @@
 <template>
     <div class="suggestion-row" :class="{ 'no-tick': !tickable }" :data-testid="testid">
-        <div class="suggestion-line d-flex align-center ga-2">
+        <div class="suggestion-line d-flex align-center flex-wrap ga-2">
             <v-checkbox-btn
                 v-if="tickable"
                 :model-value="ticked"
@@ -11,10 +11,12 @@
                 :data-testid="tickTestid"
                 @update:model-value="$emit('tick', $event)"
             ></v-checkbox-btn>
-            <span class="flex-grow-1" :class="{ 'suggestion-dropped': isDropped }">
+            <span class="suggestion-text" :class="{ 'suggestion-dropped': isDropped }">
                 <slot></slot>
             </span>
-            <slot name="end"></slot>
+            <div v-if="$slots.end" class="suggestion-end d-flex align-center ga-2">
+                <slot name="end"></slot>
+            </div>
         </div>
         <div v-if="$slots.under" class="suggestion-under">
             <slot name="under"></slot>
@@ -32,10 +34,14 @@ import './suggestions.css';
 // One row of a suggestions-to-tick list (plan "polish-1"): a tick
 // (`tickable`, off for a row that can't be ticked, e.g. a "same as"
 // name), the text (default slot, shown with `.suggestion-dropped` once
-// `dropped`), the category chip and date on the right of that line
-// (`end`), a second line under the text for placement controls and
-// notes (`under`), a repeat's match indented with a left rule (`match`)
-// and a form under all of that (`after`). `tick(Boolean)` is emitted,
+// `dropped`), the category chip and date right after that text (`end`,
+// which never shrinks; the text shrinks and wraps first, and the line
+// itself wraps the `end` content under the text when even that isn't
+// room enough — the owner's rule: a control that belongs to the row's
+// text follows it, it's never pushed to a wide pane's far edge), a
+// second line under the text for placement controls and notes
+// (`under`), a repeat's match indented with a left rule (`match`) and a
+// form under all of that (`after`). `tick(Boolean)` is emitted,
 // never applied here. `dropped` is null by default and then follows
 // `ticked` (an unticked row reads as dropped), so a caller only sets it
 // when a row that's still ticked should still read as dropped (or the
@@ -72,6 +78,15 @@ export default {
 .suggestion-row {
     padding: 2px 0;
     border-bottom: 1px dashed rgb(var(--v-theme-border));
+}
+
+.suggestion-text {
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.suggestion-end {
+    flex: 0 0 auto;
 }
 
 .suggestion-under {
