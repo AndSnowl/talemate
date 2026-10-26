@@ -142,6 +142,12 @@ def test_species_page_and_inheritance(app, page):
     page.set_viewport_size(viewport)
     assert wings.locator(".fact-date").inner_text() == "always"
     assert wings.get_by_test_id("override-button").is_visible()
+    # the Override button fits inside the buttons' room, whole
+    room = wings.locator(".fact-actions-room").bounding_box()
+    button = wings.get_by_test_id("override-button").bounding_box()
+    assert room["width"] == 76
+    assert room["x"] <= button["x"]
+    assert button["x"] + button["width"] <= room["x"] + room["width"]
     assert wings.get_by_test_id("fact-menu-button").count() == 0
 
     # Vasha's page: heritage links, his life stage, inherited facts dimmed

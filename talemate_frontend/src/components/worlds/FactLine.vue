@@ -124,10 +124,13 @@ export default {
 }
 
 /* the room of the menu and the Edit and End buttons: three x-small
-   icon buttons (20px) and the two 8px gaps between them */
+   icon buttons (20px) and the two 8px gaps between them, never sized by
+   what it holds (the Override button, 71px, fits inside: the heritage
+   e2e test checks it) */
 .fact-actions-room {
     flex: none;
     width: calc(3 * 20px + 2 * 8px);
+    min-width: 0;
 }
 
 .held {
