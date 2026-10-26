@@ -390,6 +390,14 @@
                             @save="saveForm"
                             @cancel="form = null"
                         />
+                        <HeritageSections
+                            v-if="thing.kind === 'species'"
+                            :species-id="thing.id"
+                            :races="thing.races"
+                            :mixes="thing.mixes"
+                            :creating="heritageCreating"
+                            @create="heritageCreating = $event"
+                        />
                         <NamedStubs :stubs="thing.named_stubs || []" />
                     </template>
                 </v-col>
@@ -442,10 +450,17 @@
                 </v-col>
             </v-row>
 
-            <!-- a species' Races and Mixes, below the two columns at the
-                 entry's full width (so a race or mix draft gets the same
-                 width and two-column layout as any entry page) -->
-            <HeritageSections v-if="!draft && thing.kind === 'species'" :species-id="thing.id" :races="thing.races" :mixes="thing.mixes" />
+            <!-- a race or mix draft (opened by Races'/Mixes' "+ New
+                 race"/"+ New mix", in the left column above), below the
+                 two columns at the entry's full width, so it gets the same
+                 width and two-column layout as any entry page -->
+            <CreateBox
+                v-if="!draft && thing.kind === 'species' && heritageCreating"
+                :kind="heritageCreating"
+                :preset="heritagePreset"
+                cancellable
+                @cancel="heritageCreating = null"
+            />
 
             <template v-if="draft">
                 <!-- 4. For other pages -->
@@ -559,6 +574,7 @@ import {
     tickFileInto,
     tickMoveHere,
 } from './draftPage.js';
+import CreateBox from './CreateBox.vue';
 import DraftBar from './DraftBar.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
 import EntryConnected from './EntryConnected.vue';
@@ -703,6 +719,7 @@ function cut(text, length = 28) {
 export default {
     name: 'ThingPage',
     components: {
+        CreateBox,
         DraftBar,
         EntryAddFacts,
         EntryConnected,
@@ -761,6 +778,9 @@ export default {
             selection: null,
             selecting: false,
             existenceValues: EXISTENCE,
+            // a species page's Races/Mixes: the kind its create box (below
+            // the two columns) is showing, if any
+            heritageCreating: null,
         };
     },
     computed: {
@@ -873,6 +893,10 @@ export default {
         // switch out
         draftBusy() {
             return this.worlds.previewPending || !!this.worlds.draft?.accepting || !!this.worlds.pending.use_version;
+        },
+        // the race's species, or the mix's first parent: this species
+        heritagePreset() {
+            return this.heritageCreating === 'mix' ? { parents: [this.thing.id] } : { species: this.thing.id };
         },
         existence() {
             return existenceOf(this.thing);
@@ -1051,6 +1075,7 @@ export default {
             }
             if (!thing || thing.id !== before?.id) {
                 this.merging = false;
+                this.heritageCreating = null;
             }
         },
         editing(now) {

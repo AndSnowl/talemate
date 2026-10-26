@@ -242,6 +242,14 @@ def test_new_race_and_mix_from_species_page(app, page, fixed_preview):
     species_description_x = human.get_by_text(
         "description (generated)", exact=True
     ).bounding_box()["x"]
+
+    # Races' heading and "+ New race" sit in the left column, not an
+    # entire column away from it: the button ends before the right
+    # column (Description) starts
+    races_heading = human.get_by_test_id("races-section")
+    new_race_box = races_heading.get_by_role("button", name="New race").bounding_box()
+    assert new_race_box["x"] + new_race_box["width"] <= species_description_x
+
     human.get_by_role("button", name="New race").click()
     race_box = human.get_by_test_id("create-box")
     assert "Race of Human" in race_box.inner_text()
