@@ -256,8 +256,16 @@ def test_fill_stub_instead(app, page, fixed_preview):
     # a preview named like a stub of its kind offers to fill that stub
     fixed_preview(_preview("Kalmara", "Reed-cutters work its shallows."))
     preview = _create_and_wait(page, box)
-    fill = preview.get_by_role("button", name=re.compile("Fill the stub"))
+    fill = preview.get_by_test_id("fill-stub-instead")
     assert "Kalmara" in fill.text_content()
+    # polish 3: by Accept in the draft bar, no banner; the counts say so
+    bar = preview.get_by_test_id("draft-bar")
+    accept = bar.get_by_role("button", name="Accept").bounding_box()
+    fbox = bar.get_by_test_id("fill-stub-instead").bounding_box()
+    assert 0 <= accept["x"] - (fbox["x"] + fbox["width"]) <= 16
+    assert preview.get_by_test_id("matching-stub").count() == 0
+    expect(preview.get_by_test_id("accept-counts")).to_contain_text("a stub named Kalmara exists")
+    expect(preview.get_by_test_id("fill-stub-instead-foot")).to_be_visible()
     fill.click()
     thing = _opened(page, "Kalmara")
     assert thing.get_by_test_id("stub-panel").count() == 0

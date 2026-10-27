@@ -20,6 +20,15 @@
         @discard="worlds.discardPreview()"
         @primary="$emit('accept')"
     >
+        <template v-if="matchingStub" #primary-extra>
+            <FillStubButton
+                :name="matchingStub.name"
+                :loading="!!draft.accepting"
+                :disabled="busy || !canAccept || !!locked"
+                :title="locked"
+                @fill="$emit('fill-stub')"
+            />
+        </template>
         <template #status>
             <template v-if="worlds.previewPending">
                 <v-progress-circular indeterminate size="14" width="2" color="accent"></v-progress-circular>
@@ -36,6 +45,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { versionRows } from './draftPage.js';
 import { kindInfo } from './worldKinds.js';
+import FillStubButton from './FillStubButton.vue';
 import SuggestionBar from './SuggestionBar.vue';
 
 // The draft page's bar (spec "The draft page"), on `SuggestionBar`: what
@@ -48,10 +58,12 @@ import SuggestionBar from './SuggestionBar.vue';
 // is written before; while a Regenerate is out, "Drafting another
 // version…" with a spinner in its place. `locked` (from
 // `worlds.nestedHeld`, via the page) disables Regenerate, the version
-// switch and Accept, with its reason; Discard stays on.
+// switch and Accept, with its reason; Discard stays on. With a stub of
+// its kind named like it (`matchingStub`), "Fill stub X" sits right by
+// Accept: another way to accept.
 export default {
     name: 'DraftBar',
-    components: { SuggestionBar },
+    components: { FillStubButton, SuggestionBar },
     props: {
         draft: { type: Object, required: true },
         // the Accept line ("writes 3 facts here, …")
@@ -60,8 +72,11 @@ export default {
         // a reason the owner can't regenerate, switch version or accept
         // right now (a nested fact draft is open or held), or null
         locked: { type: String, default: null },
+        // a stub of its kind named like the draft (`{id, name}`), offered
+        // as "Fill stub X" right by Accept (emitted: `fill-stub`), or null
+        matchingStub: { type: Object, default: null },
     },
-    emits: ['accept'],
+    emits: ['accept', 'fill-stub'],
     setup() {
         return { worlds: useWorldsStore() };
     },

@@ -2,23 +2,7 @@
     <div class="thing-page" :data-testid="draft ? 'draft-page' : 'thing-page'">
         <!-- a draft: its bar, and what it could be instead -->
         <template v-if="draft && thing">
-            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" :locked="draftLocked" @accept="acceptDraft()" />
-            <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
-                <div class="d-flex align-center flex-wrap ga-2">
-                    <span>There is a stub named “{{ matchingStub.name }}” already.</span>
-                    <v-spacer></v-spacer>
-                    <v-btn
-                        color="accent"
-                        variant="flat"
-                        size="small"
-                        :loading="worlds.draft.accepting"
-                        :disabled="!edited.name.trim() || !!draftLocked"
-                        :title="draftLocked"
-                        data-testid="fill-stub-instead"
-                        @click="acceptDraft(matchingStub.id)"
-                    >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
-                </div>
-            </v-alert>
+            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" :locked="draftLocked" :matching-stub="matchingStub" @accept="acceptDraft()" @fill-stub="acceptDraft(matchingStub.id)" />
             <v-alert v-if="worlds.previewError" type="error" variant="tonal" density="compact" class="mb-2">{{ worlds.previewError }}</v-alert>
         </template>
 
@@ -543,7 +527,18 @@
                     :testids="{ primary: 'draft-accept-foot', discard: 'draft-discard-foot' }"
                     @discard="worlds.discardPreview()"
                     @primary="acceptDraft()"
-                />
+                >
+                    <template v-if="matchingStub" #primary-extra>
+                        <FillStubButton
+                            :name="matchingStub.name"
+                            :loading="!!worlds.draft.accepting"
+                            :disabled="draftBusy || !edited.name.trim() || !!draftLocked"
+                            :title="draftLocked"
+                            testid="fill-stub-instead-foot"
+                            @fill="acceptDraft(matchingStub.id)"
+                        />
+                    </template>
+                </SuggestionBar>
             </template>
 
             <EntryTimeline :lines="thing.entry_timeline || []" class="mt-4">
@@ -606,6 +601,7 @@ import {
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
 import DraftBar from './DraftBar.vue';
+import FillStubButton from './FillStubButton.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
 import EntryConnected from './EntryConnected.vue';
 import EntryIn from './EntryIn.vue';
@@ -751,6 +747,7 @@ export default {
     components: {
         CreateBox,
         DraftBar,
+        FillStubButton,
         EntryAddFacts,
         EntryConnected,
         EntryIn,
@@ -912,7 +909,11 @@ export default {
                 ? (this.edited.same_as || []).find((offer) => offer.thing_id === same)?.name
                     || this.worlds.referenceTargets.find((target) => target.id === same)?.name
                 : null;
-            return this.edited ? countsLine(previewCounts(this.edited), onto) : '';
+            if (!this.edited) {
+                return '';
+            }
+            const line = countsLine(previewCounts(this.edited), onto);
+            return this.matchingStub ? `${line} · a stub named ${this.matchingStub.name} exists` : line;
         },
         // while the page draft's nested "+ Add facts" draft is open or
         // held, its own Accept, Regenerate and version switch wait for it
