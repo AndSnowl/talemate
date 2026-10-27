@@ -194,28 +194,27 @@
                 </div>
             </template>
 
-            <!-- the entry's summary fact heads the page -->
-            <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
-                <FactRow
-                    :fact="factView(summaryFact)"
-                    :exclude="[thing.id]"
-                    text-class="summary-text"
-                    @repoint="repointLink(summaryFact, $event)"
-                    @select="selected(summaryFact, $event)"
-                    @edit="startEdit(summaryFact)"
-                    @dates="startEdit(summaryFact, 'dates')"
-                    @end="startEnd(summaryFact)"
-                    @remove="worlds.removeFact(summaryFact.fact_id)"
-                >
-                    <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
-                        <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
-                    </div>
-                </FactRow>
-            </div>
-
             <!-- 3. Facts, beside the prose -->
             <v-row class="mt-1">
                 <v-col cols="12" md="6">
+                    <!-- the entry's summary fact heads the left column (polish 3) -->
+                    <div v-if="summaryFact" class="summary" data-testid="entry-summary">
+                        <FactRow
+                            :fact="factView(summaryFact)"
+                            :exclude="[thing.id]"
+                            text-class="summary-text"
+                            @repoint="repointLink(summaryFact, $event)"
+                            @select="selected(summaryFact, $event)"
+                            @edit="startEdit(summaryFact)"
+                            @dates="startEdit(summaryFact, 'dates')"
+                            @end="startEnd(summaryFact)"
+                            @remove="worlds.removeFact(summaryFact.fact_id)"
+                        >
+                            <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
+                                <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
+                            </div>
+                        </FactRow>
+                    </div>
                     <div v-for="field in shownFields" :key="field.name" class="field d-flex align-center flex-wrap ga-2" :data-testid="'field-' + field.name">
                         <span class="field-label">{{ field.label }}</span>
                         <span v-if="field.links">

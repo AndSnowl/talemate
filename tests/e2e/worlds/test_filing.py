@@ -1162,3 +1162,26 @@ def test_tags_rename_merge(app, page):
     )
     assert "Schools" not in _headings(thing)
     assert page.console_errors == []
+
+
+def test_summary_heads_left_column(app, page):
+    """Polish 3: the summary is the first row of the left column, above
+    Other names, its buttons inside the column; it edits in place."""
+
+    world, thing = _open_velikoye(page, app, _world_name("Summary"))
+    summary = thing.get_by_test_id("entry-summary")
+    expect(summary).to_contain_text(SUMMARY)
+    box = summary.bounding_box()
+    facts = thing.get_by_test_id("facts-heading").bounding_box()
+    aka = thing.get_by_test_id("aka-editor").bounding_box()
+    # in the left column: the Facts heading's x and right edge
+    assert abs(box["x"] - facts["x"]) <= 1
+    assert box["x"] + box["width"] <= facts["x"] + facts["width"] + 1
+    # first in the column: above Other names
+    assert box["y"] < aka["y"]
+    edit = summary.get_by_role("button", name="Edit fact")
+    ebox = edit.bounding_box()
+    assert ebox["x"] + ebox["width"] <= facts["x"] + facts["width"] + 1
+    assert summary.locator(".summary-text").count() == 1
+    edit.click()
+    expect(summary.get_by_test_id("fact-form")).to_be_visible()
