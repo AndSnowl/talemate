@@ -15,7 +15,7 @@
         </div>
         <slot></slot>
         <div v-if="!shown.length" class="empty">{{ lines.length ? 'No events among them.' : 'Nothing dated yet.' }}</div>
-        <div v-for="(line, index) in shown" :key="line.fact_id || 'draft-' + index" class="line d-flex align-center ga-2" :class="{ ended: !!line.until }" data-testid="timeline-row">
+        <div v-for="(line, index) in shown" :key="line.fact_id || 'draft-' + index" class="line" :class="{ ended: !!line.until }" :style="{ gridTemplateColumns: columns }" data-testid="timeline-row">
             <!-- disagrees with another line: a warning sign right before
                  the row, its menu the other line in full and the picks -->
             <v-menu v-if="flags[line.fact_id]" location="bottom start">
@@ -27,7 +27,6 @@
                         size="x-small"
                         density="comfortable"
                         color="warning"
-                        class="flex-grow-0"
                         data-testid="line-disagrees"
                         :title="`Disagrees with ${others(line)}`"
                         :aria-label="`Disagrees with ${others(line)}: pick one`"
@@ -54,9 +53,11 @@
                 </v-card>
             </v-menu>
             <!-- the sign's room on the other rows, so the years line up -->
-            <span v-else-if="anyFlag" class="flag-room flex-grow-0"></span>
-            <span class="flex-grow-1">
-                <span class="year">{{ lineDates(worlds.calendar, line) }}</span>
+            <span v-else-if="anyFlag"></span>
+            <!-- three columns, the same on every row: the sign, the date,
+                 the text (wrapping in its own column, never under the date) -->
+            <span class="year">{{ lineDates(worlds.calendar, line) }}</span>
+            <span class="line-text">
                 <LinkedText :segments="line.segments" />
                 <span class="source text-caption">
                     <template v-if="line.here"> · here</template>
@@ -104,6 +105,12 @@ export default {
         anyFlag() {
             return Object.keys(this.flags).length > 0;
         },
+        // the rows' columns: the sign's (when any row has one), the
+        // widest date's, then the text
+        columns() {
+            const widest = Math.max(4, ...this.shown.map((line) => lineDates(this.worlds.calendar, line).length));
+            return `${this.anyFlag ? '28px ' : ''}${widest + 1}ch 1fr`;
+        },
         eventIds() {
             return (this.worlds.things.event || []).map((thing) => thing.id);
         },
@@ -132,14 +139,17 @@ export default {
 </script>
 
 <style scoped>
-/* an x-small icon button's width (comfortable density) */
-.flag-room {
-    width: 28px;
-}
-
 .line {
+    display: grid;
+    column-gap: 8px;
+    align-items: start;
     margin: 3px 0;
     line-height: 1.5;
+}
+
+/* the sign sits on the first line, beside the date */
+.line :deep(.v-btn) {
+    margin-top: -2px;
 }
 
 .line.ended {
@@ -147,10 +157,7 @@ export default {
 }
 
 .year {
-    flex: none;
-    display: inline-block;
-    margin-right: 8px;
-    min-width: 48px;
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
     color: rgb(var(--v-theme-date));
 }

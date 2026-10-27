@@ -453,8 +453,19 @@ def test_timeline_gathers_and_flags(app, page):
     # the two years for the Codex are flagged; the owner keeps 217
     flag = codex_line.get_by_test_id("line-disagrees")
     assert "Disagrees with 217" in flag.get_attribute("aria-label")
-    # polish 3: a warning sign right before the row's date and text
-    assert flag.bounding_box()["x"] < codex_line.locator(".year").bounding_box()["x"]
+    # polish 3: a warning sign right before the row's date and text; the
+    # years and the texts each line up in their own column, and the sign
+    # sits on the year's line
+    year_box = codex_line.locator(".year").bounding_box()
+    assert flag.bounding_box()["x"] < year_box["x"]
+    years = [lines.nth(i).locator(".year").bounding_box() for i in range(2)]
+    texts = [lines.nth(i).locator(".line-text").bounding_box() for i in range(2)]
+    assert abs(years[0]["x"] - years[1]["x"]) <= 1
+    assert abs(texts[0]["x"] - texts[1]["x"]) <= 1
+    assert texts[0]["x"] >= years[0]["x"] + years[0]["width"]
+    fbox = flag.bounding_box()
+    centre = fbox["y"] + fbox["height"] / 2
+    assert year_box["y"] - 4 <= centre <= year_box["y"] + year_box["height"] + 4
     flag.click()
     # the menu shows the line it disagrees with in full, then the picks
     menu = page.get_by_test_id("pick-date")
