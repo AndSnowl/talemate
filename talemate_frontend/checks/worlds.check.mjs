@@ -54,7 +54,8 @@ import {
     promptSegments,
     refOccurrence,
     repicks,
-    searchReferences,
+    entryMatch,
+    searchEntries,
 } from '../src/components/worlds/nameHighlights.js';
 import {
     EXISTENCE,
@@ -480,16 +481,48 @@ check('before the names are looked up, the owner\'s own picks still go out', () 
     });
 });
 
-check('the reference search: names holding the query, starting ones first', () => {
+check('the entry search: names holding the query, starting ones first', () => {
     const targets = [
-        { id: '1', name: 'Vasha', kind: 'character', stub: false },
-        { id: '2', name: 'Vasel River', kind: 'place', stub: false },
-        { id: '3', name: 'Vasilka', kind: 'place', stub: true },
-        { id: '4', name: 'Old Vasel', kind: 'lore', stub: false },
+        { id: '1', name: 'Vasha', kind: 'character', stub: false, aka: [] },
+        { id: '2', name: 'Vasel River', kind: 'place', stub: false, aka: [] },
+        { id: '3', name: 'Vasilka', kind: 'place', stub: true, aka: [] },
+        { id: '4', name: 'Old Vasel', kind: 'lore', stub: false, aka: [] },
     ];
-    assert.deepEqual(searchReferences(targets, 'vas').map((t) => t.name), ['Vasel River', 'Vasha', 'Vasilka', 'Old Vasel']);
-    assert.deepEqual(searchReferences(targets, '  '), []);
-    assert.deepEqual(searchReferences(targets, 'vas', 2).map((t) => t.id), ['2', '1']);
+    assert.deepEqual(searchEntries(targets, 'vas').map((r) => r.target.name), ['Vasel River', 'Vasha', 'Vasilka', 'Old Vasel']);
+    assert.deepEqual(searchEntries(targets, '  '), []);
+    assert.deepEqual(searchEntries(targets, 'vas', 2).map((r) => r.target.id), ['2', '1']);
+});
+
+check('searchEntries finds an entry by its other name and says which', () => {
+    const targets = [
+        { id: 'o', name: 'Moscavian Owl-folk', kind: 'species', stub: false, aka: ['Owls', 'Moscavian Owls'] },
+        { id: 't', name: 'Tsardom of Moscavia', kind: 'place', stub: false, aka: [] },
+    ];
+    const found = searchEntries(targets, 'moscavian owls');
+    assert.deepEqual(found, [{ target: targets[0], matched: 'Moscavian Owls' }]);
+    // its own name matched: no other name to show
+    assert.deepEqual(searchEntries(targets, 'owl-folk'), [{ target: targets[0], matched: null }]);
+    assert.equal(entryMatch(targets[0], 'owls'), 'Owls');
+    assert.equal(entryMatch(targets[1], 'owls'), undefined);
+});
+
+check('searchEntries ranks name matches first', () => {
+    const targets = [
+        { id: 'a', name: 'The Owlery', kind: 'place', stub: false, aka: [] },
+        { id: 'b', name: 'Snowy Folk', kind: 'species', stub: false, aka: ['Owls'] },
+    ];
+    assert.deepEqual(searchEntries(targets, 'owl').map((r) => r.target.id), ['a', 'b']);
+});
+
+check('searchEntries lists every entry an other name matches', () => {
+    const targets = [
+        { id: 'a', name: 'Velikoye', kind: 'place', stub: false, aka: ['the capital'] },
+        { id: 'b', name: 'Kerensk', kind: 'place', stub: false, aka: ['the old capital'] },
+    ];
+    assert.deepEqual(
+        searchEntries(targets, 'capital').map((r) => [r.target.id, r.matched]),
+        [['b', 'the old capital'], ['a', 'the capital']],
+    );
 });
 
 check('match offsets count code points, as the backend does', () => {

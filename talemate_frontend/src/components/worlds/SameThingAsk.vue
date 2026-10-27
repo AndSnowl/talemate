@@ -28,11 +28,9 @@
             Is <b>“{{ name }}”</b> the same as an entry you already have?
             <span class="text-caption text-muted">If so, its facts go there, and its name becomes another name of it.</span>
         </div>
-        <v-autocomplete
+        <EntryAutocomplete
             :model-value="chosen"
-            :items="searchItems"
-            item-title="name"
-            item-value="id"
+            :targets="searchItems"
             placeholder="Search any entry…"
             prepend-inner-icon="mdi-magnify"
             clearable
@@ -43,11 +41,7 @@
             data-testid="same-search"
             aria-label="The same as"
             @update:model-value="$emit('choose', $event || null)"
-        >
-            <template #item="{ props: itemProps, item }">
-                <v-list-item v-bind="itemProps" :subtitle="item.raw.line"></v-list-item>
-            </template>
-        </v-autocomplete>
+        ></EntryAutocomplete>
         <div class="text-caption text-muted mt-1">{{ chosen ? `Nothing new is made: it goes onto ${chosenName}.` : "Leave it empty if it's new." }}</div>
         <div class="text-caption text-muted mt-2">Entries that may be it:</div>
         <div
@@ -80,6 +74,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { offerSummary, otherKindNote } from './worldKinds.js';
+import EntryAutocomplete from './EntryAutocomplete.vue';
 
 // the row choice's value for "new"
 const NEW = '__new__';
@@ -99,6 +94,7 @@ const NEW = '__new__';
 //   kind than the row's (`kind`) shows "(a lore)" beside it (ruling C34).
 export default {
     name: 'SameThingAsk',
+    components: { EntryAutocomplete },
     props: {
         // the new entry's (or stub's) name
         name: { type: String, required: true },
@@ -137,11 +133,16 @@ export default {
         // the search: the candidates first, then every other entry (not
         // stubs: filling one is Expand's)
         searchItems() {
-            const offered = this.offers.map((offer) => ({ id: offer.thing_id, name: offer.name, line: offerSummary(offer) }));
+            const known = new Map(this.worlds.referenceTargets.map((target) => [target.id, target]));
+            const offered = this.offers.map((offer) => ({
+                ...known.get(offer.thing_id),
+                id: offer.thing_id,
+                name: offer.name,
+                subtitle: offerSummary(offer),
+            }));
             const seen = new Set(offered.map((item) => item.id));
             const rest = this.worlds.referenceTargets
-                .filter((target) => !target.stub && !seen.has(target.id) && !this.exclude.includes(target.id))
-                .map((target) => ({ id: target.id, name: target.name, line: target.kind }));
+                .filter((target) => !target.stub && !seen.has(target.id) && !this.exclude.includes(target.id));
             return [...offered, ...rest];
         },
     },

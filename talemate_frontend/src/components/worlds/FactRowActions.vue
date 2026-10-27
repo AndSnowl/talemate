@@ -57,22 +57,16 @@
             @keydown.esc="escape($event)"
         >
             <div class="text-caption text-muted mb-2">{{ mode === 'move' ? moveNote : copyNote }}</div>
-            <v-autocomplete
+            <EntryAutocomplete
                 v-model="target"
-                :items="targets"
-                item-title="name"
-                item-value="id"
+                :targets="targets"
                 :label="mode === 'move' ? 'Move to' : 'Copy to'"
                 density="compact"
                 variant="outlined"
                 hide-details
                 autofocus
                 :data-testid="mode === 'move' ? 'move-target' : 'copy-target'"
-            >
-                <template #item="{ props: itemProps, item }">
-                    <v-list-item v-bind="itemProps" :subtitle="item.raw.stub ? `${item.raw.kind} · stub` : item.raw.kind"></v-list-item>
-                </template>
-            </v-autocomplete>
+            ></EntryAutocomplete>
             <div class="d-flex ga-2 mt-3">
                 <v-btn
                     color="accent"
@@ -89,18 +83,16 @@
         <!-- Held by… -->
         <v-card v-else class="pa-3" min-width="300" data-testid="fact-held-menu" @keydown.esc="escape($event)">
             <div class="text-caption text-muted mb-2">A belief someone holds rather than the world's truth: in a scene, the faithful speak of it as fact, but the narration doesn't confirm it.</div>
-            <v-autocomplete
+            <EntryAutocomplete
                 v-model="holder"
-                :items="holders"
-                item-title="name"
-                item-value="id"
+                :targets="holders"
                 label="Held by"
                 density="compact"
                 variant="outlined"
                 hide-details
                 autofocus
                 data-testid="held-by-picker"
-            ></v-autocomplete>
+            ></EntryAutocomplete>
             <div class="d-flex ga-2 mt-3">
                 <v-btn color="accent" variant="flat" size="small" :disabled="!holder" :loading="!!worlds.pending.set_held_by" @click="setHolder(holder)">Save</v-btn>
                 <v-btn v-if="heldBy" variant="outlined" size="small" :disabled="!!worlds.pending.set_held_by" @click="setHolder(null)">Clear</v-btn>
@@ -114,6 +106,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { escapeCloses } from './worldKinds.js';
+import EntryAutocomplete from './EntryAutocomplete.vue';
 
 // A fact's menu (spec "Menus that work everywhere"), on its "⋯" or a
 // right-click on its row (one with no words selected: those get the
@@ -132,6 +125,7 @@ import { escapeCloses } from './worldKinds.js';
 // shut).
 export default {
     name: 'FactRowActions',
+    components: { EntryAutocomplete },
     props: {
         // the fact row (`{fact_id, held_by: {id, name}, valid_until}`)
         fact: { type: Object, required: true },

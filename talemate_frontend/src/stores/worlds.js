@@ -740,25 +740,27 @@ export const useWorldsStore = defineStore('worlds', {
         },
         // a stub's `list_stubs` entry, or null
         stubInfo: (state) => (id) => state.stubs.find((stub) => stub.id === id) || null,
-        // what Add reference searches: `{id, name, kind, stub}` of every
-        // listed entry, species, race and mix, and every live stub
+        // what every entry search looks in (`searchEntries`): `{id, name,
+        // kind, stub, aka}` of every listed entry, species, race and mix,
+        // and every live stub (`aka`: its other names)
         referenceTargets: (state) => {
             const byId = new Map();
             for (const things of Object.values(state.things)) {
                 for (const thing of things) {
-                    byId.set(thing.id, { id: thing.id, name: thing.name, kind: thing.kind, stub: !!thing.stub });
+                    byId.set(thing.id, { id: thing.id, name: thing.name, kind: thing.kind, stub: !!thing.stub, aka: thing.aka || [] });
                 }
             }
             for (const item of state.heritage) {
                 if (!byId.has(item.id)) {
-                    byId.set(item.id, { id: item.id, name: item.name, kind: item.kind, stub: false });
+                    byId.set(item.id, { id: item.id, name: item.name, kind: item.kind, stub: false, aka: item.aka || [] });
                 }
             }
             for (const stub of state.stubs) {
                 if (stub.ignored) {
                     byId.delete(stub.id);
                 } else {
-                    byId.set(stub.id, { id: stub.id, name: stub.name, kind: stub.kind, stub: true });
+                    // the stubs list has no other names: the listing's stand
+                    byId.set(stub.id, { id: stub.id, name: stub.name, kind: stub.kind, stub: true, aka: byId.get(stub.id)?.aka || [] });
                 }
             }
             return [...byId.values()];
