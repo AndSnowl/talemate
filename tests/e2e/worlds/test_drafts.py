@@ -1030,6 +1030,11 @@ def test_stub_draft_shows_connected_and_mentioned(app, page, fixed_preview):
     mentioned = draft.get_by_test_id("entry-mentioned")
     mentioned.get_by_test_id("mentioned-toggle").click()
     expect(mentioned.get_by_test_id("mentioned-row")).to_contain_text(["Old Market"])
+    # polish 3: in the right column, under the draft's Description
+    prose = draft.get_by_test_id("draft-prose").first.bounding_box()
+    cbox = connected.bounding_box()
+    assert cbox["x"] >= prose["x"] - 1
+    assert cbox["y"] > prose["y"]
     assert page.console_errors == []
 
 

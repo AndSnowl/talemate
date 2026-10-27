@@ -456,6 +456,14 @@
                             </div>
                         </template>
                     </template>
+
+                    <!-- what's filed in it and what names it, under Appears
+                         in (polish 3): a stub's draft shows the stub's, as
+                         they are -->
+                    <template v-if="!draft || thing.id">
+                        <EntryConnected :thing="thing" :readonly="draft" class="mt-4" />
+                        <EntryMentionedIn :thing="thing" />
+                    </template>
                 </v-col>
             </v-row>
 
@@ -538,12 +546,6 @@
                 />
             </template>
 
-            <!-- what's filed in it and what names it: a stub's draft shows
-                 the stub's, as they are -->
-            <template v-if="!draft || thing.id">
-                <EntryConnected :thing="thing" :readonly="draft" class="mt-4" />
-                <EntryMentionedIn :thing="thing" />
-            </template>
             <EntryTimeline :lines="thing.entry_timeline || []" class="mt-4">
                 <template #actions>
                     <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" event :on-draft="draft" />

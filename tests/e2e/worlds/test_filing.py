@@ -1185,3 +1185,33 @@ def test_summary_heads_left_column(app, page):
     assert summary.locator(".summary-text").count() == 1
     edit.click()
     expect(summary.get_by_test_id("fact-form")).to_be_visible()
+
+
+def test_connected_in_right_column(app, page):
+    """Polish 3: Connected (and Mentioned in, just below it) sit in the
+    right column under Appears in; its groups stack inside the column,
+    "+ Add" on the heading row."""
+
+    world, thing = _open_velikoye(page, app, _world_name("RightCol"))
+    connected = thing.get_by_test_id("entry-connected")
+    expect(connected.get_by_test_id("connected-row").first).to_be_visible()
+    appears = thing.get_by_text("Appears in", exact=True).bounding_box()
+    cbox = connected.bounding_box()
+    assert cbox["x"] >= appears["x"] - 1
+    assert cbox["y"] > appears["y"]
+    right = cbox["x"] + cbox["width"]
+    groups = connected.get_by_test_id("connected-group")
+    assert groups.count() >= 3
+    xs = set()
+    for index in range(groups.count()):
+        g = groups.nth(index).bounding_box()
+        assert g["x"] + g["width"] <= right + 1
+        xs.add(round(g["x"]))
+    # stacked: one per row
+    assert len(xs) == 1
+    add = connected.get_by_test_id("connected-add").bounding_box()
+    assert add["x"] + add["width"] <= right + 1
+    assert abs(add["y"] - cbox["y"]) < 30
+    mentioned = thing.get_by_test_id("entry-mentioned").bounding_box()
+    assert abs(mentioned["x"] - cbox["x"]) <= 1
+    assert mentioned["y"] > cbox["y"]
