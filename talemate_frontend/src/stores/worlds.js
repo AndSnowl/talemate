@@ -197,6 +197,7 @@ import {
     smallKind,
 } from '../components/worlds/smallDrafts.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
+import { linkPayload } from '../components/worlds/nameHighlights.js';
 
 const ROUTER = 'worlds';
 
@@ -607,11 +608,13 @@ function worldState() {
         // section asked for (null: every section)
         proseRegenerating: null,
         proseRegeneratingSection: null,
-        // the new-scene prompt's names: the lookup in flight (`{text, at}`),
-        // and the last `match_names` reply taken (`{text, at, matches}`).
-        // A new lookup drops the old reply, so stale spans never show.
-        nameLookup: null,
-        nameMatches: null,
+        // each name box's (`NameHighlightInput`'s, by its box key) lookup in
+        // flight (`{text, at}`), and the last `match_names` reply it took
+        // (`{text, at, matches, unknown}`). A box's new lookup drops its old
+        // reply, so stale spans never show; a reply serves any box with
+        // that text and date.
+        nameLookups: {},
+        nameMatches: {},
         // the setup step: the request (`{action, data}`, plan_scene or
         // continue_scene) and its reply (`{setup, names}`)
         setupRequest: null,
@@ -710,8 +713,8 @@ export const useWorldsStore = defineStore('worlds', {
         },
         // the `match_names` matches for exactly this text and date, if any
         matchesFor: (state) => (text, at) => {
-            const found = state.nameMatches;
-            return found && found.text === text && sameDate(found.at, at) ? found.matches : [];
+            const found = Object.values(state.nameMatches).find((reply) => reply.text === text && sameDate(reply.at, at));
+            return found ? found.matches : [];
         },
         // a heritage thing's lineage as links, most general first: its
         // species, then itself unless it is one (`[]` for an unknown id)
@@ -728,8 +731,8 @@ export const useWorldsStore = defineStore('worlds', {
         },
         // the `match_names` unknown phrases for exactly this text and date
         unknownFor: (state) => (text, at) => {
-            const found = state.nameMatches;
-            return found && found.text === text && sameDate(found.at, at) ? found.unknown || [] : [];
+            const found = Object.values(state.nameMatches).find((reply) => reply.text === text && sameDate(reply.at, at));
+            return found ? found.unknown || [] : [];
         },
         // a stub's `list_stubs` entry, or null
         stubInfo: (state) => (id) => state.stubs.find((stub) => stub.id === id) || null,
@@ -836,14 +839,25 @@ export const useWorldsStore = defineStore('worlds', {
         // --- scenes -------------------------------------------------------
 
         // `at`: the date the names are as of (null for the latest)
-        matchNames(text, at = null) {
-            this.nameMatches = null;
+        // `box`: which name box asks (each keeps its own lookup and reply)
+        matchNames(text, at = null, box = 'main') {
+            const { [box]: _old, ...replies } = this.nameMatches;
+            this.nameMatches = replies;
+            const { [box]: _asked, ...lookups } = this.nameLookups;
             if (!text.trim()) {
-                this.nameLookup = null;
+                this.nameLookups = lookups;
                 return;
             }
-            this.nameLookup = { text, at };
+            this.nameLookups = { ...lookups, [box]: { text, at } };
             this.request('match_names', { text, at });
+        },
+
+        // a name box gone: its lookup and reply go with it
+        dropNameBox(box) {
+            const { [box]: _old, ...replies } = this.nameMatches;
+            const { [box]: _asked, ...lookups } = this.nameLookups;
+            this.nameMatches = replies;
+            this.nameLookups = lookups;
         },
 
         // `picks`: a matched name (as written) -> thing id; `player` a
@@ -1043,8 +1057,22 @@ export const useWorldsStore = defineStore('worlds', {
         regeneratePreview() {
             const req = this.previewRequest;
             if (req) {
-                this.previewThing(req.kind, req.prompt, req.fields, req.stubId, req);
+                this.previewThing(req.kind, req.prompt, req.fields, req.stubId, this.barLinks(req));
             }
+        },
+
+        // the request's picks and new names, with the bar prompt's own
+        // (`promptPicks`, as `NameHighlightInput` keeps them) over them
+        barLinks(req) {
+            if (!req.promptPicks) {
+                return req;
+            }
+            const links = linkPayload(this.matchesFor(req.prompt, null), req.promptPicks, {}, req.prompt);
+            return {
+                picks: { ...(req.picks || {}), ...links.picks },
+                newNames: [...new Set([...(req.newNames || []), ...links.newNames])],
+                repicks: req.repicks || [],
+            };
         },
 
         // the bar's prompt, edited in place: the next Regenerate (or
@@ -1052,6 +1080,14 @@ export const useWorldsStore = defineStore('worlds', {
         setDraftPrompt(prompt) {
             if (this.previewRequest) {
                 this.previewRequest = { ...this.previewRequest, prompt };
+            }
+        },
+
+        // the names the owner re-picked in the bar's prompt (pickKey ->
+        // thing id or NEW_THING), sent with the next Regenerate
+        setDraftPicks(picks) {
+            if (this.previewRequest) {
+                this.previewRequest = { ...this.previewRequest, promptPicks: picks };
             }
         },
 
@@ -1354,8 +1390,9 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         // a "but…" under the open page's filing in `targetId`: it departs
-        // from the entry as a whole (`rejects` null)
-        addException(targetId, text, rejects = null) {
+        // from the entry as a whole (`rejects` null); `links`: `{picks,
+        // newNames}` for the text's names, as the owner left them
+        addException(targetId, text, rejects = null, { picks = {}, newNames = [] } = {}) {
             this.pending = { ...this.pending, add_exception: true };
             this.request('add_exception', {
                 character_id: this.selectedThingId,
@@ -1363,6 +1400,7 @@ export const useWorldsStore = defineStore('worlds', {
                 text,
                 rejects,
                 at: this.thingAt,
+                ...linkFields(picks, newNames),
             });
         },
 
@@ -2177,13 +2215,12 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'match_names':
                     // a reply for text (or a date) since changed is dropped
-                    if (
-                        this.nameLookup
-                        && data.text === this.nameLookup.text
-                        && sameDate(data.at, this.nameLookup.at)
-                    ) {
-                        this.nameMatches = { ...this.nameLookup, matches: data.matches, unknown: data.unknown || [] };
-                        this.nameLookup = null;
+                    for (const [box, lookup] of Object.entries(this.nameLookups)) {
+                        if (data.text === lookup.text && sameDate(data.at, lookup.at)) {
+                            this.nameMatches = { ...this.nameMatches, [box]: { ...lookup, matches: data.matches, unknown: data.unknown || [] } };
+                            const { [box]: _done, ...rest } = this.nameLookups;
+                            this.nameLookups = rest;
+                        }
                     }
                     break;
                 case 'plan_scene':
@@ -2388,7 +2425,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.proseRegeneratingSection = null;
                         this.setupPending = false;
                         // the failed request may be the name or mix lookup
-                        this.nameLookup = null;
+                        this.nameLookups = {};
                         this.mixLookup = null;
                         this.acceptOpens = true;
                         // or a merge's preview

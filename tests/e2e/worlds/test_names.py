@@ -10,7 +10,9 @@ from __future__ import annotations
 from playwright.sync_api import expect
 
 from e2e.seed import seed_fm_world
+from e2e.worlds.test_connections_create import _wait_sent
 from e2e.worlds.test_drafts import _select
+from e2e.worlds.test_new_scene import SEND_SPY_JS
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
     _fact,
@@ -294,3 +296,80 @@ def test_connected_stub_has_the_stub_card(app, page):
         "mentions": "0 mentions",
         "repoint": 1,
     }
+
+
+VELIKOYE = {"kind": "place", "name": "Velikoye"}
+MAREN = {
+    "kind": "character",
+    "name": "Maren",
+    "filings": [{"target": "Velikoye"}],
+}
+
+
+def _highlights(box, name: str) -> None:
+    """`name` shows as a known name in the prompt `box`."""
+
+    expect(box.get_by_test_id("name-match").filter(has_text=name)).to_have_count(
+        1, timeout=TIMEOUT_MS
+    )
+
+
+def test_prompts_highlight_names(app, page, fixed_preview):
+    name = _world_name("Prompts")
+    world = seed_fm_world(app.root, name, present_year=1026, things=[VELIKOYE, MAREN])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-character").click()
+    maren = _open_thing(page, "Maren")
+
+    # an In row's "but…"
+    entry_in = maren.get_by_test_id("entry-in")
+    entry_in.get_by_test_id("in-row").filter(has_text="Velikoye").get_by_test_id(
+        "in-add-but"
+    ).click()
+    but = entry_in.get_by_test_id("in-but-form")
+    but.get_by_label("How they differ").fill("Rarely sleeps in Velikoye.")
+    _highlights(but, "Velikoye")
+    # Enter adds it, with the names as picked (its request takes them)
+    but.locator("textarea").first.press("Enter")
+    sent = _wait_sent(page, "add_exception")
+    assert sent["text"] == "Rarely sleeps in Velikoye."
+    assert sent["picks"] == {"Velikoye": world.things["Velikoye"]}
+
+    # "+ Add facts…"
+    maren.get_by_test_id("add-facts").click()
+    form = maren.get_by_test_id("add-facts-form")
+    form.get_by_test_id("add-prompt").locator("textarea").first.fill(
+        "Her days in Velikoye"
+    )
+    _highlights(form, "Velikoye")
+    form.get_by_role("button", name="Cancel").click()
+
+    # Connected's "+ Add"
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
+    vel.get_by_test_id("connected-add").click()
+    group = vel.get_by_test_id("group-add")
+    group.get_by_test_id("group-add-prompt").locator("textarea").first.fill(
+        "friends of Maren"
+    )
+    _highlights(group, "Maren")
+
+    # a page draft's prompt
+    fixed_preview(
+        {
+            "name": "Ilya",
+            "facts": [{"category": "background", "text": "A ferryman."}],
+            "prose": {"appearance": "", "personality": "", "background": ""},
+        }
+    )
+    page.get_by_test_id("kind-character").click()
+    box = page.get_by_test_id("create-box")
+    box.get_by_label("Describe it").fill("a ferryman")
+    box.get_by_role("button", name="Create").click()
+    bar = page.get_by_test_id("draft-page").get_by_test_id("draft-bar")
+    prompt = bar.get_by_test_id("draft-prompt")
+    prompt.locator("textarea").first.fill("a ferryman who knows Maren")
+    _highlights(prompt, "Maren")
+    assert page.console_errors == []

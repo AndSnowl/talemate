@@ -1086,6 +1086,22 @@ check('a new lookup leaves no matches until its reply', () => {
     assert.deepEqual(store.matchesFor('Bo Maren went home', null), []);
 });
 
+check('two boxes look names up side by side (polish 4)', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    // the draft bar's prompt, then a hidden create box's, both in flight
+    store.matchNames('a friend of Maren', null, 'bar');
+    store.matchNames('a ferryman', null, 'create');
+    store.handleMessage(reply('match_names', { text: 'a friend of Maren', at: null, matches: [MATCHES[0]] }));
+    store.handleMessage(reply('match_names', { text: 'a ferryman', at: null, matches: [] }));
+    assert.equal(store.matchesFor('a friend of Maren', null).length, 1);
+    // a box's new lookup drops only its own last reply
+    store.matchNames('a friend of Bo', null, 'create');
+    assert.equal(store.matchesFor('a friend of Maren', null).length, 1);
+    store.matchNames('a friend', null, 'bar');
+    assert.deepEqual(store.matchesFor('a friend of Maren', null), []);
+});
+
 check('a reply for an older date is dropped', () => {
     const { store } = freshStore();
     store.handleMessage(reply('open_world', WORLD));

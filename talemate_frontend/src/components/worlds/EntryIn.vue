@@ -115,7 +115,7 @@
             </div>
             <div v-if="butting && butting.targetId === row.target_id" class="in-form pa-2 mb-2 d-flex align-center flex-wrap ga-2" data-testid="in-but-form" @keydown.esc="escape($event)">
                 <span class="text-caption text-muted"><i>but…</i></span>
-                <v-text-field v-model="butting.text" label="How they differ" density="compact" variant="outlined" hide-details class="flex-grow-1" autofocus @keydown.enter="saveBut(row)"></v-text-field>
+                <NameHighlightInput v-model="butting.text" v-model:picks="butting.picks" label="How they differ" :show-label="false" :rows="1" dense autofocus class="flex-grow-1" @keydown.enter.exact="onButEnter($event, row)" />
                 <v-btn color="accent" variant="flat" size="small" :disabled="!butting.text.trim()" :loading="!!worlds.pending.add_exception" @click="saveBut(row)">Add</v-btn>
                 <v-btn variant="text" size="small" @click="butting = null">Cancel</v-btn>
             </div>
@@ -128,9 +128,11 @@ import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, dateParts } from './worldDates.js';
 import { filingDates, normaliseTag, roleLead } from './entryPage.js';
 import { filingKey } from './draftPage.js';
+import { linkPayload } from './nameHighlights.js';
 import { STUB_KINDS, actsInWorld, escapeCloses, kindInfo } from './worldKinds.js';
-import LinkedText from './LinkedText.vue';
 import EntryAutocomplete from './EntryAutocomplete.vue';
+import LinkedText from './LinkedText.vue';
+import NameHighlightInput from './NameHighlightInput.vue';
 import TagChip from './TagChip.vue';
 
 // the target choice that makes a stub of the typed name, and its title
@@ -176,7 +178,7 @@ function yearOf(date) {
 // rows is the tick. A stub's filings so far show as they are.
 export default {
     name: 'EntryIn',
-    components: { EntryAutocomplete, LinkedText, TagChip },
+    components: { EntryAutocomplete, LinkedText, NameHighlightInput, TagChip },
     props: {
         // the page's payload (a draft's: its rows as the owner left them)
         thing: { type: Object, required: true },
@@ -400,12 +402,21 @@ export default {
             }
         },
         startBut(row) {
-            this.butting = { targetId: row.target_id, text: '' };
+            this.butting = { targetId: row.target_id, text: '', picks: {} };
+        },
+        // Enter adds it (not mid-composition: an IME's Enter picks a word)
+        onButEnter(event, row) {
+            if (event.isComposing) {
+                return;
+            }
+            event.preventDefault();
+            this.saveBut(row);
         },
         saveBut(row) {
             const text = this.butting?.text.trim();
             if (text) {
-                this.worlds.addException(row.target_id, text);
+                const links = linkPayload(this.worlds.matchesFor(this.butting.text, this.worlds.thingAt), this.butting.picks, {}, this.butting.text);
+                this.worlds.addException(row.target_id, text, null, links);
                 this.sent = true;
             }
         },
