@@ -115,7 +115,7 @@
             </div>
             <div v-if="butting && butting.targetId === row.target_id" class="in-form pa-2 mb-2 d-flex align-center flex-wrap ga-2" data-testid="in-but-form" @keydown.esc="escape($event)">
                 <span class="text-caption text-muted"><i>but…</i></span>
-                <NameHighlightInput v-model="butting.text" v-model:picks="butting.picks" label="How they differ" :show-label="false" :rows="1" dense autofocus class="flex-grow-1" @keydown.enter.exact="onButEnter($event, row)" />
+                <NameHighlightInput v-model="butting.text" v-model:picks="butting.picks" :at="worlds.thingAt" label="How they differ" :show-label="false" :rows="1" dense autofocus class="flex-grow-1" @keydown.enter.exact="onButEnter($event, row)" />
                 <v-btn color="accent" variant="flat" size="small" :disabled="!butting.text.trim()" :loading="!!worlds.pending.add_exception" @click="saveBut(row)">Add</v-btn>
                 <v-btn variant="text" size="small" @click="butting = null">Cancel</v-btn>
             </div>

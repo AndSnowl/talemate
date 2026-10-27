@@ -23,6 +23,7 @@
                     :rows="2"
                     dense
                     autofocus
+                    :pickable="false"
                     class="flex-grow-1"
                     data-testid="add-prompt"
                     @keydown.enter.exact="onEnter"

@@ -2899,6 +2899,33 @@ check('For other pages: a row retargeted, "+ also here"; In, File into this and 
     assert.deepEqual(versionRows([{ version: 1, name: 'A', prompt: 'p' }, { version: 2, name: 'B', prompt: 'q' }], 1).map((r) => [r.label, r.current]), [['v2 · B', false], ['v1 · A', true]]);
 });
 
+check('the draft bar starts from the create box picks; its own are the answer (final review I3)', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    const prompt = 'Maren crossed at Sallowford';
+    // the create box: the second Maren, and Sallowford treated as new
+    store.previewThing('character', prompt, {}, null, { picks: { Maren: 'vos' }, newNames: ['Sallowford'] });
+    // the bar shows them, keyed as a name box keeps its picks
+    assert.deepEqual(store.draftPromptPicks, { maren: 'vos', sallowford: NEW_THING });
+    store.handleMessage(reply('preview_thing', draftOf(HOST)));
+    // in the bar Sallowford becomes the entry; Maren stays the second
+    store.setDraftPicks({ maren: 'vos', sallowford: 'sal' });
+    store.matchNames(prompt, null, 'bar');
+    store.handleMessage(reply('match_names', {
+        text: prompt,
+        at: null,
+        matches: [
+            { start: 0, end: 5, text: 'Maren', candidates: [HOLT, VOS] },
+            { start: 17, end: 27, text: 'Sallowford', candidates: [SALLOW] },
+        ],
+    }));
+    store.regeneratePreview();
+    assert.deepEqual(sent.at(-1).picks, { Maren: 'vos', Sallowford: 'sal' });
+    assert.equal('new_names' in sent.at(-1), false);
+    // the next version's request keeps the bar's picks
+    assert.deepEqual(store.draftPromptPicks, { maren: 'vos', sallowford: 'sal' });
+});
+
 check("versions: the owner's edits kept per version for the session, restored with it", () => {
     const { store, sent } = hostDraft();
     assert.equal(store.draft.key, 'new:lore:frostwing host');

@@ -8,6 +8,7 @@
                 :rows="2"
                 dense
                 autofocus
+                :pickable="false"
                 data-testid="group-add-prompt"
                 @keydown.enter.exact="onEnter"
                 @keydown.esc="$emit('close')"

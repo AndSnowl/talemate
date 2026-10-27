@@ -197,7 +197,7 @@ import {
     smallKind,
 } from '../components/worlds/smallDrafts.js';
 import { HERITAGE_KINDS, LISTED_KINDS, overrideCategory } from '../components/worlds/worldKinds.js';
-import { linkPayload } from '../components/worlds/nameHighlights.js';
+import { NEW_THING, linkPayload, pickKey } from '../components/worlds/nameHighlights.js';
 
 const ROUTER = 'worlds';
 
@@ -729,6 +729,22 @@ export const useWorldsStore = defineStore('worlds', {
                 .filter(Boolean);
             return [...species, entry].map(({ id: linkId, name }) => ({ id: linkId, name }));
         },
+        // the draft bar prompt's picks, as a name box keeps them (pickKey ->
+        // thing id or NEW_THING): the bar's own once the owner picks there,
+        // else the request's (the create box's)
+        draftPromptPicks: (state) => {
+            const req = state.previewRequest;
+            if (!req) {
+                return {};
+            }
+            if (req.promptPicks) {
+                return req.promptPicks;
+            }
+            return {
+                ...Object.fromEntries(Object.entries(req.picks || {}).map(([name, id]) => [pickKey(name), id])),
+                ...Object.fromEntries((req.newNames || []).map((name) => [pickKey(name), NEW_THING])),
+            };
+        },
         // the `match_names` unknown phrases for exactly this text and date
         unknownFor: (state) => (text, at) => {
             const found = Object.values(state.nameMatches).find((reply) => reply.text === text && sameDate(reply.at, at));
@@ -1023,7 +1039,7 @@ export const useWorldsStore = defineStore('worlds', {
         // name}`), each thing taught its name once the draft is accepted.
         // A draft of the same kind (and stub) open already gets a new
         // version (its `draft_key` sent back: Regenerate).
-        previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [] } = {}, { discard = false } = {}) {
+        previewThing(kind, prompt, fields = {}, stubId = null, { picks = {}, newNames = [], repicks = [], promptPicks = null } = {}, { discard = false } = {}) {
             const draft = this.draft;
             // the same box's request (its kind and stub; the draft's own
             // kind may have been changed since)
@@ -1039,7 +1055,7 @@ export const useWorldsStore = defineStore('worlds', {
                 this.discardPreview();
             }
             this.createAsk = null;
-            this.previewRequest = { kind, prompt, fields, stubId, picks, newNames, repicks };
+            this.previewRequest = { kind, prompt, fields, stubId, picks, newNames, repicks, ...(promptPicks ? { promptPicks } : {}) };
             this.previewError = null;
             this.previewPending = true;
             this.request('preview_thing', {
@@ -1061,18 +1077,15 @@ export const useWorldsStore = defineStore('worlds', {
             }
         },
 
-        // the request's picks and new names, with the bar prompt's own
-        // (`promptPicks`, as `NameHighlightInput` keeps them) over them
+        // the request's picks and new names; once the owner picks in the
+        // bar (`promptPicks`, as `NameHighlightInput` keeps them, seeded
+        // from the request's), the bar's are the whole answer for its text
         barLinks(req) {
             if (!req.promptPicks) {
                 return req;
             }
             const links = linkPayload(this.matchesFor(req.prompt, null), req.promptPicks, {}, req.prompt);
-            return {
-                picks: { ...(req.picks || {}), ...links.picks },
-                newNames: [...new Set([...(req.newNames || []), ...links.newNames])],
-                repicks: req.repicks || [],
-            };
+            return { ...links, repicks: req.repicks || [], promptPicks: req.promptPicks };
         },
 
         // the bar's prompt, edited in place: the next Regenerate (or

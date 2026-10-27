@@ -5,7 +5,7 @@
         :versions="versions"
         :version="draft.version"
         :prompt="worlds.previewRequest?.prompt || ''"
-        :picks="worlds.previewRequest?.promptPicks || {}"
+        :picks="worlds.draftPromptPicks"
         prompt-label="Prompt"
         :busy="busy"
         :locked="locked"

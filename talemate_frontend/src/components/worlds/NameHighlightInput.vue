@@ -16,7 +16,14 @@
             ></textarea>
             <div class="prompt-layer" :class="{ dense }" aria-hidden="true">
                 <template v-for="segment in segments" :key="segment.start">
-                    <v-menu v-if="segment.match || segment.ref" open-on-hover location="bottom start" :open-delay="100">
+                    <mark
+                        v-if="!pickable && (segment.match || segment.ref)"
+                        class="name"
+                        :class="segment.state"
+                        data-testid="name-match"
+                        @mousedown.prevent="caretAt(segment.end)"
+                    >{{ segment.text }}</mark>
+                    <v-menu v-else-if="segment.match || segment.ref" open-on-hover location="bottom start" :open-delay="100">
                         <template #activator="{ props }">
                             <mark
                                 v-bind="props"
@@ -166,6 +173,9 @@ export default {
         // how long typing rests before the names are looked up
         debounce: { type: Number, default: 300 },
         autofocus: { type: Boolean, default: false },
+        // false where the box's request takes no picks: names highlight,
+        // with no menu to re-pick them
+        pickable: { type: Boolean, default: true },
     },
     emits: ['update:modelValue', 'update:picks', 'update:refs', 'update:stubs', 'pick-link'],
     setup() {

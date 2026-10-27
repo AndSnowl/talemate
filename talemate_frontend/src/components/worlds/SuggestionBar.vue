@@ -69,6 +69,7 @@
         <NameHighlightInput
             :model-value="prompt"
             :picks="picks || {}"
+            :pickable="picks !== null"
             :label="promptLabel"
             :rows="2"
             dense

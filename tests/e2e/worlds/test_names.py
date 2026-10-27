@@ -373,3 +373,56 @@ def test_prompts_highlight_names(app, page, fixed_preview):
     prompt.locator("textarea").first.fill("a ferryman who knows Maren")
     _highlights(prompt, "Maren")
     assert page.console_errors == []
+
+
+def test_but_on_a_page_viewed_at_a_date_sends_its_names(app, page):
+    """Final review M4: on a page viewed as of a date, the "but…" box
+    looks its names up at that date, and sends them."""
+
+    name = _world_name("ButAt")
+    world = seed_fm_world(app.root, name, present_year=1026, things=[VELIKOYE, MAREN])
+    page.evaluate(SEND_SPY_JS)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-character").click()
+    maren = _open_thing(page, "Maren")
+    maren.get_by_test_id("as-of-button").click()
+    picker = page.get_by_test_id("as-of-picker")
+    picker.get_by_label("Year").fill("1020")
+    picker.get_by_role("button", name="View").click()
+    maren.get_by_test_id("as-of-button").filter(has_text="1020").wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+
+    entry_in = maren.get_by_test_id("entry-in")
+    entry_in.get_by_test_id("in-row").filter(has_text="Velikoye").get_by_test_id(
+        "in-add-but"
+    ).click()
+    but = entry_in.get_by_test_id("in-but-form")
+    but.get_by_label("How they differ").fill("Rarely sleeps in Velikoye.")
+    _highlights(but, "Velikoye")
+    but.locator("textarea").first.press("Enter")
+    sent = _wait_sent(page, "add_exception")
+    assert sent["picks"] == {"Velikoye": world.things["Velikoye"]}
+
+
+def test_highlight_only_prompts_offer_no_picks(app, page):
+    """Final review M5: a prompt whose request takes no picks highlights
+    its names without a menu to re-pick them, since a pick there would do
+    nothing."""
+
+    name = _world_name("NoPicks")
+    seed_fm_world(app.root, name, present_year=1026, things=[VELIKOYE, MAREN])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-character").click()
+    maren = _open_thing(page, "Maren")
+    maren.get_by_test_id("add-facts").click()
+    form = maren.get_by_test_id("add-facts-form")
+    form.get_by_test_id("add-prompt").locator("textarea").first.fill(
+        "Her days in Velikoye"
+    )
+    _highlights(form, "Velikoye")
+    form.get_by_test_id("name-match").hover()
+    page.wait_for_timeout(600)
+    expect(page.get_by_test_id("name-popover")).to_have_count(0)
