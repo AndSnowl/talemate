@@ -11,7 +11,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.filing import filings_of
 from talemate.world.refs import ref
 from talemate.world.store import Source
-from talemate.worldplay.repoint import repoint_stub
+from talemate.worldplay.repoint import move_fact, repoint_stub
 
 
 def _aka(name, tag="common", everyday=False):
@@ -400,3 +400,47 @@ def test_repoint_adds_names_at_every_dated_value(world):
 
     assert names(1000) == ["Old", "Kingdom"]
     assert names(1020) == ["New", "Kingdom"]
+
+
+# --- polish 4: dead links become words on a rewrite ---------------------------
+
+
+def test_repoint_with_dead_links_in_the_fact(world, tsardom):
+    """A fact the re-point rewrites still links two entries since deleted
+    (one of them since remade): the re-point goes through, and their links
+    read as their words."""
+
+    with world.revision(Source.manual()) as rev:
+        kerensk = rev.create_thing("place", {"name": "Kerensk"})
+        holt = rev.create_thing("place", {"name": "Holt"})
+        fact = rev.add_fact(
+            tsardom["maren"],
+            "background",
+            f"Sailed from {ref(kerensk, 'Kerensk')} and {ref(holt, 'the holt')}"
+            f" to {ref(tsardom['stub'], 'the Tsardom')}.",
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(kerensk)
+        rev.remove_thing(holt)
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("place", {"name": "Kerensk"})
+
+    repoint_stub(world, tsardom["stub"], tsardom["target"])
+
+    assert _text(world, fact) == (
+        f"Sailed from Kerensk and the holt to {ref(tsardom['target'], 'the Tsardom')}."
+    )
+
+
+def test_move_fact_with_a_dead_link(world, tsardom):
+    with world.revision(Source.manual()) as rev:
+        holt = rev.create_thing("place", {"name": "Holt"})
+        fact = rev.add_fact(
+            tsardom["maren"], "background", f"Grew up in {ref(holt, 'the holt')}."
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(holt)
+
+    moved = move_fact(world, fact, tsardom["target"])
+
+    assert _text(world, moved) == "Grew up in the holt."
