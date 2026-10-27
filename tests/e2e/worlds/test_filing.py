@@ -1272,3 +1272,19 @@ def test_sweep_controls_follow_their_titles(app, page):
     caption = row.locator(".text-caption").first.bounding_box()
     rename = row.get_by_test_id("tag-rename").bounding_box()
     assert 0 <= rename["x"] - (caption["x"] + caption["width"]) <= 24
+
+
+def test_add_fact_back_when_edited_fact_is_removed(app, page):
+    """Polish 3 final review: removing the fact whose edit form is open
+    (from its ⋯ menu) drops that form too, so "Add fact" comes back
+    instead of staying off with no form to cancel."""
+
+    world, thing = _open_velikoye(page, app, _world_name("AddBack"))
+    add = thing.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    row = thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
+    row.get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
+    row.get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-remove").click()
+    expect(thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")).to_have_count(0)
+    expect(add).to_be_enabled()

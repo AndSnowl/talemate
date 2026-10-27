@@ -929,6 +929,23 @@ export default {
         factFormOpen() {
             return !!this.form && (!!this.form.factId || this.form.index != null);
         },
+        // the open form's fact is no longer on the page (removed from its
+        // own ⋯ menu, or not true at the date now viewed): the form goes
+        // with it, so "Add fact" doesn't wait on a form nobody can see
+        formTargetGone() {
+            const form = this.form;
+            if (!form) {
+                return false;
+            }
+            if (form.factId) {
+                const facts = [this.summaryFact, ...(this.shownFacts || []), ...(this.thing?.inherited || [])];
+                return !facts.some((fact) => fact?.fact_id === form.factId);
+            }
+            if (form.index != null) {
+                return !(this.draftRows || []).some((row) => row.index === form.index);
+            }
+            return false;
+        },
         // while the page draft's nested "+ Add facts" draft is open or
         // held, its own Accept, Regenerate and version switch wait for it
         draftLocked() {
@@ -1103,6 +1120,12 @@ export default {
         },
     },
     watch: {
+        formTargetGone(gone) {
+            if (gone) {
+                this.form = null;
+                this.afterSave = null;
+            }
+        },
         // another version of the draft: its forms and menus close
         'worlds.draft.version'() {
             if (this.draft) {
