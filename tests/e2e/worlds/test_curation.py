@@ -452,8 +452,14 @@ def test_timeline_gathers_and_flags(app, page):
 
     # the two years for the Codex are flagged; the owner keeps 217
     flag = codex_line.get_by_test_id("line-disagrees")
-    assert "disagrees with 217" in flag.text_content()
+    assert "Disagrees with 217" in flag.get_attribute("aria-label")
+    # polish 3: a warning sign right before the row's date and text
+    assert flag.bounding_box()["x"] < codex_line.locator(".year").bounding_box()["x"]
     flag.click()
+    # the menu shows the line it disagrees with in full, then the picks
+    menu = page.get_by_test_id("pick-date")
+    expect(menu.get_by_test_id("disagrees-with")).to_contain_text("217")
+    expect(menu.get_by_test_id("disagrees-with")).to_contain_text("is compiled.")
     page.get_by_test_id("pick-option").filter(has_text="Keep 217, end this one").click()
     sent = _wait_sent(page, "pick_date")
     assert sent["mode"] == "end"

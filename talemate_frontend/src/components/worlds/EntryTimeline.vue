@@ -16,6 +16,45 @@
         <slot></slot>
         <div v-if="!shown.length" class="empty">{{ lines.length ? 'No events among them.' : 'Nothing dated yet.' }}</div>
         <div v-for="(line, index) in shown" :key="line.fact_id || 'draft-' + index" class="line d-flex align-center ga-2" :class="{ ended: !!line.until }" data-testid="timeline-row">
+            <!-- disagrees with another line: a warning sign right before
+                 the row, its menu the other line in full and the picks -->
+            <v-menu v-if="flags[line.fact_id]" location="bottom start">
+                <template #activator="{ props }">
+                    <v-btn
+                        v-bind="props"
+                        icon="mdi-alert"
+                        variant="text"
+                        size="x-small"
+                        density="comfortable"
+                        color="warning"
+                        class="flex-grow-0"
+                        data-testid="line-disagrees"
+                        :title="`Disagrees with ${others(line)}`"
+                        :aria-label="`Disagrees with ${others(line)}: pick one`"
+                    ></v-btn>
+                </template>
+                <v-card min-width="280" max-width="520" data-testid="pick-date">
+                    <template v-for="other in flags[line.fact_id]" :key="other.fact_id">
+                        <div class="disagrees-with pa-3 pb-1 text-body-2" data-testid="disagrees-with">
+                            <div class="text-caption text-muted">Disagrees with</div>
+                            <span class="year">{{ lineDates(worlds.calendar, other) }}</span>
+                            <LinkedText :segments="other.segments" />
+                        </div>
+                        <v-list density="compact">
+                            <v-list-item
+                                v-for="choice in choices(line, other)"
+                                :key="choice.label"
+                                :title="choice.label"
+                                data-testid="pick-option"
+                                :disabled="!!worlds.pending.pick_date"
+                                @click="worlds.pickDate(choice.keep, choice.drop, choice.mode)"
+                            ></v-list-item>
+                        </v-list>
+                    </template>
+                </v-card>
+            </v-menu>
+            <!-- the sign's room on the other rows, so the years line up -->
+            <span v-else-if="anyFlag" class="flag-room flex-grow-0"></span>
             <span class="flex-grow-1">
                 <span class="year">{{ lineDates(worlds.calendar, line) }}</span>
                 <LinkedText :segments="line.segments" />
@@ -24,31 +63,6 @@
                     <template v-else> · from <LinkedText :segments="[{ text: line.owner_name, ref: line.owner_id, stub: false }]" /></template>
                 </span>
             </span>
-            <v-menu v-if="flags[line.fact_id]" location="bottom end">
-                <template #activator="{ props }">
-                    <v-btn
-                        v-bind="props"
-                        variant="text"
-                        size="x-small"
-                        color="warning"
-                        prepend-icon="mdi-alert"
-                        data-testid="line-disagrees"
-                        :aria-label="`Disagrees with ${others(line)}: pick one`"
-                    >disagrees with {{ others(line) }}</v-btn>
-                </template>
-                <v-list density="compact" data-testid="pick-date">
-                    <template v-for="other in flags[line.fact_id]" :key="other.fact_id">
-                        <v-list-item
-                            v-for="choice in choices(line, other)"
-                            :key="choice.label"
-                            :title="choice.label"
-                            data-testid="pick-option"
-                            :disabled="!!worlds.pending.pick_date"
-                            @click="worlds.pickDate(choice.keep, choice.drop, choice.mode)"
-                        ></v-list-item>
-                    </template>
-                </v-list>
-            </v-menu>
         </div>
     </div>
 </template>
@@ -87,6 +101,9 @@ export default {
         flags() {
             return disagreements(this.lines);
         },
+        anyFlag() {
+            return Object.keys(this.flags).length > 0;
+        },
         eventIds() {
             return (this.worlds.things.event || []).map((thing) => thing.id);
         },
@@ -115,6 +132,11 @@ export default {
 </script>
 
 <style scoped>
+/* an x-small icon button's width (comfortable density) */
+.flag-room {
+    width: 28px;
+}
+
 .line {
     margin: 3px 0;
     line-height: 1.5;
