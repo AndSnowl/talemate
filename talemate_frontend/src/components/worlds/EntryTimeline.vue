@@ -11,7 +11,6 @@
                     <v-list-item title="Events only" :active="mode === 'events'" data-testid="timeline-events" @click="mode = 'events'"></v-list-item>
                 </v-list>
             </v-menu>
-            <v-spacer></v-spacer>
             <slot name="actions"></slot>
         </div>
         <slot></slot>

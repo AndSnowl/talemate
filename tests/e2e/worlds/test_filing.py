@@ -1215,3 +1215,13 @@ def test_connected_in_right_column(app, page):
     mentioned = thing.get_by_test_id("entry-mentioned").bounding_box()
     assert abs(mentioned["x"] - cbox["x"]) <= 1
     assert mentioned["y"] > cbox["y"]
+
+
+def test_add_event_by_timeline_filter(app, page):
+    """Polish 3: "+ Add event…" follows the Timeline's "Events ▾"."""
+
+    world, thing = _open_velikoye(page, app, _world_name("AddEventBy"))
+    timeline = thing.get_by_test_id("entry-timeline")
+    filt = timeline.get_by_test_id("timeline-filter").bounding_box()
+    add = timeline.get_by_test_id("add-event").bounding_box()
+    assert 0 <= add["x"] - (filt["x"] + filt["width"]) <= 24
