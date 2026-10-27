@@ -265,7 +265,16 @@
                         <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
                         <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" :on-draft="draft" />
-                        <v-btn v-if="!form || form.factId || form.index != null" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
+                        <v-btn
+                            v-if="!form || form.factId || form.index != null"
+                            variant="text"
+                            size="small"
+                            color="accent"
+                            prepend-icon="mdi-plus"
+                            :disabled="factFormOpen"
+                            :title="factFormOpen ? 'save or cancel the edit first' : null"
+                            @click="startAdd"
+                        >Add fact</v-btn>
                     </div>
 
                     <div v-if="form && !form.factId && form.index == null" class="mb-2">
@@ -915,6 +924,11 @@ export default {
             const line = countsLine(previewCounts(this.edited), onto);
             return this.matchingStub ? `${line} · a stub named ${this.matchingStub.name} exists` : line;
         },
+        // a fact's (or the summary's, or a draft fact's) edit form is
+        // open: "Add fact" waits, so it never drops that unsaved edit
+        factFormOpen() {
+            return !!this.form && (!!this.form.factId || this.form.index != null);
+        },
         // while the page draft's nested "+ Add facts" draft is open or
         // held, its own Accept, Regenerate and version switch wait for it
         draftLocked() {
@@ -1361,6 +1375,10 @@ export default {
             return { ...state, links: state.links.map((link) => ({ ...link, was: link.ref })) };
         },
         startAdd() {
+            // a fact's edit form is open: adding would drop its edit
+            if (this.factFormOpen) {
+                return;
+            }
             this.form = {
                 mode: 'add',
                 ...(this.draft ? { draft: true } : {}),

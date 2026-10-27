@@ -1819,3 +1819,22 @@ def test_draft_accept_at_the_foot(app, page, fixed_preview):
     assert sent["preview"]["name"] == "The Frostwing Host"
     _opened(page, "The Frostwing Host")
     assert page.console_errors == []
+
+
+def test_draft_add_fact_off_while_editing(app, page, fixed_preview):
+    """Polish 3: on a page draft too, "Add fact" waits while a draft
+    fact's form is open."""
+
+    name = _world_name("DraftAddWaits")
+    seed_fm_world(app.root, name, present_year=1026, things=[KALMARA])
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.get_by_label("Describe it").fill("A riverside town of reed-cutters.")
+    fixed_preview(_preview("Kalmara", "Reed-cutters work its shallows."))
+    draft = _create_and_wait(page, box)
+    add = draft.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    expect(add).to_be_enabled()
+    draft.get_by_test_id("draft-fact").first.get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
+    expect(add).to_have_attribute("title", "save or cancel the edit first")

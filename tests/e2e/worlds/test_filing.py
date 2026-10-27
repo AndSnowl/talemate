@@ -1225,3 +1225,20 @@ def test_add_event_by_timeline_filter(app, page):
     filt = timeline.get_by_test_id("timeline-filter").bounding_box()
     add = timeline.get_by_test_id("add-event").bounding_box()
     assert 0 <= add["x"] - (filt["x"] + filt["width"]) <= 24
+
+
+def test_add_fact_off_while_editing(app, page):
+    """Polish 3: "Add fact" waits while a fact's edit form is open (a
+    fact's or the summary's), so it never drops an unsaved edit."""
+
+    world, thing = _open_velikoye(page, app, _world_name("AddWaits"))
+    add = thing.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    expect(add).to_be_enabled()
+    row = thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
+    row.get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
+    expect(add).to_have_attribute("title", "save or cancel the edit first")
+    thing.get_by_test_id("fact-form").get_by_role("button", name="Cancel").click()
+    expect(add).to_be_enabled()
+    thing.get_by_test_id("entry-summary").get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
