@@ -75,7 +75,6 @@
                 class="picker picker-wide"
                 :disabled="busy"
             ></v-select>
-            <v-spacer></v-spacer>
             <v-btn
                 color="accent"
                 variant="flat"

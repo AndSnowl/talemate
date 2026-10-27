@@ -42,7 +42,6 @@
             <template v-else>
                 <span class="tag-name">{{ item.tag }}</span>
                 <span class="text-caption text-muted">· {{ item.count }} {{ item.count === 1 ? 'entry' : 'entries' }} · shown as “{{ item.heading }}”</span>
-                <v-spacer></v-spacer>
                 <v-btn variant="outlined" size="x-small" data-testid="tag-rename" @click="startRename(item.tag)">rename</v-btn>
                 <v-btn v-if="worlds.tags.length > 1" variant="outlined" size="x-small" data-testid="tag-merge" @click="startMerge(item.tag)">merge into…</v-btn>
             </template>

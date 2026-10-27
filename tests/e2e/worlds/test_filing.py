@@ -1242,3 +1242,33 @@ def test_add_fact_off_while_editing(app, page):
     expect(add).to_be_enabled()
     thing.get_by_test_id("entry-summary").get_by_role("button", name="Edit fact").click()
     expect(add).to_be_disabled()
+
+
+def test_sweep_controls_follow_their_titles(app, page):
+    """Polish 3 sweep: on the full-width Stubs and Tags pages and in the
+    create box, a control follows what it acts on instead of the far
+    edge."""
+
+    world, thing = _open_velikoye(page, app, _world_name("Sweep"))
+    # the create box: Create right after its pickers
+    page.get_by_test_id("kind-character").click()
+    box = page.get_by_test_id("create-box").first
+    box.wait_for(state="visible", timeout=TIMEOUT_MS)
+    picker = box.locator(".picker").last.bounding_box()
+    create = box.get_by_role("button", name="Create").bounding_box()
+    assert 0 <= create["x"] - (picker["x"] + picker["width"]) <= 24
+    # Stubs: "show ignored" right after the title line
+    page.get_by_test_id("kind-stubs").click()
+    tab = page.get_by_test_id("stubs-tab")
+    tab.wait_for(state="visible", timeout=TIMEOUT_MS)
+    note = tab.get_by_text("named but not made yet").bounding_box()
+    ignored = tab.get_by_label("show ignored").bounding_box()
+    assert 0 <= ignored["x"] - (note["x"] + note["width"]) <= 48
+    # Tags: rename right after the tag's line
+    page.get_by_test_id("kind-tags").click()
+    rows = page.get_by_test_id("tags-tab").get_by_test_id("tag-row")
+    rows.first.wait_for(state="visible", timeout=TIMEOUT_MS)
+    row = rows.first
+    caption = row.locator(".text-caption").first.bounding_box()
+    rename = row.get_by_test_id("tag-rename").bounding_box()
+    assert 0 <= rename["x"] - (caption["x"] + caption["width"]) <= 24

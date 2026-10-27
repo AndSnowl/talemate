@@ -3,7 +3,6 @@
         <div class="d-flex align-center flex-wrap ga-2 mb-2">
             <span class="text-h6 tab-title">Stubs</span>
             <span class="text-body-2 text-muted">named but not made yet</span>
-            <v-spacer></v-spacer>
             <v-checkbox v-model="showIgnored" label="show ignored" density="compact" hide-details class="flex-grow-0"></v-checkbox>
         </div>
 
