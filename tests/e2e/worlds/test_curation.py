@@ -463,9 +463,10 @@ def test_timeline_gathers_and_flags(app, page):
     assert abs(years[0]["x"] - years[1]["x"]) <= 1
     assert abs(texts[0]["x"] - texts[1]["x"]) <= 1
     assert texts[0]["x"] >= years[0]["x"] + years[0]["width"]
-    fbox = flag.bounding_box()
-    centre = fbox["y"] + fbox["height"] / 2
-    assert year_box["y"] - 4 <= centre <= year_box["y"] + year_box["height"] + 4
+    # the sign's icon centred on the year's line, not riding high
+    ibox = flag.locator(".v-icon").bounding_box()
+    centre = ibox["y"] + ibox["height"] / 2
+    assert abs(centre - (year_box["y"] + year_box["height"] / 2)) <= 2
     flag.click()
     # the menu shows the line it disagrees with in full, then the picks
     menu = page.get_by_test_id("pick-date")

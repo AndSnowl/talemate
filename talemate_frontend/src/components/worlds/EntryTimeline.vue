@@ -149,7 +149,7 @@ export default {
 
 /* the sign sits on the first line, beside the date */
 .line :deep(.v-btn) {
-    margin-top: -2px;
+    margin-top: 2px;
 }
 
 .line.ended {
