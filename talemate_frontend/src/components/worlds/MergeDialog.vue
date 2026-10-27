@@ -7,21 +7,15 @@
                 <v-btn icon="mdi-close" variant="text" size="small" aria-label="Close" @click="close"></v-btn>
             </div>
             <div class="text-caption text-muted mb-3">For two entries that turned out to be one thing: every link, filing and field moves over, in one revision, so one undo reverses it.</div>
-            <v-autocomplete
+            <EntryAutocomplete
                 v-model="intoId"
-                :items="targets"
-                item-title="name"
-                item-value="id"
+                :targets="targets"
                 label="Merge into"
                 density="compact"
                 variant="outlined"
                 hide-details
                 data-testid="merge-target"
-            >
-                <template #item="{ props: itemProps, item }">
-                    <v-list-item v-bind="itemProps" :subtitle="item.raw.kind"></v-list-item>
-                </template>
-            </v-autocomplete>
+            ></EntryAutocomplete>
 
             <v-alert v-if="worlds.error && modelValue" type="error" variant="tonal" density="compact" class="mt-3">{{ worlds.error }}</v-alert>
             <v-progress-linear v-if="merge && merge.pending" indeterminate color="accent" class="mt-3"></v-progress-linear>
@@ -95,6 +89,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import SuggestionRow from './SuggestionRow.vue';
+import EntryAutocomplete from './EntryAutocomplete.vue';
 
 function plural(count, one, many = `${one}s`) {
     return `${count} ${count === 1 ? one : many}`;
@@ -113,7 +108,7 @@ function plural(count, one, many = `${one}s`) {
 // (an unticked one looks dropped as everywhere else).
 export default {
     name: 'MergeDialog',
-    components: { SuggestionRow },
+    components: { EntryAutocomplete, SuggestionRow },
     props: {
         modelValue: { type: Boolean, default: false },
         // the open page's payload: the entry merged away

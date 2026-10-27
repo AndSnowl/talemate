@@ -27,7 +27,6 @@ import {
     lineDates,
     listedFacts,
     nameKey,
-    otherNamesNote,
     pageAfterDelete,
     parseWorldTarget,
     previewCounts,
@@ -54,7 +53,8 @@ import {
     promptSegments,
     refOccurrence,
     repicks,
-    searchReferences,
+    entryMatch,
+    searchEntries,
 } from '../src/components/worlds/nameHighlights.js';
 import {
     EXISTENCE,
@@ -480,16 +480,48 @@ check('before the names are looked up, the owner\'s own picks still go out', () 
     });
 });
 
-check('the reference search: names holding the query, starting ones first', () => {
+check('the entry search: names holding the query, starting ones first', () => {
     const targets = [
-        { id: '1', name: 'Vasha', kind: 'character', stub: false },
-        { id: '2', name: 'Vasel River', kind: 'place', stub: false },
-        { id: '3', name: 'Vasilka', kind: 'place', stub: true },
-        { id: '4', name: 'Old Vasel', kind: 'lore', stub: false },
+        { id: '1', name: 'Vasha', kind: 'character', stub: false, aka: [] },
+        { id: '2', name: 'Vasel River', kind: 'place', stub: false, aka: [] },
+        { id: '3', name: 'Vasilka', kind: 'place', stub: true, aka: [] },
+        { id: '4', name: 'Old Vasel', kind: 'lore', stub: false, aka: [] },
     ];
-    assert.deepEqual(searchReferences(targets, 'vas').map((t) => t.name), ['Vasel River', 'Vasha', 'Vasilka', 'Old Vasel']);
-    assert.deepEqual(searchReferences(targets, '  '), []);
-    assert.deepEqual(searchReferences(targets, 'vas', 2).map((t) => t.id), ['2', '1']);
+    assert.deepEqual(searchEntries(targets, 'vas').map((r) => r.target.name), ['Vasel River', 'Vasha', 'Vasilka', 'Old Vasel']);
+    assert.deepEqual(searchEntries(targets, '  '), []);
+    assert.deepEqual(searchEntries(targets, 'vas', 2).map((r) => r.target.id), ['2', '1']);
+});
+
+check('searchEntries finds an entry by its other name and says which', () => {
+    const targets = [
+        { id: 'o', name: 'Moscavian Owl-folk', kind: 'species', stub: false, aka: ['Owls', 'Moscavian Owls'] },
+        { id: 't', name: 'Tsardom of Moscavia', kind: 'place', stub: false, aka: [] },
+    ];
+    const found = searchEntries(targets, 'moscavian owls');
+    assert.deepEqual(found, [{ target: targets[0], matched: 'Moscavian Owls' }]);
+    // its own name matched: no other name to show
+    assert.deepEqual(searchEntries(targets, 'owl-folk'), [{ target: targets[0], matched: null }]);
+    assert.equal(entryMatch(targets[0], 'owls'), 'Owls');
+    assert.equal(entryMatch(targets[1], 'owls'), undefined);
+});
+
+check('searchEntries ranks name matches first', () => {
+    const targets = [
+        { id: 'a', name: 'The Owlery', kind: 'place', stub: false, aka: [] },
+        { id: 'b', name: 'Snowy Folk', kind: 'species', stub: false, aka: ['Owls'] },
+    ];
+    assert.deepEqual(searchEntries(targets, 'owl').map((r) => r.target.id), ['a', 'b']);
+});
+
+check('searchEntries lists every entry an other name matches', () => {
+    const targets = [
+        { id: 'a', name: 'Velikoye', kind: 'place', stub: false, aka: ['the capital'] },
+        { id: 'b', name: 'Kerensk', kind: 'place', stub: false, aka: ['the old capital'] },
+    ];
+    assert.deepEqual(
+        searchEntries(targets, 'capital').map((r) => [r.target.id, r.matched]),
+        [['b', 'the old capital'], ['a', 'the capital']],
+    );
 });
 
 check('match offsets count code points, as the backend does', () => {
@@ -1052,6 +1084,22 @@ check('a new lookup leaves no matches until its reply', () => {
     store.matchNames('Bo Maren went home', null);
     assert.deepEqual(store.matchesFor('Maren went', null), []);
     assert.deepEqual(store.matchesFor('Bo Maren went home', null), []);
+});
+
+check('two boxes look names up side by side (polish 4)', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    // the draft bar's prompt, then a hidden create box's, both in flight
+    store.matchNames('a friend of Maren', null, 'bar');
+    store.matchNames('a ferryman', null, 'create');
+    store.handleMessage(reply('match_names', { text: 'a friend of Maren', at: null, matches: [MATCHES[0]] }));
+    store.handleMessage(reply('match_names', { text: 'a ferryman', at: null, matches: [] }));
+    assert.equal(store.matchesFor('a friend of Maren', null).length, 1);
+    // a box's new lookup drops only its own last reply
+    store.matchNames('a friend of Bo', null, 'create');
+    assert.equal(store.matchesFor('a friend of Maren', null).length, 1);
+    store.matchNames('a friend', null, 'bar');
+    assert.deepEqual(store.matchesFor('a friend of Maren', null), []);
 });
 
 check('a reply for an older date is dropped', () => {
@@ -1996,7 +2044,7 @@ check('repointStub sends the stub and the target; the reply forgets the stub', (
     });
     assert.equal(
         repointedNote(store.stubRepointed),
-        'Tsardom: 2 links now point to Moscavy, which took 1 fact from it. Moscavy is now also known as Tsardom. Moscavy stays in X.',
+        'Tsardom: 2 links now point to Moscavy, which took 1 fact from it. Moscavy stays in X.',
     );
     listedEverything(sent);
     // the stub's page is gone from the history; leaving clears the note
@@ -2851,6 +2899,33 @@ check('For other pages: a row retargeted, "+ also here"; In, File into this and 
     assert.deepEqual(versionRows([{ version: 1, name: 'A', prompt: 'p' }, { version: 2, name: 'B', prompt: 'q' }], 1).map((r) => [r.label, r.current]), [['v2 · B', false], ['v1 · A', true]]);
 });
 
+check('the draft bar starts from the create box picks; its own are the answer (final review I3)', () => {
+    const { store, sent } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    const prompt = 'Maren crossed at Sallowford';
+    // the create box: the second Maren, and Sallowford treated as new
+    store.previewThing('character', prompt, {}, null, { picks: { Maren: 'vos' }, newNames: ['Sallowford'] });
+    // the bar shows them, keyed as a name box keeps its picks
+    assert.deepEqual(store.draftPromptPicks, { maren: 'vos', sallowford: NEW_THING });
+    store.handleMessage(reply('preview_thing', draftOf(HOST)));
+    // in the bar Sallowford becomes the entry; Maren stays the second
+    store.setDraftPicks({ maren: 'vos', sallowford: 'sal' });
+    store.matchNames(prompt, null, 'bar');
+    store.handleMessage(reply('match_names', {
+        text: prompt,
+        at: null,
+        matches: [
+            { start: 0, end: 5, text: 'Maren', candidates: [HOLT, VOS] },
+            { start: 17, end: 27, text: 'Sallowford', candidates: [SALLOW] },
+        ],
+    }));
+    store.regeneratePreview();
+    assert.deepEqual(sent.at(-1).picks, { Maren: 'vos', Sallowford: 'sal' });
+    assert.equal('new_names' in sent.at(-1), false);
+    // the next version's request keeps the bar's picks
+    assert.deepEqual(store.draftPromptPicks, { maren: 'vos', sallowford: 'sal' });
+});
+
 check("versions: the owner's edits kept per version for the session, restored with it", () => {
     const { store, sent } = hostDraft();
     assert.equal(store.draft.key, 'new:lore:frostwing host');
@@ -3081,7 +3156,7 @@ check('ruling H2: words are a name when a capital is not only the sentence\'s', 
     assert.equal(wordsAreAName('Snowy Owls', 'by the ', ['Snowy Moscavian Owls']), true);
 });
 
-check('P4: link and re-point send the mode; a name taught shows as a note', () => {
+check('P4: link and re-point send the mode; a name taught shows no note (polish 4)', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('vel');
@@ -3097,15 +3172,15 @@ check('P4: link and re-point send the mode; a name taught shows as a note', () =
     store.repointStub('s1', 'owls', null, 'link');
     assert.equal(sent.at(-1).mode, 'link');
     store.handleMessage(reply('link_text', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['Pure-line Moscavians'] }));
-    assert.deepEqual(store.notes, { action: 'link_text', notes: ['Added as another name: Pure-line Moscavians'] });
+    assert.equal(store.notes, null);
     store.repointRef('f1', 0, 'holt', { mode: 'rename', useName: 'Maren Holt' });
     assert.equal(sent.at(-1).use_name, 'Maren Holt');
     store.repointRef('f1', 0, 'holt', { mode: 'link' });
     assert.equal('use_name' in sent.at(-1), false);
     assert.equal(sent.at(-1).mode, 'link');
     store.handleMessage(reply('repoint_ref', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['the town'] }));
-    assert.deepEqual(store.notes, { action: 'repoint_ref', notes: ['Added as another name: the town'] });
-    assert.equal(otherNamesNote(['a', 'b']), 'Added as another name: a, b');
+    // polish 4: no note says what the target learned
+    assert.notEqual(store.notes?.action, 'repoint_ref');
 });
 
 // --- Task 10 fix round 1 -------------------------------------------------------

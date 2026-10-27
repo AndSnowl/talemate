@@ -31,16 +31,17 @@
                     variant="outlined"
                     hide-details
                     autofocus
-                    @keydown.enter.prevent="results.length && pick(results[0])"
+                    @keydown.enter.prevent="results.length && pick(results[0].target)"
                 ></v-text-field>
                 <v-list density="compact" class="results">
-                    <v-list-item v-for="target in results" :key="target.id" data-testid="reference-result" @click="pick(target)">
-                        <v-list-item-title :class="{ 'stub-name': target.stub }">{{ target.name }}</v-list-item-title>
-                        <template #append>
-                            <v-chip size="x-small" label variant="tonal" color="muted" class="ml-2">{{ kindLabel(target.kind) }}</v-chip>
-                            <v-chip v-if="target.stub" size="x-small" label variant="tonal" color="foreign" class="ml-1">stub</v-chip>
-                        </template>
-                    </v-list-item>
+                    <EntryResult
+                        v-for="result in results"
+                        :key="result.target.id"
+                        :target="result.target"
+                        :matched="result.matched"
+                        data-testid="reference-result"
+                        @click="pick(result.target)"
+                    ></EntryResult>
                     <v-list-item v-if="query.trim() && !results.length" disabled title="Nothing by that name"></v-list-item>
                 </v-list>
             </div>
@@ -50,8 +51,8 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import { searchReferences } from './nameHighlights.js';
-import { kindInfo } from './worldKinds.js';
+import EntryResult from './EntryResult.vue';
+import { searchEntries } from './nameHighlights.js';
 
 // The right-click menu of a text box the owner writes in
 // (`NameHighlightInput`): the browser's Cut, Copy, Paste and Delete, Undo
@@ -64,6 +65,7 @@ import { kindInfo } from './worldKinds.js';
 // Shown at `target`, a point (`[x, y]`) or an element.
 export default {
     name: 'ReferenceMenu',
+    components: { EntryResult },
     props: {
         modelValue: { type: Boolean, default: false },
         target: { type: [Array, Object, String], default: null },
@@ -83,7 +85,7 @@ export default {
     computed: {
         results() {
             const targets = this.worlds.referenceTargets.filter((target) => !this.exclude.includes(target.id));
-            return searchReferences(targets, this.query);
+            return searchEntries(targets, this.query);
         },
     },
     watch: {
@@ -95,9 +97,6 @@ export default {
         },
     },
     methods: {
-        kindLabel(kind) {
-            return kindInfo(kind)?.singular || kind;
-        },
         act(action) {
             this.$emit(action);
             this.$emit('update:modelValue', false);
@@ -119,11 +118,5 @@ export default {
     max-height: 260px;
     overflow-y: auto;
     background: transparent;
-}
-
-.stub-name {
-    color: rgb(var(--v-theme-foreign));
-    text-decoration: underline dashed;
-    text-underline-offset: 2px;
 }
 </style>

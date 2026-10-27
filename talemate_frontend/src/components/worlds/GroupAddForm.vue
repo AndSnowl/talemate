@@ -1,20 +1,18 @@
 <template>
     <div class="group-add pa-2" data-testid="group-add">
         <template v-if="!found">
-            <v-textarea
+            <NameHighlightInput
                 v-model="prompt"
                 :label="promptLabel"
                 :placeholder="tag ? `two more ${heading.toLowerCase()}, …` : 'a guild of ice-road pilots, …'"
-                auto-grow
-                rows="2"
-                density="compact"
-                variant="outlined"
-                hide-details
+                :rows="2"
+                dense
                 autofocus
+                :pickable="false"
                 data-testid="group-add-prompt"
                 @keydown.enter.exact="onEnter"
                 @keydown.esc="$emit('close')"
-            ></v-textarea>
+            />
             <div class="d-flex ga-2 mt-2">
                 <v-btn color="accent" variant="flat" size="small" prepend-icon="mdi-creation" :disabled="!prompt.trim()" data-testid="group-add-draft" @click="draft">Draft</v-btn>
                 <v-btn variant="text" size="small" @click="$emit('close')">Cancel</v-btn>
@@ -119,6 +117,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { tagHeading } from './entryPage.js';
 import { groupDraftKey, smallVersionRows } from './smallDrafts.js';
+import NameHighlightInput from './NameHighlightInput.vue';
 import SuggestionBar from './SuggestionBar.vue';
 import SuggestionRow from './SuggestionRow.vue';
 
@@ -137,7 +136,7 @@ import SuggestionRow from './SuggestionRow.vue';
 // tag and is filed showing under the group.
 export default {
     name: 'GroupAddForm',
-    components: { SuggestionBar, SuggestionRow },
+    components: { NameHighlightInput, SuggestionBar, SuggestionRow },
     props: {
         thingId: { type: String, required: true },
         tag: { type: String, default: null },

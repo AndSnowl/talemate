@@ -16,6 +16,7 @@ rolls back everything the revision did, including the revision row itself.
 import builtins
 import functools
 import json
+import re
 import sqlite3
 import uuid
 from collections.abc import Callable, Iterator
@@ -42,7 +43,7 @@ from .kinds import (
     validate_field,
 )
 from .curation import CurationSettings
-from .refs import parse_refs
+from .refs import REF_PATTERN, parse_refs
 from .filing import check_filings, stored_filings_value
 from .view import FactState, WorldView, _fact_state_from_row
 
@@ -200,6 +201,36 @@ class Revision:
         if row is None:
             raise KeyError(f"no such thing: {thing_id}")
         return cast(str, row[0])
+
+    def _dead_links_as_words(self, text: str) -> str:
+        """`text` with each link to a removed thing replaced by the words
+        it reads as (its shown text, else the thing's latest name), as a
+        view renders it (P5, polish 4): a fact rewritten for any reason
+        keeps its words, not a link to nothing. A link to an id that was
+        never a thing stays, for `_check_refs` to refuse."""
+
+        def words(match: re.Match[str]) -> str:
+            thing_id, shown = match.group(1), match.group(2)
+            try:
+                self._require_thing(thing_id)
+                return match.group(0)
+            except KeyError:
+                pass
+            try:
+                self._thing_kind(thing_id)
+            except KeyError:
+                return match.group(0)
+            if shown is not None:
+                return shown
+            row = self._conn.execute(
+                "SELECT value_json FROM field_values "
+                "WHERE thing_id = ? AND field = 'name' AND rev_added <= ? "
+                "ORDER BY valid_from DESC, row_id DESC LIMIT 1",
+                (thing_id, self.rev),
+            ).fetchone()
+            return cast(str, json.loads(row[0])) if row is not None else match.group(0)
+
+        return REF_PATTERN.sub(words, text)
 
     def _check_refs(self, text: str) -> None:
         """Raise `ValueError` unless every thing `text` references is live
@@ -483,6 +514,7 @@ class Revision:
             raise ValueError(f"{kind!r} has no fact category {category!r}")
 
         self._check_span(valid_from, valid_until)
+        text = self._dead_links_as_words(text)
         self._check_refs(text)
         overrides = overrides or []
         self._check_overrides(overrides)
@@ -569,6 +601,7 @@ class Revision:
             raise ValueError(f"{kind!r} has no fact category {new_category!r}")
 
         self._check_span(new_from, new_until)
+        new_text = self._dead_links_as_words(new_text)
         self._check_refs(new_text)
         self._check_overrides(new_overrides)
 

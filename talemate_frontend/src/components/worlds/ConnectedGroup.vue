@@ -62,7 +62,8 @@
                 data-testid="connected-row"
                 @dragstart="dragStart($event, row)"
             >
-                <a href="#" :class="row.stub ? 'stub-link' : 'thing-link'" draggable="false" data-testid="connected-name" @click.prevent="worlds.openThing(row.id)">{{ row.name }}</a>
+                <LinkedText v-if="row.stub" repoint-stub :segments="[{ text: row.name, ref: row.id, stub: true }]" draggable="false" data-testid="connected-name" />
+                <a v-else href="#" class="thing-link" draggable="false" data-testid="connected-name" @click.prevent="worlds.openThing(row.id)">{{ row.name }}</a>
                 <span v-if="row.believed" class="believed" data-testid="connected-believed">believed</span>
                 <span v-if="row.stub && !lineOf(row)" class="text-caption text-muted"> stub</span>
                 <span v-if="lineOf(row)" class="line"> — {{ lineOf(row) }}</span>
@@ -105,6 +106,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import { filingDates, groupKey, groupView, rowMove } from './entryPage.js';
 import GroupAddForm from './GroupAddForm.vue';
+import LinkedText from './LinkedText.vue';
 import { groupDraftKey } from './smallDrafts.js';
 
 // the drag's data type: the row dragged and the group it's from
@@ -116,8 +118,8 @@ const OTHER_DROP_TIP = 'Dropped here, a row shown under a group goes back under 
 // One of Connected's groups (mockup v3, screen A): the entries filed in
 // the page that share a tag, under its heading ("Rivers") with how many,
 // one line each -- the entry's own summary, the filing's role and dates (an
-// ended one its span, "900–1015"); a stub in the stub style. The group
-// folds. A long one (more than `GROUP_SHOWN`) shows a filter box, then its
+// ended one its span, "900–1015"); a stub in the stub style, with a
+// fact's stub card (`LinkedText`). The group folds. A long one (more than `GROUP_SHOWN`) shows a filter box, then its
 // synopsis, then its first rows and "show all". "✎ Synopsis" asks for the
 // group's synopsis (`group_synopsis`; again, skipping the cache, once
 // there is one); "+ Add" drafts new entries for it (`GroupAddForm`).
@@ -134,7 +136,7 @@ const OTHER_DROP_TIP = 'Dropped here, a row shown under a group goes back under 
 // its fold, filter and "show all" never carry over to another page.
 export default {
     name: 'ConnectedGroup',
-    components: { GroupAddForm },
+    components: { GroupAddForm, LinkedText },
     props: {
         // the page's id
         thingId: { type: String, required: true },
@@ -273,11 +275,6 @@ export default {
 .thing-link {
     color: rgb(var(--v-theme-link));
     text-decoration: underline dotted;
-}
-
-.stub-link {
-    color: rgb(var(--v-theme-foreign));
-    text-decoration: underline dashed;
 }
 
 .role,

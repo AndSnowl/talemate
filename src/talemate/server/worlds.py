@@ -521,6 +521,7 @@ from talemate.worldplay.repoint import (
     move_fact,
     renamed_words,
     repoint_stub,
+    retitle,
     target_name,
 )
 from talemate.worldplay.setup import (
@@ -698,8 +699,20 @@ class CorrectFactPayload(_ThingEdit):
 
 # how a link takes its words (P4, ruling H2): "link" keeps them and teaches
 # nothing, "name" keeps them and teaches them as another name, "rename"
-# writes one of the target's names (`use_name`) in their place
-LinkMode = Literal["link", "name", "rename"]
+# writes one of the target's names (`use_name`) in their place, "retitle"
+# (polish 4) keeps them and makes them the target's main name, its old one
+# an other name (`repoint.retitle`)
+LinkMode = Literal["link", "name", "rename", "retitle"]
+
+
+def _aka_names(state: ThingState) -> list[str]:
+    """A thing's other names, the names alone, in their order."""
+
+    return [
+        str(entry.get("name"))
+        for entry in (state.fields.get("aka") or [])
+        if isinstance(entry, dict) and entry.get("name")
+    ]
 
 
 def _link_mode(
@@ -1446,7 +1459,7 @@ class _Links:
         return out
 
     def named_stubs(self, state: ThingState) -> list[dict]:
-        """`{id, name, kind}` of each live stub `state`'s facts link to (not
+        """`{id, name, kind, tag, mentions, ignored}` of each live stub `state`'s facts link to (not
         an ignored one), in the order they're first linked."""
 
         found: list[dict] = []
@@ -1464,6 +1477,11 @@ class _Links:
                         "id": thing_id,
                         "name": self.view.name_of(thing_id) or "",
                         "kind": other.kind,
+                        # the rest of a `list_stubs` row, so the stub's card
+                        # is whole on the page that names it (polish 4)
+                        "tag": tag_of(other),
+                        "mentions": len(mentions(self.view, thing_id)),
+                        "ignored": False,
                     }
                 )
         return found
@@ -1899,13 +1917,15 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, in
     """`(text, start, end)`: where the selected `start:end` of a fact's
     rendered text (as `view.render` shows it, the payload's `rendered`)
     lies in its stored `text`, links kept: a selection may cover plain
-    words only, never cut through or take in a link (`ValueError`).
+    words and whole links, never cut through a link (`ValueError`).
     Leading and trailing spaces are left out.
 
-    A link whose target is deleted (P5) shows as plain words and counts as
-    them: each one the selection touches, whole or in part, is replaced by
-    its words in the `text` returned (the rest of the fact as stored), so
-    the caller writes the selection's link over them.
+    A link the selection holds whole (polish 4: "House of Solarius" over
+    the "Solarius" link) counts as its words: it's replaced by them in the
+    `text` returned (the rest of the fact as stored), so the caller writes
+    the selection's link over them, the longer name winning. So is a link
+    whose target is deleted (P5), which shows as plain words: each one the
+    selection touches, whole or in part.
 
     `start` and `end` are UTF-16 code units (ruling F18), the page's own
     unit, converted here (`_code_points`). They index `rendered`, not the
@@ -1926,7 +1946,7 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, in
         end -= 1
     if start == end:
         raise ValueError("the selection holds no words")
-    text = _dead_links_as_words(view, text, start, end)
+    text = _links_as_words(view, text, start, end)
     # rendered offset -> stored offset, run by run
     shown = 0
     stored = 0
@@ -1952,10 +1972,10 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, in
     return text, raw_start, raw_end
 
 
-def _dead_links_as_words(view: WorldView, text: str, start: int, end: int) -> str:
-    """`text` with each link to a deleted thing that the rendered
-    `start:end` touches replaced by the words it renders as (P5); the
-    rendered text is the same either way."""
+def _links_as_words(view: WorldView, text: str, start: int, end: int) -> str:
+    """`text` with each link the rendered `start:end` holds whole, and
+    each link to a deleted thing it touches (P5), replaced by the words it
+    renders as; the rendered text is the same either way."""
 
     shown = 0
     stored = 0
@@ -1965,8 +1985,9 @@ def _dead_links_as_words(view: WorldView, text: str, start: int, end: int) -> st
         words = view.render(found.group(0))
         dead = view.thing(found.group(1)) is None
         touched = start < shown + len(words) and end > shown
+        whole = start <= shown and shown + len(words) <= end
         out.append(text[stored : found.start()])
-        out.append(words if dead and touched else found.group(0))
+        out.append(words if whole or (dead and touched) else found.group(0))
         shown += len(words)
         stored = found.end()
     out.append(text[stored:])
@@ -2630,6 +2651,8 @@ class WorldsPlugin(Plugin):
                 "id": state.id,
                 "kind": state.kind,
                 "name": view.name_of(state.id) or "",
+                # its other names, so a picker finds it by one (polish 4)
+                "aka": _aka_names(state),
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
@@ -2653,6 +2676,7 @@ class WorldsPlugin(Plugin):
                 "id": state.id,
                 "kind": state.kind,
                 "name": view.name_of(state.id) or "",
+                "aka": _aka_names(state),
                 "species_ids": heritage.species_of(view, state.id),
             }
             for kind in HERITAGE_KINDS
@@ -4469,8 +4493,13 @@ class WorldsPlugin(Plugin):
         if not 0 <= index < len(preview.facts):
             raise ValueError(f"the draft has no fact {payload.index}")
         stored = preview.facts[index].text
-        text, start, end = _raw_span(world.view(), stored, payload.start, payload.end)
-        if text != stored:
+        view = world.view()
+        text, start, end = _raw_span(view, stored, payload.start, payload.end)
+        kept = {found.group(0) for found in REF_PATTERN.finditer(text)}
+        if any(
+            view.thing(found.group(1)) is None and found.group(0) not in kept
+            for found in REF_PATTERN.finditer(stored)
+        ):
             # a draft keeps its picks by name and writes no text here, so a
             # dead link's words can't be taken out of it (P5)
             raise ValueError(
@@ -4621,7 +4650,7 @@ class WorldsPlugin(Plugin):
         if payload.draft_key is not None:
             # a draft's fact (ruling F16): a pick, keyed by name, so accept
             # links every place the draft writes these words
-            if mode == "rename":
+            if mode in ("rename", "retitle"):
                 raise ValueError(
                     "on a draft the words can't be renamed yet: rename them"
                     " once it's accepted"
@@ -4648,11 +4677,12 @@ class WorldsPlugin(Plugin):
                 fact.fact_id,
                 text=text[:start] + ref(payload.target_id, shown) + text[end:],
             )
-            added = (
-                learn_names(rev, world, payload.target_id, [words])
-                if mode == "name"
-                else []
-            )
+            if mode == "retitle":
+                added = retitle(rev, world, payload.target_id, words)
+            elif mode == "name":
+                added = learn_names(rev, world, payload.target_id, [words])
+            else:
+                added = []
         at = _date_in(payload.at)
         self._reply(
             "link_text",
@@ -4661,6 +4691,9 @@ class WorldsPlugin(Plugin):
         if payload.use_name is not None:
             # the fact's words changed
             self._schedule_prose(owner_id, at)
+        if mode == "retitle":
+            # the target's name changed
+            self._schedule_prose(payload.target_id, at)
 
     # --- stubs ------------------------------------------------------------
 
@@ -4811,6 +4844,7 @@ class WorldsPlugin(Plugin):
             payload.target_id,
             use_name=payload.use_name,
             teach_names=mode != "link",
+            retitle=mode == "retitle",
         )
         self._reply(
             "repoint_stub",
@@ -5041,7 +5075,8 @@ class WorldsPlugin(Plugin):
         # only when this was its last reference (it names nothing else, so
         # its names are free)
         from_id = old.group(1) if old else None
-        names = [(old.group(2) or rendered) if old else ""] if mode == "name" else []
+        words = (old.group(2) or rendered) if old else ""
+        names = [words] if mode == "name" else []
         skip: set[str] = set()
         source = view.thing(from_id) if from_id else None
         if (
@@ -5069,17 +5104,40 @@ class WorldsPlugin(Plugin):
                 ]
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(payload.fact_id, text=new_text)
-            added = learn_names(
-                rev,
-                world,
-                payload.to_id,
-                names,
-                skip=skip,
-            )
+            if mode == "retitle":
+                # the stub's last link, and nothing else uses it: it goes,
+                # so no two things share the name; else it keeps the name,
+                # and the retitle is refused
+                removable = bool(skip) and not any(
+                    found
+                    for kind, found in thing_references(world, from_id or "").items()
+                    if kind != "facts"
+                )
+                added = retitle(
+                    rev,
+                    world,
+                    payload.to_id,
+                    words,
+                    also=names,
+                    skip=skip if removable else frozenset(),
+                )
+                if removable:
+                    rev.remove_thing(from_id or "")
+            else:
+                added = learn_names(
+                    rev,
+                    world,
+                    payload.to_id,
+                    names,
+                    skip=skip,
+                )
         self._reply(
             "repoint_ref",
             {**self._thing_payload(world, payload.thing_id, at), "aka_added": added},
         )
+        if mode == "retitle":
+            # the target's name changed
+            self._schedule_prose(payload.to_id, at)
         if payload.use_name is not None:
             # the fact's words changed
             self._schedule_prose(payload.thing_id, at)

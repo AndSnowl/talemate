@@ -47,6 +47,7 @@
         >{{ segment.text }}</a></template>
         <StubCard :stub="stubOf(segment)">
             <v-btn v-if="repoint" variant="outlined" size="small" prepend-icon="mdi-swap-horizontal" @click="startRepoint(index, $event)">Re-point…</v-btn>
+            <StubRepointButton v-else-if="repointStub && !stubOf(segment).ignored" :stub="stubOf(segment)" />
         </StubCard>
     </v-menu><span
         v-else-if="segment.fresh"
@@ -84,6 +85,7 @@ import { canExpand } from './worldKinds.js';
 import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 import StubCard from './StubCard.vue';
+import StubRepointButton from './StubRepointButton.vue';
 
 // Text with its names linked, from the backend's `segments` (`{text, ref,
 // stub}` runs; a preview's are made by `previewSegments`). A run linking an
@@ -101,7 +103,10 @@ import StubCard from './StubCard.vue';
 // the words (`NameModeMenu`, P4: another name of it, or renamed to one of
 // its names, or only linked, ruling H2), emitted as `repoint {index, to,
 // mode, useName}` (`index` into `segments`); the page rewrites the fact.
-// `exclude` are ids never offered.
+// `exclude` are ids never offered. With `repointStub` instead (where a
+// stub is named outside a fact: "Stubs this entry named"), a stub's card
+// re-points the whole stub, as on the Stubs page. A segment's `row` (its
+// `list_stubs`-shaped row) fills the card while the stubs aren't listed.
 //
 // With `selectable` (a fact's words), right-clicking selected words inside
 // it emits `select {start, end, words, before, x, y}` (`before`: the text
@@ -112,11 +117,13 @@ import StubCard from './StubCard.vue';
 // row (its fact menu).
 export default {
     name: 'LinkedText',
-    components: { NameModeMenu, ReferenceMenu, StubCard },
+    components: { NameModeMenu, ReferenceMenu, StubCard, StubRepointButton },
     props: {
         segments: { type: Array, default: null },
         text: { type: String, default: '' },
         repoint: { type: Boolean, default: false },
+        // a stub's card re-points the whole stub (`StubRepointButton`)
+        repointStub: { type: Boolean, default: false },
         exclude: { type: Array, default: () => [] },
         selectable: { type: Boolean, default: false },
     },
@@ -149,7 +156,7 @@ export default {
     methods: {
         // the stub's listing, else what the run itself says
         stubOf(segment) {
-            return this.worlds.stubInfo(segment.ref) || { id: segment.ref, name: segment.text, kind: null, mentions: null, ignored: false };
+            return this.worlds.stubInfo(segment.ref) || segment.row || { id: segment.ref, name: segment.text, kind: null, mentions: null, ignored: false };
         },
         // the linked entry's name (its listing), else the words linked
         targetName(segment) {

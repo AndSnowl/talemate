@@ -264,7 +264,9 @@ def test_fill_stub_instead(app, page, fixed_preview):
     fbox = bar.get_by_test_id("fill-stub-instead").bounding_box()
     assert 0 <= accept["x"] - (fbox["x"] + fbox["width"]) <= 16
     assert preview.get_by_test_id("matching-stub").count() == 0
-    expect(preview.get_by_test_id("accept-counts")).to_contain_text("a stub named Kalmara exists")
+    expect(preview.get_by_test_id("accept-counts")).to_contain_text(
+        "a stub named Kalmara exists"
+    )
     expect(preview.get_by_test_id("fill-stub-instead-foot")).to_be_visible()
     fill.click()
     thing = _opened(page, "Kalmara")

@@ -11,12 +11,11 @@
         <!-- "+ In…": an entry the world has, or a new stub of that name -->
         <div v-if="adding" class="in-form pa-2 mb-2" data-testid="in-add-form" @keydown.esc="escape($event)">
             <div class="d-flex align-center flex-wrap ga-2">
-                <v-autocomplete
+                <EntryAutocomplete
                     v-model="adding.target"
                     v-model:search="adding.search"
-                    :items="targetItems"
-                    item-title="name"
-                    item-value="id"
+                    :targets="targetItems"
+                    :extras="newItems"
                     label="In…"
                     placeholder="search the world, or type a new name"
                     density="compact"
@@ -25,11 +24,7 @@
                     autofocus
                     class="in-target"
                     data-testid="in-target"
-                >
-                    <template #item="{ props: itemProps, item }">
-                        <v-list-item v-bind="itemProps" :subtitle="item.raw.subtitle"></v-list-item>
-                    </template>
-                </v-autocomplete>
+                ></EntryAutocomplete>
                 <template v-if="adding.target === NEW">
                     <v-select v-model="adding.kind" :items="kindItems" label="Kind" density="compact" variant="outlined" hide-details class="in-small" data-testid="in-new-kind"></v-select>
                     <v-text-field v-model="adding.tag" label="Tag" density="compact" variant="outlined" hide-details class="in-small" data-testid="in-new-tag"></v-text-field>
@@ -97,19 +92,17 @@
                     <v-combobox v-model="editing.role" :items="roleItems" label="Role" :placeholder="ROLE_HINT" density="compact" variant="outlined" hide-details class="in-role" autofocus></v-combobox>
                     <v-text-field v-model.number="editing.since" label="Since (year)" type="number" density="compact" variant="outlined" hide-details class="in-year"></v-text-field>
                     <v-text-field v-if="!draft" v-model.number="editing.until" label="Until (year)" type="number" density="compact" variant="outlined" hide-details class="in-year"></v-text-field>
-                    <v-autocomplete
+                    <EntryAutocomplete
                         v-if="persons && !row.new_name"
                         v-model="editing.within"
-                        :items="withinItems(row)"
-                        item-title="name"
-                        item-value="id"
+                        :targets="withinItems(row)"
                         label="Within (a part of it)"
                         clearable
                         density="compact"
                         variant="outlined"
                         hide-details
                         class="in-target"
-                    ></v-autocomplete>
+                    ></EntryAutocomplete>
                     <v-btn color="accent" variant="flat" size="small" :disabled="!editValid" :loading="!draft && !!worlds.pending.edit_filing" @click="saveEdit(row)">Save</v-btn>
                     <v-btn variant="text" size="small" @click="editing = null">Cancel</v-btn>
                 </div>
@@ -122,7 +115,7 @@
             </div>
             <div v-if="butting && butting.targetId === row.target_id" class="in-form pa-2 mb-2 d-flex align-center flex-wrap ga-2" data-testid="in-but-form" @keydown.esc="escape($event)">
                 <span class="text-caption text-muted"><i>but…</i></span>
-                <v-text-field v-model="butting.text" label="How they differ" density="compact" variant="outlined" hide-details class="flex-grow-1" autofocus @keydown.enter="saveBut(row)"></v-text-field>
+                <NameHighlightInput v-model="butting.text" v-model:picks="butting.picks" :at="worlds.thingAt" label="How they differ" :show-label="false" :rows="1" dense autofocus class="flex-grow-1" @keydown.enter.exact="onButEnter($event, row)" />
                 <v-btn color="accent" variant="flat" size="small" :disabled="!butting.text.trim()" :loading="!!worlds.pending.add_exception" @click="saveBut(row)">Add</v-btn>
                 <v-btn variant="text" size="small" @click="butting = null">Cancel</v-btn>
             </div>
@@ -135,8 +128,11 @@ import { useWorldsStore } from '@/stores/worlds.js';
 import { dateOf, dateParts } from './worldDates.js';
 import { filingDates, normaliseTag, roleLead } from './entryPage.js';
 import { filingKey } from './draftPage.js';
+import { linkPayload } from './nameHighlights.js';
 import { STUB_KINDS, actsInWorld, escapeCloses, kindInfo } from './worldKinds.js';
+import EntryAutocomplete from './EntryAutocomplete.vue';
 import LinkedText from './LinkedText.vue';
+import NameHighlightInput from './NameHighlightInput.vue';
 import TagChip from './TagChip.vue';
 
 // the target choice that makes a stub of the typed name, and its title
@@ -182,7 +178,7 @@ function yearOf(date) {
 // rows is the tick. A stub's filings so far show as they are.
 export default {
     name: 'EntryIn',
-    components: { LinkedText, TagChip },
+    components: { EntryAutocomplete, LinkedText, NameHighlightInput, TagChip },
     props: {
         // the page's payload (a draft's: its rows as the owner left them)
         thing: { type: Object, required: true },
@@ -214,19 +210,16 @@ export default {
         newName() {
             return (this.adding?.typed || '').trim();
         },
-        // every entry and live stub but this one and those it's in, then
-        // "Make a stub" for a typed name the world hasn't
+        // every entry and live stub but this one and those it's in
         targetItems() {
             const filed = new Set(this.rows.filter((row) => !row.draft || row.ticked).map((row) => row.target_id));
-            const items = this.worlds.referenceTargets
-                .filter((target) => target.id !== this.thing.id && !filed.has(target.id))
-                .map((target) => ({ ...target, subtitle: target.stub ? `${target.kind} · stub` : target.kind }));
-            const name = this.newName;
-            const known = items.some((item) => item.name.toLowerCase() === name.toLowerCase());
-            if (name && !known) {
-                items.push({ id: NEW, name: `${NEW_LABEL}${name}”`, subtitle: 'a new entry, to expand later' });
-            }
-            return items;
+            return this.worlds.referenceTargets.filter((target) => target.id !== this.thing.id && !filed.has(target.id));
+        },
+        // "Make a stub" for a typed name the world hasn't
+        newItems() {
+            const name = this.newName.toLowerCase();
+            const known = this.targetItems.some((target) => [target.name, ...(target.aka || [])].some((each) => each.toLowerCase() === name));
+            return name && !known ? [{ id: NEW, name: `${NEW_LABEL}${this.newName}”`, subtitle: 'a new entry, to expand later' }] : [];
         },
         addValid() {
             const adding = this.adding;
@@ -409,12 +402,21 @@ export default {
             }
         },
         startBut(row) {
-            this.butting = { targetId: row.target_id, text: '' };
+            this.butting = { targetId: row.target_id, text: '', picks: {} };
+        },
+        // Enter adds it (not mid-composition: an IME's Enter picks a word)
+        onButEnter(event, row) {
+            if (event.isComposing) {
+                return;
+            }
+            event.preventDefault();
+            this.saveBut(row);
         },
         saveBut(row) {
             const text = this.butting?.text.trim();
             if (text) {
-                this.worlds.addException(row.target_id, text);
+                const links = linkPayload(this.worlds.matchesFor(this.butting.text, this.worlds.thingAt), this.butting.picks, {}, this.butting.text);
+                this.worlds.addException(row.target_id, text, null, links);
                 this.sent = true;
             }
         },

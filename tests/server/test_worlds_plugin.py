@@ -114,7 +114,7 @@ async def test_router_list_and_get_thing(plugin):
     listed = _last(plugin, "list_things")["data"]
     assert listed["kind"] == "character"
     assert listed["things"] == [
-        {"id": maren, "kind": "character", "name": "Maren", "filed_in": []}
+        {"id": maren, "kind": "character", "name": "Maren", "aka": [], "filed_in": []}
     ]
 
     scene_id = world.scenes().create(
@@ -1164,19 +1164,28 @@ async def test_list_heritage(plugin):
                 "id": h.human,
                 "kind": "species",
                 "name": "Human",
+                "aka": [],
                 "species_ids": [h.human],
             },
-            {"id": h.orc, "kind": "species", "name": "Orc", "species_ids": [h.orc]},
+            {
+                "id": h.orc,
+                "kind": "species",
+                "name": "Orc",
+                "aka": [],
+                "species_ids": [h.orc],
+            },
             {
                 "id": h.lowlander,
                 "kind": "race",
                 "name": "Lowlander",
+                "aka": [],
                 "species_ids": [h.human],
             },
             {
                 "id": h.half_orc,
                 "kind": "mix",
                 "name": "Half-orc",
+                "aka": [],
                 "species_ids": [h.human, h.orc],
             },
         ]
@@ -1836,8 +1845,17 @@ async def test_payload_segments_and_stub_fields(plugin):
     assert thing["aka"] == []
     assert thing["stub"] is None
     assert "aka" not in thing["fields"] and "stub" not in thing["fields"]
+    # polish 4: a full stub row, as `list_stubs` gives, so the card is
+    # whole without the Stubs page
     assert thing["named_stubs"] == [
-        {"id": s.tsardom, "name": "Tsardom of Moscavia", "kind": "place"}
+        {
+            "id": s.tsardom,
+            "name": "Tsardom of Moscavia",
+            "kind": "place",
+            "tag": None,
+            "mentions": 2,
+            "ignored": False,
+        }
     ]
     assert thing["mentions"] == []
     json.dumps(thing)
@@ -1864,12 +1882,14 @@ async def test_payload_segments_and_stub_fields(plugin):
             "id": s.harbour,
             "kind": "place",
             "name": "The Harbour",
+            "aka": [],
             "filed_in": [],
         },
         s.tsardom: {
             "id": s.tsardom,
             "kind": "place",
             "name": "Tsardom of Moscavia",
+            "aka": ["Moscavia"],
             "stub": {"ignored": False},
             "filed_in": [],
         },
@@ -2385,9 +2405,11 @@ async def test_make_stub_action(plugin, monkeypatch):
         # only the phrase asked for is linked: the rest is left as it was
         _plain(" in Moscavia."),
     ]
-    assert {"id": night.id, "name": "Night of Feathers", "kind": "event"} in reply[
-        "named_stubs"
-    ]
+    assert any(
+        (row["id"], row["name"], row["kind"])
+        == (night.id, "Night of Feathers", "event")
+        for row in reply["named_stubs"]
+    )
 
     # a phrase the fact doesn't hold is refused, writing nothing
     head = world.head_rev()
@@ -6020,9 +6042,10 @@ async def test_make_stub_from_text(plugin):
         f" {ref(s.khorol, 'the river')}."
     )
 
-    # cutting through a link, or taking one in, is refused
+    # cutting through a link is refused, inside it or across its edge
+    # (taking one in whole is allowed: polish 4)
     river = rendered.index("the river")
-    for start_, end_ in ((river + 2, river + 6), (0, len(rendered))):
+    for start_, end_ in ((river + 2, river + 6), (0, river + 4)):
         before = len(_errors(plugin))
         await _act(
             plugin,
@@ -6575,8 +6598,8 @@ async def test_dead_link_beside_an_astral_character(plugin):
 
 
 async def test_ignored_stub_inside_a_dead_link_range_refuses(plugin):
-    """P5: a selection over a dead link and an ignored stub's link (shown
-    plain, still a link) is refused, writing nothing."""
+    """P5: a selection over a dead link that cuts an ignored stub's link
+    (shown plain, still a link) is refused, writing nothing."""
 
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
@@ -6598,7 +6621,7 @@ async def test_ignored_stub_inside_a_dead_link_range_refuses(plugin):
         "link_text",
         fact_id=fact,
         start=start,
-        end=rendered.index(" lives"),
+        end=rendered.index("ope lives"),
         target_id=s.tsardom,
     )
     assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
@@ -9415,3 +9438,335 @@ async def test_added_facts_show_the_entry_s_own_name_as_this_page(plugin, client
         await _drain(plugin)
     (fact,) = _last(plugin, "add_facts")["data"]["facts"]
     assert _self(name) in fact["segments"]
+
+
+async def test_list_things_carries_other_names(plugin, client):
+    """Polish 4: listings carry each entry's other names (`aka`, names
+    only), so the pickers can find an entry by one."""
+
+    s = await _open_stub_world(plugin)
+    await _act(plugin, "list_things", kind="place")
+    things = _last(plugin, "list_things")["data"]["things"]
+    tsardom = next(t for t in things if t["id"] == s.tsardom)
+    assert tsardom["aka"] == ["Moscavia"]
+    await _act(plugin, "list_heritage")
+    assert all("aka" in t for t in _last(plugin, "list_heritage")["data"]["things"])
+
+
+# --- polish 4: a selection that holds whole links --------------------------
+
+HOUSES = "Its five houses include the House of Solarius."
+
+
+async def _solarius_fact(s):
+    """Solarius (a character) and a Night Court fact linking him inside
+    "the House of Solarius"."""
+
+    with s.world.revision(Source.manual()) as rev:
+        s.solarius = rev.create_thing("character", {"name": "Solarius"})
+        fact = rev.add_fact(
+            s.court,
+            "general",
+            f"Its five houses include the House of {ref(s.solarius, 'Solarius')}.",
+        )
+    return fact
+
+
+async def test_selection_containing_a_link_becomes_a_stub(plugin):
+    s = await _open_filing_world(plugin)
+    fact = await _solarius_fact(s)
+    solarius = s.world.view().thing(s.solarius).fields
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("House of Solarius"),
+        kind="lore",
+    )
+    stub_id = _last(plugin, "make_stub_from_text")["data"]["stub_id"]
+    view = s.world.view()
+    assert view.thing(stub_id).fields["name"] == "House of Solarius"
+    assert view.fact(fact)[1].text == (
+        f"Its five houses include the {ref(stub_id, 'House of Solarius')}."
+    )
+    # Solarius is untouched, and the house isn't filed under him
+    assert view.thing(s.solarius).fields == solarius
+    assert filings_of(view, stub_id) == []
+
+
+async def test_selection_containing_a_link_links(plugin):
+    s = await _open_filing_world(plugin)
+    fact = await _solarius_fact(s)
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("House of Solarius"),
+        target_id=s.velikoye,
+        mode="link",
+    )
+    assert s.world.view().fact(fact)[1].text == (
+        f"Its five houses include the {ref(s.velikoye, 'House of Solarius')}."
+    )
+
+
+async def test_selection_containing_a_link_but_cutting_another_is_refused(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        solarius = rev.create_thing("character", {"name": "Solarius"})
+        fact = rev.add_fact(
+            s.court,
+            "general",
+            f"The House of {ref(solarius, 'Solarius')} keeps"
+            f" {ref(s.vigil, 'the Dawn Vigil')}.",
+        )
+    rendered = "The House of Solarius keeps the Dawn Vigil."
+    start = rendered.index("House")
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    for action, extra in (
+        ("link_text", {"target_id": s.velikoye, "mode": "link"}),
+        ("make_stub_from_text", {"kind": "lore"}),
+    ):
+        await _act(
+            plugin,
+            action,
+            fact_id=fact,
+            start=start,
+            end=rendered.index(" Vigil"),
+            **extra,
+        )
+        assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
+    assert len(_errors(plugin)) == before + 2
+    assert s.world.head_rev() == head
+
+
+async def test_draft_selection_containing_a_name_becomes_a_stub(plugin, client):
+    """On a draft the names are picks by name: "House of Solarius" made a
+    stub wins over the "Solarius" inside it on accept."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        solarius = rev.create_thing("character", {"name": "Solarius"})
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", HOUSES), prompt="x"
+    )
+    key = draft["draft_key"]
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("House of Solarius"),
+        kind="lore",
+    )
+    preview = _last(plugin, "make_stub_from_text")["data"]["preview"]
+    await _act(plugin, "accept_preview", preview=preview, draft_key=key)
+    texts = [f["text"] for f in _last(plugin, "accept_preview")["data"]["facts"]]
+    house = next(
+        t.id
+        for t in s.world.view().things("lore")
+        if t.fields["name"] == "House of Solarius"
+    )
+    assert f"Its five houses include the {ref(house, 'House of Solarius')}." in texts
+    assert solarius not in "".join(texts)
+
+
+async def test_draft_selection_containing_a_name_links(plugin, client):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        rev.create_thing("character", {"name": "Solarius"})
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", HOUSES), prompt="x"
+    )
+    key = draft["draft_key"]
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "link_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("House of Solarius"),
+        target_id=s.velikoye,
+        mode="link",
+    )
+    preview = _last(plugin, "link_text")["data"]["preview"]
+    await _act(plugin, "accept_preview", preview=preview, draft_key=key)
+    texts = [f["text"] for f in _last(plugin, "accept_preview")["data"]["facts"]]
+    assert (
+        f"Its five houses include the {ref(s.velikoye, 'House of Solarius')}." in texts
+    )
+
+
+# --- polish 4: re-point can rename the entry to the words ------------------
+
+PURE = "Pure-line Moscavians"
+SNOWY = "Snowy Moscavian Owls"
+
+
+def _names_of(world, thing_id):
+    state = world.view().thing(thing_id)
+    return state.fields["name"], [e["name"] for e in state.fields.get("aka") or []]
+
+
+async def test_repoint_retitle_renames_the_target(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        fact = rev.add_fact(s.court, "general", f"The {PURE} keep the old ways.")
+    rendered = f"The {PURE} keep the old ways."
+    start = rendered.index(PURE)
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len(PURE),
+        target_id=snowy,
+        mode="retitle",
+    )
+    assert s.world.head_rev() == head + 1
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().fact(fact)[1].text == (
+        f"The {ref(snowy, PURE)} keep the old ways."
+    )
+
+
+async def test_repoint_ref_retitle_renames_the_target(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        other = rev.create_thing("lore", {"name": "Old Lines"})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(other, PURE)} keep the old ways."
+        )
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=snowy,
+        mode="retitle",
+    )
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().fact(fact)[1].text == (
+        f"The {ref(snowy, PURE)} keep the old ways."
+    )
+
+
+async def test_repoint_stub_retitle_renames_the_target(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(stub, PURE)} keep the old ways."
+        )
+    head = s.world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=stub, target_id=snowy, mode="retitle")
+    assert s.world.head_rev() == head + 1
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().thing(stub) is None
+    assert s.world.view().fact(fact)[1].text == (
+        f"The {ref(snowy, PURE)} keep the old ways."
+    )
+
+
+async def test_repoint_retitle_refuses_a_name_in_use(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        rev.create_thing("lore", {"name": "Old Lines", "aka": [_aka(PURE)]})
+        fact = rev.add_fact(s.court, "general", f"The {PURE} keep the old ways.")
+    rendered = f"The {PURE} keep the old ways."
+    start = rendered.index(PURE)
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len(PURE),
+        target_id=snowy,
+        mode="retitle",
+    )
+    # a stub of that name re-pointed: the name's Old Lines' too
+    with s.world.revision(Source.manual()) as rev:
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        rev.add_fact(s.dawn, "general", f"The {ref(stub, PURE)} came.")
+    head = s.world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=stub, target_id=snowy, mode="retitle")
+    errors = _errors(plugin)[before:]
+    assert len(errors) == 2
+    for error in errors:
+        assert f"{PURE} is already the name of Old Lines" in error["error"]["message"]
+    assert s.world.head_rev() == head
+    assert _names_of(s.world, snowy) == (SNOWY, [])
+    assert s.world.view().fact(fact)[1].text == rendered
+
+
+async def test_repoint_ref_retitle_from_a_stubs_last_link_removes_it(plugin):
+    """Final review I1: a stub's only link re-pointed with "Rename the entry
+    to these words": the entry takes the stub's name and the stub goes, in
+    the same revision, so no two things share the name."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(stub, PURE)} keep the old ways."
+        )
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=snowy,
+        mode="retitle",
+    )
+    assert s.world.head_rev() == head + 1
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().thing(stub) is None
+
+
+async def test_repoint_ref_retitle_from_a_stub_named_elsewhere_says_so(plugin):
+    """Final review I1: the stub still has other links, so it keeps its
+    name: the refusal says it's a stub, and what to do instead."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(stub, PURE)} keep the old ways."
+        )
+        rev.add_fact(s.dawn, "general", f"The {ref(stub, PURE)} came.")
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=snowy,
+        mode="retitle",
+    )
+    (error,) = _errors(plugin)[before:]
+    assert (
+        f"{PURE} is already the name of the stub {PURE}: re-point the whole"
+        " stub instead" in error["error"]["message"]
+    )
+    assert s.world.head_rev() == head

@@ -11,7 +11,7 @@ from talemate.world.dates import WorldDate
 from talemate.world.filing import filings_of
 from talemate.world.refs import ref
 from talemate.world.store import Source
-from talemate.worldplay.repoint import repoint_stub
+from talemate.worldplay.repoint import move_fact, repoint_stub, retitle
 
 
 def _aka(name, tag="common", everyday=False):
@@ -400,3 +400,78 @@ def test_repoint_adds_names_at_every_dated_value(world):
 
     assert names(1000) == ["Old", "Kingdom"]
     assert names(1020) == ["New", "Kingdom"]
+
+
+# --- polish 4: dead links become words on a rewrite ---------------------------
+
+
+def test_repoint_with_dead_links_in_the_fact(world, tsardom):
+    """A fact the re-point rewrites still links two entries since deleted
+    (one of them since remade): the re-point goes through, and their links
+    read as their words."""
+
+    with world.revision(Source.manual()) as rev:
+        kerensk = rev.create_thing("place", {"name": "Kerensk"})
+        holt = rev.create_thing("place", {"name": "Holt"})
+        fact = rev.add_fact(
+            tsardom["maren"],
+            "background",
+            f"Sailed from {ref(kerensk, 'Kerensk')} and {ref(holt, 'the holt')}"
+            f" to {ref(tsardom['stub'], 'the Tsardom')}.",
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(kerensk)
+        rev.remove_thing(holt)
+    with world.revision(Source.manual()) as rev:
+        rev.create_thing("place", {"name": "Kerensk"})
+
+    repoint_stub(world, tsardom["stub"], tsardom["target"])
+
+    assert _text(world, fact) == (
+        f"Sailed from Kerensk and the holt to {ref(tsardom['target'], 'the Tsardom')}."
+    )
+
+
+def test_move_fact_with_a_dead_link(world, tsardom):
+    with world.revision(Source.manual()) as rev:
+        holt = rev.create_thing("place", {"name": "Holt"})
+        fact = rev.add_fact(
+            tsardom["maren"], "background", f"Grew up in {ref(holt, 'the holt')}."
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(holt)
+
+    moved = move_fact(world, fact, tsardom["target"])
+
+    assert _text(world, moved) == "Grew up in the holt."
+
+
+def test_retitle_keeps_the_old_name_at_every_dated_value(world):
+    """Final review I2: renaming an entry to the words keeps its old name
+    as an other name at every dated value of them, and the new main name
+    leaves them all."""
+
+    with world.revision(Source.manual(note="kerensk")) as rev:
+        kerensk = rev.create_thing(
+            "place", {"name": "Kerensk", "aka": [_aka("Old"), _aka("Velikoye")]}
+        )
+        rev.set_field(kerensk, "aka", [_aka("New")], WorldDate.of(1010))
+    with world.revision(Source.manual()) as rev:
+        retitle(rev, world, kerensk, "Velikoye")
+
+    def names(year):
+        state = world.view(WorldDate.of(year)).thing(kerensk)
+        return state.fields["name"], [a["name"] for a in state.fields["aka"]]
+
+    assert names(1000) == ("Velikoye", ["Old", "Kerensk"])
+    assert names(1020) == ("Velikoye", ["New", "Kerensk"])
+
+
+def test_repoint_stub_retitle_refreshes_the_targets_prose(world, tsardom):
+    """Final review M2: the target's name changed, so its prose is redone."""
+
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(tsardom["stub"], "aka", [], None)
+    result = repoint_stub(world, tsardom["stub"], tsardom["target"], retitle=True)
+    assert world.view().thing(tsardom["target"]).fields["name"] == "the Tsardom"
+    assert tsardom["target"] in result.prose

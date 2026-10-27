@@ -1153,10 +1153,28 @@ def test_repoint_mode_picker(app, page):
     _search_and_pick(page, "tsar", "Tsardom of Moscavia")
     chooser = page.get_by_test_id("name-mode")
     chooser.wait_for(state="visible", timeout=TIMEOUT_MS)
+    # polish 4: four choices, in this order
     expect(chooser.get_by_test_id("mode-add-name")).to_contain_text(
-        "Add “Pure-line Moscavians” as another name"
+        "Add as another name"
     )
-    expect(chooser.get_by_test_id("mode-link-only")).to_have_count(1)
+    expect(chooser.get_by_test_id("mode-add-name")).to_contain_text(
+        "Tsardom of Moscavia also goes by “Pure-line Moscavians”"
+    )
+    expect(chooser.get_by_test_id("mode-retitle")).to_contain_text(
+        "Rename the entry to these words"
+    )
+    expect(chooser.get_by_test_id("mode-link-only")).to_contain_text("Link only")
+    order = chooser.evaluate(
+        "(el) => [...el.querySelectorAll('[data-testid^=\"mode-\"], .v-list-subheader')]"
+        ".map((e) => e.dataset.testid || e.textContent.trim())"
+    )
+    assert order == [
+        "mode-add-name",
+        "Use the entry's name",
+        "mode-rename-option",
+        "mode-retitle",
+        "mode-link-only",
+    ]
     expect(chooser.get_by_test_id("mode-rename-option")).to_have_text(
         ["Tsardom of Moscavia"]
     )
@@ -1167,9 +1185,6 @@ def test_repoint_mode_picker(app, page):
     assert sent["target_id"] == world.things["Tsardom of Moscavia"]
     assert sent["mode"] == "name"
     assert "use_name" not in sent
-    expect(page.get_by_test_id("accept-notes")).to_contain_text(
-        "Added as another name: Pure-line Moscavians"
-    )
     _fact(marsh, "nest by").get_by_test_id("linked-ref").filter(
         has_text="Pure-line Moscavians"
     ).wait_for(state="visible", timeout=TIMEOUT_MS)
@@ -1194,6 +1209,8 @@ def test_repoint_mode_picker(app, page):
     expect(
         _fact(marsh, "nest by the capital.").get_by_test_id("linked-ref")
     ).to_have_text(["Pure-line Moscavians", "the capital"])
+    # polish 4: no note says what the entry learned
+    expect(page.get_by_test_id("accept-notes")).to_have_count(0)
 
     # a stub's link: its words are a name, so adding one is the default,
     # and "Link only" says the name would be lost
@@ -1833,8 +1850,12 @@ def test_draft_add_fact_off_while_editing(app, page, fixed_preview):
     box.get_by_label("Describe it").fill("A riverside town of reed-cutters.")
     fixed_preview(_preview("Kalmara", "Reed-cutters work its shallows."))
     draft = _create_and_wait(page, box)
-    add = draft.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    add = draft.get_by_test_id("facts-heading").get_by_role(
+        "button", name="Add fact", exact=True
+    )
     expect(add).to_be_enabled()
-    draft.get_by_test_id("draft-fact").first.get_by_role("button", name="Edit fact").click()
+    draft.get_by_test_id("draft-fact").first.get_by_role(
+        "button", name="Edit fact"
+    ).click()
     expect(add).to_be_disabled()
     expect(add).to_have_attribute("title", "save or cancel the edit first")

@@ -403,18 +403,40 @@ export function refOccurrence(rawText, segments, index) {
 // The Add reference search: `targets` (`{id, name, kind, stub}`) whose name
 // holds `query`, ignoring case; names starting with it first, then by
 // name; at most `limit`. Nothing for a blank query.
-export function searchReferences(targets, query, limit = 8) {
+// How `target` (`{name, aka}`) matches `query` (already lowercased and
+// trimmed, or raw: it's normalised here): `null` when its own name holds
+// it, the other name that holds it when only one of those does, and
+// `undefined` when nothing does.
+export function entryMatch(target, query) {
+    const wanted = query.trim().toLowerCase();
+    if (!wanted) {
+        return undefined;
+    }
+    if (target.name.toLowerCase().includes(wanted)) {
+        return null;
+    }
+    const others = target.aka || [];
+    return others.find((name) => name.toLowerCase().startsWith(wanted))
+        ?? others.find((name) => name.toLowerCase().includes(wanted));
+}
+
+// The one entry search every picker uses (polish 4): targets whose name,
+// or one of whose other names (`aka`), holds `query`, as `{target,
+// matched}` (`matched`: the other name that matched, or null). Its own
+// name first, a starting match before one inside, then by name.
+export function searchEntries(targets, query, limit = 8) {
     const wanted = query.trim().toLowerCase();
     if (!wanted) {
         return [];
     }
+    const rank = ({ target, matched }) => {
+        const name = (matched ?? target.name).toLowerCase();
+        return (matched === null ? 0 : 2) + (name.startsWith(wanted) ? 0 : 1);
+    };
     return targets
-        .filter((target) => target.name.toLowerCase().includes(wanted))
-        .sort((a, b) => {
-            const aStarts = a.name.toLowerCase().startsWith(wanted) ? 0 : 1;
-            const bStarts = b.name.toLowerCase().startsWith(wanted) ? 0 : 1;
-            return aStarts - bStarts || a.name.localeCompare(b.name);
-        })
+        .map((target) => ({ target, matched: entryMatch(target, wanted) }))
+        .filter((found) => found.matched !== undefined)
+        .sort((a, b) => rank(a) - rank(b) || a.target.name.localeCompare(b.target.name))
         .slice(0, limit);
 }
 

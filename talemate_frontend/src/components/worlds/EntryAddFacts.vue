@@ -16,20 +16,18 @@
 
         <div v-if="asking && !draft" class="panel ask pa-2" :data-testid="event ? 'add-event-form' : 'add-facts-form'" @keydown.esc="asking = false">
             <div class="d-flex align-start ga-2">
-                <v-textarea
+                <NameHighlightInput
                     v-model="prompt"
                     :label="event ? 'What happened' : 'What to add'"
                     :placeholder="event ? 'the river froze and the ferries stopped…' : 'how it is governed, who serves it…'"
-                    auto-grow
-                    rows="2"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
+                    :rows="2"
+                    dense
                     autofocus
+                    :pickable="false"
                     class="flex-grow-1"
                     data-testid="add-prompt"
                     @keydown.enter.exact="onEnter"
-                ></v-textarea>
+                />
                 <v-text-field
                     v-if="event"
                     v-model.number="year"
@@ -154,6 +152,7 @@
 import { eventYearValid, useWorldsStore } from '@/stores/worlds.js';
 import { dateParts } from './worldDates.js';
 import FactLine from './FactLine.vue';
+import NameHighlightInput from './NameHighlightInput.vue';
 import PreviewRepeats from './PreviewRepeats.vue';
 import PreviewStubs from './PreviewStubs.vue';
 import SuggestionBar from './SuggestionBar.vue';
@@ -185,7 +184,7 @@ import { factsKey, smallVersionRows } from './smallDrafts.js';
 // meanwhile (`nestedHeld`).
 export default {
     name: 'EntryAddFacts',
-    components: { FactLine, PreviewRepeats, PreviewStubs, SuggestionBar, SuggestionRow },
+    components: { FactLine, NameHighlightInput, PreviewRepeats, PreviewStubs, SuggestionBar, SuggestionRow },
     props: {
         thing: { type: Object, required: true },
         event: { type: Boolean, default: false },

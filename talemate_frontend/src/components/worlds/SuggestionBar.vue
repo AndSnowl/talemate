@@ -66,18 +66,18 @@
                 @click="$emit('primary')"
             >{{ primaryLabel }}</v-btn>
         </div>
-        <v-textarea
+        <NameHighlightInput
             :model-value="prompt"
+            :picks="picks || {}"
+            :pickable="picks !== null"
             :label="promptLabel"
-            auto-grow
-            rows="2"
-            density="compact"
-            variant="outlined"
-            hide-details
+            :rows="2"
+            dense
             class="mt-2"
             :data-testid="promptTestid"
             @update:model-value="$emit('update:prompt', $event)"
-        ></v-textarea>
+            @update:picks="$emit('update:picks', $event)"
+        />
         <v-text-field
             v-if="year !== undefined"
             :model-value="year"
@@ -96,6 +96,8 @@
 </template>
 
 <script>
+import NameHighlightInput from './NameHighlightInput.vue';
+
 // The shared bar for every drafted-and-tick list (plan "polish-1"): the
 // chip (`label`), the version menu ("Version n of m ▾", rows from
 // `smallVersionRows` or `versionRows`, `use-version(n)`), Regenerate, a
@@ -113,6 +115,7 @@
 // group-add's own Add/Discard row).
 export default {
     name: 'SuggestionBar',
+    components: { NameHighlightInput },
     props: {
         // the chip's text ('Draft', …)
         label: { type: String, default: '' },
@@ -135,6 +138,9 @@ export default {
         testid: { type: String, default: null },
         // the prompt field's own data-testid ('add-prompt', 'group-add-prompt', …)
         promptTestid: { type: String, default: null },
+        // the prompt's name picks, where its request takes them (a page
+        // draft's); else its names are highlighted only
+        picks: { type: Object, default: null },
         // internal ids a call site needs to keep (e.g. DraftBar's
         // existing `draft-versions`, `draft-version`, `draft-discard`):
         // `{versions, version, regenerate, discard, primary}`, each
@@ -143,7 +149,7 @@ export default {
         // only the primary and Discard buttons, for the end of a list
         foot: { type: Boolean, default: false },
     },
-    emits: ['update:prompt', 'update:year', 'regenerate', 'use-version', 'discard', 'primary'],
+    emits: ['update:prompt', 'update:picks', 'update:year', 'regenerate', 'use-version', 'discard', 'primary'],
     computed: {
         lockedTitle() {
             return this.locked || null;
