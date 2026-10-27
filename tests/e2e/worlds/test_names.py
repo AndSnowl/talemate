@@ -193,3 +193,104 @@ def test_repoint_renames_the_entry_to_the_words(app, page):
     )
     expect(page.get_by_test_id("accept-notes")).to_have_count(0)
     assert page.console_errors == []
+
+
+MOSCAVIA_STUB = {
+    "kind": "place",
+    "name": "Tsardom of Moscavia",
+    "stub": "live",
+    "fields": {"tag": "nation"},
+}
+OWL_FOLK_NAMING = {
+    "kind": "species",
+    "name": "Owl-folk",
+    "facts": [
+        {
+            "category": "origin",
+            "text": "Everyone in the [[@Tsardom of Moscavia|Tsardom of Moscavia]]"
+            " became owl-folk one day in 994.",
+        }
+    ],
+}
+
+
+def _card_parts(page, link):
+    link.hover()
+    card = page.get_by_test_id("stub-card")
+    card.wait_for(state="visible", timeout=TIMEOUT_MS)
+    parts = {
+        "tag": card.get_by_test_id("stub-tag").inner_text(),
+        "kind": card.get_by_test_id("stub-kind").inner_text().split("\n")[0],
+        "mentions": card.get_by_test_id("stub-mentions").inner_text(),
+        "repoint": card.get_by_role("button", name="Re-point…").count(),
+    }
+    page.mouse.move(0, 0)
+    card.wait_for(state="hidden", timeout=TIMEOUT_MS)
+    return parts
+
+
+def test_named_stubs_card_is_full_without_stubs_page(app, page):
+    name = _world_name("StubCard")
+    seed_fm_world(
+        app.root,
+        name,
+        present_year=1026,
+        things=[MOSCAVIA_STUB, OWL_FOLK_NAMING, {"kind": "place", "name": "Moscavy"}],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-species").click()
+    owl = _open_thing(page, "Owl-folk")
+
+    named = owl.get_by_test_id("named-stubs").get_by_test_id("linked-stub")
+    in_fact = _fact(owl, "became owl-folk").get_by_test_id("linked-stub")
+    from_named = _card_parts(page, named)
+    assert from_named == {
+        "tag": "nation",
+        "kind": "place",
+        "mentions": "1 mention",
+        "repoint": 1,
+    }
+    assert _card_parts(page, in_fact) == from_named
+
+    # its Re-point… re-points the whole stub, as on the Stubs page
+    named.hover()
+    card = page.get_by_test_id("stub-card")
+    card.get_by_role("button", name="Re-point…").click()
+    search = page.get_by_test_id("reference-search")
+    search.get_by_role("textbox").fill("Mosc")
+    page.get_by_test_id("reference-result").filter(has_text="Moscavy").click()
+    page.get_by_test_id("name-mode").get_by_test_id("mode-link-only").click()
+    expect(owl.get_by_test_id("named-stubs")).to_have_count(0)
+    assert page.console_errors == []
+
+
+def test_connected_stub_has_the_stub_card(app, page):
+    name = _world_name("ConnStub")
+    seed_fm_world(
+        app.root,
+        name,
+        present_year=1026,
+        things=[
+            {"kind": "place", "name": "Velikoye"},
+            {
+                "kind": "place",
+                "name": "Wattle Row",
+                "stub": "live",
+                "fields": {"tag": "street"},
+                "filings": [{"target": "Velikoye"}],
+            },
+        ],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    vel = _open_thing(page, "Velikoye")
+    row = vel.get_by_test_id("connected-row").filter(has_text="Wattle Row")
+    parts = _card_parts(page, row.get_by_test_id("linked-stub"))
+    assert parts == {
+        "tag": "street",
+        "kind": "place",
+        "mentions": "0 mentions",
+        "repoint": 1,
+    }
