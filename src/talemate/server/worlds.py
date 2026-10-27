@@ -1914,13 +1914,15 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, in
     """`(text, start, end)`: where the selected `start:end` of a fact's
     rendered text (as `view.render` shows it, the payload's `rendered`)
     lies in its stored `text`, links kept: a selection may cover plain
-    words only, never cut through or take in a link (`ValueError`).
+    words and whole links, never cut through a link (`ValueError`).
     Leading and trailing spaces are left out.
 
-    A link whose target is deleted (P5) shows as plain words and counts as
-    them: each one the selection touches, whole or in part, is replaced by
-    its words in the `text` returned (the rest of the fact as stored), so
-    the caller writes the selection's link over them.
+    A link the selection holds whole (polish 4: "House of Solarius" over
+    the "Solarius" link) counts as its words: it's replaced by them in the
+    `text` returned (the rest of the fact as stored), so the caller writes
+    the selection's link over them, the longer name winning. So is a link
+    whose target is deleted (P5), which shows as plain words: each one the
+    selection touches, whole or in part.
 
     `start` and `end` are UTF-16 code units (ruling F18), the page's own
     unit, converted here (`_code_points`). They index `rendered`, not the
@@ -1941,7 +1943,7 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, in
         end -= 1
     if start == end:
         raise ValueError("the selection holds no words")
-    text = _dead_links_as_words(view, text, start, end)
+    text = _links_as_words(view, text, start, end)
     # rendered offset -> stored offset, run by run
     shown = 0
     stored = 0
@@ -1967,10 +1969,10 @@ def _raw_span(view: WorldView, text: str, start: int, end: int) -> tuple[str, in
     return text, raw_start, raw_end
 
 
-def _dead_links_as_words(view: WorldView, text: str, start: int, end: int) -> str:
-    """`text` with each link to a deleted thing that the rendered
-    `start:end` touches replaced by the words it renders as (P5); the
-    rendered text is the same either way."""
+def _links_as_words(view: WorldView, text: str, start: int, end: int) -> str:
+    """`text` with each link the rendered `start:end` holds whole, and
+    each link to a deleted thing it touches (P5), replaced by the words it
+    renders as; the rendered text is the same either way."""
 
     shown = 0
     stored = 0
@@ -1980,8 +1982,9 @@ def _dead_links_as_words(view: WorldView, text: str, start: int, end: int) -> st
         words = view.render(found.group(0))
         dead = view.thing(found.group(1)) is None
         touched = start < shown + len(words) and end > shown
+        whole = start <= shown and shown + len(words) <= end
         out.append(text[stored : found.start()])
-        out.append(words if dead and touched else found.group(0))
+        out.append(words if whole or (dead and touched) else found.group(0))
         shown += len(words)
         stored = found.end()
     out.append(text[stored:])
@@ -4487,8 +4490,13 @@ class WorldsPlugin(Plugin):
         if not 0 <= index < len(preview.facts):
             raise ValueError(f"the draft has no fact {payload.index}")
         stored = preview.facts[index].text
-        text, start, end = _raw_span(world.view(), stored, payload.start, payload.end)
-        if text != stored:
+        view = world.view()
+        text, start, end = _raw_span(view, stored, payload.start, payload.end)
+        kept = {found.group(0) for found in REF_PATTERN.finditer(text)}
+        if any(
+            view.thing(found.group(1)) is None and found.group(0) not in kept
+            for found in REF_PATTERN.finditer(stored)
+        ):
             # a draft keeps its picks by name and writes no text here, so a
             # dead link's words can't be taken out of it (P5)
             raise ValueError(

@@ -6042,9 +6042,10 @@ async def test_make_stub_from_text(plugin):
         f" {ref(s.khorol, 'the river')}."
     )
 
-    # cutting through a link, or taking one in, is refused
+    # cutting through a link is refused, inside it or across its edge
+    # (taking one in whole is allowed: polish 4)
     river = rendered.index("the river")
-    for start_, end_ in ((river + 2, river + 6), (0, len(rendered))):
+    for start_, end_ in ((river + 2, river + 6), (0, river + 4)):
         before = len(_errors(plugin))
         await _act(
             plugin,
@@ -6597,8 +6598,8 @@ async def test_dead_link_beside_an_astral_character(plugin):
 
 
 async def test_ignored_stub_inside_a_dead_link_range_refuses(plugin):
-    """P5: a selection over a dead link and an ignored stub's link (shown
-    plain, still a link) is refused, writing nothing."""
+    """P5: a selection over a dead link that cuts an ignored stub's link
+    (shown plain, still a link) is refused, writing nothing."""
 
     s = await _open_filing_world(plugin)
     with s.world.revision(Source.manual()) as rev:
@@ -6620,7 +6621,7 @@ async def test_ignored_stub_inside_a_dead_link_range_refuses(plugin):
         "link_text",
         fact_id=fact,
         start=start,
-        end=rendered.index(" lives"),
+        end=rendered.index("ope lives"),
         target_id=s.tsardom,
     )
     assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
@@ -9450,3 +9451,155 @@ async def test_list_things_carries_other_names(plugin, client):
     assert tsardom["aka"] == ["Moscavia"]
     await _act(plugin, "list_heritage")
     assert all("aka" in t for t in _last(plugin, "list_heritage")["data"]["things"])
+
+
+# --- polish 4: a selection that holds whole links --------------------------
+
+HOUSES = "Its five houses include the House of Solarius."
+
+
+async def _solarius_fact(s):
+    """Solarius (a character) and a Night Court fact linking him inside
+    "the House of Solarius"."""
+
+    with s.world.revision(Source.manual()) as rev:
+        s.solarius = rev.create_thing("character", {"name": "Solarius"})
+        fact = rev.add_fact(
+            s.court,
+            "general",
+            f"Its five houses include the House of {ref(s.solarius, 'Solarius')}.",
+        )
+    return fact
+
+
+async def test_selection_containing_a_link_becomes_a_stub(plugin):
+    s = await _open_filing_world(plugin)
+    fact = await _solarius_fact(s)
+    solarius = s.world.view().thing(s.solarius).fields
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("House of Solarius"),
+        kind="lore",
+    )
+    stub_id = _last(plugin, "make_stub_from_text")["data"]["stub_id"]
+    view = s.world.view()
+    assert view.thing(stub_id).fields["name"] == "House of Solarius"
+    assert view.fact(fact)[1].text == (
+        f"Its five houses include the {ref(stub_id, 'House of Solarius')}."
+    )
+    # Solarius is untouched, and the house isn't filed under him
+    assert view.thing(s.solarius).fields == solarius
+    assert filings_of(view, stub_id) == []
+
+
+async def test_selection_containing_a_link_links(plugin):
+    s = await _open_filing_world(plugin)
+    fact = await _solarius_fact(s)
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len("House of Solarius"),
+        target_id=s.velikoye,
+        mode="link",
+    )
+    assert s.world.view().fact(fact)[1].text == (
+        f"Its five houses include the {ref(s.velikoye, 'House of Solarius')}."
+    )
+
+
+async def test_selection_containing_a_link_but_cutting_another_is_refused(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        solarius = rev.create_thing("character", {"name": "Solarius"})
+        fact = rev.add_fact(
+            s.court,
+            "general",
+            f"The House of {ref(solarius, 'Solarius')} keeps"
+            f" {ref(s.vigil, 'the Dawn Vigil')}.",
+        )
+    rendered = "The House of Solarius keeps the Dawn Vigil."
+    start = rendered.index("House")
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    for action, extra in (
+        ("link_text", {"target_id": s.velikoye, "mode": "link"}),
+        ("make_stub_from_text", {"kind": "lore"}),
+    ):
+        await _act(
+            plugin,
+            action,
+            fact_id=fact,
+            start=start,
+            end=rendered.index(" Vigil"),
+            **extra,
+        )
+        assert "cuts through a link" in _errors(plugin)[-1]["error"]["message"]
+    assert len(_errors(plugin)) == before + 2
+    assert s.world.head_rev() == head
+
+
+async def test_draft_selection_containing_a_name_becomes_a_stub(plugin, client):
+    """On a draft the names are picks by name: "House of Solarius" made a
+    stub wins over the "Solarius" inside it on accept."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        solarius = rev.create_thing("character", {"name": "Solarius"})
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", HOUSES), prompt="x"
+    )
+    key = draft["draft_key"]
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "make_stub_from_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("House of Solarius"),
+        kind="lore",
+    )
+    preview = _last(plugin, "make_stub_from_text")["data"]["preview"]
+    await _act(plugin, "accept_preview", preview=preview, draft_key=key)
+    texts = [f["text"] for f in _last(plugin, "accept_preview")["data"]["facts"]]
+    house = next(
+        t.id
+        for t in s.world.view().things("lore")
+        if t.fields["name"] == "House of Solarius"
+    )
+    assert f"Its five houses include the {ref(house, 'House of Solarius')}." in texts
+    assert solarius not in "".join(texts)
+
+
+async def test_draft_selection_containing_a_name_links(plugin, client):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        rev.create_thing("character", {"name": "Solarius"})
+    draft = await _preview(
+        plugin, client, _draft_reply("Frostwing Host", HOUSES), prompt="x"
+    )
+    key = draft["draft_key"]
+    start = HOUSES.index("House of Solarius")
+    await _act(
+        plugin,
+        "link_text",
+        draft_key=key,
+        index=0,
+        start=start,
+        end=start + len("House of Solarius"),
+        target_id=s.velikoye,
+        mode="link",
+    )
+    preview = _last(plugin, "link_text")["data"]["preview"]
+    await _act(plugin, "accept_preview", preview=preview, draft_key=key)
+    texts = [f["text"] for f in _last(plugin, "accept_preview")["data"]["facts"]]
+    assert (
+        f"Its five houses include the {ref(s.velikoye, 'House of Solarius')}." in texts
+    )

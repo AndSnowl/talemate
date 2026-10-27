@@ -20,19 +20,54 @@ from e2e.worlds.test_world_tab import (
     _world_tab,
 )
 
+# selects `words` in `element` across its text nodes (over a link), then
+# right-clicks the selection, as `test_drafts.SELECT_JS` does in one node
+SELECT_ACROSS_JS = """
+([element, words]) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let all = '';
+    while (walker.nextNode()) {
+        nodes.push([walker.currentNode, all.length]);
+        all += walker.currentNode.textContent;
+    }
+    const at = all.indexOf(words);
+    if (at < 0) {
+        return false;
+    }
+    const place = (offset, end) => {
+        for (const [node, from] of nodes) {
+            const to = from + node.textContent.length;
+            if (end ? offset <= to && offset > from : offset < to) {
+                return [node, offset - from];
+            }
+        }
+        return null;
+    };
+    const range = document.createRange();
+    range.setStart(...place(at, false));
+    range.setEnd(...place(at + words.length, true));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const box = range.getBoundingClientRect();
+    range.startContainer.parentElement.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true, cancelable: true, button: 2,
+        clientX: box.left + 2, clientY: box.top + 2,
+    }));
+    return true;
+}
+"""
+
 OWL_FOLK = {
     "kind": "species",
     "name": "Moscavian Owl-folk",
-    "fields": {
-        "aka": [{"name": "Moscavian Owls", "tag": "common", "everyday": True}]
-    },
+    "fields": {"aka": [{"name": "Moscavian Owls", "tag": "common", "everyday": True}]},
 }
 NOVGRAD = {
     "kind": "place",
     "name": "Novgrad",
-    "facts": [
-        {"category": "history", "text": "The owls of the north road nest here."}
-    ],
+    "facts": [{"category": "history", "text": "The owls of the north road nest here."}],
 }
 
 
@@ -73,7 +108,9 @@ def test_pickers_find_other_names(app, page):
     form.get_by_test_id("in-target").locator("input").fill("Moscavian Owls")
     _found(page, page.get_by_test_id("entry-result"))
     # an entry goes by that name already: no new stub of it is offered
-    expect(page.get_by_test_id("entry-result").filter(has_text="Make a stub")).to_have_count(0)
+    expect(
+        page.get_by_test_id("entry-result").filter(has_text="Make a stub")
+    ).to_have_count(0)
     form.get_by_role("button", name="Cancel").click()
 
     # Move to… (a fact's menu)
@@ -82,4 +119,41 @@ def test_pickers_find_other_names(app, page):
     menu = page.get_by_test_id("fact-move-menu")
     menu.get_by_test_id("move-target").locator("input").fill("Moscavian Owls")
     _found(page, page.get_by_test_id("entry-result"))
+    assert page.console_errors == []
+
+
+SOLARIUS = {"kind": "character", "name": "Solarius"}
+ACADEMY = {
+    "kind": "place",
+    "name": "Academy of Northern Lights",
+    "facts": [
+        {
+            "category": "history",
+            "text": "Its five houses include the House of [[@Solarius|Solarius]].",
+        }
+    ],
+}
+
+
+def test_house_of_solarius_stub(app, page):
+    name = _world_name("Solarius")
+    seed_fm_world(app.root, name, present_year=1026, things=[SOLARIUS, ACADEMY])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    academy = _open_thing(page, "Academy of Northern Lights")
+
+    fact = _fact(academy, "five houses")
+    fact.wait_for(state="visible", timeout=TIMEOUT_MS)
+    text = fact.locator(".fact-text").first
+    assert page.evaluate(SELECT_ACROSS_JS, [text.element_handle(), "House of Solarius"])
+    menu = page.get_by_test_id("selection-menu")
+    menu.get_by_test_id("selection-kind").locator(".v-field").click()
+    page.get_by_role("option", name="lore entry", exact=True).click()
+    menu.get_by_test_id("selection-stub").click()
+
+    # the longer name wins: one stub link over the words, Solarius's gone
+    stub = fact.get_by_test_id("linked-stub")
+    expect(stub).to_have_text("House of Solarius")
+    expect(fact.get_by_test_id("linked-ref")).to_have_count(0)
     assert page.console_errors == []
