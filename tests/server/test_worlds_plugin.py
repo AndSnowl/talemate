@@ -114,7 +114,7 @@ async def test_router_list_and_get_thing(plugin):
     listed = _last(plugin, "list_things")["data"]
     assert listed["kind"] == "character"
     assert listed["things"] == [
-        {"id": maren, "kind": "character", "name": "Maren", "filed_in": []}
+        {"id": maren, "kind": "character", "name": "Maren", "aka": [], "filed_in": []}
     ]
 
     scene_id = world.scenes().create(
@@ -1164,19 +1164,28 @@ async def test_list_heritage(plugin):
                 "id": h.human,
                 "kind": "species",
                 "name": "Human",
+                "aka": [],
                 "species_ids": [h.human],
             },
-            {"id": h.orc, "kind": "species", "name": "Orc", "species_ids": [h.orc]},
+            {
+                "id": h.orc,
+                "kind": "species",
+                "name": "Orc",
+                "aka": [],
+                "species_ids": [h.orc],
+            },
             {
                 "id": h.lowlander,
                 "kind": "race",
                 "name": "Lowlander",
+                "aka": [],
                 "species_ids": [h.human],
             },
             {
                 "id": h.half_orc,
                 "kind": "mix",
                 "name": "Half-orc",
+                "aka": [],
                 "species_ids": [h.human, h.orc],
             },
         ]
@@ -1836,8 +1845,17 @@ async def test_payload_segments_and_stub_fields(plugin):
     assert thing["aka"] == []
     assert thing["stub"] is None
     assert "aka" not in thing["fields"] and "stub" not in thing["fields"]
+    # polish 4: a full stub row, as `list_stubs` gives, so the card is
+    # whole without the Stubs page
     assert thing["named_stubs"] == [
-        {"id": s.tsardom, "name": "Tsardom of Moscavia", "kind": "place"}
+        {
+            "id": s.tsardom,
+            "name": "Tsardom of Moscavia",
+            "kind": "place",
+            "tag": None,
+            "mentions": 2,
+            "ignored": False,
+        }
     ]
     assert thing["mentions"] == []
     json.dumps(thing)
@@ -1864,12 +1882,14 @@ async def test_payload_segments_and_stub_fields(plugin):
             "id": s.harbour,
             "kind": "place",
             "name": "The Harbour",
+            "aka": [],
             "filed_in": [],
         },
         s.tsardom: {
             "id": s.tsardom,
             "kind": "place",
             "name": "Tsardom of Moscavia",
+            "aka": ["Moscavia"],
             "stub": {"ignored": False},
             "filed_in": [],
         },
@@ -2385,9 +2405,11 @@ async def test_make_stub_action(plugin, monkeypatch):
         # only the phrase asked for is linked: the rest is left as it was
         _plain(" in Moscavia."),
     ]
-    assert {"id": night.id, "name": "Night of Feathers", "kind": "event"} in reply[
-        "named_stubs"
-    ]
+    assert any(
+        (row["id"], row["name"], row["kind"])
+        == (night.id, "Night of Feathers", "event")
+        for row in reply["named_stubs"]
+    )
 
     # a phrase the fact doesn't hold is refused, writing nothing
     head = world.head_rev()
@@ -9415,3 +9437,16 @@ async def test_added_facts_show_the_entry_s_own_name_as_this_page(plugin, client
         await _drain(plugin)
     (fact,) = _last(plugin, "add_facts")["data"]["facts"]
     assert _self(name) in fact["segments"]
+
+
+async def test_list_things_carries_other_names(plugin, client):
+    """Polish 4: listings carry each entry's other names (`aka`, names
+    only), so the pickers can find an entry by one."""
+
+    s = await _open_stub_world(plugin)
+    await _act(plugin, "list_things", kind="place")
+    things = _last(plugin, "list_things")["data"]["things"]
+    tsardom = next(t for t in things if t["id"] == s.tsardom)
+    assert tsardom["aka"] == ["Moscavia"]
+    await _act(plugin, "list_heritage")
+    assert all("aka" in t for t in _last(plugin, "list_heritage")["data"]["things"])

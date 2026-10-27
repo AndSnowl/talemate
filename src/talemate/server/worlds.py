@@ -702,6 +702,16 @@ class CorrectFactPayload(_ThingEdit):
 LinkMode = Literal["link", "name", "rename"]
 
 
+def _aka_names(state: ThingState) -> list[str]:
+    """A thing's other names, the names alone, in their order."""
+
+    return [
+        str(entry.get("name"))
+        for entry in (state.fields.get("aka") or [])
+        if isinstance(entry, dict) and entry.get("name")
+    ]
+
+
 def _link_mode(
     mode: LinkMode | None, use_name: str | None, default: LinkMode
 ) -> LinkMode:
@@ -1446,7 +1456,7 @@ class _Links:
         return out
 
     def named_stubs(self, state: ThingState) -> list[dict]:
-        """`{id, name, kind}` of each live stub `state`'s facts link to (not
+        """`{id, name, kind, tag, mentions, ignored}` of each live stub `state`'s facts link to (not
         an ignored one), in the order they're first linked."""
 
         found: list[dict] = []
@@ -1464,6 +1474,11 @@ class _Links:
                         "id": thing_id,
                         "name": self.view.name_of(thing_id) or "",
                         "kind": other.kind,
+                        # the rest of a `list_stubs` row, so the stub's card
+                        # is whole on the page that names it (polish 4)
+                        "tag": tag_of(other),
+                        "mentions": len(mentions(self.view, thing_id)),
+                        "ignored": False,
                     }
                 )
         return found
@@ -2630,6 +2645,8 @@ class WorldsPlugin(Plugin):
                 "id": state.id,
                 "kind": state.kind,
                 "name": view.name_of(state.id) or "",
+                # its other names, so a picker finds it by one (polish 4)
+                "aka": _aka_names(state),
             }
             if state.is_stub:
                 entry["stub"] = _stub_out(state)
@@ -2653,6 +2670,7 @@ class WorldsPlugin(Plugin):
                 "id": state.id,
                 "kind": state.kind,
                 "name": view.name_of(state.id) or "",
+                "aka": _aka_names(state),
                 "species_ids": heritage.species_of(view, state.id),
             }
             for kind in HERITAGE_KINDS
