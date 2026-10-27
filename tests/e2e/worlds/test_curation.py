@@ -472,7 +472,12 @@ def test_timeline_gathers_and_flags(app, page):
     menu = page.get_by_test_id("pick-date")
     expect(menu.get_by_test_id("disagrees-with")).to_contain_text("217")
     expect(menu.get_by_test_id("disagrees-with")).to_contain_text("is compiled.")
-    # the year and the text apart, not "217The…"
+    # the year and the text apart, not "217The…" (measured once the menu
+    # has finished opening: it slides in)
+    page.wait_for_function(
+        "(el) => el.getAnimations({ subtree: true }).every((a) => a.playState !== 'running')",
+        arg=menu.element_handle(),
+    )
     other_year = menu.get_by_test_id("disagrees-with").locator(".year").bounding_box()
     other_text = (
         menu.get_by_test_id("disagrees-with")
