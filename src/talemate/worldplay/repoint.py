@@ -368,9 +368,11 @@ def _other_name_keys(view: WorldView, skip: set[str]) -> set[str]:
     return keys
 
 
-def name_holder(view: WorldView, name: str, skip: AbstractSet[str]) -> str | None:
-    """The name of a thing (other than `skip`) that goes by `name`, as its
-    name or an other name, or None."""
+def name_holder(
+    view: WorldView, name: str, skip: AbstractSet[str]
+) -> ThingState | None:
+    """A thing (other than `skip`) that goes by `name`, as its name or an
+    other name, or None."""
 
     key = name_key(name)
     for state in view.things():
@@ -382,17 +384,26 @@ def name_holder(view: WorldView, name: str, skip: AbstractSet[str]) -> str | Non
             if isinstance(entry, dict) and isinstance(entry.get("name"), str)
         ]
         if any(name_key(each) == key for each in names):
-            return view.name_of(state.id)
+            return state
     return None
 
 
 def refuse_name_in_use(view: WorldView, name: str, skip: AbstractSet[str]) -> None:
     """`ValueError` when a thing other than `skip` goes by `name` (a
-    retitle can't take a name in use)."""
+    retitle can't take a name in use); for a stub, the note says to
+    re-point the whole stub."""
 
     holder = name_holder(view, name, skip)
-    if holder is not None:
-        raise ValueError(f"{' '.join(name.split())} is already the name of {holder}")
+    if holder is None:
+        return
+    words = " ".join(name.split())
+    holder_name = view.name_of(holder.id)
+    if holder.is_stub:
+        raise ValueError(
+            f"{words} is already the name of the stub {holder_name}:"
+            " re-point the whole stub instead"
+        )
+    raise ValueError(f"{words} is already the name of {holder_name}")
 
 
 def retitle(
@@ -438,7 +449,26 @@ def retitle(
         added.append(other)
         aka.append({"name": other, "tag": "common", "everyday": False})
     rev.set_field(target_id, "name", name, view.field_since(target_id, "name"))
-    rev.set_field(target_id, "aka", aka, view.field_since(target_id, "aka"))
+    latest = view.field_since(target_id, "aka")
+    # every other dated value of its other names too, so a scene set at
+    # any date knows the old name and doesn't list the new one twice
+    extra = [entry for entry in aka if entry.get("name") in added]
+    for entry in world.timeline(target_id):
+        if entry.change != "field" or entry.field != "aka":
+            continue
+        if getattr(entry.date, "instant", None) == getattr(latest, "instant", None):
+            continue
+        value = [
+            e
+            for e in entry.value or []
+            if isinstance(e, dict)
+            and name_key(str(e.get("name", ""))) != name_key(name)
+        ]
+        have = {name_key(str(e.get("name", ""))) for e in value}
+        value += [e for e in extra if name_key(str(e["name"])) not in have]
+        if value != entry.value:
+            rev.set_field(target_id, "aka", value, entry.date)
+    rev.set_field(target_id, "aka", aka, latest)
     return added
 
 
@@ -1353,6 +1383,7 @@ class RepointPlan:
                     *(
                         [target_id]
                         if self._job.merge
+                        or self._job.main_name not in (None, self._job.target_name)
                         or self._own
                         or set(self._carried) - set(UNRENDERED_FIELDS)
                         else []

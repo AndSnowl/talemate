@@ -9712,3 +9712,61 @@ async def test_repoint_retitle_refuses_a_name_in_use(plugin):
     assert s.world.head_rev() == head
     assert _names_of(s.world, snowy) == (SNOWY, [])
     assert s.world.view().fact(fact)[1].text == rendered
+
+
+async def test_repoint_ref_retitle_from_a_stubs_last_link_removes_it(plugin):
+    """Final review I1: a stub's only link re-pointed with "Rename the entry
+    to these words": the entry takes the stub's name and the stub goes, in
+    the same revision, so no two things share the name."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(stub, PURE)} keep the old ways."
+        )
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=snowy,
+        mode="retitle",
+    )
+    assert s.world.head_rev() == head + 1
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().thing(stub) is None
+
+
+async def test_repoint_ref_retitle_from_a_stub_named_elsewhere_says_so(plugin):
+    """Final review I1: the stub still has other links, so it keeps its
+    name: the refusal says it's a stub, and what to do instead."""
+
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(stub, PURE)} keep the old ways."
+        )
+        rev.add_fact(s.dawn, "general", f"The {ref(stub, PURE)} came.")
+    head = s.world.head_rev()
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=snowy,
+        mode="retitle",
+    )
+    (error,) = _errors(plugin)[before:]
+    assert (
+        f"{PURE} is already the name of the stub {PURE}: re-point the whole"
+        " stub instead" in error["error"]["message"]
+    )
+    assert s.world.head_rev() == head

@@ -5105,7 +5105,24 @@ class WorldsPlugin(Plugin):
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(payload.fact_id, text=new_text)
             if mode == "retitle":
-                added = retitle(rev, world, payload.to_id, words, also=names, skip=skip)
+                # the stub's last link, and nothing else uses it: it goes,
+                # so no two things share the name; else it keeps the name,
+                # and the retitle is refused
+                removable = bool(skip) and not any(
+                    found
+                    for kind, found in thing_references(world, from_id or "").items()
+                    if kind != "facts"
+                )
+                added = retitle(
+                    rev,
+                    world,
+                    payload.to_id,
+                    words,
+                    also=names,
+                    skip=skip if removable else frozenset(),
+                )
+                if removable:
+                    rev.remove_thing(from_id or "")
             else:
                 added = learn_names(
                     rev,
