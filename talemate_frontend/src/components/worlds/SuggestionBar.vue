@@ -1,5 +1,6 @@
 <template>
     <div v-if="foot" class="suggestion-bar-foot d-flex ga-2" :data-testid="testid">
+        <slot name="primary-extra"></slot>
         <v-btn
             color="accent"
             variant="flat"
@@ -52,6 +53,7 @@
                 @click="$emit('regenerate')"
             >Regenerate</v-btn>
             <v-btn variant="outlined" size="small" color="danger" prepend-icon="mdi-close" :disabled="busy" :data-testid="testids.discard" @click="$emit('discard')">Discard</v-btn>
+            <slot name="primary-extra"></slot>
             <v-btn
                 color="accent"
                 variant="flat"

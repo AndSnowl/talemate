@@ -2,23 +2,7 @@
     <div class="thing-page" :data-testid="draft ? 'draft-page' : 'thing-page'">
         <!-- a draft: its bar, and what it could be instead -->
         <template v-if="draft && thing">
-            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" :locked="draftLocked" @accept="acceptDraft()" />
-            <v-alert v-if="matchingStub" type="info" variant="tonal" density="compact" class="mb-2" data-testid="matching-stub">
-                <div class="d-flex align-center flex-wrap ga-2">
-                    <span>There is a stub named “{{ matchingStub.name }}” already.</span>
-                    <v-spacer></v-spacer>
-                    <v-btn
-                        color="accent"
-                        variant="flat"
-                        size="small"
-                        :loading="worlds.draft.accepting"
-                        :disabled="!edited.name.trim() || !!draftLocked"
-                        :title="draftLocked"
-                        data-testid="fill-stub-instead"
-                        @click="acceptDraft(matchingStub.id)"
-                    >Fill the stub “{{ matchingStub.name }}” instead</v-btn>
-                </div>
-            </v-alert>
+            <DraftBar :draft="worlds.draft" :counts="countsText" :can-accept="!!edited.name.trim()" :locked="draftLocked" :matching-stub="matchingStub" @accept="acceptDraft()" @fill-stub="acceptDraft(matchingStub.id)" />
             <v-alert v-if="worlds.previewError" type="error" variant="tonal" density="compact" class="mb-2">{{ worlds.previewError }}</v-alert>
         </template>
 
@@ -194,28 +178,27 @@
                 </div>
             </template>
 
-            <!-- the entry's summary fact heads the page -->
-            <div v-if="summaryFact" class="summary mt-2" data-testid="entry-summary">
-                <FactRow
-                    :fact="factView(summaryFact)"
-                    :exclude="[thing.id]"
-                    text-class="summary-text"
-                    @repoint="repointLink(summaryFact, $event)"
-                    @select="selected(summaryFact, $event)"
-                    @edit="startEdit(summaryFact)"
-                    @dates="startEdit(summaryFact, 'dates')"
-                    @end="startEnd(summaryFact)"
-                    @remove="worlds.removeFact(summaryFact.fact_id)"
-                >
-                    <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
-                        <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
-                    </div>
-                </FactRow>
-            </div>
-
             <!-- 3. Facts, beside the prose -->
             <v-row class="mt-1">
                 <v-col cols="12" md="6">
+                    <!-- the entry's summary fact heads the left column (polish 3) -->
+                    <div v-if="summaryFact" class="summary" data-testid="entry-summary">
+                        <FactRow
+                            :fact="factView(summaryFact)"
+                            :exclude="[thing.id]"
+                            text-class="summary-text"
+                            @repoint="repointLink(summaryFact, $event)"
+                            @select="selected(summaryFact, $event)"
+                            @edit="startEdit(summaryFact)"
+                            @dates="startEdit(summaryFact, 'dates')"
+                            @end="startEnd(summaryFact)"
+                            @remove="worlds.removeFact(summaryFact.fact_id)"
+                        >
+                            <div v-if="form && form.factId === summaryFact.fact_id" class="my-2">
+                                <ThingFactForm :form="form" :categories="categories" :busy="editing" @save="saveForm" @cancel="form = null" @remove="removeFact(summaryFact)" />
+                            </div>
+                        </FactRow>
+                    </div>
                     <div v-for="field in shownFields" :key="field.name" class="field d-flex align-center flex-wrap ga-2" :data-testid="'field-' + field.name">
                         <span class="field-label">{{ field.label }}</span>
                         <span v-if="field.links">
@@ -282,7 +265,16 @@
                         <span v-if="draft" class="text-caption text-muted ml-2">{{ tickedCount }} ticked</span>
                         <v-spacer></v-spacer>
                         <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" :on-draft="draft" />
-                        <v-btn v-if="!form || form.factId || form.index != null" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="startAdd">Add fact</v-btn>
+                        <v-btn
+                            v-if="!form || form.factId || form.index != null"
+                            variant="text"
+                            size="small"
+                            color="accent"
+                            prepend-icon="mdi-plus"
+                            :disabled="factFormOpen"
+                            :title="factFormOpen ? 'save or cancel the edit first' : null"
+                            @click="startAdd"
+                        >Add fact</v-btn>
                     </div>
 
                     <div v-if="form && !form.factId && form.index == null" class="mb-2">
@@ -457,6 +449,14 @@
                             </div>
                         </template>
                     </template>
+
+                    <!-- what's filed in it and what names it, under Appears
+                         in (polish 3): a stub's draft shows the stub's, as
+                         they are -->
+                    <template v-if="!draft || thing.id">
+                        <EntryConnected :thing="thing" :readonly="draft" class="mt-4" />
+                        <EntryMentionedIn :thing="thing" />
+                    </template>
                 </v-col>
             </v-row>
 
@@ -536,15 +536,20 @@
                     :testids="{ primary: 'draft-accept-foot', discard: 'draft-discard-foot' }"
                     @discard="worlds.discardPreview()"
                     @primary="acceptDraft()"
-                />
+                >
+                    <template v-if="matchingStub" #primary-extra>
+                        <FillStubButton
+                            :name="matchingStub.name"
+                            :loading="!!worlds.draft.accepting"
+                            :disabled="draftBusy || !edited.name.trim() || !!draftLocked"
+                            :title="draftLocked"
+                            testid="fill-stub-instead-foot"
+                            @fill="acceptDraft(matchingStub.id)"
+                        />
+                    </template>
+                </SuggestionBar>
             </template>
 
-            <!-- what's filed in it and what names it: a stub's draft shows
-                 the stub's, as they are -->
-            <template v-if="!draft || thing.id">
-                <EntryConnected :thing="thing" :readonly="draft" class="mt-4" />
-                <EntryMentionedIn :thing="thing" />
-            </template>
             <EntryTimeline :lines="thing.entry_timeline || []" class="mt-4">
                 <template #actions>
                     <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" event :on-draft="draft" />
@@ -605,6 +610,7 @@ import {
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
 import DraftBar from './DraftBar.vue';
+import FillStubButton from './FillStubButton.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
 import EntryConnected from './EntryConnected.vue';
 import EntryIn from './EntryIn.vue';
@@ -750,6 +756,7 @@ export default {
     components: {
         CreateBox,
         DraftBar,
+        FillStubButton,
         EntryAddFacts,
         EntryConnected,
         EntryIn,
@@ -911,7 +918,33 @@ export default {
                 ? (this.edited.same_as || []).find((offer) => offer.thing_id === same)?.name
                     || this.worlds.referenceTargets.find((target) => target.id === same)?.name
                 : null;
-            return this.edited ? countsLine(previewCounts(this.edited), onto) : '';
+            if (!this.edited) {
+                return '';
+            }
+            const line = countsLine(previewCounts(this.edited), onto);
+            return this.matchingStub ? `${line} · a stub named ${this.matchingStub.name} exists` : line;
+        },
+        // a fact's (or the summary's, or a draft fact's) edit form is
+        // open: "Add fact" waits, so it never drops that unsaved edit
+        factFormOpen() {
+            return !!this.form && (!!this.form.factId || this.form.index != null);
+        },
+        // the open form's fact is no longer on the page (removed from its
+        // own ⋯ menu, or not true at the date now viewed): the form goes
+        // with it, so "Add fact" doesn't wait on a form nobody can see
+        formTargetGone() {
+            const form = this.form;
+            if (!form) {
+                return false;
+            }
+            if (form.factId) {
+                const facts = [this.summaryFact, ...(this.shownFacts || []), ...(this.thing?.inherited || [])];
+                return !facts.some((fact) => fact?.fact_id === form.factId);
+            }
+            if (form.index != null) {
+                return !(this.draftRows || []).some((row) => row.index === form.index);
+            }
+            return false;
         },
         // while the page draft's nested "+ Add facts" draft is open or
         // held, its own Accept, Regenerate and version switch wait for it
@@ -1087,6 +1120,12 @@ export default {
         },
     },
     watch: {
+        formTargetGone(gone) {
+            if (gone) {
+                this.form = null;
+                this.afterSave = null;
+            }
+        },
         // another version of the draft: its forms and menus close
         'worlds.draft.version'() {
             if (this.draft) {
@@ -1359,6 +1398,10 @@ export default {
             return { ...state, links: state.links.map((link) => ({ ...link, was: link.ref })) };
         },
         startAdd() {
+            // a fact's edit form is open: adding would drop its edit
+            if (this.factFormOpen) {
+                return;
+            }
             this.form = {
                 mode: 'add',
                 ...(this.draft ? { draft: true } : {}),

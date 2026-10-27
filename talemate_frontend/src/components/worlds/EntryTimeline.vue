@@ -11,45 +11,59 @@
                     <v-list-item title="Events only" :active="mode === 'events'" data-testid="timeline-events" @click="mode = 'events'"></v-list-item>
                 </v-list>
             </v-menu>
-            <v-spacer></v-spacer>
             <slot name="actions"></slot>
         </div>
         <slot></slot>
         <div v-if="!shown.length" class="empty">{{ lines.length ? 'No events among them.' : 'Nothing dated yet.' }}</div>
-        <div v-for="(line, index) in shown" :key="line.fact_id || 'draft-' + index" class="line d-flex align-center ga-2" :class="{ ended: !!line.until }" data-testid="timeline-row">
-            <span class="flex-grow-1">
-                <span class="year">{{ lineDates(worlds.calendar, line) }}</span>
+        <div v-for="(line, index) in shown" :key="line.fact_id || 'draft-' + index" class="line" :class="{ ended: !!line.until }" :style="{ gridTemplateColumns: columns }" data-testid="timeline-row">
+            <!-- disagrees with another line: a warning sign right before
+                 the row, its menu the other line in full and the picks -->
+            <v-menu v-if="flags[line.fact_id]" location="bottom start">
+                <template #activator="{ props }">
+                    <v-btn
+                        v-bind="props"
+                        icon="mdi-alert"
+                        variant="text"
+                        size="x-small"
+                        density="comfortable"
+                        color="warning"
+                        data-testid="line-disagrees"
+                        :title="`Disagrees with ${others(line)}`"
+                        :aria-label="`Disagrees with ${others(line)}: pick one`"
+                    ></v-btn>
+                </template>
+                <v-card min-width="280" max-width="520" data-testid="pick-date">
+                    <template v-for="other in flags[line.fact_id]" :key="other.fact_id">
+                        <div class="disagrees-with pa-3 pb-1 text-body-2" data-testid="disagrees-with">
+                            <div class="text-caption text-muted">Disagrees with</div>
+                            <span class="year">{{ lineDates(worlds.calendar, other) }}</span>
+                            <LinkedText :segments="other.segments" />
+                        </div>
+                        <v-list density="compact">
+                            <v-list-item
+                                v-for="choice in choices(line, other)"
+                                :key="choice.label"
+                                :title="choice.label"
+                                data-testid="pick-option"
+                                :disabled="!!worlds.pending.pick_date"
+                                @click="worlds.pickDate(choice.keep, choice.drop, choice.mode)"
+                            ></v-list-item>
+                        </v-list>
+                    </template>
+                </v-card>
+            </v-menu>
+            <!-- the sign's room on the other rows, so the years line up -->
+            <span v-else-if="anyFlag"></span>
+            <!-- three columns, the same on every row: the sign, the date,
+                 the text (wrapping in its own column, never under the date) -->
+            <span class="year">{{ lineDates(worlds.calendar, line) }}</span>
+            <span class="line-text">
                 <LinkedText :segments="line.segments" />
                 <span class="source text-caption">
                     <template v-if="line.here"> · here</template>
                     <template v-else> · from <LinkedText :segments="[{ text: line.owner_name, ref: line.owner_id, stub: false }]" /></template>
                 </span>
             </span>
-            <v-menu v-if="flags[line.fact_id]" location="bottom end">
-                <template #activator="{ props }">
-                    <v-btn
-                        v-bind="props"
-                        variant="text"
-                        size="x-small"
-                        color="warning"
-                        prepend-icon="mdi-alert"
-                        data-testid="line-disagrees"
-                        :aria-label="`Disagrees with ${others(line)}: pick one`"
-                    >disagrees with {{ others(line) }}</v-btn>
-                </template>
-                <v-list density="compact" data-testid="pick-date">
-                    <template v-for="other in flags[line.fact_id]" :key="other.fact_id">
-                        <v-list-item
-                            v-for="choice in choices(line, other)"
-                            :key="choice.label"
-                            :title="choice.label"
-                            data-testid="pick-option"
-                            :disabled="!!worlds.pending.pick_date"
-                            @click="worlds.pickDate(choice.keep, choice.drop, choice.mode)"
-                        ></v-list-item>
-                    </template>
-                </v-list>
-            </v-menu>
         </div>
     </div>
 </template>
@@ -88,6 +102,15 @@ export default {
         flags() {
             return disagreements(this.lines);
         },
+        anyFlag() {
+            return Object.keys(this.flags).length > 0;
+        },
+        // the rows' columns: the sign's (when any row has one), the
+        // widest date's, then the text
+        columns() {
+            const widest = Math.max(4, ...this.shown.map((line) => lineDates(this.worlds.calendar, line).length));
+            return `${this.anyFlag ? '28px ' : ''}${widest + 1}ch 1fr`;
+        },
         eventIds() {
             return (this.worlds.things.event || []).map((thing) => thing.id);
         },
@@ -117,19 +140,29 @@ export default {
 
 <style scoped>
 .line {
+    display: grid;
+    column-gap: 8px;
+    align-items: start;
     margin: 3px 0;
     line-height: 1.5;
+}
+
+/* the sign sits on the first line, beside the date */
+.line :deep(.v-btn) {
+    margin-top: 2px;
 }
 
 .line.ended {
     opacity: 0.75;
 }
 
-.year {
-    flex: none;
-    display: inline-block;
+/* in the "Disagrees with" menu the date runs inline before its text */
+.disagrees-with .year {
     margin-right: 8px;
-    min-width: 48px;
+}
+
+.year {
+    white-space: nowrap;
     font-variant-numeric: tabular-nums;
     color: rgb(var(--v-theme-date));
 }

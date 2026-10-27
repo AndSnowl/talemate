@@ -1162,3 +1162,129 @@ def test_tags_rename_merge(app, page):
     )
     assert "Schools" not in _headings(thing)
     assert page.console_errors == []
+
+
+def test_summary_heads_left_column(app, page):
+    """Polish 3: the summary is the first row of the left column, above
+    Other names, its buttons inside the column; it edits in place."""
+
+    world, thing = _open_velikoye(page, app, _world_name("Summary"))
+    summary = thing.get_by_test_id("entry-summary")
+    expect(summary).to_contain_text(SUMMARY)
+    box = summary.bounding_box()
+    facts = thing.get_by_test_id("facts-heading").bounding_box()
+    aka = thing.get_by_test_id("aka-editor").bounding_box()
+    # in the left column: the Facts heading's x and right edge
+    assert abs(box["x"] - facts["x"]) <= 1
+    assert box["x"] + box["width"] <= facts["x"] + facts["width"] + 1
+    # first in the column: above Other names
+    assert box["y"] < aka["y"]
+    edit = summary.get_by_role("button", name="Edit fact")
+    ebox = edit.bounding_box()
+    assert ebox["x"] + ebox["width"] <= facts["x"] + facts["width"] + 1
+    assert summary.locator(".summary-text").count() == 1
+    edit.click()
+    expect(summary.get_by_test_id("fact-form")).to_be_visible()
+
+
+def test_connected_in_right_column(app, page):
+    """Polish 3: Connected (and Mentioned in, just below it) sit in the
+    right column under Appears in; its groups stack inside the column,
+    "+ Add" on the heading row."""
+
+    world, thing = _open_velikoye(page, app, _world_name("RightCol"))
+    connected = thing.get_by_test_id("entry-connected")
+    expect(connected.get_by_test_id("connected-row").first).to_be_visible()
+    appears = thing.get_by_text("Appears in", exact=True).bounding_box()
+    cbox = connected.bounding_box()
+    assert cbox["x"] >= appears["x"] - 1
+    assert cbox["y"] > appears["y"]
+    right = cbox["x"] + cbox["width"]
+    groups = connected.get_by_test_id("connected-group")
+    assert groups.count() >= 3
+    xs = set()
+    for index in range(groups.count()):
+        g = groups.nth(index).bounding_box()
+        assert g["x"] + g["width"] <= right + 1
+        xs.add(round(g["x"]))
+    # stacked: one per row
+    assert len(xs) == 1
+    add = connected.get_by_test_id("connected-add").bounding_box()
+    assert add["x"] + add["width"] <= right + 1
+    assert abs(add["y"] - cbox["y"]) < 30
+    mentioned = thing.get_by_test_id("entry-mentioned").bounding_box()
+    assert abs(mentioned["x"] - cbox["x"]) <= 1
+    assert mentioned["y"] > cbox["y"]
+
+
+def test_add_event_by_timeline_filter(app, page):
+    """Polish 3: "+ Add event…" follows the Timeline's "Events ▾"."""
+
+    world, thing = _open_velikoye(page, app, _world_name("AddEventBy"))
+    timeline = thing.get_by_test_id("entry-timeline")
+    filt = timeline.get_by_test_id("timeline-filter").bounding_box()
+    add = timeline.get_by_test_id("add-event").bounding_box()
+    assert 0 <= add["x"] - (filt["x"] + filt["width"]) <= 24
+
+
+def test_add_fact_off_while_editing(app, page):
+    """Polish 3: "Add fact" waits while a fact's edit form is open (a
+    fact's or the summary's), so it never drops an unsaved edit."""
+
+    world, thing = _open_velikoye(page, app, _world_name("AddWaits"))
+    add = thing.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    expect(add).to_be_enabled()
+    row = thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
+    row.get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
+    expect(add).to_have_attribute("title", "save or cancel the edit first")
+    thing.get_by_test_id("fact-form").get_by_role("button", name="Cancel").click()
+    expect(add).to_be_enabled()
+    thing.get_by_test_id("entry-summary").get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
+
+
+def test_sweep_controls_follow_their_titles(app, page):
+    """Polish 3 sweep: on the full-width Stubs and Tags pages and in the
+    create box, a control follows what it acts on instead of the far
+    edge."""
+
+    world, thing = _open_velikoye(page, app, _world_name("Sweep"))
+    # the create box: Create right after its pickers
+    page.get_by_test_id("kind-character").click()
+    box = page.get_by_test_id("create-box").first
+    box.wait_for(state="visible", timeout=TIMEOUT_MS)
+    picker = box.locator(".picker").last.bounding_box()
+    create = box.get_by_role("button", name="Create").bounding_box()
+    assert 0 <= create["x"] - (picker["x"] + picker["width"]) <= 24
+    # Stubs: "show ignored" right after the title line
+    page.get_by_test_id("kind-stubs").click()
+    tab = page.get_by_test_id("stubs-tab")
+    tab.wait_for(state="visible", timeout=TIMEOUT_MS)
+    note = tab.get_by_text("named but not made yet").bounding_box()
+    ignored = tab.get_by_label("show ignored").bounding_box()
+    assert 0 <= ignored["x"] - (note["x"] + note["width"]) <= 48
+    # Tags: rename right after the tag's line
+    page.get_by_test_id("kind-tags").click()
+    rows = page.get_by_test_id("tags-tab").get_by_test_id("tag-row")
+    rows.first.wait_for(state="visible", timeout=TIMEOUT_MS)
+    row = rows.first
+    caption = row.locator(".text-caption").first.bounding_box()
+    rename = row.get_by_test_id("tag-rename").bounding_box()
+    assert 0 <= rename["x"] - (caption["x"] + caption["width"]) <= 24
+
+
+def test_add_fact_back_when_edited_fact_is_removed(app, page):
+    """Polish 3 final review: removing the fact whose edit form is open
+    (from its ⋯ menu) drops that form too, so "Add fact" comes back
+    instead of staying off with no form to cancel."""
+
+    world, thing = _open_velikoye(page, app, _world_name("AddBack"))
+    add = thing.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    row = thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
+    row.get_by_role("button", name="Edit fact").click()
+    expect(add).to_be_disabled()
+    row.get_by_test_id("fact-menu-button").click()
+    page.get_by_test_id("fact-menu").get_by_test_id("fact-remove").click()
+    expect(thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")).to_have_count(0)
+    expect(add).to_be_enabled()

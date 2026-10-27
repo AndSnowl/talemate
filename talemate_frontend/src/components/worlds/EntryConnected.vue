@@ -78,16 +78,6 @@ export default {
 </script>
 
 <style scoped>
-.groups {
-    column-count: 2;
-    column-gap: 18px;
-}
-
-@media (max-width: 960px) {
-    .groups {
-        column-count: 1;
-    }
-}
 
 .empty {
     color: rgb(var(--v-theme-muted));

@@ -452,8 +452,30 @@ def test_timeline_gathers_and_flags(app, page):
 
     # the two years for the Codex are flagged; the owner keeps 217
     flag = codex_line.get_by_test_id("line-disagrees")
-    assert "disagrees with 217" in flag.text_content()
+    assert "Disagrees with 217" in flag.get_attribute("aria-label")
+    # polish 3: a warning sign right before the row's date and text; the
+    # years and the texts each line up in their own column, and the sign
+    # sits on the year's line
+    year_box = codex_line.locator(".year").bounding_box()
+    assert flag.bounding_box()["x"] < year_box["x"]
+    years = [lines.nth(i).locator(".year").bounding_box() for i in range(2)]
+    texts = [lines.nth(i).locator(".line-text").bounding_box() for i in range(2)]
+    assert abs(years[0]["x"] - years[1]["x"]) <= 1
+    assert abs(texts[0]["x"] - texts[1]["x"]) <= 1
+    assert texts[0]["x"] >= years[0]["x"] + years[0]["width"]
+    # the sign's icon centred on the year's line, not riding high
+    ibox = flag.locator(".v-icon").bounding_box()
+    centre = ibox["y"] + ibox["height"] / 2
+    assert abs(centre - (year_box["y"] + year_box["height"] / 2)) <= 2
     flag.click()
+    # the menu shows the line it disagrees with in full, then the picks
+    menu = page.get_by_test_id("pick-date")
+    expect(menu.get_by_test_id("disagrees-with")).to_contain_text("217")
+    expect(menu.get_by_test_id("disagrees-with")).to_contain_text("is compiled.")
+    # the year and the text apart, not "217The…"
+    other_year = menu.get_by_test_id("disagrees-with").locator(".year").bounding_box()
+    other_text = menu.get_by_test_id("disagrees-with").get_by_text("The First Codex").bounding_box()
+    assert other_text["x"] - (other_year["x"] + other_year["width"]) >= 4
     page.get_by_test_id("pick-option").filter(has_text="Keep 217, end this one").click()
     sent = _wait_sent(page, "pick_date")
     assert sent["mode"] == "end"
