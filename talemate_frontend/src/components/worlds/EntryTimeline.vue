@@ -156,6 +156,11 @@ export default {
     opacity: 0.75;
 }
 
+/* in the "Disagrees with" menu the date runs inline before its text */
+.disagrees-with .year {
+    margin-right: 8px;
+}
+
 .year {
     white-space: nowrap;
     font-variant-numeric: tabular-nums;

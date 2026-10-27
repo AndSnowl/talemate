@@ -472,6 +472,10 @@ def test_timeline_gathers_and_flags(app, page):
     menu = page.get_by_test_id("pick-date")
     expect(menu.get_by_test_id("disagrees-with")).to_contain_text("217")
     expect(menu.get_by_test_id("disagrees-with")).to_contain_text("is compiled.")
+    # the year and the text apart, not "217The…"
+    other_year = menu.get_by_test_id("disagrees-with").locator(".year").bounding_box()
+    other_text = menu.get_by_test_id("disagrees-with").get_by_text("The First Codex").bounding_box()
+    assert other_text["x"] - (other_year["x"] + other_year["width"]) >= 4
     page.get_by_test_id("pick-option").filter(has_text="Keep 217, end this one").click()
     sent = _wait_sent(page, "pick_date")
     assert sent["mode"] == "end"
