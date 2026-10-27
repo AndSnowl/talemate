@@ -368,6 +368,80 @@ def _other_name_keys(view: WorldView, skip: set[str]) -> set[str]:
     return keys
 
 
+def name_holder(view: WorldView, name: str, skip: AbstractSet[str]) -> str | None:
+    """The name of a thing (other than `skip`) that goes by `name`, as its
+    name or an other name, or None."""
+
+    key = name_key(name)
+    for state in view.things():
+        if state.id in skip:
+            continue
+        names = [view.name_of(state.id) or ""] + [
+            entry["name"]
+            for entry in state.fields.get("aka") or []
+            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+        ]
+        if any(name_key(each) == key for each in names):
+            return view.name_of(state.id)
+    return None
+
+
+def refuse_name_in_use(view: WorldView, name: str, skip: AbstractSet[str]) -> None:
+    """`ValueError` when a thing other than `skip` goes by `name` (a
+    retitle can't take a name in use)."""
+
+    holder = name_holder(view, name, skip)
+    if holder is not None:
+        raise ValueError(f"{' '.join(name.split())} is already the name of {holder}")
+
+
+def retitle(
+    rev: Revision,
+    world: World,
+    target_id: str,
+    name: str,
+    *,
+    also: Sequence[str] = (),
+    skip: AbstractSet[str] = frozenset(),
+) -> list[str]:
+    """Rename `target_id` to `name` ("Rename the entry to these words",
+    polish 4), in `rev`: its main name, corrected at that value's date,
+    becomes `name`; its old main name joins its other names (common, not
+    everyday), as do `also` (a re-pointed stub's names), unless another
+    thing (other than `skip`) goes by one. Refused (`ValueError`) when
+    another thing already goes by `name`. Returns the other names added."""
+
+    view = world.view()
+    target = view.thing(target_id)
+    if target is None:
+        raise KeyError(f"no such thing: {target_id}")
+    name = " ".join(name.split())
+    refuse_name_in_use(view, name, {target_id, *skip})
+    old = view.name_of(target_id) or ""
+    if name_key(old) == name_key(name):
+        return []
+    aka = [
+        entry
+        for entry in target.fields.get("aka") or []
+        if isinstance(entry, dict)
+        and name_key(str(entry.get("name", ""))) != name_key(name)
+    ]
+    held = {name_key(name)} | {name_key(str(entry.get("name", ""))) for entry in aka}
+    taken = _other_name_keys(view, {target_id, *skip})
+    added: list[str] = []
+    for other in [old, *also]:
+        other = " ".join(other.split())
+        key = name_key(other)
+        if not key or key in held or key in taken:
+            continue
+        held.add(key)
+        added.append(other)
+        aka.append({"name": other, "tag": "common", "everyday": False})
+    rev.set_field(target_id, "name", name, view.field_since(target_id, "name"))
+    rev.set_field(target_id, "aka", aka, view.field_since(target_id, "aka"))
+    return added
+
+
 def learn_names(
     rev: Revision,
     world: World,
@@ -432,7 +506,8 @@ class _Job(BaseModel):
     merge: bool = False
     # a merge's facts to move (the owner's ticks); `None`, all of them
     fact_ids: list[str] | None = None
-    # a merge's main name, either side's; `None`, the target's own
+    # a merge's main name, either side's (a retitle's, the stub's); `None`,
+    # the target's own
     main_name: str | None = None
     # a merge's link words to add as other names; `None`, every one
     link_akas: list[str] | None = None
@@ -1208,11 +1283,12 @@ class RepointPlan:
             for use in ready or pending[:1]:
                 self._write_use(rev, use)
                 pending.remove(use)
+        renamed = job.main_name not in (None, job.target_name)
         if self._added or (
-            job.merge and self._aka != (job.target.fields.get("aka") or [])
+            (job.merge or renamed) and self._aka != (job.target.fields.get("aka") or [])
         ):
             self._write_aka(rev)
-        if job.merge and job.main_name not in (None, job.target_name):
+        if renamed:
             # a correction of the name it holds now, at that value's date
             rev.set_field(
                 target_id,
@@ -1308,6 +1384,7 @@ def plan_repoint(
     as_kind: str | None = None,
     use_name: str | None = None,
     teach_names: bool = True,
+    retitle: bool = False,
 ) -> RepointPlan:
     """Read and decide a re-point of the stub `stub_id` onto `target_id`
     (see the module docstring), writing nothing. Raises `KeyError` for a
@@ -1318,10 +1395,16 @@ def plan_repoint(
     re-point"), every link's words become that name, which must be one of
     the target's own (its name or an other name; any case, written as the
     target has it): anything else is refused. With `teach_names` false
-    ("link only", ruling H2) the target learns no names at all."""
+    ("link only", ruling H2) the target learns no names at all. With
+    `retitle` ("Rename the entry to these words", polish 4) the target
+    takes the stub's name as its main name, its old one an other name;
+    refused when a third thing goes by the stub's name."""
 
     job = _job(world, stub_id, target_id)
     job.teach_names = teach_names
+    if retitle:
+        refuse_name_in_use(job.view, job.stub_name, {stub_id, target_id})
+        job.main_name = job.stub_name
     if use_name is not None:
         job.use_name = target_name(job.view, target_id, use_name)
     if as_kind is not None and as_kind != job.target.kind:
@@ -1358,7 +1441,7 @@ def _plan(job: _Job) -> RepointPlan:
     changes, links, own = _fact_changes(job, shown_texts)
     own_filings = _own_filings(job)
     carried = _carried_fields(job)
-    if job.merge:
+    if job.merge or job.main_name is not None:
         aka, added = _merge_names(job, shown_texts)
     else:
         aka, added = _names(job, shown_texts)
@@ -1403,15 +1486,22 @@ def repoint_stub(
     *,
     use_name: str | None = None,
     teach_names: bool = True,
+    retitle: bool = False,
 ) -> RepointResult:
     """Point everything that names the stub `stub_id` at `target_id`, and
     remove the stub, in one revision (see the module docstring); with
     `use_name`, the hard re-point, and without `teach_names`, no names
-    taught (`plan_repoint`). Raises `KeyError` for a missing thing and
+    taught, and with `retitle`, the target renamed to the stub's name
+    (`plan_repoint`). Raises `KeyError` for a missing thing and
     `ValueError` for what's refused, writing nothing."""
 
     plan = plan_repoint(
-        world, stub_id, target_id, use_name=use_name, teach_names=teach_names
+        world,
+        stub_id,
+        target_id,
+        use_name=use_name,
+        teach_names=teach_names,
+        retitle=retitle,
     )
     with world.revision(Source.manual(note=plan.note)) as rev:
         plan.write(rev)

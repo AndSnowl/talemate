@@ -82,9 +82,9 @@
 // `stubExpandAfter` opens its box once it's made) and `linkText`, by
 // their UTF-16 offsets in its rendered text (ruling F18). `linkText` and
 // `repointRef` take the owner's mode (P4, ruling H2, `NameModeMenu`): the
-// words linked as written, kept and taught as another name (the reply's
-// `aka_added`, shown as a note), or `useName`, one of the target's names
-// in their place. `referenceTargets` is what Add reference searches: every entry and
+// words linked as written, kept and taught as another name, kept and made
+// the target's main name ('retitle'), or `useName`, one of the target's
+// names in their place. `referenceTargets` is what Add reference searches: every entry and
 // live stub.
 //
 // Filing and tags (the entry page, mockup v3): `addFiling`, `editFiling`
@@ -305,19 +305,12 @@ export function pageAfterDelete(thing, heritage, openedFrom) {
     return null;
 }
 
-// The note on a link that taught its target other names (P4's "add as
-// another name": `link_text`, `repoint_ref`).
-export function otherNamesNote(names) {
-    return `Added as another name: ${names.join(', ')}`;
-}
-
 // The Stubs page's (and the target page's) note on a `stubRepointed`.
 export function repointedNote(done) {
     const links = `${done.links} link${done.links === 1 ? '' : 's'}`;
     const facts = done.factsMoved ? `, which took ${done.factsMoved} fact${done.factsMoved === 1 ? '' : 's'} from it` : '';
-    const names = done.akaAdded.length ? ` ${done.target.name} is now also known as ${done.akaAdded.join(', ')}.` : '';
     const notes = done.notes.map((note) => ` ${note}.`).join('');
-    return `${done.stubName}: ${links} now point to ${done.target.name}${facts}.${names}${notes}`;
+    return `${done.stubName}: ${links} now point to ${done.target.name}${facts}.${notes}`;
 }
 
 // the most pages the back arrow remembers
@@ -2258,9 +2251,6 @@ export const useWorldsStore = defineStore('worlds', {
                         } else {
                             this.refreshThing();
                         }
-                        if (data.aka_added?.length) {
-                            this.showNotes(action, [otherNamesNote(data.aka_added)]);
-                        }
                         this.listStubs();
                         this.listAllThings();
                         const expand = this.stubExpandAfter;
@@ -2445,8 +2435,8 @@ export const useWorldsStore = defineStore('worlds', {
                         this.filingEdited(action, data);
                     } else if (EDIT_ACTIONS.includes(action) && data.id === this.selectedThingId) {
                         this.thing = data;
-                        if (action === 'repoint_ref' && data.aka_added?.length) {
-                            this.showNotes(action, [otherNamesNote(data.aka_added)]);
+                        if (action === 'repoint_ref') {
+                            // its target may have new names, or a new one
                             this.listAllThings();
                         }
                         // a linked fact (or a new name) changes the stubs' mentions

@@ -9603,3 +9603,112 @@ async def test_draft_selection_containing_a_name_links(plugin, client):
     assert (
         f"Its five houses include the {ref(s.velikoye, 'House of Solarius')}." in texts
     )
+
+
+# --- polish 4: re-point can rename the entry to the words ------------------
+
+PURE = "Pure-line Moscavians"
+SNOWY = "Snowy Moscavian Owls"
+
+
+def _names_of(world, thing_id):
+    state = world.view().thing(thing_id)
+    return state.fields["name"], [e["name"] for e in state.fields.get("aka") or []]
+
+
+async def test_repoint_retitle_renames_the_target(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        fact = rev.add_fact(s.court, "general", f"The {PURE} keep the old ways.")
+    rendered = f"The {PURE} keep the old ways."
+    start = rendered.index(PURE)
+    head = s.world.head_rev()
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len(PURE),
+        target_id=snowy,
+        mode="retitle",
+    )
+    assert s.world.head_rev() == head + 1
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().fact(fact)[1].text == (
+        f"The {ref(snowy, PURE)} keep the old ways."
+    )
+
+
+async def test_repoint_ref_retitle_renames_the_target(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        other = rev.create_thing("lore", {"name": "Old Lines"})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(other, PURE)} keep the old ways."
+        )
+    await _act(
+        plugin,
+        "repoint_ref",
+        thing_id=s.court,
+        fact_id=fact,
+        occurrence=0,
+        to_id=snowy,
+        mode="retitle",
+    )
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().fact(fact)[1].text == (
+        f"The {ref(snowy, PURE)} keep the old ways."
+    )
+
+
+async def test_repoint_stub_retitle_renames_the_target(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        fact = rev.add_fact(
+            s.court, "general", f"The {ref(stub, PURE)} keep the old ways."
+        )
+    head = s.world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=stub, target_id=snowy, mode="retitle")
+    assert s.world.head_rev() == head + 1
+    assert _names_of(s.world, snowy) == (PURE, [SNOWY])
+    assert s.world.view().thing(stub) is None
+    assert s.world.view().fact(fact)[1].text == (
+        f"The {ref(snowy, PURE)} keep the old ways."
+    )
+
+
+async def test_repoint_retitle_refuses_a_name_in_use(plugin):
+    s = await _open_filing_world(plugin)
+    with s.world.revision(Source.manual()) as rev:
+        snowy = rev.create_thing("lore", {"name": SNOWY})
+        rev.create_thing("lore", {"name": "Old Lines", "aka": [_aka(PURE)]})
+        fact = rev.add_fact(s.court, "general", f"The {PURE} keep the old ways.")
+    rendered = f"The {PURE} keep the old ways."
+    start = rendered.index(PURE)
+    before = len(_errors(plugin))
+    await _act(
+        plugin,
+        "link_text",
+        fact_id=fact,
+        start=start,
+        end=start + len(PURE),
+        target_id=snowy,
+        mode="retitle",
+    )
+    # a stub of that name re-pointed: the name's Old Lines' too
+    with s.world.revision(Source.manual()) as rev:
+        stub = rev.create_thing("lore", {"name": PURE, "stub": {"ignored": False}})
+        rev.add_fact(s.dawn, "general", f"The {ref(stub, PURE)} came.")
+    head = s.world.head_rev()
+    await _act(plugin, "repoint_stub", stub_id=stub, target_id=snowy, mode="retitle")
+    errors = _errors(plugin)[before:]
+    assert len(errors) == 2
+    for error in errors:
+        assert f"{PURE} is already the name of Old Lines" in error["error"]["message"]
+    assert s.world.head_rev() == head
+    assert _names_of(s.world, snowy) == (SNOWY, [])
+    assert s.world.view().fact(fact)[1].text == rendered

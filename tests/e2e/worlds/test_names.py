@@ -157,3 +157,39 @@ def test_house_of_solarius_stub(app, page):
     expect(stub).to_have_text("House of Solarius")
     expect(fact.get_by_test_id("linked-ref")).to_have_count(0)
     assert page.console_errors == []
+
+
+SNOW_OWLS = {"kind": "species", "name": "Snow Owls"}
+OWL_MARSH = {
+    "kind": "place",
+    "name": "Owl Marsh",
+    "facts": [{"category": "history", "text": "The Pure-line Moscavians nest here."}],
+}
+
+
+def test_repoint_renames_the_entry_to_the_words(app, page):
+    name = _world_name("Retitle")
+    seed_fm_world(app.root, name, present_year=1026, things=[SNOW_OWLS, OWL_MARSH])
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    marsh = _open_thing(page, "Owl Marsh")
+
+    _select(page, _fact(marsh, "nest here"), "Pure-line Moscavians")
+    page.get_by_test_id("selection-menu").get_by_test_id("selection-link").click()
+    search = page.get_by_test_id("reference-search")
+    search.get_by_role("textbox").fill("Snow")
+    page.get_by_test_id("reference-result").filter(has_text="Snow Owls").click()
+    chooser = page.get_by_test_id("name-mode")
+    chooser.get_by_test_id("mode-retitle").click()
+
+    # the words link the entry, which now goes by them, its old name kept
+    link = _fact(marsh, "nest here").get_by_test_id("linked-ref")
+    expect(link).to_have_text("Pure-line Moscavians")
+    page.get_by_test_id("kind-species").click()
+    owls = _open_thing(page, "Pure-line Moscavians")
+    expect(owls.get_by_test_id("aka-editor").get_by_test_id("aka-row")).to_contain_text(
+        ["Snow Owls"]
+    )
+    expect(page.get_by_test_id("accept-notes")).to_have_count(0)
+    assert page.console_errors == []

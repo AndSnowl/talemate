@@ -1232,7 +1232,9 @@ def test_add_fact_off_while_editing(app, page):
     fact's or the summary's), so it never drops an unsaved edit."""
 
     world, thing = _open_velikoye(page, app, _world_name("AddWaits"))
-    add = thing.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    add = thing.get_by_test_id("facts-heading").get_by_role(
+        "button", name="Add fact", exact=True
+    )
     expect(add).to_be_enabled()
     row = thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
     row.get_by_role("button", name="Edit fact").click()
@@ -1240,7 +1242,9 @@ def test_add_fact_off_while_editing(app, page):
     expect(add).to_have_attribute("title", "save or cancel the edit first")
     thing.get_by_test_id("fact-form").get_by_role("button", name="Cancel").click()
     expect(add).to_be_enabled()
-    thing.get_by_test_id("entry-summary").get_by_role("button", name="Edit fact").click()
+    thing.get_by_test_id("entry-summary").get_by_role(
+        "button", name="Edit fact"
+    ).click()
     expect(add).to_be_disabled()
 
 
@@ -1280,11 +1284,15 @@ def test_add_fact_back_when_edited_fact_is_removed(app, page):
     instead of staying off with no form to cancel."""
 
     world, thing = _open_velikoye(page, app, _world_name("AddBack"))
-    add = thing.get_by_test_id("facts-heading").get_by_role("button", name="Add fact", exact=True)
+    add = thing.get_by_test_id("facts-heading").get_by_role(
+        "button", name="Add fact", exact=True
+    )
     row = thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
     row.get_by_role("button", name="Edit fact").click()
     expect(add).to_be_disabled()
     row.get_by_test_id("fact-menu-button").click()
     page.get_by_test_id("fact-menu").get_by_test_id("fact-remove").click()
-    expect(thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")).to_have_count(0)
+    expect(
+        thing.get_by_test_id("fact-row").filter(has_text="Walled in stone")
+    ).to_have_count(0)
     expect(add).to_be_enabled()

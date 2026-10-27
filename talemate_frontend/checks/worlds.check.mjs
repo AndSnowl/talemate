@@ -27,7 +27,6 @@ import {
     lineDates,
     listedFacts,
     nameKey,
-    otherNamesNote,
     pageAfterDelete,
     parseWorldTarget,
     previewCounts,
@@ -2029,7 +2028,7 @@ check('repointStub sends the stub and the target; the reply forgets the stub', (
     });
     assert.equal(
         repointedNote(store.stubRepointed),
-        'Tsardom: 2 links now point to Moscavy, which took 1 fact from it. Moscavy is now also known as Tsardom. Moscavy stays in X.',
+        'Tsardom: 2 links now point to Moscavy, which took 1 fact from it. Moscavy stays in X.',
     );
     listedEverything(sent);
     // the stub's page is gone from the history; leaving clears the note
@@ -3114,7 +3113,7 @@ check('ruling H2: words are a name when a capital is not only the sentence\'s', 
     assert.equal(wordsAreAName('Snowy Owls', 'by the ', ['Snowy Moscavian Owls']), true);
 });
 
-check('P4: link and re-point send the mode; a name taught shows as a note', () => {
+check('P4: link and re-point send the mode; a name taught shows no note (polish 4)', () => {
     const { store, sent } = freshStore();
     store.handleMessage(reply('open_world', WORLD));
     store.openThing('vel');
@@ -3130,15 +3129,15 @@ check('P4: link and re-point send the mode; a name taught shows as a note', () =
     store.repointStub('s1', 'owls', null, 'link');
     assert.equal(sent.at(-1).mode, 'link');
     store.handleMessage(reply('link_text', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['Pure-line Moscavians'] }));
-    assert.deepEqual(store.notes, { action: 'link_text', notes: ['Added as another name: Pure-line Moscavians'] });
+    assert.equal(store.notes, null);
     store.repointRef('f1', 0, 'holt', { mode: 'rename', useName: 'Maren Holt' });
     assert.equal(sent.at(-1).use_name, 'Maren Holt');
     store.repointRef('f1', 0, 'holt', { mode: 'link' });
     assert.equal('use_name' in sent.at(-1), false);
     assert.equal(sent.at(-1).mode, 'link');
     store.handleMessage(reply('repoint_ref', { id: 'vel', kind: 'place', name: 'Velikoye', facts: [], aka_added: ['the town'] }));
-    assert.deepEqual(store.notes, { action: 'repoint_ref', notes: ['Added as another name: the town'] });
-    assert.equal(otherNamesNote(['a', 'b']), 'Added as another name: a, b');
+    // polish 4: no note says what the target learned
+    assert.notEqual(store.notes?.action, 'repoint_ref');
 });
 
 // --- Task 10 fix round 1 -------------------------------------------------------

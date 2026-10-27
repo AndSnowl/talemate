@@ -521,6 +521,7 @@ from talemate.worldplay.repoint import (
     move_fact,
     renamed_words,
     repoint_stub,
+    retitle,
     target_name,
 )
 from talemate.worldplay.setup import (
@@ -698,8 +699,10 @@ class CorrectFactPayload(_ThingEdit):
 
 # how a link takes its words (P4, ruling H2): "link" keeps them and teaches
 # nothing, "name" keeps them and teaches them as another name, "rename"
-# writes one of the target's names (`use_name`) in their place
-LinkMode = Literal["link", "name", "rename"]
+# writes one of the target's names (`use_name`) in their place, "retitle"
+# (polish 4) keeps them and makes them the target's main name, its old one
+# an other name (`repoint.retitle`)
+LinkMode = Literal["link", "name", "rename", "retitle"]
 
 
 def _aka_names(state: ThingState) -> list[str]:
@@ -4647,7 +4650,7 @@ class WorldsPlugin(Plugin):
         if payload.draft_key is not None:
             # a draft's fact (ruling F16): a pick, keyed by name, so accept
             # links every place the draft writes these words
-            if mode == "rename":
+            if mode in ("rename", "retitle"):
                 raise ValueError(
                     "on a draft the words can't be renamed yet: rename them"
                     " once it's accepted"
@@ -4674,11 +4677,12 @@ class WorldsPlugin(Plugin):
                 fact.fact_id,
                 text=text[:start] + ref(payload.target_id, shown) + text[end:],
             )
-            added = (
-                learn_names(rev, world, payload.target_id, [words])
-                if mode == "name"
-                else []
-            )
+            if mode == "retitle":
+                added = retitle(rev, world, payload.target_id, words)
+            elif mode == "name":
+                added = learn_names(rev, world, payload.target_id, [words])
+            else:
+                added = []
         at = _date_in(payload.at)
         self._reply(
             "link_text",
@@ -4687,6 +4691,9 @@ class WorldsPlugin(Plugin):
         if payload.use_name is not None:
             # the fact's words changed
             self._schedule_prose(owner_id, at)
+        if mode == "retitle":
+            # the target's name changed
+            self._schedule_prose(payload.target_id, at)
 
     # --- stubs ------------------------------------------------------------
 
@@ -4837,6 +4844,7 @@ class WorldsPlugin(Plugin):
             payload.target_id,
             use_name=payload.use_name,
             teach_names=mode != "link",
+            retitle=mode == "retitle",
         )
         self._reply(
             "repoint_stub",
@@ -5067,7 +5075,8 @@ class WorldsPlugin(Plugin):
         # only when this was its last reference (it names nothing else, so
         # its names are free)
         from_id = old.group(1) if old else None
-        names = [(old.group(2) or rendered) if old else ""] if mode == "name" else []
+        words = (old.group(2) or rendered) if old else ""
+        names = [words] if mode == "name" else []
         skip: set[str] = set()
         source = view.thing(from_id) if from_id else None
         if (
@@ -5095,17 +5104,23 @@ class WorldsPlugin(Plugin):
                 ]
         with world.revision(Source.manual()) as rev:
             rev.correct_fact(payload.fact_id, text=new_text)
-            added = learn_names(
-                rev,
-                world,
-                payload.to_id,
-                names,
-                skip=skip,
-            )
+            if mode == "retitle":
+                added = retitle(rev, world, payload.to_id, words, also=names, skip=skip)
+            else:
+                added = learn_names(
+                    rev,
+                    world,
+                    payload.to_id,
+                    names,
+                    skip=skip,
+                )
         self._reply(
             "repoint_ref",
             {**self._thing_payload(world, payload.thing_id, at), "aka_added": added},
         )
+        if mode == "retitle":
+            # the target's name changed
+            self._schedule_prose(payload.to_id, at)
         if payload.use_name is not None:
             # the fact's words changed
             self._schedule_prose(payload.thing_id, at)

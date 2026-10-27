@@ -139,13 +139,13 @@ def test_stubs_page_repoints_a_stub_onto_an_entry(app, page):
     # a stub's words are a name: "Add as another name" is its default
     _choose_mode(page, default="name")
 
-    # the stub is gone; a note says where its links went and what names
-    # Moscavy took
+    # the stub is gone; a note says where its links went (polish 4: not
+    # what names Moscavy took)
     note = tab.get_by_test_id("stub-repointed")
     note.wait_for(state="visible", timeout=TIMEOUT_MS)
     text = note.inner_text()
     assert "2 links" in text and "Moscavy" in text
-    assert "Tsardom of Moscavia" in text and "the Tsardom" in text
+    assert "Tsardom of Moscavia" in text and "also known as" not in text
     row.wait_for(state="detached", timeout=TIMEOUT_MS)
 
     # the links now open Moscavy, keeping their words
