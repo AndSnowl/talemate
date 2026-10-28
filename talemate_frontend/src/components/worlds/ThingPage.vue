@@ -460,6 +460,10 @@
                 </v-col>
             </v-row>
 
+            <!-- a language's own sections, below the ordinary ones at the
+                 page's full width (languages 3a) -->
+            <LanguageSections v-if="!draft && thing.kind === 'language'" class="mt-4" :thing="thing" />
+
             <!-- a race or mix draft (opened by Races'/Mixes' "+ New
                  race"/"+ New mix", in the left column above), below the
                  two columns at the entry's full width, so it gets the same
@@ -609,6 +613,7 @@ import {
     tickMoveHere,
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
+import LanguageSections from './LanguageSections.vue';
 import DraftBar from './DraftBar.vue';
 import FillStubButton from './FillStubButton.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
@@ -645,6 +650,9 @@ import ThingReferencedIn from './ThingReferencedIn.vue';
 const HIDDEN_FIELDS = [
     'name', 'voice', 'color', 'lifespan', 'adult_age', 'measures',
     'agent', 'existence', 'tag', 'hint', 'filings', 'aka',
+    // languages 3a: who speaks what, and a language's own sections
+    'languages', 'depth', 'flavour', 'sound', 'rules', 'words', 'phrases',
+    'descends_from', 'similar',
 ];
 
 // what a being's existence means for it
@@ -755,6 +763,7 @@ export default {
     name: 'ThingPage',
     components: {
         CreateBox,
+        LanguageSections,
         DraftBar,
         FillStubButton,
         EntryAddFacts,

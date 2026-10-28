@@ -70,6 +70,15 @@ export const WORLD_KINDS = [
         categories: ['general'],
     },
     {
+        // a language or naming style (languages 3a): imported, never written
+        // from a prompt; its page shows its sounds, words and phrases
+        kind: 'language',
+        label: 'Languages',
+        singular: 'language',
+        icon: 'mdi-alphabetical-variant',
+        categories: ['general', 'history'],
+    },
+    {
         // a god, a spirit, a legendary creature: real (it acts in the world
         // like a character), believed or undecided (`EXISTENCE`)
         kind: 'being',

@@ -611,7 +611,7 @@ function draftOf(preview, { key = null, version = 1, count = null } = {}) {
 }
 
 // every kind's listing, as opening a world, an accept or a started scene asks
-const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being'];
+const ALL_KINDS = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'language', 'being'];
 const STUBS_REQUEST = { type: 'worlds', action: 'list_stubs', include_ignored: true };
 
 // whether `sent` asked for the stubs and every kind's listing
@@ -1539,6 +1539,12 @@ check('other routers are ignored', () => {
     store.handleMessage({ type: 'scene_status', data: {} });
     store.handleMessage({ type: 'worlds', action: 'list_worlds', data: { worlds: [WORLD] } });
     assert.equal(store.worlds.length, 1);
+});
+
+check('languages are a listed kind, imported rather than stubbed (languages 3a)', () => {
+    assert.ok(TOP_KINDS.some((k) => k.kind === 'language'));
+    assert.ok(LISTED_KINDS.includes('language'));
+    assert.ok(!STUB_KINDS.includes('language'));
 });
 
 // --- connections: kinds, other names, preview names, stubs ------------------

@@ -6,7 +6,7 @@ import { OTHER_HEADING, mostPreciseHome, tagHeading } from './entryPage.js';
 
 // The order kinds come in, wherever entries of several kinds are listed
 // together (Connected sorts by it too, on the server).
-export const KIND_ORDER = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being'];
+export const KIND_ORDER = ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'language', 'being'];
 
 // The heading of a kind's list grouped by where, for entries filed nowhere
 export const NOWHERE_HEADING = 'Nowhere';
