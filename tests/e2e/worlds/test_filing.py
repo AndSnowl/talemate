@@ -236,7 +236,7 @@ def test_velikoye_connected_by_tag(app, page):
     expect(rows).to_contain_text("since 412")
     expect(thing.get_by_test_id("entry-summary")).to_contain_text(SUMMARY)
 
-    # Connected, grouped by tag, largest group first
+    # Connected, grouped by tag
     headings = _headings(thing)
     # polish 5: groups run by kind, so the Rulers (characters) lead
     assert headings[0] == "Rulers"
