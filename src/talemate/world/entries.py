@@ -4,8 +4,8 @@
 - **Held by.** A fact can be held by an entry (a religion, a character):
   a belief, not world truth (`held_by`). Its origin names the holder
   (`with_held_by`), or clears it (`"held_by": None`); unmarked, a fact in
-  the `belief` category is held by its owner (ruling F9: the religion,
-  culture and order prompt hints add that category). Nothing else holds a
+  the `belief` category is held by its owner (ruling F9: the religion
+  and order prompt hints add that category). Nothing else holds a
   fact implicitly.
 - **Acting in the world.** A character, or a `being` whose `existence` is
   `real`, acts in the world (`acts_in_world`): it can be cast in a scene,

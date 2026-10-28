@@ -13,7 +13,6 @@ import importlib.util
 import json
 import subprocess
 import sys
-from datetime import date
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -39,7 +38,6 @@ def _load_talemate_app():
 class SeededWorld:
     scene_path: Path
     shared_context_path: Path
-    world_dir: Path
 
 
 # Runs inside the copy (PYTHONPATH=<root>/src). argv[1] is a JSON spec; the
@@ -50,7 +48,6 @@ from pathlib import Path
 
 import talemate.instance as instance
 from talemate.character import Character
-from talemate.cultures.store import world_dir_for
 from talemate.scene_message import CharacterMessage, NarratorMessage
 from talemate.shared_context import SharedContext
 from talemate.tale_mate import Scene
@@ -109,7 +106,6 @@ async def main(spec):
             details={},
             color="#fff",
             shared=item.get("shared", False),
-            culture=item.get("culture"),
             is_player=item.get("is_player", False),
         )
         if item.get("active", True):
@@ -129,7 +125,6 @@ async def main(spec):
         await shared.init_from_scene(scene, write=True)
         scene.shared_context = shared
         result["shared_context_path"] = str(shared.filepath)
-        result["world_dir"] = str(world_dir_for(shared.filepath))
     await scene.save(force=True)
     result["scene_path"] = scene.full_path
     print(RESULT_PREFIX + json.dumps(result))
@@ -138,56 +133,6 @@ async def main(spec):
 asyncio.run(main(json.loads(sys.argv[1])))
 """
 
-_PLACES_GLOSSARY_SCRIPT = """
-import json, sys
-from pathlib import Path
-
-from talemate.cultures.models import GlossaryEntry, Place, new_id
-from talemate.cultures.store import WorldStore
-
-spec = json.loads(sys.argv[1])
-store = WorldStore(Path(spec["world_dir"]))
-
-if spec.get("places") is not None:
-    places = []
-    for raw in spec["places"]:
-        data = dict(raw)
-        data.setdefault("id", new_id())
-        places.append(Place.model_validate(data))
-    store.save_places(places)
-
-if spec.get("entries") is not None:
-    entries = []
-    for raw in spec["entries"]:
-        data = dict(raw)
-        data.setdefault("id", new_id())
-        entries.append(GlossaryEntry.model_validate(data))
-    store.save_glossary(entries)
-
-print(RESULT_PREFIX + json.dumps({}))
-"""
-
-_CULTURE_SCRIPT = """
-import json, sys
-from pathlib import Path
-
-from talemate.cultures.exchange import apply_import
-from talemate.cultures.store import WorldStore
-
-spec = json.loads(sys.argv[1])
-culture = apply_import(
-    WorldStore(Path(spec["world_dir"])),
-    Path(spec["culture_file"]).read_text(encoding="utf-8"),
-    spec["today"],
-)
-print(RESULT_PREFIX + json.dumps({"id": culture.id}))
-"""
-
-
-# One long-lived seeding process per app root: importing talemate costs ~5 s,
-# so paying it once per run instead of once per seed call saves minutes.
-# The worker exec()s each script in a fresh namespace with sys.argv set, the
-# same contract as the old `python -c script spec` call.
 _WORKER_SRC = r"""
 import contextlib, io, json, sys, traceback
 for line in sys.stdin:
@@ -246,11 +191,6 @@ def _run_in_copy(root: Path, script: str, spec: dict) -> dict:
     return json.loads(lines[-1][len(RESULT_PREFIX) :])
 
 
-def _root_from_world(world_dir: Path) -> Path:
-    # <root>/scenes/<project>/shared-context/<name>.world
-    return world_dir.parents[3]
-
-
 def seed_world(
     root: Path,
     project: str = "e2e-world",
@@ -267,8 +207,8 @@ def seed_world(
     ``messages`` items are ``{"text": str, "character": str|None}``, appended
     to the scene's history as a ``CharacterMessage`` (``"Name: text"``) when
     ``character`` is given, else as a ``NarratorMessage``. ``characters``
-    items are ``{"name", "description"="", "culture": dict|None, "active":
-    bool=True, "shared": bool=False, "is_player": bool=False}``: active ones
+    items are ``{"name", "description"="", "active": bool=True,
+    "shared": bool=False, "is_player": bool=False}``: active ones
     are added via a real ``Actor`` (``Player`` when ``is_player``,
     ``commit_to_memory=False``), inactive ones go only into
     ``scene.character_data``.
@@ -295,7 +235,6 @@ def seed_world(
     return SeededWorld(
         scene_path=Path(result["scene_path"]),
         shared_context_path=Path(result["shared_context_path"]),
-        world_dir=Path(result["world_dir"]),
     )
 
 
@@ -319,37 +258,6 @@ def seed_scene_without_world(
         },
     )
     return Path(result["scene_path"])
-
-
-def place_culture(world: SeededWorld, culture_file: Path) -> None:
-    """Import ``culture_file`` into the world's folder, as World Editor's import does."""
-    _run_in_copy(
-        _root_from_world(world.world_dir),
-        _CULTURE_SCRIPT,
-        {
-            "world_dir": str(world.world_dir),
-            "culture_file": str(Path(culture_file).resolve()),
-            "today": date.today().isoformat(),
-        },
-    )
-
-
-def place_places(world: SeededWorld, places: list[dict]) -> None:
-    """Validate and save ``places`` (dicts) via `WorldStore.save_places`."""
-    _run_in_copy(
-        _root_from_world(world.world_dir),
-        _PLACES_GLOSSARY_SCRIPT,
-        {"world_dir": str(world.world_dir), "places": list(places)},
-    )
-
-
-def place_glossary(world: SeededWorld, entries: list[dict]) -> None:
-    """Validate and save ``entries`` (dicts) via `WorldStore.save_glossary`."""
-    _run_in_copy(
-        _root_from_world(world.world_dir),
-        _PLACES_GLOSSARY_SCRIPT,
-        {"world_dir": str(world.world_dir), "entries": list(entries)},
-    )
 
 
 # Runs inside the copy: a fantasymate world (`talemate.world`) in the copy's

@@ -8,9 +8,6 @@ from pathlib import Path
 from e2e import conftest as e2e_conftest
 from e2e.seed import (
     dismiss_onboarding,
-    open_scene,
-    place_glossary,
-    place_places,
     seed_world,
 )
 
@@ -25,26 +22,6 @@ def test_app_loads_without_console_errors(page):
     assert page.console_errors == []
 
 
-def test_seeded_world_opens_with_cultures_tab(app, page):
-    world = seed_world(app.root)
-
-    scene_data = json.loads(world.scene_path.read_text())
-    assert scene_data["shared_context"] == world.shared_context_path.name
-    assert world.world_dir == world.shared_context_path.with_name("world.world")
-
-    open_scene(page, world.scene_path)
-
-    page.locator(f"{APP_BAR} .v-tab", has_text="World Editor").click()
-    cultures_tab = page.locator(".v-tab", has_text="Cultures")
-    cultures_tab.wait_for(state="visible", timeout=30_000)
-    cultures_tab.click()
-
-    # Wait for the tab's positive "linked world, no cultures yet" state, so
-    # the absence check below isn't passing just because nothing rendered yet.
-    page.get_by_text("No cultures yet.").wait_for(state="visible", timeout=30_000)
-    assert page.get_by_text("Link this scene to a Shared World").count() == 0
-
-
 def test_seed_world_with_messages_location_and_characters(app):
     world = seed_world(
         app.root,
@@ -56,7 +33,6 @@ def test_seed_world_with_messages_location_and_characters(app):
             {
                 "name": "Kethrun",
                 "description": "A river trader.",
-                "culture": {"culture_id": "taelrik", "unsure": True},
             },
             {
                 "name": "Offstage Wren",
@@ -74,10 +50,6 @@ def test_seed_world_with_messages_location_and_characters(app):
     ]
 
     assert "Kethrun" in scene_data["character_data"]
-    assert scene_data["character_data"]["Kethrun"]["culture"]["culture_id"] == (
-        "taelrik"
-    )
-    assert scene_data["character_data"]["Kethrun"]["culture"]["unsure"] is True
     assert "Kethrun" in scene_data["active_characters"]
 
     assert "Offstage Wren" in scene_data["character_data"]
@@ -106,32 +78,6 @@ def test_seed_world_state_with_anchor_ids(app):
     assert history_ids
     assert scene_data["world_state"]["anchor_message_ids"] == history_ids
     assert scene_data["world_state"]["characters"]["Kethrun"]["mentions"] == ["Kethrun"]
-
-
-def test_place_places_and_glossary(app):
-    world = seed_world(app.root, project="e2e-seed-places-glossary")
-
-    place_places(
-        world,
-        [{"name": "Dhunmouth", "kind": "city"}],
-    )
-    place_glossary(
-        world,
-        [
-            {
-                "text": "Marigold",
-                "language": None,
-                "kind": "person",
-                "origin": {"by": "owner"},
-            }
-        ],
-    )
-
-    places_data = json.loads((world.world_dir / "places.json").read_text())
-    assert [p["name"] for p in places_data["places"]] == ["Dhunmouth"]
-
-    glossary_data = json.loads((world.world_dir / "glossary.json").read_text())
-    assert [e["text"] for e in glossary_data["entries"]] == ["Marigold"]
 
 
 def test_failure_artifacts_written(page, tmp_path):

@@ -149,7 +149,7 @@ def heritage_world(world):
             "mix", fields={"name": "Half-orc", "parents": [lowlander, orc]}
         )
         riverfolk = rev.create_thing(
-            "lore", fields={"name": "Riverfolk", "tag": "culture", "hint": "culture"}
+            "lore", fields={"name": "Riverfolk", "tag": "culture", "hint": "order"}
         )
         customs = rev.add_fact(riverfolk, "general", "Name their boats.")
         vasha = rev.create_thing(

@@ -139,8 +139,8 @@ class DialogueExamplesEmission(AgentEmission):
 
 class CharacterNamingEmission(AgentEmission):
     """Sent before the creator invents a name for a new character, giving a
-    listener (the Culture agent) the chance to pre-supply a culture-
-    appropriate one instead. A no-op with no receiver connected: `name` is
+    listener (language naming) the chance to pre-supply one from the
+    language in reach instead. A no-op with no receiver connected: `name` is
     then generated as before."""
 
     name: str = ""
@@ -468,7 +468,7 @@ class CharacterCreatorMixin:
         description: str,
     ) -> CharacterNamingEmission:
         """Send the pre-naming signal and return the emission. A listener
-        (the Culture agent) may set `chosen_name` to pre-supply a name, and
+        (language naming) may set `chosen_name` to pre-supply a name, and
         add `dynamic_instructions` to carry along with it. A no-op with no
         receiver connected."""
         emission = CharacterNamingEmission(
@@ -484,9 +484,9 @@ class CharacterCreatorMixin:
         allowed_names: list[str] = None,
         group: bool = False,
         instructions: str = "",
-        culture_hook: bool = True,
+        naming_hook: bool = True,
     ) -> str:
-        if culture_hook and not group and not allowed_names:
+        if naming_hook and not group and not allowed_names:
             # only the name is returned here: there's no later prompt on this
             # path to carry `emission.dynamic_instructions` into
             emission = await self._pre_name_character(character_name, instructions, "")
@@ -927,7 +927,7 @@ class CharacterCreatorMixin:
         )
 
         # pre-naming hook: when a name is being generated, give a listener
-        # (the Culture agent) the chance to pre-supply one before the LLM
+        # (language naming) the chance to pre-supply one before the LLM
         # invents it. A no-op with no receiver connected.
         chosen_name = None
         if "name" in request.aspects:
@@ -1057,7 +1057,7 @@ class CharacterCreatorMixin:
         working_character: Character,
     ) -> None:
         result.name = await self.determine_character_name(
-            request.name, instructions=request.content, culture_hook=False
+            request.name, instructions=request.content, naming_hook=False
         )
         working_character.name = result.name
 

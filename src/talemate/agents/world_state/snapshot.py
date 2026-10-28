@@ -41,7 +41,7 @@ talemate.emit.async_signals.register("world_state.snapshot.after")
 
 class WorldStateSnapshotEmission(AgentEmission):
     """Sent at the end of a successful `apply_snapshot_update` (after the
-    merge and `world_state.emit()`), so a listener (the Culture agent) can
+    merge and `world_state.emit()`), so a listener (language naming) can
     react to the fresh snapshot. Not sent after a cancel, an error, or an
     empty response. A no-op with no receiver connected."""
 

@@ -5,8 +5,7 @@ species.
 then its `heritage` (a race or mix), a mix's own layer followed by each
 parent's chain in turn, and a race's `species`. Each thing appears once, so
 a cycle in mix parents terminates, and a missing or deleted target is
-skipped. A culture is no layer: a character is filed in it rather than
-inheriting from it.
+skipped.
 
 Facts and numbers are resolved from those layers in code. A fact is
 dropped from the inherited set when it's listed in `overrides` by facts

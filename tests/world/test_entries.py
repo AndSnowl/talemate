@@ -29,7 +29,7 @@ class Faiths:
 
 @pytest.fixture
 def faiths(world):
-    """The Church (religion lore), the Riverfolk (culture lore), the
+    """The Church (religion lore), the Riverfolk (order lore), the
     Tsardom (a place), each with a plain fact; the Eternal Light (a lore
     entry, its one fact held by the Church by hand) and the Divine Right,
     a doctrine entry filed in the Church."""
@@ -44,7 +44,7 @@ def faiths(world):
         )
         candles = rev.add_fact(church, "general", "Candles are lit at every baptism.")
         folk = rev.create_thing(
-            "lore", fields={"name": "The Riverfolk", "hint": "culture"}
+            "lore", fields={"name": "The Riverfolk", "hint": "order"}
         )
         stars = rev.add_fact(folk, "general", "The dead are reborn as stars.")
         tsardom = rev.create_thing("place", fields={"name": "The Tsardom"})
@@ -109,12 +109,12 @@ def test_held_by_deleted_holder_is_hidden(world, faiths):
 
 
 def _hill_clans(world):
-    """The Hill Clans, a culture (lore, whose kind takes `belief` facts),
+    """The Hill Clans, an order (lore, whose kind takes `belief` facts),
     with one belief unmarked and one marked held by the Church."""
 
     with world.revision(Source.manual(note="clans")) as rev:
         clans = rev.create_thing(
-            "lore", fields={"name": "The Hill Clans", "hint": "culture"}
+            "lore", fields={"name": "The Hill Clans", "hint": "order"}
         )
         stones = rev.add_fact(clans, "belief", "The standing stones hear oaths.")
         light = rev.add_fact(clans, "general", "They keep sheep on the high fells.")

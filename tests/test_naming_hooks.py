@@ -1,8 +1,8 @@
-"""Tests for the core culture hooks (plan 2 / task 5):
+"""Tests for the core naming hooks:
 
 - the creator agent's pre-naming signal (`agent.creator.before_name_character`),
-  which lets a listener (the Culture agent) pre-supply a culture-appropriate
-  name before the creator invents one
+  which lets a listener (part 4's language naming) pre-supply a name from
+  the language in reach before the creator invents one
 - the world-state agent's post-snapshot signal (`world_state.snapshot.after`),
   sent once a snapshot update has been merged successfully
 
@@ -27,14 +27,14 @@ from _director_test_helpers import patch_prompt_request_in
 
 
 @pytest.fixture
-def culture_scene():
+def naming_scene():
     scene = MockScene()
     bootstrap_scene(scene)
     return scene
 
 
 @pytest.fixture
-def creator(culture_scene):
+def creator(naming_scene):
     return instance.get_agent("creator")
 
 
@@ -80,7 +80,7 @@ async def test_fast_name_presupplied_removes_name_aspect(
     async def set_name(emission):
         emission.chosen_name = "Tovrin"
         emission.dynamic_instructions.append(
-            DynamicInstruction(title="Culture", content="Use local naming.")
+            DynamicInstruction(title="Naming", content="Use local naming.")
         )
 
     signal.connect(set_name)
@@ -105,7 +105,7 @@ async def test_fast_name_presupplied_removes_name_aspect(
     assert len(calls) == 1
     assert calls[0]["vars"]["aspects"] == ["description"]
     assert calls[0]["vars"]["character_name"] == "Tovrin"
-    assert any(di.title == "Culture" for di in calls[0]["vars"]["dynamic_instructions"])
+    assert any(di.title == "Naming" for di in calls[0]["vars"]["dynamic_instructions"])
 
 
 @pytest.mark.asyncio
@@ -157,7 +157,7 @@ async def test_determine_character_name_hook_and_opt_out(
     await creator.determine_character_name("the ferryman", group=True)
     assert received == []
 
-    await creator.determine_character_name("the ferryman", culture_hook=False)
+    await creator.determine_character_name("the ferryman", naming_hook=False)
     assert received == []
 
 
@@ -187,13 +187,13 @@ async def test_fill_aspect_name_does_not_rehook(creator, isolate_signals, prompt
 
 @pytest.mark.asyncio
 async def test_snapshot_after_signal_sent_on_success_only(
-    culture_scene, isolate_signals, monkeypatch
+    naming_scene, isolate_signals, monkeypatch
 ):
     signal = isolate_signals("world_state.snapshot.after")
     received = connect_recorder(signal)
 
     agent = instance.get_agent("world_state")
-    world_state = culture_scene.world_state
+    world_state = naming_scene.world_state
 
     async def ok_response(*args, **kwargs):
         return WorldStateResponse(
