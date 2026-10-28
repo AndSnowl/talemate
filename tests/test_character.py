@@ -726,3 +726,13 @@ class TestListCharacters:
         assert result[0].description.endswith("...")
         # original 10 chars + 3 dots
         assert len(result[0].description) == 13
+
+
+def test_character_ignores_saved_culture_key():
+    """A scene saved before cultures were removed carries `culture` on its
+    characters (null or a full dict); it loads and the key is dropped."""
+    for saved in (None, {"culture_id": "x", "shares": []}):
+        c = Character(name="Ivan", culture=saved)
+        assert "culture" not in c.model_dump()
+        c.update(culture=saved)
+        assert "culture" not in c.model_dump()

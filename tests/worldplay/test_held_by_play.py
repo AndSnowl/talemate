@@ -443,7 +443,7 @@ def test_moved_belief_keeps_its_old_owner_as_holder(world):
 
     with world.revision(Source.manual(note="clans")) as rev:
         clans = rev.create_thing(
-            "lore", fields={"name": "The Hill Clans", "hint": "culture"}
+            "lore", fields={"name": "The Hill Clans", "hint": "order"}
         )
         tsardom = rev.create_thing("lore", fields={"name": "The Tsardom"})
         stones = rev.add_fact(clans, "belief", "The standing stones hear oaths.")

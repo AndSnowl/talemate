@@ -82,7 +82,6 @@ HINT_AGENT: dict[str, bool] = {
     "religion": True,
     "nation": True,
     "order": True,
-    "culture": False,
     "field": False,
 }
 
@@ -180,7 +179,7 @@ KINDS: dict[str, KindSpec] = {
         ),
         categories=["summary", "consequence", "general"],
     ),
-    # `belief`: what a faith, culture or order teaches, held by the entry
+    # `belief`: what a faith or order teaches, held by the entry
     # itself (`entries.held_by`); offered only under those prompt hints
     "lore": KindSpec(
         name="lore",

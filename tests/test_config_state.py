@@ -99,6 +99,19 @@ class TestLoadConfig:
         assert cfg.agents == {}
         assert cfg.clients == {}
 
+    def test_config_with_culture_agent_loads(self, monkeypatch, tmp_path):
+        """A config saved while the Culture agent existed still loads; the
+        agent itself is gone."""
+        import talemate.instance as instance
+
+        path = tmp_path / "old.yaml"
+        path.write_text("agents:\n  culture:\n    enabled: true\nclients: {}\n")
+        monkeypatch.setattr(config_state, "CONFIG_FILE", path)
+
+        cfg = config_state._load_config()
+        assert isinstance(cfg, Config)
+        assert "culture" not in instance.agent_types()
+
     def test_handles_empty_yaml_file(self, monkeypatch, tmp_path):
         path = tmp_path / "empty.yaml"
         path.write_text("")

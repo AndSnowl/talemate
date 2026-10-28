@@ -7,9 +7,7 @@
 // sync.
 //
 // Imports from ../theme/ by relative path (not the `@/` Vite alias) so this
-// module stays loadable under plain node — see checks/theme.check.mjs and
-// checks/culturesStory.check.mjs (which imports sceneMessageRenderer.js,
-// which imports this file).
+// module stays loadable under plain node — see checks/theme.check.mjs.
 
 import { isHex } from '../theme/colorMath.js';
 import { PALETTE_KEYS } from '../theme/palette.js';

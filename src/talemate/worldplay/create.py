@@ -78,7 +78,7 @@ tags in use, and the reply gives:
 "Could move here" (`move_here_rows`) is found by code, never asked: the
 facts near the entry that name it (`names_draft`), less what its own
 facts repeat. A prompt hint (`hint_text`, `prompts/templates/world/
-hints/`) goes into the prompt, and under the religion, culture or order
+hints/`) goes into the prompt, and under the religion or order
 hint the `belief` category is offered (ruling F9), whose facts its owner
 holds (`entries.held_by`).
 
@@ -724,7 +724,7 @@ def create_categories(kind: str, hint: str | None = None) -> list[str]:
     """The fact categories a `kind` thing is written from a prompt: its
     kind's, less `kinds.UNPROMPTED_CATEGORIES` and `ties` (exceptions come
     from the reply's "in" rows, never its facts). `belief` only under the
-    religion, culture or order hint, and first (the probe's v2: then the
+    religion or order hint, and first (the probe's v2: then the
     example's first fact is a belief), when the kind has it (ruling F9)."""
 
     own = get_kind(kind).categories
@@ -1808,7 +1808,7 @@ def _generic_branch(kind: str, sources: Sequence[str]) -> bool:
 HINTS_DIR = (
     Path(__file__).resolve().parent.parent / "prompts" / "templates" / "world" / "hints"
 )
-BELIEF_HINTS: tuple[str, ...] = ("religion", "culture", "order")
+BELIEF_HINTS: tuple[str, ...] = ("religion", "order")
 
 
 def hint_names() -> list[str]:
@@ -2888,7 +2888,7 @@ async def preview_thing(
     `owner`) become ticked "In" rows (`owner_filings`).
 
     `hint` names a prompt hint (`hint_names`): its text goes into the
-    prompt, and under the religion, culture or order hint the `belief`
+    prompt, and under the religion or order hint the `belief`
     category is offered (`create_categories`, ruling F9), whose facts are
     held by the entry itself (`entries.held_by`). An unknown hint is a
     `ValueError`.
@@ -3688,8 +3688,8 @@ def _same_text(text: str) -> str:
 
 def _hint_agent(preview: CreatePreview, stub: Any = None) -> dict[str, bool]:
     """`{"agent": <bool>}`, the default its prompt hint gives an entry
-    (`kinds.HINT_AGENT`: a religion, nation or order acts; a culture or
-    field doesn't), unless the owner's fields set it, or the `stub` being
+    (`kinds.HINT_AGENT`: a religion, nation or order acts; a field
+    doesn't), unless the owner's fields set it, or the `stub` being
     filled has it already; nothing for no hint or one the table doesn't
     list."""
 

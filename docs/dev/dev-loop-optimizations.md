@@ -64,7 +64,7 @@ With items 1 and 2 the full suite is only 3.5 min, so this matters less than it 
 | A change touching | Runs |
 |---|---|
 | theme or appearance | `tests/e2e/theme` (9 tests) |
-| cultures | `tests/e2e/cultures` |
+| the worlds screens | `tests/e2e/worlds` |
 | anything else | the node checks and the plain suite |
 
 Run the full suite once per task, at its end, not in every fix round.

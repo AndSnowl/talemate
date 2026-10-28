@@ -1,0 +1,276 @@
+{
+ "model": "Skyfall-31B-v4.2-i1-Q4_K_M",
+ "variants": {
+  "none": {
+   "note": null,
+   "turns": [
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "Mira and Ivan size each other up.",
+     "output": "Mira drops into the chair across from Ivan, and the wood groans under the sudden weight. She sets her pack on the floor between her boots, a worn leather thing that's seen better days. Ivan's cart wheel — a split oak rim with iron bands — leans against the table leg beside him like a wounded dog waiting to be put out of its misery.\n\nThey look at each other for a long, unhurried moment. Ivan has the kind of face that weather forgets to leave alone — deep lines carved around his mouth, a scar bisecting one eyebrow, the permanent squint of someone who's spent decades staring into sun and dust. Mira's younger by a good margin, but her hands tell a similar story. She catches him glancing at those hands and doesn't flinch.\n\n\"So,\" she says, and the word hangs there like cigarette smoke, neither of them rushing to chase it.\n\nIvan slides the broken wheel out from behind the table and props it upright. A crack runs along the rim from about seven o'clock to eleven, jagged enough that the iron band has started to separate from the wood. He taps it with his knuckle and the split yawns open. It's the kind of damage that happens when you hit a rock going too fast and the axle twists wrong. He doesn't explain any of this — he just turns the wheel slowly so she can see the damage for herself, watching her face for some indication of whether she knows one end of a spoke from the other.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: Excuse me, are you heading north? I can pay for a ride.",
+     "direction": null,
+     "output": "Ivan: He stops turning the wheel and leans back in his chair, the wood creaking in protest. His eyes — pale grey, like river stones — fix on her with an expression that's not quite suspicion, not quite curiosity. Somewhere in between. He pulls a hand down over his stubbled jaw, considering.\n\n\"Heading north,\" he repeats, like he's tasting the words. \"Depends on what you mean by north. There's north to the trading post, north to the mountain pass, and then there's north where the roads stop being roads and start being suggestions.\" He scratches at the scar on his brow with his thumb. \"Which one you need?\"\n\nHe picks up his mug — dark ale, half-empty — and takes a slow drink, watching her over the rim. His other hand rests on the table, fingers drumming absently against the wood.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: I saw your cart outside. The wheel is cracked. I know a little about mending.",
+     "direction": null,
+     "output": "Ivan: He glances at the wheel propped against the table leg, then back at her. One eyebrow — the scarred one — lifts a fraction of an inch.\n\n\"A little,\" he says. The word carries the weight of a man who's heard \"a little\" before and watched someone fumble a spoke-iron into their own shin. But he doesn't dismiss it. He just pulls the wheel closer, setting it upright between them on the table so it leans against the edge.\n\n\"Well, that's more than I've got right now. The wheelwright in town's three days south and won't be back for a week. I've got the iron bands, a bit of pine pitch, and a hammer that's seen better decades.\" He taps the wheel with his knuckle again — the crack splits open, revealing the pale wood beneath the bark. \"What's your idea?\"\n\nHe leans forward, forearms on the table.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "They try to agree on a deal: her help with the wheel for a ride north.",
+     "output": "Mira reaches forward and runs her thumb along the edge of the crack, pressing into the split. The wood gives slightly, then resists. She snaps her thumb back and examines the grain under her nail.\n\n\"Split's clean,\" she says. \"Didn't rot before it broke. That's good. Rot would mean throwing the whole wheel.\" She looks up at Ivan, and there's something practical in her eyes — the kind of calm assessment that comes from having done this before, maybe more than once. \"I can close this with wedges and pitch. Pine pitch, you said? That'll hold if we seal it tight. Not forever, but long enough to get where you're going. You'd need to keep it wrapped after, replace the band properly later.\"\n\nIvan watches her hands work — the way she tilts the wheel to catch the firelight from the hearth so she can see the grain running along the crack. She knows what she's looking at. He lets out a slow breath through his nose.\n\n\"Alright,\" he says, leaning back again. The chair groans. \"So here's what I'm hearing. You fix my wheel, I give you a ride north. You've got a deal — but I want to be clear on the terms before you start cutting.\" He holds up one finger. \"First, you're not paying me a copper. You're doing the work, the work is the payment. Second, I decide the route, not you — my cart, my road.\" He holds up a second finger. \"And third — we fix it right. Not quick, not half-measures. I don't want to be sitting on the side of the road at midnight because we rushed the job.\"\n\nHe fixes her with those grey eyes, waiting. The rain keeps drumming on the roof.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 1
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: So we have a deal? We leave at dawn?",
+     "direction": null,
+     "output": "Ivan: He holds up a third finger, slowly.\n\n\"And a fourth — don't pack light. I've got blankets and dried meat, but if you've got supplies of your own, bring them. The road's not friendly when it's wet.\" He drops his hand and takes another pull from his mug, draining it. He sets the empty vessel down and pushes it to the edge of the table. \"Dawn works. But we're talking true dawn, not that grey hour where fools think they can see the road.\"\n\nHe stands, and he's taller than he looked sitting down — broad across the shoulders, the kind of frame that cart-hauling and border-guard duty builds over years. He reaches down and hauls the cracked wheel off the table, tucking it under one arm like it weighs nothing.\n\n\"I'll get the pitch and wedges ready tonight.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 1
+     }
+    },
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "The innkeeper brings bread and the evening winds down.",
+     "output": "The innkeeper — a heavyset woman with flour-dusted forearms and no patience for lingering — drops a round of dark bread and a small pot of butter on the table between them without being asked. She's already moving on to the next table before the sound of the knife hitting the board finishes echoing. Ivan tears off a piece, passes the rest across to Mira without ceremony, and they eat in the kind of silence that only settles between people who've already agreed on the important things.\n\nThe fire in the hearth shifts, sending up a constellation of sparks that dissolve into the smoky dark above. A few of the other travelers have drifted out into the rain or up the narrow stairs — the inn is emptying, the evening folding itself down like a closing hand. Somewhere above them, a floorboard groans under shifting weight, and the candle on their table gutters once, twice, then steadies.\n\nIvan pulls a stub of charcoal from his coat pocket and scrawls something on the table's surface — a rough map, barely more than lines and X's, but legible enough. He circles a point near the top and taps it with his finger. \"This is where I'm headed. Two days north from here, give or take.\" He draws a second line branching off to the east, marks it with a small slash. \"There's a fork past the river crossing. My road goes left. If you need somewhere else, that's where we part ways.\" He looks up at her, waiting for her mark on the wood.\n\nMira studies the crude map, the charcoal lines smudging slightly under her fingertip. The rain eases for a moment, then comes back harder, hammering the roof like it's trying to get in. She takes another piece of bread, chews slowly, and finally leans forward to draw a small circle east of the fork — then a second circle, further still, connected by a thin line that wavers like it's not sure of itself. She sets the charcoal down and sits back, and Ivan looks at what she's drawn, his grey eyes tracing the line to its end. He doesn't say anything for a long moment. Then he picks up the charcoal again and adds something — a small note beside her circle, barely legible, but she nods when she reads it.",
+     "scan": {
+      "understand": 0,
+      "gesture": 2,
+      "repeat_slow": 2,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    }
+   ],
+   "world_block": "[world]\nGoal: Mira needs a ride north; Ivan needs help mending his cart wheel.\nPlace: The Ford Inn\n- A smoky inn at the river ford on the Sorau-Moscavia border.\n[end of world]"
+  },
+  "barrier": {
+   "note": "Ivan and Mira share no language: they can't simply talk.",
+   "turns": [
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "Mira and Ivan size each other up.",
+     "output": "Mira drops into the chair across from Ivan, the wood creaking under her as she shifts her weight. Rain hammers the roof above them in a relentless grey sheet, turning the whole inn into a drum. The table between them is scarred with knife marks and old ring stains, and a half-melted candle gutters in a crooked holder, throwing uneven light across Ivan's face.\n\nHe's older than she expected — broad-shouldered, with a grey stubble that catches the candlelight like iron filings. His hands are on the table, palms down, and they're rough. Working hands. There's a mud-caked boot propped against the leg of his chair, and she can see the outline of a coil of rope tucked under the bench behind him. A traveler's cart, she figures. Which means he has a horse.\n\nShe glances toward the window. Through the warped glass, the river is barely visible — just a dark ribbon cutting through the downpour, the ford crossing submerged under churning water. No way she's getting through on foot. No way she's getting through at all, not tonight. She turns her attention back to Ivan and holds up her hand, fingers spread, then points north. His eyebrows lift a fraction. He looks down at his own hand, then mimics her gesture — fingers out, but he points east.\n\nA beat of silence. He taps the side of his boot with one finger, then makes a slow circle in the air, like a wheel turning. Mira's expression shifts. She nods, leaning forward, and taps the table twice — the universal language of deal. Ivan studies her for a long moment, his dark eyes moving over her face like he's reading something written in a script he doesn't quite know. Then he gives a single, slow nod, and reaches for the rope behind his bench.",
+     "scan": {
+      "understand": 0,
+      "gesture": 5,
+      "repeat_slow": 0,
+      "foreign": 1,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: Excuse me, are you heading north? I can pay for a ride.",
+     "direction": null,
+     "output": "Ivan: He pauses mid-reach, the coil of rope half-unwound in his grip. His eyes narrow at her — not hostile, just sharp, the way a man looks at someone who's just said something unexpected. He'd been expecting gestures. Signs. Not words.\n\nHe sets the rope back down slowly, leaning forward on his elbows. His jaw works like he's chewing on the idea of a stranger speaking his language — or maybe chewing on the idea of being spoken to at all. The candle flickers between them, throwing his shadow long against the inn wall.\n\n\"Sorau?\" he says, the word rough and blunt, like he's spitting out something he's not sure he wants in his mouth. His eyes drop to her pack, the herbs still poking out of the top, then back to her face. He gestures vaguely at her with one calloused hand.",
+     "scan": {
+      "understand": 0,
+      "gesture": 3,
+      "repeat_slow": 1,
+      "foreign": 1,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: I saw your cart outside. The wheel is cracked. I know a little about mending.",
+     "direction": null,
+     "output": "Ivan: He stares at her for a beat too long, then lets out a short breath through his nose — not quite a laugh, but close. He leans back, the chair groaning under him, and folds his arms across his chest.\n\n\"The wheel is *broken*,\" he corrects, slow and deliberate, like he's talking to a child who's said something almost right. He holds up his hand, thumb and forefinger apart, making a rough arc. \"Crack runs from rim to hub. I've seen it split clean when I set the brake on the mud.\" He shakes his head. \"Mending is for furniture. This needs a wheelwright.\"\n\nHe reaches under the bench and pulls out the rope again, dropping it on the table between them with a soft thud.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "They try to agree on a deal: her help with the wheel for a ride north.",
+     "output": "Mira doesn't flinch at the correction. She picks up the rope and runs it through her fingers, feeling the fiber, testing its give. Her hands know things her mouth sometimes struggles to say. She sets the rope down and taps the cracked section of the wheel Ivan had gestured toward, then holds up three fingers.\n\nThree days' work. Maybe four, depending on how bad the split is once she gets a proper look.\n\nIvan watches her fingers, then glances toward the window where the river roars under the storm. He understands something without her having to explain it — that she isn't offering to fix the wheel out of charity. She needs passage north as badly as he needs someone to help with the cart. He drums his thick fingers on the table, thinking.\n\nHe leans forward again and points at her, then at the wheel, then draws a line in the air with his finger — north. She nods. He holds up one hand, palm out, and waggles it back and forth like a scale. She mimics the gesture and nods again, harder this time. He lets out a slow breath, the tension in his jaw easing by a fraction, and reaches across the table to shake her hand. His grip is crushing but brief. He pulls back, jerks his chin toward the door, and says something she can't quite make out over the hammering rain — but the meaning is clear enough.\n\nThey'll look at the wheel in the morning. Tonight, the storm owns the road, and the Ford Inn has room enough for two people who've made a deal with nothing but gestures and good faith.",
+     "scan": {
+      "understand": 3,
+      "gesture": 6,
+      "repeat_slow": 2,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: So we have a deal? We leave at dawn?",
+     "direction": null,
+     "output": "Ivan: He gives a short nod, reaching for the rope again and winding it back into a neat coil with practiced hands. His eyes drift to the window, where the rain hasn't let up — if anything, it's worse, the glass sheeting with water so hard he can barely make out the shape of his cart through the downpour.\n\n\"Dawn,\" he repeats, testing the word in his mouth like he's tasting it. He looks back at her, and for a moment there's something almost like amusement in his expression — the idea of two strangers pinning their plans to something as unreliable as morning in this part of the world. \"Dawn,\" he says again, more firmly this time, and taps the table twice with his knuckle. The same gesture she'd made. Deal.",
+     "scan": {
+      "understand": 1,
+      "gesture": 2,
+      "repeat_slow": 3,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "The innkeeper brings bread and the evening winds down.",
+     "output": "The innkeeper — a stout woman with flour on her forearms and a permanent squint, like she's been peering through smoke for most of her life — appears between them carrying a wooden tray. She sets down two bowls of something steaming and thick, a round loaf of dark bread, and a small clay pot of butter that's already starting to swim in its own melt. No explanation, no pleasantries. Just food. Ivan nods at her like this was expected, and she squints harder before disappearing back behind the curtain that separates the common room from whatever passes for a kitchen here.\n\nMira breaks the bread and tears off a piece, offering half across the table. Ivan takes it without ceremony, ripping it in half again and dunking it into the stew. He eats with the focused efficiency of someone who's learned not to waste heat on fancy manners. The stew is simple — root vegetables and some kind of tough meat that's been simmered until it's barely a suggestion of its former self — but it's hot, and the warmth spreads through Mira's chest like a small, welcome fire.\n\nFor a while, they eat in silence. The rain does most of the talking. It's a living sound, the way it fills the gaps between the creak of the building and the occasional cough from the corner where a second traveler sits nursing his own drink, half-asleep. Ivan finishes first, wipes his mouth with the back of his hand, and settles deeper into his chair. He pulls the rope from the table and tucks it under the bench with the ease of someone who's been doing this a thousand times — coiling it, storing it, moving on.\n\nHe glances at Mira, then at the dark window, then back at her. He holds up both hands, fingers splayed, then closes them one at a time. Five. She tilts her head — five what? He points at her pack, then at the ceiling, miming sleep, then holds up the same five fingers again. Five hours until dawn. She nods. He leans back, closes his eyes, and the candle gutters between them like a dying pulse.",
+     "scan": {
+      "understand": 0,
+      "gesture": 3,
+      "repeat_slow": 2,
+      "foreign": 0,
+      "puzzled": 1
+     }
+    }
+   ],
+   "world_block": "[world]\nGoal: Mira needs a ride north; Ivan needs help mending his cart wheel.\nPlace: The Ford Inn\n- A smoky inn at the river ford on the Sorau-Moscavia border.\n[end of world]\nIvan and Mira share no language: they can't simply talk."
+  },
+  "similar": {
+   "note": "Ivan's Moscavian is close to Mira's Sorauan: they understand each other with effort.",
+   "turns": [
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "Mira and Ivan size each other up.",
+     "output": "Mira drops into the chair across from Ivan, and the wood groans under the shift. The table between them is scarred with old knife marks and sticky with spilled ale. She pushes back the hood of her cloak, letting rain-darkened hair fall loose around her shoulders. Her boots leave a faint trail of mud on the already muddy floorboards.\n\nIvan looks up from his cup. He's a broad man, weathered in the way that suggests he spends more time outside than in, though the way he's hunched over his drink suggests he's been here long enough to get comfortable. His cart sits just outside the inn's open stable door — she can see its broken wheel through the gap, the spokes splayed out like a fan.\n\nFor a moment neither of them speaks. The fire crackles. Someone at the bar laughs too loud. Mira breaks the silence first, gesturing vaguely toward the stable with a tilt of her chin, then making a turning motion with her hand — the universal language of that thing is broken. Ivan nods slowly, catching her meaning. He taps the rim of his cup with a thick finger, then holds up two hands apart, miming a circle. A wheel. Then he shrugs, palms up, and shakes his head — I don't have the tools.\n\nMira leans forward, pulling a small leather kit from inside her cloak. She sets it on the table between them and flips it open. A handful of tools catches the firelight — a draw knife, a mallet, a few iron wedges. Ivan's eyebrows rise. He leans in to look, and their eyes meet properly for the first time. His are dark and appraising. She holds his gaze without flinching.",
+     "scan": {
+      "understand": 1,
+      "gesture": 2,
+      "repeat_slow": 1,
+      "foreign": 1,
+      "puzzled": 2
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: Excuse me, are you heading north? I can pay for a ride.",
+     "direction": null,
+     "output": "Ivan: He leaned back in his chair, the wood creaking under his weight, and studied her with the kind of look a man gives a horse he's thinking about buying — checking for soundness, for signs of trouble. The rain hammered the roof like it had a grudge.\n\nHe picked up his cup, took a slow pull of ale, and set it down.\n\n\"North,\" he repeated, rolling the word around like it tasted strange. His Moscavian had a rough edge to it, the consonants bitten off short, but she'd understand well enough. \"How far north?\"\n\nHe scratched at the stubble along his jaw, eyes flicking to the toolkit on the table, then back to her face. The offer was clear enough. She had the skill, he had the cart — once it was fixed. A fair trade, maybe.\n\n\"I'm not a courier, girl. I move grain.",
+     "scan": {
+      "understand": 1,
+      "gesture": 1,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: I saw your cart outside. The wheel is cracked. I know a little about mending.",
+     "direction": null,
+     "output": "Ivan: He snorted — not quite a laugh, but close. He turned his head toward the stable door and squinted out at the dark shape of his cart, barely visible through the sheets of rain.\n\n\"You saw my cart and you *still* sat down across from me.\" He tapped his chest with a thick finger. \"Most people cross the street when they see a broken wheel. Means trouble. Means time.\"\n\nHe pulled his chair forward, the legs scraping against the floorboards, and leaned his elbows on the table. The candlelight caught the lines around his eyes — deep ones, carved by sun and wind and years of staring down muddy roads.\n\n\"Mending, she says.\" He picked up the draw knife from her kit and turned it over in his rough hands, testing the edge with his thumb. \"A little mending. That wheel's got a split clean through the hub.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 0,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "They try to agree on a deal: her help with the wheel for a ride north.",
+     "output": "Mira reached across the table and took the draw knife back from him, her fingers brushing over his calloused palm without ceremony. She held it up and pointed the blade at the stable door.\n\n\"It's not a clean split,\" she said. \"If it were clean, you'd have a cracked wheel, not a broken one. That means the hub is loose — the wedges have worked free. I've seen it a dozen times.\" She set the knife down and folded her hands on the table, looking at him steadily. \"Give me an hour, maybe two, and I'll have it road-worthy. Not pretty, but solid. You won't lose it on the way north.\"\n\nIvan drummed his fingers on the table, processing this. His gaze drifted to the rain-streaked window, then back to the toolkit. He seemed to be doing math — time against distance, cost against labor, the value of a stranger's promise against the alternative of sitting in this inn until the road dried enough to flag down someone else.\n\n\"How far north?\" he asked again, but this time there was a different weight behind it. The question of whether he could make the trip now hinged on whether she could fix what was broken.\n\nMira named a town. It was further than he'd expected — far enough that the grain in his cart wouldn't be the only cargo worth protecting along the way. His jaw tightened, working over the risk. Then he reached across the table and pushed the toolkit closer to her with one hand, standing up so abruptly the chair scraped back and nearly toppled.\n\n\"Fine. You fix my wheel, I take you north. But you work on it first — I watch you start, and if I don't like what I see, you find another ride.\" He jerked his chin toward the stable door. \"Go on, then. Rain's not getting any lighter.\"",
+     "scan": {
+      "understand": 0,
+      "gesture": 1,
+      "repeat_slow": 1,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    },
+    {
+     "kind": "conversation",
+     "who": "Ivan",
+     "player_line": "Mira: So we have a deal? We leave at dawn?",
+     "direction": null,
+     "output": "Ivan: He paused at the stable door, half-turned back toward her, rain catching in his hair and running down the creases of his neck.\n\n\"Dawn's ambitious for a job like that.\" He pulled a wool coat from a hook on the wall and shrugged into it, his movements unhurried despite his earlier urgency. \"We leave when the wheel's done and the road's fit for travel. Could be dawn. Could be noon. Could be tomorrow morning if you botch it.\"\n\nHe stepped out into the downpour, boots squelching in the mud, and held the stable door open for her with one arm. The cart was just inside — a sturdy thing, Moscavian-made, with two full sacks of grain still loaded in the back and the broken wheel propped up on a stack of firewood so the hub was accessible.",
+     "scan": {
+      "understand": 0,
+      "gesture": 0,
+      "repeat_slow": 0,
+      "foreign": 0,
+      "puzzled": 1
+     }
+    },
+    {
+     "kind": "narrator",
+     "who": "progress_story",
+     "player_line": null,
+     "direction": "The innkeeper brings bread and the evening winds down.",
+     "output": "Mira stepped through the stable door and into the damp air. The rain came at an angle here, driven by a wind that pushed through the gap between the stable wall and the inn's timber frame. She could see the broken wheel more clearly now — Ivan hadn't been exaggerating. The split ran from the outer edge of the hub inward, and the iron ring had shifted maybe a finger's width out of true. Not catastrophic, but the kind of damage that would turn a pothole into a disaster.\n\nShe knelt beside the cart and ran her fingers along the split, feeling the grain of the wood, testing how loose the hub was. It moved more than it should. She pulled the mallet and a wedge from her kit and looked up at Ivan, who stood over her with his arms crossed, watching with the patient skepticism of a man who'd seen plenty of confident promises crumble under scrutiny.\n\nInside the inn, a door banged shut — probably the barmaid heading to the kitchens. A moment later the innkeeper appeared in the stable doorway carrying a round loaf of dark bread on a wooden plate, steam still rising from the center where it had been torn open. He said something in thick Sorauan, gesturing at the bread and then at the two of them, offering it as a kind of house peace offering — the border tensions between Sorau and Moscavia made travelers wary of each other, and an innkeeper who kept the peace fed his guests before he worried about politics.\n\nMira took the loaf and tore off a piece, handing the rest to Ivan. He accepted it with a grunt, then settled his back against the stable wall and watched as she set a wooden brace against the inside of the split and began tapping it into place with the mallet, slow and deliberate, each blow drawing the crack together a fraction tighter. The evening light was fading, but she worked by feel as much as sight, her fingers reading the wood the way a musician reads a melody — listening for the change in resistance, the moment when the grain held and the hub steadied.",
+     "scan": {
+      "understand": 0,
+      "gesture": 1,
+      "repeat_slow": 0,
+      "foreign": 0,
+      "puzzled": 0
+     }
+    }
+   ],
+   "world_block": "[world]\nGoal: Mira needs a ride north; Ivan needs help mending his cart wheel.\nPlace: The Ford Inn\n- A smoky inn at the river ford on the Sorau-Moscavia border.\n[end of world]\nIvan's Moscavian is close to Mira's Sorauan: they understand each other with effort."
+  }
+ },
+ "calls": 18
+}

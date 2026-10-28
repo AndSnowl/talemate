@@ -12,7 +12,6 @@ import talemate.scene_message as scene_message
 import talemate.agents.base as agent_base
 from talemate.agents.tts.schema import Voice
 from talemate.agents.visual.schema import PromptFinalizer as VisualPromptFinalizer
-from talemate.cultures.models import CharacterCulture
 import talemate.emit.async_signals as async_signals
 from talemate.game.engine.context_id.character import (
     CharacterContext,
@@ -52,7 +51,6 @@ class Character(pydantic.BaseModel):
         default_factory=list
     )
     voice: Voice | None = None
-    culture: CharacterCulture | None = None
 
     # shared context
     shared: bool = False
@@ -359,7 +357,8 @@ class Character(pydantic.BaseModel):
             if key == "voice":
                 self.voice = Voice(**value) if value else None
             elif key == "culture":
-                self.culture = CharacterCulture(**value) if value else None
+                # scenes saved before cultures were removed still carry it
+                continue
             else:
                 setattr(self, key, value)
 
@@ -686,9 +685,6 @@ class Character(pydantic.BaseModel):
         # `folder` must propagate even when cleared; the exclude_none=True dump
         # above would drop None values so we assign explicitly here.
         self.folder = other_character.folder
-        self.culture = (
-            other_character.culture.model_copy() if other_character.culture else None
-        )
 
         for attribute in self.shared_attributes:
             if attribute not in other_character.base_attributes:

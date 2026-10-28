@@ -1,0 +1,33 @@
+<template>
+    <div>
+        <v-expansion-panels density="compact" v-for="(place, name) in places" :key="name">
+            <v-expansion-panel rounded="0" density="compact">
+                <v-expansion-panel-title class="text-subtitle-2" diable-icon-rotate>
+                    {{ name }}
+                    <template v-slot:actions>
+                        <v-icon icon="mdi-map-marker"></v-icon>
+                    </template>
+                </v-expansion-panel-title>
+
+                <v-expansion-panel-text class="text-body-2">
+                    {{ place.snapshot }}
+                </v-expansion-panel-text>
+            </v-expansion-panel>
+        </v-expansion-panels>
+    </div>
+</template>
+
+<script>
+// The World panel's "places" section: one row per
+// `world_state.places` entry, with the place's snapshot text — the same expansion-panel shape as the
+// characters/objects sections above it in WorldState.vue.
+export default {
+    name: 'WorldPanelPlaces',
+    props: {
+        places: {
+            type: Object,
+            default: () => ({}),
+        },
+    },
+};
+</script>

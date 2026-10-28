@@ -1,15 +1,14 @@
 """Drive a running local Talemate backend over its websocket, without a browser.
 
-For the cultures AI tests (tests/ai/) and the overnight evaluation script:
-load a scene, create characters, trigger narration and snapshots, and read
-the results, the same way the frontend does. Start the backend with
+For AI tests and evaluation scripts: load a scene, create characters,
+trigger narration, and read the results, the same way the frontend does. Start the backend with
 ``scripts/dev/talemate_app.py`` and pass its ``AppInfo.backend_ws_url``::
 
     with BackendSession(info.backend_ws_url) as session:
         session.wait_client_ready()
         session.load_scene(world.scene_path)
         session.persist_character("the ferryman", "A gruff old man.")
-        print(session.events("name_chosen"))
+        print(session.last_output("creator"))
 
 The backend accepts one frontend connection at a time, so don't open the
 app in a browser while a session is connected (the second connection is
@@ -27,7 +26,7 @@ output. Backend failures raise ``BackendError`` (a ``RuntimeError``):
   ``operation_done`` carrying an ``error``).
 
 Every received message is kept in ``messages``, in order; ``prompts()`` and
-``events()`` read from it. ``mark()`` returns the current position, to read
+``last_output()`` read from it. ``mark()`` returns the current position, to read
 only what a later call produced.
 """
 
@@ -283,38 +282,12 @@ class BackendSession:
         )
         return message.get("message", "")
 
-    def request_snapshot(self, timeout: float = 600) -> dict:
-        """Ask for a world state snapshot; return the Culture agent's report on it.
-
-        That is the ``data`` of the next ``cultures`` ``snapshot_processed``
-        event. A scene without a shared world with cultures never sends one,
-        so this times out there.
-        """
-        self.send({"type": "world_state_agent", "action": "request_update"})
-        message = self.wait_for(
-            lambda m: m.get("type") == "cultures"
-            and m.get("action") == "snapshot_processed",
-            timeout,
-            error=_operation_failed("world_state_agent"),
-        )
-        return message.get("data") or {}
-
-    def get_world(self, timeout: float = 30) -> dict:
-        """Return the scene's shared world as the Cultures tab gets it."""
-        self.send({"type": "cultures", "action": "get_world"})
-        message = self.wait_for(
-            lambda m: m.get("type") == "cultures" and m.get("action") == "world",
-            timeout,
-            error=_operation_failed("cultures"),
-        )
-        return message.get("data") or {}
-
     # --- reading -----------------------------------------------------------
 
     def prompts(self, agent_type: str | None = None, start: int = 0) -> list[dict]:
         """``prompt_sent`` data (prompt, raw ``response``, agent, timing) from ``start``.
 
-        ``agent_type`` keeps only one agent's prompts (e.g. ``"culture"``).
+        ``agent_type`` keeps only one agent's prompts (e.g. ``"creator"``).
         """
         return [
             m.get("data") or {}
@@ -330,11 +303,3 @@ class BackendSession:
         """The model's raw response to the last prompt, or None if none was sent."""
         prompts = self.prompts(agent_type)
         return prompts[-1].get("response") if prompts else None
-
-    def events(self, kind: str, start: int = 0) -> list[dict]:
-        """``data`` of the ``cultures`` messages with ``action == kind``, from ``start``."""
-        return [
-            m.get("data") or {}
-            for m in self.messages[start:]
-            if m.get("type") == "cultures" and m.get("action") == kind
-        ]

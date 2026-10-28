@@ -1,0 +1,571 @@
+"""Rule-based name generator and "fits" check for languages.
+
+This module turns the small pattern language used by `Language.categories`
+and `GeneratorDef.patterns` into either randomly generated names (`roll`) or
+a predicate that tells whether an existing name plausibly belongs to a
+language (`fits`). The pattern syntax below is the language format for
+these fields: whatever writes a language's categories and patterns (a
+model, an import, the owner by hand) writes this syntax.
+
+Rule syntax
+-----------
+
+**Categories** (`Language.categories`): a mapping of single uppercase
+letters to a space-separated list of options, e.g.::
+
+    {"C": "k kh t th dh r*2", "V": "a ae e o u i"}
+
+Each option may carry a trailing weight suffix ``*n`` (an integer); options
+without a suffix have weight 1. Options may be more than one letter long
+(e.g. ``kh``, ``th``).
+
+**Pattern tokens** (`GeneratorDef.patterns`), read left to right:
+
+- an uppercase letter that names a defined category means "one weighted
+  pick from that category's options";
+- ``(...)`` marks its contents as optional: included with 50% probability,
+  and may nest, e.g. ``C(V(C))``;
+- ``[a|b|c]`` picks between the alternatives with equal probability; each
+  alternative is itself a sub-pattern and may contain categories, optional
+  groups and nested choices;
+- anything else — lowercase letters, spaces, ``'``, ``-``, digits, and
+  uppercase letters that are *not* defined categories — is literal text,
+  copied through as-is.
+
+Groups may nest at most `MAX_NESTING` levels deep. A pattern that nests
+deeper, a reject rule that isn't a valid regex, or two generators sharing
+an id raise `GeneratorError` (see `validate_language`).
+
+**Pattern weight:** a whole pattern string may end in ``*n`` to weight it
+among a generator's other patterns when one pattern is picked to render
+(e.g. ``["CVC*3", "CV"]`` favours the first pattern 3:1). The ``*n`` suffix
+is stripped before the pattern body is parsed, so it must not collide with
+a trailing category/literal that legitimately ends in ``*n`` (it never
+does, since ``*`` is not itself a valid category or literal character in
+this syntax).
+
+**Output rules**, applied to each candidate produced from a pattern:
+
+- `GeneratorDef.reject` is a list of regexes, matched case-insensitively
+  with `re.search` against the full rendered name; any match drops the
+  candidate;
+- `GeneratorDef.min_length` / `max_length` count *letters only* (so
+  spaces, apostrophes and hyphens are free);
+- when `GeneratorDef.capitalize` is true, the first letter of each
+  space-separated word is uppercased (the rest of the word is left as
+  rendered);
+- results are de-duplicated case-insensitively, and none of them may equal
+  (case-insensitively) an entry of the caller-supplied `exclude` set.
+
+Rendered names have their whitespace collapsed to single spaces and
+stripped.
+
+**`fits`:** every pattern of every generator of the language is compiled
+into an anchored, case-insensitive regex: a category becomes an
+alternation of its options sorted longest-first (so a longer option such
+as ``th`` is tried before a prefix like ``t``), ``(...)`` becomes
+``(?:...)?``, ``[a|b]`` becomes ``(?:a|b)``, and literal text is
+regex-escaped. A name fits the language when, with its whitespace
+normalised to single spaces, the *whole* name matches a pattern of some
+generator, and none of *that generator's own* `reject` regexes match it.
+Checks are per generator: another generator's reject rules never veto a
+name. A language with no generators has nothing to check against, so
+`fits` always returns `True` for it — such languages are never flagged as
+having a "foreign" name.
+
+Compiled regexes (and parsed pattern trees) are cached per language,
+keyed on a JSON dump of its `categories` and generators, since parsing and
+compiling are the expensive part and languages are reused across many
+`roll`/`fits` calls.
+"""
+
+from __future__ import annotations
+
+import functools
+import json
+import random
+import re
+from dataclasses import dataclass, field
+from typing import Union
+
+from talemate.languages.models import GeneratorDef, Language
+
+__all__ = [
+    "GeneratorError",
+    "parse_categories",
+    "pattern_letters",
+    "roll",
+    "fits",
+    "name_fits",
+    "validate_language",
+]
+
+
+class GeneratorError(ValueError):
+    """Raised for an unknown generator id or a malformed pattern/category."""
+
+
+# --------------------------------------------------------------------------
+# Pattern tokens
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _Literal:
+    text: str
+
+
+@dataclass(frozen=True)
+class _Category:
+    key: str
+
+
+@dataclass(frozen=True)
+class _Sequence:
+    items: tuple["_Token", ...]
+
+
+@dataclass(frozen=True)
+class _Optional:
+    inner: "_Token"
+
+
+@dataclass(frozen=True)
+class _Choice:
+    options: tuple["_Token", ...]
+
+
+_Token = Union[_Literal, _Category, _Sequence, _Optional, _Choice]
+
+
+_WEIGHT_SUFFIX_RE = re.compile(r"^(.*)\*(\d+)$")
+
+# Deepest `(...)` / `[...]` nesting a pattern may use. Real patterns nest two
+# or three levels; the cap keeps a hostile or broken file from exhausting
+# the recursion limit in the parser, the renderer or `re`.
+MAX_NESTING = 32
+
+
+def _split_weight(text: str) -> tuple[str, int]:
+    """Split a trailing ``*n`` weight suffix off `text`, default weight 1."""
+    match = _WEIGHT_SUFFIX_RE.match(text)
+    if match:
+        return match.group(1), int(match.group(2))
+    return text, 1
+
+
+def pattern_letters(pattern: str) -> set[str]:
+    """Return the uppercase ASCII letters appearing in `pattern`.
+
+    The pattern's own trailing ``*n`` weight suffix (if any) is stripped
+    first, so it never contributes a false category-letter candidate. Used
+    to flag an uppercase letter that isn't one of the language's defined
+    categories — such a
+    letter is still accepted by the parser, which treats it as literal
+    text, so this never raises on its own.
+    """
+    text, _ = _split_weight(pattern)
+    return {ch for ch in text if ch.isalpha() and ch.isupper()}
+
+
+def parse_categories(categories: dict[str, str]) -> dict[str, list[tuple[str, int]]]:
+    """Parse `Language.categories` into options with resolved weights.
+
+    Each category's value is a space-separated list of options; an option
+    may end in ``*n`` for an integer weight (default 1). Returns a mapping
+    of category key to a list of `(option_text, weight)` tuples, in the
+    order the options were declared.
+    """
+    parsed: dict[str, list[tuple[str, int]]] = {}
+    for key, value in categories.items():
+        options: list[tuple[str, int]] = []
+        for token in value.split():
+            text, weight = _split_weight(token)
+            if not text:
+                raise GeneratorError(f"empty option in category {key!r}: {value!r}")
+            options.append((text, weight))
+        if not options:
+            raise GeneratorError(f"category {key!r} has no options")
+        parsed[key] = options
+    return parsed
+
+
+class _PatternParser:
+    """Recursive-descent parser for a single pattern string."""
+
+    def __init__(self, pattern: str, category_keys: frozenset[str]):
+        self.pattern = pattern
+        self.category_keys = category_keys
+        self.pos = 0
+        self.depth = 0
+
+    def parse(self) -> _Sequence:
+        result = self._parse_sequence(stop_chars="")
+        if self.pos != len(self.pattern):
+            raise GeneratorError(
+                f"unexpected {self.pattern[self.pos]!r} in pattern {self.pattern!r}"
+            )
+        return result
+
+    def _parse_sequence(self, stop_chars: str) -> _Sequence:
+        self.depth += 1
+        try:
+            return self._parse_sequence_body(stop_chars)
+        finally:
+            self.depth -= 1
+
+    def _parse_sequence_body(self, stop_chars: str) -> _Sequence:
+        # The top-level sequence is depth 1, each group adds one.
+        if self.depth > MAX_NESTING + 1:
+            raise GeneratorError(
+                f"pattern nests deeper than {MAX_NESTING} levels: {self.pattern[:40]!r}..."
+            )
+        items: list[_Token] = []
+        literal_buf: list[str] = []
+
+        def flush() -> None:
+            if literal_buf:
+                items.append(_Literal("".join(literal_buf)))
+                literal_buf.clear()
+
+        while self.pos < len(self.pattern) and self.pattern[self.pos] not in stop_chars:
+            ch = self.pattern[self.pos]
+            if ch == "(":
+                flush()
+                self.pos += 1
+                inner = self._parse_sequence(stop_chars=")")
+                if self.pos >= len(self.pattern) or self.pattern[self.pos] != ")":
+                    raise GeneratorError(
+                        f"unterminated '(' in pattern {self.pattern!r}"
+                    )
+                self.pos += 1
+                items.append(_Optional(inner))
+            elif ch == "[":
+                flush()
+                self.pos += 1
+                options = [self._parse_sequence(stop_chars="|]")]
+                while self.pos < len(self.pattern) and self.pattern[self.pos] == "|":
+                    self.pos += 1
+                    options.append(self._parse_sequence(stop_chars="|]"))
+                if self.pos >= len(self.pattern) or self.pattern[self.pos] != "]":
+                    raise GeneratorError(
+                        f"unterminated '[' in pattern {self.pattern!r}"
+                    )
+                self.pos += 1
+                items.append(_Choice(tuple(options)))
+            elif ch == ")" or ch == "]":
+                raise GeneratorError(f"unmatched {ch!r} in pattern {self.pattern!r}")
+            elif ch.isupper() and ch in self.category_keys:
+                flush()
+                items.append(_Category(ch))
+                self.pos += 1
+            else:
+                literal_buf.append(ch)
+                self.pos += 1
+        flush()
+        return _Sequence(tuple(items))
+
+
+def _parse_pattern(pattern: str, category_keys: frozenset[str]) -> _Sequence:
+    return _PatternParser(pattern, category_keys).parse()
+
+
+# --------------------------------------------------------------------------
+# Rendering (for `roll`)
+# --------------------------------------------------------------------------
+
+
+def _weighted_choice(options, rng: random.Random):
+    total = sum(weight for _, weight in options)
+    threshold = rng.uniform(0, total)
+    upto = 0.0
+    for item, weight in options:
+        upto += weight
+        if threshold <= upto:
+            return item
+    return options[-1][0]
+
+
+def _render(
+    token: _Token,
+    categories: dict[str, list[tuple[str, int]]],
+    rng: random.Random,
+) -> str:
+    if isinstance(token, _Literal):
+        return token.text
+    if isinstance(token, _Category):
+        return _weighted_choice(categories[token.key], rng)
+    if isinstance(token, _Sequence):
+        return "".join(_render(item, categories, rng) for item in token.items)
+    if isinstance(token, _Optional):
+        if rng.random() < 0.5:
+            return _render(token.inner, categories, rng)
+        return ""
+    if isinstance(token, _Choice):
+        chosen = rng.choice(token.options)
+        return _render(chosen, categories, rng)
+    raise GeneratorError(f"unknown pattern token: {token!r}")
+
+
+def _capitalize_words(name: str) -> str:
+    def cap(word: str) -> str:
+        return word[:1].upper() + word[1:] if word else word
+
+    return " ".join(cap(word) for word in name.split(" "))
+
+
+# --------------------------------------------------------------------------
+# Regex compilation (for `fits`)
+# --------------------------------------------------------------------------
+
+
+# A whitespace run in a pattern's literal text. Names are matched with their
+# whitespace collapsed to single spaces (and stripped), so this matches one
+# space, or nothing where a space was already matched just before it or at
+# either end of the name: "CV (CV) CVC" without its optional group renders
+# "Ka  Tek", which is normalised to (and must match) "Ka Tek".
+_WHITESPACE_REGEX = "(?:(?<= )|^|$| )"
+
+
+def _literal_regex(text: str) -> str:
+    return "".join(
+        _WHITESPACE_REGEX if part.isspace() else re.escape(part)
+        for part in re.split(r"(\s+)", text)
+        if part
+    )
+
+
+def _normalize_whitespace(name: str) -> str:
+    return " ".join(name.split())
+
+
+def _to_regex(token: _Token, category_options: dict[str, list[str]]) -> str:
+    if isinstance(token, _Literal):
+        return _literal_regex(token.text)
+    if isinstance(token, _Category):
+        options = category_options[token.key]
+        return "(?:" + "|".join(re.escape(option) for option in options) + ")"
+    if isinstance(token, _Sequence):
+        return "".join(_to_regex(item, category_options) for item in token.items)
+    if isinstance(token, _Optional):
+        return "(?:" + _to_regex(token.inner, category_options) + ")?"
+    if isinstance(token, _Choice):
+        return (
+            "(?:"
+            + "|".join(_to_regex(option, category_options) for option in token.options)
+            + ")"
+        )
+    raise GeneratorError(f"unknown pattern token: {token!r}")
+
+
+# --------------------------------------------------------------------------
+# Per-language compilation cache
+# --------------------------------------------------------------------------
+
+
+@dataclass
+class _CompiledLanguage:
+    categories: dict[str, list[tuple[str, int]]]
+    generator_patterns: dict[str, list[tuple[_Sequence, int]]] = field(
+        default_factory=dict
+    )
+    generator_reject: dict[str, list[re.Pattern]] = field(default_factory=dict)
+    # generator id -> anchored whole-name regexes, one per pattern
+    generator_fits: dict[str, list[re.Pattern]] = field(default_factory=dict)
+
+
+def _language_cache_key(language: Language) -> str:
+    payload = {
+        "categories": language.categories,
+        "generators": [
+            {
+                "id": gen.id,
+                "name": gen.name,
+                "patterns": gen.patterns,
+                "reject": gen.reject,
+            }
+            for gen in language.generators
+        ],
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+def _compile_regex(pattern: str, what: str) -> re.Pattern:
+    """`re.compile` case-insensitively, raising `GeneratorError` on failure.
+
+    `re.error` isn't a `ValueError`, and a deeply nested expression raises
+    `RecursionError`, so both are turned into a readable `GeneratorError`.
+    """
+    try:
+        return re.compile(pattern, re.IGNORECASE)
+    except (re.error, RecursionError, OverflowError) as exc:
+        reason = exc if isinstance(exc, re.error) else "it nests too deeply"
+        raise GeneratorError(f"invalid {what} {pattern[:40]!r}: {reason}") from None
+
+
+def _compile_generator(
+    gen: dict,
+    category_keys: frozenset[str],
+    category_options: dict[str, list[str]],
+) -> tuple[list[tuple[_Sequence, int]], list[re.Pattern], list[re.Pattern]]:
+    parsed_patterns: list[tuple[_Sequence, int]] = []
+    pattern_regexes: list[re.Pattern] = []
+    for pattern_text in gen["patterns"]:
+        text, weight = _split_weight(pattern_text)
+        tree = _parse_pattern(text, category_keys)
+        parsed_patterns.append((tree, weight))
+        pattern_regexes.append(
+            _compile_regex(f"^{_to_regex(tree, category_options)}$", "pattern")
+        )
+    reject_regexes = [
+        _compile_regex(pattern, "reject rule") for pattern in gen.get("reject", [])
+    ]
+    return parsed_patterns, pattern_regexes, reject_regexes
+
+
+@functools.lru_cache(maxsize=256)
+def _compile_language(cache_key: str) -> _CompiledLanguage:
+    data = json.loads(cache_key)
+    category_keys = frozenset(data["categories"].keys())
+    categories = parse_categories(data["categories"])
+    category_options = {
+        key: sorted((option for option, _ in opts), key=len, reverse=True)
+        for key, opts in categories.items()
+    }
+
+    compiled = _CompiledLanguage(categories=categories)
+
+    for gen in data["generators"]:
+        if gen["id"] in compiled.generator_patterns:
+            raise GeneratorError(f"duplicate generator id: {gen['id']!r}")
+        try:
+            parsed_patterns, pattern_regexes, reject_regexes = _compile_generator(
+                gen, category_keys, category_options
+            )
+        except GeneratorError as exc:
+            raise GeneratorError(
+                f"generator '{gen['name']}' ({gen['id']}): {exc}"
+            ) from None
+        compiled.generator_fits[gen["id"]] = pattern_regexes
+        compiled.generator_patterns[gen["id"]] = parsed_patterns
+        compiled.generator_reject[gen["id"]] = reject_regexes
+
+    return compiled
+
+
+# --------------------------------------------------------------------------
+# Public API
+# --------------------------------------------------------------------------
+
+
+def roll(
+    language: Language,
+    generator_id: str,
+    count: int = 20,
+    rng: random.Random | None = None,
+    exclude: set[str] = frozenset(),
+) -> list[str]:
+    """Generate up to `count` unique candidate names.
+
+    Raises `GeneratorError` if `generator_id` is not one of
+    `language.generators`. Attempts are capped at `count * 50`, so the
+    result may have fewer than `count` names when the generator's pattern
+    space is smaller than that (or reject rules/length bounds are tight).
+    """
+    generator: GeneratorDef | None = next(
+        (gen for gen in language.generators if gen.id == generator_id), None
+    )
+    if generator is None:
+        raise GeneratorError(f"unknown generator id: {generator_id!r}")
+
+    rng = rng if rng is not None else random.Random()
+    compiled = _compile_language(_language_cache_key(language))
+    categories = compiled.categories
+    patterns = compiled.generator_patterns[generator.id]
+    rejects = compiled.generator_reject[generator.id]
+
+    exclude_lower = {value.lower() for value in exclude}
+    seen: set[str] = set()
+    results: list[str] = []
+    attempts = 0
+    max_attempts = count * 50
+
+    while len(results) < count and attempts < max_attempts:
+        attempts += 1
+        tree = _weighted_choice(patterns, rng)
+        name = _normalize_whitespace(_render(tree, categories, rng))
+        if generator.capitalize:
+            name = _capitalize_words(name)
+
+        letters = sum(1 for ch in name if ch.isalpha())
+        if letters < generator.min_length or letters > generator.max_length:
+            continue
+        if any(reject.search(name) for reject in rejects):
+            continue
+
+        key = name.lower()
+        if key in seen or key in exclude_lower:
+            continue
+        seen.add(key)
+        results.append(name)
+
+    return results
+
+
+def validate_language(language: Language) -> None:
+    """Raise `GeneratorError` if any category, pattern or reject rule is bad.
+
+    Also rejects duplicate generator ids within the language.
+    """
+    _compile_language(_language_cache_key(language))
+
+
+def fits(language: Language, name: str) -> bool:
+    """Return whether `name` plausibly belongs to `language`.
+
+    Languages with no generators have no shape to check against, so this
+    always returns `True` for them.
+    """
+    if not language.generators:
+        return True
+
+    compiled = _compile_language(_language_cache_key(language))
+    normalized = _normalize_whitespace(name.lower())
+    if not normalized:
+        return False
+
+    for generator_id, pattern_regexes in compiled.generator_fits.items():
+        if not any(pattern.match(normalized) for pattern in pattern_regexes):
+            continue
+        rejects = compiled.generator_reject[generator_id]
+        if not any(reject.search(normalized) for reject in rejects):
+            return True
+    return False
+
+
+# Words skipped when a multi-word name is checked word by word: a leading
+# article and the connectors that join name parts ("Ilsa of the Birches",
+# "Anne de la Croix").
+_NAME_CONNECTORS = frozenset(
+    {"the", "of", "and", "de", "du", "da", "di", "van", "von", "al", "el", "la", "le"}
+)
+
+
+def name_fits(language: Language, text: str) -> bool:
+    """Return whether a (possibly multi-word) name fits `language`.
+
+    A single word behaves exactly as `fits`. A multi-word name fits when it
+    fits as a whole, or when every word, leaving out a leading "The" and
+    connector words, fits some generator of the language: a given name plus
+    a family name ("Khusrek Thriv") fits, as does "The X" when X fits, but a
+    name mixing a fitting word with a foreign one doesn't.
+    """
+    words = _normalize_whitespace(text).split()
+    if len(words) <= 1:
+        return fits(language, text)
+    if fits(language, text):
+        return True
+    words = [word for word in words if word.lower() not in _NAME_CONNECTORS]
+    if not words:
+        return False
+    return all(fits(language, word) for word in words)

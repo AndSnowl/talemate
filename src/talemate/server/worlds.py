@@ -5234,7 +5234,7 @@ class WorldsPlugin(Plugin):
 
     async def handle_set_held_by(self, data: dict):
         """Set or clear who holds one of a thing's own facts as a belief
-        (`entries.with_held_by`): any live entry (a faith, a culture, a
+        (`entries.with_held_by`): any live entry (a faith, an order, a
         character), or null for world truth (an explicit clear, so a
         `belief` fact can read plain too). One revision; nothing is written when the fact
         is already held so. Answers with the thing. Held-ness feeds
