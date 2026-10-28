@@ -4677,6 +4677,4064 @@
    "small_jobs": {
     "error": "ValidationError: 2 validation errors for Language\nname\n  Field required [type=missing, input_value={'word': 'shkvora', 'meaning': 'welcome'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nlevel\n  Field required [type=missing, input_value={'word': 'shkvora', 'meaning': 'welcome'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing"
    }
+  },
+  "qwen-nothink": {
+   "model": "koboldcpp/Qwen3.8-27B-i1-Q5_K_M",
+   "max_tokens": 6000,
+   "thinking": "off",
+   "cases": {
+    "russian": [
+     {
+      "version": 1,
+      "seconds": 44.7,
+      "reply": "{\n  \"name\": \"Ostrovian\",\n  \"level\": \"full\",\n  \"sound\": \"The language sounds like a heavy, rolling drumbeat with a lot of hard consonants and open vowels. Words often end in short, snappy sounds, giving the speech a brisk, staccato rhythm. It feels earthy and sturdy, like wood and iron.\",\n  \"categories\": {\n    \"C\": \"k kh t th d b p f v s sh zh z r l m n\",\n    \"V\": \"a o u e i y\",\n    \"S\": \"s sh z zh\",\n    \"N\": \"n m l r\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"Personal Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CV(C)V(C)*2\",\n        \"CVCVC*2\",\n        \"CVCV\"\n      ],\n      \"reject\": [\n        \"^k.*k$\",\n        \"^sh.*sh$\",\n        \"oo\",\n        \"uu\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 6\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVCV(C)*2\",\n        \"CVCVCV*2\",\n        \"CVCV\"\n      ],\n      \"reject\": [\n        \"^v.*v$\",\n        \"^m.*m$\",\n        \"aa\",\n        \"ii\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 8\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Object Names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"CVC\",\n        \"CVCV\",\n        \"CVCC\"\n      ],\n      \"reject\": [\n        \".*[aeiou]{3}.*\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 5\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"vark\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"zolm\",\n      \"meaning\": \"water\"\n    },\n    {\n      \"word\": \"keth\",\n      \"meaning\": \"stone\"\n    },\n    {\n      \"word\": \"brun\",\n      \"meaning\": \"wood\"\n    },\n    {\n      \"word\": \"shil\",\n      \"meaning\": \"wind\"\n    },\n    {\n      \"word\": \"dorn\",\n      \"meaning\": \"sun\"\n    },\n    {\n      \"word\": \"nusk\",\n      \"meaning\": \"moon\"\n    },\n    {\n      \"word\": \"pash\",\n      \"meaning\": \"snow\"\n    },\n    {\n      \"word\": \"grot\",\n      \"meaning\": \"earth\"\n    },\n    {\n      \"word\": \"liv\",\n      \"meaning\": \"life\"\n    },\n    {\n      \"word\": \"mord\",\n      \"meaning\": \"death\"\n    },\n    {\n      \"word\": \"takh\",\n      \"meaning\": \"hand\"\n    },\n    {\n      \"word\": \"zov\",\n      \"meaning\": \"voice\"\n    },\n    {\n      \"word\": \"rek\",\n      \"meaning\": \"blood\"\n    },\n    {\n      \"word\": \"blut\",\n      \"meaning\": \"bone\"\n    },\n    {\n      \"word\": \"skar\",\n      \"meaning\": \"skin\"\n    },\n    {\n      \"word\": \"fesh\",\n      \"meaning\": \"flesh\"\n    },\n    {\n      \"word\": \"kold\",\n      \"meaning\": \"cold\"\n    },\n    {\n      \"word\": \"warm\",\n      \"meaning\": \"heat\"\n    },\n    {\n      \"word\": \"bright\",\n      \"meaning\": \"light\"\n    },\n    {\n      \"word\": \"dark\",\n      \"meaning\": \"shadow\"\n    },\n    {\n      \"word\": \"deep\",\n      \"meaning\": \"bottom\"\n    },\n    {\n      \"word\": \"high\",\n      \"meaning\": \"top\"\n    },\n    {\n      \"word\": \"fast\",\n      \"meaning\": \"speed\"\n    },\n    {\n      \"word\": \"slow\",\n      \"meaning\": \"rest\"\n    }\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"greet_1\",\n      \"category\": \"greeting\",\n      \"original\": \"Zolm vark\",\n      \"translation\": \"Peace be with you\"\n    },\n    {\n      \"id\": \"greet_2\",\n      \"category\": \"greeting\",\n      \"original\": \"Dorn keth\",\n      \"translation\": \"May your light be steady\"\n    },\n    {\n      \"id\": \"bless_1\",\n      \"category\": \"blessing\",\n      \"original\": \"Liv takh\",\n      \"translation\": \"Strength in your hands\"\n    },\n    {\n      \"id\": \"bless_2\",\n      \"category\": \"blessing\",\n      \"original\": \"Shil zov\",\n      \"translation\": \"May the wind carry your words\"\n    },\n    {\n      \"id\": \"curse_1\",\n      \"category\": \"curse\",\n      \"original\": \"Mord rek\",\n      \"translation\": \"May your blood freeze\"\n    },\n    {\n      \"id\": \"curse_2\",\n      \"category\": \"curse\",\n      \"original\": \"Dark skar\",\n      \"translation\": \"May shadow consume you\"\n    },\n    {\n      \"id\": \"say_1\",\n      \"category\": \"saying\",\n      \"original\": \"Kold warm\",\n      \"translation\": \"Even in cold, there is heat\"\n    },\n    {\n      \"id\": \"say_2\",\n      \"category\": \"saying\",\n      \"original\": \"Grot brunt\",\n      \"translation\": \"The earth holds all things\"\n    }\n  ]\n}",
+      "language": {
+       "name": "Ostrovian",
+       "level": "full",
+       "sound": "The language sounds like a heavy, rolling drumbeat with a lot of hard consonants and open vowels. Words often end in short, snappy sounds, giving the speech a brisk, staccato rhythm. It feels earthy and sturdy, like wood and iron.",
+       "categories": {
+        "C": "k kh t th d b p f v s sh zh z r l m n",
+        "V": "a o u e i y",
+        "S": "s sh z zh",
+        "N": "n m l r"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "Personal Names",
+         "use": "people",
+         "patterns": [
+          "CV(C)V(C)*2",
+          "CVCVC*2",
+          "CVCV"
+         ],
+         "reject": [
+          "^k.*k$",
+          "^sh.*sh$",
+          "oo",
+          "uu"
+         ],
+         "min_length": 3,
+         "max_length": 6
+        },
+        {
+         "id": "places",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "CVCV(C)*2",
+          "CVCVCV*2",
+          "CVCV"
+         ],
+         "reject": [
+          "^v.*v$",
+          "^m.*m$",
+          "aa",
+          "ii"
+         ],
+         "min_length": 4,
+         "max_length": 8
+        },
+        {
+         "id": "things",
+         "name": "Object Names",
+         "use": "things",
+         "patterns": [
+          "CVC",
+          "CVCV",
+          "CVCC"
+         ],
+         "reject": [
+          ".*[aeiou]{3}.*"
+         ],
+         "min_length": 3,
+         "max_length": 5
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "vark",
+         "meaning": "fire"
+        },
+        {
+         "word": "zolm",
+         "meaning": "water"
+        },
+        {
+         "word": "keth",
+         "meaning": "stone"
+        },
+        {
+         "word": "brun",
+         "meaning": "wood"
+        },
+        {
+         "word": "shil",
+         "meaning": "wind"
+        },
+        {
+         "word": "dorn",
+         "meaning": "sun"
+        },
+        {
+         "word": "nusk",
+         "meaning": "moon"
+        },
+        {
+         "word": "pash",
+         "meaning": "snow"
+        },
+        {
+         "word": "grot",
+         "meaning": "earth"
+        },
+        {
+         "word": "liv",
+         "meaning": "life"
+        },
+        {
+         "word": "mord",
+         "meaning": "death"
+        },
+        {
+         "word": "takh",
+         "meaning": "hand"
+        },
+        {
+         "word": "zov",
+         "meaning": "voice"
+        },
+        {
+         "word": "rek",
+         "meaning": "blood"
+        },
+        {
+         "word": "blut",
+         "meaning": "bone"
+        },
+        {
+         "word": "skar",
+         "meaning": "skin"
+        },
+        {
+         "word": "fesh",
+         "meaning": "flesh"
+        },
+        {
+         "word": "kold",
+         "meaning": "cold"
+        },
+        {
+         "word": "warm",
+         "meaning": "heat"
+        },
+        {
+         "word": "bright",
+         "meaning": "light"
+        },
+        {
+         "word": "dark",
+         "meaning": "shadow"
+        },
+        {
+         "word": "deep",
+         "meaning": "bottom"
+        },
+        {
+         "word": "high",
+         "meaning": "top"
+        },
+        {
+         "word": "fast",
+         "meaning": "speed"
+        },
+        {
+         "word": "slow",
+         "meaning": "rest"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "greet_1",
+         "category": "greeting",
+         "original": "Zolm vark",
+         "translation": "Peace be with you"
+        },
+        {
+         "id": "greet_2",
+         "category": "greeting",
+         "original": "Dorn keth",
+         "translation": "May your light be steady"
+        },
+        {
+         "id": "bless_1",
+         "category": "blessing",
+         "original": "Liv takh",
+         "translation": "Strength in your hands"
+        },
+        {
+         "id": "bless_2",
+         "category": "blessing",
+         "original": "Shil zov",
+         "translation": "May the wind carry your words"
+        },
+        {
+         "id": "curse_1",
+         "category": "curse",
+         "original": "Mord rek",
+         "translation": "May your blood freeze"
+        },
+        {
+         "id": "curse_2",
+         "category": "curse",
+         "original": "Dark skar",
+         "translation": "May shadow consume you"
+        },
+        {
+         "id": "say_1",
+         "category": "saying",
+         "original": "Kold warm",
+         "translation": "Even in cold, there is heat"
+        },
+        {
+         "id": "say_2",
+         "category": "saying",
+         "original": "Grot brunt",
+         "translation": "The earth holds all things"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Livu",
+         "Khaluz",
+         "Finyk",
+         "Muthuk",
+         "Futhod",
+         "Leo",
+         "Tozi",
+         "Fizho",
+         "Myvek",
+         "Rusi",
+         "Feev",
+         "Kiet",
+         "Nisyth",
+         "Nefos",
+         "Kiry",
+         "Resuk",
+         "Sovu",
+         "Beek",
+         "Thei",
+         "Dyzha",
+         "Vozuv",
+         "Pukhy",
+         "Shika",
+         "Zhio",
+         "Vozhus",
+         "Shanyl",
+         "Mida",
+         "Ryo",
+         "Zhepu",
+         "Lytho",
+         "Bozhym",
+         "Mino",
+         "Tyze",
+         "Boe",
+         "Tekha",
+         "Liu",
+         "Pethad",
+         "Syfo",
+         "Konu",
+         "Toa",
+         "Nyduzh",
+         "Nykho",
+         "Nezhed",
+         "Bokhon",
+         "Zhemub",
+         "Byos",
+         "Lavikh",
+         "Tini",
+         "Kheo",
+         "Mami"
+        ],
+        "places": [
+         "Zithu",
+         "Zida",
+         "Selu",
+         "Bokes",
+         "Pato",
+         "Petha",
+         "Zhuzhidu",
+         "Thusymo",
+         "Kavyti",
+         "Bilu",
+         "Zelyne",
+         "Dosizh",
+         "Betiky",
+         "Shomy",
+         "Ryzhim",
+         "Pifa",
+         "Tyna",
+         "Todiko",
+         "Keshytho",
+         "Dediri",
+         "Suli",
+         "Pokhiti",
+         "Ninave",
+         "Vuvaf",
+         "Pizhu",
+         "Thade",
+         "Vyfy",
+         "Zyboshe",
+         "Kufu",
+         "Zyzuze",
+         "Shushemi",
+         "Rishu",
+         "Zysa",
+         "Favifu",
+         "Kenipi",
+         "Thomokhi",
+         "Pezozhi",
+         "Dethe",
+         "Rybo",
+         "Lamebu",
+         "Roshanu",
+         "Zede",
+         "Tipiz",
+         "Bapukho",
+         "Shytha",
+         "Neby",
+         "Zhaput",
+         "Ruso",
+         "Shyna",
+         "Busy"
+        ],
+        "things": [
+         "Lity",
+         "Tek",
+         "Tuly",
+         "Khyk",
+         "Khak",
+         "Zile",
+         "Meb",
+         "Sekhu",
+         "Thyfe",
+         "Zizd",
+         "Tyll",
+         "Khif",
+         "Nasu",
+         "Pil",
+         "Var",
+         "Kuz",
+         "Tir",
+         "Buds",
+         "Bin",
+         "Khefy",
+         "Lism",
+         "Dapv",
+         "Bek",
+         "Zhobb",
+         "Zev",
+         "Mob",
+         "Num",
+         "Nimm",
+         "Tesn",
+         "Zhipn",
+         "Pune",
+         "Tis",
+         "Thuzk",
+         "Sokh",
+         "Shekh",
+         "Let",
+         "Kulz",
+         "Mel",
+         "Fisn",
+         "Zind",
+         "Ziv",
+         "Pyre",
+         "Luth",
+         "Zhat",
+         "Min",
+         "Seve",
+         "Nushb",
+         "Ves",
+         "Tenz",
+         "Pumy"
+        ]
+       },
+       "dictionary_fit": 0.68,
+       "real_hits": [
+        "Rusi",
+        "Sovu",
+        "Neby",
+        "Ruso",
+        "Tuly",
+        "Let",
+        "rek"
+       ]
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 181.4,
+      "reply": "{\n  \"name\": \"Volgari\",\n  \"level\": \"full\",\n  \"sound\": \"It sounds like a deep, rolling thunder with a lot of soft endings. Many words finish in vowels or the letter 'a', which makes the speech feel open and flowing. There are few hard stops, so it feels more like a long song than a rapid staccato.\",\n  \"categories\": {\n    \"C\": \"z zh sh ch k g r l m n v f d t b p\",\n    \"V\": \"a o u e i y\",\n    \"S\": \"s sh zh ch\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"People\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CVVCa\",\n        \"CVVka\",\n        \"CVVCya\",\n        \"CCVVCa\",\n        \"CVVCeva\"\n      ],\n      \"reject\": [\n        \"zz\",\n        \"kk\",\n        \"mm\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 9\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Places\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVVCevo\",\n        \"CVVCev\",\n        \"CVVCya\",\n        \"CVVCevo*2\",\n        \"CCVVCevo\"\n      ],\n      \"reject\": [\n        \"kk\",\n        \"zz\"\n      ],\n      \"min_length\": 5,\n      \"max_length\": 12\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Things\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"CVVCa\",\n        \"CVVko\",\n        \"CVVny\",\n        \"CVVCevo\"\n      ],\n      \"reject\": [\n        \"zz\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 8\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"volga\",\n      \"meaning\": \"river\"\n    },\n    {\n      \"word\": \"zima\",\n      \"meaning\": \"winter\"\n    },\n    {\n      \"word\": \"letno\",\n      \"meaning\": \"summer\"\n    },\n    {\n      \"word\": \"vesna\",\n      \"meaning\": \"spring\"\n    },\n    {\n      \"word\": \"osen\",\n      \"meaning\": \"autumn\"\n    },\n    {\n      \"word\": \"solne\",\n      \"meaning\": \"sun\"\n    },\n    {\n      \"word\": \"mesy\",\n      \"meaning\": \"moon\"\n    },\n    {\n      \"word\": \"zvezda\",\n      \"meaning\": \"star\"\n    },\n    {\n      \"word\": \"nebo\",\n      \"meaning\": \"sky\"\n    },\n    {\n      \"word\": \"zemlya\",\n      \"meaning\": \"earth\"\n    },\n    {\n      \"word\": \"voda\",\n      \"meaning\": \"water\"\n    },\n    {\n      \"word\": \"ogon\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"veter\",\n      \"meaning\": \"wind\"\n    },\n    {\n      \"word\": \"drevno\",\n      \"meaning\": \"tree\"\n    },\n    {\n      \"word\": \"kamen\",\n      \"meaning\": \"stone\"\n    },\n    {\n      \"word\": \"grom\",\n      \"meaning\": \"thunder\"\n    },\n    {\n      \"word\": \"molo\",\n      \"meaning\": \"milk\"\n    },\n    {\n      \"word\": \"khleb\",\n      \"meaning\": \"bread\"\n    },\n    {\n      \"word\": \"ryba\",\n      \"meaning\": \"fish\"\n    },\n    {\n      \"word\": \"kov\",\n      \"meaning\": \"cow\"\n    },\n    {\n      \"word\": \"svin\",\n      \"meaning\": \"pig\"\n    },\n    {\n      \"word\": \"ptitsa\",\n      \"meaning\": \"bird\"\n    },\n    {\n      \"word\": \"volk\",\n      \"meaning\": \"wolf\"\n    },\n    {\n      \"word\": \"medved\",\n      \"meaning\": \"bear\"\n    },\n    {\n      \"word\": \"lis\",\n      \"meaning\": \"fox\"\n    },\n    {\n      \"word\": \"dom\",\n      \"meaning\": \"house\"\n    },\n    {\n      \"word\": \"gorod\",\n      \"meaning\": \"city\"\n    },\n    {\n      \"word\": \"put\",\n      \"meaning\": \"road\"\n    },\n    {\n      \"word\": \"dver\",\n      \"meaning\": \"door\"\n    },\n    {\n      \"word\": \"okno\",\n      \"meaning\": \"window\"\n    },\n    {\n      \"word\": \"stol\",\n      \"meaning\": \"table\"\n    },\n    {\n      \"word\": \"stul\",\n      \"meaning\": \"chair\"\n    },\n    {\n      \"word\": \"krov\",\n      \"meaning\": \"blood\"\n    },\n    {\n      \"word\": \"serdce\",\n      \"meaning\": \"heart\"\n    },\n    {\n      \"word\": \"glaza\",\n      \"meaning\": \"eyes\"\n    },\n    {\n      \"word\": \"ruka\",\n      \"meaning\": \"hand\"\n    },\n    {\n      \"word\": \"noga\",\n      \"meaning\": \"foot\"\n    },\n    {\n      \"word\": \"golova\",\n      \"meaning\": \"head\"\n    },\n    {\n      \"word\": \"yaz\",\n      \"meaning\": \"tongue\"\n    },\n    {\n      \"word\": \"us\",\n      \"meaning\": \"ear\"\n    },\n    {\n      \"word\": \"nos\",\n      \"meaning\": \"nose\"\n    },\n    {\n      \"word\": \"zub\",\n      \"meaning\": \"tooth\"\n    },\n    {\n      \"word\": \"volos\",\n      \"meaning\": \"hair\"\n    },\n    {\n      \"word\": \"kozh\",\n      \"meaning\": \"skin\"\n    },\n    {\n      \"word\": \"kosti\",\n      \"meaning\": \"bone\"\n    },\n    {\n      \"word\": \"myaso\",\n      \"meaning\": \"meat\"\n    },\n    {\n      \"word\": \"sol\",\n      \"meaning\": \"salt\"\n    },\n    {\n      \"word\": \"maslo\",\n      \"meaning\": \"butter\"\n    },\n    {\n      \"word\": \"kisel\",\n      \"meaning\": \"jam\"\n    },\n    {\n      \"word\": \"med\",\n      \"meaning\": \"honey\"\n    },\n    {\n      \"word\": \"vino\",\n      \"meaning\": \"wine\"\n    },\n    {\n      \"word\": \"medov\",\n      \"meaning\": \"mead\"\n    },\n    {\n      \"word\": \"plod\",\n      \"meaning\": \"fruit\"\n    },\n    {\n      \"word\": \"kor\",\n      \"meaning\": \"root\"\n    },\n    {\n      \"word\": \"list\",\n      \"meaning\": \"leaf\"\n    },\n    {\n      \"word\": \"tsvet\",\n      \"meaning\": \"flower\"\n    },\n    {\n      \"word\": \"trava\",\n      \"meaning\": \"grass\"\n    },\n    {\n      \"word\": \"moss\",\n      \"meaning\": \"moss\"\n    },\n    {\n      \"word\": \"lich\",\n      \"meaning\": \"mushroom\"\n    },\n    {\n      \"word\": \"or\",\n      \"meaning\": \"eagle\"\n    },\n    {\n      \"word\": \"golub\",\n      \"meaning\": \"pigeon\"\n    },\n    {\n      \"word\": \"voron\",\n      \"meaning\": \"crow\"\n    },\n    {\n      \"word\": \"gus\",\n      \"meaning\": \"goose\"\n    },\n    {\n      \"word\": \"kura\",\n      \"meaning\": \"chicken\"\n    },\n    {\n      \"word\": \"goved\",\n      \"meaning\": \"ox\"\n    },\n    {\n      \"word\": \"losha\",\n      \"meaning\": \"horse\"\n    },\n    {\n      \"word\": \"soba\",\n      \"meaning\": \"dog\"\n    },\n    {\n      \"word\": \"kot\",\n      \"meaning\": \"cat\"\n    },\n    {\n      \"word\": \"mys\",\n      \"meaning\": \"mouse\"\n    },\n    {\n      \"word\": \"krolik\",\n      \"meaning\": \"rabbit\"\n    },\n    {\n      \"word\": \"zayac\",\n      \"meaning\": \"hare\"\n    },\n    {\n      \"word\": \"baras\",\n      \"meaning\": \"boar\"\n    },\n    {\n      \"word\": \"olena\",\n      \"meaning\": \"deer\"\n    },\n    {\n      \"word\": \"kapy\",\n      \"meaning\": \"antler\"\n    },\n    {\n      \"word\": \"shkura\",\n      \"meaning\": \"hide\"\n    },\n    {\n      \"word\": \"per\",\n      \"meaning\": \"feather\"\n    },\n    {\n      \"word\": \"klyuv\",\n      \"meaning\": \"beak\"\n    },\n    {\n      \"word\": \"kopyto\",\n      \"meaning\": \"hoof\"\n    },\n    {\n      \"word\": \"kosh\",\n      \"meaning\": \"claw\"\n    },\n    {\n      \"word\": \"zub\",\n      \"meaning\": \"tooth\"\n    },\n    {\n      \"word\": \"rok\",\n      \"meaning\": \"jaw\"\n    },\n    {\n      \"word\": \"vyshe\",\n      \"meaning\": \"above\"\n    },\n    {\n      \"word\": \"nize\",\n      \"meaning\": \"below\"\n    },\n    {\n      \"word\": \"pered\",\n      \"meaning\": \"front\"\n    },\n    {\n      \"word\": \"zady\",\n      \"meaning\": \"back\"\n    },\n    {\n      \"word\": \"levy\",\n      \"meaning\": \"left\"\n    },\n    {\n      \"word\": \"pravy\",\n      \"meaning\": \"right\"\n    },\n    {\n      \"word\": \"bliz\",\n      \"meaning\": \"near\"\n    },\n    {\n      \"word\": \"daly\",\n      \"meaning\": \"far\"\n    },\n    {\n      \"word\": \"velik\",\n      \"meaning\": \"big\"\n    },\n    {\n      \"word\": \"maly\",\n      \"meaning\": \"small\"\n    },\n    {\n      \"word\": \"dlin\",\n      \"meaning\": \"long\"\n    },\n    {\n      \"word\": \"krat\",\n      \"meaning\": \"short\"\n    },\n    {\n      \"word\": \"shirok\",\n      \"meaning\": \"wide\"\n    },\n    {\n      \"word\": \"uzk\",\n      \"meaning\": \"narrow\"\n    },\n    {\n      \"word\": \"gлуб\",\n      \"meaning\": \"deep\"\n    },\n    {\n      \"word\": \"vyso\",\n      \"meaning\": \"high\"\n    },\n    {\n      \"word\": \"nizk\",\n      \"meaning\": \"low\"\n    },\n    {\n      \"word\": \"teply\",\n      \"meaning\": \"warm\"\n    },\n    {\n      \"word\": \"holod\",\n      \"meaning\": \"cold\"\n    },\n    {\n      \"word\": \"suh\",\n      \"meaning\": \"dry\"\n    },\n    {\n      \"word\": \"mok\",\n      \"meaning\": \"wet\"\n    },\n    {\n      \"word\": \"svet\",\n      \"meaning\": \"light\"\n    },\n    {\n      \"word\": \"temn\",\n      \"meaning\": \"dark\"\n    },\n    {\n      \"word\": \"krasn\",\n      \"meaning\": \"red\"\n    },\n    {\n      \"word\": \"bely\",\n      \"meaning\": \"white\"\n    },\n    {\n      \"word\": \"chern\",\n      \"meaning\": \"black\"\n    },\n    {\n      \"word\": \"zelen\",\n      \"meaning\": \"green\"\n    },\n    {\n      \"word\": \"zhelt\",\n      \"meaning\": \"yellow\"\n    },\n    {\n      \"word\": \"sini\",\n      \"meaning\": \"blue\"\n    },\n    {\n      \"word\": \"fiolet\",\n      \"meaning\": \"purple\"\n    },\n    {\n      \"word\": \"zlat\",\n      \"meaning\": \"gold\"\n    },\n    {\n      \"word\": \"sereb\",\n      \"meaning\": \"silver\"\n    },\n    {\n      \"word\": \"zhelez\",\n      \"meaning\": \"iron\"\n    },\n    {\n      \"word\": \"bron\",\n      \"meaning\": \"bronze\"\n    },\n    {\n      \"word\": \"kovcheg\",\n      \"meaning\": \"ark\"\n    },\n    {\n      \"word\": \"korabl\",\n      \"meaning\": \"ship\"\n    },\n    {\n      \"word\": \"kol\",\n      \"meaning\": \"wheel\"\n    },\n    {\n      \"word\": \"strun\",\n      \"meaning\": \"string\"\n    },\n    {\n      \"word\": \"tkan\",\n      \"meaning\": \"cloth\"\n    },\n    {\n      \"word\": \"shub\",\n      \"meaning\": \"coat\"\n    },\n    {\n      \"word\": \"bot\",\n      \"meaning\": \"boot\"\n    },\n    {\n      \"word\": \"pere\",\n      \"meaning\": \"hat\"\n    },\n    {\n      \"word\": \"shlyap\",\n      \"meaning\": \"cap\"\n    },\n    {\n      \"word\": \"pal\",\n      \"meaning\": \"candle\"\n    },\n    {\n      \"word\": \"ogon\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"dym\",\n      \"meaning\": \"smoke\"\n    },\n    {\n      \"word\": \"par\",\n      \"meaning\": \"steam\"\n    },\n    {\n      \"word\": \"kaplya\",\n      \"meaning\": \"drop\"\n    },\n    {\n      \"word\": \"strok\",\n      \"meaning\": \"stream\"\n    },\n    {\n      \"word\": \"reka\",\n      \"meaning\": \"river\"\n    },\n    {\n      \"word\": \"more\",\n      \"meaning\": \"sea\"\n    },\n    {\n      \"word\": \"ozero\",\n      \"meaning\": \"lake\"\n    },\n    {\n      \"word\": \"boloto\",\n      \"meaning\": \"swamp\"\n    },\n    {\n      \"word\": \"les\",\n      \"meaning\": \"forest\"\n    },\n    {\n      \"word\": \"pole\",\n      \"meaning\": \"field\"\n    },\n    {\n      \"word\": \"gora\",\n      \"meaning\": \"mountain\"\n    },\n    {\n      \"word\": \"dol\",\n      \"meaning\": \"valley\"\n    },\n    {\n      \"word\": \"brdo\",\n      \"meaning\": \"hill\"\n    },\n    {\n      \"word\": \"skala\",\n      \"meaning\": \"cliff\"\n    },\n    {\n      \"word\": \"peysch\",\n      \"meaning\": \"pebble\"\n    },\n    {\n      \"word\": \"pesok\",\n      \"meaning\": \"sand\"\n    },\n    {\n      \"word\": \"glina\",\n      \"meaning\": \"clay\"\n    },\n    {\n      \"word\": \"ugol\",\n      \"meaning\": \"coal\"\n    },\n    {\n      \"word\": \"ruda\",\n      \"meaning\": \"ore\"\n    },\n    {\n      \"word\": \"kamen\",\n      \"meaning\": \"stone\"\n    },\n    {\n      \"word\": \"krysh\",\n      \"meaning\": \"roof\"\n    },\n    {\n      \"word\": \"sten\",\n      \"meaning\": \"wall\"\n    },\n    {\n      \"word\": \"pol\",\n      \"meaning\": \"floor\"\n    },\n    {\n      \"word\": \"stol\",\n      \"meaning\": \"table\"\n    },\n    {\n      \"word\": \"stul\",\n      \"meaning\": \"chair\"\n    },\n    {\n      \"word\": \"stol\",\n      \"meaning\": \"table\"\n    },\n    {\n      \"word\": \"krov\",\n      \"meaning\": \"blood\"\n    },\n    {\n      \"word\": \"serdce\",\n      \"meaning\": \"heart\"\n    },\n    {\n      \"word\": \"glaza\",\n      \"meaning\": \"eyes\"\n    },\n    {\n      \"word\": \"ruka\",\n      \"meaning\": \"hand\"\n    },\n    {\n      \"word\": \"noga\",\n      \"meaning\": \"foot\"\n    },\n    {\n      \"word\": \"golova\",\n      \"meaning\": \"head\"\n    },\n    {\n      \"word\": \"yaz\",\n      \"meaning\": \"tongue\"\n    },\n    {\n      \"word\": \"us\",\n      \"meaning\": \"ear\"\n    },\n    {\n      \"word\": \"nos\",\n      \"meaning\": \"nose\"\n    },\n    {\n      \"word\": \"zub\",\n      \"meaning\": \"tooth\"\n    },\n    {\n      \"word\": \"volos\",\n      \"meaning\": \"hair\"\n    },\n    {\n      \"word\": \"kozh\",\n      \"meaning\": \"skin\"\n    },\n    {\n      \"word\": \"kosti\",\n      \"meaning\": \"bone\"\n    },\n    {\n      \"word\": \"myaso\",\n      \"meaning\": \"meat\"\n    },\n    {\n      \"word\": \"sol\",\n      \"meaning\": \"salt\"\n    },\n    {\n      \"word\": \"maslo\",\n      \"meaning\": \"butter\"\n    },\n    {\n      \"word\": \"kisel\",\n      \"meaning\": \"jam\"\n    },\n    {\n      \"word\": \"med\",\n      \"meaning\": \"honey\"\n    },\n    {\n      \"word\": \"vino\",\n      \"meaning\": \"wine\"\n    },\n    {\n      \"word\": \"medov\",\n      \"meaning\": \"mead\"\n    },\n    {\n      \"word\": \"plod\",\n      \"meaning\": \"fruit\"\n    },\n    {\n      \"word\": \"kor\",\n      \"meaning\": \"root\"\n    },\n    {\n      \"word\": \"list\",\n      \"meaning\": \"leaf\"\n    },\n    {\n      \"word\": \"tsvet\",\n      \"meaning\": \"flower\"\n    },\n    {\n      \"word\": \"trava\",\n      \"meaning\": \"grass\"\n    },\n    {\n      \"word\": \"moss\",\n      \"meaning\": \"moss\"\n    },\n    {\n      \"word\": \"lich\",\n      \"meaning\": \"mushroom\"\n    },\n    {\n      \"word\": \"or\",\n      \"meaning\": \"eagle\"\n    },\n    {\n      \"word\": \"golub\",\n      \"meaning\": \"pigeon\"\n    },\n    {\n      \"word\": \"voron\",\n      \"meaning\": \"crow\"\n    },\n    {\n      \"word\": \"gus\",\n      \"meaning\": \"goose\"\n    },\n    {\n      \"word\": \"kura\",\n      \"meaning\": \"chicken\"\n    },\n    {\n      \"word\": \"goved\",\n      \"meaning\": \"ox\"\n    },\n    {\n      \"word\": \"losha\",\n      \"meaning\": \"horse\"\n    },\n    {\n      \"word\": \"soba\",\n      \"meaning\": \"dog\"\n    },\n    {\n      \"word\": \"kot\",\n      \"meaning\": \"cat\"\n    },\n    {\n      \"word\": \"mys\",\n      \"meaning\": \"mouse\"\n    },\n    {\n      \"word\": \"krolik\",\n      \"meaning\": \"rabbit\"\n    },\n    {\n      \"word\": \"zayac\",\n      \"meaning\": \"hare\"\n    },\n    {\n      \"word\": \"baras\",\n      \"meaning\": \"boar\"\n    },\n    {\n      \"word\": \"olena\",\n      \"meaning\": \"deer\"\n    },\n    {\n      \"word\": \"kapy\",\n      \"meaning\": \"antler\"\n    },\n    {\n      \"word\": \"shkura\",\n      \"meaning\": \"hide\"\n    },\n    {\n      \"word\": \"per\",\n      \"meaning\": \"feather\"\n    },\n    {\n      \"word\": \"klyuv\",\n      \"meaning\": \"beak\"\n    },\n    {\n      \"word\": \"kopyto\",\n      \"meaning\": \"hoof\"\n    },\n    {\n      \"word\": \"kosh\",\n      \"meaning\": \"claw\"\n    },\n    {\n      \"word\": \"zub\",\n      \"meaning\": \"tooth\"\n    },\n    {\n      \"word\": \"rok\",\n      \"meaning\": \"jaw\"\n    },\n    {\n      \"word\": \"vyshe\",\n      \"meaning\": \"above\"\n    },\n    {\n      \"word\": \"nize\",\n      \"meaning\": \"below\"\n    },\n    {\n      \"word\": \"pered\",\n      \"meaning\": \"front\"\n    },\n    {\n      \"word\": \"zady\",\n      \"meaning\": \"back\"\n    },\n    {\n      \"word\": \"levy\",\n      \"meaning\": \"left\"\n    },\n    {\n      \"word\": \"pravy\",\n      \"meaning\": \"right\"\n    },\n    {\n      \"word\": \"bliz\",\n      \"meaning\": \"near\"\n    },\n    {\n      \"word\": \"daly\",\n      \"meaning\": \"far\"\n    },\n    {\n      \"word\": \"velik\",\n      \"meaning\": \"big\"\n    },\n    {\n      \"word\": \"maly\",\n      \"meaning\": \"small\"\n    },\n    {\n      \"word\": \"dlin\",\n      \"meaning\": \"long\"\n    },\n    {\n      \"word\": \"krat\",\n      \"meaning\": \"short\"\n    },\n    {\n      \"word\": \"shirok\",\n      \"meaning\": \"wide\"\n    },\n    {\n      \"word\": \"uzk\",\n      \"meaning\": \"narrow\"\n    },\n    {\n      \"word\": \"gлуб\",\n      \"meaning\": \"deep\"\n    },\n    {\n      \"word\": \"vyso\",\n      \"meaning\": \"high\"\n    },\n    {\n      \"word\": \"nizk\",\n      \"meaning\": \"low\"\n    },\n    {\n      \"word\": \"teply\",\n      \"meaning\": \"warm\"\n    },\n    {\n      \"word\": \"holod\",\n      \"meaning\": \"cold\"\n    },\n    {\n      \"word\": \"suh\",\n      \"meaning\": \"dry\"\n    },\n    {\n      \"word\": \"mok\",\n      \"meaning\": \"wet\"\n    },\n    {\n      \"word\": \"svet\",\n      \"meaning\": \"light\"\n    },\n    {\n      \"word\": \"temn\",\n      \"meaning\": \"dark\"\n    },\n    {\n      \"word\": \"krasn\",\n      \"meaning\": \"red\"\n    },\n    {\n      \"word\": \"bely\",\n      \"meaning\": \"white\"\n    },\n    {\n      \"word\": \"chern\",\n      \"meaning\": \"black\"\n    },\n    {\n      \"word\": \"zelen\",\n      \"meaning\": \"green\"\n    },\n    {\n      \"word\": \"zhelt\",\n      \"meaning\": \"yellow\"\n    },\n    {\n      \"word\": \"sini\",\n      \"meaning\": \"blue\"\n    },\n    {\n      \"word\": \"fiolet\",\n      \"meaning\": \"purple\"\n    },\n    {\n      \"word\": \"zlat\",\n      \"meaning\": \"gold\"\n    },\n    {\n      \"word\": \"sereb\",\n      \"meaning\": \"silver\"\n    },\n    {\n      \"word\": \"zhelez\",\n      \"meaning\": \"iron\"\n    },\n    {\n      \"word\": \"bron\",\n      \"meaning\": \"bronze\"\n    },\n    {\n      \"word\": \"kovcheg\",\n      \"meaning\": \"ark\"\n    },\n    {\n      \"word\": \"korabl\",\n      \"meaning\": \"ship\"\n    },\n    {\n      \"word\": \"kol\",\n      \"meaning\": \"wheel\"\n    },\n    {\n      \"word\": \"strun",
+      "language": {
+       "C": "z zh sh ch k g r l m n v f d t b p",
+       "V": "a o u e i y",
+       "S": "s sh zh ch"
+      },
+      "checks": {
+       "valid": false,
+       "error": "ValidationError: 2 validation errors for Language\nname\n  Field required [type=missing, input_value={'C': 'z zh sh ch k g r l...i y', 'S': 's sh zh ch'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing\nlevel\n  Field required [type=missing, input_value={'C': 'z zh sh ch k g r l...i y', 'S': 's sh zh ch'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/missing",
+       "samples": {},
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "compound-desc": [
+     {
+      "version": 1,
+      "seconds": 107.1,
+      "reply": "{\n  \"name\": \"Old English Compound Style\",\n  \"level\": \"naming\",\n  \"sound\": \"These names sound like the old stories of knights and kings. They are made by gluing two common English words together, usually describing a place or a person by what they do or where they live. They feel sturdy and grounded, like stone or iron.\",\n  \"categories\": {\n    \"A\": \"dusk thorn ash raven storm wolf oak iron fire wind stone mountain river cloud shadow blood bone root\",\n    \"B\": \"hollow field mere ford wick hall gate wood vale knoll ridge bank den nest farm forge mill bridge tower keep watch post rest home place land\",\n    \"C\": \"king queen lord lady squire knight rogue thief hunter farmer smith gardener priest monk bard singer dancer runner swimmer climber sailor captain guard sentry spy scout guide leader elder young old wise mad brave coward\",\n    \"D\": \"white black red gold silver green blue grey brown yellow purple crimson scarlet amber ivory obsidian crystal diamond ruby sapphire emerald topaz opal pearl jade coral ivory bone stone metal wood leather cloth silk wool hair skin eye heart soul spirit shadow light dark bright dim dull sharp blunt soft hard cold hot warm cool crisp wet dry\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people_generator\",\n      \"name\": \"People Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"A C\",\n        \"C B\",\n        \"A B C\",\n        \"D A C\",\n        \"C A B\"\n      ],\n      \"reject\": [\n        \".*\\\\s.*\\\\s.*\"\n      ],\n      \"min_length\": 5,\n      \"max_length\": 25\n    },\n    {\n      \"id\": \"place_generator\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"A B\",\n        \"B A\",\n        \"A B B\",\n        \"B B A\",\n        \"D A B\",\n        \"A D B\"\n      ],\n      \"reject\": [\n        \".*\\\\s.*\\\\s.*\"\n      ],\n      \"min_length\": 5,\n      \"max_length\": 25\n    },\n    {\n      \"id\": \"thing_generator\",\n      \"name\": \"Thing Names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"A B\",\n        \"B A\",\n        \"D A\",\n        \"A D\"\n      ],\n      \"reject\": [],\n      \"min_length\": 5,\n      \"max_length\": 20\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"dusk\", \"meaning\": \"the time when the sun sets\"},\n    {\"word\": \"thorn\", \"meaning\": \"a sharp point on a plant\"},\n    {\"word\": \"ash\", \"meaning\": \"the grey powder left after a fire\"},\n    {\"word\": \"raven\", \"meaning\": \"a large black bird\"},\n    {\"word\": \"storm\", \"meaning\": \"bad weather with wind and rain\"},\n    {\"word\": \"wolf\", \"meaning\": \"a wild dog-like animal\"},\n    {\"word\": \"oak\", \"meaning\": \"a large, strong tree\"},\n    {\"word\": \"iron\", \"meaning\": \"a hard, dark metal\"},\n    {\"word\": \"fire\", \"meaning\": \"flames and heat\"},\n    {\"word\": \"wind\", \"meaning\": \"moving air\"},\n    {\"word\": \"stone\", \"meaning\": \"a piece of rock\"},\n    {\"word\": \"mountain\", \"meaning\": \"a very high piece of land\"},\n    {\"word\": \"river\", \"meaning\": \"a moving body of water\"},\n    {\"word\": \"cloud\", \"meaning\": \"a puff of water vapor in the sky\"},\n    {\"word\": \"shadow\", \"meaning\": \"the dark shape made when light is blocked\"},\n    {\"word\": \"blood\", \"meaning\": \"the red liquid in the body\"},\n    {\"word\": \"bone\", \"meaning\": \"the hard structure inside the body\"},\n    {\"word\": \"root\", \"meaning\": \"the part of a plant under the ground\"},\n    {\"word\": \"hollow\", \"meaning\": \"an empty space inside something\"},\n    {\"word\": \"field\", \"meaning\": \"an open area of land for crops\"},\n    {\"word\": \"mere\", \"meaning\": \"a small lake\"},\n    {\"word\": \"ford\", \"meaning\": \"a shallow place where you can cross a river\"},\n    {\"word\": \"wick\", \"meaning\": \"a small village or a place with a church\"},\n    {\"word\": \"hall\", \"meaning\": \"a large building for meetings or living\"},\n    {\"word\": \"gate\", \"meaning\": \"a door in a wall\"},\n    {\"word\": \"wood\", \"meaning\": \"a forest\"},\n    {\"word\": \"vale\", \"meaning\": \"a valley\"},\n    {\"word\": \"knoll\", \"meaning\": \"a small, round hill\"},\n    {\"word\": \"ridge\", \"meaning\": \"a long, narrow hill\"},\n    {\"word\": \"bank\", \"meaning\": \"the side of a river or stream\"},\n    {\"word\": \"den\", \"meaning\": \"a home for a wild animal\"},\n    {\"word\": \"nest\", \"meaning\": \"a home for birds\"},\n    {\"word\": \"farm\", \"meaning\": \"a place where crops and animals are kept\"},\n    {\"word\": \"forge\", \"meaning\": \"a workshop for making metal things\"},\n    {\"word\": \"mill\", \"meaning\": \"a machine for grinding grain\"},\n    {\"word\": \"bridge\", \"meaning\": \"a structure that goes over water\"},\n    {\"word\": \"tower\", \"meaning\": \"a tall, narrow building\"},\n    {\"word\": \"keep\", \"meaning\": \"the main building in a castle\"},\n    {\"word\": \"watch\", \"meaning\": \"a group of people guarding a place\"},\n    {\"word\": \"post\", \"meaning\": \"a standing place for a guard\"},\n    {\"word\": \"rest\", \"meaning\": \"a place to sleep or relax\"},\n    {\"word\": \"home\", \"meaning\": \"the place where you live\"},\n    {\"word\": \"place\", \"meaning\": \"a location\"},\n    {\"word\": \"land\", \"meaning\": \"solid ground\"},\n    {\"word\": \"king\", \"meaning\": \"a male ruler of a country\"},\n    {\"word\": \"queen\", \"meaning\": \"a female ruler of a country\"},\n    {\"word\": \"lord\", \"meaning\": \"a man of high rank who owns land\"},\n    {\"word\": \"lady\", \"meaning\": \"a woman of high rank\"},\n    {\"word\": \"squire\", \"meaning\": \"a young knight in training\"},\n    {\"word\": \"knight\", \"meaning\": \"a soldier who rides a horse\"},\n    {\"word\": \"rogue\", \"meaning\": \"a dishonest person\"},\n    {\"word\": \"thief\", \"meaning\": \"a person who steals\"},\n    {\"word\": \"hunter\", \"meaning\": \"a person who chases animals for food\"},\n    {\"word\": \"farmer\", \"meaning\": \"a person who grows food\"},\n    {\"word\": \"smith\", \"meaning\": \"a person who works with metal\"},\n    {\"word\": \"gardener\", \"meaning\": \"a person who tends to plants\"},\n    {\"word\": \"priest\", \"meaning\": \"a religious leader\"},\n    {\"word\": \"monk\", \"meaning\": \"a religious person who lives in a monastery\"},\n    {\"word\": \"bard\", \"meaning\": \"a poet or singer who tells stories\"},\n    {\"word\": \"singer\", \"meaning\": \"a person who makes music with their voice\"},\n    {\"word\": \"dancer\", \"meaning\": \"a person who moves their body to music\"},\n    {\"word\": \"runner\", \"meaning\": \"a person who runs fast\"},\n    {\"word\": \"swimmer\", \"meaning\": \"a person who moves through water\"},\n    {\"word\": \"climber\", \"meaning\": \"a person who goes up mountains\"},\n    {\"word\": \"sailor\", \"meaning\": \"a person who works on a ship\"},\n    {\"word\": \"captain\", \"meaning\": \"the leader of a ship or group\"},\n    {\"word\": \"guard\", \"meaning\": \"a person who protects a place\"},\n    {\"word\": \"sentry\", \"meaning\": \"a soldier on watch\"},\n    {\"word\": \"spy\", \"meaning\": \"a person who secretly gathers information\"},\n    {\"word\": \"scout\", \"meaning\": \"a person who goes ahead to look for danger\"},\n    {\"word\": \"guide\", \"meaning\": \"a person who shows the way\"},\n    {\"word\": \"leader\", \"meaning\": \"a person who leads others\"},\n    {\"word\": \"elder\", \"meaning\": \"an older, respected person\"},\n    {\"word\": \"young\", \"meaning\": \"not old\"},\n    {\"word\": \"old\", \"meaning\": \"having lived a long time\"},\n    {\"word\": \"wise\", \"meaning\": \"having good judgment\"},\n    {\"word\": \"mad\", \"meaning\": \"not thinking clearly\"},\n    {\"word\": \"brave\", \"meaning\": \"not afraid of danger\"},\n    {\"word\": \"coward\", \"meaning\": \"a person who is very afraid\"},\n    {\"word\": \"white\", \"meaning\": \"the color of snow\"},\n    {\"word\": \"black\", \"meaning\": \"the color of night\"},\n    {\"word\": \"red\", \"meaning\": \"the color of blood\"},\n    {\"word\": \"gold\", \"meaning\": \"a shiny, yellow metal\"},\n    {\"word\": \"silver\", \"meaning\": \"a shiny, white metal\"},\n    {\"word\": \"green\", \"meaning\": \"the color of grass\"},\n    {\"word\": \"blue\", \"meaning\": \"the color of the sky\"},\n    {\"word\": \"grey\", \"meaning\": \"the color between black and white\"},\n    {\"word\": \"brown\", \"meaning\": \"the color of earth\"},\n    {\"word\": \"yellow\", \"meaning\": \"the color of the sun\"},\n    {\"word\": \"purple\", \"meaning\": \"a mix of red and blue\"},\n    {\"word\": \"crimson\", \"meaning\": \"a deep red\"},\n    {\"word\": \"scarlet\", \"meaning\": \"a bright red\"},\n    {\"word\": \"amber\", \"meaning\": \"a warm, orange-brown color\"},\n    {\"word\": \"ivory\", \"meaning\": \"a soft, creamy white\"},\n    {\"word\": \"obsidian\", \"meaning\": \"a very dark, glassy stone\"},\n    {\"word\": \"crystal\", \"meaning\": \"a clear, hard mineral\"},\n    {\"word\": \"diamond\", \"meaning\": \"a very hard, sparkling stone\"},\n    {\"word\": \"ruby\", \"meaning\": \"a red gemstone\"},\n    {\"word\": \"sapphire\", \"meaning\": \"a blue gemstone\"},\n    {\"word\": \"emerald\", \"meaning\": \"a green gemstone\"},\n    {\"word\": \"topaz\", \"meaning\": \"a yellow or orange gemstone\"},\n    {\"word\": \"opal\", \"meaning\": \"a stone with many colors inside\"},\n    {\"word\": \"pearl\", \"meaning\": \"a smooth, round stone from a shell\"},\n    {\"word\": \"jade\", \"meaning\": \"a green stone used for carving\"},\n    {\"word\": \"coral\", \"meaning\": \"a hard material from the sea\"},\n    {\"word\": \"metal\", \"meaning\": \"a hard, shiny material\"},\n    {\"word\": \"wood\", \"meaning\": \"the material from trees\"},\n    {\"word\": \"leather\", \"meaning\": \"skin that has been treated to be strong\"},\n    {\"word\": \"cloth\", \"meaning\": \"material made from threads\"},\n    {\"word\": \"silk\", \"meaning\": \"a smooth, shiny fabric\"},\n    {\"word\": \"wool\", \"meaning\": \"soft hair from sheep\"},\n    {\"word\": \"hair\", \"meaning\": \"the strands that grow on the head\"},\n    {\"word\": \"skin\", \"meaning\": \"the outer layer of the body\"},\n    {\"word\": \"eye\", \"meaning\": \"the part of the body used for seeing\"},\n    {\"word\": \"heart\", \"meaning\": \"the organ that pumps blood\"},\n    {\"word\": \"soul\", \"meaning\": \"the part of you that lives after death\"},\n    {\"word\": \"spirit\", \"meaning\": \"a ghost or the energy of a person\"},\n    {\"word\": \"light\", \"meaning\": \"brightness that lets you see\"},\n    {\"word\": \"dark\", \"meaning\": \"the absence of light\"},\n    {\"word\": \"bright\", \"meaning\": \"full of light\"},\n    {\"word\": \"dim\", \"meaning\": \"not very bright\"},\n    {\"word\": \"dull\", \"meaning\": \"not shiny or interesting\"},\n    {\"word\": \"sharp\", \"meaning\": \"having a fine edge or point\"},\n    {\"word\": \"blunt\", \"meaning\": \"not sharp\"},\n    {\"word\": \"soft\", \"meaning\": \"not hard\"},\n    {\"word\": \"hard\", \"meaning\": \"not soft\"},\n    {\"word\": \"cold\", \"meaning\": \"low in temperature\"},\n    {\"word\": \"hot\", \"meaning\": \"high in temperature\"},\n    {\"word\": \"warm\", \"meaning\": \"not cold or hot\"},\n    {\"word\": \"cool\", \"meaning\": \"slightly cold\"},\n    {\"word\": \"crisp\", \"meaning\": \"fresh and stiff\"},\n    {\"word\": \"wet\", \"meaning\": \"covered in water\"},\n    {\"word\": \"dry\", \"meaning\": \"not wet\"}\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"ph1\",\n      \"category\": \"greeting\",\n      \"original\": \"By the Stone and the Sky\",\n      \"translation\": \"A common hello, meaning 'May you be as strong as stone and as free as the sky.'\"\n    },\n    {\n      \"id\": \"ph2\",\n      \"category\": \"blessing\",\n      \"original\": \"May the Oak Hold You\",\n      \"translation\": \"A wish for stability and strength, like a deep-rooted tree.\"\n    },\n    {\n      \"id\": \"ph3\",\n      \"category\": \"curse\",\n      \"original\": \"Dusk Falls on Your Name\",\n      \"translation\": \"A wish for your reputation to fade into darkness and be forgotten.\"\n    },\n    {\n      \"id\": \"ph4\",\n      \"category\": \"saying\",\n      \"original\": \"Iron Bends, Stone Breaks\",\n      \"translation\": \"A reminder that flexibility is stronger than rigid hardness.\"\n    },\n    {\n      \"id\": \"ph5\",\n      \"category\": \"blessing\",\n      \"original\": \"The River Finds the Sea\",\n      \"translation\": \"A hope that your journey will reach its destination, no matter the path.\"\n    },\n    {\n      \"id\": \"ph6\",\n      \"category\": \"curse\",\n      \"original\": \"Wolf in the Hollow\",\n      \"translation\": \"A warning or curse that danger is hiding in a place you trust.\"\n    },\n    {\n      \"id\": \"ph7\",\n      \"category\": \"greeting\",\n      \"original\": \"Friend of the Gate\",\n      \"translation\": \"A welcome to a stranger, implying they are now safe within the walls.\"\n    },\n    {\n      \"id\": \"ph8\",\n      \"category\": \"saying\",\n      \"original\": \"Ash Remembers Fire\",\n      \"translation\": \"A reminder that the past, even when destroyed, leaves a mark.\"\n    }\n  ]\n}",
+      "language": {
+       "name": "Old English Compound Style",
+       "level": "naming",
+       "sound": "These names sound like the old stories of knights and kings. They are made by gluing two common English words together, usually describing a place or a person by what they do or where they live. They feel sturdy and grounded, like stone or iron.",
+       "categories": {
+        "A": "dusk thorn ash raven storm wolf oak iron fire wind stone mountain river cloud shadow blood bone root",
+        "B": "hollow field mere ford wick hall gate wood vale knoll ridge bank den nest farm forge mill bridge tower keep watch post rest home place land",
+        "C": "king queen lord lady squire knight rogue thief hunter farmer smith gardener priest monk bard singer dancer runner swimmer climber sailor captain guard sentry spy scout guide leader elder young old wise mad brave coward",
+        "D": "white black red gold silver green blue grey brown yellow purple crimson scarlet amber ivory obsidian crystal diamond ruby sapphire emerald topaz opal pearl jade coral ivory bone stone metal wood leather cloth silk wool hair skin eye heart soul spirit shadow light dark bright dim dull sharp blunt soft hard cold hot warm cool crisp wet dry"
+       },
+       "generators": [
+        {
+         "id": "people_generator",
+         "name": "People Names",
+         "use": "people",
+         "patterns": [
+          "A C",
+          "C B",
+          "A B C",
+          "D A C",
+          "C A B"
+         ],
+         "reject": [
+          ".*\\s.*\\s.*"
+         ],
+         "min_length": 5,
+         "max_length": 25
+        },
+        {
+         "id": "place_generator",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "A B",
+          "B A",
+          "A B B",
+          "B B A",
+          "D A B",
+          "A D B"
+         ],
+         "reject": [
+          ".*\\s.*\\s.*"
+         ],
+         "min_length": 5,
+         "max_length": 25
+        },
+        {
+         "id": "thing_generator",
+         "name": "Thing Names",
+         "use": "things",
+         "patterns": [
+          "A B",
+          "B A",
+          "D A",
+          "A D"
+         ],
+         "reject": [],
+         "min_length": 5,
+         "max_length": 20
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "the time when the sun sets"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp point on a plant"
+        },
+        {
+         "word": "ash",
+         "meaning": "the grey powder left after a fire"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird"
+        },
+        {
+         "word": "storm",
+         "meaning": "bad weather with wind and rain"
+        },
+        {
+         "word": "wolf",
+         "meaning": "a wild dog-like animal"
+        },
+        {
+         "word": "oak",
+         "meaning": "a large, strong tree"
+        },
+        {
+         "word": "iron",
+         "meaning": "a hard, dark metal"
+        },
+        {
+         "word": "fire",
+         "meaning": "flames and heat"
+        },
+        {
+         "word": "wind",
+         "meaning": "moving air"
+        },
+        {
+         "word": "stone",
+         "meaning": "a piece of rock"
+        },
+        {
+         "word": "mountain",
+         "meaning": "a very high piece of land"
+        },
+        {
+         "word": "river",
+         "meaning": "a moving body of water"
+        },
+        {
+         "word": "cloud",
+         "meaning": "a puff of water vapor in the sky"
+        },
+        {
+         "word": "shadow",
+         "meaning": "the dark shape made when light is blocked"
+        },
+        {
+         "word": "blood",
+         "meaning": "the red liquid in the body"
+        },
+        {
+         "word": "bone",
+         "meaning": "the hard structure inside the body"
+        },
+        {
+         "word": "root",
+         "meaning": "the part of a plant under the ground"
+        },
+        {
+         "word": "hollow",
+         "meaning": "an empty space inside something"
+        },
+        {
+         "word": "field",
+         "meaning": "an open area of land for crops"
+        },
+        {
+         "word": "mere",
+         "meaning": "a small lake"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow place where you can cross a river"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small village or a place with a church"
+        },
+        {
+         "word": "hall",
+         "meaning": "a large building for meetings or living"
+        },
+        {
+         "word": "gate",
+         "meaning": "a door in a wall"
+        },
+        {
+         "word": "wood",
+         "meaning": "a forest"
+        },
+        {
+         "word": "vale",
+         "meaning": "a valley"
+        },
+        {
+         "word": "knoll",
+         "meaning": "a small, round hill"
+        },
+        {
+         "word": "ridge",
+         "meaning": "a long, narrow hill"
+        },
+        {
+         "word": "bank",
+         "meaning": "the side of a river or stream"
+        },
+        {
+         "word": "den",
+         "meaning": "a home for a wild animal"
+        },
+        {
+         "word": "nest",
+         "meaning": "a home for birds"
+        },
+        {
+         "word": "farm",
+         "meaning": "a place where crops and animals are kept"
+        },
+        {
+         "word": "forge",
+         "meaning": "a workshop for making metal things"
+        },
+        {
+         "word": "mill",
+         "meaning": "a machine for grinding grain"
+        },
+        {
+         "word": "bridge",
+         "meaning": "a structure that goes over water"
+        },
+        {
+         "word": "tower",
+         "meaning": "a tall, narrow building"
+        },
+        {
+         "word": "keep",
+         "meaning": "the main building in a castle"
+        },
+        {
+         "word": "watch",
+         "meaning": "a group of people guarding a place"
+        },
+        {
+         "word": "post",
+         "meaning": "a standing place for a guard"
+        },
+        {
+         "word": "rest",
+         "meaning": "a place to sleep or relax"
+        },
+        {
+         "word": "home",
+         "meaning": "the place where you live"
+        },
+        {
+         "word": "place",
+         "meaning": "a location"
+        },
+        {
+         "word": "land",
+         "meaning": "solid ground"
+        },
+        {
+         "word": "king",
+         "meaning": "a male ruler of a country"
+        },
+        {
+         "word": "queen",
+         "meaning": "a female ruler of a country"
+        },
+        {
+         "word": "lord",
+         "meaning": "a man of high rank who owns land"
+        },
+        {
+         "word": "lady",
+         "meaning": "a woman of high rank"
+        },
+        {
+         "word": "squire",
+         "meaning": "a young knight in training"
+        },
+        {
+         "word": "knight",
+         "meaning": "a soldier who rides a horse"
+        },
+        {
+         "word": "rogue",
+         "meaning": "a dishonest person"
+        },
+        {
+         "word": "thief",
+         "meaning": "a person who steals"
+        },
+        {
+         "word": "hunter",
+         "meaning": "a person who chases animals for food"
+        },
+        {
+         "word": "farmer",
+         "meaning": "a person who grows food"
+        },
+        {
+         "word": "smith",
+         "meaning": "a person who works with metal"
+        },
+        {
+         "word": "gardener",
+         "meaning": "a person who tends to plants"
+        },
+        {
+         "word": "priest",
+         "meaning": "a religious leader"
+        },
+        {
+         "word": "monk",
+         "meaning": "a religious person who lives in a monastery"
+        },
+        {
+         "word": "bard",
+         "meaning": "a poet or singer who tells stories"
+        },
+        {
+         "word": "singer",
+         "meaning": "a person who makes music with their voice"
+        },
+        {
+         "word": "dancer",
+         "meaning": "a person who moves their body to music"
+        },
+        {
+         "word": "runner",
+         "meaning": "a person who runs fast"
+        },
+        {
+         "word": "swimmer",
+         "meaning": "a person who moves through water"
+        },
+        {
+         "word": "climber",
+         "meaning": "a person who goes up mountains"
+        },
+        {
+         "word": "sailor",
+         "meaning": "a person who works on a ship"
+        },
+        {
+         "word": "captain",
+         "meaning": "the leader of a ship or group"
+        },
+        {
+         "word": "guard",
+         "meaning": "a person who protects a place"
+        },
+        {
+         "word": "sentry",
+         "meaning": "a soldier on watch"
+        },
+        {
+         "word": "spy",
+         "meaning": "a person who secretly gathers information"
+        },
+        {
+         "word": "scout",
+         "meaning": "a person who goes ahead to look for danger"
+        },
+        {
+         "word": "guide",
+         "meaning": "a person who shows the way"
+        },
+        {
+         "word": "leader",
+         "meaning": "a person who leads others"
+        },
+        {
+         "word": "elder",
+         "meaning": "an older, respected person"
+        },
+        {
+         "word": "young",
+         "meaning": "not old"
+        },
+        {
+         "word": "old",
+         "meaning": "having lived a long time"
+        },
+        {
+         "word": "wise",
+         "meaning": "having good judgment"
+        },
+        {
+         "word": "mad",
+         "meaning": "not thinking clearly"
+        },
+        {
+         "word": "brave",
+         "meaning": "not afraid of danger"
+        },
+        {
+         "word": "coward",
+         "meaning": "a person who is very afraid"
+        },
+        {
+         "word": "white",
+         "meaning": "the color of snow"
+        },
+        {
+         "word": "black",
+         "meaning": "the color of night"
+        },
+        {
+         "word": "red",
+         "meaning": "the color of blood"
+        },
+        {
+         "word": "gold",
+         "meaning": "a shiny, yellow metal"
+        },
+        {
+         "word": "silver",
+         "meaning": "a shiny, white metal"
+        },
+        {
+         "word": "green",
+         "meaning": "the color of grass"
+        },
+        {
+         "word": "blue",
+         "meaning": "the color of the sky"
+        },
+        {
+         "word": "grey",
+         "meaning": "the color between black and white"
+        },
+        {
+         "word": "brown",
+         "meaning": "the color of earth"
+        },
+        {
+         "word": "yellow",
+         "meaning": "the color of the sun"
+        },
+        {
+         "word": "purple",
+         "meaning": "a mix of red and blue"
+        },
+        {
+         "word": "crimson",
+         "meaning": "a deep red"
+        },
+        {
+         "word": "scarlet",
+         "meaning": "a bright red"
+        },
+        {
+         "word": "amber",
+         "meaning": "a warm, orange-brown color"
+        },
+        {
+         "word": "ivory",
+         "meaning": "a soft, creamy white"
+        },
+        {
+         "word": "obsidian",
+         "meaning": "a very dark, glassy stone"
+        },
+        {
+         "word": "crystal",
+         "meaning": "a clear, hard mineral"
+        },
+        {
+         "word": "diamond",
+         "meaning": "a very hard, sparkling stone"
+        },
+        {
+         "word": "ruby",
+         "meaning": "a red gemstone"
+        },
+        {
+         "word": "sapphire",
+         "meaning": "a blue gemstone"
+        },
+        {
+         "word": "emerald",
+         "meaning": "a green gemstone"
+        },
+        {
+         "word": "topaz",
+         "meaning": "a yellow or orange gemstone"
+        },
+        {
+         "word": "opal",
+         "meaning": "a stone with many colors inside"
+        },
+        {
+         "word": "pearl",
+         "meaning": "a smooth, round stone from a shell"
+        },
+        {
+         "word": "jade",
+         "meaning": "a green stone used for carving"
+        },
+        {
+         "word": "coral",
+         "meaning": "a hard material from the sea"
+        },
+        {
+         "word": "metal",
+         "meaning": "a hard, shiny material"
+        },
+        {
+         "word": "wood",
+         "meaning": "the material from trees"
+        },
+        {
+         "word": "leather",
+         "meaning": "skin that has been treated to be strong"
+        },
+        {
+         "word": "cloth",
+         "meaning": "material made from threads"
+        },
+        {
+         "word": "silk",
+         "meaning": "a smooth, shiny fabric"
+        },
+        {
+         "word": "wool",
+         "meaning": "soft hair from sheep"
+        },
+        {
+         "word": "hair",
+         "meaning": "the strands that grow on the head"
+        },
+        {
+         "word": "skin",
+         "meaning": "the outer layer of the body"
+        },
+        {
+         "word": "eye",
+         "meaning": "the part of the body used for seeing"
+        },
+        {
+         "word": "heart",
+         "meaning": "the organ that pumps blood"
+        },
+        {
+         "word": "soul",
+         "meaning": "the part of you that lives after death"
+        },
+        {
+         "word": "spirit",
+         "meaning": "a ghost or the energy of a person"
+        },
+        {
+         "word": "light",
+         "meaning": "brightness that lets you see"
+        },
+        {
+         "word": "dark",
+         "meaning": "the absence of light"
+        },
+        {
+         "word": "bright",
+         "meaning": "full of light"
+        },
+        {
+         "word": "dim",
+         "meaning": "not very bright"
+        },
+        {
+         "word": "dull",
+         "meaning": "not shiny or interesting"
+        },
+        {
+         "word": "sharp",
+         "meaning": "having a fine edge or point"
+        },
+        {
+         "word": "blunt",
+         "meaning": "not sharp"
+        },
+        {
+         "word": "soft",
+         "meaning": "not hard"
+        },
+        {
+         "word": "hard",
+         "meaning": "not soft"
+        },
+        {
+         "word": "cold",
+         "meaning": "low in temperature"
+        },
+        {
+         "word": "hot",
+         "meaning": "high in temperature"
+        },
+        {
+         "word": "warm",
+         "meaning": "not cold or hot"
+        },
+        {
+         "word": "cool",
+         "meaning": "slightly cold"
+        },
+        {
+         "word": "crisp",
+         "meaning": "fresh and stiff"
+        },
+        {
+         "word": "wet",
+         "meaning": "covered in water"
+        },
+        {
+         "word": "dry",
+         "meaning": "not wet"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "ph1",
+         "category": "greeting",
+         "original": "By the Stone and the Sky",
+         "translation": "A common hello, meaning 'May you be as strong as stone and as free as the sky.'"
+        },
+        {
+         "id": "ph2",
+         "category": "blessing",
+         "original": "May the Oak Hold You",
+         "translation": "A wish for stability and strength, like a deep-rooted tree."
+        },
+        {
+         "id": "ph3",
+         "category": "curse",
+         "original": "Dusk Falls on Your Name",
+         "translation": "A wish for your reputation to fade into darkness and be forgotten."
+        },
+        {
+         "id": "ph4",
+         "category": "saying",
+         "original": "Iron Bends, Stone Breaks",
+         "translation": "A reminder that flexibility is stronger than rigid hardness."
+        },
+        {
+         "id": "ph5",
+         "category": "blessing",
+         "original": "The River Finds the Sea",
+         "translation": "A hope that your journey will reach its destination, no matter the path."
+        },
+        {
+         "id": "ph6",
+         "category": "curse",
+         "original": "Wolf in the Hollow",
+         "translation": "A warning or curse that danger is hiding in a place you trust."
+        },
+        {
+         "id": "ph7",
+         "category": "greeting",
+         "original": "Friend of the Gate",
+         "translation": "A welcome to a stranger, implying they are now safe within the walls."
+        },
+        {
+         "id": "ph8",
+         "category": "saying",
+         "original": "Ash Remembers Fire",
+         "translation": "A reminder that the past, even when destroyed, leaves a mark."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people_generator": [
+         "Blood Guide",
+         "Runner Bank",
+         "Raven Singer",
+         "Leader Ridge",
+         "Wind Spy",
+         "Dusk Spy",
+         "Priest Farm",
+         "Rogue Forge",
+         "Young Bridge",
+         "Dusk King",
+         "Lord Wick",
+         "Bard Wick",
+         "Bone Runner",
+         "Captain Post",
+         "Dusk Knight",
+         "Brave Rest",
+         "Old Vale",
+         "Blood Queen",
+         "Priest Hall",
+         "Coward Watch",
+         "Thief Bridge",
+         "Guide Forge",
+         "Wind Lady",
+         "Thorn Old",
+         "Storm Wise",
+         "Ash Old",
+         "Storm Coward",
+         "Root Smith",
+         "Captain Land",
+         "Coward Bank",
+         "Gardener Vale",
+         "Storm Lord",
+         "Leader Den",
+         "Root Rogue",
+         "Wind Mad",
+         "Wise Ford",
+         "King Mill",
+         "Ash Farmer",
+         "King Nest",
+         "Bard Farm",
+         "Thorn Runner",
+         "Spy Rest",
+         "Spy Keep",
+         "Cloud Young",
+         "Wolf Squire",
+         "Mountain Captain",
+         "Sailor Gate",
+         "Swimmer Hollow",
+         "Thief Hollow",
+         "Sailor Rest"
+        ],
+        "place_generator": [
+         "Wick Mountain",
+         "Wind Place",
+         "Hall Blood",
+         "Field Shadow",
+         "Mill River",
+         "Hall Root",
+         "River Knoll",
+         "Mere Iron",
+         "Iron Den",
+         "Forge Bone",
+         "Knoll Stone",
+         "Bone Hollow",
+         "Mountain Field",
+         "Storm Ford",
+         "Dusk Mill",
+         "Field Bone",
+         "Rest Iron",
+         "Shadow Den",
+         "Farm Wolf",
+         "Mountain Bank",
+         "Oak Nest",
+         "Oak Farm",
+         "Shadow Mill",
+         "Wood Oak",
+         "Keep Wind",
+         "Field Root",
+         "Wind Farm",
+         "River Farm",
+         "Thorn Farm",
+         "Mere Storm",
+         "Oak Rest",
+         "Blood Bank",
+         "Wood River",
+         "Ash Wood",
+         "Wood Wind",
+         "Oak Ridge",
+         "Raven Gate",
+         "Nest Cloud",
+         "Ash Land",
+         "Hollow Storm",
+         "Nest Bone",
+         "Blood Mere",
+         "Farm Iron",
+         "Bridge Mountain",
+         "Ford Ash",
+         "Mere Wind",
+         "Farm Blood",
+         "Wolf Ford",
+         "Watch River",
+         "Thorn Tower"
+        ],
+        "thing_generator": [
+         "Wolf Wood",
+         "Dusk Ford",
+         "Place Mountain",
+         "River Wood",
+         "Ruby Root",
+         "Watch Mountain",
+         "Stone Hard",
+         "Bridge Mountain",
+         "Cloth Wind",
+         "Home Mountain",
+         "Gold Wind",
+         "Raven Bank",
+         "Ivory Storm",
+         "Bone Iron",
+         "Oak Bridge",
+         "Leather Blood",
+         "Soul Dusk",
+         "Bridge Ash",
+         "Ash Hard",
+         "Blood Rest",
+         "Home Ash",
+         "Oak Coral",
+         "Stone Wood",
+         "Dull Stone",
+         "Root Home",
+         "Opal Stone",
+         "Fire Dim",
+         "Jade Bone",
+         "Forge Dusk",
+         "Hollow River",
+         "Dusk Mere",
+         "Wind Knoll",
+         "Land Bone",
+         "Dull Shadow",
+         "Shadow Gate",
+         "Emerald Ash",
+         "Bone Ruby",
+         "Oak Heart",
+         "Cloud Gold",
+         "Knoll Wolf",
+         "Iron Spirit",
+         "Wood Thorn",
+         "Cold Raven",
+         "Stone Oak",
+         "Wet Dusk",
+         "Oak Blunt",
+         "River Mere",
+         "Land Mountain",
+         "Fire Bone",
+         "Watch Cloud"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 99.6,
+      "reply": "{\n  \"name\": \"Old-Word Naming\",\n  \"level\": \"naming\",\n  \"sound\": \"These names sound like words you might find in an old English book or a nature guide. They feel grounded and familiar, like places you could actually visit. They are built by sticking two common English words together.\",\n  \"categories\": {\n    \"A\": \"dusk thorn ash raven hollow storm iron stone\",\n    \"B\": \"mere field ford wick vale glen moor fen\",\n    \"C\": \"knight ward gate keep watch hold fort\",\n    \"D\": \"king lord saint holy true pure\",\n    \"E\": \"black white red gold silver\",\n    \"F\": \"hill rock cliff peak summit\",\n    \"G\": \"river stream brook creek\",\n    \"H\": \"oak elm pine birch\",\n    \"I\": \"wolf bear fox deer\",\n    \"J\": \"sun moon star light\",\n    \"K\": \"fire water wind earth\",\n    \"L\": \"long short wide narrow\",\n    \"M\": \"old new high low\",\n    \"N\": \"deep dark bright clear\",\n    \"O\": \"strong weak fast slow\",\n    \"P\": \"fair foul rich poor\",\n    \"Q\": \"free bound safe lost\",\n    \"R\": \"lost found hidden revealed\",\n    \"S\": \"singing dancing crying laughing\",\n    \"T\": \"sleeping waking dying living\",\n    \"U\": \"broken mended filled emptied\",\n    \"V\": \"crowned uncrowned armed unarmed\",\n    \"W\": \"named unnamed spoken silent\",\n    \"X\": \"known unknown written erased\",\n    \"Y\": \"born died lived loved\",\n    \"Z\": \"kept lost sold bought\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"person_names\",\n      \"name\": \"Person Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"AB\",\n        \"A B\",\n        \"A B C\",\n        \"D A B\",\n        \"E A B\",\n        \"A B E\",\n        \"A B C D\",\n        \"A B C D E\"\n      ],\n      \"reject\": [\n        \"^a a$\",\n        \"^b b$\",\n        \"^[aeiou]+$\",\n        \"^[bcdfg]+$\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 20\n    },\n    {\n      \"id\": \"place_names\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"AB\",\n        \"A B\",\n        \"A B C\",\n        \"A B C F\",\n        \"A B C G\",\n        \"A B C H\",\n        \"A B C I\",\n        \"A B C J\",\n        \"A B C K\",\n        \"A B C L\",\n        \"A B C M\",\n        \"A B C N\",\n        \"A B C O\",\n        \"A B C P\",\n        \"A B C Q\",\n        \"A B C R\",\n        \"A B C S\",\n        \"A B C T\",\n        \"A B C U\",\n        \"A B C V\",\n        \"A B C W\",\n        \"A B C X\",\n        \"A B C Y\",\n        \"A B C Z\"\n      ],\n      \"reject\": [\n        \"^a a$\",\n        \"^b b$\",\n        \"^[aeiou]+$\",\n        \"^[bcdfg]+$\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 25\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"dusk\", \"meaning\": \"the time when the sun sets\"},\n    {\"word\": \"thorn\", \"meaning\": \"a sharp point on a plant\"},\n    {\"word\": \"ash\", \"meaning\": \"the gray powder left after a fire\"},\n    {\"word\": \"raven\", \"meaning\": \"a large black bird\"},\n    {\"word\": \"hollow\", \"meaning\": \"an empty space or a small valley\"},\n    {\"word\": \"storm\", \"meaning\": \"bad weather with wind and rain\"},\n    {\"word\": \"iron\", \"meaning\": \"a strong metal\"},\n    {\"word\": \"stone\", \"meaning\": \"a hard rock\"},\n    {\"word\": \"mere\", \"meaning\": \"a lake\"},\n    {\"word\": \"field\", \"meaning\": \"a flat area of land for farming\"},\n    {\"word\": \"ford\", \"meaning\": \"a shallow place where a river can be crossed\"},\n    {\"word\": \"wick\", \"meaning\": \"a small village\"},\n    {\"word\": \"vale\", \"meaning\": \"a valley\"},\n    {\"word\": \"glen\", \"meaning\": \"a narrow valley in the hills\"},\n    {\"word\": \"moor\", \"meaning\": \"open land with poor soil\"},\n    {\"word\": \"fen\", \"meaning\": \"wet, low-lying land\"},\n    {\"word\": \"knight\", \"meaning\": \"a soldier who rides a horse\"},\n    {\"word\": \"ward\", \"meaning\": \"a guarded area\"},\n    {\"word\": \"gate\", \"meaning\": \"an opening in a wall\"},\n    {\"word\": \"keep\", \"meaning\": \"the main tower in a castle\"},\n    {\"word\": \"watch\", \"meaning\": \"a guard post\"},\n    {\"word\": \"hold\", \"meaning\": \"a fortress\"},\n    {\"word\": \"fort\", \"meaning\": \"a military building\"},\n    {\"word\": \"king\", \"meaning\": \"a male ruler of a country\"},\n    {\"word\": \"lord\", \"meaning\": \"a nobleman\"},\n    {\"word\": \"saint\", \"meaning\": \"a holy person\"},\n    {\"word\": \"holy\", \"meaning\": \"sacred or religious\"},\n    {\"word\": \"true\", \"meaning\": \"real or honest\"},\n    {\"word\": \"pure\", \"meaning\": \"clean and not mixed with anything else\"},\n    {\"word\": \"black\", \"meaning\": \"the color of night\"},\n    {\"word\": \"white\", \"meaning\": \"the color of snow\"},\n    {\"word\": \"red\", \"meaning\": \"the color of blood\"},\n    {\"word\": \"gold\", \"meaning\": \"a precious yellow metal\"},\n    {\"word\": \"silver\", \"meaning\": \"a precious white metal\"},\n    {\"word\": \"hill\", \"meaning\": \"a raised area of land\"},\n    {\"word\": \"rock\", \"meaning\": \"a large piece of stone\"},\n    {\"word\": \"cliff\", \"meaning\": \"a steep rock face\"},\n    {\"word\": \"peak\", \"meaning\": \"the top of a mountain\"},\n    {\"word\": \"summit\", \"meaning\": \"the highest point\"},\n    {\"word\": \"river\", \"meaning\": \"a large flow of water\"},\n    {\"word\": \"stream\", \"meaning\": \"a small flow of water\"},\n    {\"word\": \"brook\", \"meaning\": \"a small stream\"},\n    {\"word\": \"creek\", \"meaning\": \"a small stream or river\"},\n    {\"word\": \"oak\", \"meaning\": \"a large strong tree\"},\n    {\"word\": \"elm\", \"meaning\": \"a tall tree with smooth bark\"},\n    {\"word\": \"pine\", \"meaning\": \"a tree that keeps its needles in winter\"},\n    {\"word\": \"birch\", \"meaning\": \"a tree with white bark\"},\n    {\"word\": \"wolf\", \"meaning\": \"a wild dog-like animal\"},\n    {\"word\": \"bear\", \"meaning\": \"a large strong animal\"},\n    {\"word\": \"fox\", \"meaning\": \"a small clever animal\"},\n    {\"word\": \"deer\", \"meaning\": \"a gentle animal with antlers\"},\n    {\"word\": \"sun\", \"meaning\": \"the star that lights the day\"},\n    {\"word\": \"moon\", \"meaning\": \"the object that lights the night\"},\n    {\"word\": \"star\", \"meaning\": \"a point of light in the sky\"},\n    {\"word\": \"light\", \"meaning\": \"the opposite of dark\"},\n    {\"word\": \"fire\", \"meaning\": \"flames and heat\"},\n    {\"word\": \"water\", \"meaning\": \"the clear liquid we drink\"},\n    {\"word\": \"wind\", \"meaning\": \"moving air\"},\n    {\"word\": \"earth\", \"meaning\": \"the ground or soil\"},\n    {\"word\": \"long\", \"meaning\": \"stretching far\"},\n    {\"word\": \"short\", \"meaning\": \"not long\"},\n    {\"word\": \"wide\", \"meaning\": \"stretching broad\"},\n    {\"word\": \"narrow\", \"meaning\": \"not wide\"},\n    {\"word\": \"old\", \"meaning\": \"having existed for a long time\"},\n    {\"word\": \"new\", \"meaning\": \"just made or found\"},\n    {\"word\": \"high\", \"meaning\": \"at the top\"},\n    {\"word\": \"low\", \"meaning\": \"at the bottom\"},\n    {\"word\": \"deep\", \"meaning\": \"far down\"},\n    {\"word\": \"dark\", \"meaning\": \"without light\"},\n    {\"word\": \"bright\", \"meaning\": \"full of light\"},\n    {\"word\": \"clear\", \"meaning\": \"easy to see through\"},\n    {\"word\": \"strong\", \"meaning\": \"having much power\"},\n    {\"word\": \"weak\", \"meaning\": \"having little power\"},\n    {\"word\": \"fast\", \"meaning\": \"moving quickly\"},\n    {\"word\": \"slow\", \"meaning\": \"moving slowly\"},\n    {\"word\": \"fair\", \"meaning\": \"beautiful or just\"},\n    {\"word\": \"foul\", \"meaning\": \"ugly or evil\"},\n    {\"word\": \"rich\", \"meaning\": \"having much money\"},\n    {\"word\": \"poor\", \"meaning\": \"having little money\"},\n    {\"word\": \"free\", \"meaning\": \"not owned by anyone\"},\n    {\"word\": \"bound\", \"meaning\": \"tied or restricted\"},\n    {\"word\": \"safe\", \"meaning\": \"not in danger\"},\n    {\"word\": \"lost\", \"meaning\": \"unable to be found\"},\n    {\"word\": \"found\", \"meaning\": \"discovered\"},\n    {\"word\": \"hidden\", \"meaning\": \"kept out of sight\"},\n    {\"word\": \"revealed\", \"meaning\": \"shown to be seen\"},\n    {\"word\": \"singing\", \"meaning\": \"making music with the voice\"},\n    {\"word\": \"dancing\", \"meaning\": \"moving to music\"},\n    {\"word\": \"crying\", \"meaning\": \"shedding tears\"},\n    {\"word\": \"laughing\", \"meaning\": \"showing happiness\"},\n    {\"word\": \"sleeping\", \"meaning\": \"resting in a deep state\"},\n    {\"word\": \"waking\", \"meaning\": \"coming out of sleep\"},\n    {\"word\": \"dying\", \"meaning\": \"coming to an end of life\"},\n    {\"word\": \"living\", \"meaning\": \"being alive\"},\n    {\"word\": \"broken\", \"meaning\": \"no longer whole\"},\n    {\"word\": \"mended\", \"meaning\": \"repaired\"},\n    {\"word\": \"filled\", \"meaning\": \"made full\"},\n    {\"word\": \"emptied\", \"meaning\": \"made empty\"},\n    {\"word\": \"crowned\", \"meaning\": \"wearing a crown\"},\n    {\"word\": \"uncrowned\", \"meaning\": \"not wearing a crown\"},\n    {\"word\": \"armed\", \"meaning\": \"holding weapons\"},\n    {\"word\": \"unarmed\", \"meaning\": \"not holding weapons\"},\n    {\"word\": \"named\", \"meaning\": \"given a name\"},\n    {\"word\": \"unnamed\", \"meaning\": \"not given a name\"},\n    {\"word\": \"spoken\", \"meaning\": \"said out loud\"},\n    {\"word\": \"silent\", \"meaning\": \"not making sound\"},\n    {\"word\": \"known\", \"meaning\": \"understood by people\"},\n    {\"word\": \"unknown\", \"meaning\": \"not understood by people\"},\n    {\"word\": \"written\", \"meaning\": \"put down in writing\"},\n    {\"word\": \"erased\", \"meaning\": \"removed from writing\"},\n    {\"word\": \"born\", \"meaning\": \"coming into the world\"},\n    {\"word\": \"died\", \"meaning\": \"ending life\"},\n    {\"word\": \"lived\", \"meaning\": \"being alive\"},\n    {\"word\": \"loved\", \"meaning\": \"cared for deeply\"},\n    {\"word\": \"kept\", \"meaning\": \"held onto\"},\n    {\"word\": \"sold\", \"meaning\": \"given for money\"},\n    {\"word\": \"bought\", \"meaning\": \"received for money\"}\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"greeting_1\",\n      \"category\": \"greeting\",\n      \"original\": \"Good day to you\",\n      \"translation\": \"A standard polite greeting\"\n    },\n    {\n      \"id\": \"greeting_2\",\n      \"category\": \"greeting\",\n      \"original\": \"Peace be with you\",\n      \"translation\": \"A wish for safety and calm\"\n    },\n    {\n      \"id\": \"blessing_1\",\n      \"category\": \"blessing\",\n      \"original\": \"May your path be clear\",\n      \"translation\": \"Wishing someone good fortune on their journey\"\n    },\n    {\n      \"id\": \"blessing_2\",\n      \"category\": \"blessing\",\n      \"original\": \"The sun favors you\",\n      \"translation\": \"Wishing someone strength and light\"\n    },\n    {\n      \"id\": \"curse_1\",\n      \"category\": \"curse\",\n      \"original\": \"May your luck run dry\",\n      \"translation\": \"Wishing someone bad fortune\"\n    },\n    {\n      \"id\": \"curse_2\",\n      \"category\": \"curse\",\n      \"original\": \"The shadows claim you\",\n      \"translation\": \"Wishing someone to be consumed by darkness or misfortune\"\n    },\n    {\n      \"id\": \"saying_1\",\n      \"category\": \"saying\",\n      \"original\": \"Iron bends, but does not break\",\n      \"translation\": \"A reminder of resilience and strength\"\n    },\n    {\n      \"id\": \"saying_2\",\n      \"category\": \"saying\",\n      \"original\": \"The river forgets, the stone remembers\",\n      \"translation\": \"A thought about how history leaves traces\"\n    }\n  ]\n}",
+      "language": {
+       "name": "Old-Word Naming",
+       "level": "naming",
+       "sound": "These names sound like words you might find in an old English book or a nature guide. They feel grounded and familiar, like places you could actually visit. They are built by sticking two common English words together.",
+       "categories": {
+        "A": "dusk thorn ash raven hollow storm iron stone",
+        "B": "mere field ford wick vale glen moor fen",
+        "C": "knight ward gate keep watch hold fort",
+        "D": "king lord saint holy true pure",
+        "E": "black white red gold silver",
+        "F": "hill rock cliff peak summit",
+        "G": "river stream brook creek",
+        "H": "oak elm pine birch",
+        "I": "wolf bear fox deer",
+        "J": "sun moon star light",
+        "K": "fire water wind earth",
+        "L": "long short wide narrow",
+        "M": "old new high low",
+        "N": "deep dark bright clear",
+        "O": "strong weak fast slow",
+        "P": "fair foul rich poor",
+        "Q": "free bound safe lost",
+        "R": "lost found hidden revealed",
+        "S": "singing dancing crying laughing",
+        "T": "sleeping waking dying living",
+        "U": "broken mended filled emptied",
+        "V": "crowned uncrowned armed unarmed",
+        "W": "named unnamed spoken silent",
+        "X": "known unknown written erased",
+        "Y": "born died lived loved",
+        "Z": "kept lost sold bought"
+       },
+       "generators": [
+        {
+         "id": "person_names",
+         "name": "Person Names",
+         "use": "people",
+         "patterns": [
+          "AB",
+          "A B",
+          "A B C",
+          "D A B",
+          "E A B",
+          "A B E",
+          "A B C D",
+          "A B C D E"
+         ],
+         "reject": [
+          "^a a$",
+          "^b b$",
+          "^[aeiou]+$",
+          "^[bcdfg]+$"
+         ],
+         "min_length": 4,
+         "max_length": 20
+        },
+        {
+         "id": "place_names",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "AB",
+          "A B",
+          "A B C",
+          "A B C F",
+          "A B C G",
+          "A B C H",
+          "A B C I",
+          "A B C J",
+          "A B C K",
+          "A B C L",
+          "A B C M",
+          "A B C N",
+          "A B C O",
+          "A B C P",
+          "A B C Q",
+          "A B C R",
+          "A B C S",
+          "A B C T",
+          "A B C U",
+          "A B C V",
+          "A B C W",
+          "A B C X",
+          "A B C Y",
+          "A B C Z"
+         ],
+         "reject": [
+          "^a a$",
+          "^b b$",
+          "^[aeiou]+$",
+          "^[bcdfg]+$"
+         ],
+         "min_length": 4,
+         "max_length": 25
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "the time when the sun sets"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp point on a plant"
+        },
+        {
+         "word": "ash",
+         "meaning": "the gray powder left after a fire"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird"
+        },
+        {
+         "word": "hollow",
+         "meaning": "an empty space or a small valley"
+        },
+        {
+         "word": "storm",
+         "meaning": "bad weather with wind and rain"
+        },
+        {
+         "word": "iron",
+         "meaning": "a strong metal"
+        },
+        {
+         "word": "stone",
+         "meaning": "a hard rock"
+        },
+        {
+         "word": "mere",
+         "meaning": "a lake"
+        },
+        {
+         "word": "field",
+         "meaning": "a flat area of land for farming"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow place where a river can be crossed"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small village"
+        },
+        {
+         "word": "vale",
+         "meaning": "a valley"
+        },
+        {
+         "word": "glen",
+         "meaning": "a narrow valley in the hills"
+        },
+        {
+         "word": "moor",
+         "meaning": "open land with poor soil"
+        },
+        {
+         "word": "fen",
+         "meaning": "wet, low-lying land"
+        },
+        {
+         "word": "knight",
+         "meaning": "a soldier who rides a horse"
+        },
+        {
+         "word": "ward",
+         "meaning": "a guarded area"
+        },
+        {
+         "word": "gate",
+         "meaning": "an opening in a wall"
+        },
+        {
+         "word": "keep",
+         "meaning": "the main tower in a castle"
+        },
+        {
+         "word": "watch",
+         "meaning": "a guard post"
+        },
+        {
+         "word": "hold",
+         "meaning": "a fortress"
+        },
+        {
+         "word": "fort",
+         "meaning": "a military building"
+        },
+        {
+         "word": "king",
+         "meaning": "a male ruler of a country"
+        },
+        {
+         "word": "lord",
+         "meaning": "a nobleman"
+        },
+        {
+         "word": "saint",
+         "meaning": "a holy person"
+        },
+        {
+         "word": "holy",
+         "meaning": "sacred or religious"
+        },
+        {
+         "word": "true",
+         "meaning": "real or honest"
+        },
+        {
+         "word": "pure",
+         "meaning": "clean and not mixed with anything else"
+        },
+        {
+         "word": "black",
+         "meaning": "the color of night"
+        },
+        {
+         "word": "white",
+         "meaning": "the color of snow"
+        },
+        {
+         "word": "red",
+         "meaning": "the color of blood"
+        },
+        {
+         "word": "gold",
+         "meaning": "a precious yellow metal"
+        },
+        {
+         "word": "silver",
+         "meaning": "a precious white metal"
+        },
+        {
+         "word": "hill",
+         "meaning": "a raised area of land"
+        },
+        {
+         "word": "rock",
+         "meaning": "a large piece of stone"
+        },
+        {
+         "word": "cliff",
+         "meaning": "a steep rock face"
+        },
+        {
+         "word": "peak",
+         "meaning": "the top of a mountain"
+        },
+        {
+         "word": "summit",
+         "meaning": "the highest point"
+        },
+        {
+         "word": "river",
+         "meaning": "a large flow of water"
+        },
+        {
+         "word": "stream",
+         "meaning": "a small flow of water"
+        },
+        {
+         "word": "brook",
+         "meaning": "a small stream"
+        },
+        {
+         "word": "creek",
+         "meaning": "a small stream or river"
+        },
+        {
+         "word": "oak",
+         "meaning": "a large strong tree"
+        },
+        {
+         "word": "elm",
+         "meaning": "a tall tree with smooth bark"
+        },
+        {
+         "word": "pine",
+         "meaning": "a tree that keeps its needles in winter"
+        },
+        {
+         "word": "birch",
+         "meaning": "a tree with white bark"
+        },
+        {
+         "word": "wolf",
+         "meaning": "a wild dog-like animal"
+        },
+        {
+         "word": "bear",
+         "meaning": "a large strong animal"
+        },
+        {
+         "word": "fox",
+         "meaning": "a small clever animal"
+        },
+        {
+         "word": "deer",
+         "meaning": "a gentle animal with antlers"
+        },
+        {
+         "word": "sun",
+         "meaning": "the star that lights the day"
+        },
+        {
+         "word": "moon",
+         "meaning": "the object that lights the night"
+        },
+        {
+         "word": "star",
+         "meaning": "a point of light in the sky"
+        },
+        {
+         "word": "light",
+         "meaning": "the opposite of dark"
+        },
+        {
+         "word": "fire",
+         "meaning": "flames and heat"
+        },
+        {
+         "word": "water",
+         "meaning": "the clear liquid we drink"
+        },
+        {
+         "word": "wind",
+         "meaning": "moving air"
+        },
+        {
+         "word": "earth",
+         "meaning": "the ground or soil"
+        },
+        {
+         "word": "long",
+         "meaning": "stretching far"
+        },
+        {
+         "word": "short",
+         "meaning": "not long"
+        },
+        {
+         "word": "wide",
+         "meaning": "stretching broad"
+        },
+        {
+         "word": "narrow",
+         "meaning": "not wide"
+        },
+        {
+         "word": "old",
+         "meaning": "having existed for a long time"
+        },
+        {
+         "word": "new",
+         "meaning": "just made or found"
+        },
+        {
+         "word": "high",
+         "meaning": "at the top"
+        },
+        {
+         "word": "low",
+         "meaning": "at the bottom"
+        },
+        {
+         "word": "deep",
+         "meaning": "far down"
+        },
+        {
+         "word": "dark",
+         "meaning": "without light"
+        },
+        {
+         "word": "bright",
+         "meaning": "full of light"
+        },
+        {
+         "word": "clear",
+         "meaning": "easy to see through"
+        },
+        {
+         "word": "strong",
+         "meaning": "having much power"
+        },
+        {
+         "word": "weak",
+         "meaning": "having little power"
+        },
+        {
+         "word": "fast",
+         "meaning": "moving quickly"
+        },
+        {
+         "word": "slow",
+         "meaning": "moving slowly"
+        },
+        {
+         "word": "fair",
+         "meaning": "beautiful or just"
+        },
+        {
+         "word": "foul",
+         "meaning": "ugly or evil"
+        },
+        {
+         "word": "rich",
+         "meaning": "having much money"
+        },
+        {
+         "word": "poor",
+         "meaning": "having little money"
+        },
+        {
+         "word": "free",
+         "meaning": "not owned by anyone"
+        },
+        {
+         "word": "bound",
+         "meaning": "tied or restricted"
+        },
+        {
+         "word": "safe",
+         "meaning": "not in danger"
+        },
+        {
+         "word": "lost",
+         "meaning": "unable to be found"
+        },
+        {
+         "word": "found",
+         "meaning": "discovered"
+        },
+        {
+         "word": "hidden",
+         "meaning": "kept out of sight"
+        },
+        {
+         "word": "revealed",
+         "meaning": "shown to be seen"
+        },
+        {
+         "word": "singing",
+         "meaning": "making music with the voice"
+        },
+        {
+         "word": "dancing",
+         "meaning": "moving to music"
+        },
+        {
+         "word": "crying",
+         "meaning": "shedding tears"
+        },
+        {
+         "word": "laughing",
+         "meaning": "showing happiness"
+        },
+        {
+         "word": "sleeping",
+         "meaning": "resting in a deep state"
+        },
+        {
+         "word": "waking",
+         "meaning": "coming out of sleep"
+        },
+        {
+         "word": "dying",
+         "meaning": "coming to an end of life"
+        },
+        {
+         "word": "living",
+         "meaning": "being alive"
+        },
+        {
+         "word": "broken",
+         "meaning": "no longer whole"
+        },
+        {
+         "word": "mended",
+         "meaning": "repaired"
+        },
+        {
+         "word": "filled",
+         "meaning": "made full"
+        },
+        {
+         "word": "emptied",
+         "meaning": "made empty"
+        },
+        {
+         "word": "crowned",
+         "meaning": "wearing a crown"
+        },
+        {
+         "word": "uncrowned",
+         "meaning": "not wearing a crown"
+        },
+        {
+         "word": "armed",
+         "meaning": "holding weapons"
+        },
+        {
+         "word": "unarmed",
+         "meaning": "not holding weapons"
+        },
+        {
+         "word": "named",
+         "meaning": "given a name"
+        },
+        {
+         "word": "unnamed",
+         "meaning": "not given a name"
+        },
+        {
+         "word": "spoken",
+         "meaning": "said out loud"
+        },
+        {
+         "word": "silent",
+         "meaning": "not making sound"
+        },
+        {
+         "word": "known",
+         "meaning": "understood by people"
+        },
+        {
+         "word": "unknown",
+         "meaning": "not understood by people"
+        },
+        {
+         "word": "written",
+         "meaning": "put down in writing"
+        },
+        {
+         "word": "erased",
+         "meaning": "removed from writing"
+        },
+        {
+         "word": "born",
+         "meaning": "coming into the world"
+        },
+        {
+         "word": "died",
+         "meaning": "ending life"
+        },
+        {
+         "word": "lived",
+         "meaning": "being alive"
+        },
+        {
+         "word": "loved",
+         "meaning": "cared for deeply"
+        },
+        {
+         "word": "kept",
+         "meaning": "held onto"
+        },
+        {
+         "word": "sold",
+         "meaning": "given for money"
+        },
+        {
+         "word": "bought",
+         "meaning": "received for money"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "greeting_1",
+         "category": "greeting",
+         "original": "Good day to you",
+         "translation": "A standard polite greeting"
+        },
+        {
+         "id": "greeting_2",
+         "category": "greeting",
+         "original": "Peace be with you",
+         "translation": "A wish for safety and calm"
+        },
+        {
+         "id": "blessing_1",
+         "category": "blessing",
+         "original": "May your path be clear",
+         "translation": "Wishing someone good fortune on their journey"
+        },
+        {
+         "id": "blessing_2",
+         "category": "blessing",
+         "original": "The sun favors you",
+         "translation": "Wishing someone strength and light"
+        },
+        {
+         "id": "curse_1",
+         "category": "curse",
+         "original": "May your luck run dry",
+         "translation": "Wishing someone bad fortune"
+        },
+        {
+         "id": "curse_2",
+         "category": "curse",
+         "original": "The shadows claim you",
+         "translation": "Wishing someone to be consumed by darkness or misfortune"
+        },
+        {
+         "id": "saying_1",
+         "category": "saying",
+         "original": "Iron bends, but does not break",
+         "translation": "A reminder of resilience and strength"
+        },
+        {
+         "id": "saying_2",
+         "category": "saying",
+         "original": "The river forgets, the stone remembers",
+         "translation": "A thought about how history leaves traces"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "person_names": [
+         "Ash Vale Gold",
+         "Black Raven Wick",
+         "Stone Fen Red",
+         "Lord Dusk Mere",
+         "Lord Raven Fen",
+         "Red Thorn Mere",
+         "Thorn Vale Fort",
+         "Thorn Fen Gold",
+         "Stone Moor Gold",
+         "Stone Fen Ward",
+         "Storm Wick Keep Saint",
+         "Holy Stone Glen",
+         "Lord Ash Glen",
+         "Stone Ford",
+         "Ash Fen Watch Holy Red",
+         "Hollow Ford White",
+         "Silver Hollow Mere",
+         "Storm Fen Ward True",
+         "Stormford",
+         "Stone Mere",
+         "Silver Thorn Field",
+         "Dusk Fen Black",
+         "Dusk Ford Silver",
+         "Thorn Glen",
+         "King Stone Field",
+         "Ashvale",
+         "Dusk Ford Black",
+         "True Storm Fen",
+         "Iron Glen Keep Lord",
+         "Ash Mere Red",
+         "Thorn Vale Gate Holy",
+         "Red Dusk Vale",
+         "Dusk Mere",
+         "Dusk Glen",
+         "Silver Stone Fen",
+         "Raven Ford",
+         "Gold Iron Glen",
+         "Raven Vale Knight",
+         "Ravenmere",
+         "Thorn Mere Black",
+         "Thorn Vale",
+         "Lord Storm Field",
+         "Stone Glen Keep Holy Red",
+         "Ravenvale",
+         "Dusk Moor",
+         "Hollow Fen Watch",
+         "Stone Ford Knight",
+         "Dusk Wick Red",
+         "Lord Hollow Mere",
+         "Ash Fen Knight"
+        ],
+        "place_names": [
+         "Thorn Vale Gate Mended",
+         "Raven Mere Knight Broken",
+         "Storm Fen Watch Named",
+         "Iron Glen Keep Found",
+         "Iron Ford Keep New",
+         "Iron Fen Hold Died",
+         "Raven Ford Gate Pine",
+         "Hollow Moor Knight Died",
+         "Thorn Wick Knight Kept",
+         "Stone Glen Knight Unknown",
+         "Storm Glen Keep Pine",
+         "Hollow Fen Hold",
+         "Hollow Glen Ward",
+         "Raven Glen Gate Erased",
+         "Hollow Field Keep Broken",
+         "Stone Field Keep Bound",
+         "Storm Fen Watch Short",
+         "Ash Glen Watch Bought",
+         "Thorn Vale Gate Spoken",
+         "Storm Mere Keep Sold",
+         "Storm Moor Knight Erased",
+         "Hollow Fen Fort Sleeping",
+         "Iron Field Hold Armed",
+         "Iron Field Watch Stream",
+         "Hollow Wick Ward Deer",
+         "Dusk Wick",
+         "Storm Moor Keep Spoken",
+         "Ash Vale Knight Fire",
+         "Thorn Moor Hold Mended",
+         "Iron Moor Knight Singing",
+         "Raven Ford Knight Wide",
+         "Ash Vale Gate Lost",
+         "Ash Glen Keep Spoken",
+         "Dusk Moor Gate Written",
+         "Storm Wick Hold Crowned",
+         "Raven Vale Hold Revealed",
+         "Ash Field Keep Lost",
+         "Stone Mere Hold Bear",
+         "Ash Mere Keep Fire",
+         "Ash Fen Fort New",
+         "Stone Ford Knight Lost",
+         "Storm Ford Gate Creek",
+         "Iron Glen Gate Birch",
+         "Stone Fen Keep Wind",
+         "Storm Moor Fort Loved",
+         "Stone Ford Watch Filled",
+         "Raven Field Fort Water",
+         "Stone Field Fort Deep",
+         "Ashford",
+         "Stone Moor Keep Lived"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "compound-examples": [
+     {
+      "version": 1,
+      "seconds": 38.5,
+      "reply": "```json\n{\n  \"name\": \"Grimshard\",\n  \"level\": \"naming\",\n  \"sound\": \"The names feel like dark, heavy stones. They are made by stacking old English-style words together, usually starting with something wild or dark and ending with a piece of land.\",\n  \"categories\": {\n    \"A\": \"dusk thorn ash raven briar mist fog shadow stone iron\",\n    \"B\": \"hollow field mere ford wick vale end gate wood vale hill vale moor\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"places\",\n      \"name\": \"Grimshard Places\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"AB\"\n      ],\n      \"reject\": [\n        \"^$\",\n        \"aa\",\n        \"ee\",\n        \"oo\",\n        \"uu\",\n        \"ii\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 15\n    },\n    {\n      \"id\": \"people\",\n      \"name\": \"Grimshard People\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"A\",\n        \"AB\"\n      ],\n      \"reject\": [\n        \"^$\",\n        \"aa\",\n        \"ee\",\n        \"oo\",\n        \"uu\",\n        \"ii\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 12\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"dusk\",\n      \"meaning\": \"the time when the sun goes down\"\n    },\n    {\n      \"word\": \"thorn\",\n      \"meaning\": \"a sharp point on a plant\"\n    },\n    {\n      \"word\": \"ash\",\n      \"meaning\": \"the grey powder left after a fire\"\n    },\n    {\n      \"word\": \"raven\",\n      \"meaning\": \"a large black bird\"\n    },\n    {\n      \"word\": \"briar\",\n      \"meaning\": \"a wild bush with thorns\"\n    },\n    {\n      \"word\": \"mist\",\n      \"meaning\": \"thin fog near the ground\"\n    },\n    {\n      \"word\": \"fog\",\n      \"meaning\": \"thick clouds of water in the air\"\n    },\n    {\n      \"word\": \"shadow\",\n      \"meaning\": \"the dark shape made by blocking light\"\n    },\n    {\n      \"word\": \"stone\",\n      \"meaning\": \"a hard piece of rock\"\n    },\n    {\n      \"word\": \"iron\",\n      \"meaning\": \"a strong grey metal\"\n    },\n    {\n      \"word\": \"hollow\",\n      \"meaning\": \"a low area of land between hills\"\n    },\n    {\n      \"word\": \"field\",\n      \"meaning\": \"an open piece of land\"\n    },\n    {\n      \"word\": \"mere\",\n      \"meaning\": \"a natural lake\"\n    },\n    {\n      \"word\": \"ford\",\n      \"meaning\": \"a place where a river is shallow enough to cross\"\n    },\n    {\n      \"word\": \"wick\",\n      \"meaning\": \"a small town or village\"\n    },\n    {\n      \"word\": \"vale\",\n      \"meaning\": \"a long valley\"\n    },\n    {\n      \"word\": \"end\",\n      \"meaning\": \"the final part of something\"\n    },\n    {\n      \"word\": \"gate\",\n      \"meaning\": \"a barrier that opens and closes\"\n    },\n    {\n      \"word\": \"wood\",\n      \"meaning\": \"an area with many trees\"\n    },\n    {\n      \"word\": \"hill\",\n      \"meaning\": \"a raised area of land\"\n    },\n    {\n      \"word\": \"moor\",\n      \"meaning\": \"open, wild land with grass and heather\"\n    }\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"phr_01\",\n      \"category\": \"saying\",\n      \"original\": \"Dusk hollow, shadow field\",\n      \"translation\": \"In the dark places, secrets grow\"\n    },\n    {\n      \"id\": \"phr_02\",\n      \"category\": \"blessing\",\n      \"original\": \"Iron stone, mist vale\",\n      \"translation\": \"May your heart be strong and your path clear\"\n    },\n    {\n      \"id\": \"phr_03\",\n      \"category\": \"curse\",\n      \"original\": \"Thorn briar, fog end\",\n      \"translation\": \"May you be trapped where no light reaches\"\n    },\n    {\n      \"id\": \"phr_04\",\n      \"category\": \"greeting\",\n      \"original\": \"Raven wick, ash gate\",\n      \"translation\": \"Peace to this place and those who live here\"\n    },\n    {\n      \"id\": \"phr_05\",\n      \"category\": \"saying\",\n      \"original\": \"Stone moor, shadow ford\",\n      \"translation\": \"The land remembers what people forget\"\n    },\n    {\n      \"id\": \"phr_06\",\n      \"category\": \"blessing\",\n      \"original\": \"Mere wood, dusk hill\",\n      \"translation\": \"May you find rest in the quiet places\"\n    }\n  ]\n}\n```",
+      "language": {
+       "name": "Grimshard",
+       "level": "naming",
+       "sound": "The names feel like dark, heavy stones. They are made by stacking old English-style words together, usually starting with something wild or dark and ending with a piece of land.",
+       "categories": {
+        "A": "dusk thorn ash raven briar mist fog shadow stone iron",
+        "B": "hollow field mere ford wick vale end gate wood vale hill vale moor"
+       },
+       "generators": [
+        {
+         "id": "places",
+         "name": "Grimshard Places",
+         "use": "places",
+         "patterns": [
+          "AB"
+         ],
+         "reject": [
+          "^$",
+          "aa",
+          "ee",
+          "oo",
+          "uu",
+          "ii"
+         ],
+         "min_length": 4,
+         "max_length": 15
+        },
+        {
+         "id": "people",
+         "name": "Grimshard People",
+         "use": "people",
+         "patterns": [
+          "A",
+          "AB"
+         ],
+         "reject": [
+          "^$",
+          "aa",
+          "ee",
+          "oo",
+          "uu",
+          "ii"
+         ],
+         "min_length": 3,
+         "max_length": 12
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "the time when the sun goes down"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp point on a plant"
+        },
+        {
+         "word": "ash",
+         "meaning": "the grey powder left after a fire"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird"
+        },
+        {
+         "word": "briar",
+         "meaning": "a wild bush with thorns"
+        },
+        {
+         "word": "mist",
+         "meaning": "thin fog near the ground"
+        },
+        {
+         "word": "fog",
+         "meaning": "thick clouds of water in the air"
+        },
+        {
+         "word": "shadow",
+         "meaning": "the dark shape made by blocking light"
+        },
+        {
+         "word": "stone",
+         "meaning": "a hard piece of rock"
+        },
+        {
+         "word": "iron",
+         "meaning": "a strong grey metal"
+        },
+        {
+         "word": "hollow",
+         "meaning": "a low area of land between hills"
+        },
+        {
+         "word": "field",
+         "meaning": "an open piece of land"
+        },
+        {
+         "word": "mere",
+         "meaning": "a natural lake"
+        },
+        {
+         "word": "ford",
+         "meaning": "a place where a river is shallow enough to cross"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small town or village"
+        },
+        {
+         "word": "vale",
+         "meaning": "a long valley"
+        },
+        {
+         "word": "end",
+         "meaning": "the final part of something"
+        },
+        {
+         "word": "gate",
+         "meaning": "a barrier that opens and closes"
+        },
+        {
+         "word": "wood",
+         "meaning": "an area with many trees"
+        },
+        {
+         "word": "hill",
+         "meaning": "a raised area of land"
+        },
+        {
+         "word": "moor",
+         "meaning": "open, wild land with grass and heather"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "phr_01",
+         "category": "saying",
+         "original": "Dusk hollow, shadow field",
+         "translation": "In the dark places, secrets grow"
+        },
+        {
+         "id": "phr_02",
+         "category": "blessing",
+         "original": "Iron stone, mist vale",
+         "translation": "May your heart be strong and your path clear"
+        },
+        {
+         "id": "phr_03",
+         "category": "curse",
+         "original": "Thorn briar, fog end",
+         "translation": "May you be trapped where no light reaches"
+        },
+        {
+         "id": "phr_04",
+         "category": "greeting",
+         "original": "Raven wick, ash gate",
+         "translation": "Peace to this place and those who live here"
+        },
+        {
+         "id": "phr_05",
+         "category": "saying",
+         "original": "Stone moor, shadow ford",
+         "translation": "The land remembers what people forget"
+        },
+        {
+         "id": "phr_06",
+         "category": "blessing",
+         "original": "Mere wood, dusk hill",
+         "translation": "May you find rest in the quiet places"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "places": [
+         "Stonevale",
+         "Briarvale",
+         "Shadowfield",
+         "Duskvale",
+         "Duskhollow",
+         "Ironwick",
+         "Briarhollow",
+         "Briarend",
+         "Ashmere",
+         "Ashhollow",
+         "Ironvale",
+         "Ravenvale",
+         "Fogford",
+         "Misthollow",
+         "Shadowvale",
+         "Mistvale",
+         "Shadowend",
+         "Ravenmere",
+         "Ironhill",
+         "Stoneford",
+         "Irongate",
+         "Ashgate",
+         "Duskhill",
+         "Mistgate",
+         "Thornend",
+         "Ravenwick",
+         "Foggate",
+         "Duskmere",
+         "Shadowhill",
+         "Ashfield",
+         "Ravenhollow",
+         "Mistmere",
+         "Briarmere",
+         "Foghill",
+         "Duskfield",
+         "Thornvale",
+         "Fogvale",
+         "Briarwick",
+         "Stonehollow",
+         "Ironford",
+         "Ashvale",
+         "Stonewick",
+         "Mistfield",
+         "Shadowwick",
+         "Stonegate",
+         "Briarford",
+         "Duskford",
+         "Briarfield",
+         "Ravengate",
+         "Mistford"
+        ],
+        "people": [
+         "Ash",
+         "Mist",
+         "Dusk",
+         "Ashhill",
+         "Stone",
+         "Shadow",
+         "Stonewick",
+         "Ashvale",
+         "Iron",
+         "Raven",
+         "Stonevale",
+         "Briar",
+         "Ashhollow",
+         "Stonegate",
+         "Briargate",
+         "Thorn",
+         "Fog",
+         "Ashend",
+         "Ironford",
+         "Duskhollow",
+         "Stonemere",
+         "Shadowgate",
+         "Thornford",
+         "Ravenend",
+         "Fogford",
+         "Ironfield",
+         "Ravenhill",
+         "Briarfield",
+         "Duskmere",
+         "Foghill",
+         "Ashgate",
+         "Briarvale",
+         "Mistwick",
+         "Thornvale",
+         "Ironvale",
+         "Thornend",
+         "Stonehill",
+         "Ironend",
+         "Ravenmere",
+         "Mistvale",
+         "Shadowend",
+         "Ironhill",
+         "Shadowhill",
+         "Ravenford",
+         "Briarwick",
+         "Duskend",
+         "Fogvale",
+         "Fogmere",
+         "Shadowmere",
+         "Ravenvale"
+        ]
+       },
+       "dictionary_fit": 0.47619047619047616,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 42.6,
+      "reply": "{\n  \"name\": \"Gloamwood\",\n  \"level\": \"naming\",\n  \"sound\": \"These names sound like dark, old English places. They are built by sticking two common nature words together, often ending in sounds like 'field', 'wood', or 'wick'. The feeling is heavy, moody, and rooted in the earth.\",\n  \"categories\": {\n    \"A\": \"dusk thorn ash raven briar gloom storm mist fern oak stone wolf\",\n    \"B\": \"hollow field mere ford wick wood gate hill brook vale thicket\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"place_gen\",\n      \"name\": \"Dark Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"AB\"\n      ],\n      \"reject\": [],\n      \"min_length\": 5,\n      \"max_length\": 15\n    },\n    {\n      \"id\": \"person_gen\",\n      \"name\": \"Dark Surname Style\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"AB\"\n      ],\n      \"reject\": [],\n      \"min_length\": 5,\n      \"max_length\": 15\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"dusk\",\n      \"meaning\": \"the time when the sun has set but it is not yet fully dark\"\n    },\n    {\n      \"word\": \"thorn\",\n      \"meaning\": \"a sharp point on a plant that can hurt you\"\n    },\n    {\n      \"word\": \"ash\",\n      \"meaning\": \"the gray powder left after a fire burns out\"\n    },\n    {\n      \"word\": \"raven\",\n      \"meaning\": \"a large, black bird known for being clever\"\n    },\n    {\n      \"word\": \"briar\",\n      \"meaning\": \"a thorny bush or wild rose plant\"\n    },\n    {\n      \"word\": \"gloom\",\n      \"meaning\": \"a dark, sad, or depressing atmosphere\"\n    },\n    {\n      \"word\": \"storm\",\n      \"meaning\": \"bad weather with heavy rain, wind, or lightning\"\n    },\n    {\n      \"word\": \"mist\",\n      \"meaning\": \"fine fog that makes things hard to see\"\n    },\n    {\n      \"word\": \"fern\",\n      \"meaning\": \"a green plant with feathery leaves that grows in damp places\"\n    },\n    {\n      \"word\": \"oak\",\n      \"meaning\": \"a large, strong tree with hard wood\"\n    },\n    {\n      \"word\": \"stone\",\n      \"meaning\": \"a hard, solid piece of rock\"\n    },\n    {\n      \"word\": \"wolf\",\n      \"meaning\": \"a wild dog-like animal that hunts in packs\"\n    },\n    {\n      \"word\": \"hollow\",\n      \"meaning\": \"a low area of land between hills or mountains\"\n    },\n    {\n      \"word\": \"field\",\n      \"meaning\": \"a large open area of land, often used for growing things or grazing\"\n    },\n    {\n      \"word\": \"mere\",\n      \"meaning\": \"a lake or pool of water\"\n    },\n    {\n      \"word\": \"ford\",\n      \"meaning\": \"a shallow place where a river can be crossed on foot or by horse\"\n    },\n    {\n      \"word\": \"wick\",\n      \"meaning\": \"a small village or town\"\n    },\n    {\n      \"word\": \"wood\",\n      \"meaning\": \"an area covered with trees\"\n    },\n    {\n      \"word\": \"gate\",\n      \"meaning\": \"a door or entrance to a place, often leading into a field or yard\"\n    },\n    {\n      \"word\": \"hill\",\n      \"meaning\": \"a raised area of land, smaller than a mountain\"\n    },\n    {\n      \"word\": \"brook\",\n      \"meaning\": \"a small stream of water\"\n    },\n    {\n      \"word\": \"vale\",\n      \"meaning\": \"a valley, a low area between hills\"\n    },\n    {\n      \"word\": \"thicket\",\n      \"meaning\": \"a dense growth of bushes and small trees\"\n    },\n    {\n      \"word\": \"moss\",\n      \"meaning\": \"soft green plants that grow in damp, shady places\"\n    },\n    {\n      \"word\": \"cliff\",\n      \"meaning\": \"a steep rock face, usually near the sea or a valley\"\n    },\n    {\n      \"word\": \"fen\",\n      \"meaning\": \"a wet, boggy area of land\"\n    }\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"ph_01\",\n      \"category\": \"saying\",\n      \"original\": \"Dusk holds the key\",\n      \"translation\": \"The end of the day reveals the truth\"\n    },\n    {\n      \"id\": \"ph_02\",\n      \"category\": \"blessing\",\n      \"original\": \"May your roots run deep\",\n      \"translation\": \"I hope you stay strong and safe\"\n    },\n    {\n      \"id\": \"ph_03\",\n      \"category\": \"curse\",\n      \"original\": \"Rot in the thorn\",\n      \"translation\": \"May you suffer pain and decay\"\n    },\n    {\n      \"id\": \"ph_04\",\n      \"category\": \"greeting\",\n      \"original\": \"Ash to ash\",\n      \"translation\": \"Hello, fellow survivor\"\n    },\n    {\n      \"id\": \"ph_05\",\n      \"category\": \"saying\",\n      \"original\": \"The raven sees all\",\n      \"translation\": \"Nothing is hidden from the wise\"\n    },\n    {\n      \"id\": \"ph_06\",\n      \"category\": \"blessing\",\n      \"original\": \"Walk the quiet ford\",\n      \"translation\": \"May your journey be peaceful and easy\"\n    }\n  ]\n}",
+      "language": {
+       "name": "Gloamwood",
+       "level": "naming",
+       "sound": "These names sound like dark, old English places. They are built by sticking two common nature words together, often ending in sounds like 'field', 'wood', or 'wick'. The feeling is heavy, moody, and rooted in the earth.",
+       "categories": {
+        "A": "dusk thorn ash raven briar gloom storm mist fern oak stone wolf",
+        "B": "hollow field mere ford wick wood gate hill brook vale thicket"
+       },
+       "generators": [
+        {
+         "id": "place_gen",
+         "name": "Dark Place Names",
+         "use": "places",
+         "patterns": [
+          "AB"
+         ],
+         "reject": [],
+         "min_length": 5,
+         "max_length": 15
+        },
+        {
+         "id": "person_gen",
+         "name": "Dark Surname Style",
+         "use": "people",
+         "patterns": [
+          "AB"
+         ],
+         "reject": [],
+         "min_length": 5,
+         "max_length": 15
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "the time when the sun has set but it is not yet fully dark"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp point on a plant that can hurt you"
+        },
+        {
+         "word": "ash",
+         "meaning": "the gray powder left after a fire burns out"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large, black bird known for being clever"
+        },
+        {
+         "word": "briar",
+         "meaning": "a thorny bush or wild rose plant"
+        },
+        {
+         "word": "gloom",
+         "meaning": "a dark, sad, or depressing atmosphere"
+        },
+        {
+         "word": "storm",
+         "meaning": "bad weather with heavy rain, wind, or lightning"
+        },
+        {
+         "word": "mist",
+         "meaning": "fine fog that makes things hard to see"
+        },
+        {
+         "word": "fern",
+         "meaning": "a green plant with feathery leaves that grows in damp places"
+        },
+        {
+         "word": "oak",
+         "meaning": "a large, strong tree with hard wood"
+        },
+        {
+         "word": "stone",
+         "meaning": "a hard, solid piece of rock"
+        },
+        {
+         "word": "wolf",
+         "meaning": "a wild dog-like animal that hunts in packs"
+        },
+        {
+         "word": "hollow",
+         "meaning": "a low area of land between hills or mountains"
+        },
+        {
+         "word": "field",
+         "meaning": "a large open area of land, often used for growing things or grazing"
+        },
+        {
+         "word": "mere",
+         "meaning": "a lake or pool of water"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow place where a river can be crossed on foot or by horse"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small village or town"
+        },
+        {
+         "word": "wood",
+         "meaning": "an area covered with trees"
+        },
+        {
+         "word": "gate",
+         "meaning": "a door or entrance to a place, often leading into a field or yard"
+        },
+        {
+         "word": "hill",
+         "meaning": "a raised area of land, smaller than a mountain"
+        },
+        {
+         "word": "brook",
+         "meaning": "a small stream of water"
+        },
+        {
+         "word": "vale",
+         "meaning": "a valley, a low area between hills"
+        },
+        {
+         "word": "thicket",
+         "meaning": "a dense growth of bushes and small trees"
+        },
+        {
+         "word": "moss",
+         "meaning": "soft green plants that grow in damp, shady places"
+        },
+        {
+         "word": "cliff",
+         "meaning": "a steep rock face, usually near the sea or a valley"
+        },
+        {
+         "word": "fen",
+         "meaning": "a wet, boggy area of land"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "ph_01",
+         "category": "saying",
+         "original": "Dusk holds the key",
+         "translation": "The end of the day reveals the truth"
+        },
+        {
+         "id": "ph_02",
+         "category": "blessing",
+         "original": "May your roots run deep",
+         "translation": "I hope you stay strong and safe"
+        },
+        {
+         "id": "ph_03",
+         "category": "curse",
+         "original": "Rot in the thorn",
+         "translation": "May you suffer pain and decay"
+        },
+        {
+         "id": "ph_04",
+         "category": "greeting",
+         "original": "Ash to ash",
+         "translation": "Hello, fellow survivor"
+        },
+        {
+         "id": "ph_05",
+         "category": "saying",
+         "original": "The raven sees all",
+         "translation": "Nothing is hidden from the wise"
+        },
+        {
+         "id": "ph_06",
+         "category": "blessing",
+         "original": "Walk the quiet ford",
+         "translation": "May your journey be peaceful and easy"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "place_gen": [
+         "Wolfhollow",
+         "Stonebrook",
+         "Ravengate",
+         "Stormfield",
+         "Briarhill",
+         "Wolfwood",
+         "Ravenhollow",
+         "Gloomford",
+         "Stonewood",
+         "Ashhollow",
+         "Thornwood",
+         "Fernmere",
+         "Oakbrook",
+         "Wolfthicket",
+         "Oakhill",
+         "Stormwood",
+         "Stormvale",
+         "Stonevale",
+         "Stormthicket",
+         "Gloommere",
+         "Fernfield",
+         "Raventhicket",
+         "Wolfhill",
+         "Stormhill",
+         "Ravenmere",
+         "Wolfgate",
+         "Ashbrook",
+         "Mistford",
+         "Stonefield",
+         "Stonemere",
+         "Stonewick",
+         "Duskford",
+         "Fernhollow",
+         "Duskbrook",
+         "Ravenbrook",
+         "Ashhill",
+         "Duskthicket",
+         "Duskwick",
+         "Fernvale",
+         "Stonehill",
+         "Thornwick",
+         "Thorngate",
+         "Duskgate",
+         "Duskhollow",
+         "Ashwick",
+         "Mistgate",
+         "Stormhollow",
+         "Briarfield",
+         "Ashfield",
+         "Ashmere"
+        ],
+        "person_gen": [
+         "Gloomford",
+         "Ashvale",
+         "Fernwick",
+         "Stormhollow",
+         "Stormfield",
+         "Oakwick",
+         "Wolfgate",
+         "Wolfwick",
+         "Fernfield",
+         "Stonehill",
+         "Gloomwick",
+         "Ashgate",
+         "Ravenwick",
+         "Duskbrook",
+         "Stormwick",
+         "Thornhollow",
+         "Mistthicket",
+         "Duskhill",
+         "Fernwood",
+         "Gloombrook",
+         "Stormwood",
+         "Oakthicket",
+         "Ravenmere",
+         "Thornford",
+         "Thornwick",
+         "Thornvale",
+         "Mistfield",
+         "Ashhill",
+         "Gloomwood",
+         "Stormthicket",
+         "Thornwood",
+         "Ravenvale",
+         "Oakgate",
+         "Gloomhollow",
+         "Stonefield",
+         "Wolfhill",
+         "Wolfford",
+         "Mistbrook",
+         "Fernthicket",
+         "Duskwood",
+         "Duskthicket",
+         "Mistvale",
+         "Thornbrook",
+         "Ashbrook",
+         "Mistwick",
+         "Wolfhollow",
+         "Gloomvale",
+         "Oakwood",
+         "Briarmere",
+         "Duskhollow"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "daughter": [
+     {
+      "version": 1,
+      "seconds": 44.1,
+      "reply": "{\n  \"name\": \"High Ostrovian\",\n  \"level\": \"naming\",\n  \"sound\": \"This speech sounds thinner and sharper than its lowland parent, as if the wind has scoured the rough edges off the words. The hard 'k' and 't' sounds are still there, but they are shorter and quicker, while the vowels tend to open up into long 'o' and 'a' sounds. It feels airy and brittle, like ice cracking on a frozen lake.\",\n  \"categories\": {\n    \"C\": \"k t th r l m n f v s\",\n    \"V\": \"a o u e i\",\n    \"S\": \"s f v\",\n    \"N\": \"n m l\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"Personal Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CV(C)V*2\",\n        \"CVCV*2\",\n        \"CVV\"\n      ],\n      \"reject\": [\n        \"^k.*k$\",\n        \"^s.*s$\",\n        \"oo\",\n        \"uu\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 6\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVCV(C)*2\",\n        \"CVCV*2\",\n        \"CVV(C)\"\n      ],\n      \"reject\": [\n        \"^v.*v$\",\n        \"^m.*m$\",\n        \"aa\",\n        \"ii\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 8\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"vark\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"zolm\",\n      \"meaning\": \"water\"\n    },\n    {\n      \"word\": \"keth\",\n      \"meaning\": \"stone\"\n    },\n    {\n      \"word\": \"brun\",\n      \"meaning\": \"wood\"\n    },\n    {\n      \"word\": \"shil\",\n      \"meaning\": \"wind\"\n    },\n    {\n      \"word\": \"dorn\",\n      \"meaning\": \"sun\"\n    },\n    {\n      \"word\": \"nusk\",\n      \"meaning\": \"moon\"\n    },\n    {\n      \"word\": \"pash\",\n      \"meaning\": \"snow\"\n    },\n    {\n      \"word\": \"grot\",\n      \"meaning\": \"earth\"\n    },\n    {\n      \"word\": \"liv\",\n      \"meaning\": \"life\"\n    },\n    {\n      \"word\": \"mord\",\n      \"meaning\": \"death\"\n    },\n    {\n      \"word\": \"takh\",\n      \"meaning\": \"hand\"\n    },\n    {\n      \"word\": \"zov\",\n      \"meaning\": \"voice\"\n    },\n    {\n      \"word\": \"rek\",\n      \"meaning\": \"blood\"\n    },\n    {\n      \"word\": \"blut\",\n      \"meaning\": \"bone\"\n    },\n    {\n      \"word\": \"skar\",\n      \"meaning\": \"skin\"\n    },\n    {\n      \"word\": \"fesh\",\n      \"meaning\": \"flesh\"\n    },\n    {\n      \"word\": \"kold\",\n      \"meaning\": \"cold\"\n    },\n    {\n      \"word\": \"warm\",\n      \"meaning\": \"heat\"\n    },\n    {\n      \"word\": \"bright\",\n      \"meaning\": \"light\"\n    },\n    {\n      \"word\": \"dark\",\n      \"meaning\": \"shadow\"\n    },\n    {\n      \"word\": \"deep\",\n      \"meaning\": \"bottom\"\n    },\n    {\n      \"word\": \"high\",\n      \"meaning\": \"top\"\n    },\n    {\n      \"word\": \"fast\",\n      \"meaning\": \"speed\"\n    },\n    {\n      \"word\": \"slow\",\n      \"meaning\": \"rest\"\n    },\n    {\n      \"word\": \"vark\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"zolm\",\n      \"meaning\": \"water\"\n    }\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"greet_1\",\n      \"category\": \"greeting\",\n      \"original\": \"Zolm vark\",\n      \"translation\": \"Peace be with you\"\n    },\n    {\n      \"id\": \"greet_2\",\n      \"category\": \"greeting\",\n      \"original\": \"Dorn keth\",\n      \"translation\": \"May your light be steady\"\n    },\n    {\n      \"id\": \"bless_1\",\n      \"category\": \"blessing\",\n      \"original\": \"Liv takh\",\n      \"translation\": \"Strength in your hands\"\n    },\n    {\n      \"id\": \"bless_2\",\n      \"category\": \"blessing\",\n      \"original\": \"Shil zov\",\n      \"translation\": \"May the wind carry your words\"\n    },\n    {\n      \"id\": \"curse_1\",\n      \"category\": \"curse\",\n      \"original\": \"Mord rek\",\n      \"translation\": \"May your blood freeze\"\n    },\n    {\n      \"id\": \"curse_2\",\n      \"category\": \"curse\",\n      \"original\": \"Dark skar\",\n      \"translation\": \"May shadow consume you\"\n    },\n    {\n      \"id\": \"say_1\",\n      \"category\": \"saying\",\n      \"original\": \"Kold warm\",\n      \"translation\": \"Even in cold, there is heat\"\n    },\n    {\n      \"id\": \"say_2\",\n      \"category\": \"saying\",\n      \"original\": \"Grot brunt\",\n      \"translation\": \"The earth holds all things\"\n    }\n  ]\n}",
+      "language": {
+       "name": "High Ostrovian",
+       "level": "naming",
+       "sound": "This speech sounds thinner and sharper than its lowland parent, as if the wind has scoured the rough edges off the words. The hard 'k' and 't' sounds are still there, but they are shorter and quicker, while the vowels tend to open up into long 'o' and 'a' sounds. It feels airy and brittle, like ice cracking on a frozen lake.",
+       "categories": {
+        "C": "k t th r l m n f v s",
+        "V": "a o u e i",
+        "S": "s f v",
+        "N": "n m l"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "Personal Names",
+         "use": "people",
+         "patterns": [
+          "CV(C)V*2",
+          "CVCV*2",
+          "CVV"
+         ],
+         "reject": [
+          "^k.*k$",
+          "^s.*s$",
+          "oo",
+          "uu"
+         ],
+         "min_length": 3,
+         "max_length": 6
+        },
+        {
+         "id": "places",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "CVCV(C)*2",
+          "CVCV*2",
+          "CVV(C)"
+         ],
+         "reject": [
+          "^v.*v$",
+          "^m.*m$",
+          "aa",
+          "ii"
+         ],
+         "min_length": 4,
+         "max_length": 8
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "vark",
+         "meaning": "fire"
+        },
+        {
+         "word": "zolm",
+         "meaning": "water"
+        },
+        {
+         "word": "keth",
+         "meaning": "stone"
+        },
+        {
+         "word": "brun",
+         "meaning": "wood"
+        },
+        {
+         "word": "shil",
+         "meaning": "wind"
+        },
+        {
+         "word": "dorn",
+         "meaning": "sun"
+        },
+        {
+         "word": "nusk",
+         "meaning": "moon"
+        },
+        {
+         "word": "pash",
+         "meaning": "snow"
+        },
+        {
+         "word": "grot",
+         "meaning": "earth"
+        },
+        {
+         "word": "liv",
+         "meaning": "life"
+        },
+        {
+         "word": "mord",
+         "meaning": "death"
+        },
+        {
+         "word": "takh",
+         "meaning": "hand"
+        },
+        {
+         "word": "zov",
+         "meaning": "voice"
+        },
+        {
+         "word": "rek",
+         "meaning": "blood"
+        },
+        {
+         "word": "blut",
+         "meaning": "bone"
+        },
+        {
+         "word": "skar",
+         "meaning": "skin"
+        },
+        {
+         "word": "fesh",
+         "meaning": "flesh"
+        },
+        {
+         "word": "kold",
+         "meaning": "cold"
+        },
+        {
+         "word": "warm",
+         "meaning": "heat"
+        },
+        {
+         "word": "bright",
+         "meaning": "light"
+        },
+        {
+         "word": "dark",
+         "meaning": "shadow"
+        },
+        {
+         "word": "deep",
+         "meaning": "bottom"
+        },
+        {
+         "word": "high",
+         "meaning": "top"
+        },
+        {
+         "word": "fast",
+         "meaning": "speed"
+        },
+        {
+         "word": "slow",
+         "meaning": "rest"
+        },
+        {
+         "word": "vark",
+         "meaning": "fire"
+        },
+        {
+         "word": "zolm",
+         "meaning": "water"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "greet_1",
+         "category": "greeting",
+         "original": "Zolm vark",
+         "translation": "Peace be with you"
+        },
+        {
+         "id": "greet_2",
+         "category": "greeting",
+         "original": "Dorn keth",
+         "translation": "May your light be steady"
+        },
+        {
+         "id": "bless_1",
+         "category": "blessing",
+         "original": "Liv takh",
+         "translation": "Strength in your hands"
+        },
+        {
+         "id": "bless_2",
+         "category": "blessing",
+         "original": "Shil zov",
+         "translation": "May the wind carry your words"
+        },
+        {
+         "id": "curse_1",
+         "category": "curse",
+         "original": "Mord rek",
+         "translation": "May your blood freeze"
+        },
+        {
+         "id": "curse_2",
+         "category": "curse",
+         "original": "Dark skar",
+         "translation": "May shadow consume you"
+        },
+        {
+         "id": "say_1",
+         "category": "saying",
+         "original": "Kold warm",
+         "translation": "Even in cold, there is heat"
+        },
+        {
+         "id": "say_2",
+         "category": "saying",
+         "original": "Grot brunt",
+         "translation": "The earth holds all things"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Velu",
+         "Faki",
+         "Fale",
+         "Siku",
+         "Rou",
+         "Thutho",
+         "Lovu",
+         "Tiva",
+         "Feu",
+         "Nou",
+         "Thetu",
+         "Nolu",
+         "Mola",
+         "Fio",
+         "Miu",
+         "Thui",
+         "Lomi",
+         "Fie",
+         "Vumu",
+         "Rue",
+         "Kotu",
+         "Fei",
+         "Veka",
+         "Thano",
+         "Tuthe",
+         "Ruko",
+         "Tavu",
+         "Nika",
+         "Tenu",
+         "Seo",
+         "Rure",
+         "Thio",
+         "Rie",
+         "Thava",
+         "Sua",
+         "Seu",
+         "Telo",
+         "Vao",
+         "Sethe",
+         "Soi",
+         "Lithe",
+         "Tife",
+         "Nii",
+         "Maki",
+         "Vone",
+         "Mothi",
+         "Suthe",
+         "Kea",
+         "Vasu",
+         "Toa"
+        ],
+        "places": [
+         "Teka",
+         "Thuuk",
+         "Sian",
+         "Thathin",
+         "Soro",
+         "Viro",
+         "Moko",
+         "Makef",
+         "Vame",
+         "Safi",
+         "Tuso",
+         "Sari",
+         "Veel",
+         "Fetha",
+         "Muir",
+         "Thanu",
+         "Rato",
+         "Letha",
+         "Nune",
+         "Luthu",
+         "Soek",
+         "Vafi",
+         "Nire",
+         "Visu",
+         "Thomen",
+         "Rute",
+         "Sino",
+         "Liso",
+         "Laos",
+         "Teuth",
+         "Fatun",
+         "Vothu",
+         "Mone",
+         "Roti",
+         "Fuse",
+         "Luro",
+         "Lero",
+         "Thuvi",
+         "Kolu",
+         "Fifu",
+         "Nenu",
+         "Nifi",
+         "Vero",
+         "Vuti",
+         "Lame",
+         "Reku",
+         "Thitha",
+         "Rufa",
+         "Fithe",
+         "Mafith"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": [
+        "Liso",
+        "Vero",
+        "Reku",
+        "rek"
+       ]
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 46.3,
+      "reply": "```json\n{\n  \"name\": \"Vaelthorn\",\n  \"level\": \"full\",\n  \"sound\": \"The language sounds like wind whistling through narrow rock crevices, with soft, flowing vowels and consonants that blend into one another. Words often have a gentle, rolling quality, lacking the hard stops of the parent tongue. It feels airy and cold, like thin air and smooth ice.\",\n  \"categories\": {\n    \"C\": \"k kh t th d b p f v s sh zh z r*2 l*2 m n\",\n    \"V\": \"a o u e i y*2\",\n    \"S\": \"s sh z zh\",\n    \"N\": \"n m l*2 r*2\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"Personal Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CV(C)V(C)\",\n        \"CVCV\",\n        \"CVVCV*2\"\n      ],\n      \"reject\": [\n        \"^k.*k$\",\n        \"^sh.*sh$\",\n        \"oo\",\n        \"uu\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 7\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVCV(C)\",\n        \"CVCVCV\",\n        \"CVVCV(C)*2\"\n      ],\n      \"reject\": [\n        \"^v.*v$\",\n        \"^m.*m$\",\n        \"aa\",\n        \"ii\"\n      ],\n      \"min_length\": 4,\n      \"max_length\": 9\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Object Names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"CVC\",\n        \"CVCV\",\n        \"CVCC\"\n      ],\n      \"reject\": [\n        \".*[aeiou]{3}.*\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 6\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"varkh\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"zolm\",\n      \"meaning\": \"water\"\n    },\n    {\n      \"word\": \"keth\",\n      \"meaning\": \"stone\"\n    },\n    {\n      \"word\": \"brun\",\n      \"meaning\": \"wood\"\n    },\n    {\n      \"word\": \"shil\",\n      \"meaning\": \"wind\"\n    },\n    {\n      \"word\": \"dorn\",\n      \"meaning\": \"sun\"\n    },\n    {\n      \"word\": \"nusk\",\n      \"meaning\": \"moon\"\n    },\n    {\n      \"word\": \"pash\",\n      \"meaning\": \"snow\"\n    },\n    {\n      \"word\": \"grot\",\n      \"meaning\": \"earth\"\n    },\n    {\n      \"word\": \"liv\",\n      \"meaning\": \"life\"\n    },\n    {\n      \"word\": \"mord\",\n      \"meaning\": \"death\"\n    },\n    {\n      \"word\": \"takh\",\n      \"meaning\": \"hand\"\n    },\n    {\n      \"word\": \"zov\",\n      \"meaning\": \"voice\"\n    },\n    {\n      \"word\": \"rek\",\n      \"meaning\": \"blood\"\n    },\n    {\n      \"word\": \"blut\",\n      \"meaning\": \"bone\"\n    },\n    {\n      \"word\": \"skar\",\n      \"meaning\": \"skin\"\n    },\n    {\n      \"word\": \"fesh\",\n      \"meaning\": \"flesh\"\n    },\n    {\n      \"word\": \"kold\",\n      \"meaning\": \"cold\"\n    },\n    {\n      \"word\": \"warm\",\n      \"meaning\": \"heat\"\n    },\n    {\n      \"word\": \"bright\",\n      \"meaning\": \"light\"\n    },\n    {\n      \"word\": \"dark\",\n      \"meaning\": \"shadow\"\n    },\n    {\n      \"word\": \"deep\",\n      \"meaning\": \"bottom\"\n    },\n    {\n      \"word\": \"high\",\n      \"meaning\": \"top\"\n    },\n    {\n      \"word\": \"fast\",\n      \"meaning\": \"speed\"\n    },\n    {\n      \"word\": \"slow\",\n      \"meaning\": \"rest\"\n    },\n    {\n      \"word\": \"vael\",\n      \"meaning\": \"mountain\"\n    },\n    {\n      \"word\": \"thorn\",\n      \"meaning\": \"isolation\"\n    }\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"greet_1\",\n      \"category\": \"greeting\",\n      \"original\": \"Zolm varkh\",\n      \"translation\": \"Peace be with you\"\n    },\n    {\n      \"id\": \"greet_2\",\n      \"category\": \"greeting\",\n      \"original\": \"Dorn keth\",\n      \"translation\": \"May your light be steady\"\n    },\n    {\n      \"id\": \"bless_1\",\n      \"category\": \"blessing\",\n      \"original\": \"Liv takh\",\n      \"translation\": \"Strength in your hands\"\n    },\n    {\n      \"id\": \"bless_2\",\n      \"category\": \"blessing\",\n      \"original\": \"Shil zov\",\n      \"translation\": \"May the wind carry your words\"\n    },\n    {\n      \"id\": \"curse_1\",\n      \"category\": \"curse\",\n      \"original\": \"Mord rek\",\n      \"translation\": \"May your blood freeze\"\n    },\n    {\n      \"id\": \"curse_2\",\n      \"category\": \"curse\",\n      \"original\": \"Dark skar\",\n      \"translation\": \"May shadow consume you\"\n    },\n    {\n      \"id\": \"say_1\",\n      \"category\": \"saying\",\n      \"original\": \"Kold warm\",\n      \"translation\": \"Even in cold, there is heat\"\n    },\n    {\n      \"id\": \"say_2\",\n      \"category\": \"saying\",\n      \"original\": \"Grot brunt\",\n      \"translation\": \"The earth holds all things\"\n    }\n  ]\n}\n```",
+      "language": {
+       "name": "Vaelthorn",
+       "level": "full",
+       "sound": "The language sounds like wind whistling through narrow rock crevices, with soft, flowing vowels and consonants that blend into one another. Words often have a gentle, rolling quality, lacking the hard stops of the parent tongue. It feels airy and cold, like thin air and smooth ice.",
+       "categories": {
+        "C": "k kh t th d b p f v s sh zh z r*2 l*2 m n",
+        "V": "a o u e i y*2",
+        "S": "s sh z zh",
+        "N": "n m l*2 r*2"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "Personal Names",
+         "use": "people",
+         "patterns": [
+          "CV(C)V(C)",
+          "CVCV",
+          "CVVCV*2"
+         ],
+         "reject": [
+          "^k.*k$",
+          "^sh.*sh$",
+          "oo",
+          "uu"
+         ],
+         "min_length": 3,
+         "max_length": 7
+        },
+        {
+         "id": "places",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "CVCV(C)",
+          "CVCVCV",
+          "CVVCV(C)*2"
+         ],
+         "reject": [
+          "^v.*v$",
+          "^m.*m$",
+          "aa",
+          "ii"
+         ],
+         "min_length": 4,
+         "max_length": 9
+        },
+        {
+         "id": "things",
+         "name": "Object Names",
+         "use": "things",
+         "patterns": [
+          "CVC",
+          "CVCV",
+          "CVCC"
+         ],
+         "reject": [
+          ".*[aeiou]{3}.*"
+         ],
+         "min_length": 3,
+         "max_length": 6
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "varkh",
+         "meaning": "fire"
+        },
+        {
+         "word": "zolm",
+         "meaning": "water"
+        },
+        {
+         "word": "keth",
+         "meaning": "stone"
+        },
+        {
+         "word": "brun",
+         "meaning": "wood"
+        },
+        {
+         "word": "shil",
+         "meaning": "wind"
+        },
+        {
+         "word": "dorn",
+         "meaning": "sun"
+        },
+        {
+         "word": "nusk",
+         "meaning": "moon"
+        },
+        {
+         "word": "pash",
+         "meaning": "snow"
+        },
+        {
+         "word": "grot",
+         "meaning": "earth"
+        },
+        {
+         "word": "liv",
+         "meaning": "life"
+        },
+        {
+         "word": "mord",
+         "meaning": "death"
+        },
+        {
+         "word": "takh",
+         "meaning": "hand"
+        },
+        {
+         "word": "zov",
+         "meaning": "voice"
+        },
+        {
+         "word": "rek",
+         "meaning": "blood"
+        },
+        {
+         "word": "blut",
+         "meaning": "bone"
+        },
+        {
+         "word": "skar",
+         "meaning": "skin"
+        },
+        {
+         "word": "fesh",
+         "meaning": "flesh"
+        },
+        {
+         "word": "kold",
+         "meaning": "cold"
+        },
+        {
+         "word": "warm",
+         "meaning": "heat"
+        },
+        {
+         "word": "bright",
+         "meaning": "light"
+        },
+        {
+         "word": "dark",
+         "meaning": "shadow"
+        },
+        {
+         "word": "deep",
+         "meaning": "bottom"
+        },
+        {
+         "word": "high",
+         "meaning": "top"
+        },
+        {
+         "word": "fast",
+         "meaning": "speed"
+        },
+        {
+         "word": "slow",
+         "meaning": "rest"
+        },
+        {
+         "word": "vael",
+         "meaning": "mountain"
+        },
+        {
+         "word": "thorn",
+         "meaning": "isolation"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "greet_1",
+         "category": "greeting",
+         "original": "Zolm varkh",
+         "translation": "Peace be with you"
+        },
+        {
+         "id": "greet_2",
+         "category": "greeting",
+         "original": "Dorn keth",
+         "translation": "May your light be steady"
+        },
+        {
+         "id": "bless_1",
+         "category": "blessing",
+         "original": "Liv takh",
+         "translation": "Strength in your hands"
+        },
+        {
+         "id": "bless_2",
+         "category": "blessing",
+         "original": "Shil zov",
+         "translation": "May the wind carry your words"
+        },
+        {
+         "id": "curse_1",
+         "category": "curse",
+         "original": "Mord rek",
+         "translation": "May your blood freeze"
+        },
+        {
+         "id": "curse_2",
+         "category": "curse",
+         "original": "Dark skar",
+         "translation": "May shadow consume you"
+        },
+        {
+         "id": "say_1",
+         "category": "saying",
+         "original": "Kold warm",
+         "translation": "Even in cold, there is heat"
+        },
+        {
+         "id": "say_2",
+         "category": "saying",
+         "original": "Grot brunt",
+         "translation": "The earth holds all things"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Naaly",
+         "Biizho",
+         "Fyny",
+         "Voake",
+         "Fyse",
+         "Kusy",
+         "Lyy",
+         "Pyythy",
+         "Veeme",
+         "Pyyve",
+         "Reopi",
+         "Mou",
+         "Seizhu",
+         "Sya",
+         "Moykhi",
+         "Dyte",
+         "Doyvy",
+         "Poa",
+         "Ralor",
+         "Kyta",
+         "Zhytu",
+         "Vyy",
+         "Reozu",
+         "Vyzhu",
+         "Noush",
+         "Khakhi",
+         "Myovo",
+         "Zhyidu",
+         "Kauty",
+         "Khodeb",
+         "Dyyre",
+         "Zhauso",
+         "Luy",
+         "Nuki",
+         "Byaf",
+         "Thikho",
+         "Maro",
+         "Feyfa",
+         "Khyy",
+         "Zyev",
+         "Beeny",
+         "Luoso",
+         "Zyzhy",
+         "Pyfam",
+         "Zaudi",
+         "Veashy",
+         "Kheydy",
+         "Runy",
+         "Teazhy",
+         "Sery"
+        ],
+        "places": [
+         "Nuriry",
+         "Zhuzy",
+         "Vili",
+         "Myzhy",
+         "Lythy",
+         "Lazhesh",
+         "Thykhasy",
+         "Reipo",
+         "Khythy",
+         "Zylathu",
+         "Bashype",
+         "Vybise",
+         "Khyuzy",
+         "Lazushy",
+         "Zhuovon",
+         "Lupuv",
+         "Vulyz",
+         "Paothip",
+         "Dyifyl",
+         "Siyry",
+         "Ryuzhif",
+         "Nusyn",
+         "Kupy",
+         "Veoluz",
+         "Pykhad",
+         "Dudozhu",
+         "Ratyvy",
+         "Sypy",
+         "Nusipy",
+         "Zheynyf",
+         "Kayty",
+         "Khuykath",
+         "Zanim",
+         "Seteth",
+         "Leilat",
+         "Tokhozh",
+         "Myemol",
+         "Thuuvul",
+         "Sheoryr",
+         "Zaetho",
+         "Zhyisa",
+         "Liatha",
+         "Thyymeth",
+         "Royshur",
+         "Zaromo",
+         "Shusythy",
+         "Reepeth",
+         "Theshuthi",
+         "Baythud",
+         "Peula"
+        ],
+        "things": [
+         "Tif",
+         "Zhyz",
+         "Lytu",
+         "Morl",
+         "Redo",
+         "Zazh",
+         "Vyfe",
+         "Doshy",
+         "Mikh",
+         "Fekhs",
+         "Riry",
+         "Ket",
+         "Pezh",
+         "Masha",
+         "Vabz",
+         "Mupy",
+         "Typy",
+         "Lysy",
+         "Pyk",
+         "Nylkh",
+         "Zhefy",
+         "Kin",
+         "Zumk",
+         "Ryf",
+         "Tikhd",
+         "Kus",
+         "Zas",
+         "Fytu",
+         "Fyshe",
+         "Vyli",
+         "Zhap",
+         "Ryz",
+         "Devu",
+         "Dyn",
+         "Zhabl",
+         "Sherd",
+         "Pyvz",
+         "Sheny",
+         "Syri",
+         "Tizhv",
+         "Nuzhr",
+         "Pypt",
+         "Zusy",
+         "Fyshf",
+         "Ryzi",
+         "Kety",
+         "Zhythy",
+         "Khif",
+         "Vakk",
+         "Rape"
+        ]
+       },
+       "dictionary_fit": 0.7037037037037037,
+       "real_hits": [
+        "rek"
+       ]
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "ask-russian": [
+     {
+      "version": 1,
+      "questions": "1. Should it sound like classic Russian with a bit of a twist, or feel like a completely new language that just happens to be from Russia?\n2. Do you want it to sound hard and strong, or soft and flowing?\n3. Should it feel old and ancient, or modern and futuristic?\n4. What is the main vibe you want people to feel when they hear it spoken?",
+      "jargon": [],
+      "seconds": 48.0,
+      "reply": "{\n  \"name\": \"Zarnish\",\n  \"level\": \"naming\",\n  \"sound\": \"The language sounds heavy and rough, like stone grinding against stone. It is full of deep throat sounds and hard clicks that stop the air in your mouth. It feels like a language spoken by people who do not waste breath on soft sounds.\",\n  \"categories\": {\n    \"C\": \"k kh t th d dz r*2 z zh sh ch v f m n l ng\",\n    \"V\": \"a o u e i y\",\n    \"H\": \"kh h gh\",\n    \"L\": \"l ll r rr\",\n    \"N\": \"n nn m mm\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people_gen\",\n      \"name\": \"Common People\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CV(C)\",\n        \"CCV\",\n        \"CVCV\",\n        \"CVCC\"\n      ],\n      \"reject\": [\n        \"^[aeiouy]+$\"\n      ],\n      \"min_length\": 2,\n      \"max_length\": 5\n    },\n    {\n      \"id\": \"place_gen\",\n      \"name\": \"Grand Locations\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVCV(C)CVCV(C)CVCV\",\n        \"CCVCVCCVCVCCVCV\",\n        \"CVCVCCVCVCCVCVCC\"\n      ],\n      \"reject\": [\n        \"^[aeiouy]+$\",\n        \"^[a-z]+$\"\n      ],\n      \"min_length\": 10,\n      \"max_length\": 22\n    }\n  ],\n  \"dictionary\": [\n    {\n      \"word\": \"khrath\",\n      \"meaning\": \"stone\"\n    },\n    {\n      \"word\": \"zarn\",\n      \"meaning\": \"shadow\"\n    },\n    {\n      \"word\": \"velk\",\n      \"meaning\": \"fire\"\n    },\n    {\n      \"word\": \"moth\",\n      \"meaning\": \"water\"\n    },\n    {\n      \"word\": \"drazh\",\n      \"meaning\": \"blood\"\n    },\n    {\n      \"word\": \"koth\",\n      \"meaning\": \"war\"\n    },\n    {\n      \"word\": \"rath\",\n      \"meaning\": \"peace\"\n    },\n    {\n      \"word\": \"shum\",\n      \"meaning\": \"wind\"\n    },\n    {\n      \"word\": \"grath\",\n      \"meaning\": \"king\"\n    },\n    {\n      \"word\": \"veth\",\n      \"meaning\": \"mother\"\n    },\n    {\n      \"word\": \"keth\",\n      \"meaning\": \"father\"\n    },\n    {\n      \"word\": \"zold\",\n      \"meaning\": \"gold\"\n    },\n    {\n      \"word\": \"brakh\",\n      \"meaning\": \"iron\"\n    },\n    {\n      \"word\": \"neth\",\n      \"meaning\": \"night\"\n    },\n    {\n      \"word\": \"sol\",\n      \"meaning\": \"sun\"\n    },\n    {\n      \"word\": \"lun\",\n      \"meaning\": \"moon\"\n    },\n    {\n      \"word\": \"dusk\",\n      \"meaning\": \"dying light\"\n    },\n    {\n      \"word\": \"dawn\",\n      \"meaning\": \"first light\"\n    },\n    {\n      \"word\": \"path\",\n      \"meaning\": \"road\"\n    },\n    {\n      \"word\": \"gate\",\n      \"meaning\": \"door\"\n    },\n    {\n      \"word\": \"wall\",\n      \"meaning\": \"barrier\"\n    },\n    {\n      \"word\": \"tower\",\n      \"meaning\": \"high place\"\n    },\n    {\n      \"word\": \"city\",\n      \"meaning\": \"place of many\"\n    },\n    {\n      \"word\": \"home\",\n      \"meaning\": \"place of rest\"\n    },\n    {\n      \"word\": \"friend\",\n      \"meaning\": \"ally\"\n    },\n    {\n      \"word\": \"enemy\",\n      \"meaning\": \"foe\"\n    },\n    {\n      \"word\": \"life\",\n      \"meaning\": \"breath\"\n    },\n    {\n      \"word\": \"death\",\n      \"meaning\": \"end\"\n    },\n    {\n      \"word\": \"time\",\n      \"meaning\": \"flow\"\n    },\n    {\n      \"word\": \"space\",\n      \"meaning\": \"room\"\n    }\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"greet_1\",\n      \"category\": \"greeting\",\n      \"original\": \"Khrath zarn\",\n      \"translation\": \"Stone shadow\"\n    },\n    {\n      \"id\": \"greet_2\",\n      \"category\": \"greeting\",\n      \"original\": \"Velk moth\",\n      \"translation\": \"Fire water\"\n    },\n    {\n      \"id\": \"bless_1\",\n      \"category\": \"blessing\",\n      \"original\": \"Rath koth\",\n      \"translation\": \"Peace war\"\n    },\n    {\n      \"id\": \"bless_2\",\n      \"category\": \"blessing\",\n      \"original\": \"Sol neth\",\n      \"translation\": \"Sun night\"\n    },\n    {\n      \"id\": \"curse_1\",\n      \"category\": \"curse\",\n      \"original\": \"Drazh zold\",\n      \"translation\": \"Blood gold\"\n    },\n    {\n      \"id\": \"curse_2\",\n      \"category\": \"curse\",\n      \"original\": \"Brakh brakh\",\n      \"translation\": \"Iron iron\"\n    },\n    {\n      \"id\": \"say_1\",\n      \"category\": \"saying\",\n      \"original\": \"Shum path\",\n      \"translation\": \"Wind road\"\n    },\n    {\n      \"id\": \"say_2\",\n      \"category\": \"saying\",\n      \"original\": \"Grath veth\",\n      \"translation\": \"King mother\"\n    }\n  ]\n}",
+      "language": {
+       "name": "Zarnish",
+       "level": "naming",
+       "sound": "The language sounds heavy and rough, like stone grinding against stone. It is full of deep throat sounds and hard clicks that stop the air in your mouth. It feels like a language spoken by people who do not waste breath on soft sounds.",
+       "categories": {
+        "C": "k kh t th d dz r*2 z zh sh ch v f m n l ng",
+        "V": "a o u e i y",
+        "H": "kh h gh",
+        "L": "l ll r rr",
+        "N": "n nn m mm"
+       },
+       "generators": [
+        {
+         "id": "people_gen",
+         "name": "Common People",
+         "use": "people",
+         "patterns": [
+          "CV(C)",
+          "CCV",
+          "CVCV",
+          "CVCC"
+         ],
+         "reject": [
+          "^[aeiouy]+$"
+         ],
+         "min_length": 2,
+         "max_length": 5
+        },
+        {
+         "id": "place_gen",
+         "name": "Grand Locations",
+         "use": "places",
+         "patterns": [
+          "CVCV(C)CVCV(C)CVCV",
+          "CCVCVCCVCVCCVCV",
+          "CVCVCCVCVCCVCVCC"
+         ],
+         "reject": [
+          "^[aeiouy]+$",
+          "^[a-z]+$"
+         ],
+         "min_length": 10,
+         "max_length": 22
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "khrath",
+         "meaning": "stone"
+        },
+        {
+         "word": "zarn",
+         "meaning": "shadow"
+        },
+        {
+         "word": "velk",
+         "meaning": "fire"
+        },
+        {
+         "word": "moth",
+         "meaning": "water"
+        },
+        {
+         "word": "drazh",
+         "meaning": "blood"
+        },
+        {
+         "word": "koth",
+         "meaning": "war"
+        },
+        {
+         "word": "rath",
+         "meaning": "peace"
+        },
+        {
+         "word": "shum",
+         "meaning": "wind"
+        },
+        {
+         "word": "grath",
+         "meaning": "king"
+        },
+        {
+         "word": "veth",
+         "meaning": "mother"
+        },
+        {
+         "word": "keth",
+         "meaning": "father"
+        },
+        {
+         "word": "zold",
+         "meaning": "gold"
+        },
+        {
+         "word": "brakh",
+         "meaning": "iron"
+        },
+        {
+         "word": "neth",
+         "meaning": "night"
+        },
+        {
+         "word": "sol",
+         "meaning": "sun"
+        },
+        {
+         "word": "lun",
+         "meaning": "moon"
+        },
+        {
+         "word": "dusk",
+         "meaning": "dying light"
+        },
+        {
+         "word": "dawn",
+         "meaning": "first light"
+        },
+        {
+         "word": "path",
+         "meaning": "road"
+        },
+        {
+         "word": "gate",
+         "meaning": "door"
+        },
+        {
+         "word": "wall",
+         "meaning": "barrier"
+        },
+        {
+         "word": "tower",
+         "meaning": "high place"
+        },
+        {
+         "word": "city",
+         "meaning": "place of many"
+        },
+        {
+         "word": "home",
+         "meaning": "place of rest"
+        },
+        {
+         "word": "friend",
+         "meaning": "ally"
+        },
+        {
+         "word": "enemy",
+         "meaning": "foe"
+        },
+        {
+         "word": "life",
+         "meaning": "breath"
+        },
+        {
+         "word": "death",
+         "meaning": "end"
+        },
+        {
+         "word": "time",
+         "meaning": "flow"
+        },
+        {
+         "word": "space",
+         "meaning": "room"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "greet_1",
+         "category": "greeting",
+         "original": "Khrath zarn",
+         "translation": "Stone shadow"
+        },
+        {
+         "id": "greet_2",
+         "category": "greeting",
+         "original": "Velk moth",
+         "translation": "Fire water"
+        },
+        {
+         "id": "bless_1",
+         "category": "blessing",
+         "original": "Rath koth",
+         "translation": "Peace war"
+        },
+        {
+         "id": "bless_2",
+         "category": "blessing",
+         "original": "Sol neth",
+         "translation": "Sun night"
+        },
+        {
+         "id": "curse_1",
+         "category": "curse",
+         "original": "Drazh zold",
+         "translation": "Blood gold"
+        },
+        {
+         "id": "curse_2",
+         "category": "curse",
+         "original": "Brakh brakh",
+         "translation": "Iron iron"
+        },
+        {
+         "id": "say_1",
+         "category": "saying",
+         "original": "Shum path",
+         "translation": "Wind road"
+        },
+        {
+         "id": "say_2",
+         "category": "saying",
+         "original": "Grath veth",
+         "translation": "King mother"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people_gen": [
+         "Niz",
+         "Chma",
+         "Nu",
+         "Zing",
+         "Kazhl",
+         "Thra",
+         "Rud",
+         "Zon",
+         "Dzi",
+         "Rivdz",
+         "Nyzhe",
+         "Dith",
+         "Viru",
+         "Meru",
+         "Ki",
+         "Rozhy",
+         "Kimn",
+         "Meshu",
+         "Nezh",
+         "Rre",
+         "Chuko",
+         "Shy",
+         "Monv",
+         "Ka",
+         "Khekh",
+         "Zhov",
+         "Dzza",
+         "Rtha",
+         "Vi",
+         "Ngi",
+         "Chu",
+         "Chkho",
+         "Nondz",
+         "Fudk",
+         "Ny",
+         "Ruthi",
+         "Thkhe",
+         "Zdzy",
+         "Rovn",
+         "Ryvz",
+         "Rdzy",
+         "Ngyte",
+         "Muchm",
+         "Shda",
+         "Lshy",
+         "Dmi",
+         "Van",
+         "Dyt",
+         "Dil",
+         "Nglo"
+        ],
+        "place_gen": []
+       },
+       "dictionary_fit": 0.43333333333333335,
+       "real_hits": [
+        "sol",
+        "lun"
+       ]
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "questions": "1. Should it sound like a strict, formal empire or a cozy, rural village?\n2. Do you want it to feel old and ancient, or modern and sharp?\n3. Should it sound cold and harsh, or warm and inviting?\n4. Is it meant to be a real, spoken language for characters, or just names and titles for flavor?",
+      "jargon": [],
+      "seconds": 42.9,
+      "reply": "{\n  \"name\": \"Vorek\",\n  \"level\": \"full\",\n  \"sound\": \"The language sounds heavy and deep, like stone grinding against stone. It uses hard consonants and short, abrupt vowels, making everyday speech sound brisk and efficient. Formal titles and place names are long and complex, stacking multiple syllables to sound imposing and ancient.\",\n  \"categories\": {\n    \"C\": \"k kh t th r*2 s sh z zh d b p v f m n l\",\n    \"V\": \"a e o u i y\",\n    \"C2\": \"sk shch str zhr\",\n    \"V2\": \"ae oi eu\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"vorek_people\",\n      \"name\": \"Vorek People\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CV(C)\",\n        \"CCV(C)\",\n        \"CVCV(C)\"\n      ],\n      \"reject\": [\n        \"^[aeiouy]+$\",\n        \"^[bcdfgklmnpqrstvwxz]+$\"\n      ],\n      \"min_length\": 2,\n      \"max_length\": 5\n    },\n    {\n      \"id\": \"vorek_places\",\n      \"name\": \"Vorek Places\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"C2V(C)C2V(C)C2V(C)\",\n        \"CV(C)C2V(C)C2V(C)C2V(C)\",\n        \"C2V(C)C2V(C)C2V(C)C2V(C)\"\n      ],\n      \"reject\": [\n        \"^[aeiouy]+$\"\n      ],\n      \"min_length\": 8,\n      \"max_length\": 16\n    },\n    {\n      \"id\": \"vorek_things\",\n      \"name\": \"Vorek Things\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"CVCV(C)\",\n        \"CCV(C)C\",\n        \"CV(C)C2V(C)\"\n      ],\n      \"reject\": [\n        \"^[aeiouy]+$\"\n      ],\n      \"min_length\": 3,\n      \"max_length\": 7\n    }\n  ],\n  \"dictionary\": [\n    { \"word\": \"Kor\", \"meaning\": \"stone\" },\n    { \"word\": \"Vaz\", \"meaning\": \"water\" },\n    { \"word\": \"Thur\", \"meaning\": \"fire\" },\n    { \"word\": \"Skel\", \"meaning\": \"bone\" },\n    { \"word\": \"Bor\", \"meaning\": \"forest\" },\n    { \"word\": \"Zhar\", \"meaning\": \"heat\" },\n    { \"word\": \"Lum\", \"meaning\": \"light\" },\n    { \"word\": \"Mor\", \"meaning\": \"sea\" },\n    { \"word\": \"Vet\", \"meaning\": \"wind\" },\n    { \"word\": \"Kras\", \"meaning\": \"red\" },\n    { \"word\": \"Shit\", \"meaning\": \"black\" },\n    { \"word\": \"Bel\", \"meaning\": \"white\" },\n    { \"word\": \"Tep\", \"meaning\": \"warm\" },\n    { \"word\": \"Hol\", \"meaning\": \"cold\" },\n    { \"word\": \"Kot\", \"meaning\": \"cat\" },\n    { \"word\": \"Pis\", \"meaning\": \"dog\" },\n    { \"word\": \"Vuk\", \"meaning\": \"wolf\" },\n    { \"word\": \"Med\", \"meaning\": \"bear\" },\n    { \"word\": \"Zub\", \"meaning\": \"tooth\" },\n    { \"word\": \"Glo\", \"meaning\": \"hand\" },\n    { \"word\": \"Kno\", \"meaning\": \"foot\" },\n    { \"word\": \"Gla\", \"meaning\": \"eye\" },\n    { \"word\": \"Ush\", \"meaning\": \"ear\" },\n    { \"word\": \"Nos\", \"meaning\": \"nose\" },\n    { \"word\": \"Rus\", \"meaning\": \"mouth\" }\n  ],\n  \"phrases\": [\n    { \"id\": \"ph_01\", \"category\": \"greeting\", \"original\": \"Kor vaz\", \"translation\": \"Stone water (A greeting implying stability and life)\" },\n    { \"id\": \"ph_02\", \"category\": \"greeting\", \"original\": \"Thur lum\", \"translation\": \"Fire light (A warm greeting)\" },\n    { \"id\": \"ph_03\", \"category\": \"blessing\", \"original\": \"Vet bor\", \"translation\": \"Wind forest (May you be as strong as the wind in the woods)\" },\n    { \"id\": \"ph_04\", \"category\": \"blessing\", \"original\": \"Mor tep\", \"translation\": \"Sea warm (May your journey be smooth and warm)\" },\n    { \"id\": \"ph_05\", \"category\": \"curse\", \"original\": \"Hol shit\", \"translation\": \"Cold black (May you be frozen in darkness)\" },\n    { \"id\": \"ph_06\", \"category\": \"saying\", \"original\": \"Kot pis vuk\", \"translation\": \"Cat dog wolf (A warning about hidden dangers in familiar places)\" },\n    { \"id\": \"ph_07\", \"category\": \"saying\", \"original\": \"Zhar skel\", \"translation\": \"Heat bone (Endurance comes from pain)\" },\n    { \"id\": \"ph_08\", \"category\": \"curse\", \"original\": \"Bel hol\", \"translation\": \"White cold (May you be stripped of all warmth and color)\" }\n  ]\n}",
+      "language": {
+       "name": "Vorek",
+       "level": "full",
+       "sound": "The language sounds heavy and deep, like stone grinding against stone. It uses hard consonants and short, abrupt vowels, making everyday speech sound brisk and efficient. Formal titles and place names are long and complex, stacking multiple syllables to sound imposing and ancient.",
+       "categories": {
+        "C": "k kh t th r*2 s sh z zh d b p v f m n l",
+        "V": "a e o u i y",
+        "C2": "sk shch str zhr",
+        "V2": "ae oi eu"
+       },
+       "generators": [
+        {
+         "id": "vorek_people",
+         "name": "Vorek People",
+         "use": "people",
+         "patterns": [
+          "CV(C)",
+          "CCV(C)",
+          "CVCV(C)"
+         ],
+         "reject": [
+          "^[aeiouy]+$",
+          "^[bcdfgklmnpqrstvwxz]+$"
+         ],
+         "min_length": 2,
+         "max_length": 5
+        },
+        {
+         "id": "vorek_places",
+         "name": "Vorek Places",
+         "use": "places",
+         "patterns": [
+          "C2V(C)C2V(C)C2V(C)",
+          "CV(C)C2V(C)C2V(C)C2V(C)",
+          "C2V(C)C2V(C)C2V(C)C2V(C)"
+         ],
+         "reject": [
+          "^[aeiouy]+$"
+         ],
+         "min_length": 8,
+         "max_length": 16
+        },
+        {
+         "id": "vorek_things",
+         "name": "Vorek Things",
+         "use": "things",
+         "patterns": [
+          "CVCV(C)",
+          "CCV(C)C",
+          "CV(C)C2V(C)"
+         ],
+         "reject": [
+          "^[aeiouy]+$"
+         ],
+         "min_length": 3,
+         "max_length": 7
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "Kor",
+         "meaning": "stone"
+        },
+        {
+         "word": "Vaz",
+         "meaning": "water"
+        },
+        {
+         "word": "Thur",
+         "meaning": "fire"
+        },
+        {
+         "word": "Skel",
+         "meaning": "bone"
+        },
+        {
+         "word": "Bor",
+         "meaning": "forest"
+        },
+        {
+         "word": "Zhar",
+         "meaning": "heat"
+        },
+        {
+         "word": "Lum",
+         "meaning": "light"
+        },
+        {
+         "word": "Mor",
+         "meaning": "sea"
+        },
+        {
+         "word": "Vet",
+         "meaning": "wind"
+        },
+        {
+         "word": "Kras",
+         "meaning": "red"
+        },
+        {
+         "word": "Shit",
+         "meaning": "black"
+        },
+        {
+         "word": "Bel",
+         "meaning": "white"
+        },
+        {
+         "word": "Tep",
+         "meaning": "warm"
+        },
+        {
+         "word": "Hol",
+         "meaning": "cold"
+        },
+        {
+         "word": "Kot",
+         "meaning": "cat"
+        },
+        {
+         "word": "Pis",
+         "meaning": "dog"
+        },
+        {
+         "word": "Vuk",
+         "meaning": "wolf"
+        },
+        {
+         "word": "Med",
+         "meaning": "bear"
+        },
+        {
+         "word": "Zub",
+         "meaning": "tooth"
+        },
+        {
+         "word": "Glo",
+         "meaning": "hand"
+        },
+        {
+         "word": "Kno",
+         "meaning": "foot"
+        },
+        {
+         "word": "Gla",
+         "meaning": "eye"
+        },
+        {
+         "word": "Ush",
+         "meaning": "ear"
+        },
+        {
+         "word": "Nos",
+         "meaning": "nose"
+        },
+        {
+         "word": "Rus",
+         "meaning": "mouth"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "ph_01",
+         "category": "greeting",
+         "original": "Kor vaz",
+         "translation": "Stone water (A greeting implying stability and life)"
+        },
+        {
+         "id": "ph_02",
+         "category": "greeting",
+         "original": "Thur lum",
+         "translation": "Fire light (A warm greeting)"
+        },
+        {
+         "id": "ph_03",
+         "category": "blessing",
+         "original": "Vet bor",
+         "translation": "Wind forest (May you be as strong as the wind in the woods)"
+        },
+        {
+         "id": "ph_04",
+         "category": "blessing",
+         "original": "Mor tep",
+         "translation": "Sea warm (May your journey be smooth and warm)"
+        },
+        {
+         "id": "ph_05",
+         "category": "curse",
+         "original": "Hol shit",
+         "translation": "Cold black (May you be frozen in darkness)"
+        },
+        {
+         "id": "ph_06",
+         "category": "saying",
+         "original": "Kot pis vuk",
+         "translation": "Cat dog wolf (A warning about hidden dangers in familiar places)"
+        },
+        {
+         "id": "ph_07",
+         "category": "saying",
+         "original": "Zhar skel",
+         "translation": "Heat bone (Endurance comes from pain)"
+        },
+        {
+         "id": "ph_08",
+         "category": "curse",
+         "original": "Bel hol",
+         "translation": "White cold (May you be stripped of all warmth and color)"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "vorek_people": [
+         "Lakhy",
+         "Vly",
+         "Rkar",
+         "Nzhuk",
+         "Tu",
+         "Thyfi",
+         "Folyv",
+         "Zuzy",
+         "Syno",
+         "Vothe",
+         "Ne",
+         "Li",
+         "Bdezh",
+         "Bafi",
+         "Va",
+         "Ryzh",
+         "Remo",
+         "Se",
+         "La",
+         "Rith",
+         "Salas",
+         "Vtoz",
+         "Vyvy",
+         "Rbez",
+         "Dod",
+         "Khakh",
+         "Zhly",
+         "Ze",
+         "Fpezh",
+         "Kov",
+         "Kheth",
+         "Zrun",
+         "Delop",
+         "Ry",
+         "Zoth",
+         "Khro",
+         "Ve",
+         "Zvot",
+         "Mu",
+         "Kuvis",
+         "Frul",
+         "Nyrer",
+         "Pnu",
+         "Sysh",
+         "Khy",
+         "Tre",
+         "Shutu",
+         "Khupe",
+         "Pshy",
+         "Tsha"
+        ],
+        "vorek_places": [
+         "Th2ushp2yz2yvb2i",
+         "K2yd2ykh2ith2i",
+         "Kh2ivf2of2yt",
+         "Zedl2os2or2uzh",
+         "Kh2ibf2umkh2uzhm2i",
+         "R2orl2as2okh",
+         "Tonn2on2erth2is",
+         "R2ish2imn2ul2i",
+         "N2ir2us2ols2o",
+         "M2obt2ekh2ar",
+         "Rord2ovkh2ash2izh",
+         "S2ish2yzb2ed2u",
+         "L2yshzh2alt2yn2af",
+         "Kh2otp2ab2a",
+         "Z2uzhkh2ef2u",
+         "T2otkh2eths2un2i",
+         "T2ab2ersh2off2ur",
+         "L2ep2uzhth2eb2u",
+         "Z2af2yk2ebzh2e",
+         "N2othf2ind2opz2up",
+         "N2ezhsh2uth2i",
+         "Z2ozr2ethz2uthd2yb",
+         "Mithm2emth2erv2osh",
+         "K2utd2odn2ufn2al",
+         "Th2id2ir2ebt2ush",
+         "Sh2othr2ukh2yk2izh",
+         "Zh2ud2ith2at",
+         "R2ub2ydkh2it",
+         "Lun2uk2ok2i",
+         "M2ad2oft2al2i",
+         "N2afn2okh2ur",
+         "K2or2uzhzh2o",
+         "Sh2old2ushl2i",
+         "D2akp2yd2ez",
+         "Rel2ik2el2u",
+         "R2imz2uzh2ov2o",
+         "V2ut2uz2ysh2u",
+         "S2itb2uzl2ind2o",
+         "N2ish2atn2ov2e",
+         "Kh2unz2akz2ir",
+         "Nyb2ubt2ed2ir",
+         "Del2efp2er2y",
+         "Tosth2en2yf2ap",
+         "Kh2ithsh2ymr2ut",
+         "Th2iz2ytz2azh2ik",
+         "Th2odz2esf2abb2i",
+         "T2ytkh2in2yb2o",
+         "Th2ukb2iv2al2ir",
+         "Zh2ad2iskh2eshb2yn",
+         "Seb2as2or2e"
+        ],
+        "vorek_things": [
+         "Khyth2u",
+         "Zher2okh",
+         "Sodizh",
+         "Rtyf",
+         "Tarosh",
+         "Mefs2er",
+         "Rezhish",
+         "Mvyfr",
+         "Zhdekn",
+         "Zazh2o",
+         "Thivyl",
+         "Zhykhf2a",
+         "Pek2u",
+         "Rlin",
+         "Dir2ek",
+         "Shnath",
+         "Rybok",
+         "Lshik",
+         "Shesip",
+         "Befo",
+         "Dalb2in",
+         "Bukth2i",
+         "Mark2u",
+         "Khub2om",
+         "Purr2ep",
+         "Thyld2up",
+         "Thar2ath",
+         "Rafu",
+         "Vylakh",
+         "Bdob",
+         "Shuzhb2e",
+         "Zuzas",
+         "Shthotd",
+         "Rkytr",
+         "Nimk2ad",
+         "Blith",
+         "Nipzh2uv",
+         "Vekh2ik",
+         "Byzu",
+         "Likhn2e",
+         "Themm2yb",
+         "Sumsh2o",
+         "Foshi",
+         "Mibm2a",
+         "Shtem",
+         "Vyt2i",
+         "Rishv2ib",
+         "Thine",
+         "Zokho",
+         "Khethr2i"
+        ]
+       },
+       "dictionary_fit": 0.84,
+       "real_hits": [
+        "Syno",
+        "R2orl2as2okh",
+        "Lun2uk2ok2i",
+        "Mor",
+        "Bel",
+        "Med",
+        "Rus"
+       ]
+      },
+      "jargon_in_language": []
+     }
+    ]
+   },
+   "calls": 15,
+   "small_jobs": {
+    "definitions": {
+     "names": [
+      "Tekhek",
+      "Kukhafi",
+      "Thenen",
+      "Lotar",
+      "Sepekh",
+      "Zhubeb",
+      "Zhoseli",
+      "Nafiv",
+      "Zhisyzh",
+      "Sulyve"
+     ],
+     "reply": {
+      "definitions": {
+       "Tekhek": "Tekhek is a person who carries the weight of the earth on their back.",
+       "Kukhafi": "Kukhafi is named after a warrior who fought with fire and bone.",
+       "Thenen": "Thenen is the sound of wind moving through a forest of wood.",
+       "Lotar": "Lotar is the deep shadow cast by the moon at night.",
+       "Sepekh": "Sepekh is a place where the water runs fast over the stone.",
+       "Zhubeb": "Zhubeb is the cold heat that rises from the ground in winter.",
+       "Zhoseli": "Zhoseli is a voice that sings of life and death together.",
+       "Nafiv": "Nafiv is the bright light of the sun seen through the snow.",
+       "Zhisyzh": "Zhisyzh is a slow rest taken at the bottom of the deep.",
+       "Sulyve": "Sulyve is the skin of the earth cracked by the hard wind."
+      }
+     }
+    },
+    "pick": {
+     "names": [
+      "Zhenip",
+      "Kutakhi",
+      "Dulas",
+      "Rydu",
+      "Mytoth",
+      "Shokupe",
+      "Zheshi",
+      "Milip",
+      "Shakhob",
+      "Kakhul",
+      "Tobuty",
+      "Fukha",
+      "Dita",
+      "Tekeny",
+      "Dutisi",
+      "Thiny",
+      "Zovu",
+      "Kodi",
+      "Mynutho",
+      "Themyzh"
+     ],
+     "reply": {
+      "pick": "Kutakhi",
+      "why": "It sounds like a heavy, rolling drumbeat with hard consonants and open vowels, fitting the earthy and sturdy aesthetic of the language."
+     },
+     "pick_in_candidates": true
+    },
+    "coin": {
+     "reply": {
+      "name": "Shil Zolm Keth",
+      "words": [
+       {
+        "word": "Shil",
+        "meaning": "wind"
+       },
+       {
+        "word": "Zolm",
+        "meaning": "water"
+       },
+       {
+        "word": "Keth",
+        "meaning": "stone"
+       }
+      ]
+     },
+     "coined_fit": {
+      "Shil": true,
+      "Zolm": true,
+      "Keth": true
+     }
+    }
+   }
   }
  }
 }
