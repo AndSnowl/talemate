@@ -1,0 +1,284 @@
+{
+  "$defs": {
+    "DictionaryEntry": {
+      "properties": {
+        "word": {
+          "title": "Word",
+          "type": "string"
+        },
+        "meaning": {
+          "title": "Meaning",
+          "type": "string"
+        },
+        "part": {
+          "default": "",
+          "title": "Part",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "word",
+        "meaning"
+      ],
+      "title": "DictionaryEntry",
+      "type": "object"
+    },
+    "GeneratorDef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "use": {
+          "title": "Use",
+          "type": "string"
+        },
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Patterns",
+          "type": "array"
+        },
+        "reject": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reject",
+          "type": "array"
+        },
+        "capitalize": {
+          "default": true,
+          "title": "Capitalize",
+          "type": "boolean"
+        },
+        "min_length": {
+          "default": 2,
+          "title": "Min Length",
+          "type": "integer"
+        },
+        "max_length": {
+          "default": 24,
+          "title": "Max Length",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "use",
+        "patterns"
+      ],
+      "title": "GeneratorDef",
+      "type": "object"
+    },
+    "Language": {
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "description",
+            "naming",
+            "full"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "writable": {
+          "default": true,
+          "title": "Writable",
+          "type": "boolean"
+        },
+        "sound": {
+          "default": "",
+          "title": "Sound",
+          "type": "string"
+        },
+        "categories": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Categories",
+          "type": "object"
+        },
+        "syllable_notes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Syllable Notes",
+          "type": "array"
+        },
+        "generators": {
+          "items": {
+            "$ref": "#/$defs/GeneratorDef"
+          },
+          "title": "Generators",
+          "type": "array"
+        },
+        "grammar": {
+          "default": "",
+          "title": "Grammar",
+          "type": "string"
+        },
+        "dictionary": {
+          "items": {
+            "$ref": "#/$defs/DictionaryEntry"
+          },
+          "title": "Dictionary",
+          "type": "array"
+        },
+        "phrases": {
+          "items": {
+            "$ref": "#/$defs/Phrase"
+          },
+          "title": "Phrases",
+          "type": "array"
+        },
+        "flavour": {
+          "default": "",
+          "title": "Flavour",
+          "type": "string"
+        },
+        "similar": {
+          "items": {
+            "$ref": "#/$defs/SimilarLink"
+          },
+          "title": "Similar",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "level"
+      ],
+      "title": "Language",
+      "type": "object"
+    },
+    "Phrase": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "original": {
+          "title": "Original",
+          "type": "string"
+        },
+        "translation": {
+          "title": "Translation",
+          "type": "string"
+        },
+        "breakdown": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Breakdown",
+          "type": "array"
+        },
+        "usage": {
+          "default": "",
+          "title": "Usage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "category",
+        "original",
+        "translation"
+      ],
+      "title": "Phrase",
+      "type": "object"
+    },
+    "SimilarLink": {
+      "description": "Another language this one is close to, by name (in a file; an entry\nstores the other language's id).",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "degree": {
+          "enum": [
+            "close",
+            "distant",
+            "one-way"
+          ],
+          "title": "Degree",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "degree"
+      ],
+      "title": "SimilarLink",
+      "type": "object"
+    }
+  },
+  "description": "A language as a file: what the language-design skill writes and the\napp imports. `parent` names the language it descends from.",
+  "properties": {
+    "format": {
+      "const": "fantasymate.language",
+      "default": "fantasymate.language",
+      "title": "Format",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "language": {
+      "$ref": "#/$defs/Language"
+    },
+    "parent": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "language"
+  ],
+  "title": "LanguageFile",
+  "type": "object"
+}
