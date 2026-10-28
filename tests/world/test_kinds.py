@@ -390,3 +390,13 @@ def test_words_phrases_similar_and_depth_validate():
     ):
         with pytest.raises(ValueError):
             validate_field(k, field, bad)
+
+
+def test_languages_rows_store_dates_as_plain_data():
+    from talemate.world.kinds import normalise_field
+
+    rows = normalise_field(
+        "languages",
+        [{"language": "a" * 32, "role": "official", "since": WorldDate.of(1412)}],
+    )
+    assert rows[0]["since"] == WorldDate.of(1412).model_dump(mode="json")

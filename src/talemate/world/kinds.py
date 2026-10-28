@@ -308,10 +308,25 @@ def normalise_tag(value: str) -> str:
 
 def normalise_field(field: str, value: object) -> object:
     """`value` as it's stored in `field`: a `tag` string is normalised
-    (`normalise_tag`); everything else is kept as given."""
+    (`normalise_tag`), and a `languages` row's dates become plain data, as
+    filings' do; everything else is kept as given."""
 
     if field == "tag" and isinstance(value, str):
         return normalise_tag(value)
+    if field == "languages" and isinstance(value, list):
+        return [
+            {
+                key: (
+                    item.model_dump(mode="json")
+                    if isinstance(item, WorldDate)
+                    else item
+                )
+                for key, item in row.items()
+            }
+            if isinstance(row, dict)
+            else row
+            for row in value
+        ]
     return value
 
 
