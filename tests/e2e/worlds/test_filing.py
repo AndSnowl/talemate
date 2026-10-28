@@ -238,7 +238,8 @@ def test_velikoye_connected_by_tag(app, page):
 
     # Connected, grouped by tag, largest group first
     headings = _headings(thing)
-    assert headings[0] == "Institutions"
+    # polish 5: groups run by kind, so the Rulers (characters) lead
+    assert headings[0] == "Rulers"
     assert set(headings) == {
         "Institutions",
         "Rivers",
