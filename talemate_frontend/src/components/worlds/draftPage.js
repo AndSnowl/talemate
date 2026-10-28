@@ -287,7 +287,10 @@ function changedAt(rows, index, change) {
 
 // An `aka` entry as the backend keeps it, `everyday` always set.
 function akaEntry(entry) {
-    return { name: entry.name, tag: entry.tag === 'proper' ? 'proper' : 'common', everyday: !!entry.everyday };
+    const clean = { name: entry.name, tag: entry.tag === 'proper' ? 'proper' : 'common', everyday: !!entry.everyday };
+    // a name given in one of the world's languages keeps its marker
+    if (entry.language) clean.language = entry.language;
+    return clean;
 }
 
 function cleanName(name) {

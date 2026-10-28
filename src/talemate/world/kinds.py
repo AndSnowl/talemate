@@ -415,6 +415,11 @@ def _validate_measures(field: str, value: object) -> None:
             )
 
 
+# an other name's keys; `language` marks a name given in one of the world's
+# languages (languages 3a, "Name it in…")
+AKA_KEYS: tuple[str, ...] = ("name", "tag", "everyday", "language")
+
+
 def _validate_aka(field: str, value: object) -> None:
     if not isinstance(value, list):
         raise ValueError(f"{field!r} must be a list of other names")
@@ -422,7 +427,14 @@ def _validate_aka(field: str, value: object) -> None:
     for entry in value:
         if (
             not isinstance(entry, dict)
-            or set(entry) != {"name", "tag", "everyday"}
+            or not {"name", "tag", "everyday"} <= set(entry) <= set(AKA_KEYS)
+            or not (
+                entry.get("language") is None
+                or (
+                    isinstance(entry["language"], str)
+                    and _THING_ID_RE.match(entry["language"])
+                )
+            )
             or not isinstance(entry["name"], str)
             or not entry["name"].strip()
             or entry["tag"] not in AKA_TAGS
@@ -430,7 +442,8 @@ def _validate_aka(field: str, value: object) -> None:
         ):
             raise ValueError(
                 f"{field!r} entries must be "
-                '{"name": str, "tag": "proper" | "common", "everyday": bool}'
+                '{"name": str, "tag": "proper" | "common", "everyday": bool, '
+                '"language": <32-hex>|absent}'
             )
         if entry["everyday"]:
             if entry["tag"] != "common":

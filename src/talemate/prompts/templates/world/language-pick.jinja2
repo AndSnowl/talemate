@@ -1,0 +1,21 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+Pick the name that best fits what is being named, from candidates made by the rules of {{ language }}, an invented language of a fantasy world. {% if sound %}It sounds like this: {{ sound }}{% endif %}
+
+What is being named: {{ what }}
+
+The candidates:
+{% for name in candidates -%}
+- {{ name }}
+{% endfor %}
+Pick one of the candidates exactly as written; never change it or make up another.
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"pick": "Kovar", "why": "It sounds old and solid, right for a capital."}
+
+No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}
