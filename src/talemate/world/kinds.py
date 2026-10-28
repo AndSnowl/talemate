@@ -67,6 +67,7 @@ _SHARED_FIELDS: tuple[tuple[str, FieldType], ...] = (
     ("filings", "json"),
     ("hint", "text"),
     ("agent", "json"),
+    ("languages", "json"),
 )
 
 AKA_TAGS: tuple[str, ...] = ("proper", "common")
@@ -186,6 +187,23 @@ KINDS: dict[str, KindSpec] = {
         fields=_fields(("name", "text")),
         categories=["general", "belief"],
     ),
+    # a language or naming style (languages 3a): its technical part lives
+    # in fields of its own, read by `talemate.languages.entry`
+    "language": KindSpec(
+        name="language",
+        fields=_fields(
+            ("name", "text"),
+            ("depth", "text"),
+            ("flavour", "text"),
+            ("sound", "text"),
+            ("rules", "json"),
+            ("words", "json"),
+            ("phrases", "json"),
+            ("descends_from", "thing"),
+            ("similar", "json"),
+        ),
+        categories=["general", "history", "about", "statement", "timeline"],
+    ),
     # a god, a spirit, a legendary creature; it acts in the world only
     # while its `existence` is real (`entries.acts_in_world`)
     "being": KindSpec(
@@ -214,6 +232,7 @@ KIND_ORDER: tuple[str, ...] = (
     "event",
     "item",
     "lore",
+    "language",
     "being",
 )
 
@@ -307,6 +326,8 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
             raise ValueError(f"{field!r} must be a string")
         if field == "existence" and value not in EXISTENCE_VALUES:
             raise ValueError(f"{field!r} must be one of {EXISTENCE_VALUES}")
+        if field == "depth" and value not in LANGUAGE_DEPTHS:
+            raise ValueError(f"{field!r} must be one of {LANGUAGE_DEPTHS}")
     elif spec.type == "date":
         if isinstance(value, WorldDate):
             return
@@ -347,6 +368,16 @@ def validate_field(kind: KindSpec, field: str, value: object) -> None:
                 raise ValueError(f"{field!r} must be a bool")
         elif field == "filings":
             _validate_filings(field, value)
+        elif field == "languages":
+            _validate_languages(field, value)
+        elif field == "rules":
+            _validate_rules(field, value)
+        elif field == "words":
+            _validate_words(field, value)
+        elif field == "phrases":
+            _validate_phrases(field, value)
+        elif field == "similar":
+            _validate_similar(field, value)
         # otherwise any JSON-serializable value is accepted
 
 
@@ -413,6 +444,120 @@ def _validate_world_date_or_null(field: str, key: str, value: object) -> None:
             raise ValueError(f"{field!r} {key} must be a valid date") from exc
         return
     raise ValueError(f"{field!r} {key} must be a WorldDate, its dict form, or null")
+
+
+LANGUAGE_DEPTHS: tuple[str, ...] = ("description", "naming", "full")
+LANGUAGE_ROLES: tuple[str, ...] = (
+    "spoken",
+    "official",
+    "scholarly",
+    "ceremonial",
+    "trade",
+    "liturgical",
+)
+LANGUAGE_FLUENCIES: tuple[str, ...] = ("native", "fluent", "broken")
+SIMILAR_DEGREES: tuple[str, ...] = ("close", "distant", "one-way")
+LANGUAGE_ROW_KEYS: tuple[str, ...] = (
+    "language",
+    "role",
+    "share",
+    "fluency",
+    "since",
+    "until",
+)
+
+
+def _validate_languages(field: str, value: object) -> None:
+    """Who speaks what: rows of `{"language": <32-hex>, "role", "share",
+    "fluency", "since", "until"}`; a share (0-100) only on a spoken row;
+    no row twice."""
+
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list of language rows")
+    seen: list[tuple[tuple[str, str], ...]] = []
+    for row in value:
+        if (
+            not isinstance(row, dict)
+            or not set(row) <= set(LANGUAGE_ROW_KEYS)
+            or not isinstance(row.get("language"), str)
+            or not _THING_ID_RE.match(row["language"])
+            or row.get("role") not in LANGUAGE_ROLES
+        ):
+            raise ValueError(
+                f'{field!r} rows must be {{"language": <32-hex>, "role": one of '
+                f"{LANGUAGE_ROLES}, ...}}"
+            )
+        share = row.get("share")
+        if share is not None:
+            if row["role"] != "spoken":
+                raise ValueError(f"{field!r}: only a spoken row has a share")
+            if isinstance(share, bool) or not isinstance(share, (int, float)):
+                raise ValueError(f"{field!r}: share must be a number")
+            if not 0 <= share <= 100:
+                raise ValueError(f"{field!r}: share must be between 0 and 100")
+        if row.get("fluency") not in (None, *LANGUAGE_FLUENCIES):
+            raise ValueError(f"{field!r}: fluency must be one of {LANGUAGE_FLUENCIES}")
+        _validate_world_date_or_null(field, "since", row.get("since"))
+        _validate_world_date_or_null(field, "until", row.get("until"))
+        since, until = row.get("since"), row.get("until")
+        if since is not None and until is not None:
+            if WorldDate.model_validate(until) <= WorldDate.model_validate(since):
+                raise ValueError(f"{field!r}: until must be after since")
+        key = tuple(sorted((k, repr(v)) for k, v in row.items()))
+        if key in seen:
+            raise ValueError(f"{field!r} must not repeat a row")
+        seen.append(key)
+
+
+def _validate_rules(field: str, value: object) -> None:
+    """A language's sound categories and name rules: they must load and
+    parse (`talemate.languages.generator.validate_language`)."""
+
+    from talemate.languages.generator import validate_language
+    from talemate.languages.models import Language
+
+    if not isinstance(value, dict) or not set(value) <= {"categories", "generators"}:
+        raise ValueError(
+            f'{field!r} must be {{"categories": ..., "generators": [...]}}'
+        )
+    try:
+        validate_language(Language(name="rules", level="naming", **value))
+    except Exception as exc:
+        raise ValueError(f"{field!r}: {exc}") from exc
+
+
+def _validate_entries(field: str, value: object, required: tuple[str, ...]) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list")
+    for entry in value:
+        if not isinstance(entry, dict) or not all(
+            isinstance(entry.get(key), str) and entry[key].strip() for key in required
+        ):
+            raise ValueError(f"{field!r} entries need non-blank {required}")
+
+
+def _validate_words(field: str, value: object) -> None:
+    _validate_entries(field, value, ("word", "meaning"))
+
+
+def _validate_phrases(field: str, value: object) -> None:
+    _validate_entries(field, value, ("id", "category", "original", "translation"))
+
+
+def _validate_similar(field: str, value: object) -> None:
+    if not isinstance(value, list):
+        raise ValueError(f"{field!r} must be a list")
+    for link in value:
+        if (
+            not isinstance(link, dict)
+            or not isinstance(link.get("target"), str)
+            or not _THING_ID_RE.match(link["target"])
+            or link.get("degree") not in SIMILAR_DEGREES
+        ):
+            raise ValueError(
+                f'{field!r} entries must be {{"target": <32-hex>, "degree": one of '
+                f"{SIMILAR_DEGREES}}}"
+            )
 
 
 FILING_KEYS: tuple[str, ...] = (

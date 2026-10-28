@@ -458,3 +458,18 @@ def test_unknown_structure_is_empty_after_a_stub_changes_kind(world):
             (inn,),
         )
     assert world.unknown_structure() == ["part_of"]
+
+
+def test_language_field_write_is_undoable(world):
+    with world.revision(Source.manual()) as rev:
+        lid = rev.create_thing(
+            "language",
+            {"name": "Moscavian", "words": [{"word": "vel", "meaning": "great"}]},
+        )
+    with world.revision(Source.manual()) as rev:
+        rev.set_field(lid, "words", [], None)
+        cleared = rev.rev
+    world.undo([cleared])
+    assert world.view().thing(lid).fields["words"] == [
+        {"word": "vel", "meaning": "great"}
+    ]

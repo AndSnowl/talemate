@@ -69,6 +69,16 @@ UNRENDERED_FIELDS: tuple[str, ...] = (
     "agent",
     # a being's existence changes who it acts as, not what it is
     "existence",
+    # who speaks what, and a language's own technical part (languages 3a)
+    "languages",
+    "depth",
+    "flavour",
+    "sound",
+    "rules",
+    "words",
+    "phrases",
+    "descends_from",
+    "similar",
 )
 _UNRENDERED_FIELDS = UNRENDERED_FIELDS
 
