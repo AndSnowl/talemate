@@ -1627,7 +1627,8 @@ export default {
 }
 
 /* an unticked row's name greys with the rest of its row */
-.suggestion-dropped .file-into-name {
+.suggestion-dropped .file-into-name,
+.suggestion-offer .file-into-name {
     color: inherit;
 }
 

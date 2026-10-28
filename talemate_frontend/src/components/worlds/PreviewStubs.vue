@@ -39,7 +39,8 @@
             </template>
             <!-- what it is and where it's filed, on a line under its name -->
             <template #under>
-                <div class="d-flex align-center flex-wrap ga-2">
+                <!-- a "same as X?" dropdown gets room under the kind's -->
+                <div class="d-flex align-center flex-wrap ga-2" :class="{ 'same-room': asksSame(row) }">
                     <span v-if="plain(row)" class="text-caption text-muted" data-testid="new-name-plain">no stub: its words stay plain</span>
                     <template v-else-if="row.same_target_id">
                         <span class="text-caption text-muted" data-testid="new-name-same">same as <b>{{ nameOf(row.same_target_id) }}</b>: no stub, it links that entry</span>
@@ -47,7 +48,7 @@
                     </template>
                     <template v-else>
                         <SameThingAsk
-                            v-if="row.same_as && row.same_as.length"
+                            v-if="asksSame(row)"
                             variant="row"
                             :name="row.name"
                             :kind="row.kind"
@@ -114,6 +115,10 @@ export default {
         },
     },
     methods: {
+        // whether its row asks "same as X?" (the AI's few candidates)
+        asksSame(row) {
+            return !this.plain(row) && !row.same_target_id && !!(row.same_as && row.same_as.length);
+        },
         normaliseTag,
         // unticked (a "+ Add facts…" draft's): no stub, its words plain
         plain(row) {
@@ -159,15 +164,20 @@ export default {
 </script>
 
 <style scoped>
+.same-room {
+    margin-top: 8px;
+}
+
 .stub-name {
     font-weight: 600;
     color: rgb(var(--v-theme-foreign));
     text-decoration: underline dashed;
 }
 
-/* unticked, the name greys and is struck through with the rest of its
-   row (no stub's dashed underline) */
-.suggestion-dropped .stub-name {
+/* unticked, the name greys with the rest of its row (struck through with
+   it once the owner dropped it; no stub's dashed underline) */
+.suggestion-dropped .stub-name,
+.suggestion-offer .stub-name {
     color: inherit;
     text-decoration: none;
 }

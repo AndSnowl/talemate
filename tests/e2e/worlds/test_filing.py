@@ -25,6 +25,8 @@ from e2e.worlds.test_drafts import _draft
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
+    _clear_search,
+    _find_in_tree,
     _fact,
     _open_thing,
     _open_world,
@@ -234,9 +236,10 @@ def test_velikoye_connected_by_tag(app, page):
     expect(rows).to_contain_text("since 412")
     expect(thing.get_by_test_id("entry-summary")).to_contain_text(SUMMARY)
 
-    # Connected, grouped by tag, largest group first
+    # Connected, grouped by tag
     headings = _headings(thing)
-    assert headings[0] == "Institutions"
+    # polish 5: groups run by kind, so the Rulers (characters) lead
+    assert headings[0] == "Rulers"
     assert set(headings) == {
         "Institutions",
         "Rivers",
@@ -323,7 +326,6 @@ def test_add_filing_and_role(app, page):
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
-    world_things = page.get_by_test_id("world-list")
     thing = _open_thing(page, "Tsar Dmitry IV")
     entry_in = thing.get_by_test_id("entry-in")
     expect(entry_in.get_by_test_id("in-row")).to_have_count(2)
@@ -359,9 +361,8 @@ def test_add_filing_and_role(app, page):
     expect(
         entry_in.get_by_test_id("in-row").filter(has_text="The Frost Council")
     ).to_be_visible()
-    world_things.get_by_test_id("stub-item").filter(
-        has_text="The Frost Council"
-    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+    _find_in_tree(page, "The Frost Council", "stub-item")
+    _clear_search(page)
 
     # the role changed, then "End this" in 1010: its span shows
     court = entry_in.get_by_test_id("in-row").filter(has_text="The Night Court")
@@ -669,7 +670,8 @@ def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
     assert _sent(page, "set_tag") == []
 
     # "Other": dropping a row there puts it back under its own tag
-    expect(_group(town, "Other")).to_have_attribute(
+    # (its tip on the heading only, polish 5)
+    expect(_group(town, "Other").locator(".group-head").first).to_have_attribute(
         "title", re.compile("back under its own tag")
     )
     assert page.console_errors == []
@@ -744,7 +746,7 @@ def test_change_tag_moves_group(app, page):
     expect(_row(_group(thing, "Customs"), "Wattle Row")).to_be_visible()
 
     # the list is reached by keyboard: Enter on an entry opens it
-    card = page.get_by_test_id("thing-card").filter(has_text="Tsar Dmitry IV")
+    card = _find_in_tree(page, "Tsar Dmitry IV")
     card.focus()
     page.keyboard.press("Enter")
     _opened(page, "Tsar Dmitry IV")
@@ -1155,8 +1157,7 @@ def test_tags_rename_merge(app, page):
     expect(rows).to_have_count(3)
 
     # the page groups by the new tags
-    page.get_by_test_id("thing-card").filter(has_text="Velikoye").click()
-    thing = _opened(page, "Velikoye")
+    thing = _open_thing(page, "Velikoye")
     expect(_group(thing, "Institutions").get_by_test_id("group-count")).to_have_text(
         "3"
     )

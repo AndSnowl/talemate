@@ -225,12 +225,19 @@ export default {
             this.scheduleMatch();
         }
         this.$nextTick(this.grow);
+        // shown again, or its column resized (an error message above it,
+        // a world switched while hidden): measure again (polish 5)
+        if (typeof ResizeObserver !== 'undefined') {
+            this.resizer = new ResizeObserver(() => this.grow());
+            this.resizer.observe(this.$el);
+        }
         if (this.autofocus) {
             this.$nextTick(this.focus);
         }
     },
     beforeUnmount() {
         clearTimeout(this.matchTimer);
+        this.resizer?.disconnect();
         this.worlds.dropNameBox(this.inputId);
     },
     methods: {

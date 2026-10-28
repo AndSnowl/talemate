@@ -113,7 +113,8 @@ async def test_router_list_and_get_thing(plugin):
     )
     listed = _last(plugin, "list_things")["data"]
     assert listed["kind"] == "character"
-    assert listed["things"] == [
+    base = ("id", "kind", "name", "aka", "filed_in")
+    assert [{k: t[k] for k in base} for t in listed["things"]] == [
         {"id": maren, "kind": "character", "name": "Maren", "aka": [], "filed_in": []}
     ]
 
@@ -1876,7 +1877,12 @@ async def test_payload_segments_and_stub_fields(plugin):
 
     # kind lists hold stubs, marked, but not ignored ones
     await plugin.handle({"type": "worlds", "action": "list_things", "kind": "place"})
-    places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+    places = {
+        t["id"]: {
+            k: t[k] for k in ("id", "kind", "name", "aka", "stub", "filed_in") if k in t
+        }
+        for t in _last(plugin, "list_things")["data"]["things"]
+    }
     assert places == {
         s.harbour: {
             "id": s.harbour,
@@ -9094,7 +9100,8 @@ async def test_list_things_carry_filed_in(plugin):
     s = await _open_filing_world(plugin)
     await _act(plugin, "list_things", kind="place")
     places = {t["id"]: t for t in _last(plugin, "list_things")["data"]["things"]}
-    assert "tag" not in places[s.khorol]
+    # polish 5: the listing carries the tag too
+    assert places[s.khorol]["tag"] == s.world.view().thing(s.khorol).fields.get("tag")
     assert places[s.khorol]["filed_in"] == [s.tsardom, s.velikoye]
     assert places[s.velikoye]["filed_in"] == [s.tsardom]
     assert places[s.tsardom]["filed_in"] == []
@@ -9770,3 +9777,135 @@ async def test_repoint_ref_retitle_from_a_stub_named_elsewhere_says_so(plugin):
         " stub instead" in error["error"]["message"]
     )
     assert s.world.head_rev() == head
+
+
+# --- polish 5: what a kind's list and the side search read ------------------
+
+
+async def _list_world(plugin):
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "create_world",
+            "name": "Lists",
+            "present_year": 1026,
+        }
+    )
+    world = plugin.world
+    s = SimpleNamespace(world=world)
+    with world.revision(Source.manual()) as rev:
+        s.velikoye = rev.create_thing("place", {"name": "Velikoye", "tag": "city"})
+        rev.add_fact(s.velikoye, "description", "The fortified capital.")
+        s.kerensk = rev.create_thing(
+            "place",
+            {"name": "Kerensk", "filings": [{"target": s.velikoye, "role": None}]},
+        )
+        rev.add_fact(s.kerensk, "description", f"A rival of {ref(s.velikoye)}.")
+        s.maren = rev.create_thing(
+            "character", {"name": "Maren", "born": WorldDate.of(1000)}
+        )
+        s.thaw = rev.create_thing(
+            "event",
+            {
+                "name": "The Thaw",
+                "when": WorldDate.of(1010),
+                "until": WorldDate.of(1012),
+            },
+        )
+    return s
+
+
+async def _listed(plugin, kind):
+    await _act(plugin, "list_things", kind=kind)
+    return {t["name"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+
+
+async def test_list_things_carries_list_fields(plugin):
+    s = await _list_world(plugin)
+    places = await _listed(plugin, "place")
+    vel = places["Velikoye"]
+    assert vel["tag"] == "city"
+    assert vel["line"] == "The fortified capital."
+    # Kerensk's fact mentions it, and Kerensk is filed in it
+    assert vel["connections"] == 2
+    assert vel["span"] is None
+    assert places["Kerensk"]["tag"] is None
+    maren = (await _listed(plugin, "character"))["Maren"]
+    assert maren["span"] == {"from": 1000, "until": None}
+    assert maren["sort_date"] == 1000
+    thaw = (await _listed(plugin, "event"))["The Thaw"]
+    assert thaw["span"] == {"from": 1010, "until": 1012}
+    before = vel["changed_rev"]
+    await _act(plugin, "set_tag", thing_id=s.velikoye, tag="capital")
+    assert (await _listed(plugin, "place"))["Velikoye"]["changed_rev"] > before
+
+
+async def test_list_things_extra_fields_cost(plugin):
+    import time
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "create_world",
+            "name": "Big",
+            "present_year": 1026,
+        }
+    )
+    world = plugin.world
+    with world.revision(Source.manual()) as rev:
+        for n in range(150):
+            place = rev.create_thing("place", {"name": f"Place {n}"})
+            rev.add_fact(place, "description", f"Place number {n}.")
+            rev.add_fact(place, "history", f"Founded in year {n}.")
+    started = time.monotonic()
+    things = await _listed(plugin, "place")
+    assert len(things) == 150
+    assert time.monotonic() - started < 2.0
+
+
+async def test_list_things_cost_with_many_facts(plugin):
+    """Final review I1: a kind's list stays quick in a full world (300
+    places, 8 facts each, each place filed in a hub and naming the last)."""
+
+    import time
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "create_world",
+            "name": "Full",
+            "present_year": 1026,
+        }
+    )
+    world = plugin.world
+    with world.revision(Source.manual()) as rev:
+        hub = rev.create_thing("place", {"name": "Hub"})
+        last = hub
+        for n in range(300):
+            place = rev.create_thing(
+                "place",
+                {"name": f"Place {n}", "filings": [{"target": hub, "role": None}]},
+            )
+            rev.add_fact(place, "description", f"Next to {ref(last)}.")
+            for k in range(7):
+                rev.add_fact(place, "history", f"Fact {k} of place {n}.")
+            last = place
+    # warm (the first read after a big write pays the disk), then typical
+    await _act(plugin, "list_things", kind="place")
+    times = []
+    for _ in range(3):
+        started = time.monotonic()
+        await _act(plugin, "list_things", kind="place")
+        times.append(time.monotonic() - started)
+    things = {t["name"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+    assert len(things) == 301
+    assert things["Hub"]["connections"] == 301
+    # against one read of the world (the work a list can't skip), timed
+    # the same way, so a busy machine slows both alike
+    reads = []
+    for _ in range(3):
+        started = time.monotonic()
+        world.view().things()
+        reads.append(time.monotonic() - started)
+    took, read = sorted(times)[1], sorted(reads)[1]
+    assert took < 8 * read, (times, reads)

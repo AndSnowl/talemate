@@ -45,12 +45,13 @@ import structlog
 from pydantic import BaseModel, Field, ValidationError
 
 from .dates import WorldDate
-from .kinds import normalise_tag
+from .kinds import kind_rank, normalise_tag
 from .view import ThingState, WorldView
 
 log = structlog.get_logger("talemate.world.filing")
 
 __all__ = [
+    "stored_filings",
     "FIELD_ROLES",
     "OTHER_HEADING",
     "Filing",
@@ -173,6 +174,13 @@ def _live(
         for filing in stored
         if (include_ended or filing_live(filing, view.at)) and exists(filing.target)
     ]
+
+
+def stored_filings(state: ThingState) -> list[Filing]:
+    """The entry's filings as stored, from a state already read (no
+    lookups: a list of many entries reads them all at once)."""
+
+    return _stored_filings(state)
 
 
 def filings_of(view: WorldView, thing_id: str, *, live: bool = True) -> list[Filing]:
@@ -421,8 +429,9 @@ def connected(
     """What is filed in the target (`filed_in`, ended filings too with
     `include_ended`), grouped by the group each filing shows under
     (`show_under`), else the entry's tag, an untagged entry under
-    "Other". Groups run largest first, then by heading; rows by role (a
-    row without one last), then since (undated first), then name."""
+    "Other". Groups run by the earliest kind they hold (`KIND_ORDER`),
+    then by heading, Other last (polish 5); rows by kind, then role (a row
+    without one last), then since (undated first), then name."""
 
     by_tag: dict[str | None, list[tuple[ThingState, Filing]]] = {}
     for state, filing in filed_in(
@@ -434,11 +443,12 @@ def connected(
 
     def row_key(
         row: tuple[ThingState, Filing],
-    ) -> tuple[bool, str, bool, int, str]:
+    ) -> tuple[int, bool, str, bool, int, str]:
         state, filing = row
         role = filing.role.casefold() if filing.role else ""
         since = filing.since
         return (
+            kind_rank(state.kind),
             filing.role is None,
             role,
             since is not None,
@@ -446,16 +456,17 @@ def connected(
             _name(state).casefold(),
         )
 
-    groups = [
-        Group(
+    ranked = []
+    for tag, rows in by_tag.items():
+        group = Group(
             tag=tag,
             heading=tag_heading(tag) if tag is not None else OTHER_HEADING,
             rows=[(state.id, filing) for state, filing in sorted(rows, key=row_key)],
         )
-        for tag, rows in by_tag.items()
-    ]
-    groups.sort(key=lambda group: (-len(group.rows), group.heading.casefold()))
-    return groups
+        first = min(kind_rank(state.kind) for state, _filing in rows)
+        ranked.append(((tag is None, first, group.heading.casefold()), group))
+    ranked.sort(key=lambda pair: pair[0])
+    return [group for _key, group in ranked]
 
 
 def mentioned_in(

@@ -58,8 +58,34 @@ def _world_tab(page) -> None:
     page.get_by_test_id("world-tab").wait_for(state="visible", timeout=TIMEOUT_MS)
 
 
+def _find_in_tree(page, name: str, testid: str = "thing-card"):
+    """`name`'s row in the side tree, found through the search box (the
+    tree starts folded, polish 5); `_clear_search` puts the folds back."""
+
+    page.get_by_test_id("world-search").locator("input").fill(name)
+    row = page.get_by_test_id("world-list").get_by_test_id(testid).filter(has_text=name)
+    row.first.wait_for(state="visible", timeout=TIMEOUT_MS)
+    return row
+
+
+def _clear_search(page) -> None:
+    page.get_by_test_id("world-search").locator("input").fill("")
+
+
 def _open_thing(page, name: str):
-    page.get_by_test_id("thing-card").filter(has_text=name).click()
+    """Open `name` from the side tree. The tree starts folded (polish 5),
+    so an entry not in sight is found through the search box, which is
+    cleared again once its page is open."""
+
+    card = page.get_by_test_id("thing-card").filter(has_text=name)
+    if card.count() and card.first.is_visible():
+        card.click()
+    else:
+        search = page.get_by_test_id("world-search").locator("input")
+        search.fill(name)
+        card.first.wait_for(state="visible", timeout=TIMEOUT_MS)
+        card.filter(has=page.locator(".card-name", has_text=name)).first.click()
+        search.fill("")
     thing = page.get_by_test_id("thing-page")
     thing.get_by_test_id("thing-name").filter(has_text=name).wait_for(
         state="visible", timeout=TIMEOUT_MS
@@ -92,7 +118,8 @@ def test_worlds_home_lists_and_opens(app, page):
     scene.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert scene.get_by_role("button", name="Play").is_visible()
 
-    # the World tab shows the world's characters
+    # the World tab shows the world's characters (their page, so their
+    # kind is unfolded)
     _world_tab(page)
     page.get_by_test_id("thing-card").filter(has_text="Maren Vos").wait_for(
         state="visible", timeout=TIMEOUT_MS
@@ -122,7 +149,8 @@ def test_a_world_made_before_filing_is_refused_with_a_plain_message(app, page):
     home.get_by_role("button", name="Refresh worlds").click()
     row = home.get_by_test_id("world-row").filter(has_text=name)
     row.get_by_role("button", name="Open").click()
-    alert = home.get_by_role("alert").filter(has_text="made before Filing")
+    # the worlds screens' one error message (polish 5)
+    alert = page.get_by_test_id("world-error").filter(has_text="made before Filing")
     alert.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert "Start a fresh world." in alert.inner_text()
     assert row.get_by_role("button", name="Open").is_visible()
@@ -340,7 +368,8 @@ def test_regenerate_one_prose_section(app, page):
         "() => window.__e2eSent.filter((m) => m.action === 'regenerate_prose')"
     )
     assert [m.get("section") for m in asked] == ["personality"]
-    page.get_by_test_id("world-tab").get_by_text(
+    # the worlds screens' one error message (polish 5)
+    page.get_by_test_id("world-error").get_by_text(
         "No AI client is set up to write the prose"
     ).wait_for(state="visible", timeout=TIMEOUT_MS)
 

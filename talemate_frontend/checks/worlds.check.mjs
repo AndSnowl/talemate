@@ -79,7 +79,6 @@ import {
     groupKey,
     groupView,
     headerNames,
-    kindList,
     mostPreciseHome,
     normaliseTag,
     referenceFieldLabel,
@@ -90,6 +89,17 @@ import {
     timelineShown,
 } from '../src/components/worlds/entryPage.js';
 import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/worldNumbers.js';
+import {
+    KIND_ORDER,
+    groupList,
+    loadFolds,
+    matchesSearch,
+    parseSearch,
+    saveFolds,
+    searchContext,
+    sideTree,
+    whereLabel,
+} from '../src/components/worlds/worldTree.js';
 import {
     acceptable,
     addDraftFact,
@@ -2188,6 +2198,13 @@ check('"Events ▾": every dated fact, or the event entries\' lines only', () =>
     assert.deepEqual(timelineShown(null, 'events'), []);
 });
 
+// the side tree's rows (polish 5), everything unfolded: [id, depth]
+function treeRows(things, query = '') {
+    return sideTree(things, { nest: true, search: parseSearch(query), opened: new Set((things || []).map((t) => t.id)) })
+        .filter((row) => !row.more)
+        .map((row) => [row.thing.id, row.depth]);
+}
+
 check('the World tab lists a kind, its stubs last; a place under its most precise place', () => {
     const things = [
         { id: 'k', name: 'Khorol River', filed_in: ['t', 'v'] },
@@ -2196,22 +2213,23 @@ check('the World tab lists a kind, its stubs last; a place under its most precis
         { id: 't', name: 'Tsardom of Moscavia', filed_in: [] },
         { id: 'g', name: 'Greensea Strait', filed_in: ['lore-id'] },
     ];
-    const flat = kindList(things).map((row) => [row.thing.id, row.depth]);
-    assert.deepEqual(flat, [['k', 0], ['v', 0], ['t', 0], ['g', 0], ['w', 0]]);
-    const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
+    // polish 5: siblings by name, entries before stubs
+    const flat = sideTree(things, { search: parseSearch('') }).map((row) => [row.thing.id, row.depth]);
+    assert.deepEqual(flat, [['g', 0], ['k', 0], ['t', 0], ['v', 0], ['w', 0]]);
+    const nested = treeRows(things);
     // the river is filed in both the Tsardom and Velikoye, but Velikoye
     // already sits in the Tsardom, so the Tsardom drops out and the river
     // nests under Velikoye (its most precise place), two deep; the stub
     // Wattle Row too; a place in no listed place on top
-    assert.deepEqual(nested, [['t', 0], ['v', 1], ['k', 2], ['w', 2], ['g', 0]]);
-    // the search keeps what holds it, any case; a place goes under its
-    // most precise place still listed, else on top
-    assert.deepEqual(kindList(things, 'ROW', { nest: true }).map((row) => [row.thing.id, row.depth]), [['w', 0]]);
-    assert.deepEqual(kindList(things, 'e', { nest: true }).map((row) => [row.thing.id, row.depth]), [['v', 0], ['k', 1], ['w', 1], ['g', 0]]);
+    assert.deepEqual(nested, [['g', 0], ['t', 0], ['v', 1], ['k', 2], ['w', 2]]);
+    // the search keeps what holds it, any case, with its homes above it
+    // as context (polish 5)
+    assert.deepEqual(treeRows(things, 'ROW'), [['t', 0], ['v', 1], ['w', 2]]);
+    assert.deepEqual(treeRows(things, 'e'), [['g', 0], ['t', 0], ['v', 1], ['k', 2], ['w', 2]]);
     // a loop of places never hangs: each sits on top
     const loop = [{ id: 'a', name: 'A', filed_in: ['b'] }, { id: 'b', name: 'B', filed_in: ['a'] }];
-    assert.deepEqual(kindList(loop, '', { nest: true }).map((row) => [row.thing.id, row.depth]), [['a', 0], ['b', 0]]);
-    assert.deepEqual(kindList(undefined), []);
+    assert.deepEqual(treeRows(loop), [['a', 0], ['b', 0]]);
+    assert.deepEqual(sideTree(undefined), []);
 });
 
 check('the most precise place: drops a home another home already sits in', () => {
@@ -2225,21 +2243,19 @@ check('the most precise place: drops a home another home already sits in', () =>
         { id: 'tsardom', name: 'Tsardom of Moscavia', filed_in: [] },
         { id: 'halls', name: 'Great Stone Halls', filed_in: ['novograd'] },
     ];
-    const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
-    assert.deepEqual(nested, [['tsardom', 0], ['novograd', 1], ['halls', 2], ['hq', 3]]);
+    assert.deepEqual(treeRows(things), [['tsardom', 0], ['novograd', 1], ['halls', 2], ['hq', 3]]);
 
     // a cycle among the homes themselves doesn't hang: X and Y each sit in
-    // the other, so dropping homes leaves none and the first filed (X)
-    // would win, but X and Y's own loop (same as the plain loop case
-    // above) puts everything reaching it on top too
+    // the other, so they go on top; the entry filed in them keeps its
+    // first filed home, X (polish 5: only the loop's own members move)
     const selfCycle = [
         { id: 'e', name: 'Entry', filed_in: ['x', 'y'] },
         { id: 'x', name: 'X', filed_in: ['y'] },
         { id: 'y', name: 'Y', filed_in: ['x'] },
     ];
     assert.deepEqual(
-        kindList(selfCycle, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
-        [['e', 0], ['x', 0], ['y', 0]],
+        treeRows(selfCycle),
+        [['x', 0], ['e', 1], ['y', 0]],
     );
 
     // two unrelated homes (neither sits in the other): the first filed wins
@@ -2249,7 +2265,7 @@ check('the most precise place: drops a home another home already sits in', () =>
         { id: 'q', name: 'Q', filed_in: [] },
     ];
     assert.deepEqual(
-        kindList(unrelated, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        treeRows(unrelated),
         [['p', 0], ['e', 1], ['q', 0]],
     );
 
@@ -2280,7 +2296,7 @@ check('the most precise place: drops a home another home already sits in', () =>
         { id: 'p', name: 'P', filed_in: [] },
     ];
     assert.deepEqual(
-        kindList(single, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        treeRows(single),
         [['p', 0], ['e', 1]],
     );
 });
@@ -3700,6 +3716,216 @@ check('a Regenerate refused before it went out ends drafting, its versions kept'
     host.store.askNestedFacts('its drills', 990);
     host.store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_event: bad year' } });
     assert.equal(host.store.nestedHeld, false);
+});
+
+
+
+// --- polish 5: the side tree, search and the kind's list ---------------------
+
+const T_M = { id: 'm', kind: 'place', name: 'Moscavia', aka: [], filed_in: [], tag: 'nation' };
+const T_V = { id: 'v', kind: 'place', name: 'Velikoye', aka: ['the capital'], filed_in: ['m'], tag: 'city' };
+const T_K = { id: 'k', kind: 'place', name: 'Kerensk', aka: [], filed_in: ['m'], tag: 'city' };
+const T_C = { id: 'c', kind: 'place', name: 'Night Court', aka: [], filed_in: ['v'], tag: 'court' };
+const T_W = { id: 'w', kind: 'place', name: 'Wattle Row', aka: [], filed_in: ['v'], tag: null, stub: { ignored: false } };
+const T_PLACES = [T_M, T_V, T_K, T_C, T_W];
+const tById = (things) => new Map(things.map((thing) => [thing.id, thing]));
+const tRows = (rows) => rows.map((row) => (row.more ? ['more', row.more.parentId, row.more.count] : [row.thing.id, row.depth]));
+const tCtx = (things) => {
+    const byId = tById(things);
+    const byName = new Map();
+    for (const thing of things) {
+        for (const name of [thing.name, ...(thing.aka || [])]) {
+            byName.set(name.toLowerCase(), new Set([...(byName.get(name.toLowerCase()) || []), thing.id]));
+        }
+    }
+    return { byName, filedIn: (id) => byId.get(id)?.filed_in || [] };
+};
+
+check('parseSearch reads modifiers', () => {
+    assert.deepEqual(parseSearch('owl tag:City in:"Night Court" stub when:1020'), {
+        words: 'owl', tag: 'city', inName: 'night court', stub: true, when: 1020,
+    });
+    assert.deepEqual(parseSearch('in:Velikoye'), { words: '', tag: null, inName: 'velikoye', stub: false, when: null });
+});
+
+check('parseSearch reads malformed modifiers as words', () => {
+    const found = parseSearch('when:abc tag: in:"Night foo:bar');
+    assert.equal(found.when, null);
+    assert.equal(found.tag, null);
+    assert.equal(found.inName, null);
+    assert.equal(found.words, 'when:abc tag: in:"Night foo:bar');
+});
+
+check('matchesSearch in: follows homes at any depth, any filing', () => {
+    const ctx = tCtx(T_PLACES);
+    assert.equal(matchesSearch(T_C, parseSearch('in:Moscavia'), ctx), true);
+    assert.equal(matchesSearch(T_C, parseSearch('in:Velikoye'), ctx), true);
+    assert.equal(matchesSearch(T_K, parseSearch('in:Velikoye'), ctx), false);
+    // filed in two places: either one counts
+    const twice = { ...T_K, filed_in: ['m', 'c'] };
+    assert.equal(matchesSearch(twice, parseSearch('in:Velikoye'), ctx), true);
+    assert.equal(matchesSearch(T_C, parseSearch('in:Nowhereville'), ctx), false);
+    // words: a name or another name, any case; tag whole, any case
+    assert.equal(matchesSearch(T_V, parseSearch('CAPITAL'), ctx), true);
+    assert.equal(matchesSearch(T_V, parseSearch('tag:CITY'), ctx), true);
+    assert.equal(matchesSearch(T_V, parseSearch('tag:cit'), ctx), false);
+    assert.equal(matchesSearch(T_W, parseSearch('stub'), ctx), true);
+    assert.equal(matchesSearch(T_V, parseSearch('stub'), ctx), false);
+});
+
+check('matchesSearch when: by kind', () => {
+    const ctx = tCtx([]);
+    const maren = { id: 'p', kind: 'character', name: 'Maren', aka: [], filed_in: [], span: { from: 1000, until: null } };
+    const thaw = { id: 'e', kind: 'event', name: 'The Thaw', aka: [], filed_in: [], span: { from: 1010, until: 1012 } };
+    const day = { id: 'd', kind: 'event', name: 'A Day', aka: [], filed_in: [], span: { from: 1010, until: null } };
+    assert.equal(matchesSearch(maren, parseSearch('when:999'), ctx), false);
+    assert.equal(matchesSearch(maren, parseSearch('when:1000'), ctx), true);
+    assert.equal(matchesSearch(thaw, parseSearch('when:1012'), ctx), true);
+    assert.equal(matchesSearch(thaw, parseSearch('when:1013'), ctx), false);
+    assert.equal(matchesSearch(day, parseSearch('when:1011'), ctx), false);
+    assert.equal(matchesSearch({ ...T_V, span: null }, parseSearch('when:5'), ctx), true);
+});
+
+check('sideTree folds by default and opens the path', () => {
+    const folded = sideTree(T_PLACES, { nest: true, search: parseSearch(''), opened: new Set(), openPath: new Set() });
+    assert.deepEqual(tRows(folded), [['m', 0]]);
+    assert.equal(folded[0].folded, true);
+    assert.equal(folded[0].childCount, 2);
+    const path = sideTree(T_PLACES, { nest: true, search: parseSearch(''), opened: new Set(), openPath: new Set(['m', 'v']) });
+    assert.deepEqual(tRows(path), [['m', 0], ['k', 1], ['v', 1], ['c', 2], ['w', 2]]);
+    assert.equal(path.find((row) => row.thing?.id === 'k').folded, false);
+    // what the owner opened stays open
+    const opened = sideTree(T_PLACES, { nest: true, search: parseSearch(''), opened: new Set(['m']), openPath: new Set() });
+    assert.deepEqual(tRows(opened), [['m', 0], ['k', 1], ['v', 1]]);
+});
+
+check('sideTree narrows to matches with their parents as context', () => {
+    const rows = sideTree(T_PLACES, { nest: true, search: parseSearch('court'), opened: new Set(), openPath: new Set() });
+    assert.deepEqual(tRows(rows), [['m', 0], ['v', 1], ['c', 2]]);
+    assert.deepEqual(rows.map((row) => row.context), [true, true, false]);
+    assert.ok(rows.every((row) => !row.folded));
+});
+
+check('sideTree survives a filing loop', () => {
+    const a = { id: 'a', kind: 'place', name: 'A', aka: [], filed_in: ['b'] };
+    const b = { id: 'b', kind: 'place', name: 'B', aka: [], filed_in: ['a'] };
+    const rows = sideTree([a, b], { nest: true, search: parseSearch(''), opened: new Set(['a', 'b']), openPath: new Set() });
+    assert.deepEqual(tRows(rows), [['a', 0], ['b', 0]]);
+    // an entry filed in a loop keeps its home
+    const c = { id: 'c', kind: 'place', name: 'C', aka: [], filed_in: ['a'] };
+    const withC = sideTree([a, b, c], { nest: true, search: parseSearch(''), opened: new Set(['a', 'b']), openPath: new Set() });
+    assert.deepEqual(tRows(withC), [['a', 0], ['c', 1], ['b', 0]]);
+});
+
+check('sideTree shows ten children then more', () => {
+    const parent = { id: 'p', kind: 'place', name: 'Hub', aka: [], filed_in: [] };
+    const kids = Array.from({ length: 12 }, (_, n) => ({ id: `k${n}`, kind: 'place', name: `Kid ${String(n).padStart(2, '0')}`, aka: [], filed_in: ['p'] }));
+    const rows = sideTree([parent, ...kids], { nest: true, search: parseSearch(''), opened: new Set(['p']), openPath: new Set() });
+    assert.equal(rows.length, 12);
+    assert.deepEqual(tRows(rows).at(-1), ['more', 'p', 2]);
+    const all = sideTree([parent, ...kids], { nest: true, search: parseSearch(''), opened: new Set(['p']), openPath: new Set(), showAll: new Set(['p']) });
+    assert.equal(all.length, 13);
+});
+
+check('groupList by where uses a home of any kind', () => {
+    const maren = { id: 'h', kind: 'character', name: 'Maren', aka: [], filed_in: [] };
+    const bell = { id: 'i', kind: 'item', name: 'Ferry Bell', aka: [], filed_in: ['h'] };
+    const loose = { id: 'j', kind: 'item', name: 'Loose Coin', aka: [], filed_in: [] };
+    const byId = tById([maren, bell, loose]);
+    const groups = groupList([loose, bell], { by: 'where', sort: 'name', byId });
+    assert.deepEqual(groups.map((g) => [g.heading, g.rows.map((r) => r.id)]), [['In Maren', ['i']], ['Nowhere', ['j']]]);
+    const tags = groupList(T_PLACES, { by: 'tag', sort: 'name', byId: tById(T_PLACES) });
+    assert.deepEqual(tags.map((g) => g.heading), ['Cities', 'Courts', 'Nations', 'Other']);
+    const none = groupList(T_PLACES, { by: 'none', sort: 'name', byId: tById(T_PLACES) });
+    assert.equal(none.length, 1);
+    assert.equal(none[0].heading, null);
+});
+
+check('groupList sorts recent, connected and date with nulls last', () => {
+    const rows = [
+        { id: 'a', kind: 'place', name: 'Alpha', filed_in: [], changed_rev: 3, connections: 1, sort_date: null },
+        { id: 'b', kind: 'place', name: 'Beta', filed_in: [], changed_rev: 9, connections: 5, sort_date: 1020 },
+        { id: 'c', kind: 'place', name: 'Gamma', filed_in: [], changed_rev: 9, connections: 0, sort_date: 900 },
+    ];
+    const order = (sort) => groupList(rows, { by: 'none', sort, byId: tById(rows) })[0].rows.map((r) => r.id);
+    assert.deepEqual(order('name'), ['a', 'b', 'c']);
+    assert.deepEqual(order('recent'), ['b', 'c', 'a']);
+    assert.deepEqual(order('connected'), ['b', 'a', 'c']);
+    assert.deepEqual(order('date'), ['c', 'b', 'a']);
+});
+
+check('whereLabel counts the other places', () => {
+    const byId = tById(T_PLACES);
+    assert.equal(whereLabel(T_C, byId), 'in Velikoye');
+    assert.equal(whereLabel({ ...T_C, filed_in: ['v', 'm'] }, byId), 'in Velikoye +1');
+    assert.equal(whereLabel(T_M, byId), '');
+    assert.deepEqual(KIND_ORDER, ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being']);
+});
+
+check('loadFolds survives bad storage', () => {
+    const throwing = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
+    assert.deepEqual(loadFolds('w', throwing), { kinds: new Set(), entries: new Set() });
+    saveFolds('w', { kinds: new Set(['place']), entries: new Set() }, throwing);
+    const bad = { getItem: () => '{bad', setItem() {} };
+    assert.deepEqual(loadFolds('w', bad), { kinds: new Set(), entries: new Set() });
+    const kept = new Map();
+    const good = { getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => kept.set(key, value) };
+    saveFolds('w', { kinds: new Set(['place']), entries: new Set(['v']) }, good);
+    assert.deepEqual(loadFolds('w', good), { kinds: new Set(['place']), entries: new Set(['v']) });
+    assert.deepEqual(loadFolds('other', good), { kinds: new Set(), entries: new Set() });
+});
+
+check('the same error again counts; another world clears it', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    const fail = (message) => store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message } });
+    fail('Error during get_thing: no such thing');
+    assert.equal(store.error, 'Error during get_thing: no such thing');
+    assert.equal(store.errorCount, 1);
+    fail('Error during get_thing: no such thing');
+    assert.equal(store.errorCount, 2);
+    fail('Error during set_tag: bad tag');
+    assert.equal(store.errorCount, 1);
+    store.openWorld('/somewhere/else');
+    assert.equal(store.error, null);
+    assert.equal(store.errorCount, 0);
+});
+
+check('parseSearch takes a quoted tag of several words (final review I4)', () => {
+    assert.deepEqual(parseSearch('tag:"Holy  Site"'), { words: '', tag: 'holy site', inName: null, stub: false, when: null });
+    const ctx = tCtx([]);
+    assert.equal(matchesSearch({ id: 'x', kind: 'place', name: 'Shrine', aka: [], filed_in: [], tag: 'holy site' }, parseSearch('tag:"holy site"'), ctx), true);
+});
+
+check('loadFolds survives storage that throws on reading it (final review M1)', () => {
+    const before = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('SecurityError'); } });
+    try {
+        assert.deepEqual(loadFolds('w'), { kinds: new Set(), entries: new Set() });
+        saveFolds('w', { kinds: new Set(['place']), entries: new Set() });
+    } finally {
+        if (before) {
+            Object.defineProperty(globalThis, 'localStorage', before);
+        } else {
+            delete globalThis.localStorage;
+        }
+    }
+});
+
+check('in: matches any entry of that name (final review M6)', () => {
+    const stub = { id: 'sv', kind: 'character', name: 'Velikoye', aka: [], filed_in: [], stub: { ignored: false } };
+    const ctx = searchContext([stub, ...T_PLACES]);
+    assert.equal(matchesSearch(T_C, parseSearch('in:Velikoye'), ctx), true);
+});
+
+check('the same error again is a new event (final review M5)', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    const fail = () => store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_filing: no' } });
+    fail();
+    const first = store.errorSeq;
+    fail();
+    assert.ok(store.errorSeq > first);
 });
 
 if (failures.length) {

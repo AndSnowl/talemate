@@ -88,13 +88,12 @@ export default {
                 this.merging = null;
             }
         },
-        // refused: the form stays, to change and try again
-        'worlds.error'(error) {
-            if (error) {
-                for (const form of [this.renaming, this.merging]) {
-                    if (form) {
-                        form.sent = false;
-                    }
+        // refused (every time, the same error again too: `errorSeq`): the
+        // form stays, to change and try again
+        'worlds.errorSeq'() {
+            for (const form of [this.renaming, this.merging]) {
+                if (form) {
+                    form.sent = false;
                 }
             }
         },

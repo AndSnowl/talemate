@@ -4,12 +4,12 @@
         :class="{ over: dragOver }"
         data-testid="connected-group"
         :data-tag="group.tag ?? ''"
-        :title="group.tag == null && !readonly ? OTHER_DROP_TIP : undefined"
         @dragover="dragOverRow"
         @dragleave="dragOver = false"
         @drop="drop"
     >
-        <div class="group-head d-flex align-center ga-2">
+        <!-- Other's drop tip on its heading, not over its rows -->
+        <div class="group-head d-flex align-center ga-2" :title="group.tag == null && !readonly ? OTHER_DROP_TIP : undefined">
             <v-btn
                 :icon="folded ? 'mdi-chevron-right' : 'mdi-chevron-down'"
                 variant="text"
