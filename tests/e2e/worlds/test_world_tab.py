@@ -118,9 +118,9 @@ def test_worlds_home_lists_and_opens(app, page):
     scene.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert scene.get_by_role("button", name="Play").is_visible()
 
-    # the World tab shows the world's characters (their kind unfolded)
+    # the World tab shows the world's characters (their page, so their
+    # kind is unfolded)
     _world_tab(page)
-    page.get_by_test_id("kind-fold-character").click()
     page.get_by_test_id("thing-card").filter(has_text="Maren Vos").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )

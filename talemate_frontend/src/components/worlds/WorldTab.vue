@@ -29,6 +29,7 @@
                     <v-icon
                         size="small"
                         class="fold"
+                        :class="{ off: searchActive }"
                         role="button"
                         :aria-label="(kindOpen(item.kind) ? 'Fold ' : 'Unfold ') + item.label"
                         :data-testid="'kind-fold-' + item.kind"
@@ -86,6 +87,7 @@
                                 v-if="row.childCount"
                                 size="x-small"
                                 class="fold"
+                                :class="{ off: searchActive }"
                                 role="button"
                                 :aria-label="(row.folded ? 'Unfold ' : 'Fold ') + row.thing.name"
                                 data-testid="entry-fold"
@@ -191,6 +193,9 @@ export default {
             openKinds: new Set(),
             openEntries: new Set(),
             showAll: new Set(),
+            // what the owner folded on the way to the open page (kept until
+            // another page opens; "kind:<kind>" for its kind)
+            foldedOnPath: new Set(),
         };
     },
     computed: {
@@ -204,8 +209,42 @@ export default {
         search() {
             return parseSearch(this.query || '');
         },
+        searchActive() {
+            return searching(this.search);
+        },
         searchCtx() {
             return searchContext(Object.values(this.worlds.things).flat());
+        },
+        // the way to the open page: its kind and every entry above it (on a
+        // kind's own page, that kind), worked
+        // out again whenever the lists change (a new entry's page opens
+        // before they know it), never saved
+        path() {
+            const id = this.worlds.selectedThingId;
+            if (!id) {
+                // a kind's own page (Back to it, or after a delete): its kind
+                return { kind: this.kind in this.worlds.things ? this.kind : null, ids: new Set() };
+            }
+            const kind = Object.keys(this.worlds.things).find((key) => (this.worlds.things[key] || []).some((thing) => thing.id === id));
+            if (!kind) {
+                return { kind: null, ids: new Set() };
+            }
+            return { kind, ids: new Set(homesAbove(this.worlds.things[kind], id)) };
+        },
+        // the entries shown open: the owner's, and the way to the open page
+        // unless folded on it
+        openedEntries() {
+            return new Set([...this.openEntries, ...[...this.path.ids].filter((id) => !this.foldedOnPath.has(id))]);
+        },
+        // each kind's tree rows, once per render
+        trees() {
+            return Object.fromEntries(Object.keys(this.worlds.things).map((kind) => [kind, sideTree(this.worlds.things[kind], {
+                nest: true,
+                search: this.search,
+                opened: this.openedEntries,
+                showAll: this.showAll,
+                ctx: this.searchCtx,
+            })]));
         },
         liveStubCount() {
             return this.worlds.stubs.filter((stub) => !stub.ignored).length;
@@ -221,12 +260,12 @@ export default {
                 this.openKinds = kept.kinds;
                 this.openEntries = kept.entries;
                 this.showAll = new Set();
-                this.openPathTo(this.worlds.selectedThingId);
+                this.foldedOnPath = new Set();
             },
         },
-        // arriving on a page opens the way to it; it can be folded again
-        'worlds.selectedThingId'(id) {
-            this.openPathTo(id);
+        // arriving on a page opens the way to it afresh
+        'worlds.selectedThingId'() {
+            this.foldedOnPath = new Set();
         },
     },
     methods: {
@@ -236,18 +275,15 @@ export default {
         },
         // the list's rows of a kind, for the search typed
         treeOf(kind) {
-            return sideTree(this.worlds.things[kind], {
-                nest: true,
-                search: this.search,
-                opened: this.openEntries,
-                showAll: this.showAll,
-                ctx: this.searchCtx,
-            });
+            return this.trees[kind] || [];
         },
         // a kind shows its entries when unfolded, or when a search finds
         // some in it
         kindOpen(kind) {
-            return searching(this.search) ? this.treeOf(kind).length > 0 : this.openKinds.has(kind);
+            if (searching(this.search)) {
+                return this.treeOf(kind).length > 0;
+            }
+            return this.openKinds.has(kind) || (this.path.kind === kind && !this.foldedOnPath.has(`kind:${kind}`));
         },
         indent(depth) {
             return `${4 + depth * 14}px`;
@@ -258,40 +294,49 @@ export default {
                 saveFolds(id, { kinds: this.openKinds, entries: this.openEntries });
             }
         },
+        // folding takes it out of the owner's opened ones (and off the way
+        // to the open page, for now); unfolding keeps it opened
         toggleKind(kind) {
+            // while searching everything shows open: the folds wait
+            if (searching(this.search)) {
+                return;
+            }
             const kinds = new Set(this.openKinds);
-            if (kinds.has(kind)) {
+            const onPath = new Set(this.foldedOnPath);
+            if (this.kindOpen(kind)) {
                 kinds.delete(kind);
+                if (this.path.kind === kind) {
+                    onPath.add(`kind:${kind}`);
+                }
             } else {
                 kinds.add(kind);
+                onPath.delete(`kind:${kind}`);
             }
             this.openKinds = kinds;
+            this.foldedOnPath = onPath;
             this.keepFolds();
         },
         toggleEntry(id) {
+            if (searching(this.search)) {
+                return;
+            }
             const entries = new Set(this.openEntries);
-            if (entries.has(id)) {
+            const onPath = new Set(this.foldedOnPath);
+            if (this.openedEntries.has(id)) {
                 entries.delete(id);
+                if (this.path.ids.has(id)) {
+                    onPath.add(id);
+                }
             } else {
                 entries.add(id);
+                onPath.delete(id);
             }
             this.openEntries = entries;
+            this.foldedOnPath = onPath;
             this.keepFolds();
         },
         showAllOf(id) {
             this.showAll = new Set([...this.showAll, id]);
-        },
-        openPathTo(id) {
-            if (!id) {
-                return;
-            }
-            const kind = Object.keys(this.worlds.things).find((key) => (this.worlds.things[key] || []).some((thing) => thing.id === id));
-            if (!kind) {
-                return;
-            }
-            this.openKinds = new Set([...this.openKinds, kind]);
-            this.openEntries = new Set([...this.openEntries, ...homesAbove(this.worlds.things[kind], id)]);
-            this.keepFolds();
         },
         // "+": the kind's page, its prompt ready to type
         newOf(kind) {
@@ -405,6 +450,12 @@ export default {
     cursor: pointer;
     color: rgb(var(--v-theme-muted));
     flex: none;
+}
+
+/* while searching, everything shows open and the folds wait */
+.fold.off {
+    opacity: 0.35;
+    cursor: default;
 }
 
 .fold-spacer {

@@ -1157,8 +1157,7 @@ def test_tags_rename_merge(app, page):
     expect(rows).to_have_count(3)
 
     # the page groups by the new tags
-    page.get_by_test_id("thing-card").filter(has_text="Velikoye").click()
-    thing = _opened(page, "Velikoye")
+    thing = _open_thing(page, "Velikoye")
     expect(_group(thing, "Institutions").get_by_test_id("group-count")).to_have_text(
         "3"
     )

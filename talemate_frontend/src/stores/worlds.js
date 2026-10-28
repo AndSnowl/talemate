@@ -698,6 +698,9 @@ export const useWorldsStore = defineStore('worlds', {
         // the same one came (polish 5)
         error: null,
         errorCount: 0,
+        // goes up with every error, the same one again too: what a form
+        // watches to know its request was refused
+        errorSeq: 0,
         ...worldState(),
     }),
 
@@ -815,6 +818,7 @@ export const useWorldsStore = defineStore('worlds', {
         setError(message) {
             this.errorCount = message === this.error ? this.errorCount + 1 : 1;
             this.error = message;
+            this.errorSeq += 1;
         },
 
         // --- worlds -------------------------------------------------------

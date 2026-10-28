@@ -4,7 +4,7 @@
         <template v-else>
             <!-- the heading, then its controls right after it (rule 1) -->
             <div class="d-flex align-center flex-wrap ga-3 mb-1">
-                <span class="list-title" data-testid="kind-list-title">All {{ label }} · {{ shown.length }}</span>
+                <span class="list-title" data-testid="kind-list-title">All {{ label }} · {{ countLine }}</span>
                 <span class="d-flex align-center ga-1">
                     <span class="text-caption text-muted">group</span>
                     <v-btn-toggle :model-value="group" mandatory density="compact" variant="outlined" divided class="toggle" @update:model-value="setGroup">
@@ -55,8 +55,9 @@ const SORTS = [
 const KEPT_KEY = 'fantasymate:kind-list:';
 
 // A kind's full list, under its create box (polish 5, mockup 2, row A):
-// "All places · 41", then group (where / tag / none) and sort (name /
-// recent / connected / date) right after the heading, then one line per
+// "All places · 41" (and "· 2 not made yet" for its stubs), then group
+// (where / tag / none) and sort (name / recent / connected / date) right
+// after the heading, then one line per
 // entry: its name, "· in Velikoye" (`whereLabel`), "— its summary" (or
 // "· not made yet" for a stub), nothing at the far edge. The side
 // search (`query`) filters it too. The group and sort are kept per kind
@@ -90,6 +91,12 @@ export default {
             const search = parseSearch(this.query || '');
             const ctx = searchContext(this.everything);
             return this.all.filter((thing) => matchesSearch(thing, search, ctx));
+        },
+        // counted as the side tree counts its kind (entries), its stubs apart
+        countLine() {
+            const stubs = this.shown.filter((thing) => thing.stub).length;
+            const made = this.shown.length - stubs;
+            return stubs ? `${made} · ${stubs} not made yet` : `${made}`;
         },
         groups() {
             return groupList(this.shown, { by: this.group, sort: this.sort, byId: this.byId });

@@ -81,8 +81,9 @@ def _seeded(app, page, label):
 
 def test_side_tree_folds_and_remembers(app, page):
     name, _ = _seeded(app, page, "Folds")
-    # every kind starts folded
-    expect(_cards(page)).to_have_count(0)
+    # every kind starts folded, but the one whose page is open (a world
+    # opens on its characters)
+    expect(_names(page)).to_have_text(["Maren"])
 
     # opening the Night Court opens the path to it, and only that
     _open_thing(page, "Night Court")
@@ -92,21 +93,29 @@ def test_side_tree_folds_and_remembers(app, page):
     kerensk = _cards(page).filter(has_text="Kerensk")
     expect(kerensk.get_by_test_id("fold-count")).to_have_text("1")
 
-    # folded with its ▸, Places stays folded after a reload
+    # the way to a page opens only while it's open: reloaded, with no page
+    # open, the tree is folded again (final review I2)
+    page.reload()
+    dismiss_onboarding(page)
+    _open_world(page, name)
+    _world_tab(page)
+    expect(_names(page)).to_have_text(["Maren"])
+    _open_thing(page, "Night Court")
+
+    # folded with its ▸, Places stays folded after a reload (the Night
+    # Court's page is open, so no other kind is)
     page.get_by_test_id("kind-fold-place").click()
     expect(_cards(page)).to_have_count(0)
     page.reload()
     dismiss_onboarding(page)
     _open_world(page, name)
     _world_tab(page)
-    expect(_cards(page)).to_have_count(0)
+    expect(_names(page)).to_have_text(["Maren"])
 
-    # the kind's name opens its page and unfolds it, the way to the Night
-    # Court still open as it was left
+    # the kind's name opens its page and unfolds it; what was only the way
+    # to a page isn't kept open
     page.get_by_test_id("kind-place").click()
-    expect(_names(page)).to_have_text(
-        ["Moscavia", "Kerensk", "Velikoye", "Night Court"]
-    )
+    expect(_names(page)).to_have_text(["Moscavia"])
     page.get_by_test_id("create-box").wait_for(state="visible", timeout=TIMEOUT_MS)
 
     # its "+" opens the page with the prompt ready to type
@@ -131,9 +140,14 @@ def test_side_search_modifiers(app, page):
     expect(_tree(page).locator(".stub-name")).to_have_text(["Wattle Row"])
     expect(_cards(page).filter(has_text="Night Court")).to_have_count(0)
 
-    # cleared: the folds come back
+    # while searching, a fold arrow waits (final review M7)
+    search.fill("in:Velikoye")
+    _cards(page).filter(has_text="Moscavia").get_by_test_id("entry-fold").click()
+    # cleared: the folds come back, as they were
     search.fill("")
-    expect(_cards(page)).to_have_count(0)
+    expect(_names(page)).to_have_text(["Maren"])
+    page.get_by_test_id("kind-fold-place").click()
+    expect(_names(page)).to_have_text(["Maren", "Moscavia"])
 
 
 def test_stub_row_one_line(app, page):
@@ -162,7 +176,11 @@ def test_kind_page_lists_entries(app, page):
     page.get_by_test_id("kind-place").click()
     page.get_by_test_id("create-box").wait_for(state="visible", timeout=TIMEOUT_MS)
     lst = _kind_list(page)
-    expect(lst.get_by_test_id("kind-list-title")).to_have_text("All places · 6")
+    # counted as the side tree counts (entries; a stub apart), final review M8
+    expect(lst.get_by_test_id("kind-list-title")).to_have_text(
+        "All places · 5 · 1 not made yet"
+    )
+    expect(page.get_by_test_id("kind-place")).to_contain_text("5")
 
     # places group by where they are, by default; nowhere comes last
     expect(_headings(page)).to_have_text(
@@ -342,3 +360,44 @@ def test_other_tip_on_heading_only(app, page):
     assert "Dropped here" in (
         other.locator(".group-head").first.get_attribute("title") or ""
     )
+
+
+def test_new_entry_path_opens(app, page, fixed_preview):
+    """Final review I3: a new entry's page opens before the lists know it;
+    the way to it in the tree opens once they do."""
+
+    from e2e.worlds.test_drafts import _draft, _host
+    from e2e.worlds.test_drafts import _seeded as _drafts_world
+
+    _drafts_world(app, page, "NewPath")
+    fixed_preview(_host("It stands guard.", **{"in": [{"entry": "Velikoye"}]}))
+    draft = _draft(page, "place", "A watchtower in the capital.")
+    draft.get_by_test_id("draft-in-row").filter(has_text="Velikoye").get_by_role(
+        "checkbox"
+    ).check()
+    draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
+    page.get_by_test_id("thing-page").get_by_test_id("thing-name").filter(
+        has_text="The Frostwing Host"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(_names(page).filter(has_text="The Frostwing Host")).to_be_visible()
+
+
+def test_error_under_dialogs(app, page):
+    """Final review M2: an open dialog covers the error message, not the
+    other way round."""
+
+    _seeded(app, page, "ErrorDialog")
+    velikoye = _open_thing(page, "Velikoye")
+    _fail(page)
+    error = page.get_by_test_id("world-error")
+    error.wait_for(state="visible", timeout=TIMEOUT_MS)
+    velikoye.get_by_role("button", name="Delete").click()
+    page.locator(".v-overlay--active .v-overlay__scrim").first.wait_for(
+        state="visible", timeout=TIMEOUT_MS
+    )
+    box = error.bounding_box()
+    on_top = page.evaluate(
+        "([x, y]) => !!document.elementFromPoint(x, y)?.closest('[data-testid=\"world-error\"]')",
+        [box["x"] + box["width"] / 2, box["y"] + box["height"] / 2],
+    )
+    assert not on_top

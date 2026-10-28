@@ -96,6 +96,7 @@ import {
     matchesSearch,
     parseSearch,
     saveFolds,
+    searchContext,
     sideTree,
     whereLabel,
 } from '../src/components/worlds/worldTree.js';
@@ -3734,7 +3735,7 @@ const tCtx = (things) => {
     const byName = new Map();
     for (const thing of things) {
         for (const name of [thing.name, ...(thing.aka || [])]) {
-            byName.set(name.toLowerCase(), thing.id);
+            byName.set(name.toLowerCase(), new Set([...(byName.get(name.toLowerCase()) || []), thing.id]));
         }
     }
     return { byName, filedIn: (id) => byId.get(id)?.filed_in || [] };
@@ -3888,6 +3889,43 @@ check('the same error again counts; another world clears it', () => {
     store.openWorld('/somewhere/else');
     assert.equal(store.error, null);
     assert.equal(store.errorCount, 0);
+});
+
+check('parseSearch takes a quoted tag of several words (final review I4)', () => {
+    assert.deepEqual(parseSearch('tag:"Holy  Site"'), { words: '', tag: 'holy site', inName: null, stub: false, when: null });
+    const ctx = tCtx([]);
+    assert.equal(matchesSearch({ id: 'x', kind: 'place', name: 'Shrine', aka: [], filed_in: [], tag: 'holy site' }, parseSearch('tag:"holy site"'), ctx), true);
+});
+
+check('loadFolds survives storage that throws on reading it (final review M1)', () => {
+    const before = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('SecurityError'); } });
+    try {
+        assert.deepEqual(loadFolds('w'), { kinds: new Set(), entries: new Set() });
+        saveFolds('w', { kinds: new Set(['place']), entries: new Set() });
+    } finally {
+        if (before) {
+            Object.defineProperty(globalThis, 'localStorage', before);
+        } else {
+            delete globalThis.localStorage;
+        }
+    }
+});
+
+check('in: matches any entry of that name (final review M6)', () => {
+    const stub = { id: 'sv', kind: 'character', name: 'Velikoye', aka: [], filed_in: [], stub: { ignored: false } };
+    const ctx = searchContext([stub, ...T_PLACES]);
+    assert.equal(matchesSearch(T_C, parseSearch('in:Velikoye'), ctx), true);
+});
+
+check('the same error again is a new event (final review M5)', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    const fail = () => store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message: 'Error during add_filing: no' } });
+    fail();
+    const first = store.errorSeq;
+    fail();
+    assert.ok(store.errorSeq > first);
 });
 
 if (failures.length) {

@@ -11,8 +11,9 @@ export const KIND_ORDER = ['character', 'species', 'race', 'mix', 'place', 'even
 // The heading of a kind's list grouped by where, for entries filed nowhere
 export const NOWHERE_HEADING = 'Nowhere';
 
-// A search box's text as `{words, tag, inName, stub, when}`: `tag:city`
-// (the entry's own tag), `in:Velikoye` or `in:"Night Court"` (filed in it,
+// A search box's text as `{words, tag, inName, stub, when}`: `tag:city` or
+// `tag:"holy site"` (the entry's own tag), `in:Velikoye` or
+// `in:"Night Court"` (filed in it,
 // at any depth), `stub` (not made yet), `when:1020` (in the world that
 // year). Anything else, a malformed or unknown modifier too, is plain
 // words, matched against names.
@@ -21,8 +22,8 @@ export function parseSearch(text) {
     const words = [];
     for (const token of String(text || '').match(/\S+?:"[^"]*"|\S+/g) || []) {
         let match;
-        if ((match = token.match(/^tag:([^"\s]+)$/i))) {
-            found.tag = match[1].toLowerCase();
+        if ((match = token.match(/^tag:"([^"]+)"$/i) || token.match(/^tag:([^"\s]+)$/i))) {
+            found.tag = match[1].trim().split(/\s+/).join(' ').toLowerCase();
         } else if ((match = token.match(/^in:"([^"]+)"$/i) || token.match(/^in:([^"\s]+)$/i))) {
             found.inName = match[1].trim().split(/\s+/).join(' ').toLowerCase();
         } else if (/^stub$/i.test(token)) {
@@ -43,7 +44,8 @@ export function searching(search) {
 }
 
 // Whether `thing` (a `list_things` entry) answers `search`: every part
-// that's set must hold. `byName`: a lowercased name or other name -> id;
+// that's set must hold. `byName`: a lowercased name or other name -> the
+// Set of ids going by it;
 // `filedIn(id)`: the ids an entry is filed in (to follow homes upward).
 export function matchesSearch(thing, search, { byName = new Map(), filedIn = () => [] } = {}) {
     const words = (search.words || '').trim().toLowerCase();
@@ -56,7 +58,7 @@ export function matchesSearch(thing, search, { byName = new Map(), filedIn = () 
     if (search.stub && !thing.stub) {
         return false;
     }
-    if (search.inName !== null && !filedUnder(thing, byName.get(search.inName), filedIn)) {
+    if (search.inName !== null && ![...(byName.get(search.inName) || [])].some((id) => filedUnder(thing, id, filedIn))) {
         return false;
     }
     if (search.when !== null && !inWorldAt(thing, search.when)) {
@@ -141,9 +143,11 @@ const FOLDS_KEY = 'fantasymate:tree-open:';
 // The kinds and entries the owner unfolded in a world's side tree, kept in
 // the browser: `{kinds, entries}` (Sets). Empty when nothing is kept or
 // the storage can't be read (a private window); never throws.
-export function loadFolds(worldId, storage = globalThis.localStorage) {
+export function loadFolds(worldId, storage = undefined) {
     try {
-        const kept = JSON.parse(storage?.getItem(FOLDS_KEY + worldId) || 'null');
+        // read inside the try: a blocked storage throws on being reached
+        const store = storage === undefined ? globalThis.localStorage : storage;
+        const kept = JSON.parse(store?.getItem(FOLDS_KEY + worldId) || 'null');
         if (kept && Array.isArray(kept.kinds) && Array.isArray(kept.entries)) {
             return { kinds: new Set(kept.kinds), entries: new Set(kept.entries) };
         }
@@ -153,9 +157,10 @@ export function loadFolds(worldId, storage = globalThis.localStorage) {
     return { kinds: new Set(), entries: new Set() };
 }
 
-export function saveFolds(worldId, { kinds, entries }, storage = globalThis.localStorage) {
+export function saveFolds(worldId, { kinds, entries }, storage = undefined) {
     try {
-        storage?.setItem(FOLDS_KEY + worldId, JSON.stringify({ kinds: [...kinds], entries: [...entries] }));
+        const store = storage === undefined ? globalThis.localStorage : storage;
+        store?.setItem(FOLDS_KEY + worldId, JSON.stringify({ kinds: [...kinds], entries: [...entries] }));
     } catch {
         // storage refused: the folds last as long as the page
     }
@@ -223,7 +228,8 @@ export function sideTree(things, { nest = false, search = null, opened = new Set
     return out;
 }
 
-// what `matchesSearch` needs, from the entries at hand (the World tab
+// what `matchesSearch` needs, from the entries at hand (`byName`: a name
+// to every entry that goes by it) (the World tab
 // passes every kind's, so `in:` reaches across kinds)
 export function searchContext(things) {
     const byId = new Map((things || []).map((thing) => [thing.id, thing]));
@@ -231,8 +237,8 @@ export function searchContext(things) {
     for (const thing of things || []) {
         for (const name of [thing.name, ...(thing.aka || [])]) {
             const key = String(name).trim().split(/\s+/).join(' ').toLowerCase();
-            if (key && !byName.has(key)) {
-                byName.set(key, thing.id);
+            if (key) {
+                byName.set(key, new Set([...(byName.get(key) || []), thing.id]));
             }
         }
     }
