@@ -12,23 +12,9 @@ from __future__ import annotations
 import random
 import re
 
+from talemate.languages.check import stem as _stem
 from talemate.languages.generator import fits, roll, validate_language
 from talemate.languages.models import Language
-
-_LONG_ENDINGS = ("ov", "ev", "in")
-_VOWELS = "aoyieu"
-
-
-def _stem(word: str) -> str:
-    """`word` lower-cased, with one crude ending cut: "ov"/"ev"/"in" from a
-    word of five letters or more, else a final vowel from one of four or
-    more."""
-    word = word.lower()
-    if len(word) >= 5 and word.endswith(_LONG_ENDINGS):
-        return word[:-2]
-    if len(word) >= 4 and word[-1] in _VOWELS:
-        return word[:-1]
-    return word
 
 
 def real_word_hits(names: list[str], real: list[str]) -> list[str]:
