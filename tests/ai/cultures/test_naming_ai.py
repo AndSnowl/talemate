@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from ai.cultures.conftest import load_cultures
 from ai.cultures.scenarios import NPC_ROLES, SCENARIOS, seed_scenario
-from talemate.cultures.generator import fits
+from talemate.languages.generator import fits
 from talemate.cultures.store import WorldStore
 
 ROLE_CONTENT = dict(NPC_ROLES)

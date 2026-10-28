@@ -3,8 +3,8 @@ import re
 
 import pytest
 
-from talemate.cultures.models import GeneratorDef, Language
-from talemate.cultures.generator import (
+from talemate.languages.models import GeneratorDef, Language
+from talemate.languages.generator import (
     GeneratorError,
     fits,
     name_fits,

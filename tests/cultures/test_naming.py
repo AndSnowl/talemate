@@ -3,7 +3,7 @@ import random
 from pathlib import Path
 
 from talemate.character import Character
-from talemate.cultures.generator import roll
+from talemate.languages.generator import roll
 from talemate.cultures.models import CharacterCulture, Culture, GeneratorDef, Language
 from talemate.cultures.naming import (
     CultureGuess,

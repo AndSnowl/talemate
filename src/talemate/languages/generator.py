@@ -1,11 +1,11 @@
-"""Rule-based name generator and "fits" check for cultures/languages.
+"""Rule-based name generator and "fits" check for languages.
 
 This module turns the small pattern language used by `Language.categories`
 and `GeneratorDef.patterns` into either randomly generated names (`roll`) or
 a predicate that tells whether an existing name plausibly belongs to a
-language (`fits`). The pattern syntax below is also the culture *import
-file format* for these fields, so any change here must stay in sync with
-the importer and with Task 7's authoring skill.
+language (`fits`). The pattern syntax below is the language format for
+these fields: whatever writes a language's categories and patterns (a
+model, an import, the owner by hand) writes this syntax.
 
 Rule syntax
 -----------
@@ -88,7 +88,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Union
 
-from talemate.cultures.models import GeneratorDef, Language
+from talemate.languages.models import GeneratorDef, Language
 
 __all__ = [
     "GeneratorError",
@@ -159,8 +159,8 @@ def pattern_letters(pattern: str) -> set[str]:
 
     The pattern's own trailing ``*n`` weight suffix (if any) is stripped
     first, so it never contributes a false category-letter candidate. Used
-    by the importer's lint to flag an uppercase letter that isn't one of
-    the language's defined categories (see `lint_culture_file`) — such a
+    to flag an uppercase letter that isn't one of the language's defined
+    categories — such a
     letter is still accepted by the parser, which treats it as literal
     text, so this never raises on its own.
     """

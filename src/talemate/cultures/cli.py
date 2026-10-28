@@ -13,7 +13,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from talemate.cultures.exchange import CultureFile, lint_culture_file
-from talemate.cultures.generator import GeneratorError, fits, roll, validate_language
+from talemate.languages.generator import GeneratorError, fits, roll, validate_language
 
 
 def cmd_validate(args: argparse.Namespace) -> int:

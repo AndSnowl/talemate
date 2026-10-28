@@ -30,7 +30,7 @@ import re
 from collections import Counter
 from typing import Iterable
 
-from talemate.cultures.generator import fits
+from talemate.languages.generator import fits
 from talemate.cultures.models import Language
 from talemate.cultures.words import COMMON_WORDS, clean_name, mid_sentence_occurrence
 

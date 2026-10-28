@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, get_args
 
-from talemate.cultures.generator import name_fits
+from talemate.languages.generator import name_fits
 from talemate.cultures.models import (
     Culture,
     CultureShare,

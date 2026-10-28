@@ -60,7 +60,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from .generator import (
+from talemate.languages.generator import (
     GeneratorError,
     name_fits,
     pattern_letters,

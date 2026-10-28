@@ -8,7 +8,7 @@ from talemate.cultures.context import (
     build_culture_section,
     language_traits,
 )
-from talemate.cultures.generator import fits
+from talemate.languages.generator import fits
 from talemate.cultures.models import (
     CharacterCulture,
     Culture,

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from talemate.cultures.exchange import CultureFile
-from talemate.cultures.generator import fits, roll, validate_language
+from talemate.languages.generator import fits, roll, validate_language
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "ai" / "data"
 FILES = {

@@ -21,7 +21,7 @@ import structlog
 
 from talemate.agents.base import DynamicInstruction, set_processing
 from talemate.cultures.detect import _capitalised_runs, name_key
-from talemate.cultures.generator import name_fits
+from talemate.languages.generator import name_fits
 from talemate.cultures.models import (
     CharacterCulture,
     Culture,

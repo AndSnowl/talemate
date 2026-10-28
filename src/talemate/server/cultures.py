@@ -29,7 +29,7 @@ import pydantic
 import structlog
 
 import talemate.instance as instance
-from talemate.cultures import generator
+from talemate.languages import generator
 from talemate.cultures.exchange import apply_import, export_culture, preview_import
 from talemate.cultures.lexicon import build_scene_lexicon
 from talemate.cultures.models import (

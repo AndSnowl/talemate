@@ -12,6 +12,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from talemate.languages.models import (  # noqa: F401
+    DictionaryEntry,
+    GeneratorDef,
+    Language,
+    Phrase,
+)
+
 __all__ = [
     "GeneratorDef",
     "Phrase",
@@ -43,54 +50,6 @@ def slugify(name: str) -> str:
     ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", ascii_only).strip("-")
     return slug.lower()
-
-
-class GeneratorDef(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    name: str
-    use: Literal["people", "places", "things"]
-    patterns: list[str]
-    reject: list[str] = Field(default_factory=list)
-    capitalize: bool = True
-    min_length: int = 2
-    max_length: int = 24
-
-
-class Phrase(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: str
-    category: str
-    original: str
-    translation: str
-    breakdown: list[tuple[str, str]] = Field(default_factory=list)
-    usage: str = ""
-
-
-class DictionaryEntry(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    word: str
-    meaning: str
-    part: str = ""
-    notes: str = ""
-
-
-class Language(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    name: str
-    level: Literal["description", "naming", "full"]
-    writable: bool = True
-    sound: str = ""
-    categories: dict[str, str] = Field(default_factory=dict)
-    syllable_notes: list[str] = Field(default_factory=list)
-    generators: list[GeneratorDef] = Field(default_factory=list)
-    grammar: str = ""
-    dictionary: list[DictionaryEntry] = Field(default_factory=list)
-    phrases: list[Phrase] = Field(default_factory=list)
 
 
 class Holiday(BaseModel):

@@ -15,7 +15,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import Literal
 
-from talemate.cultures.generator import GeneratorError, name_fits, roll
+from talemate.languages.generator import GeneratorError, name_fits, roll
 from talemate.cultures.models import Culture, GeneratorDef, Language
 from talemate.cultures.scene_context import SceneCultures
 from talemate.cultures.words import clean_name

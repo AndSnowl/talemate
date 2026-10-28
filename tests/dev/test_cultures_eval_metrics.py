@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from talemate.cultures.generator import fits
+from talemate.languages.generator import fits
 from talemate.cultures.models import Language
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
