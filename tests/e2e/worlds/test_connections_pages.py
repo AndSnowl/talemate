@@ -155,7 +155,8 @@ def test_stub_lists_page_and_expand(app, page, fixed_preview):
     )
     assert page.get_by_test_id("thing-card").filter(has_text="Yelena").count() == 0
     stub_item = page.get_by_test_id("stub-item").filter(has_text="Yelena")
-    assert "not made yet" in stub_item.inner_text()
+    # polish 5: "not made yet" is its tooltip, so the row stays one line
+    assert "not made yet" in (stub_item.get_attribute("title") or "")
 
     # a stub's own page: its card and what mentions it
     stub_item.click()

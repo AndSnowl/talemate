@@ -45,6 +45,7 @@ from e2e.worlds.test_connections_create import (
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
+    _find_in_tree,
     _fact,
     _open_thing,
     _open_world,
@@ -897,7 +898,7 @@ def test_hard_repoint(app, page):
     _world_tab(page)
 
     # the stub's own card offers it too
-    page.get_by_test_id("stub-item").filter(has_text="the Old Capital").click()
+    _find_in_tree(page, "the Old Capital", "stub-item").click()
     stub_page = _opened(page, "the Old Capital")
     expect(stub_page.get_by_test_id("stub-repoint")).to_have_count(1)
 
@@ -1005,7 +1006,7 @@ def test_stub_draft_shows_connected_and_mentioned(app, page, fixed_preview):
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
-    page.get_by_test_id("stub-item").filter(has_text="Wattle Row").click()
+    _find_in_tree(page, "Wattle Row", "stub-item").click()
     stub = _opened(page, "Wattle Row")
     stub.get_by_test_id("stub-panel").get_by_role("button", name="Expand").click()
     box = page.get_by_test_id("create-box")

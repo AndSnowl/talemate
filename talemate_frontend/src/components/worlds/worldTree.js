@@ -99,26 +99,17 @@ function inWorldAt(thing, year) {
     return span.from <= year;
 }
 
-// The side tree of one kind: `[{thing, depth, folded, childCount,
-// context}]`, plus `{more: {parentId, count}, depth}` rows. Entries come
-// before stubs, otherwise in the listing's order; with `nest`, each sits
-// once under its most precise home among them (a loop has no top). All
-// folded but `opened` (the owner's) and `openPath` (above the open page);
-// an open entry shows its first `limit` children, then "more", unless
-// it's in `showAll`. With a `search` that asks something, only matches
-// show, with their homes as `context`, everything open.
-export function sideTree(things, { nest = false, search = null, opened = new Set(), openPath = new Set(), showAll = new Set(), limit = 10, ctx = null } = {}) {
-    const listed = things || [];
-    const ordered = [...listed.filter((thing) => !thing.stub), ...listed.filter((thing) => thing.stub)];
-    const byId = new Map(ordered.map((thing) => [thing.id, thing]));
+// Each entry's parent in the side tree (id -> id or null): its most
+// precise home among `things`; an entry whose homes loop back to it sits
+// at the top (judged on the homes as filed). Without `nest`, all at the top.
+export function treeParents(things, nest = true) {
+    const byId = new Map((things || []).map((thing) => [thing.id, thing]));
     const parents = new Map();
-    for (const thing of ordered) {
+    for (const thing of things || []) {
         parents.set(thing.id, nest ? mostPreciseHome(thing.filed_in, byId) : null);
     }
-    // a home that leads back round to the entry has no top: each entry
-    // whose homes loop sits at the top (judged on the homes as filed)
     const filed = new Map(parents);
-    for (const thing of ordered) {
+    for (const thing of things || []) {
         const seen = new Set([thing.id]);
         for (let up = filed.get(thing.id); up; up = filed.get(up)) {
             if (up === thing.id) {
@@ -131,6 +122,58 @@ export function sideTree(things, { nest = false, search = null, opened = new Set
             seen.add(up);
         }
     }
+    return parents;
+}
+
+// The ids above `id` in its kind's side tree, nearest first: what opens
+// when its page is opened
+export function homesAbove(things, id) {
+    const parents = treeParents(things);
+    const out = [];
+    for (let up = parents.get(id); up && !out.includes(up); up = parents.get(up)) {
+        out.push(up);
+    }
+    return out;
+}
+
+const FOLDS_KEY = 'fantasymate:tree-open:';
+
+// The kinds and entries the owner unfolded in a world's side tree, kept in
+// the browser: `{kinds, entries}` (Sets). Empty when nothing is kept or
+// the storage can't be read (a private window); never throws.
+export function loadFolds(worldId, storage = globalThis.localStorage) {
+    try {
+        const kept = JSON.parse(storage?.getItem(FOLDS_KEY + worldId) || 'null');
+        if (kept && Array.isArray(kept.kinds) && Array.isArray(kept.entries)) {
+            return { kinds: new Set(kept.kinds), entries: new Set(kept.entries) };
+        }
+    } catch {
+        // a bad value or no storage: start folded
+    }
+    return { kinds: new Set(), entries: new Set() };
+}
+
+export function saveFolds(worldId, { kinds, entries }, storage = globalThis.localStorage) {
+    try {
+        storage?.setItem(FOLDS_KEY + worldId, JSON.stringify({ kinds: [...kinds], entries: [...entries] }));
+    } catch {
+        // storage refused: the folds last as long as the page
+    }
+}
+
+// The side tree of one kind: `[{thing, depth, folded, childCount,
+// context}]`, plus `{more: {parentId, count}, depth}` rows. Entries come
+// before stubs, each by name; with `nest`, each sits
+// once under its most precise home among them (a loop has no top). All
+// folded but `opened` (the owner's) and `openPath` (above the open page);
+// an open entry shows its first `limit` children, then "more", unless
+// it's in `showAll`. With a `search` that asks something, only matches
+// show, with their homes as `context`, everything open.
+export function sideTree(things, { nest = false, search = null, opened = new Set(), openPath = new Set(), showAll = new Set(), limit = 10, ctx = null } = {}) {
+    const listed = things || [];
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    const ordered = [...listed.filter((thing) => !thing.stub).sort(byName), ...listed.filter((thing) => thing.stub).sort(byName)];
+    const parents = treeParents(ordered, nest);
     const children = new Map();
     const roots = [];
     for (const thing of ordered) {

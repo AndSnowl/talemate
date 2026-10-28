@@ -25,6 +25,8 @@ from e2e.worlds.test_drafts import _draft
 from e2e.worlds.test_new_scene import SEND_SPY_JS, _sent
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
+    _clear_search,
+    _find_in_tree,
     _fact,
     _open_thing,
     _open_world,
@@ -323,7 +325,6 @@ def test_add_filing_and_role(app, page):
     page.evaluate(SEND_SPY_JS)
     _open_world(page, name)
     _world_tab(page)
-    world_things = page.get_by_test_id("world-list")
     thing = _open_thing(page, "Tsar Dmitry IV")
     entry_in = thing.get_by_test_id("entry-in")
     expect(entry_in.get_by_test_id("in-row")).to_have_count(2)
@@ -359,9 +360,8 @@ def test_add_filing_and_role(app, page):
     expect(
         entry_in.get_by_test_id("in-row").filter(has_text="The Frost Council")
     ).to_be_visible()
-    world_things.get_by_test_id("stub-item").filter(
-        has_text="The Frost Council"
-    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+    _find_in_tree(page, "The Frost Council", "stub-item")
+    _clear_search(page)
 
     # the role changed, then "End this" in 1010: its span shows
     court = entry_in.get_by_test_id("in-row").filter(has_text="The Night Court")
@@ -744,7 +744,7 @@ def test_change_tag_moves_group(app, page):
     expect(_row(_group(thing, "Customs"), "Wattle Row")).to_be_visible()
 
     # the list is reached by keyboard: Enter on an entry opens it
-    card = page.get_by_test_id("thing-card").filter(has_text="Tsar Dmitry IV")
+    card = _find_in_tree(page, "Tsar Dmitry IV")
     card.focus()
     page.keyboard.press("Enter")
     _opened(page, "Tsar Dmitry IV")

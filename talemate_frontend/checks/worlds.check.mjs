@@ -79,7 +79,6 @@ import {
     groupKey,
     groupView,
     headerNames,
-    kindList,
     mostPreciseHome,
     normaliseTag,
     referenceFieldLabel,
@@ -93,8 +92,10 @@ import { formatNumber, ownMeasures, rangeText } from '../src/components/worlds/w
 import {
     KIND_ORDER,
     groupList,
+    loadFolds,
     matchesSearch,
     parseSearch,
+    saveFolds,
     sideTree,
     whereLabel,
 } from '../src/components/worlds/worldTree.js';
@@ -2196,6 +2197,13 @@ check('"Events ▾": every dated fact, or the event entries\' lines only', () =>
     assert.deepEqual(timelineShown(null, 'events'), []);
 });
 
+// the side tree's rows (polish 5), everything unfolded: [id, depth]
+function treeRows(things, query = '') {
+    return sideTree(things, { nest: true, search: parseSearch(query), opened: new Set((things || []).map((t) => t.id)) })
+        .filter((row) => !row.more)
+        .map((row) => [row.thing.id, row.depth]);
+}
+
 check('the World tab lists a kind, its stubs last; a place under its most precise place', () => {
     const things = [
         { id: 'k', name: 'Khorol River', filed_in: ['t', 'v'] },
@@ -2204,22 +2212,23 @@ check('the World tab lists a kind, its stubs last; a place under its most precis
         { id: 't', name: 'Tsardom of Moscavia', filed_in: [] },
         { id: 'g', name: 'Greensea Strait', filed_in: ['lore-id'] },
     ];
-    const flat = kindList(things).map((row) => [row.thing.id, row.depth]);
-    assert.deepEqual(flat, [['k', 0], ['v', 0], ['t', 0], ['g', 0], ['w', 0]]);
-    const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
+    // polish 5: siblings by name, entries before stubs
+    const flat = sideTree(things, { search: parseSearch('') }).map((row) => [row.thing.id, row.depth]);
+    assert.deepEqual(flat, [['g', 0], ['k', 0], ['t', 0], ['v', 0], ['w', 0]]);
+    const nested = treeRows(things);
     // the river is filed in both the Tsardom and Velikoye, but Velikoye
     // already sits in the Tsardom, so the Tsardom drops out and the river
     // nests under Velikoye (its most precise place), two deep; the stub
     // Wattle Row too; a place in no listed place on top
-    assert.deepEqual(nested, [['t', 0], ['v', 1], ['k', 2], ['w', 2], ['g', 0]]);
-    // the search keeps what holds it, any case; a place goes under its
-    // most precise place still listed, else on top
-    assert.deepEqual(kindList(things, 'ROW', { nest: true }).map((row) => [row.thing.id, row.depth]), [['w', 0]]);
-    assert.deepEqual(kindList(things, 'e', { nest: true }).map((row) => [row.thing.id, row.depth]), [['v', 0], ['k', 1], ['w', 1], ['g', 0]]);
+    assert.deepEqual(nested, [['g', 0], ['t', 0], ['v', 1], ['k', 2], ['w', 2]]);
+    // the search keeps what holds it, any case, with its homes above it
+    // as context (polish 5)
+    assert.deepEqual(treeRows(things, 'ROW'), [['t', 0], ['v', 1], ['w', 2]]);
+    assert.deepEqual(treeRows(things, 'e'), [['g', 0], ['t', 0], ['v', 1], ['k', 2], ['w', 2]]);
     // a loop of places never hangs: each sits on top
     const loop = [{ id: 'a', name: 'A', filed_in: ['b'] }, { id: 'b', name: 'B', filed_in: ['a'] }];
-    assert.deepEqual(kindList(loop, '', { nest: true }).map((row) => [row.thing.id, row.depth]), [['a', 0], ['b', 0]]);
-    assert.deepEqual(kindList(undefined), []);
+    assert.deepEqual(treeRows(loop), [['a', 0], ['b', 0]]);
+    assert.deepEqual(sideTree(undefined), []);
 });
 
 check('the most precise place: drops a home another home already sits in', () => {
@@ -2233,21 +2242,19 @@ check('the most precise place: drops a home another home already sits in', () =>
         { id: 'tsardom', name: 'Tsardom of Moscavia', filed_in: [] },
         { id: 'halls', name: 'Great Stone Halls', filed_in: ['novograd'] },
     ];
-    const nested = kindList(things, '', { nest: true }).map((row) => [row.thing.id, row.depth]);
-    assert.deepEqual(nested, [['tsardom', 0], ['novograd', 1], ['halls', 2], ['hq', 3]]);
+    assert.deepEqual(treeRows(things), [['tsardom', 0], ['novograd', 1], ['halls', 2], ['hq', 3]]);
 
     // a cycle among the homes themselves doesn't hang: X and Y each sit in
-    // the other, so dropping homes leaves none and the first filed (X)
-    // would win, but X and Y's own loop (same as the plain loop case
-    // above) puts everything reaching it on top too
+    // the other, so they go on top; the entry filed in them keeps its
+    // first filed home, X (polish 5: only the loop's own members move)
     const selfCycle = [
         { id: 'e', name: 'Entry', filed_in: ['x', 'y'] },
         { id: 'x', name: 'X', filed_in: ['y'] },
         { id: 'y', name: 'Y', filed_in: ['x'] },
     ];
     assert.deepEqual(
-        kindList(selfCycle, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
-        [['e', 0], ['x', 0], ['y', 0]],
+        treeRows(selfCycle),
+        [['x', 0], ['e', 1], ['y', 0]],
     );
 
     // two unrelated homes (neither sits in the other): the first filed wins
@@ -2257,7 +2264,7 @@ check('the most precise place: drops a home another home already sits in', () =>
         { id: 'q', name: 'Q', filed_in: [] },
     ];
     assert.deepEqual(
-        kindList(unrelated, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        treeRows(unrelated),
         [['p', 0], ['e', 1], ['q', 0]],
     );
 
@@ -2288,7 +2295,7 @@ check('the most precise place: drops a home another home already sits in', () =>
         { id: 'p', name: 'P', filed_in: [] },
     ];
     assert.deepEqual(
-        kindList(single, '', { nest: true }).map((row) => [row.thing.id, row.depth]),
+        treeRows(single),
         [['p', 0], ['e', 1]],
     );
 });
@@ -3784,11 +3791,11 @@ check('sideTree folds by default and opens the path', () => {
     assert.equal(folded[0].folded, true);
     assert.equal(folded[0].childCount, 2);
     const path = sideTree(T_PLACES, { nest: true, search: parseSearch(''), opened: new Set(), openPath: new Set(['m', 'v']) });
-    assert.deepEqual(tRows(path), [['m', 0], ['v', 1], ['c', 2], ['w', 2], ['k', 1]]);
+    assert.deepEqual(tRows(path), [['m', 0], ['k', 1], ['v', 1], ['c', 2], ['w', 2]]);
     assert.equal(path.find((row) => row.thing?.id === 'k').folded, false);
     // what the owner opened stays open
     const opened = sideTree(T_PLACES, { nest: true, search: parseSearch(''), opened: new Set(['m']), openPath: new Set() });
-    assert.deepEqual(tRows(opened), [['m', 0], ['v', 1], ['k', 1]]);
+    assert.deepEqual(tRows(opened), [['m', 0], ['k', 1], ['v', 1]]);
 });
 
 check('sideTree narrows to matches with their parents as context', () => {
@@ -3852,6 +3859,19 @@ check('whereLabel counts the other places', () => {
     assert.equal(whereLabel({ ...T_C, filed_in: ['v', 'm'] }, byId), 'in Velikoye +1');
     assert.equal(whereLabel(T_M, byId), '');
     assert.deepEqual(KIND_ORDER, ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being']);
+});
+
+check('loadFolds survives bad storage', () => {
+    const throwing = { getItem() { throw new Error('denied'); }, setItem() { throw new Error('denied'); } };
+    assert.deepEqual(loadFolds('w', throwing), { kinds: new Set(), entries: new Set() });
+    saveFolds('w', { kinds: new Set(['place']), entries: new Set() }, throwing);
+    const bad = { getItem: () => '{bad', setItem() {} };
+    assert.deepEqual(loadFolds('w', bad), { kinds: new Set(), entries: new Set() });
+    const kept = new Map();
+    const good = { getItem: (key) => kept.get(key) ?? null, setItem: (key, value) => kept.set(key, value) };
+    saveFolds('w', { kinds: new Set(['place']), entries: new Set(['v']) }, good);
+    assert.deepEqual(loadFolds('w', good), { kinds: new Set(['place']), entries: new Set(['v']) });
+    assert.deepEqual(loadFolds('other', good), { kinds: new Set(), entries: new Set() });
 });
 
 if (failures.length) {
