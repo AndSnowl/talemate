@@ -96,14 +96,21 @@ words (never linguistics terms). Reply with the numbered questions only."""
 
 
 def chat_messages(
-    url: str, messages: list[dict], max_tokens: int = 6000, timeout: float = 1200
+    url: str,
+    messages: list[dict],
+    max_tokens: int = 6000,
+    timeout: float = 1200,
+    thinking: bool | None = None,
 ) -> str:
     """POST `messages` to koboldcpp's OpenAI-compatible chat endpoint (as
     `probe_fact_roundtrip.chat` does, with a whole message list); return the
-    reply with any think block stripped."""
-    payload = json.dumps(
-        {"messages": messages, "temperature": 0.7, "max_tokens": max_tokens}
-    ).encode("utf-8")
+    reply with any think block stripped. `thinking` False switches a
+    thinking model's reasoning off (`chat_template_kwargs.enable_thinking`);
+    None leaves the model's default."""
+    body: dict = {"messages": messages, "temperature": 0.7, "max_tokens": max_tokens}
+    if thinking is not None:
+        body["chat_template_kwargs"] = {"enable_thinking": thinking}
+    payload = json.dumps(body).encode("utf-8")
     request = urllib.request.Request(
         f"{url}/v1/chat/completions",
         data=payload,
@@ -319,6 +326,12 @@ def main() -> None:
     parser.add_argument("--label", required=True)
     parser.add_argument("--versions", type=int, default=2)
     parser.add_argument("--fake", action="store_true")
+    parser.add_argument("--max-tokens", type=int, default=6000)
+    parser.add_argument(
+        "--no-think",
+        action="store_true",
+        help="switch a thinking model's reasoning off",
+    )
     args = parser.parse_args()
 
     labels = json.loads(LABELS.read_text())
@@ -330,9 +343,16 @@ def main() -> None:
     else:
         url = ai_helpers.koboldcpp_url()
         model = ai_helpers.koboldcpp_model(url)
-        send = lambda messages: chat_messages(url, messages)  # noqa: E731
+        thinking = False if args.no_think else None
+        send = lambda messages: chat_messages(  # noqa: E731
+            url, messages, max_tokens=args.max_tokens, thinking=thinking
+        )
 
-    run_result: dict = {"model": model}
+    run_result: dict = {
+        "model": model,
+        "max_tokens": args.max_tokens,
+        "thinking": "off" if args.no_think else "default",
+    }
     results["runs"][args.label] = run_result
 
     def save():
