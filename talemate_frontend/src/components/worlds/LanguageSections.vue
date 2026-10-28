@@ -1,8 +1,10 @@
 <template>
     <div class="language-sections" :data-testid="'language-view-' + tab">
-        <!-- Language: how it sounds, its sounds, syllables and grammar -->
+        <!-- Language: how it sounds, its sounds, syllables and grammar on
+             the left; related languages and its name rules on the right -->
         <template v-if="tab === 'language'">
             <div class="d-flex align-center flex-wrap ga-1 mb-2">
+                <span class="text-caption text-muted mr-2" data-testid="language-counts">{{ words.length }} words · {{ phrases.length }} phrases · {{ generators.length }} name rules</span>
                 <v-btn size="small" variant="text" prepend-icon="mdi-file-replace-outline" @click="importing = !importing">Import a new version</v-btn>
                 <v-btn size="small" variant="text" prepend-icon="mdi-download" @click="exportFile">Export</v-btn>
             </div>
@@ -49,31 +51,6 @@
                             </div>
                         </v-card-text>
                     </v-card>
-                </v-col>
-
-                <v-col cols="12" md="6">
-                    <v-card class="mb-4" variant="tonal">
-                        <v-card-title class="text-caption text-uppercase text-muted">Counts</v-card-title>
-                        <v-card-text>
-                            <div class="d-flex flex-wrap ga-6" data-testid="language-counts">
-                                <div>
-                                    <div class="text-h6 font-weight-regular">{{ words.length }}</div>
-                                    <div class="text-caption text-muted">words</div>
-                                </div>
-                                <div>
-                                    <div class="text-h6 font-weight-regular">{{ phrases.length }}</div>
-                                    <div class="text-caption text-muted">phrases</div>
-                                </div>
-                                <div>
-                                    <div class="text-h6 font-weight-regular">{{ generators.length }}</div>
-                                    <div class="text-caption text-muted">name rules</div>
-                                </div>
-                            </div>
-                        </v-card-text>
-                    </v-card>
-                </v-col>
-
-                <v-col cols="12" md="6">
                     <v-card class="mb-4" variant="tonal" data-testid="language-inventory">
                         <v-card-title class="text-caption text-uppercase text-muted">Sound inventory</v-card-title>
                         <v-card-text>
@@ -91,9 +68,6 @@
                             </div>
                         </v-card-text>
                     </v-card>
-                </v-col>
-
-                <v-col cols="12" md="6">
                     <v-card class="mb-4" variant="tonal">
                         <v-card-title class="text-caption text-uppercase text-muted">Syllable notes</v-card-title>
                         <v-card-text>
@@ -112,8 +86,22 @@
                             <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="local.syllable_notes.push('')">Add note</v-btn>
                         </v-card-text>
                     </v-card>
+                    <v-card class="mb-4" variant="tonal">
+                        <v-card-title class="text-caption text-uppercase text-muted">Grammar notes</v-card-title>
+                        <v-card-text>
+                            <v-textarea
+                                v-model="local.grammar"
+                                rows="3"
+                                auto-grow
+                                hide-details
+                                variant="outlined"
+                                density="compact"
+                                data-testid="language-grammar"
+                                @blur="saveRules()"
+                            ></v-textarea>
+                        </v-card-text>
+                    </v-card>
                 </v-col>
-
                 <v-col cols="12" md="6">
                     <v-card class="mb-4" variant="tonal" data-testid="language-links">
                         <v-card-title class="text-caption text-uppercase text-muted">Related languages</v-card-title>
@@ -142,181 +130,165 @@
                             </div>
                         </v-card-text>
                     </v-card>
-                </v-col>
-
-                <v-col cols="12">
-                    <v-card class="mb-4" variant="tonal">
-                        <v-card-title class="text-caption text-uppercase text-muted">Grammar notes</v-card-title>
-                        <v-card-text>
-                            <v-textarea
-                                v-model="local.grammar"
-                                rows="3"
-                                auto-grow
-                                hide-details
-                                variant="outlined"
-                                density="compact"
-                                data-testid="language-grammar"
-                                @blur="saveRules()"
-                            ></v-textarea>
-                        </v-card-text>
-                    </v-card>
+                    <div class="mt-2" data-testid="language-rules">
+                        <div class="d-flex align-center ga-2 mb-2">
+                            <v-btn size="small" variant="tonal" prepend-icon="mdi-dice-multiple-outline" @click="reroll()">Roll all</v-btn>
+                            <v-btn size="small" variant="text" @click="toggleAdvanced">{{ advanced ? 'Close advanced edit' : 'Advanced edit' }}</v-btn>
+                        </div>
+                        <div v-if="advanced" class="mb-3">
+                            <v-textarea v-model="rulesText" rows="10" auto-grow variant="outlined" density="compact" hide-details class="rules-text"></v-textarea>
+                            <div class="d-flex align-center ga-2 mt-1">
+                                <v-btn size="small" color="primary" variant="tonal" @click="saveAdvanced">Save rules</v-btn>
+                                <span v-if="rulesError" class="text-caption text-error">{{ rulesError }}</span>
+                            </div>
+                        </div>
+                        <v-row data-testid="language-samples">
+                            <v-col v-for="(gen, g) in local.generators" :key="gen.id" cols="12">
+                                <v-card variant="tonal" class="pa-4 h-100" data-testid="language-generator">
+                                    <div class="d-flex align-center ga-2 mb-2">
+                                        <v-icon size="small" color="muted">{{ useIcon(gen.use) }}</v-icon>
+                                        <span class="text-body-1 flex-grow-1">{{ gen.name }}</span>
+                                        <span class="text-caption text-muted">{{ useLabel(gen.use) }}</span>
+                                        <v-btn icon="mdi-dice-multiple-outline" size="small" variant="tonal" density="comfortable" aria-label="Roll" title="Roll new sample names" @click="reroll()"></v-btn>
+                                    </div>
+                                    <div class="d-flex flex-wrap ga-1 mb-3">
+                                        <v-chip v-for="(name, i) in (samples[gen.id] || []).slice(0, 12)" :key="i" size="small" class="font-italic text-foreign">{{ name }}</v-chip>
+                                        <span v-if="!(samples[gen.id] || []).length" class="text-muted text-caption">Roll to see names.</span>
+                                    </div>
+                                    <div class="text-caption text-muted mb-1">Patterns</div>
+                                    <div v-for="(pattern, i) in gen.patterns" :key="'p' + i" class="d-flex align-center ga-1 mb-1">
+                                        <v-text-field v-model="local.generators[g].patterns[i]" density="compact" variant="outlined" hide-details class="font-mono pattern-field" @blur="saveRules()"></v-text-field>
+                                        <v-btn icon size="small" variant="text" aria-label="Remove pattern" @click="removePattern(g, i)">
+                                            <v-icon size="small" color="delete">mdi-close</v-icon>
+                                        </v-btn>
+                                    </div>
+                                    <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="local.generators[g].patterns.push('')">Add pattern</v-btn>
+                                </v-card>
+                            </v-col>
+                            <v-col v-if="!local.generators.length" cols="12">
+                                <v-card variant="tonal" class="pa-4 text-muted text-center">This language has no name rules yet.</v-card>
+                            </v-col>
+                        </v-row>
+                    </div>
                 </v-col>
             </v-row>
         </template>
 
-        <!-- Dictionary: words, meanings and parts -->
-        <div v-else-if="tab === 'dictionary'" data-testid="language-words">
-            <div class="d-flex align-center flex-wrap ga-2 mb-3">
-                <span class="text-muted text-caption">{{ local.words.length }} words · showing {{ filteredWords.length }}</span>
-                <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="addWord">Add word</v-btn>
-                <v-text-field
-                    v-model="search"
-                    density="compact"
-                    variant="outlined"
-                    hide-details
-                    clearable
-                    prepend-inner-icon="mdi-magnify"
-                    placeholder="Word or meaning"
-                    class="flex-grow-0 search-field"
-                ></v-text-field>
-            </div>
-            <v-table density="compact" class="word-table">
-                <thead>
-                    <tr>
-                        <th>Word</th>
-                        <th>Meaning</th>
-                        <th>Part</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="row in filteredWords" :key="row.index" data-testid="language-word">
-                        <td class="word-col">
-                            <v-text-field v-model="local.words[row.index].word" density="compact" variant="plain" hide-details class="font-italic text-foreign" @blur="saveWords"></v-text-field>
-                        </td>
-                        <td class="meaning-col">
-                            <v-text-field v-model="local.words[row.index].meaning" density="compact" variant="plain" hide-details @blur="saveWords"></v-text-field>
-                        </td>
-                        <td class="part-col">
-                            <v-text-field v-model="local.words[row.index].part" density="compact" variant="plain" hide-details @blur="saveWords"></v-text-field>
-                        </td>
-                        <td class="text-right">
-                            <v-btn icon size="small" variant="text" :aria-label="'Remove ' + local.words[row.index].word" @click="removeWord(row.index)">
-                                <v-icon size="small" color="delete">mdi-close</v-icon>
-                            </v-btn>
-                        </td>
-                    </tr>
-                    <tr v-if="!filteredWords.length">
-                        <td colspan="4" class="text-center text-muted">No words found.</td>
-                    </tr>
-                </tbody>
-            </v-table>
-        </div>
-
-        <!-- Phrases: by category, with word-by-word breakdowns -->
-        <div v-else-if="tab === 'phrases'" data-testid="language-phrases">
-            <v-row>
-                <v-col v-for="group in groupedPhrases" :key="group.category" cols="12" md="6">
-                    <v-card variant="tonal" class="pa-4 h-100">
-                        <v-card-title class="text-caption text-uppercase text-muted pa-0 mb-2">{{ group.category }}</v-card-title>
-                        <v-card-text class="pa-0">
-                            <div v-for="phrase in group.items" :key="phrase.id" class="phrase-row py-2" data-testid="language-phrase">
-                                <div class="d-flex align-start ga-1">
-                                    <div class="flex-grow-1">
-                                        <div class="font-italic text-foreign">{{ phrase.original }}</div>
-                                        <div>{{ phrase.translation }}</div>
-                                        <div v-if="phrase.usage" class="text-caption text-muted">{{ phrase.usage }}</div>
-                                        <div v-if="(phrase.breakdown || []).length" class="d-flex flex-wrap ga-1 mt-1">
-                                            <v-chip v-for="(part, i) in phrase.breakdown" :key="i" size="x-small" variant="tonal">{{ part[0] }}: {{ part[1] }}</v-chip>
-                                        </div>
-                                    </div>
-                                    <v-btn icon size="small" variant="text" :aria-label="'Edit ' + phrase.original" @click="openPhrase(phrase)">
-                                        <v-icon size="small">mdi-pencil</v-icon>
-                                    </v-btn>
-                                    <v-btn icon size="small" variant="text" :aria-label="'Remove ' + phrase.original" @click="removePhrase(phrase)">
+        <!-- Words & phrases: the dictionary beside the phrases -->
+        <v-row v-else-if="tab === 'words'">
+            <v-col cols="12" md="7">
+                <div data-testid="language-words">
+                    <div class="d-flex align-center flex-wrap ga-2 mb-3">
+                        <span class="text-muted text-caption">{{ local.words.length }} words · showing {{ filteredWords.length }}</span>
+                        <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="addWord">Add word</v-btn>
+                        <v-text-field
+                            v-model="search"
+                            density="compact"
+                            variant="outlined"
+                            hide-details
+                            clearable
+                            prepend-inner-icon="mdi-magnify"
+                            placeholder="Word or meaning"
+                            class="flex-grow-0 search-field"
+                        ></v-text-field>
+                    </div>
+                    <v-table density="compact" class="word-table">
+                        <thead>
+                            <tr>
+                                <th>Word</th>
+                                <th>Meaning</th>
+                                <th>Part</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in filteredWords" :key="row.index" data-testid="language-word">
+                                <td class="word-col">
+                                    <v-text-field v-model="local.words[row.index].word" density="compact" variant="plain" hide-details class="font-italic text-foreign" @blur="saveWords"></v-text-field>
+                                </td>
+                                <td class="meaning-col">
+                                    <v-text-field v-model="local.words[row.index].meaning" density="compact" variant="plain" hide-details @blur="saveWords"></v-text-field>
+                                </td>
+                                <td class="part-col">
+                                    <v-text-field v-model="local.words[row.index].part" density="compact" variant="plain" hide-details @blur="saveWords"></v-text-field>
+                                </td>
+                                <td class="text-right">
+                                    <v-btn icon size="small" variant="text" :aria-label="'Remove ' + local.words[row.index].word" @click="removeWord(row.index)">
                                         <v-icon size="small" color="delete">mdi-close</v-icon>
                                     </v-btn>
-                                </div>
-                            </div>
-                        </v-card-text>
-                    </v-card>
-                </v-col>
-                <v-col v-if="!groupedPhrases.length" cols="12">
-                    <v-card variant="tonal" class="pa-4 text-muted text-center">No phrases yet.</v-card>
-                </v-col>
-            </v-row>
-            <v-btn variant="tonal" size="small" prepend-icon="mdi-plus" class="mt-2" @click="openPhrase(null)">Add phrase</v-btn>
-
-            <v-dialog v-model="phraseDialog" max-width="560">
-                <v-card class="pa-4">
-                    <v-card-title class="pa-0 mb-3">{{ phraseForm.id ? 'Edit phrase' : 'Add phrase' }}</v-card-title>
-                    <v-card-text class="pa-0 d-flex flex-column ga-3">
-                        <v-text-field v-model="phraseForm.category" label="Category (greeting, curse, saying…)" density="compact" variant="outlined" hide-details></v-text-field>
-                        <v-text-field v-model="phraseForm.original" label="In the language" density="compact" variant="outlined" hide-details></v-text-field>
-                        <v-text-field v-model="phraseForm.translation" label="Translation" density="compact" variant="outlined" hide-details></v-text-field>
-                        <v-text-field v-model="phraseForm.usage" label="When it's said" density="compact" variant="outlined" hide-details></v-text-field>
-                        <div>
-                            <div class="text-caption text-muted mb-1">Word by word</div>
-                            <div v-for="(part, i) in phraseForm.breakdown" :key="i" class="d-flex align-center ga-1 mb-1">
-                                <v-text-field v-model="part[0]" placeholder="word" density="compact" variant="outlined" hide-details></v-text-field>
-                                <v-text-field v-model="part[1]" placeholder="meaning" density="compact" variant="outlined" hide-details></v-text-field>
-                                <v-btn icon size="small" variant="text" aria-label="Remove part" @click="phraseForm.breakdown.splice(i, 1)">
-                                    <v-icon size="small" color="delete">mdi-close</v-icon>
-                                </v-btn>
-                            </div>
-                            <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="phraseForm.breakdown.push(['', ''])">Add word</v-btn>
-                        </div>
-                    </v-card-text>
-                    <v-card-actions class="pa-0 mt-3">
-                        <v-spacer></v-spacer>
-                        <v-btn variant="text" @click="phraseDialog = false">Cancel</v-btn>
-                        <v-btn color="primary" variant="tonal" :disabled="!phraseValid" @click="savePhrase">Save</v-btn>
-                    </v-card-actions>
-                </v-card>
-            </v-dialog>
-        </div>
-
-        <!-- Name rules: each rule set with sample names and its patterns -->
-        <div v-else-if="tab === 'rules'" data-testid="language-rules">
-            <div class="d-flex align-center ga-2 mb-2">
-                <v-btn size="small" variant="tonal" prepend-icon="mdi-dice-multiple-outline" @click="reroll()">Roll all</v-btn>
-                <v-btn size="small" variant="text" @click="toggleAdvanced">{{ advanced ? 'Close advanced edit' : 'Advanced edit' }}</v-btn>
-            </div>
-            <div v-if="advanced" class="mb-3">
-                <v-textarea v-model="rulesText" rows="10" auto-grow variant="outlined" density="compact" hide-details class="rules-text"></v-textarea>
-                <div class="d-flex align-center ga-2 mt-1">
-                    <v-btn size="small" color="primary" variant="tonal" @click="saveAdvanced">Save rules</v-btn>
-                    <span v-if="rulesError" class="text-caption text-error">{{ rulesError }}</span>
+                                </td>
+                            </tr>
+                            <tr v-if="!filteredWords.length">
+                                <td colspan="4" class="text-center text-muted">No words found.</td>
+                            </tr>
+                        </tbody>
+                    </v-table>
                 </div>
-            </div>
-            <v-row data-testid="language-samples">
-                <v-col v-for="(gen, g) in local.generators" :key="gen.id" cols="12" md="6">
-                    <v-card variant="tonal" class="pa-4 h-100" data-testid="language-generator">
-                        <div class="d-flex align-center ga-2 mb-2">
-                            <v-icon size="small" color="muted">{{ useIcon(gen.use) }}</v-icon>
-                            <span class="text-body-1 flex-grow-1">{{ gen.name }}</span>
-                            <span class="text-caption text-muted">{{ useLabel(gen.use) }}</span>
-                            <v-btn icon="mdi-dice-multiple-outline" size="small" variant="tonal" density="comfortable" aria-label="Roll" title="Roll new sample names" @click="reroll()"></v-btn>
-                        </div>
-                        <div class="d-flex flex-wrap ga-1 mb-3">
-                            <v-chip v-for="(name, i) in (samples[gen.id] || []).slice(0, 12)" :key="i" size="small" class="font-italic text-foreign">{{ name }}</v-chip>
-                            <span v-if="!(samples[gen.id] || []).length" class="text-muted text-caption">Roll to see names.</span>
-                        </div>
-                        <div class="text-caption text-muted mb-1">Patterns</div>
-                        <div v-for="(pattern, i) in gen.patterns" :key="'p' + i" class="d-flex align-center ga-1 mb-1">
-                            <v-text-field v-model="local.generators[g].patterns[i]" density="compact" variant="outlined" hide-details class="font-mono" @blur="saveRules()"></v-text-field>
-                            <v-btn icon size="small" variant="text" aria-label="Remove pattern" @click="removePattern(g, i)">
-                                <v-icon size="small" color="delete">mdi-close</v-icon>
-                            </v-btn>
-                        </div>
-                        <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="local.generators[g].patterns.push('')">Add pattern</v-btn>
-                    </v-card>
-                </v-col>
-                <v-col v-if="!local.generators.length" cols="12">
-                    <v-card variant="tonal" class="pa-4 text-muted text-center">This language has no name rules yet.</v-card>
-                </v-col>
-            </v-row>
-        </div>
+            </v-col>
+            <v-col cols="12" md="5">
+                <div data-testid="language-phrases">
+                    <v-row>
+                        <v-col v-for="group in groupedPhrases" :key="group.category" cols="12">
+                            <v-card variant="tonal" class="pa-4 h-100">
+                                <v-card-title class="text-caption text-uppercase text-muted pa-0 mb-2">{{ group.category }}</v-card-title>
+                                <v-card-text class="pa-0">
+                                    <div v-for="phrase in group.items" :key="phrase.id" class="phrase-row py-2" data-testid="language-phrase">
+                                        <div class="d-flex align-start ga-1">
+                                            <div class="flex-grow-1">
+                                                <div class="font-italic text-foreign">{{ phrase.original }}</div>
+                                                <div>{{ phrase.translation }}</div>
+                                                <div v-if="phrase.usage" class="text-caption text-muted">{{ phrase.usage }}</div>
+                                                <div v-if="(phrase.breakdown || []).length" class="d-flex flex-wrap ga-1 mt-1">
+                                                    <v-chip v-for="(part, i) in phrase.breakdown" :key="i" size="x-small" variant="tonal">{{ part[0] }}: {{ part[1] }}</v-chip>
+                                                </div>
+                                            </div>
+                                            <v-btn icon size="small" variant="text" :aria-label="'Edit ' + phrase.original" @click="openPhrase(phrase)">
+                                                <v-icon size="small">mdi-pencil</v-icon>
+                                            </v-btn>
+                                            <v-btn icon size="small" variant="text" :aria-label="'Remove ' + phrase.original" @click="removePhrase(phrase)">
+                                                <v-icon size="small" color="delete">mdi-close</v-icon>
+                                            </v-btn>
+                                        </div>
+                                    </div>
+                                </v-card-text>
+                            </v-card>
+                        </v-col>
+                        <v-col v-if="!groupedPhrases.length" cols="12">
+                            <v-card variant="tonal" class="pa-4 text-muted text-center">No phrases yet.</v-card>
+                        </v-col>
+                    </v-row>
+                    <v-btn variant="tonal" size="small" prepend-icon="mdi-plus" class="mt-2" @click="openPhrase(null)">Add phrase</v-btn>
+
+                    <v-dialog v-model="phraseDialog" max-width="560">
+                        <v-card class="pa-4">
+                            <v-card-title class="pa-0 mb-3">{{ phraseForm.id ? 'Edit phrase' : 'Add phrase' }}</v-card-title>
+                            <v-card-text class="pa-0 d-flex flex-column ga-3">
+                                <v-text-field v-model="phraseForm.category" label="Category (greeting, curse, saying…)" density="compact" variant="outlined" hide-details></v-text-field>
+                                <v-text-field v-model="phraseForm.original" label="In the language" density="compact" variant="outlined" hide-details></v-text-field>
+                                <v-text-field v-model="phraseForm.translation" label="Translation" density="compact" variant="outlined" hide-details></v-text-field>
+                                <v-text-field v-model="phraseForm.usage" label="When it's said" density="compact" variant="outlined" hide-details></v-text-field>
+                                <div>
+                                    <div class="text-caption text-muted mb-1">Word by word</div>
+                                    <div v-for="(part, i) in phraseForm.breakdown" :key="i" class="d-flex align-center ga-1 mb-1">
+                                        <v-text-field v-model="part[0]" placeholder="word" density="compact" variant="outlined" hide-details></v-text-field>
+                                        <v-text-field v-model="part[1]" placeholder="meaning" density="compact" variant="outlined" hide-details></v-text-field>
+                                        <v-btn icon size="small" variant="text" aria-label="Remove part" @click="phraseForm.breakdown.splice(i, 1)">
+                                            <v-icon size="small" color="delete">mdi-close</v-icon>
+                                        </v-btn>
+                                    </div>
+                                    <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="phraseForm.breakdown.push(['', ''])">Add word</v-btn>
+                                </div>
+                            </v-card-text>
+                            <v-card-actions class="pa-0 mt-3">
+                                <v-spacer></v-spacer>
+                                <v-btn variant="text" @click="phraseDialog = false">Cancel</v-btn>
+                                <v-btn color="primary" variant="tonal" :disabled="!phraseValid" @click="savePhrase">Save</v-btn>
+                            </v-card-actions>
+                        </v-card>
+                    </v-dialog>
+                </div>
+            </v-col>
+        </v-row>
     </div>
 </template>
 
@@ -367,7 +339,7 @@ export default {
     components: { LanguageImport },
     props: {
         thing: { type: Object, required: true },
-        // 'language' | 'dictionary' | 'phrases' | 'rules'
+        // 'language' | 'words'
         tab: { type: String, required: true },
     },
     setup() {
@@ -601,10 +573,11 @@ export default {
 <style scoped>
 /* never stretched across a wide window: controls stay near their content */
 .language-sections {
-    max-width: 1100px;
+    max-width: 1400px;
 }
-.word-table {
-    max-width: 820px;
+/* a pattern is short: its box stays near its remove button */
+.pattern-field {
+    flex: 0 1 220px;
 }
 .small-field {
     flex: 0 1 220px;

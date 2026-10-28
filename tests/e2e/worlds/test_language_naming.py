@@ -54,7 +54,7 @@ def _pick_language(page, menu, language="Sorauan"):
 
 def _words(page, language):
     thing = _open_thing(page, language)
-    thing.get_by_test_id("language-tab-dictionary").click()
+    thing.get_by_test_id("language-tab-words").click()
     words = thing.get_by_test_id("language-words")
     words.get_by_test_id("language-word").first.wait_for(state="visible", timeout=TIMEOUT_MS)
     return words.locator("input").evaluate_all("els => els.map((e) => e.value)")

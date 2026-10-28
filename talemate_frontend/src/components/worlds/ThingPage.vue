@@ -678,9 +678,7 @@ const HIDDEN_FIELDS = [
 const LANGUAGE_TABS = [
     { value: 'about', title: 'About' },
     { value: 'language', title: 'Language' },
-    { value: 'dictionary', title: 'Dictionary' },
-    { value: 'phrases', title: 'Phrases' },
-    { value: 'rules', title: 'Name rules' },
+    { value: 'words', title: 'Words & phrases' },
 ];
 
 // what a being's existence means for it
