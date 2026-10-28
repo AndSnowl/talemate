@@ -54,10 +54,13 @@ def _pick_language(page, menu, language="Sorauan"):
 
 def _words(page, language):
     thing = _open_thing(page, language)
-    thing.get_by_test_id("language-tab-words").click()
+    thing.get_by_test_id("language-tab-lexicon").click()
     words = thing.get_by_test_id("language-words")
     words.get_by_test_id("language-word").first.wait_for(state="visible", timeout=TIMEOUT_MS)
-    return words.locator("input").evaluate_all("els => els.map((e) => e.value)")
+    return [
+        row.locator("td").first.inner_text().strip()
+        for row in words.get_by_test_id("language-word").all()
+    ]
 
 
 def test_make_a_name_inserts_and_saves_word(app, page, fixed_language):

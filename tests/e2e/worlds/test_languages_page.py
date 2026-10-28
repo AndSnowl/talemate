@@ -72,12 +72,11 @@ def test_import_pasted_language_and_see_its_page(app, page):
     expect(thing.get_by_test_id("thing-name")).to_have_text("Velskar", timeout=TIMEOUT_MS)
     # About (facts and connections) is the default tab
     expect(thing.get_by_test_id("language-tab-about")).to_have_attribute("aria-selected", "true")
-    thing.get_by_test_id("language-tab-words").click()
+    thing.get_by_test_id("language-tab-lexicon").click()
     words = thing.get_by_test_id("language-words")
-    # the dictionary edits in place: its words are field values
     expect(words.get_by_test_id("language-word")).to_have_count(8, timeout=TIMEOUT_MS)
-    values = words.locator("input").evaluate_all("els => els.map((e) => e.value)")
-    assert "veltasun" in values and "the great fort" in values
+    expect(words).to_contain_text("veltasun")
+    expect(words).to_contain_text("the great fort")
 
 
 def test_blocking_problem_disables_import(app, page):
@@ -140,7 +139,7 @@ def test_phrases_tab_shows_breakdown_and_adds_a_phrase(app, page):
     _open_world(page, name)
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
-    thing.get_by_test_id("language-tab-words").click()
+    thing.get_by_test_id("language-tab-lexicon").click()
     phrases = thing.get_by_test_id("language-phrases")
     expect(phrases).to_contain_text("Kor vel!", timeout=TIMEOUT_MS)
     phrases.get_by_role("button", name="Add phrase").click()
