@@ -9861,3 +9861,51 @@ async def test_list_things_extra_fields_cost(plugin):
     things = await _listed(plugin, "place")
     assert len(things) == 150
     assert time.monotonic() - started < 2.0
+
+
+async def test_list_things_cost_with_many_facts(plugin):
+    """Final review I1: a kind's list stays quick in a full world (300
+    places, 8 facts each, each place filed in a hub and naming the last)."""
+
+    import time
+
+    await plugin.handle(
+        {
+            "type": "worlds",
+            "action": "create_world",
+            "name": "Full",
+            "present_year": 1026,
+        }
+    )
+    world = plugin.world
+    with world.revision(Source.manual()) as rev:
+        hub = rev.create_thing("place", {"name": "Hub"})
+        last = hub
+        for n in range(300):
+            place = rev.create_thing(
+                "place",
+                {"name": f"Place {n}", "filings": [{"target": hub, "role": None}]},
+            )
+            rev.add_fact(place, "description", f"Next to {ref(last)}.")
+            for k in range(7):
+                rev.add_fact(place, "history", f"Fact {k} of place {n}.")
+            last = place
+    # warm (the first read after a big write pays the disk), then typical
+    await _act(plugin, "list_things", kind="place")
+    times = []
+    for _ in range(3):
+        started = time.monotonic()
+        await _act(plugin, "list_things", kind="place")
+        times.append(time.monotonic() - started)
+    things = {t["name"]: t for t in _last(plugin, "list_things")["data"]["things"]}
+    assert len(things) == 301
+    assert things["Hub"]["connections"] == 301
+    # against one read of the world (the work a list can't skip), timed
+    # the same way, so a busy machine slows both alike
+    reads = []
+    for _ in range(3):
+        started = time.monotonic()
+        world.view().things()
+        reads.append(time.monotonic() - started)
+    took, read = sorted(times)[1], sorted(reads)[1]
+    assert took < 8 * read, (times, reads)

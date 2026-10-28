@@ -410,6 +410,7 @@ from talemate.world.filing import (
     filings_of,
     mentioned_in,
     roles_in_use,
+    stored_filings,
     tag_heading,
     tag_of,
     tags_in_use,
@@ -2678,16 +2679,22 @@ class WorldsPlugin(Plugin):
         payload = ListThingsPayload(**data)
         world = self._require_world()
         view = world.view()
-        # how many live entries are filed in each one (its connections)
+        # how many live entries are filed in each one now (its connections),
+        # read once from the stored filings: no per-entry checks
+        everything = [other for other in view.things() if not other.stub_ignored]
+        live_ids = {other.id for other in everything}
         filed_here: dict[str, int] = {}
-        for other in view.things():
-            if other.stub_ignored:
-                continue
-            for target in {filing.target for filing in filings_of(view, other.id)}:
+        for other in everything:
+            targets = {
+                filing.target
+                for filing in stored_filings(other)
+                if filing.until is None and filing.target in live_ids
+            }
+            for target in targets:
                 filed_here[target] = filed_here.get(target, 0) + 1
         things = []
-        for state in view.things(payload.kind):
-            if state.stub_ignored:
+        for state in everything:
+            if state.kind != payload.kind:
                 continue
             entry: dict[str, Any] = {
                 "id": state.id,
@@ -2721,9 +2728,13 @@ class WorldsPlugin(Plugin):
             entry["changed_rev"] = max(
                 (change.source_rev for change in world.timeline(state.id)), default=0
             )
-            entry["connections"] = len(mentions(view, state.id)) + filed_here.get(
-                state.id, 0
+            # the facts of other entries that name it, counted, not rendered
+            named = sum(
+                1
+                for owner, _fact in view.referencing(state.id, any_date=True)
+                if owner != state.id
             )
+            entry["connections"] = named + filed_here.get(state.id, 0)
             entry["span"] = span
             entry["sort_date"] = (span or {}).get("from") or (
                 min(dated) if dated else None

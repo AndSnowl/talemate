@@ -51,6 +51,7 @@ from .view import ThingState, WorldView
 log = structlog.get_logger("talemate.world.filing")
 
 __all__ = [
+    "stored_filings",
     "FIELD_ROLES",
     "OTHER_HEADING",
     "Filing",
@@ -173,6 +174,13 @@ def _live(
         for filing in stored
         if (include_ended or filing_live(filing, view.at)) and exists(filing.target)
     ]
+
+
+def stored_filings(state: ThingState) -> list[Filing]:
+    """The entry's filings as stored, from a state already read (no
+    lookups: a list of many entries reads them all at once)."""
+
+    return _stored_filings(state)
 
 
 def filings_of(view: WorldView, thing_id: str, *, live: bool = True) -> list[Filing]:
