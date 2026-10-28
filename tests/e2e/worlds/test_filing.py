@@ -1128,12 +1128,20 @@ def test_tags_rename_merge(app, page):
     )
     tab = page.get_by_test_id("tags-tab")
     rows = tab.get_by_test_id("tag-row")
-    expect(rows.filter(has_text="institution")).to_contain_text("2 entries")
-    expect(rows.filter(has_text="institution")).to_contain_text("Institutions")
-    expect(rows.filter(has_text="school")).to_contain_text("1 entry")
+
+    def row(tag):
+        # by the row's own tag: while a merge is in flight, the merging
+        # row's form shows its target tag too
+        return rows.filter(
+            has=page.locator(".tag-name", has_text=re.compile(f"^{tag}$"))
+        )
+
+    expect(row("institution")).to_contain_text("2 entries")
+    expect(row("institution")).to_contain_text("Institutions")
+    expect(row("school")).to_contain_text("1 entry")
 
     # renaming onto a tag in use is offered as a merge instead
-    rows.filter(has_text="school").get_by_test_id("tag-rename").click()
+    row("school").get_by_test_id("tag-rename").click()
     field = tab.get_by_test_id("tag-rename-field").locator("input")
     field.fill("Institution")
     expect(tab.get_by_test_id("tag-rename-taken")).to_contain_text("merge into it")
@@ -1144,16 +1152,16 @@ def test_tags_rename_merge(app, page):
     tab.get_by_role("button", name="Rename", exact=True).click()
     sent = _wait_sent(page, "rename_tag")
     assert (sent["old"], sent["new"]) == ("school", "academy")
-    expect(rows.filter(has_text="academy")).to_contain_text("1 entry")
-    expect(rows.filter(has_text="school")).to_have_count(0)
+    expect(row("academy")).to_contain_text("1 entry")
+    expect(row("school")).to_have_count(0)
 
     # merge into another tag
-    rows.filter(has_text="academy").get_by_test_id("tag-merge").click()
+    row("academy").get_by_test_id("tag-merge").click()
     _pick(page, tab.get_by_test_id("tag-merge-into"), "institution")
     tab.get_by_role("button", name="Merge", exact=True).click()
     sent = _wait_sent(page, "merge_tag")
     assert (sent["from"], sent["into"]) == ("academy", "institution")
-    expect(rows.filter(has_text="institution")).to_contain_text("3 entries")
+    expect(row("institution")).to_contain_text("3 entries")
     expect(rows).to_have_count(3)
 
     # the page groups by the new tags
