@@ -4,6 +4,35 @@
             <span class="text-overline text-muted">Other names</span>
             <v-spacer></v-spacer>
             <v-btn v-if="!adding" variant="text" size="small" color="accent" prepend-icon="mdi-plus" :disabled="busy" @click="startAdd">Add other name</v-btn>
+            <!-- its name in one of the world's languages (languages 3a) -->
+            <v-menu v-if="thingId && languages.length" location="bottom end">
+                <template #activator="{ props: menuProps }">
+                    <v-btn v-bind="menuProps" variant="text" size="small" color="accent" prepend-icon="mdi-translate" :disabled="busy || nameInPending" data-testid="name-it-in">Name it in…</v-btn>
+                </template>
+                <v-list density="compact">
+                    <v-list-item v-for="language in languages" :key="language.id" role="menuitem" :title="language.name" @click="worlds.nameIn(thingId, language.id)"></v-list-item>
+                </v-list>
+            </v-menu>
+        </div>
+
+        <!-- a name in another language, for review before it's kept -->
+        <div v-if="nameIn" class="name-in-review pa-2 my-1" data-testid="name-in-review">
+            <div v-if="nameIn.pending" class="text-caption text-muted">Naming it in {{ languageName(nameIn.language_id) }}…</div>
+            <div v-else-if="nameIn.error" class="text-caption text-error">{{ nameIn.error }}</div>
+            <template v-else-if="nameIn.result">
+                <div class="d-flex align-baseline flex-wrap ga-2">
+                    <span class="text-caption text-muted">In {{ languageName(nameIn.language_id) }}:</span>
+                    <span class="foreign-name" data-testid="name-in-name">{{ nameIn.result.name }}</span>
+                </div>
+                <div v-if="nameIn.result.new_words.length" class="text-caption text-muted">
+                    New words: {{ nameIn.result.new_words.map((w) => `${w.word} (${w.meaning})`).join(', ') }}
+                </div>
+                <div class="d-flex ga-2 mt-1">
+                    <v-btn size="small" color="accent" variant="tonal" @click="worlds.applyNameIn(thingId, nameIn.language_id, nameIn.result)">Keep it</v-btn>
+                    <v-btn size="small" variant="text" @click="worlds.nameIn(thingId, nameIn.language_id)">Reroll</v-btn>
+                    <v-btn size="small" variant="text" @click="worlds.clearNameIn()">Cancel</v-btn>
+                </div>
+            </template>
         </div>
         <div v-if="!aka.length && !adding" class="text-body-2 text-muted">None yet.</div>
 
@@ -25,7 +54,7 @@
                 <v-btn variant="text" size="small" :disabled="busy" @click="editing = null">Cancel</v-btn>
             </template>
             <template v-else>
-                <span class="flex-grow-1 aka-name">{{ entry.name }}</span>
+                <span class="flex-grow-1 aka-name">{{ entry.name }}<v-chip v-if="entry.language" size="x-small" label variant="tonal" class="ml-2" data-testid="aka-language">{{ languageName(entry.language) }}</v-chip></span>
                 <v-select
                     :model-value="entry.tag"
                     :items="tags"
@@ -79,7 +108,7 @@
 </template>
 
 <script>
-import { akaAdded, akaChanged, akaEveryday, akaRemoved } from '@/stores/worlds.js';
+import { akaAdded, akaChanged, akaEveryday, akaRemoved, useWorldsStore } from '@/stores/worlds.js';
 
 // The other names (`aka`) of a page or a draft: add, rename, tag (proper
 // or common), the everyday pick (one common name at most) and remove.
@@ -94,8 +123,13 @@ export default {
         // the name an other name can't repeat
         mainName: { type: String, default: '' },
         busy: { type: Boolean, default: false },
+        // a saved page's id: offers "Name it in…" (none on a draft)
+        thingId: { type: String, default: null },
     },
     emits: ['save'],
+    setup() {
+        return { worlds: useWorldsStore() };
+    },
     data() {
         return {
             tags: ['proper', 'common'],
@@ -114,7 +148,25 @@ export default {
             }
         },
     },
+    computed: {
+        languages() {
+            return this.worlds.things.language || [];
+        },
+        nameIn() {
+            const result = this.worlds.nameInResult;
+            return result && result.thing_id === this.thingId ? result : null;
+        },
+        nameInPending() {
+            return !!this.nameIn?.pending;
+        },
+    },
+    mounted() {
+        if (this.thingId && !this.worlds.things.language) this.worlds.listThings('language');
+    },
     methods: {
+        languageName(id) {
+            return this.languages.find((l) => l.id === id)?.name || 'a deleted language';
+        },
         akaChanged,
         akaEveryday,
         akaRemoved,
@@ -168,5 +220,13 @@ export default {
     flex: none;
     min-width: 54px;
     color: rgb(var(--v-theme-accent));
+}
+.name-in-review {
+    border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+    border-radius: 4px;
+}
+.foreign-name {
+    font-style: italic;
+    color: rgb(var(--v-theme-foreign));
 }
 </style>

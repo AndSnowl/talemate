@@ -429,6 +429,8 @@ def set_fixed_preview(root: Path, preview: dict) -> None:
 FIXED_FACTS_FILE = "e2e-fixed-facts.json"
 FIXED_GROUP_SYNOPSIS_FILE = "e2e-fixed-group-synopsis.json"
 FIXED_GROUP_ADD_FILE = "e2e-fixed-group-add.json"
+# language naming (definitions and picks, languages 3a)
+FIXED_LANGUAGE_FILE = "e2e-fixed-language.json"
 
 
 def set_fixed_reply(root: Path, file_name: str, reply: dict) -> None:

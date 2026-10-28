@@ -24,6 +24,8 @@
             v-model="prompt"
             v-model:picks="picks"
             v-model:refs="refs"
+            :context-thing-id="null"
+            :context-kind="kind"
             :label="kind === 'mix' ? 'Describe it (optional)' : 'Describe it'"
             :placeholder="placeholder"
             :rows="2"

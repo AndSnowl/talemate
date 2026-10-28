@@ -140,6 +140,9 @@ async def pick(
     candidate when it picks something else. `reply` stands in for the
     model's (browser tests)."""
 
+    if reply is None and client is None:
+        # no model to choose: the rules made them all, the first will do
+        return candidates[0], ""
     if reply is None:
         reply = await _pick_reply(client, language, candidates, what)
     chosen = _reply_object(reply).get("pick")

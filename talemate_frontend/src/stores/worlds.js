@@ -696,6 +696,13 @@ export const useWorldsStore = defineStore('worlds', {
         languagePreview: null,
         languageSamples: {},
         languageExport: null,
+        // right-click naming: the languages in reach of a box's page
+        // (`language_menu`), rolled names with definitions, a suggested
+        // definition, and a name in another language for review
+        languageMenu: null,
+        languageNames: null,
+        languageDefinition: null,
+        nameInResult: null,
         connected: false,
         worlds: [],
         currentWorld: null,
@@ -1922,6 +1929,39 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('language_export', { thing_id: thingId });
         },
 
+        loadLanguageMenu(thingId = null) {
+            this.languageMenu = null;
+            this.request('language_menu', thingId ? { thing_id: thingId } : {});
+        },
+
+        requestLanguageNames(languageId, kind, seed = null, context = '') {
+            this.languageNames = { language_id: languageId, kind, pending: true, names: [], error: null };
+            this.request('language_names', { language_id: languageId, kind, count: 4, seed, context });
+        },
+
+        addLanguageWord(languageId, word, meaning) {
+            this.request('language_add_word', { language_id: languageId, word, meaning, at: this.thingAt });
+        },
+
+        suggestDefinition(languageId, word, context = '') {
+            this.languageDefinition = { language_id: languageId, word, pending: true, definition: '' };
+            this.request('language_suggest_definition', { language_id: languageId, word, context });
+        },
+
+        nameIn(thingId, languageId) {
+            this.nameInResult = { thing_id: thingId, language_id: languageId, pending: true, result: null, error: null };
+            this.request('language_name_in', { thing_id: thingId, language_id: languageId });
+        },
+
+        applyNameIn(thingId, languageId, result) {
+            this.nameInResult = null;
+            this.request('language_apply_name_in', { thing_id: thingId, language_id: languageId, result, at: this.thingAt });
+        },
+
+        clearNameIn() {
+            this.nameInResult = null;
+        },
+
         rollLanguageSamples(thingId, seed = 0) {
             this.request('language_samples', { thing_id: thingId, seed });
         },
@@ -2181,6 +2221,41 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'language_export':
                     this.languageExport = data;
+                    break;
+                case 'language_menu':
+                    this.languageMenu = data;
+                    break;
+                case 'language_names':
+                    if (this.languageNames?.language_id === data.language_id) {
+                        this.languageNames = { ...this.languageNames, pending: false, names: data.names };
+                    }
+                    break;
+                case 'language_names_failed':
+                    if (this.languageNames) {
+                        this.languageNames = { ...this.languageNames, pending: false, error: message.message || 'No names came back.' };
+                    }
+                    break;
+                case 'language_definition':
+                case 'language_definition_failed':
+                    if (this.languageDefinition?.word === data?.word) {
+                        this.languageDefinition = { ...this.languageDefinition, pending: false, definition: data.definition || '' };
+                    }
+                    break;
+                case 'language_name_in':
+                    if (this.nameInResult?.thing_id === data.thing_id) {
+                        this.nameInResult = { ...this.nameInResult, pending: false, result: data.result };
+                    }
+                    break;
+                case 'language_name_in_failed':
+                    if (this.nameInResult) {
+                        this.nameInResult = { ...this.nameInResult, pending: false, error: message.message || 'It could not be named.' };
+                    }
+                    break;
+                case 'language_add_word':
+                case 'language_apply_name_in':
+                    if (data.id === this.selectedThingId) {
+                        this.thing = data;
+                    }
                     break;
                 case 'language_samples':
                     this.languageSamples = { ...this.languageSamples, [data.thing_id]: data.samples };

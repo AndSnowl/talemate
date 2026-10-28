@@ -258,3 +258,12 @@ async def test_set_field_clears_a_language_parent(plugin):
     await _act(plugin, "set_field", thing_id=lid, field="descends_from", value=None)
     assert not _errors(plugin)
     assert "descends_from" not in world.view().thing(lid).fields
+
+
+async def test_language_names_without_a_client_come_without_definitions(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    instance.AGENTS["creator"] = SimpleNamespace(client=None)
+    await _act(plugin, "language_names", language_id=lid, kind="place", count=4, seed=2)
+    await _drain(plugin)
+    names = _last(plugin, "language_names")["data"]["names"]
+    assert len(names) == 4 and all(n["definition"] == "" for n in names)

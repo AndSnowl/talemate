@@ -177,3 +177,7 @@ def test_aka_accepts_language_key():
 
 def test_name_in_result_shape():
     assert NameInResult(name="X", new_words=[]).name == "X"
+
+
+async def test_pick_without_a_client_takes_the_first_candidate():
+    assert await pick(None, _lang(), ["Kovar", "Selun"], "a capital") == ("Kovar", "")

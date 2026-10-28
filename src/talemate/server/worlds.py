@@ -5563,7 +5563,11 @@ class WorldsPlugin(Plugin):
                 "rows": [r.model_dump() for r in rows],
                 "default": default_language(rows),
                 "languages": [
-                    {"id": s.id, "name": s.fields.get("name", "")}
+                    {
+                        "id": s.id,
+                        "name": s.fields.get("name", ""),
+                        "phrases": s.fields.get("phrases") or [],
+                    }
                     for s in all_languages(view)
                 ],
             },
@@ -5590,9 +5594,13 @@ class WorldsPlugin(Plugin):
         client, reply = self._language_reply()
 
         async def named() -> list[dict]:
-            definitions = await define_names(
-                client, language, names, payload.context, reply=reply
-            )
+            # names are rolled from the language's rules; only their
+            # definitions need a model, so with none they come without
+            definitions: dict[str, str] = {}
+            if client is not None or reply is not None:
+                definitions = await define_names(
+                    client, language, names, payload.context, reply=reply
+                )
             return [{"name": n, "definition": definitions.get(n, "")} for n in names]
 
         self._spawn(

@@ -67,7 +67,7 @@
                         label
                         variant="outlined"
                         data-testid="thing-other-name"
-                    >{{ other.name }}</v-chip>
+                    >{{ other.name }}<span v-if="otherNameLanguage(other.index)" class="text-muted ml-1">· {{ otherNameLanguage(other.index) }}</span></v-chip>
                 </span>
                 <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
                 <v-spacer></v-spacer>
@@ -259,6 +259,7 @@
                         :aka="akaList"
                         :main-name="thing.name"
                         :busy="editorBusy"
+                        :thing-id="draft ? null : thing.id"
                         @save="saveAka"
                     />
 
@@ -1062,6 +1063,15 @@ export default {
         },
         otherNames() {
             return headerNames(this.thing?.aka);
+        },
+        // an other name given in one of the world's languages: that
+        // language's name (languages 3a)
+        otherNameLanguage() {
+            const languages = this.worlds.things.language || [];
+            return (index) => {
+                const id = this.thing?.aka?.[index]?.language;
+                return id ? languages.find((l) => l.id === id)?.name || '' : '';
+            };
         },
         // what the numbers and other names editors show: a draft's own
         // fields are its copy's (`thing.numbers` resolved as rendered)
