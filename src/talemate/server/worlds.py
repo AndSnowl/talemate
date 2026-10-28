@@ -434,7 +434,7 @@ from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
-from talemate.languages.entry import language_of
+from talemate.languages.entry import language_of, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
     default_language,
@@ -2375,6 +2375,9 @@ class WorldsPlugin(Plugin):
             },
         }
         page.update(_languages_page(view, state))
+        if state.kind == "language":
+            # which of its words name something, worked out each time
+            page["word_uses"] = word_uses(view, thing_id)
         if mark_own:
             _mark_own_page(page, own_alias_table(state, page["name"]))
         return page

@@ -149,3 +149,24 @@ def test_phrases_tab_shows_breakdown_and_adds_a_phrase(app, page):
     dialog.get_by_label("Translation").fill("A free river.")
     dialog.get_by_role("button", name="Save").click()
     expect(phrases).to_contain_text("A free river.", timeout=TIMEOUT_MS)
+
+
+def test_a_word_shows_its_meanings_and_what_it_names(app, page):
+    name = _world_name("Lang meanings")
+    fields = _language_fields()
+    fields["words"] = [*fields["words"], {"word": "soru", "meanings": ["wind", "breath"]}]
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {"kind": "language", "name": "Velskar", "fields": fields},
+            {"kind": "character", "name": "Soru", "born": 990},
+        ],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-lexicon").click()
+    row = thing.get_by_test_id("language-word").filter(has_text="soru")
+    expect(row).to_contain_text("wind; breath", timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-names")).to_contain_text("name of Soru")

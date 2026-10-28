@@ -115,15 +115,18 @@ async def test_pick_falls_back_to_first_candidate():
         )
 
 
-def test_add_word_keeps_used_meaning(world):
+def test_add_word_adds_a_meaning_and_keeps_the_old(world):
     lid = _store(world, _lang())
     with world.revision(Source.manual()) as rev:
         rev.create_thing("place", {"name": "Free Provinces of Sorau"})
     with world.revision(Source.manual()) as rev:
         add_word(rev, world.view(), lid, "sorau", "southern march")
         add_word(rev, world.view(), lid, "Velgarov", "great fort")
-    words = {e.word: e.meaning for e in language_of(world.view().thing(lid)).dictionary}
-    assert words["sorau"] == "free land" and words["Velgarov"] == "great fort"
+    words = {
+        e.word: e.meanings for e in language_of(world.view().thing(lid)).dictionary
+    }
+    assert words["sorau"] == ["free land", "southern march"]
+    assert words["Velgarov"] == ["great fort"]
 
 
 async def test_name_in_translates_known_and_rolls_missing(world, monkeypatch):

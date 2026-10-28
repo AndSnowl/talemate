@@ -367,3 +367,13 @@ async def test_suggest_definition_without_a_client_is_empty(plugin):
     await _drain(plugin)
     assert not _errors(plugin)
     assert _last(plugin, "language_definition")["data"]["definition"] == ""
+
+
+async def test_a_language_page_carries_its_words_uses_as_names(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    await _act(plugin, "language_add_word", language_id=lid, word="Soru", meaning="wind")
+    with world.revision(Source.manual()) as rev:
+        soru = rev.create_thing("character", {"name": "Soru"})
+    await _act(plugin, "get_thing", id=lid)
+    page = _last(plugin, "get_thing")["data"]
+    assert page["word_uses"] == {"soru": [{"id": soru, "name": "Soru", "kind": "character"}]}

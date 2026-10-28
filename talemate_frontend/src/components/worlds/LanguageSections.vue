@@ -212,7 +212,7 @@
                     </div>
                     <table class="dict">
                         <thead>
-                            <tr><th>Word</th><th>Meaning</th><th>Part</th><th></th></tr>
+                            <tr><th>Word</th><th>Meanings</th><th>Part</th><th></th></tr>
                         </thead>
                         <tbody>
                             <tr v-for="row in filteredWords" :key="row.index" data-testid="language-word">
@@ -227,6 +227,16 @@
                                         @blur="saveCell"
                                     />
                                     <span v-else>{{ local.words[row.index][field] }}</span>
+                                    <!-- what the word names in the world, worked out live -->
+                                    <span v-if="field === 'meanings' && usesOf(row.word).length" class="word-names" data-testid="word-names">
+                                        <a
+                                            v-for="use in usesOf(row.word)"
+                                            :key="use.id"
+                                            href="#"
+                                            class="name-use"
+                                            @click.prevent.stop="worlds.openThing(use.id)"
+                                        >name of {{ use.name }} ({{ use.kind }})</a>
+                                    </span>
                                 </td>
                                 <td class="col-x">
                                     <v-btn icon="mdi-close" size="x-small" variant="text" density="comfortable" color="delete" :aria-label="'Remove ' + local.words[row.index].word" @click.stop="removeWord(row.index)"></v-btn>
@@ -332,7 +342,8 @@ const USES = {
     demonym: 'peoples',
 };
 
-const WORD_FIELDS = ['word', 'meaning', 'part'];
+// a word's meanings edit as one text, "wind; breath"
+const WORD_FIELDS = ['word', 'meanings', 'part'];
 
 function plain(value) {
     return JSON.parse(JSON.stringify(value ?? null));
@@ -405,7 +416,7 @@ export default {
             const query = (this.search || '').trim().toLowerCase();
             return this.local.words
                 .map((w, index) => ({ ...w, index }))
-                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || (w.meaning || '').toLowerCase().includes(query));
+                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || (w.meanings || '').toLowerCase().includes(query));
         },
         groupedPhrases() {
             const groups = {};
@@ -469,7 +480,12 @@ export default {
                 grammar: rules.grammar || '',
                 syllable_notes: plain(rules.syllable_notes || []),
                 generators: plain(rules.generators || []),
-                words: plain(fields.words || []).map((w) => ({ part: '', ...w })),
+                words: plain(fields.words || []).map((w) => ({
+                    word: w.word,
+                    meanings: (w.meanings || (w.meaning ? [w.meaning] : [])).join('; '),
+                    part: w.part || '',
+                    notes: w.notes,
+                })),
             };
         },
         saveField(field, value) {
@@ -519,6 +535,10 @@ export default {
             this.local.syllable_notes.splice(index, 1);
             this.saveRules();
         },
+        // the entries a word names (`word_uses`, from the page)
+        usesOf(word) {
+            return (this.thing.word_uses || {})[(word || '').toLowerCase()] || [];
+        },
         nameOf(id) {
             return (this.worlds.things.language || []).find((t) => t.id === id)?.name || '(deleted language)';
         },
@@ -567,9 +587,10 @@ export default {
         },
         saveWords() {
             const words = this.local.words
-                .filter((w) => (w.word || '').trim() && (w.meaning || '').trim())
+                .filter((w) => (w.word || '').trim())
                 .map((w) => {
-                    const row = { word: w.word.trim(), meaning: w.meaning.trim() };
+                    const meanings = (w.meanings || '').split(';').map((m) => m.trim()).filter(Boolean);
+                    const row = { word: w.word.trim(), meanings };
                     if ((w.part || '').trim()) row.part = w.part.trim();
                     if (w.notes) row.notes = w.notes;
                     return row;
@@ -578,7 +599,7 @@ export default {
         },
         addWord() {
             this.search = '';
-            this.local.words.unshift({ word: '', meaning: '', part: '' });
+            this.local.words.unshift({ word: '', meanings: '', part: '' });
             this.editCell = { index: 0, field: 'word' };
         },
         removeWord(index) {
@@ -781,6 +802,15 @@ export default {
     outline: 1px solid rgb(var(--v-theme-accent, var(--v-theme-primary)));
     border-radius: 2px;
     padding: 0 2px;
+}
+.word-names {
+    margin-left: 8px;
+}
+.name-use {
+    font-size: 0.75rem;
+    margin-right: 6px;
+    color: rgb(var(--v-theme-link, var(--v-theme-primary)));
+    text-decoration: none;
 }
 .category {
     margin: 10px 0 2px;

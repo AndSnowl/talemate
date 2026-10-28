@@ -104,7 +104,9 @@ def test_revision_keeps_used_words(world):
     assert set(preview.diff.kept_used) == {"velgarov", "sorau"}
     with world.revision(Source.manual()) as rev:
         apply_import(rev, world.view(), preview, target_id=lid)
-    words = {e.word: e.meaning for e in language_of(world.view().thing(lid)).dictionary}
+    words = {
+        e.word: e.meanings[0] for e in language_of(world.view().thing(lid)).dictionary
+    }
     assert words == {"velgarov": "great fort", "sorau": "free land", "kor": "river"}
 
 

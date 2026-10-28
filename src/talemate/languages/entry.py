@@ -22,7 +22,7 @@ from talemate.languages.models import (
 )
 from talemate.world.view import ThingState, WorldView
 
-__all__ = ["fields_of", "language_of", "languages", "used_words"]
+__all__ = ["fields_of", "language_of", "languages", "used_words", "word_uses"]
 
 
 def fields_of(language: Language) -> dict[str, object]:
@@ -90,6 +90,34 @@ def _names(state: ThingState) -> list[str]:
     names = [str(state.fields.get("name") or "")]
     names += [str(a.get("name", "")) for a in state.fields.get("aka") or []]
     return [n for n in names if n]
+
+
+def word_uses(view: WorldView, language_id: str) -> dict[str, list[dict[str, str]]]:
+    """For each of the language's words that names something, the live
+    entries whose name or other names use it (`{id, name, kind}`), keyed
+    by the word in lower case: worked out each time, never stored."""
+
+    state = view.thing(language_id)
+    if state is None:
+        return {}
+    words = {str(w.get("word", "")).lower() for w in state.fields.get("words") or []}
+    words.discard("")
+    uses: dict[str, list[dict[str, str]]] = {}
+    for thing in view.things(facts=False):
+        if thing.id == language_id:
+            continue
+        found = set()
+        for name in _names(thing):
+            found |= words & {w.lower() for w in re.findall(r"[^\W\d_]+", name)}
+        for word in sorted(found):
+            uses.setdefault(word, []).append(
+                {
+                    "id": thing.id,
+                    "name": str(thing.fields.get("name") or ""),
+                    "kind": thing.kind,
+                }
+            )
+    return uses
 
 
 def used_words(view: WorldView, language_id: str) -> set[str]:

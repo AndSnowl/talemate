@@ -69,7 +69,7 @@
             <v-text-field
                 v-model="meaning"
                 :label="`What “${selected}” means`"
-                :placeholder="definitionPending ? 'suggesting…' : ''"
+                :placeholder="definitionPending ? 'suggesting…' : 'leave blank if it is only a name'"
                 density="compact"
                 variant="outlined"
                 hide-details
@@ -78,7 +78,7 @@
                 @keydown.enter="saveWord"
             ></v-text-field>
             <div class="d-flex ga-2">
-                <v-btn size="small" color="primary" variant="tonal" :disabled="!meaning.trim()" @click="saveWord">Save</v-btn>
+                <v-btn size="small" color="primary" variant="tonal" @click="saveWord">Save</v-btn>
                 <v-btn size="small" variant="text" @click="$emit('done')">Cancel</v-btn>
             </div>
         </template>
@@ -196,12 +196,11 @@ export default {
         },
         pickName(candidate) {
             this.$emit('insert', candidate.name);
-            this.worlds.addLanguageWord(this.languageId, candidate.name, candidate.definition || 'a name', this.scene);
+            this.worlds.addLanguageWord(this.languageId, candidate.name, candidate.definition || '', this.scene);
             this.saveOnPageIfAsked();
             this.$emit('done');
         },
         saveWord() {
-            if (!this.meaning.trim()) return;
             this.worlds.addLanguageWord(this.languageId, this.selected, this.meaning.trim(), this.scene);
             this.saveOnPageIfAsked();
             this.$emit('done');

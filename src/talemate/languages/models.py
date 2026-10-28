@@ -7,7 +7,7 @@ AI-written language data carrying unknown fields still loads.
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 __all__ = [
     "GENERATOR_USES",
@@ -74,12 +74,25 @@ class Phrase(BaseModel):
 
 
 class DictionaryEntry(BaseModel):
+    """A word and its meanings ("wind", "breath"); a word made only to be
+    a name may have none. An older file's single `meaning` is read as the
+    first meaning and never written back."""
+
     model_config = ConfigDict(extra="ignore")
 
     word: str
-    meaning: str
+    meanings: list[str] = Field(default_factory=list)
+    meaning: str = Field(default="", exclude=True)
     part: str = ""
     notes: str = ""
+
+    @model_validator(mode="after")
+    def _one_meaning_is_a_list(self) -> "DictionaryEntry":
+        if self.meaning.strip() and not self.meanings:
+            self.meanings = [self.meaning.strip()]
+        self.meaning = ""
+        self.meanings = [m.strip() for m in self.meanings if m.strip()]
+        return self
 
 
 class SimilarLink(BaseModel):

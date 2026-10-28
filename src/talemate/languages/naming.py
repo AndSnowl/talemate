@@ -14,9 +14,9 @@ import re
 
 from pydantic import BaseModel
 
-from talemate.languages.entry import language_of, used_words
+from talemate.languages.entry import language_of
 from talemate.languages.generator import roll
-from talemate.languages.models import GeneratorDef, Language
+from talemate.languages.models import DictionaryEntry, GeneratorDef, Language
 from talemate.prompts import Prompt
 from talemate.world.store import Revision
 from talemate.world.view import WorldView
@@ -173,24 +173,29 @@ async def _pick_reply(
 def add_word(
     rev: Revision, view: WorldView, language_id: str, word: str, meaning: str
 ) -> None:
-    """Add `word` to the language, or redefine it; a word already used as
-    an entry's name keeps its meaning."""
+    """Add `word` to the language, or add `meaning` to its meanings (a word
+    has several: "wind", "breath"). A blank meaning adds the word alone, as
+    a name with no meaning; nothing already there is replaced."""
 
     state = view.thing(language_id)
     if state is None or state.kind != "language":
         raise ValueError("there's no such language")
     word, meaning = word.strip(), " ".join(meaning.split())
-    if not word or not meaning:
-        raise ValueError("a word needs both the word and its meaning")
-    words = [dict(w) for w in state.fields.get("words") or []]
+    if not word:
+        raise ValueError("a word can't be blank")
+    words = [
+        DictionaryEntry.model_validate(w).model_dump(exclude_defaults=True)
+        | {"meanings": DictionaryEntry.model_validate(w).meanings}
+        for w in state.fields.get("words") or []
+    ]
     key = word.lower()
     existing = next((w for w in words if str(w.get("word", "")).lower() == key), None)
-    if existing is not None:
-        if key in used_words(view, language_id):
-            return
-        existing["meaning"] = meaning
+    if existing is None:
+        words.append({"word": word, "meanings": [meaning] if meaning else []})
+    elif meaning and meaning.lower() not in {m.lower() for m in existing["meanings"]}:
+        existing["meanings"] = [*existing["meanings"], meaning]
     else:
-        words.append({"word": word, "meaning": meaning})
+        return
     rev.set_field(language_id, "words", words, None)
 
 
@@ -212,7 +217,7 @@ async def name_in(
         raise ValueError("there's no such entry or language")
     language = language_of(state)
     by_word = {e.word.lower(): e.word for e in language.dictionary}
-    by_meaning = {e.meaning.strip().lower(): e.word for e in language.dictionary}
+    by_meaning = {m.lower(): e.word for e in language.dictionary for m in e.meanings}
     word_rules = language.word_generator()
     taken = set(by_word)
     out: list[str] = []

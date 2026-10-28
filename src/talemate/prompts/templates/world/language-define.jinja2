@@ -2,27 +2,27 @@
   - response: AsIsExtractor()
 -#}
 <|SECTION:TASK|>
-Write a one-sentence definition for each name below. The names come from {{ language }}, an invented language of a fantasy world. {% if sound %}It sounds like this: {{ sound }}{% endif %}
+Give the meaning of each word below, as a dictionary would: one to three words, such as "wind", "great fort" or "the eastern river". The words come from {{ language }}, an invented language of a fantasy world. {% if sound %}It sounds like this: {{ sound }}{% endif %}
 
-A definition says plainly what the name means or where it comes from. It may just be the name of a place or person, be named after someone, or be built from the language's own words listed below. Never use words from a real language, and never explain how the language works.
+A word may be built from the language's own words listed below, and its meaning follows from them. A word made only to be a name, with no meaning of its own, gets "" (an empty meaning). Never write a sentence, never use words from a real language, and never explain how the language works.
 {% if context %}
 What is being named: {{ context }}
 {% endif %}
 {% if words -%}
 Some of the language's words:
 {% for word in words -%}
-- {{ word.word }}: {{ word.meaning }}
+- {{ word.word }}: {{ word.meanings|join("; ") }}
 {% endfor %}
 {%- endif %}
-The names:
+The words:
 {% for name in names -%}
 - {{ name }}
 {% endfor %}
 <|CLOSE_SECTION|>
 <|SECTION:FORMAT|>
 Reply with only one JSON object, shaped exactly like this example:
-{"definitions": {"Velgarov": "The great fort, from vel (great) and garov (walls)."}}
+{"definitions": {"Velgarov": "great fort", "Kassa": ""}}
 
-One entry per name, each one plain sentence. No commentary, no markdown fences, just the JSON object.
+One entry per word, each a meaning of one to three words, or "". No commentary, no markdown fences, just the JSON object.
 <|CLOSE_SECTION|>
 {{ set_prepared_response('{') }}

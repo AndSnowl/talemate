@@ -1,12 +1,21 @@
 {
   "$defs": {
     "DictionaryEntry": {
+      "description": "A word and its meanings (\"wind\", \"breath\"); a word made only to be\na name may have none. An older file's single `meaning` is read as the\nfirst meaning and never written back.",
       "properties": {
         "word": {
           "title": "Word",
           "type": "string"
         },
+        "meanings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Meanings",
+          "type": "array"
+        },
         "meaning": {
+          "default": "",
           "title": "Meaning",
           "type": "string"
         },
@@ -22,8 +31,7 @@
         }
       },
       "required": [
-        "word",
-        "meaning"
+        "word"
       ],
       "title": "DictionaryEntry",
       "type": "object"

@@ -576,7 +576,21 @@ def _validate_entries(field: str, value: object, required: tuple[str, ...]) -> N
 
 
 def _validate_words(field: str, value: object) -> None:
-    _validate_entries(field, value, ("word", "meaning"))
+    """Words: a non-blank `word`, and its `meanings` (non-blank strings,
+    possibly none: a word made only to be a name) or an older file's
+    single `meaning`."""
+
+    _validate_entries(field, value, ("word",))
+    for entry in value if isinstance(value, list) else []:
+        meanings = entry.get("meanings")
+        if meanings is not None and (
+            not isinstance(meanings, list)
+            or not all(isinstance(m, str) and m.strip() for m in meanings)
+        ):
+            raise ValueError(f"{field!r}: meanings must be non-blank strings")
+        meaning = entry.get("meaning")
+        if meaning is not None and not isinstance(meaning, str):
+            raise ValueError(f"{field!r}: meaning must be a string")
 
 
 def _validate_phrases(field: str, value: object) -> None:

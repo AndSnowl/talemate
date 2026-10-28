@@ -129,7 +129,7 @@ def _diff(old: Language, new: Language, kept: list[str]) -> LanguageDiff:
         words_changed=[
             w
             for w in new_words
-            if w in old_words and new_words[w].meaning != old_words[w].meaning
+            if w in old_words and new_words[w].meanings != old_words[w].meanings
         ],
         phrases_added=[i for i in new_phrases if i not in old_phrases],
         phrases_removed=[i for i in old_phrases if i not in new_phrases],
@@ -155,7 +155,7 @@ def _keep_used(
         w
         for w in sorted(used)
         if w in old_words
-        and (w not in new_words or new_words[w].meaning != old_words[w].meaning)
+        and (w not in new_words or new_words[w].meanings != old_words[w].meanings)
     ]
     if not kept:
         return new, []

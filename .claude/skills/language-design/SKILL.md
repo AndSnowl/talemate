@@ -70,7 +70,7 @@ from `talemate.languages.models.LanguageFile`). The shape:
       {"id": "places", "name": "Places", "use": "place", "patterns": ["CVCVC(ov)"]}
     ],
     "grammar": "A short plain paragraph, for a full language.",
-    "dictionary": [{"word": "vel", "meaning": "great"}],
+    "dictionary": [{"word": "vel", "meanings": ["great"]}, {"word": "soru", "meanings": ["wind", "breath"]}],
     "phrases": [{"id": "curse-rot", "category": "curse", "original": "Vel kar!", "translation": "Great rot!"}],
     "similar": [{"name": "Sorauan", "degree": "close"}]
   }
@@ -80,6 +80,7 @@ from `talemate.languages.models.LanguageFile`). The shape:
 - `level`: `description` (only how it sounds, for speech that can't be
   written), `naming` (enough to make names), or `full` (names, words,
   phrases).
+- **Meanings are short**, as a dictionary gives them: one to three words ("wind", "great fort"), never a sentence. A word can have several meanings; a word made only to be a name can have none. Never write "used as a name" as a meaning: the app shows which words name something.
 - **A full language must have a `words` generator** (`"use": "words"`):
   the rules ordinary words follow. Every dictionary word should fit it
   (or be made of two or more words that do); the app rolls new words for
