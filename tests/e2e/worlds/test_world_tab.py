@@ -368,7 +368,8 @@ def test_regenerate_one_prose_section(app, page):
         "() => window.__e2eSent.filter((m) => m.action === 'regenerate_prose')"
     )
     assert [m.get("section") for m in asked] == ["personality"]
-    page.get_by_test_id("world-tab").get_by_text(
+    # the worlds screens' one error message (polish 5)
+    page.get_by_test_id("world-error").get_by_text(
         "No AI client is set up to write the prose"
     ).wait_for(state="visible", timeout=TIMEOUT_MS)
 

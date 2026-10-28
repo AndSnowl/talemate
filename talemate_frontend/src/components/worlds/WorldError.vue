@@ -62,7 +62,7 @@ export default {
     border-radius: 6px;
     border: 1px solid rgb(var(--v-theme-error));
     background: rgb(var(--v-theme-surface));
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 16px rgba(var(--v-theme-on-surface), 0.12);
 }
 
 .error-text {
