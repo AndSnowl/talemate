@@ -3865,7 +3865,7 @@ check('whereLabel counts the other places', () => {
     assert.equal(whereLabel(T_C, byId), 'in Velikoye');
     assert.equal(whereLabel({ ...T_C, filed_in: ['v', 'm'] }, byId), 'in Velikoye +1');
     assert.equal(whereLabel(T_M, byId), '');
-    assert.deepEqual(KIND_ORDER, ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'being']);
+    assert.deepEqual(KIND_ORDER, ['character', 'species', 'race', 'mix', 'place', 'event', 'item', 'lore', 'language', 'being']);
 });
 
 check('loadFolds survives bad storage', () => {
