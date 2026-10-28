@@ -178,6 +178,22 @@
                 </div>
             </template>
 
+            <!-- a language's page (languages 3a): About is the entry's own
+                 page (facts, connections, timeline); the others are the
+                 language's parts, as the old culture page showed them -->
+            <v-tabs
+                v-if="isLanguage"
+                v-model="languageTab"
+                density="compact"
+                color="primary"
+                class="mt-2 language-tabs"
+                data-testid="language-tabs"
+            >
+                <v-tab v-for="tab in LANGUAGE_TABS" :key="tab.value" :value="tab.value" :data-testid="'language-tab-' + tab.value">{{ tab.title }}</v-tab>
+            </v-tabs>
+            <LanguageSections v-if="isLanguage && languageTab !== 'about'" class="mt-3" :thing="thing" :tab="languageTab" />
+
+            <div v-show="!isLanguage || languageTab === 'about'">
             <!-- 3. Facts, beside the prose -->
             <v-row class="mt-1">
                 <v-col cols="12" md="6">
@@ -460,10 +476,6 @@
                 </v-col>
             </v-row>
 
-            <!-- a language's own sections, below the ordinary ones at the
-                 page's full width (languages 3a) -->
-            <LanguageSections v-if="!draft && thing.kind === 'language'" class="mt-4" :thing="thing" />
-
             <!-- a race or mix draft (opened by Races'/Mixes' "+ New
                  race"/"+ New mix", in the left column above), below the
                  two columns at the entry's full width, so it gets the same
@@ -559,6 +571,7 @@
                     <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" event :on-draft="draft" />
                 </template>
             </EntryTimeline>
+            </div>
         </template>
 
         <SelectionMenu
@@ -653,6 +666,15 @@ const HIDDEN_FIELDS = [
     // languages 3a: who speaks what, and a language's own sections
     'languages', 'depth', 'flavour', 'sound', 'rules', 'words', 'phrases',
     'descends_from', 'similar',
+];
+
+// a language page's tabs (languages 3a): About first, the default
+const LANGUAGE_TABS = [
+    { value: 'about', title: 'About' },
+    { value: 'language', title: 'Language' },
+    { value: 'dictionary', title: 'Dictionary' },
+    { value: 'phrases', title: 'Phrases' },
+    { value: 'rules', title: 'Name rules' },
 ];
 
 // what a being's existence means for it
@@ -805,6 +827,9 @@ export default {
     },
     data() {
         return {
+            LANGUAGE_TABS,
+            // a language page's open tab (languages 3a)
+            languageTab: 'about',
             asOfMenu: false,
             asOfYear: null,
             asOfMonth: null,
@@ -988,6 +1013,9 @@ export default {
         categories() {
             return this.info?.categories || [];
         },
+        isLanguage() {
+            return !this.draft && this.thing?.kind === 'language';
+        },
         isHeritage() {
             return HERITAGE_KINDS.includes(this.thing?.kind);
         },
@@ -1129,6 +1157,9 @@ export default {
         },
     },
     watch: {
+        'thing.id'() {
+            this.languageTab = 'about';
+        },
         formTargetGone(gone) {
             if (gone) {
                 this.form = null;

@@ -70,9 +70,14 @@ def test_import_pasted_language_and_see_its_page(app, page):
 
     thing = page.get_by_test_id("thing-page")
     expect(thing.get_by_test_id("thing-name")).to_have_text("Velskar", timeout=TIMEOUT_MS)
+    # About (facts and connections) is the default tab
+    expect(thing.get_by_test_id("language-tab-about")).to_have_attribute("aria-selected", "true")
+    thing.get_by_test_id("language-tab-dictionary").click()
     words = thing.get_by_test_id("language-words")
-    expect(words).to_contain_text("veltasun")
-    expect(words).to_contain_text("the great fort")
+    # the dictionary edits in place: its words are field values
+    expect(words.get_by_test_id("language-word")).to_have_count(8, timeout=TIMEOUT_MS)
+    values = words.locator("input").evaluate_all("els => els.map((e) => e.value)")
+    assert "veltasun" in values and "the great fort" in values
 
 
 def test_blocking_problem_disables_import(app, page):
@@ -105,15 +110,43 @@ def test_new_version_shows_kept_used_words(app, page):
     _open_world(page, name)
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
-    expect(thing.get_by_test_id("language-samples")).to_be_visible(timeout=TIMEOUT_MS)
+    thing.get_by_test_id("language-tab-rules").click()
+    expect(thing.get_by_test_id("language-generator").first).to_contain_text(
+        "Words", timeout=TIMEOUT_MS
+    )
+    thing.get_by_test_id("language-tab-language").click()
+    expect(thing.get_by_test_id("language-inventory")).to_contain_text("C")
 
     data = json.loads(SAMPLE.read_text())
     data["language"]["dictionary"] = [
         w for w in data["language"]["dictionary"] if w["word"] != "veltasun"
     ]
     thing.get_by_role("button", name="Import a new version").click()
+    # the import box sits on the Language tab
     box = thing.get_by_test_id("language-import")
     box.get_by_test_id("language-paste").locator("textarea").first.fill(json.dumps(data))
     box.get_by_role("button", name="Check").click()
     expect(box.get_by_test_id("language-diff")).to_contain_text("veltasun", timeout=TIMEOUT_MS)
     expect(box.get_by_test_id("language-diff")).to_contain_text("kept because")
+
+
+def test_phrases_tab_shows_breakdown_and_adds_a_phrase(app, page):
+    name = _world_name("Lang phrases")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[{"kind": "language", "name": "Velskar", "fields": _language_fields()}],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-phrases").click()
+    phrases = thing.get_by_test_id("language-phrases")
+    expect(phrases).to_contain_text("Kor vel!", timeout=TIMEOUT_MS)
+    phrases.get_by_role("button", name="Add phrase").click()
+    dialog = page.get_by_role("dialog")
+    dialog.get_by_label("Category (greeting, curse, saying…)").fill("blessing")
+    dialog.get_by_label("In the language").fill("Sel kor.")
+    dialog.get_by_label("Translation").fill("A free river.")
+    dialog.get_by_role("button", name="Save").click()
+    expect(phrases).to_contain_text("A free river.", timeout=TIMEOUT_MS)
