@@ -670,7 +670,8 @@ def test_add_and_drag_into_a_show_under_group(app, page, fixed_group_add):
     assert _sent(page, "set_tag") == []
 
     # "Other": dropping a row there puts it back under its own tag
-    expect(_group(town, "Other")).to_have_attribute(
+    # (its tip on the heading only, polish 5)
+    expect(_group(town, "Other").locator(".group-head").first).to_have_attribute(
         "title", re.compile("back under its own tag")
     )
     assert page.console_errors == []
