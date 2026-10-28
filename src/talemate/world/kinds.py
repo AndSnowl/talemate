@@ -204,6 +204,27 @@ KINDS: dict[str, KindSpec] = {
 
 HERITAGE_KINDS: tuple[str, ...] = ("species", "race", "mix")
 
+# the order kinds come in wherever entries of several kinds are listed
+# together (Connected, polish 5); the World tab's `KIND_ORDER` matches it
+KIND_ORDER: tuple[str, ...] = (
+    "character",
+    "species",
+    "race",
+    "mix",
+    "place",
+    "event",
+    "item",
+    "lore",
+    "being",
+)
+
+
+def kind_rank(kind: str) -> int:
+    """Where `kind` comes in `KIND_ORDER` (any other kind last)."""
+
+    return KIND_ORDER.index(kind) if kind in KIND_ORDER else len(KIND_ORDER)
+
+
 # the fact categories a place holds that a prompt never writes it: its
 # timeline, its summary (`about`, `entries.summary_fact`) and statements
 UNPROMPTED_CATEGORIES: tuple[str, ...] = ("timeline", "about", "statement")

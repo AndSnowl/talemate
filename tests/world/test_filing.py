@@ -159,24 +159,26 @@ def test_connected_groups_by_tag(world):
         _thing(rev, "place", "Vosgrad", tag="city")
 
     groups = connected(world.view(), velikoye)
+    # polish 5: groups by the earliest kind they hold (the ruler is a
+    # character), then by heading
     assert [(g.tag, g.heading) for g in groups] == [
+        ("ruler", "Rulers"),
         ("river", "Rivers"),
         ("custom", "Customs"),
-        ("ruler", "Rulers"),
     ]
-    assert [thing_id for thing_id, _ in groups[0].rows] == [neva, oka]
-    assert groups[0].rows[0][1].role == "flows through"
-    assert [thing_id for thing_id, _ in groups[1].rows] == [dance]
-    assert [thing_id for thing_id, _ in groups[2].rows] == [tsar]
+    assert [thing_id for thing_id, _ in groups[1].rows] == [neva, oka]
+    assert groups[1].rows[0][1].role == "flows through"
+    assert [thing_id for thing_id, _ in groups[2].rows] == [dance]
+    assert [thing_id for thing_id, _ in groups[0].rows] == [tsar]
 
     # changing an entry's tag moves it to the matching group
     with world.revision(Source.manual()) as rev:
         rev.set_field(oka, "tag", "custom", None)
     groups = connected(world.view(), velikoye)
     assert [(g.heading, len(g.rows)) for g in groups] == [
+        ("Rulers", 1),
         ("Customs", 2),
         ("Rivers", 1),
-        ("Rulers", 1),
     ]
 
 
@@ -189,12 +191,13 @@ def test_untagged_goes_to_other(world):
         )
 
     groups = connected(world.view(), velikoye)
+    # polish 5: Other comes last
     assert [(g.tag, g.heading) for g in groups] == [
-        (None, "Other"),
         ("river", "Rivers"),
+        (None, "Other"),
     ]
-    assert [thing_id for thing_id, _ in groups[0].rows] == [bell]
-    assert [thing_id for thing_id, _ in groups[1].rows] == [neva]
+    assert [thing_id for thing_id, _ in groups[1].rows] == [bell]
+    assert [thing_id for thing_id, _ in groups[0].rows] == [neva]
 
 
 def test_within_lists_person_under_both(world):
@@ -716,3 +719,33 @@ def test_roles_in_use_counts(world):
         ("native", 2),
         ("branch of", 1),
     ]
+
+
+def test_connected_groups_and_rows_by_kind(world):
+    """Polish 5: Connected's groups run by the earliest kind they hold
+    (characters, species, races, mixes, places, events, items, lore,
+    beings), then by heading, Other last; a group's rows by kind, then as
+    before (role, since, name)."""
+
+    with world.revision(Source.manual()) as rev:
+        velikoye = _thing(rev, "place", "Velikoye", tag="city")
+        edict = _thing(
+            rev, "lore", "Tsar's Edict", tag="noble", filings=[_filing(velikoye)]
+        )
+        orlov = _thing(
+            rev, "character", "Count Orlov", tag="noble", filings=[_filing(velikoye)]
+        )
+        market = _thing(
+            rev, "place", "The Ice Market", tag="market", filings=[_filing(velikoye)]
+        )
+        ivan = _thing(
+            rev, "character", "Ivan", tag="merchant", filings=[_filing(velikoye)]
+        )
+        song = _thing(rev, "lore", "Old Song", filings=[_filing(velikoye)])
+
+    groups = connected(world.view(), velikoye)
+    assert [g.heading for g in groups] == ["Merchants", "Nobles", "Markets", "Other"]
+    assert [thing_id for thing_id, _ in groups[1].rows] == [orlov, edict]
+    assert [thing_id for thing_id, _ in groups[0].rows] == [ivan]
+    assert [thing_id for thing_id, _ in groups[2].rows] == [market]
+    assert [thing_id for thing_id, _ in groups[3].rows] == [song]
