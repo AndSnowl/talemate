@@ -509,6 +509,17 @@ def _validate_languages(field: str, value: object) -> None:
         seen.append(key)
 
 
+# what a language's `rules` field holds: its sound categories and name
+# rules, plus the notes a full language carries with them
+RULES_KEYS: tuple[str, ...] = (
+    "categories",
+    "generators",
+    "syllable_notes",
+    "grammar",
+    "writable",
+)
+
+
 def _validate_rules(field: str, value: object) -> None:
     """A language's sound categories and name rules: they must load and
     parse (`talemate.languages.generator.validate_language`)."""
@@ -516,7 +527,7 @@ def _validate_rules(field: str, value: object) -> None:
     from talemate.languages.generator import validate_language
     from talemate.languages.models import Language
 
-    if not isinstance(value, dict) or not set(value) <= {"categories", "generators"}:
+    if not isinstance(value, dict) or not set(value) <= set(RULES_KEYS):
         raise ValueError(
             f'{field!r} must be {{"categories": ..., "generators": [...]}}'
         )
