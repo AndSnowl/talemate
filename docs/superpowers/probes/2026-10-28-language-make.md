@@ -72,7 +72,11 @@
    - coining a translation fails on both (real Russian, or nonsense).
 6. **Plain questions work on both models.**
 
-## Decision (my recommendation, for the owner to confirm)
+## Decision
+
+**The owner agreed (2026-10-28):** full languages are made outside the app. The owner also wants the route to be configurable for other users: a stronger local model or an API client in the app, or an outside assistant (Claude Code, or a chat subscription in the browser) given a ready-made brief that returns an importable file. Part 3's brainstorm takes this up.
+
+The recommendation as written:
 
 - **Full languages and daughters are made outside the app by Claude** (the spec's fallback), and imported.
   - So `.claude/skills/culture-design/` is **kept**, and the part-3 plan reworks it into the language-design skill, with the new import format.
