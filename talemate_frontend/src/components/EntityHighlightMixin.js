@@ -4,15 +4,6 @@ import {
     dispatchLookAtEntity,
     isKnownSceneCharacter,
 } from '@/utils/entityActions';
-import { culturesStory } from '@/components/cultures/culturesStory.js';
-import {
-    foreignMentions,
-    buildNameIndex,
-    markUnreviewed,
-    combineMentions,
-    findLexiconEntry,
-} from '@/components/cultures/storyLexicon.js';
-import '@/components/cultures/story.css';
 
 // Shared empty array for messages with no entity highlights — using the same
 // reference avoids invalidating the entityMentions prop on every parent render.
@@ -71,13 +62,6 @@ export default {
         };
     },
 
-    created() {
-        // The story object is replaced only when a new scene starts loading
-        // (pushes update it in place), so an open bubble showing the old
-        // scene's foreign word or name data is closed then.
-        this.$watch(() => culturesStory.story, () => this.closeEntityTooltip());
-    },
-
     mounted() {
         document.addEventListener('click', this.onDocumentClickForTooltip);
     },
@@ -86,61 +70,15 @@ export default {
         document.removeEventListener('click', this.onDocumentClickForTooltip);
     },
 
-    computed: {
-        // Foreign-word/phrase mentions for the scene's present cultures —
-        // rendered on every story message, not just the snapshot's anchors.
-        culturesForeignMentions() {
-            return foreignMentions(culturesStory.story.lexicon || []);
-        },
-
-        // Glossary names, indexed for `markUnreviewed`'s lookup.
-        culturesNameIndex() {
-            return buildNameIndex(culturesStory.story.names || []);
-        },
-
-        // Name mentions (world-state entities, flagged unreviewed where the
-        // glossary says so).
-        culturesNameMentions() {
-            return markUnreviewed(this.worldStateMentions, this.culturesNameIndex);
-        },
-
-        // Name mentions followed by foreign mentions — names first, so a
-        // name wins over a foreign entry with the same text.
-        culturesAnchorMentions() {
-            return combineMentions(this.culturesNameMentions, this.culturesForeignMentions);
-        },
-
-        // False when the Appearance toggle hides entity highlights. The
-        // renderer would print foreign words as plain text anyway, so they
-        // aren't matched at all and cost nothing.
-        culturesHighlightsShown() {
-            return this.appearanceConfig?.scene?.entities?.show !== false;
-        },
-    },
-
     methods: {
         // Return the entity-mention list to feed to the SceneTextParser for
-        // this message — an anchor message (part of the latest world-state
-        // snapshot's focus span) gets names and foreign words; every other
-        // message still gets foreign-word highlights. With highlights
-        // switched off, foreign words are left out. Falls back to the
-        // shared empty sentinel so the prop reference stays stable across
-        // re-renders when there's nothing to highlight.
+        // this message — only messages that were part of the latest
+        // world-state snapshot's focus span get highlights; everything else
+        // gets the shared empty sentinel so the prop reference stays stable
+        // across re-renders.
         getEntityMentionsForMessage(messageId) {
-            const anchor = this.worldStateAnchorIds.has(messageId);
-            if (!this.culturesHighlightsShown) {
-                return anchor && this.culturesNameMentions.length
-                    ? this.culturesNameMentions
-                    : NO_ENTITY_MENTIONS;
-            }
-            if (anchor) {
-                return this.culturesAnchorMentions.length
-                    ? this.culturesAnchorMentions
-                    : NO_ENTITY_MENTIONS;
-            }
-            return this.culturesForeignMentions.length
-                ? this.culturesForeignMentions
-                : NO_ENTITY_MENTIONS;
+            if (!this.worldStateAnchorIds.has(messageId)) return NO_ENTITY_MENTIONS;
+            return this.worldStateMentions;
         },
 
         // Rebuild the parser-facing mentions list and the tooltip lookup
@@ -177,14 +115,6 @@ export default {
         // lands on a `.scene-entity` span emitted by the SceneTextParser,
         // look up the entity and open the tooltip menu anchored to the span.
         onMessageContainerClick(event) {
-            const foreignSpan = event.target.closest?.('.scene-foreign');
-            if (foreignSpan) {
-                const entry = findLexiconEntry(culturesStory.story, foreignSpan.dataset.foreignId);
-                if (!entry) return;
-                event.stopPropagation();
-                this.openEntityTooltip(foreignSpan, { kind: 'foreign', name: entry.text, foreign: entry });
-                return;
-            }
             const span = event.target.closest?.('.scene-entity');
             if (!span) return;
             const name = span.getAttribute('data-entity-name');
@@ -231,7 +161,6 @@ export default {
             if (!this.entityTooltip.open) return;
             if (event.target.closest?.('.v-overlay__content')) return;
             if (event.target.closest?.('.scene-entity')) return;
-            if (event.target.closest?.('.scene-foreign')) return;
             this.closeEntityTooltip();
         },
 

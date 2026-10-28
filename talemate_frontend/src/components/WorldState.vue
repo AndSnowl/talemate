@@ -38,7 +38,6 @@
                         {{ name }}
                         <!-- <v-chip v-if="character.emotion !== null && character.emotion !== ''" label size="x-small" variant="outlined" class="ml-1">{{ character.emotion }}</v-chip> -->
                         <span class="text-caption ml-1 text-muted">{{ character.emotion }}</span>
-                        <CultureChip kind="character" :name="name" class="ml-1" />
                         <template v-slot:actions>
                             <v-icon v-if="characterSuggestions(name)" color="highlight5" class="mr-1">mdi-lightbulb-on</v-icon>
                             <div v-else-if="getCharacterAvatar(name)" class="character-avatar-square mr-1">
@@ -237,14 +236,12 @@ import {
     isKnownSceneCharacter,
 } from '@/utils/entityActions';
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
-import CultureChip from './cultures/CultureChip.vue';
-import WorldPanelPlaces from './cultures/WorldPanelPlaces.vue';
+import WorldPanelPlaces from './WorldPanelPlaces.vue';
 
 export default {
     name: 'WorldState',
     mixins: [VisualAssetsMixin],
     components: {
-        CultureChip,
         WorldPanelPlaces,
     },
     data() {

@@ -509,7 +509,6 @@ import { effectiveActionEnabled } from '@/constants/sceneAgentSettings';
 import { isVisualAgentReady, isImageEditAvailable, isImageCreateAvailable } from '@/constants/visual';
 import { createSceneAssetsRequester } from './VisualAssetsMixin.js';
 import AutocompleteMixin from './AutocompleteMixin.js';
-import { culturesStory, ingestCulturesMessage, requestReview } from '@/components/cultures/culturesStory.js';
 import { themeFromConfig } from '@/theme/engine.js';
 import { applyTheme } from '@/theme/store.js';
 // Vuetify wraps `$vuetify.theme` in `reactive()`, which auto-unwraps the
@@ -609,7 +608,6 @@ export default {
           title: () => { return 'World Editor' },
           condition: () => { return this.sceneActive },
           icon: () => { return 'mdi-earth-box' },
-          badge: () => { return culturesStory.counts.unreviewed_total || 0 },
           click: () => { 
             this.$nextTick(() => {
               this.onOpenWorldStateManager();
@@ -1056,11 +1054,6 @@ export default {
       autocompleteInfoMessage: (active) => this.autocompleteInfoMessage(active),
       toLabel: (value) => this.toLabel(value),
       openWorldStateManager: this.onOpenWorldStateManager,
-      openCulturesReview: (target) => {
-        requestReview(target);
-        this.$refs.sceneMessages?.closeEntityTooltip?.();
-        this.onOpenWorldStateManager('cultures');
-      },
       requestTemplates: () => this.requestWorldStateTemplates(),
       beginUxInteraction: (uxId) => this.beginUxInteraction(uxId),
       endUxInteraction: (uxId) => this.endUxInteraction(uxId),
@@ -1215,8 +1208,6 @@ export default {
 
     handleMessage(event) {
       const data = JSON.parse(event.data);
-
-      ingestCulturesMessage(data, (p) => this.websocket?.send(JSON.stringify(p)));
 
       this.messageHandlers.forEach(handler => handler(data));
 
