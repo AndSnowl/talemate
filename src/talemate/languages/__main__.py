@@ -9,14 +9,15 @@ import argparse
 import sys
 from pathlib import Path
 
-from pydantic import ValidationError
-
 from talemate.languages.check import CheckReport, check_language, repair_note
+from talemate.languages.importer import parse_language_text
 from talemate.languages.models import LanguageFile
 
 
 def _read(path: Path) -> LanguageFile:
-    return LanguageFile.model_validate_json(path.read_text(encoding="utf-8"))
+    """The language in `path`: a file, or a saved reply with prose around
+    it (`parse_language_text`)."""
+    return parse_language_text(path.read_text(encoding="utf-8"))
 
 
 def check_file(path: Path) -> CheckReport:
@@ -24,7 +25,7 @@ def check_file(path: Path) -> CheckReport:
     language is a blocking problem."""
     try:
         language_file = _read(path)
-    except (OSError, ValidationError, ValueError) as exc:
+    except (OSError, ValueError) as exc:
         return CheckReport(blocking=[f"The file can't be read as a language: {exc}"])
     return check_language(language_file.language)
 

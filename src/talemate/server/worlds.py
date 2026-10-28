@@ -433,6 +433,9 @@ from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
+from talemate.languages.check import check_language, repair_note
+from talemate.languages.entry import language_of
+from talemate.languages.importer import apply_import, export_language, preview_import
 from talemate.world.store import Revision, Source, World
 from talemate.world.timeline import TimelineEntry
 from talemate.world.timelines import TimelineLine, entry_timeline
@@ -881,6 +884,20 @@ class FindMixPayload(pydantic.BaseModel):
         if len(value) != 2:
             raise ValueError("a mix has two parents")
         return value
+
+
+class LanguageTextPayload(pydantic.BaseModel):
+    """A language file's text (a file or a pasted reply), for a new
+    language or a new version of `target_id`."""
+
+    text: str
+    target_id: str | None = None
+    at: dict | None = None
+
+
+class LanguageSamplesPayload(pydantic.BaseModel):
+    thing_id: str
+    seed: int = 0
 
 
 class SetFieldPayload(_ThingEdit):
@@ -5397,6 +5414,60 @@ class WorldsPlugin(Plugin):
             payload.thing_id,
             _date_in(payload.at),
             prose=payload.field not in UNRENDERED_FIELDS,
+        )
+
+    # --- languages (languages 3a) -------------------------------------------
+
+    async def handle_language_preview(self, data: dict):
+        """What importing a language would give: the file, the shared check
+        and its repair note, and, for a new version, what changes."""
+
+        payload = LanguageTextPayload(**data)
+        preview = preview_import(
+            self._require_world().view(), payload.text, payload.target_id
+        )
+        self._reply(
+            "language_preview",
+            {
+                **preview.model_dump(mode="json"),
+                "ok": preview.report.ok,
+                "repair_note": repair_note(preview.report),
+                "target_id": payload.target_id,
+            },
+        )
+
+    async def handle_language_import(self, data: dict):
+        """Import a language as a new entry, or a new version onto
+        `target_id`; refused when something must be fixed first."""
+
+        payload = LanguageTextPayload(**data)
+        world = self._require_world()
+        preview = preview_import(world.view(), payload.text, payload.target_id)
+        with world.revision(Source.manual(note="import language")) as rev:
+            thing_id = apply_import(rev, world.view(), preview, payload.target_id)
+        self._edited("language_import", thing_id, _date_in(payload.at), prose=False)
+
+    async def handle_language_export(self, data: dict):
+        """The language entry as a file's text."""
+
+        thing_id = str(data.get("thing_id", ""))
+        exported = export_language(self._require_world().view(), thing_id)
+        self._reply(
+            "language_export",
+            {"thing_id": thing_id, "text": exported.model_dump_json(indent=2)},
+        )
+
+    async def handle_language_samples(self, data: dict):
+        """Sample names from each of the language's name rules."""
+
+        payload = LanguageSamplesPayload(**data)
+        state = self._require_world().view().thing(payload.thing_id)
+        if state is None or state.kind != "language":
+            raise ValueError("there's no such language")
+        report = check_language(language_of(state), seed=payload.seed)
+        self._reply(
+            "language_samples",
+            {"thing_id": payload.thing_id, "samples": report.samples},
         )
 
     async def handle_override_fact(self, data: dict):
