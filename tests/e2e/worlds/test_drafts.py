@@ -1472,11 +1472,13 @@ def test_elsewhere_row_controls_under_text_and_repeat_choices(app, page, fixed_p
     move = match.get_by_role("button", name="Move existing here")
     expect(move).to_be_disabled()
     expect(move).to_have_attribute("title", "already on that page")
-    # unticked, it looks dropped; ticked again by Keep new, it doesn't
-    expect(again.locator(".suggestion-dropped")).to_have_count(1)
+    # it came unticked: an offer, dimmed (polish 5), not struck through;
+    # ticked by Keep new, it's in full colour
+    expect(again.locator(".suggestion-offer")).to_have_count(1)
+    expect(again.locator(".suggestion-dropped")).to_have_count(0)
     match.get_by_role("button", name="Keep new").click()
     expect(again.get_by_role("checkbox").first).to_be_checked()
-    expect(again.locator(".suggestion-dropped")).to_have_count(0)
+    expect(again.locator(".suggestion-offer")).to_have_count(0)
     expect(match.get_by_test_id("repeat-removing")).to_be_visible()
 
     draft.get_by_test_id("draft-bar").get_by_role("button", name="Accept").click()
