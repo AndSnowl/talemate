@@ -114,6 +114,36 @@
                     </v-card>
                 </v-col>
 
+                <v-col cols="12" md="6">
+                    <v-card class="mb-4" variant="tonal" data-testid="language-links">
+                        <v-card-title class="text-caption text-uppercase text-muted">Related languages</v-card-title>
+                        <v-card-text>
+                            <v-select
+                                :model-value="fields.descends_from || null"
+                                :items="otherLanguages"
+                                label="Descends from"
+                                density="compact"
+                                variant="outlined"
+                                hide-details
+                                clearable
+                                class="mb-3"
+                                data-testid="language-parent"
+                                @update:model-value="(value) => saveField('descends_from', value || null)"
+                            ></v-select>
+                            <div v-for="(link, i) in similar" :key="link.target" class="d-flex align-center ga-2 mb-1" data-testid="language-similar">
+                                <span>{{ nameOf(link.target) }}</span>
+                                <v-chip size="x-small" label variant="tonal">{{ DEGREE_LABELS[link.degree] || link.degree }}</v-chip>
+                                <v-btn icon="mdi-close" size="x-small" variant="text" density="comfortable" :aria-label="'Not similar to ' + nameOf(link.target)" @click="removeSimilar(i)"></v-btn>
+                            </div>
+                            <div class="d-flex align-center flex-wrap ga-2 mt-1">
+                                <v-select v-model="similarDraft.target" :items="similarCandidates" label="Similar to…" density="compact" variant="outlined" hide-details class="small-field" data-testid="language-similar-target"></v-select>
+                                <v-select v-model="similarDraft.degree" :items="DEGREES" label="How close" density="compact" variant="outlined" hide-details class="small-field"></v-select>
+                                <v-btn size="small" variant="tonal" :disabled="!similarDraft.target" @click="addSimilar">Add</v-btn>
+                            </div>
+                        </v-card-text>
+                    </v-card>
+                </v-col>
+
                 <v-col cols="12">
                     <v-card class="mb-4" variant="tonal">
                         <v-card-title class="text-caption text-uppercase text-muted">Grammar notes</v-card-title>
@@ -300,6 +330,13 @@ const DEPTHS = [
     { title: 'Full language', value: 'full' },
 ];
 
+const DEGREES = [
+    { title: 'close: talk with effort', value: 'close' },
+    { title: 'distant: a few shared words', value: 'distant' },
+    { title: 'one way: they follow us, not the reverse', value: 'one-way' },
+];
+const DEGREE_LABELS = { close: 'close', distant: 'distant', 'one-way': 'one way' };
+
 const USES = {
     words: { label: 'ordinary words', icon: 'mdi-alphabetical' },
     people: { label: 'people', icon: 'mdi-account' },
@@ -334,7 +371,7 @@ export default {
         tab: { type: String, required: true },
     },
     setup() {
-        return { worlds: useWorldsStore(), DEPTHS };
+        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS };
     },
     data() {
         return {
@@ -347,6 +384,7 @@ export default {
             rulesText: '',
             rulesError: '',
             seed: 0,
+            similarDraft: { target: null, degree: 'close' },
         };
     },
     computed: {
@@ -391,6 +429,18 @@ export default {
             const f = this.phraseForm;
             return !!(f.category.trim() && f.original.trim() && f.translation.trim());
         },
+        similar() {
+            return this.fields.similar || [];
+        },
+        otherLanguages() {
+            return (this.worlds.things.language || [])
+                .filter((t) => t.id !== this.thing.id)
+                .map((t) => ({ title: t.name, value: t.id }));
+        },
+        similarCandidates() {
+            const taken = new Set(this.similar.map((l) => l.target));
+            return this.otherLanguages.filter((item) => !taken.has(item.value));
+        },
         samples() {
             return this.worlds.languageSamples[this.thing.id] || {};
         },
@@ -406,6 +456,7 @@ export default {
                 this.importing = false;
                 this.advanced = false;
                 this.reroll(0);
+                if (!this.worlds.things.language) this.worlds.listThings('language');
             },
         },
         'worlds.languageExport'(exported) {
@@ -441,6 +492,16 @@ export default {
             if (!rules.grammar) delete rules.grammar;
             if (!rules.syllable_notes.length) delete rules.syllable_notes;
             this.saveField('rules', rules);
+        },
+        nameOf(id) {
+            return (this.worlds.things.language || []).find((t) => t.id === id)?.name || '(deleted language)';
+        },
+        addSimilar() {
+            this.saveField('similar', [...plain(this.similar), { ...this.similarDraft }]);
+            this.similarDraft = { target: null, degree: 'close' };
+        },
+        removeSimilar(index) {
+            this.saveField('similar', this.similar.filter((_, i) => i !== index));
         },
         removeSyllableNote(index) {
             this.local.syllable_notes.splice(index, 1);

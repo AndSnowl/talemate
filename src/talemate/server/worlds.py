@@ -1183,6 +1183,27 @@ class RepositionScenePayload(pydantic.BaseModel):
     start: dict
 
 
+def _languages_page(view: WorldView, state: ThingState) -> dict:
+    """A page's Languages section (languages 3a): its own rows, each named
+    (None for a deleted language), the languages that apply to it (its own,
+    or inherited through its filings) and, when inherited, where from."""
+
+    own = []
+    for row in state.fields.get("languages") or []:
+        language = view.thing(row["language"])
+        named = language is not None and language.kind == "language"
+        own.append({**row, "name": language.fields.get("name") if named else None})
+    rows = languages_for(view, state.id)
+    source = rows[0].source_id if rows and rows[0].inherited else None
+    return {
+        "languages_own": own,
+        "languages_view": [
+            {**r.model_dump(), "source_name": view.name_of(r.source_id)} for r in rows
+        ],
+        "languages_source_name": view.name_of(source) if source else None,
+    }
+
+
 def _fixed_file(env: str) -> Path | None:
     """The browser tests' fixed-reply file named by `env`, if it's set and
     a test has written the file; `None` otherwise, so a request with no
@@ -2337,6 +2358,7 @@ class WorldsPlugin(Plugin):
                 ),
             },
         }
+        page.update(_languages_page(view, state))
         if mark_own:
             _mark_own_page(page, own_alias_table(state, page["name"]))
         return page
@@ -5439,6 +5461,13 @@ class WorldsPlugin(Plugin):
                 if payload.value is not None and not isinstance(payload.value, str):
                     raise ValueError(f"{payload.field!r} must be a thing id")
                 file_by_role(rev, world, payload.thing_id, role, payload.value)
+            elif payload.value is None:
+                # a cleared field (a language's "Descends from", languages
+                # 3a): its value is removed, not set to nothing
+                if state is not None and payload.field in state.fields:
+                    rev.remove_field_value(
+                        payload.thing_id, payload.field, _date_in(payload.valid_from)
+                    )
             else:
                 rev.set_field(
                     payload.thing_id,

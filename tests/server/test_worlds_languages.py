@@ -218,3 +218,43 @@ async def test_language_add_word_and_name_in(plugin, client):
     )
     aka = world.view().thing(sorau).fields["aka"]
     assert aka[-1]["language"] == lid and aka[-1]["name"] == result["result"]["name"]
+
+
+# --- Languages sections (Task 10) --------------------------------------------
+
+
+async def test_thing_payload_includes_languages_view(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    await _act(plugin, "get_thing", id=town)
+    page = _last(plugin, "get_thing")["data"]
+    rows = page["languages_view"]
+    assert [(r["language_id"], r["role"], r["inherited"]) for r in rows] == [
+        (lid, "official", True)
+    ]
+    assert rows[0]["source_id"] == sorau and rows[0]["name"] == "Moscavian"
+    assert rows[0]["source_name"] == "Free Provinces of Sorau"
+    assert page["languages_source_name"] == "Free Provinces of Sorau"
+
+
+async def test_thing_payload_names_own_rows_and_deleted_languages(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    await _act(plugin, "get_thing", id=sorau)
+    own = _last(plugin, "get_thing")["data"]["languages_own"]
+    assert own == [{"language": lid, "role": "official", "name": "Moscavian"}]
+    with world.revision(Source.manual()) as rev:
+        rev.remove_thing(lid)
+    await _act(plugin, "get_thing", id=sorau)
+    page = _last(plugin, "get_thing")["data"]
+    assert page["languages_own"][0]["name"] is None
+    assert page["languages_view"] == []
+
+
+async def test_set_field_clears_a_language_parent(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    with world.revision(Source.manual()) as rev:
+        old = rev.create_thing("language", {"name": "Old Moscavian"})
+    await _act(plugin, "set_field", thing_id=lid, field="descends_from", value=old)
+    assert world.view().thing(lid).fields["descends_from"] == old
+    await _act(plugin, "set_field", thing_id=lid, field="descends_from", value=None)
+    assert not _errors(plugin)
+    assert "descends_from" not in world.view().thing(lid).fields

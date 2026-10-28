@@ -273,6 +273,10 @@
                         @remove="edit(removeFiling(edited, $event))"
                     />
 
+                    <!-- who speaks what here (languages 3a); a language's
+                         own page has none -->
+                    <EntryLanguages v-if="!draft && thing.kind !== 'language'" :thing="thing" />
+
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
                          line under the heading (a draft page's nested draft
                          indented) -->
@@ -626,6 +630,7 @@ import {
     tickMoveHere,
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
+import EntryLanguages from './EntryLanguages.vue';
 import LanguageSections from './LanguageSections.vue';
 import DraftBar from './DraftBar.vue';
 import FillStubButton from './FillStubButton.vue';
@@ -785,6 +790,7 @@ export default {
     name: 'ThingPage',
     components: {
         CreateBox,
+        EntryLanguages,
         LanguageSections,
         DraftBar,
         FillStubButton,
