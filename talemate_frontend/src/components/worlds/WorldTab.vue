@@ -121,9 +121,6 @@
         <!-- the page -->
         <div class="main flex-grow-1 pa-4">
             <ExpandAskDialog />
-            <v-alert v-if="worlds.error" type="error" variant="tonal" density="compact" class="mb-3" closable @click:close="worlds.clearError()">
-                {{ worlds.error }}
-            </v-alert>
             <!-- what the last accept, move, merge or date pick left out, and why -->
             <v-alert
                 v-if="worlds.notes"

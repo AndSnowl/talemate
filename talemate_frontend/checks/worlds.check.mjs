@@ -3874,6 +3874,22 @@ check('loadFolds survives bad storage', () => {
     assert.deepEqual(loadFolds('other', good), { kinds: new Set(), entries: new Set() });
 });
 
+check('the same error again counts; another world clears it', () => {
+    const { store } = freshStore();
+    store.handleMessage(reply('open_world', WORLD));
+    const fail = (message) => store.handleMessage({ type: 'worlds', action: 'operation_done', error: { message } });
+    fail('Error during get_thing: no such thing');
+    assert.equal(store.error, 'Error during get_thing: no such thing');
+    assert.equal(store.errorCount, 1);
+    fail('Error during get_thing: no such thing');
+    assert.equal(store.errorCount, 2);
+    fail('Error during set_tag: bad tag');
+    assert.equal(store.errorCount, 1);
+    store.openWorld('/somewhere/else');
+    assert.equal(store.error, null);
+    assert.equal(store.errorCount, 0);
+});
+
 if (failures.length) {
     for (const { name, err } of failures) {
         console.error(`FAIL ${name}\n  ${err.message}`);

@@ -694,7 +694,10 @@ export const useWorldsStore = defineStore('worlds', {
         connected: false,
         worlds: [],
         currentWorld: null,
+        // the one error message (`WorldError`), and how many times in a row
+        // the same one came (polish 5)
         error: null,
+        errorCount: 0,
         ...worldState(),
     }),
 
@@ -805,6 +808,13 @@ export const useWorldsStore = defineStore('worlds', {
 
         clearError() {
             this.error = null;
+            this.errorCount = 0;
+        },
+
+        // a new error replaces the last; the same one again counts
+        setError(message) {
+            this.errorCount = message === this.error ? this.errorCount + 1 : 1;
+            this.error = message;
         },
 
         // --- worlds -------------------------------------------------------
@@ -820,6 +830,8 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         openWorld(path) {
+            // the last world's error no longer applies
+            this.clearError();
             this.resetWorld();
             this.pending = { open_world: true };
             this.request('open_world', { path });
@@ -2417,7 +2429,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.proseRegenerating = null;
                         this.proseRegeneratingSection = null;
                     }
-                    this.error = message.message;
+                    this.setError(message.message);
                     break;
                 case 'operation_done':
                     if (message.error) {
@@ -2427,7 +2439,7 @@ export const useWorldsStore = defineStore('worlds', {
                         if (this.setupPending || this.pending.start_scene) {
                             this.setupError = message.error.message;
                         } else {
-                            this.error = message.error.message;
+                            this.setError(message.error.message);
                         }
                         this.pending = {};
                         // the failed request may be the delete (or its
@@ -2475,7 +2487,7 @@ export const useWorldsStore = defineStore('worlds', {
                         this.backOpening = null;
                         if (failed && failed === this.selectedThingId) {
                             this.gone = [...this.gone, failed];
-                            this.error = null;
+                            this.clearError();
                             this.goBack();
                         }
                     }

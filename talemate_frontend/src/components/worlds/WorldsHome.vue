@@ -1,8 +1,5 @@
 <template>
     <div class="worlds-home pa-4" data-testid="worlds-home">
-        <v-alert v-if="worlds.error" type="error" variant="tonal" density="compact" class="mb-4" closable @click:close="worlds.clearError()">
-            {{ worlds.error }}
-        </v-alert>
 
         <v-row>
             <v-col cols="12" md="5">

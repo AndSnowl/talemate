@@ -2029,6 +2029,12 @@ def _links_as_words(view: WorldView, text: str, start: int, end: int) -> str:
 class WorldsPlugin(Plugin):
     router = "worlds"
 
+    async def signal_operation_failed(self, message: str, emit_status: bool = True):
+        """A refused worlds action shows once, in the World tab's own error
+        message (polish 5): no app-wide status popup repeats it."""
+
+        await super().signal_operation_failed(message, emit_status=False)
+
     # where worlds live; tests point this at a temp directory
     worlds_root: Path | None = None
 

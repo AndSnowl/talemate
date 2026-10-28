@@ -222,6 +222,8 @@
 
         <FmWordmark v-if="!sceneActive && tab !== 'fmworld'" size="lg" class="backdrop-wordmark" />
 
+        <!-- the worlds screens' one error message, pinned (polish 5) -->
+        <WorldError v-if="tab === 'worlds' || tab === 'fmworld'" />
         <v-tabs-window v-model="tab" style="height: 100%;">
           <!-- WORLDS (the fantasymate home) -->
           <v-tabs-window-item :transition="false" :reverse-transition="false" value="worlds">
@@ -499,6 +501,7 @@ import PromptsView from './prompts/PromptsView.vue';
 import PromptsMenu from './prompts/PromptsMenu.vue';
 import WorldsHome from './worlds/WorldsHome.vue';
 import WorldTab from './worlds/WorldTab.vue';
+import WorldError from './worlds/WorldError.vue';
 import { useWorldsStore } from '@/stores/worlds.js';
 // import debounce
 import { debounce } from 'lodash';
@@ -555,6 +558,7 @@ export default {
     PromptsMenu,
     WorldsHome,
     WorldTab,
+    WorldError,
   },
   name: 'TalemateApp',
   mixins: [AutocompleteMixin],

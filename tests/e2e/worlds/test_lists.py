@@ -12,7 +12,7 @@ import re
 
 from playwright.sync_api import expect
 
-from e2e.seed import dismiss_onboarding, seed_fm_world
+from e2e.seed import dismiss_onboarding, seed_fm_world, send_backend
 from e2e.worlds.test_world_tab import (
     TIMEOUT_MS,
     _open_thing,
@@ -218,3 +218,53 @@ def test_kind_page_lists_entries(app, page):
         has_text="Velikoye"
     ).wait_for(state="visible", timeout=TIMEOUT_MS)
     assert page.console_errors == []
+
+
+def _fail(page):
+    """A request the backend refuses: a thing that isn't there."""
+
+    send_backend(page, {"type": "worlds", "action": "get_thing", "id": "0" * 32})
+
+
+def test_error_pinned_counts_and_clears(app, page):
+    name, _ = _seeded(app, page, "Errors")
+    other = _world_name("ErrorsToo")
+    seed_fm_world(app.root, other, present_year=1026, things=TREE[:1])
+    _open_thing(page, "Night Court")
+    page.mouse.wheel(0, 2000)
+    _fail(page)
+    error = page.get_by_test_id("world-error")
+    expect(error).to_contain_text("no such thing")
+    _fail(page)
+    expect(error).to_contain_text("×2")
+    # in view, however far the page is scrolled
+    box = error.bounding_box()
+    assert 0 <= box["y"] < page.viewport_size["height"]
+    expect(error.get_by_role("button", name="Copy")).to_be_visible()
+    # one message: no popup repeats it
+    expect(page.get_by_text("no such thing")).to_have_count(1)
+    # it stays until closed
+    page.wait_for_timeout(4000)
+    expect(error).to_be_visible()
+
+    # another world: it no longer applies
+    page.get_by_role("tab", name="Worlds", exact=True).click()
+    _open_world(page, other)
+    expect(error).to_have_count(0)
+
+
+def test_prompt_box_survives_an_error(app, page):
+    name, _ = _seeded(app, page, "Squash")
+    other = _world_name("SquashToo")
+    seed_fm_world(app.root, other, present_year=1026, things=TREE[:1])
+    _fail(page)
+    page.get_by_test_id("world-error").wait_for(state="visible", timeout=TIMEOUT_MS)
+    page.get_by_role("tab", name="Worlds", exact=True).click()
+    _open_world(page, other)
+    # the World tab drew its create box while hidden, behind the Worlds tab
+    # (the owner's squashed prompt box, hubs item 19): shown now, it's
+    # measured again
+    _world_tab(page)
+    box = page.get_by_test_id("create-box").locator("textarea").first
+    box.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert box.bounding_box()["height"] >= 40
