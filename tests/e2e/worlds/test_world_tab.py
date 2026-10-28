@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import uuid
 
+from playwright.sync_api import expect
+
 from e2e.seed import seed_fm_world
 
 TIMEOUT_MS = 30_000
@@ -124,7 +126,8 @@ def test_worlds_home_lists_and_opens(app, page):
     page.get_by_test_id("thing-card").filter(has_text="Maren Vos").wait_for(
         state="visible", timeout=TIMEOUT_MS
     )
-    assert page.get_by_test_id("kind-culture").get_by_text("via skill").is_visible()
+    # the old "Cultures via skill" pointer is gone
+    expect(page.get_by_test_id("kind-culture")).to_have_count(0)
 
 
 def test_a_world_made_before_filing_is_refused_with_a_plain_message(app, page):
