@@ -436,7 +436,11 @@ from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
 from talemate.languages.entry import language_of
 from talemate.languages.entry import languages as all_languages
-from talemate.languages.lookup import default_language, languages_for
+from talemate.languages.lookup import (
+    default_language,
+    languages_for,
+    languages_for_scene,
+)
 from talemate.languages.models import Language
 from talemate.languages.naming import (
     NameInResult,
@@ -5542,6 +5546,18 @@ class WorldsPlugin(Plugin):
             return None, fixed.read_text(encoding="utf-8")
         return self._client(), None
 
+    def _naming_world(self) -> World:
+        """The world naming works in: the open one, else the world scene's
+        (the scene's message box can name things with no world open)."""
+
+        if self.world is not None:
+            return self.world
+        scene = getattr(self.websocket_handler, "scene", None)
+        context = getattr(scene, "world_context", None)
+        if context is not None:
+            return context.world
+        return self._require_world()
+
     def _language(self, view: WorldView, language_id: str) -> Language:
         state = view.thing(language_id)
         if state is None or state.kind != "language":
@@ -5553,6 +5569,49 @@ class WorldsPlugin(Plugin):
         none for a box with no page): its rows, the default, and every
         language in the world for the picker."""
 
+        if data.get("scene"):
+            # the scene's message box: the speaker's languages, then the
+            # scene place's; none in a scene with no world
+            context = getattr(
+                getattr(self.websocket_handler, "scene", None), "world_context", None
+            )
+            if context is None:
+                self._reply(
+                    "language_menu",
+                    {
+                        "thing_id": None,
+                        "scene": True,
+                        "rows": [],
+                        "default": None,
+                        "languages": [],
+                    },
+                )
+                return
+            view = context.world.view()
+            place = context.record.state.get("place_thing_id")
+            rows = languages_for_scene(
+                view,
+                place if isinstance(place, str) else None,
+                context.record.player_thing_id,
+            )
+            self._reply(
+                "language_menu",
+                {
+                    "thing_id": None,
+                    "scene": True,
+                    "rows": [r.model_dump() for r in rows],
+                    "default": rows[0].language_id if rows else None,
+                    "languages": [
+                        {
+                            "id": s.id,
+                            "name": s.fields.get("name", ""),
+                            "phrases": s.fields.get("phrases") or [],
+                        }
+                        for s in all_languages(view)
+                    ],
+                },
+            )
+            return
         view = self._require_world().view()
         thing_id = data.get("thing_id")
         rows = languages_for(view, thing_id) if thing_id else []
@@ -5560,6 +5619,7 @@ class WorldsPlugin(Plugin):
             "language_menu",
             {
                 "thing_id": thing_id,
+                "scene": False,
                 "rows": [r.model_dump() for r in rows],
                 "default": default_language(rows),
                 "languages": [
@@ -5579,7 +5639,7 @@ class WorldsPlugin(Plugin):
         `language_names {language_id, kind, names: [{name, definition}]}`."""
 
         payload = LanguageNamesPayload(**data)
-        view = self._require_world().view()
+        view = self._naming_world().view()
         language = self._language(view, payload.language_id)
         exclude = frozenset(payload.exclude) | frozenset(
             str(s.fields.get("name", "")) for s in view.things(facts=False)
@@ -5624,7 +5684,7 @@ class WorldsPlugin(Plugin):
         definition}`."""
 
         payload = LanguageWordPayload(**data)
-        language = self._language(self._require_world().view(), payload.language_id)
+        language = self._language(self._naming_world().view(), payload.language_id)
         client, reply = self._language_reply()
 
         async def suggested() -> str:
@@ -5653,7 +5713,7 @@ class WorldsPlugin(Plugin):
         as a name keeps its meaning)."""
 
         payload = LanguageWordPayload(**data)
-        world = self._require_world()
+        world = self._naming_world()
         with world.revision(Source.manual(note="add word")) as rev:
             add_word(
                 rev, world.view(), payload.language_id, payload.word, payload.meaning

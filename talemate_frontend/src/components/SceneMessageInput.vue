@@ -1,5 +1,5 @@
 <template>
-  <div class="position-relative scene-message-input-root">
+  <div class="position-relative scene-message-input-root" @contextmenu="openMenu">
     <v-textarea
       v-model="inputValue"
       :label="inputHint"
@@ -30,6 +30,27 @@
         </v-btn>
       </template>
     </v-textarea>
+    <!-- right-click: the edit items and naming from the scene's
+         languages (languages 3a); no references in a scene's message -->
+    <ReferenceMenu
+      v-model="menuOpen"
+      :target="menuTarget"
+      :has-selection="selection[1] > selection[0]"
+      :references="false"
+      language-naming
+      context-scene
+      :context-thing-id="null"
+      context-kind="character"
+      :selected-text="menuOpen ? (inputValue || '').slice(selection[0], selection[1]) : ''"
+      @cut="edit('cut')"
+      @copy="edit('copy')"
+      @paste="paste"
+      @delete="edit('delete')"
+      @undo="edit('undo')"
+      @redo="edit('redo')"
+      @select-all="edit('selectAll')"
+      @insert="insertAt"
+    />
     <AutocompleteRedoChip
       :applied="autocompleteField?.state.applied || false"
       :disabled="disabled"
@@ -49,6 +70,8 @@
 <script>
 import { isPrimaryModifier, primaryModifierLabel } from '@/utils/keyboardModifiers';
 import AutocompleteRedoChip from './AutocompleteRedoChip.vue';
+import ReferenceMenu from './worlds/ReferenceMenu.vue';
+import { replaceSelection } from './worlds/languageMenu.js';
 import { createAutocompleteField } from '@/utils/autocompleteField';
 import { characterColor } from '@/theme/dataColors';
 import { currentTheme } from '@/theme/store';
@@ -99,7 +122,7 @@ const PREFIXES = [
 
 export default {
   name: 'SceneMessageInput',
-  components: { AutocompleteRedoChip },
+  components: { AutocompleteRedoChip, ReferenceMenu },
   inject: ['autocompleteRequest'],
   props: {
     // The textarea's text, bound via v-model on the parent.
@@ -154,6 +177,10 @@ export default {
       historyIndex: 0,
       draftBeforeHistoryBrowse: '',
       autocompleteField: null,
+      // the right-click menu (languages 3a)
+      menuOpen: false,
+      menuTarget: null,
+      selection: [0, 0],
     };
   },
   created() {
@@ -295,6 +322,47 @@ export default {
     },
   },
   methods: {
+    // --- the right-click menu (languages 3a) -------------------------------
+    textareaEl() {
+      return this.$refs.textarea?.$el?.querySelector('textarea') || null;
+    },
+    openMenu(event) {
+      if (this.disabled || event.shiftKey) return;
+      const el = this.textareaEl();
+      if (!el || !el.contains(event.target)) return;
+      event.preventDefault();
+      this.selection = [el.selectionStart, el.selectionEnd];
+      this.menuTarget = [event.clientX, event.clientY];
+      this.menuOpen = true;
+    },
+    restoreSelection() {
+      const el = this.textareaEl();
+      if (!el) return null;
+      el.focus();
+      el.setSelectionRange(this.selection[0], this.selection[1]);
+      return el;
+    },
+    edit(command) {
+      if (!this.restoreSelection()) return;
+      document.execCommand(command);
+    },
+    async paste() {
+      try {
+        const text = await navigator.clipboard.readText();
+        this.insertAt(text);
+      } catch {
+        this.edit('paste');
+      }
+    },
+    insertAt(text) {
+      const value = this.inputValue || '';
+      this.inputValue = replaceSelection(value, this.selection, text);
+      const caret = this.selection[0] + text.length;
+      this.$nextTick(() => {
+        const el = this.restoreSelection();
+        if (el) el.setSelectionRange(caret, caret);
+      });
+    },
     focus() {
       this.$refs.textarea?.focus();
     },

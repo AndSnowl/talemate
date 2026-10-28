@@ -130,3 +130,4 @@ def test_name_it_in_other_language(app, page, fixed_language):
     names = sorau.get_by_test_id("thing-other-names")
     expect(names).to_contain_text(proposed, timeout=TIMEOUT_MS)
     expect(names).to_contain_text("Sorauan")
+

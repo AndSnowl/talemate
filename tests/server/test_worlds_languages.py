@@ -267,3 +267,37 @@ async def test_language_names_without_a_client_come_without_definitions(plugin):
     await _drain(plugin)
     names = _last(plugin, "language_names")["data"]["names"]
     assert len(names) == 4 and all(n["definition"] == "" for n in names)
+
+
+# --- the scene's message box (Task 12) ---------------------------------------
+
+
+async def test_scene_menu_uses_speaker_then_place(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    with world.revision(Source.manual()) as rev:
+        other = rev.create_thing("language", {"name": "Old Moscavian"})
+        ivan = rev.create_thing(
+            "character",
+            {"name": "Ivan", "languages": [{"language": other, "role": "spoken"}]},
+        )
+    plugin.websocket_handler.scene = SimpleNamespace(
+        cancel_requested=False,
+        world_context=SimpleNamespace(
+            world=world,
+            record=SimpleNamespace(
+                player_thing_id=ivan, state={"place_thing_id": town}
+            ),
+        ),
+    )
+    await _act(plugin, "language_menu", scene=True)
+    menu = _last(plugin, "language_menu")["data"]
+    assert [r["language_id"] for r in menu["rows"]] == [other, lid]
+    assert menu["scene"] is True and menu["default"] == other
+
+
+async def test_scene_menu_without_a_world_scene_is_empty(plugin):
+    await _open(plugin)
+    plugin.websocket_handler.scene = SimpleNamespace(cancel_requested=False)
+    await _act(plugin, "language_menu", scene=True)
+    menu = _last(plugin, "language_menu")["data"]
+    assert menu["rows"] == [] and menu["languages"] == []

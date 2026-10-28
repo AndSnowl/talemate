@@ -107,6 +107,8 @@ export default {
         thingId: { type: String, default: null },
         kind: { type: String, default: 'place' },
         selected: { type: String, default: '' },
+        // a scene's message box: the speaker's and the place's languages
+        scene: { type: Boolean, default: false },
     },
     emits: ['insert', 'done'],
     setup() {
@@ -121,7 +123,8 @@ export default {
         },
         menu() {
             const menu = this.worlds.languageMenu;
-            return menu && (menu.thing_id || null) === (this.thingId || null) ? menu : null;
+            if (!menu || !!menu.scene !== this.scene) return null;
+            return (menu.thing_id || null) === (this.thingId || null) ? menu : null;
         },
         languages() {
             return menuLanguages(this.menu);
@@ -166,7 +169,7 @@ export default {
         },
     },
     mounted() {
-        this.worlds.loadLanguageMenu(this.thingId);
+        this.worlds.loadLanguageMenu(this.thingId, this.scene);
     },
     methods: {
         roll() {

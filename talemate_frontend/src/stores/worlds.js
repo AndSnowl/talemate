@@ -1929,9 +1929,9 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('language_export', { thing_id: thingId });
         },
 
-        loadLanguageMenu(thingId = null) {
+        loadLanguageMenu(thingId = null, scene = false) {
             this.languageMenu = null;
-            this.request('language_menu', thingId ? { thing_id: thingId } : {});
+            this.request('language_menu', scene ? { scene: true } : thingId ? { thing_id: thingId } : {});
         },
 
         requestLanguageNames(languageId, kind, seed = null, context = '') {

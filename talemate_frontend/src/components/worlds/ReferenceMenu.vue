@@ -13,6 +13,7 @@
                 :thing-id="contextThingId"
                 :kind="contextKind || 'place'"
                 :selected="selectedText"
+                :scene="contextScene"
                 @insert="insert"
                 @done="$emit('update:modelValue', false)"
             />
@@ -27,7 +28,7 @@
                 <v-divider></v-divider>
                 <v-list-item prepend-icon="mdi-select-all" title="Select all" @click="act('selectAll')"></v-list-item>
                 <v-divider></v-divider>
-                <v-list-item prepend-icon="mdi-link-variant" title="Add reference…" @click="searching = true"></v-list-item>
+                <v-list-item v-if="references" prepend-icon="mdi-link-variant" title="Add reference…" @click="searching = true"></v-list-item>
                 <template v-if="languageNaming">
                     <v-divider></v-divider>
                     <v-list-item v-if="!hasSelection" prepend-icon="mdi-alphabetical-variant" title="Make a name…" data-testid="menu-make-name" @click="mode = 'name'"></v-list-item>
@@ -100,6 +101,10 @@ export default {
         contextThingId: { type: String, default: null },
         contextKind: { type: String, default: null },
         selectedText: { type: String, default: '' },
+        // a scene's message box: the languages in reach are the scene's
+        contextScene: { type: Boolean, default: false },
+        // false where a box takes no references (a scene's message)
+        references: { type: Boolean, default: true },
     },
     emits: ['update:modelValue', 'cut', 'copy', 'paste', 'delete', 'undo', 'redo', 'selectAll', 'pick', 'insert'],
     setup() {
