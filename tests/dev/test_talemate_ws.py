@@ -209,43 +209,12 @@ def test_generation_error_is_cancelled_and_raised(stub_server):
     }
 
 
-def test_request_snapshot_returns_processed_data(stub_server):
-    processed = {"place": "Veldhaer", "new_places": [], "new_names": []}
-    stub = Stub(
-        replies={
-            ("world_state_agent", "request_update"): [
-                {"type": "world_state_agent", "action": "operation_done", "data": {}},
-                {"type": "cultures", "action": "world", "data": {"available": True}},
-                {"type": "cultures", "action": "snapshot_processed", "data": processed},
-            ]
-        }
-    )
-    with BackendSession(stub_server(stub)) as session:
-        assert session.request_snapshot(timeout=5) == processed
-        assert session.events("snapshot_processed") == [processed]
-        assert session.events("snapshot_processed", start=len(session.messages)) == []
-    assert stub.received == [{"type": "world_state_agent", "action": "request_update"}]
-
-
-def test_get_world_returns_world_data(stub_server):
-    world = {"available": True, "cultures": [], "glossary": []}
-    stub = Stub(
-        replies={
-            ("cultures", "get_world"): [
-                {"type": "cultures", "action": "world", "data": world}
-            ]
-        }
-    )
-    with BackendSession(stub_server(stub)) as session:
-        assert session.get_world(timeout=5) == world
-
-
 def test_wait_for_timeout_names_last_types(stub_server):
     stub = Stub(
         on_connect=[
             {"type": "client_status", "status": "idle"},
             {"type": "ping"},
-            {"type": "cultures", "action": "context_injected", "data": {}},
+            {"type": "world_state_agent", "action": "request_update", "data": {}},
             {"type": "status", "status": "idle"},
         ]
     )
@@ -255,40 +224,40 @@ def test_wait_for_timeout_names_last_types(stub_server):
             session.wait_for(lambda m: False, timeout=0.3)
     text = str(excinfo.value)
     assert "client_status" in text
-    assert "cultures:context_injected" in text
+    assert "world_state_agent:request_update" in text
     assert "status" in text
 
 
 def test_type_error_message_raises(stub_server):
     stub = Stub(
         replies={
-            ("cultures", "get_world"): [
-                {"type": "error", "plugin": "cultures", "error": "kaput"}
+            ("narrator", "narrate_environment"): [
+                {"type": "error", "plugin": "narrator", "error": "kaput"}
             ]
         }
     )
     with BackendSession(stub_server(stub)) as session:
         with pytest.raises(BackendError, match="kaput"):
-            session.get_world(timeout=5)
+            session.narrate(timeout=5)
 
 
 def test_prompts_filter_by_agent(stub_server):
     stub = Stub(
         on_connect=[
             _prompt("narrator", "It rains."),
-            _prompt("culture", "Kethra", action="pick_name"),
+            _prompt("creator", "Kethra", action="determine_character_name"),
             {"type": "ping"},
-            _prompt("culture", "Veldhaer: town", action="places"),
+            _prompt("creator", "Veldhaer: town", action="determine_character_name"),
             {"type": "status", "status": "idle", "message": "done"},
         ]
     )
     with BackendSession(stub_server(stub)) as session:
         session.wait_for(lambda m: m["type"] == "status", timeout=5)
-        culture = session.prompts("culture")
-        assert [p["response"] for p in culture] == ["Kethra", "Veldhaer: town"]
+        creator = session.prompts("creator")
+        assert [p["response"] for p in creator] == ["Kethra", "Veldhaer: town"]
         assert len(session.prompts()) == 3
         # `start` is an index into `messages`
-        assert [p["response"] for p in session.prompts("culture", start=2)] == [
+        assert [p["response"] for p in session.prompts("creator", start=2)] == [
             "Veldhaer: town"
         ]
         assert session.last_output() == "Veldhaer: town"

@@ -141,11 +141,11 @@ node instead of a full Vitest/Jest setup — see
 `talemate_frontend/checks/*.check.mjs`. Run directly:
 
 ```bash
-guix shell -m manifest.scm -- sh -c 'cd talemate_frontend && node checks/culturesStory.check.mjs'
+guix shell -m manifest.scm -- sh -c 'cd talemate_frontend && node checks/sceneTextParser.check.mjs'
 ```
 
 The plain suite also runs it, via `tests/dev/test_frontend_checks.py`,
-which shells out to the same command and skips when `node` or the
+which shells out to each check and skips when `node` or the
 frontend's installed dependencies (`talemate_frontend/node_modules`)
 aren't available.
 
@@ -168,7 +168,7 @@ suite in about 3.5 minutes. Don't go above 4 on this machine: each app
 ### A fast loop while working
 
 - While iterating, run only the tests for the area you changed, for
-  example `tests/e2e/theme` or `tests/e2e/cultures`, plus the frontend
+  example `tests/e2e/theme` or `tests/e2e/worlds`, plus the frontend
   checks (1 s) and the plain suite (about 40 s). Run the full browser
   suite once, at the end of a task, not after every fix.
 - A change to UI that the AI tests drive, such as a selector, a class or
@@ -206,34 +206,6 @@ Without `TALEMATE_AI_TESTS=1` every test here is skipped — no network call
 is made just by collecting or running them. With it exported, a run that
 doesn't select `-m ai` (a plain `pytest`, say) still makes no call: the
 header's model-name probe only runs when `-m ai` is given.
-
-### Cultures AI evaluation
-
-An overnight measurement of how well the Culture agent works with the
-loaded model, rather than a pass/fail test. It needs the same go-ahead
-as the AI group.
-
-```bash
-TALEMATE_AI_TESTS=1 guix shell -m manifest.scm -- uv run --no-sync python scripts/dev/eval_cultures_ai.py [--runs 3] [--npcs 5] [--narrations 3] [--out DIR]
-```
-
-- It starts one isolated app with the KoboldCpp client. Then, for each
-  run and each of the three cultures scenarios (`tests/ai/cultures/scenarios.py`),
-  it seeds a fresh world, creates characters, asks for narrations and
-  requests two snapshots.
-- It writes `report.md` (plain tables, with a short note on what each
-  number means, plus samples of the names, narration excerpts and
-  glossary entries), `report.json` (every raw result) and `model.txt`
-  to `--out`. The default is `.test-artifacts/cultures-eval-<YYYYmmdd-HHMMSS>/`.
-- Both reports are rewritten after every step. A failed step is listed
-  under `errors` and the run goes on.
-- At the default size it takes about 1 to 2 hours on Skyfall-31B, and
-  it prints a progress line with an estimate of the time left after
-  each step.
-- `--scenarios` limits a run to some scenarios, for a quick check (e.g.
-  `--runs 1 --npcs 2 --narrations 1 --scenarios taelrik_town`).
-- Without `TALEMATE_AI_TESTS=1` it exits at once with "AI runs need
-  TALEMATE_AI_TESTS=1 — ask the owner first" and makes no network call.
 
 ## Owner's koboldcpp and the AI opt-in
 

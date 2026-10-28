@@ -80,3 +80,24 @@ def test_worlds_checks():
     assert "ok " in result.stdout, (
         f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
     )
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="node is not on PATH")
+@pytest.mark.skipif(
+    not _frontend_deps_installed(),
+    reason="talemate_frontend/node_modules/marked is missing (pnpm install)",
+)
+def test_scene_text_parser_checks():
+    result = subprocess.run(
+        ["node", "checks/sceneTextParser.check.mjs"],
+        cwd=_FRONTEND_DIR,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, (
+        f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    )
+    assert "ok " in result.stdout, (
+        f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
+    )
