@@ -144,10 +144,7 @@
             <CurationSettings v-else-if="kind === settingsTab.kind" />
             <template v-else-if="info">
                 <CreateBox :kind="kind" :key="kind" />
-                <div v-if="!worlds.draft" class="empty-hint pa-4 text-body-2">
-                    <template v-if="entriesOf(kind).length">Pick one of the {{ info.label.toLowerCase() }} on the left, or describe a new one above.</template>
-                    <template v-else>No {{ info.label.toLowerCase() }} yet. Describe one above to create it.</template>
-                </div>
+                <KindList v-if="!worlds.draft" :kind="kind" :query="query || ''" />
             </template>
         </div>
     </div>
@@ -160,6 +157,7 @@ import { SETTINGS_TAB, STUBS_TAB, TAGS_TAB, TOP_KINDS, kindInfo } from './worldK
 import CreateBox from './CreateBox.vue';
 import CurationSettings from './CurationSettings.vue';
 import ExpandAskDialog from './ExpandAskDialog.vue';
+import KindList from './KindList.vue';
 import StubsTab from './StubsTab.vue';
 import TagsTab from './TagsTab.vue';
 import ThingPage from './ThingPage.vue';
@@ -178,7 +176,7 @@ import ThingPage from './ThingPage.vue';
 // dimmed as context. Stubs, Tags and Settings sit at the bottom.
 export default {
     name: 'WorldTab',
-    components: { CreateBox, CurationSettings, ExpandAskDialog, StubsTab, TagsTab, ThingPage },
+    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, StubsTab, TagsTab, ThingPage },
     setup() {
         return { worlds: useWorldsStore() };
     },
@@ -452,10 +450,4 @@ export default {
     text-decoration: underline dashed;
 }
 
-.empty-hint {
-    background: rgba(var(--v-theme-on-surface), 0.03);
-    border: 1px dashed rgb(var(--v-theme-border));
-    border-radius: 6px;
-    color: rgb(var(--v-theme-muted));
-}
 </style>

@@ -143,3 +143,78 @@ def test_stub_row_one_line(app, page):
     expect(row.locator(".stub-name")).to_have_text("Wattle Row")
     expect(row).not_to_contain_text("not made yet")
     assert "not made yet" in (row.get_attribute("title") or "")
+
+
+def _kind_list(page):
+    return page.get_by_test_id("kind-list")
+
+
+def _headings(page):
+    return _kind_list(page).get_by_test_id("kind-list-heading")
+
+
+def _row_names(page):
+    return _kind_list(page).get_by_test_id("kind-list-row").locator(".row-name")
+
+
+def test_kind_page_lists_entries(app, page):
+    name, _ = _seeded(app, page, "KindList")
+    page.get_by_test_id("kind-place").click()
+    page.get_by_test_id("create-box").wait_for(state="visible", timeout=TIMEOUT_MS)
+    lst = _kind_list(page)
+    expect(lst.get_by_test_id("kind-list-title")).to_have_text("All places · 6")
+
+    # places group by where they are, by default; nowhere comes last
+    expect(_headings(page)).to_have_text(
+        ["In Kerensk · 1", "In Moscavia · 2", "In Velikoye · 2", "Nowhere · 1"]
+    )
+    court = lst.get_by_test_id("kind-list-row").filter(has_text="Night Court")
+    expect(court).to_have_text(
+        "Night Court · in Velikoye — Where the Tsar's quiet business is done."
+    )
+    name_box = court.locator(".row-name").bounding_box()
+    where_box = court.locator(".row-where").bounding_box()
+    assert where_box["x"] - (name_box["x"] + name_box["width"]) < 40
+    stub = lst.get_by_test_id("kind-list-row").filter(has_text="Wattle Row")
+    expect(stub).to_have_text("Wattle Row · in Velikoye · not made yet")
+
+    # by tag: Connected's headings, Other last
+    lst.get_by_test_id("group-tag").click()
+    expect(_headings(page)).to_have_text(
+        ["Cities · 2", "Courts · 1", "Nations · 1", "Other · 2"]
+    )
+
+    # sorted by recent change: Kerensk, just re-tagged, comes first
+    lst.get_by_test_id("group-none").click()
+    lst.get_by_test_id("sort-recent").click()
+    kerensk = _open_thing(page, "Kerensk")
+    kerensk.get_by_test_id("tag-chip").first.click()
+    picker = page.get_by_test_id("tag-picker")
+    picker.get_by_test_id("tag-search").locator("input").fill("port")
+    picker.get_by_test_id("tag-new").click()
+    expect(kerensk.get_by_test_id("tag-chip").first).to_have_text("port")
+    page.get_by_test_id("kind-place").click()
+    expect(_row_names(page).first).to_have_text("Kerensk")
+
+    # the choice is kept
+    page.reload()
+    dismiss_onboarding(page)
+    _open_world(page, name)
+    _world_tab(page)
+    page.get_by_test_id("kind-place").click()
+    expect(_headings(page)).to_have_count(0)
+    expect(_row_names(page).first).to_have_text("Kerensk")
+
+    # the side search filters it too
+    page.get_by_test_id("world-search").locator("input").fill("stub")
+    expect(_row_names(page)).to_have_text(["Wattle Row"])
+    page.get_by_test_id("world-search").locator("input").fill("")
+
+    # a row opens its entry
+    _kind_list(page).get_by_test_id("kind-list-row").filter(
+        has=page.locator(".row-name", has_text=re.compile("^Velikoye$"))
+    ).click()
+    page.get_by_test_id("thing-page").get_by_test_id("thing-name").filter(
+        has_text="Velikoye"
+    ).wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert page.console_errors == []
