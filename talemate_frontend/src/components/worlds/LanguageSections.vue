@@ -139,7 +139,6 @@
             <div class="d-flex align-center flex-wrap ga-2 mb-3">
                 <span class="text-muted text-caption">{{ local.words.length }} words · showing {{ filteredWords.length }}</span>
                 <v-btn variant="text" size="small" prepend-icon="mdi-plus" @click="addWord">Add word</v-btn>
-                <v-spacer></v-spacer>
                 <v-text-field
                     v-model="search"
                     density="compact"
@@ -151,7 +150,7 @@
                     class="flex-grow-0 search-field"
                 ></v-text-field>
             </div>
-            <v-table density="compact">
+            <v-table density="compact" class="word-table">
                 <thead>
                     <tr>
                         <th>Word</th>
@@ -169,7 +168,7 @@
                             <v-text-field v-model="local.words[row.index].meaning" density="compact" variant="plain" hide-details @blur="saveWords"></v-text-field>
                         </td>
                         <td class="part-col">
-                            <v-text-field v-model="local.words[row.index].part" density="compact" variant="plain" hide-details placeholder="noun, verb…" @blur="saveWords"></v-text-field>
+                            <v-text-field v-model="local.words[row.index].part" density="compact" variant="plain" hide-details @blur="saveWords"></v-text-field>
                         </td>
                         <td class="text-right">
                             <v-btn icon size="small" variant="text" :aria-label="'Remove ' + local.words[row.index].word" @click="removeWord(row.index)">
@@ -539,11 +538,18 @@ export default {
 </script>
 
 <style scoped>
+/* never stretched across a wide window: controls stay near their content */
+.language-sections {
+    max-width: 1100px;
+}
+.word-table {
+    max-width: 820px;
+}
 .small-field {
     flex: 0 1 220px;
 }
 .search-field {
-    width: 280px;
+    width: 240px;
 }
 .word-col {
     min-width: 140px;
