@@ -1,7 +1,6 @@
 // The kinds the World tab shows, with their fact categories (mirroring
 // `talemate.world.kinds.KINDS`). Races and mixes (`nested`) aren't listed
-// at the top level: they're reached from their species page; Cultures
-// (`viaSkill`) is listed but made through the culture skill. The Stubs,
+// at the top level: they're reached from their species page. The Stubs,
 // Tags and Settings tabs (`STUBS_TAB`, `TAGS_TAB`, `SETTINGS_TAB`) sit
 // below the kinds.
 //
@@ -79,20 +78,10 @@ export const WORLD_KINDS = [
         icon: 'mdi-star-four-points-outline',
         categories: ['nature', 'deeds', 'worship', 'general'],
     },
-    {
-        // not a world kind: a pointer to the cultures feature (World Editor →
-        // Cultures), whose cultures are made through the culture skill
-        kind: 'culture',
-        label: 'Cultures',
-        singular: 'culture',
-        icon: 'mdi-account-group',
-        categories: [],
-        viaSkill: true,
-    },
 ];
 
 // the kinds the store lists
-export const LISTED_KINDS = WORLD_KINDS.filter((k) => !k.viaSkill).map((k) => k.kind);
+export const LISTED_KINDS = WORLD_KINDS.map((k) => k.kind);
 
 // the kinds the World tab lists (and the create box offers)
 export const TOP_KINDS = WORLD_KINDS.filter((k) => !k.nested);

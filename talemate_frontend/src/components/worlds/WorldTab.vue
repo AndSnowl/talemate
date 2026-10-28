@@ -19,13 +19,7 @@
             ></v-text-field>
             <div class="search-hint px-2 mb-2" :class="{ shown: searchFocused }" data-testid="search-hint">tag:city · in:Velikoye · stub · when:1020</div>
             <div v-for="item in kinds" :key="item.kind" class="kind-group">
-                <div v-if="item.viaSkill" class="kind-head disabled d-flex align-center ga-2" :data-testid="'kind-' + item.kind">
-                    <span class="fold-spacer"></span>
-                    <v-icon size="small">{{ item.icon }}</v-icon>
-                    <span class="flex-grow-1">{{ item.label }}</span>
-                    <span class="text-caption text-muted">via skill</span>
-                </div>
-                <div v-else class="kind-head d-flex align-center" :class="{ active: !worlds.selectedThingId && item.kind === kind }">
+                <div class="kind-head d-flex align-center" :class="{ active: !worlds.selectedThingId && item.kind === kind }">
                     <v-icon
                         size="small"
                         class="fold"
@@ -164,10 +158,9 @@ import ThingPage from './ThingPage.vue';
 // The World tab, in two panes (spec "The pages"): the list and the page.
 // The list (polish 5, mockup A) has a search box, then the world's entries
 // by kind (Characters, Species, Places, Events, Items, Lore, Beings; races
-// and mixes are reached from their species page; Cultures are made
-// through the culture skill), as a tree that folds: each entry under its
-// most precise home of its own kind (`sideTree`), a kind's stubs after its
-// entries. Everything starts folded; opening a page opens the way to it;
+// and mixes are reached from their species page), as a tree that folds:
+// each entry under its most precise home of its own kind (`sideTree`), a
+// kind's stubs after its entries. Everything starts folded; opening a page opens the way to it;
 // what the owner folds or unfolds is kept per world (`loadFolds`). A kind's
 // ▸ folds it, its name opens its page (unfolding it), its "+" opens the
 // page with the prompt ready. The search narrows the tree to what matches
@@ -414,20 +407,6 @@ export default {
 .kind-head.active,
 .list-item.active {
     background: rgba(var(--v-theme-accent), 0.14);
-}
-
-.kind-head.disabled {
-    cursor: default;
-    opacity: 0.6;
-}
-
-.new-icon {
-    opacity: 0;
-}
-
-.kind-head:hover .kind-head.disabled {
-    cursor: default;
-    opacity: 0.6;
 }
 
 .new-icon {

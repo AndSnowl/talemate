@@ -1543,12 +1543,12 @@ check('other routers are ignored', () => {
 
 // --- connections: kinds, other names, preview names, stubs ------------------
 
-check('events and items are kinds of their own; no sphere kind, and cultures via the skill', () => {
+check('events and items are kinds of their own; no sphere or culture entry', () => {
     const top = TOP_KINDS.map((k) => k.kind);
     assert.ok(top.includes('event') && top.includes('item'));
     assert.ok(!top.includes('sphere'));
-    // cultures are listed, but made through the culture skill: no listing
-    assert.ok(TOP_KINDS.find((k) => k.kind === 'culture').viaSkill);
+    // the old "Cultures via skill" pointer is gone from the World tab
+    assert.ok(!top.includes('culture'));
     assert.ok(!LISTED_KINDS.includes('culture') && !LISTED_KINDS.includes('sphere'));
     assert.ok(!STUB_KINDS.includes('culture') && !STUB_KINDS.includes('race') && !STUB_KINDS.includes('sphere'));
     assert.equal(expandLabel('place'), 'Expand');
