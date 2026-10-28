@@ -715,6 +715,35 @@ def _aka_names(state: ThingState) -> list[str]:
     ]
 
 
+def _year_of(value: object) -> int | None:
+    """A stored date's year (a `WorldDate` or its dumped dict), or None."""
+
+    if value is None:
+        return None
+    try:
+        return WorldDate.model_validate(value).to_datetime().year
+    except (TypeError, ValueError):
+        return None
+
+
+def _span_out(state: ThingState) -> dict[str, int | None] | None:
+    """When an entry is in the world, as years (polish 5, `when:`): a
+    character's or being's birth on, an event's span; None for a kind
+    with no span of its own (or a being with no birth)."""
+
+    if state.kind in ("character", "being"):
+        born = _year_of(state.fields.get("born"))
+        if state.kind == "being" and born is None:
+            return None
+        return {"from": born, "until": None}
+    if state.kind == "event":
+        return {
+            "from": _year_of(state.fields.get("when")),
+            "until": _year_of(state.fields.get("until")),
+        }
+    return None
+
+
 def _link_mode(
     mode: LinkMode | None, use_name: str | None, default: LinkMode
 ) -> LinkMode:
@@ -2643,6 +2672,13 @@ class WorldsPlugin(Plugin):
         payload = ListThingsPayload(**data)
         world = self._require_world()
         view = world.view()
+        # how many live entries are filed in each one (its connections)
+        filed_here: dict[str, int] = {}
+        for other in view.things():
+            if other.stub_ignored:
+                continue
+            for target in {filing.target for filing in filings_of(view, other.id)}:
+                filed_here[target] = filed_here.get(target, 0) + 1
         things = []
         for state in view.things(payload.kind):
             if state.stub_ignored:
@@ -2666,6 +2702,26 @@ class WorldsPlugin(Plugin):
             if state.kind == "being":
                 # only a real being is cast or played (the scene pickers)
                 entry["existence"] = entries.existence(state)
+            # what a kind's list and the side search read (polish 5)
+            line = _line_fact(state)
+            span = _span_out(state)
+            dated = [
+                year
+                for year in (_year_of(fact.valid_from) for fact in state.facts)
+                if year is not None
+            ]
+            entry["tag"] = tag_of(state)
+            entry["line"] = view.render(line.text) if line else ""
+            entry["changed_rev"] = max(
+                (change.source_rev for change in world.timeline(state.id)), default=0
+            )
+            entry["connections"] = len(mentions(view, state.id)) + filed_here.get(
+                state.id, 0
+            )
+            entry["span"] = span
+            entry["sort_date"] = (span or {}).get("from") or (
+                min(dated) if dated else None
+            )
             things.append(entry)
         self._reply("list_things", {"kind": payload.kind, "things": things})
 
