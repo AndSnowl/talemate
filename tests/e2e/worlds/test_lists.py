@@ -309,3 +309,36 @@ def test_offer_rows_dim_dropped_rows_strike(app, page, fixed_preview):
         "text-decoration-line", "line-through"
     )
     assert page.console_errors == []
+
+
+def test_same_as_has_room(app, page, fixed_facts):
+    from e2e.worlds.test_filing import _open_velikoye
+
+    _, thing = _open_velikoye(page, app, _world_name("SameRoom"))
+    fixed_facts(
+        {
+            "facts": [
+                {"category": "general", "text": "Tsar Ivan III rebuilt its walls."}
+            ],
+            "names": [{"name": "Tsar Ivan III", "kind": "character", "tag": "ruler"}],
+        }
+    )
+    thing.get_by_test_id("add-facts").click()
+    thing.get_by_test_id("add-facts-form").get_by_label("What to add").fill("its Tsars")
+    thing.get_by_test_id("add-draft").click()
+    row = thing.get_by_test_id("fact-draft").get_by_test_id("new-name-row").first
+    same = row.get_by_test_id("stub-same")
+    same.wait_for(state="visible", timeout=TIMEOUT_MS)
+    kind = row.get_by_test_id("new-name-kind").bounding_box()
+    assert same.bounding_box()["y"] >= kind["y"] + kind["height"] + 6
+
+
+def test_other_tip_on_heading_only(app, page):
+    _seeded(app, page, "OtherTip")
+    vel = _open_thing(page, "Velikoye")
+    other = vel.get_by_test_id("connected-group").filter(has_text="Other")
+    other.wait_for(state="visible", timeout=TIMEOUT_MS)
+    assert other.get_attribute("title") is None
+    assert "Dropped here" in (
+        other.locator(".group-head").first.get_attribute("title") or ""
+    )
