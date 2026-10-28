@@ -20,15 +20,25 @@
             <div v-if="nameIn.pending" class="text-caption text-muted">Naming it in {{ languageName(nameIn.language_id) }}…</div>
             <div v-else-if="nameIn.error" class="text-caption text-error">{{ nameIn.error }}</div>
             <template v-else-if="nameIn.result">
-                <div class="d-flex align-baseline flex-wrap ga-2">
+                <div class="d-flex align-center flex-wrap ga-2">
                     <span class="text-caption text-muted">In {{ languageName(nameIn.language_id) }}:</span>
                     <span class="foreign-name" data-testid="name-in-name">{{ nameIn.result.name }}</span>
                 </div>
+                <!-- or the owner's own words for it -->
+                <v-text-field
+                    v-model="typedName"
+                    label="Or type it yourself"
+                    density="compact"
+                    variant="outlined"
+                    hide-details
+                    class="mt-1 typed-name"
+                    data-testid="name-in-edit"
+                ></v-text-field>
                 <div v-if="nameIn.result.new_words.length" class="text-caption text-muted">
                     New words: {{ nameIn.result.new_words.map((w) => `${w.word} (${w.meaning})`).join(', ') }}
                 </div>
                 <div class="d-flex ga-2 mt-1">
-                    <v-btn size="small" color="accent" variant="tonal" @click="worlds.applyNameIn(thingId, nameIn.language_id, nameIn.result)">Keep it</v-btn>
+                    <v-btn size="small" color="accent" variant="tonal" @click="keepNameIn">Keep it</v-btn>
                     <v-btn size="small" variant="text" @click="worlds.nameIn(thingId, nameIn.language_id)">Reroll</v-btn>
                     <v-btn size="small" variant="text" @click="worlds.clearNameIn()">Cancel</v-btn>
                 </div>
@@ -132,6 +142,7 @@ export default {
     },
     data() {
         return {
+            typedName: '',
             tags: ['proper', 'common'],
             // the name being added: {name, tag}
             adding: null,
@@ -164,6 +175,17 @@ export default {
         if (this.thingId && !this.worlds.things.language) this.worlds.listThings('language');
     },
     methods: {
+        // the proposed name, or the owner's typed one with only the new
+        // words it still uses
+        keepNameIn() {
+            const result = this.nameIn.result;
+            const typed = (this.typedName || '').trim();
+            const name = typed || result.name;
+            const used = new Set(name.toLowerCase().split(/\s+/));
+            const kept = { name, new_words: result.new_words.filter((w) => used.has(w.word.toLowerCase())) };
+            this.worlds.applyNameIn(this.thingId, this.nameIn.language_id, kept);
+            this.typedName = '';
+        },
         languageName(id) {
             return this.languages.find((l) => l.id === id)?.name || 'a deleted language';
         },
@@ -224,6 +246,9 @@ export default {
 .name-in-review {
     border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
     border-radius: 4px;
+}
+.typed-name {
+    max-width: 320px;
 }
 .foreign-name {
     font-style: italic;

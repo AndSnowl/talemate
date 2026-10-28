@@ -845,7 +845,12 @@ def _aka_entries(value: object) -> list[dict[str, Any]]:
             and not everyday
         )
         everyday = everyday or is_everyday
-        entries.append({"name": name, "tag": tag, "everyday": is_everyday})
+        entry: dict[str, Any] = {"name": name, "tag": tag, "everyday": is_everyday}
+        language = item.get("language") if isinstance(item, dict) else None
+        if isinstance(language, str) and re.fullmatch(r"[0-9a-f]{32}", language):
+            # a name given in one of the world's languages (languages 3a)
+            entry["language"] = language
+        entries.append(entry)
     return entries
 
 

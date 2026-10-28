@@ -1934,18 +1934,19 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('language_menu', scene ? { scene: true } : thingId ? { thing_id: thingId } : {});
         },
 
-        requestLanguageNames(languageId, kind, seed = null, context = '') {
+        // `scene`: asked from a world scene's message box (the scene's world)
+        requestLanguageNames(languageId, kind, seed = null, context = '', scene = false) {
             this.languageNames = { language_id: languageId, kind, pending: true, names: [], error: null };
-            this.request('language_names', { language_id: languageId, kind, count: 4, seed, context });
+            this.request('language_names', { language_id: languageId, kind, count: 4, seed, context, scene });
         },
 
-        addLanguageWord(languageId, word, meaning) {
-            this.request('language_add_word', { language_id: languageId, word, meaning, at: this.thingAt });
+        addLanguageWord(languageId, word, meaning, scene = false) {
+            this.request('language_add_word', { language_id: languageId, word, meaning, at: this.thingAt, scene });
         },
 
-        suggestDefinition(languageId, word, context = '') {
+        suggestDefinition(languageId, word, context = '', scene = false) {
             this.languageDefinition = { language_id: languageId, word, pending: true, definition: '' };
-            this.request('language_suggest_definition', { language_id: languageId, word, context });
+            this.request('language_suggest_definition', { language_id: languageId, word, context, scene });
         },
 
         nameIn(thingId, languageId) {
@@ -2578,6 +2579,17 @@ export const useWorldsStore = defineStore('worlds', {
                         this.nameLookups = {};
                         this.mixLookup = null;
                         this.acceptOpens = true;
+                        // or a naming request refused before it went out
+                        // (languages 3a)
+                        if (this.languageNames?.pending) {
+                            this.languageNames = { ...this.languageNames, pending: false, error: message.error.message };
+                        }
+                        if (this.languageDefinition?.pending) {
+                            this.languageDefinition = { ...this.languageDefinition, pending: false };
+                        }
+                        if (this.nameInResult?.pending) {
+                            this.nameInResult = { ...this.nameInResult, pending: false, error: message.error.message };
+                        }
                         // or a merge's preview
                         if (this.merge?.pending) {
                             this.merge = { ...this.merge, pending: false };

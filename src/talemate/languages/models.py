@@ -110,6 +110,11 @@ class Language(BaseModel):
     flavour: str = ""
     similar: list[SimilarLink] = Field(default_factory=list)
 
+    @field_validator("flavour")
+    @classmethod
+    def _lower_flavour(cls, value: str) -> str:
+        return value.strip().lower()
+
     def word_generator(self) -> GeneratorDef | None:
         """The generator for ordinary words (`use == "words"`), if any."""
         return next((g for g in self.generators if g.use == "words"), None)

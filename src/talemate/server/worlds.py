@@ -920,6 +920,8 @@ class LanguageSamplesPayload(pydantic.BaseModel):
 
 class LanguageNamesPayload(pydantic.BaseModel):
     language_id: str
+    # asked from a world scene's message box: the scene's world
+    scene: bool = False
     kind: str = "place"
     count: int = 4
     seed: int | None = None
@@ -930,6 +932,8 @@ class LanguageNamesPayload(pydantic.BaseModel):
 
 class LanguageWordPayload(pydantic.BaseModel):
     language_id: str
+    # asked from a world scene's message box: the scene's world
+    scene: bool = False
     word: str
     meaning: str = ""
     context: str = ""
@@ -1185,6 +1189,14 @@ class ContinueScenePayload(pydantic.BaseModel):
 class RepositionScenePayload(pydantic.BaseModel):
     scene_id: str
     start: dict
+
+
+def _has_name_rules(state: ThingState) -> bool:
+    """Whether a language entry can make names: a name rule that isn't
+    for ordinary words (a description-only language has none)."""
+
+    rules = state.fields.get("rules") or {}
+    return any(g.get("use") != "words" for g in rules.get("generators") or [])
 
 
 def _languages_page(view: WorldView, state: ThingState) -> dict:
@@ -5546,16 +5558,17 @@ class WorldsPlugin(Plugin):
             return None, fixed.read_text(encoding="utf-8")
         return self._client(), None
 
-    def _naming_world(self) -> World:
-        """The world naming works in: the open one, else the world scene's
-        (the scene's message box can name things with no world open)."""
+    def _naming_world(self, scene: bool = False) -> World:
+        """The world naming works in: the world scene's, for the scene's
+        message box (whatever world the Worlds tab has open), else the open
+        one."""
 
-        if self.world is not None:
-            return self.world
-        scene = getattr(self.websocket_handler, "scene", None)
-        context = getattr(scene, "world_context", None)
-        if context is not None:
-            return context.world
+        if scene:
+            context = getattr(
+                getattr(self.websocket_handler, "scene", None), "world_context", None
+            )
+            if context is not None:
+                return context.world
         return self._require_world()
 
     def _language(self, view: WorldView, language_id: str) -> Language:
@@ -5606,6 +5619,7 @@ class WorldsPlugin(Plugin):
                             "id": s.id,
                             "name": s.fields.get("name", ""),
                             "phrases": s.fields.get("phrases") or [],
+                            "has_names": _has_name_rules(s),
                         }
                         for s in all_languages(view)
                     ],
@@ -5627,6 +5641,7 @@ class WorldsPlugin(Plugin):
                         "id": s.id,
                         "name": s.fields.get("name", ""),
                         "phrases": s.fields.get("phrases") or [],
+                        "has_names": _has_name_rules(s),
                     }
                     for s in all_languages(view)
                 ],
@@ -5639,7 +5654,7 @@ class WorldsPlugin(Plugin):
         `language_names {language_id, kind, names: [{name, definition}]}`."""
 
         payload = LanguageNamesPayload(**data)
-        view = self._naming_world().view()
+        view = self._naming_world(payload.scene).view()
         language = self._language(view, payload.language_id)
         exclude = frozenset(payload.exclude) | frozenset(
             str(s.fields.get("name", "")) for s in view.things(facts=False)
@@ -5684,10 +5699,15 @@ class WorldsPlugin(Plugin):
         definition}`."""
 
         payload = LanguageWordPayload(**data)
-        language = self._language(self._naming_world().view(), payload.language_id)
+        language = self._language(
+            self._naming_world(payload.scene).view(), payload.language_id
+        )
         client, reply = self._language_reply()
 
         async def suggested() -> str:
+            if client is None and reply is None:
+                # no model to suggest one: the owner writes it
+                return ""
             found = await define_names(
                 client, language, [payload.word], payload.context, reply=reply
             )
@@ -5713,14 +5733,21 @@ class WorldsPlugin(Plugin):
         as a name keeps its meaning)."""
 
         payload = LanguageWordPayload(**data)
-        world = self._naming_world()
+        world = self._naming_world(payload.scene)
         with world.revision(Source.manual(note="add word")) as rev:
             add_word(
                 rev, world.view(), payload.language_id, payload.word, payload.meaning
             )
-        self._edited(
-            "language_add_word", payload.language_id, _date_in(payload.at), prose=False
-        )
+        if world is self.world:
+            self._edited(
+                "language_add_word",
+                payload.language_id,
+                _date_in(payload.at),
+                prose=False,
+            )
+        else:
+            # the scene's world, not the one the Worlds tab shows
+            self._reply("language_add_word", {"id": payload.language_id, "scene": True})
 
     async def handle_language_name_in(self, data: dict):
         """The entry's name in a language, for review, in the background:

@@ -13,7 +13,8 @@
                 :variant="language.id === languageId ? 'flat' : 'outlined'"
                 :color="language.id === languageId ? 'primary' : undefined"
                 :prepend-icon="language.inReach ? 'mdi-map-marker' : undefined"
-                :title="language.inReach ? 'Spoken here' : ''"
+                :title="nameless(language) ? 'No name rules: it can\'t make names' : language.inReach ? 'Spoken here' : ''"
+                :disabled="nameless(language)"
                 @click="languageId = language.id"
             >{{ language.name }}</v-chip>
         </div>
@@ -53,7 +54,7 @@
             <v-list v-else density="compact" class="candidates">
                 <template v-for="group in phraseGroups" :key="group.category">
                     <v-list-subheader>{{ group.category }}</v-list-subheader>
-                    <v-list-item v-for="phrase in group.items" :key="phrase.id" data-testid="language-phrase-pick" @click="$emit('insert', phrase.original)">
+                    <v-list-item v-for="phrase in group.items" :key="phrase.id" data-testid="language-phrase-pick" @click="pickPhrase(phrase)">
                         <div class="d-flex align-baseline ga-2">
                             <span class="candidate-name">{{ phrase.original }}</span>
                             <span class="text-caption text-muted">{{ phrase.translation }}</span>
@@ -157,12 +158,15 @@ export default {
     },
     watch: {
         menu(menu) {
-            if (menu && !this.languageId) this.languageId = menu.default || null;
+            if (menu && !this.languageId) {
+                const start = this.languages.find((l) => l.id === menu.default);
+                this.languageId = start && !this.nameless(start) ? start.id : null;
+            }
         },
         languageId(id) {
             if (!id) return;
             if (this.mode === 'name' || this.mode === 'reroll') this.roll();
-            if (this.mode === 'word') this.worlds.suggestDefinition(id, this.selected);
+            if (this.mode === 'word') this.worlds.suggestDefinition(id, this.selected, '', this.scene);
         },
         'definition.definition'(text) {
             if (text && !this.meaning) this.meaning = text;
@@ -172,9 +176,18 @@ export default {
         this.worlds.loadLanguageMenu(this.thingId, this.scene);
     },
     methods: {
+        // a language with no name rules can't make names (its phrases and
+        // words still can be used)
+        nameless(language) {
+            return (this.mode === 'name' || this.mode === 'reroll') && language.has_names === false;
+        },
+        pickPhrase(phrase) {
+            this.$emit('insert', phrase.original);
+            this.$emit('done');
+        },
         roll() {
             this.seed += 1;
-            this.worlds.requestLanguageNames(this.languageId, this.kind, Date.now() % 100000 + this.seed);
+            this.worlds.requestLanguageNames(this.languageId, this.kind, Date.now() % 100000 + this.seed, '', this.scene);
         },
         saveOnPageIfAsked() {
             if (!this.saveOnPage) return;
@@ -183,13 +196,13 @@ export default {
         },
         pickName(candidate) {
             this.$emit('insert', candidate.name);
-            this.worlds.addLanguageWord(this.languageId, candidate.name, candidate.definition || 'a name');
+            this.worlds.addLanguageWord(this.languageId, candidate.name, candidate.definition || 'a name', this.scene);
             this.saveOnPageIfAsked();
             this.$emit('done');
         },
         saveWord() {
             if (!this.meaning.trim()) return;
-            this.worlds.addLanguageWord(this.languageId, this.selected, this.meaning.trim());
+            this.worlds.addLanguageWord(this.languageId, this.selected, this.meaning.trim(), this.scene);
             this.saveOnPageIfAsked();
             this.$emit('done');
         },

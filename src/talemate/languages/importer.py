@@ -82,7 +82,8 @@ def _json_objects(text: str):
                 depth -= 1
                 if depth == 0:
                     try:
-                        yield json.loads(text[start : i + 1])
+                        # a model's reply may break a line inside a string
+                        yield json.loads(text[start : i + 1], strict=False)
                     except ValueError:
                         pass
                     break

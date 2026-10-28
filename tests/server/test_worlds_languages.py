@@ -13,6 +13,7 @@ from talemate.languages.models import (
     LanguageFile,
 )
 from talemate.server.worlds import WorldsPlugin
+from talemate.world.store import World
 
 from conftest import MockClient
 
@@ -301,3 +302,68 @@ async def test_scene_menu_without_a_world_scene_is_empty(plugin):
     await _act(plugin, "language_menu", scene=True)
     menu = _last(plugin, "language_menu")["data"]
     assert menu["rows"] == [] and menu["languages"] == []
+
+
+# --- review fixes ---------------------------------------------------------------
+
+
+async def test_scene_naming_uses_the_scenes_world_not_the_open_one(plugin, tmp_path):
+    opened, lid, sorau, town = await _sorau_world(plugin)
+    # a loaded scene holds its own handle on its world (opening another
+    # world in the Worlds tab closes the tab's)
+    scene_world = World.open(opened.path)
+    plugin.websocket_handler.scene = SimpleNamespace(
+        cancel_requested=False,
+        world_context=SimpleNamespace(
+            world=scene_world,
+            record=SimpleNamespace(
+                player_thing_id=None, state={"place_thing_id": town}
+            ),
+        ),
+    )
+    await _act(plugin, "create_world", name="Another")  # now the open world
+    assert plugin.world is not scene_world
+    await _act(
+        plugin,
+        "language_names",
+        language_id=lid,
+        kind="place",
+        count=2,
+        seed=1,
+        scene=True,
+    )
+    await _drain(plugin)
+    assert len(_last(plugin, "language_names")["data"]["names"]) == 2
+    await _act(
+        plugin,
+        "language_add_word",
+        language_id=lid,
+        word="kolo",
+        meaning="wheel",
+        scene=True,
+    )
+    assert not _errors(plugin)
+    assert "kolo" in {w["word"] for w in scene_world.view().thing(lid).fields["words"]}
+
+
+async def test_menu_marks_languages_without_name_rules(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    with world.revision(Source.manual()) as rev:
+        silent = rev.create_thing(
+            "language", {"name": "Whistle", "depth": "description"}
+        )
+    await _act(plugin, "language_menu")
+    languages = {
+        lang["id"]: lang for lang in _last(plugin, "language_menu")["data"]["languages"]
+    }
+    assert languages[lid]["has_names"] is True
+    assert languages[silent]["has_names"] is False
+
+
+async def test_suggest_definition_without_a_client_is_empty(plugin):
+    world, lid, sorau, town = await _sorau_world(plugin)
+    instance.AGENTS["creator"] = SimpleNamespace(client=None)
+    await _act(plugin, "language_suggest_definition", language_id=lid, word="Moscavia")
+    await _drain(plugin)
+    assert not _errors(plugin)
+    assert _last(plugin, "language_definition")["data"]["definition"] == ""

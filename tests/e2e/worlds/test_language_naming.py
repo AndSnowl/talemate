@@ -131,3 +131,60 @@ def test_name_it_in_other_language(app, page, fixed_language):
     expect(names).to_contain_text(proposed, timeout=TIMEOUT_MS)
     expect(names).to_contain_text("Sorauan")
 
+
+
+def test_make_a_phrase_inserts_once_and_closes(app, page):
+    name = _seed(app, "Name phrase")
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.fill("They cursed: ")
+    _right_click(box)
+    menu = page.get_by_test_id("reference-menu")
+    menu.get_by_test_id("menu-make-phrase").click()
+    _pick_language(page, menu)
+    menu.get_by_test_id("language-phrase-pick").filter(has_text="Kor vel!").click()
+    expect(box).to_have_value("They cursed: Kor vel!", timeout=TIMEOUT_MS)
+    expect(page.get_by_test_id("reference-menu")).to_have_count(0, timeout=TIMEOUT_MS)
+
+
+def test_a_language_without_name_rules_cannot_make_names(app, page):
+    name = _world_name("Name rules none")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {"kind": "language", "name": "Sorauan", "fields": _language_fields()},
+            {"kind": "language", "name": "Whistle", "fields": {"depth": "description"}},
+        ],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.fill("Tsardom of ")
+    _right_click(box)
+    menu = page.get_by_test_id("reference-menu")
+    menu.get_by_test_id("menu-make-name").click()
+    picker = menu.get_by_test_id("language-picker")
+    picker.wait_for(state="visible", timeout=TIMEOUT_MS)
+    expect(picker.locator(".v-chip", has_text="Whistle")).to_have_class(
+        __import__("re").compile("v-chip--disabled")
+    )
+
+
+def test_name_it_in_lets_the_owner_type_the_name(app, page, fixed_language):
+    fixed_language({"definitions": {}, "pick": "", "why": ""})
+    name = _seed(app, "Name in typed")
+    _open_world(page, name)
+    _world_tab(page)
+    sorau = _open_thing(page, "Free Provinces of Sorau")
+    sorau.get_by_test_id("name-it-in").click()
+    page.get_by_role("menuitem", name="Sorauan").click()
+    review = page.get_by_test_id("name-in-review")
+    field = review.get_by_test_id("name-in-edit").locator("input")
+    field.wait_for(state="visible", timeout=TIMEOUT_MS)
+    field.fill("Sel Provanna")
+    review.get_by_role("button", name="Keep it").click()
+    expect(sorau.get_by_test_id("thing-other-names")).to_contain_text(
+        "Sel Provanna", timeout=TIMEOUT_MS
+    )
