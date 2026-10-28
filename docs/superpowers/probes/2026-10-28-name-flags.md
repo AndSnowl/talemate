@@ -76,7 +76,7 @@ The leak the owner sees is mostly **real Russian words used as names**, plus rea
 
 Some rewrites change what the thing is, which the prompt forbids. A kingdom became "Spring Envoys", a guild became "the Salt Tax", and a set of islands became "Shiver Peaks". The context line ("sends envoys each spring", "sets the price of salt") pulled them off course.
 
-**The owner's verdict on the rewrites:** *pending.*
+**The owner's verdict on the rewrites:** the owner saw the samples and agreed with the recommendations (2026-10-28), with no separate verdict.
 
 ## Findings
 

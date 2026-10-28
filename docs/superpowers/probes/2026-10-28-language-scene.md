@@ -36,7 +36,7 @@ But Ivan still answers in full English sentences, and the deal gets made. The fi
 
 **similar.** The first turns carry it ("His Moscavian had a rough edge", "rolling the word around like it tasted strange"), then it fades. By turn 3 it's an ordinary conversation.
 
-**The owner's verdict:** *pending.* Read the turns in the raw file, under `variants.<name>.turns[].output`.
+**The owner's verdict:** the owner saw the samples and agreed with the recommendations (2026-10-28), with no separate verdict. Read the turns in the raw file, under `variants.<name>.turns[].output`.
 
 ## Findings
 

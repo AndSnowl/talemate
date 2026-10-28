@@ -51,7 +51,7 @@
 | pick (20 candidates, a capital) | picked one in the list, with a reason | picked one in the list, with a reason |
 | coin "Free Provinces" | **real Russian**: "Svobodnaya Provinciya" | wrong: "Shil Zolm Keth" ("wind water stone") |
 
-**The owner's grades:** *pending.* The questions:
+**The owner's grades:** the owner agreed with the findings and the recommendation (2026-10-28), with no separate grade per sample. The questions asked were:
 1. Does either `russian` sound recognizably Russian without being Russian?
 2. Does `daughter` sound related to its parent?
 3. Do the compound styles read like Duskhollow?
@@ -75,6 +75,17 @@
 ## Decision
 
 **The owner agreed (2026-10-28):** full languages are made outside the app. The owner also wants the route to be configurable for other users: a stronger local model or an API client in the app, or an outside assistant (Claude Code, or a chat subscription in the browser) given a ready-made brief that returns an importable file. Part 3's brainstorm takes this up.
+
+**Agreed in the same conversation, for part 3's brainstorm:**
+- **The route and model for language making are global** (owner). It's a language-making agent with its own client, set once in the app like the other agents. Anything world-specific (a world's default language or flavour) lives in the world.
+
+**Proposed by Claude, not yet decided:**
+- the route chosen per job, with defaults from this probe;
+- one app-written brief for any outside assistant (Claude Code, Claude.ai, ChatGPT, Gemini), with the Claude Code skill as a thin wrapper;
+- importing by pasting as well as by file;
+- one check for every route, with a repair note to paste back;
+- a "Test this model" button;
+- briefs for follow-ups (more words, daughters, fixes).
 
 The recommendation as written:
 
