@@ -244,10 +244,12 @@ def small_jobs(send: Callable, parent: dict, labels: dict, record: Callable) -> 
     return out
 
 
-def run(send: Callable, labels: dict, versions: int, save: Callable) -> dict:
-    """Every case `versions` times, then the small jobs; `save()` after each
-    call."""
-    result: dict = {"cases": {}, "calls": 0}
+def run(
+    send: Callable, labels: dict, versions: int, save: Callable, result: dict
+) -> dict:
+    """Every case `versions` times, then the small jobs, into `result` (the
+    saved run, so a crash keeps what was done); `save()` after each call."""
+    result.update({"cases": {}, "calls": 0})
 
     def record():
         result["calls"] += 1
@@ -336,7 +338,7 @@ def main() -> None:
     def save():
         args.out.write_text(json.dumps(results, indent=1, ensure_ascii=False))
 
-    run_result.update(run(send, labels, args.versions, save))
+    run(send, labels, args.versions, save, run_result)
     save()
     print(f"{args.label}: {model}, {run_result['calls']} calls -> {args.out}")
 
