@@ -1,0 +1,4508 @@
+{
+ "runs": {
+  "skyfall": {
+   "model": "koboldcpp/Skyfall-31B-v4.2-i1-Q4_K_M",
+   "cases": {
+    "russian": [
+     {
+      "version": 1,
+      "seconds": 38.1,
+      "reply": "```json\n{\n  \"name\": \"Ruskalan\",\n  \"level\": \"full\",\n  \"sound\": \"Ruskalan sounds like a familiar cousin of Russian — you'll catch the rolling R's and the hard consonants, but the vowels have been shifted just enough to feel strange. Words tend to be long and heavy, with stress falling on the second or third syllable. To an English ear, it sounds both harsh and musical, like someone speaking Russian through a thick accent from a land that doesn't quite exist.\",\n  \"categories\": {\n    \"C\": \"k g kh t d th r*2 s z sh zh ch j v f m n l*2 r\",\n    \"V\": \"a e o u i y\",\n    \"S\": \"sk sl sn st kn gr dr br kr\",\n    \"F\": \"ov ev iv av un in om\",\n    \"E\": \"ts dz ch sh zh\",\n    \"T\": \"ol or el ir on um an im\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"People names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CVCVC*2\",\n        \"CVCVCC\",\n        \"[C|CC]VCV(C)*2\",\n        \"CVCV-FVC*2\",\n        \"CVCV-T*2\"\n      ],\n      \"reject\": [\"^.*[aeiou]{3,}.*$\", \"^.*[kgh]{3,}.*$\"],\n      \"min_length\": 5,\n      \"max_length\": 14\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVCCV-CVCC\",\n        \"S-CVCCV*2\",\n        \"CVCC-T*2\",\n        \"F-CVCCV*2\",\n        \"[C|CC]VCCV-CVCC*2\",\n        \"E-VCCV-CVCC*2\"\n      ],\n      \"reject\": [\"^.*[aeiou]{4,}.*$\", \"^[aeiou].*$\"],\n      \"min_length\": 7,\n      \"max_length\": 18\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Thing names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"CVC-CVC\",\n        \"CVCCV-CV\",\n        \"S-CVC*2\",\n        \"F-CVC*2\",\n        \"[C|CC]VCC-VCC*2\"\n      ],\n      \"reject\": [\"^.*[aeiou]{4,}.*$\"],\n      \"min_length\": 6,\n      \"max_length\": 14\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"volkosh\", \"meaning\": \"wolf\"},\n    {\"word\": \"domara\", \"meaning\": \"house\"},\n    {\"word\": \"materya\", \"meaning\": \"mother\"},\n    {\"word\": \"otets\", \"meaning\": \"father\"},\n    {\"word\": \"synok\", \"meaning\": \"son\"},\n    {\"word\": \"doshka\", \"meaning\": \"table\"},\n    {\"word\": \"okno\", \"meaning\": \"window\"},\n    {\"word\": \"voda\", \"meaning\": \"water\"},\n    {\"word\": \"ogon\", \"meaning\": \"fire\"},\n    {\"word\": \"zemlya\", \"meaning\": \"earth/land\"},\n    {\"word\": \"solntse\", \"meaning\": \"sun\"},\n    {\"word\": \"mesyats\", \"meaning\": \"moon\"},\n    {\"word\": \"derevo\", \"meaning\": \"tree\"},\n    {\"word\": \"kamen\", \"meaning\": \"stone\"},\n    {\"word\": \"krov\", \"meaning\": \"blood\"},\n    {\"word\": \"sneg\", \"meaning\": \"snow\"},\n    {\"word\": \"khleb\", \"meaning\": \"bread\"},\n    {\"word\": \"moloko\", \"meaning\": \"milk\"},\n    {\"word\": \"noshcha\", \"meaning\": \"knife\"},\n    {\"word\": \"topor\", \"meaning\": \"axe\"},\n    {\"word\": \"shal\", \"meaning\": \"coat\"},\n    {\"word\": \"sapogi\", \"meaning\": \"boots\"},\n    {\"word\": \"knyaga\", \"meaning\": \"book\"},\n    {\"word\": \"svet\", \"meaning\": \"light\"},\n    {\"word\": \"tma\", \"meaning\": \"darkness\"},\n    {\"word\": \"dusha\", \"meaning\": \"soul\"},\n    {\"word\": \"govoor\", \"meaning\": \"voice/speech\"}\n  ],\n  \"phrases\": [\n    {\"id\": \"1\", \"category\": \"greeting\", \"original\": \"Zdravstvuy, brat!\", \"translation\": \"Hello, brother!\"},\n    {\"id\": \"2\", \"category\": \"greeting\", \"original\": \"Kak dyela, tovarishch?\", \"translation\": \"How are you, comrade?\"},\n    {\"id\": \"3\", \"category\": \"blessing\", \"original\": \"Khranit tebya Bog i sveta!\", \"translation\": \"May God and light protect you!\"},\n    {\"id\": \"4\", \"category\": \"blessing\", \"original\": \"Pust' tvoya dusha budet chista!\", \"translation\": \"May your soul be pure!\"},\n    {\"id\": \"5\", \"category\": \"curse\", \"original\": \"K chortu ty i tvoya rodina!\", \"translation\": \"To hell with you and your homeland!\"},\n    {\"id\": \"6\", \"category\": \"curse\", \"original\": \"Pozhalko, gnusnaya svinya!\", \"translation\": \"Damn you, filthy pig!\"},\n    {\"id\": \"7\", \"category\": \"saying\", \"original\": \"Kotoryy ranny, totu i pishch.\", \"translation\": \"The early bird gets the worm.\"},\n    {\"id\": \"8\", \"category\": \"saying\", \"original\": \"Ne v sily bogatyr, a v umy.\", \"translation\": \"A hero's strength is not in his muscles, but in his mind.\"}\n  ]\n}\n```",
+      "language": {
+       "name": "Ruskalan",
+       "level": "full",
+       "sound": "Ruskalan sounds like a familiar cousin of Russian — you'll catch the rolling R's and the hard consonants, but the vowels have been shifted just enough to feel strange. Words tend to be long and heavy, with stress falling on the second or third syllable. To an English ear, it sounds both harsh and musical, like someone speaking Russian through a thick accent from a land that doesn't quite exist.",
+       "categories": {
+        "C": "k g kh t d th r*2 s z sh zh ch j v f m n l*2 r",
+        "V": "a e o u i y",
+        "S": "sk sl sn st kn gr dr br kr",
+        "F": "ov ev iv av un in om",
+        "E": "ts dz ch sh zh",
+        "T": "ol or el ir on um an im"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "People names",
+         "use": "people",
+         "patterns": [
+          "CVCVC*2",
+          "CVCVCC",
+          "[C|CC]VCV(C)*2",
+          "CVCV-FVC*2",
+          "CVCV-T*2"
+         ],
+         "reject": [
+          "^.*[aeiou]{3,}.*$",
+          "^.*[kgh]{3,}.*$"
+         ],
+         "min_length": 5,
+         "max_length": 14
+        },
+        {
+         "id": "places",
+         "name": "Place names",
+         "use": "places",
+         "patterns": [
+          "CVCCV-CVCC",
+          "S-CVCCV*2",
+          "CVCC-T*2",
+          "F-CVCCV*2",
+          "[C|CC]VCCV-CVCC*2",
+          "E-VCCV-CVCC*2"
+         ],
+         "reject": [
+          "^.*[aeiou]{4,}.*$",
+          "^[aeiou].*$"
+         ],
+         "min_length": 7,
+         "max_length": 18
+        },
+        {
+         "id": "things",
+         "name": "Thing names",
+         "use": "things",
+         "patterns": [
+          "CVC-CVC",
+          "CVCCV-CV",
+          "S-CVC*2",
+          "F-CVC*2",
+          "[C|CC]VCC-VCC*2"
+         ],
+         "reject": [
+          "^.*[aeiou]{4,}.*$"
+         ],
+         "min_length": 6,
+         "max_length": 14
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "volkosh",
+         "meaning": "wolf"
+        },
+        {
+         "word": "domara",
+         "meaning": "house"
+        },
+        {
+         "word": "materya",
+         "meaning": "mother"
+        },
+        {
+         "word": "otets",
+         "meaning": "father"
+        },
+        {
+         "word": "synok",
+         "meaning": "son"
+        },
+        {
+         "word": "doshka",
+         "meaning": "table"
+        },
+        {
+         "word": "okno",
+         "meaning": "window"
+        },
+        {
+         "word": "voda",
+         "meaning": "water"
+        },
+        {
+         "word": "ogon",
+         "meaning": "fire"
+        },
+        {
+         "word": "zemlya",
+         "meaning": "earth/land"
+        },
+        {
+         "word": "solntse",
+         "meaning": "sun"
+        },
+        {
+         "word": "mesyats",
+         "meaning": "moon"
+        },
+        {
+         "word": "derevo",
+         "meaning": "tree"
+        },
+        {
+         "word": "kamen",
+         "meaning": "stone"
+        },
+        {
+         "word": "krov",
+         "meaning": "blood"
+        },
+        {
+         "word": "sneg",
+         "meaning": "snow"
+        },
+        {
+         "word": "khleb",
+         "meaning": "bread"
+        },
+        {
+         "word": "moloko",
+         "meaning": "milk"
+        },
+        {
+         "word": "noshcha",
+         "meaning": "knife"
+        },
+        {
+         "word": "topor",
+         "meaning": "axe"
+        },
+        {
+         "word": "shal",
+         "meaning": "coat"
+        },
+        {
+         "word": "sapogi",
+         "meaning": "boots"
+        },
+        {
+         "word": "knyaga",
+         "meaning": "book"
+        },
+        {
+         "word": "svet",
+         "meaning": "light"
+        },
+        {
+         "word": "tma",
+         "meaning": "darkness"
+        },
+        {
+         "word": "dusha",
+         "meaning": "soul"
+        },
+        {
+         "word": "govoor",
+         "meaning": "voice/speech"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "greeting",
+         "original": "Zdravstvuy, brat!",
+         "translation": "Hello, brother!"
+        },
+        {
+         "id": "2",
+         "category": "greeting",
+         "original": "Kak dyela, tovarishch?",
+         "translation": "How are you, comrade?"
+        },
+        {
+         "id": "3",
+         "category": "blessing",
+         "original": "Khranit tebya Bog i sveta!",
+         "translation": "May God and light protect you!"
+        },
+        {
+         "id": "4",
+         "category": "blessing",
+         "original": "Pust' tvoya dusha budet chista!",
+         "translation": "May your soul be pure!"
+        },
+        {
+         "id": "5",
+         "category": "curse",
+         "original": "K chortu ty i tvoya rodina!",
+         "translation": "To hell with you and your homeland!"
+        },
+        {
+         "id": "6",
+         "category": "curse",
+         "original": "Pozhalko, gnusnaya svinya!",
+         "translation": "Damn you, filthy pig!"
+        },
+        {
+         "id": "7",
+         "category": "saying",
+         "original": "Kotoryy ranny, totu i pishch.",
+         "translation": "The early bird gets the worm."
+        },
+        {
+         "id": "8",
+         "category": "saying",
+         "original": "Ne v sily bogatyr, a v umy.",
+         "translation": "A hero's strength is not in his muscles, but in his mind."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Nithoz",
+         "Maky-avik",
+         "Chara",
+         "Lirizh",
+         "Luri-inyl",
+         "Tylaf",
+         "Loni-ivul",
+         "Shuke-an",
+         "Rymij",
+         "Tyriz",
+         "Nuchutd",
+         "Dyzhor",
+         "Ryju-um",
+         "Shusa",
+         "Dusho-ivuj",
+         "Zade-unym",
+         "Neni-ol",
+         "Kithaj",
+         "Vokherm",
+         "Thiryzr",
+         "Saroshs",
+         "Ruvo-on",
+         "Vijof",
+         "Dagal",
+         "Tukhunch",
+         "Lonym",
+         "Kekhu-omush",
+         "Suku-ir",
+         "Tynukhz",
+         "Khozhynzh",
+         "Zhaka-evuth",
+         "Sheradl",
+         "Fochi-el",
+         "Lmiru",
+         "Zhyre",
+         "Lakech",
+         "Simem",
+         "Tova-inor",
+         "Zhizhi-el",
+         "Ramyf",
+         "Sogechz",
+         "Milyzr",
+         "Derig",
+         "Gure-omat",
+         "Chytha-on",
+         "Gemo-el",
+         "Faki-el",
+         "Khiru",
+         "Talev",
+         "Chadu-um"
+        ],
+        "places": [
+         "Totfi-tharm",
+         "Jozhgo-khathn",
+         "Lijru-merr",
+         "Sh-yvgy-thyll",
+         "Lojsh-or",
+         "Zhyjth-ir",
+         "Sl-terfi",
+         "Sl-lenla",
+         "Dr-rurfu",
+         "Kr-surji",
+         "Ronsi-retj",
+         "Sujli-ninch",
+         "Thilzh-or",
+         "Ch-okshi-sojk",
+         "Br-thansho",
+         "Kr-vyklu",
+         "Kr-zyfche",
+         "Gdelra-mafv",
+         "Sn-zhoztho",
+         "Sl-gakshy",
+         "Dz-etnu-masl",
+         "Sn-jechme",
+         "Ts-ekhge-sajl",
+         "Sh-yzfe-therl",
+         "Thithra-vansh",
+         "Kr-sholsha",
+         "Lirto-sharch",
+         "Nurro-rishzh",
+         "Kr-regro",
+         "Zh-ynly-mashch",
+         "Sh-ifry-jozr",
+         "Fakhzh-el",
+         "Sn-juggy",
+         "Shochlo-medsh",
+         "Dz-orle-shanr",
+         "Sh-uzhnu-remj",
+         "Dz-ollu-chuzkh",
+         "Khirth-ol",
+         "Jasth-um",
+         "Lynso-mofsh",
+         "Sn-lurre",
+         "Tholsi-nachr",
+         "Vathth-ir",
+         "Migsi-rulkh",
+         "Ts-oldu-syrr",
+         "Rulre-zhofn",
+         "Sn-vokhdu",
+         "Shshuthti-fuzt",
+         "Tazhshu-remn",
+         "Dz-ithjy-thirkh"
+        ],
+        "things": [
+         "Sl-lach",
+         "Sk-reth",
+         "Rijn-uls",
+         "Un-zhuzh",
+         "Ev-dozh",
+         "Sn-zhos",
+         "Ruzh-zhyf",
+         "Vishm-irr",
+         "Misra-ri",
+         "Om-zhan",
+         "Fykhko-ve",
+         "Un-nich",
+         "In-zhizh",
+         "Mnemth-urt",
+         "Sfejl-ychs",
+         "Ev-rash",
+         "Un-likh",
+         "Sn-thyr",
+         "Virju-lo",
+         "Sl-shekh",
+         "Sij-lor",
+         "In-lazh",
+         "Thon-vid",
+         "Om-zhes",
+         "Tugzhu-to",
+         "Dek-shesh",
+         "Shik-lof",
+         "Khunmu-ri",
+         "Un-vish",
+         "Kr-thet",
+         "Ov-ryth",
+         "St-zhar",
+         "Dizhd-olch",
+         "Koskh-uvzh",
+         "Khdisf-ert",
+         "Sn-shev",
+         "Mukh-roch",
+         "Makh-likh",
+         "Nolkh-ithk",
+         "Dir-shuth",
+         "Sshint-afsh",
+         "Dr-noth",
+         "Fyn-tesh",
+         "Shdolr-igl",
+         "Sk-shyn",
+         "Kr-zyzh",
+         "Krimch-urg",
+         "In-rosh",
+         "Chazh-khel",
+         "Jushj-yzsh"
+        ]
+       },
+       "dictionary_fit": 0.14814814814814814,
+       "real_hits": [
+        "Dz-orle-shanr",
+        "otets",
+        "voda",
+        "ogon",
+        "zemlya",
+        "solntse",
+        "sneg",
+        "khleb"
+       ]
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 50.9,
+      "reply": "```json\n{\n  \"name\": \"Drevnik\",\n  \"level\": \"full\",\n  \"sound\": \"Drevnik sounds heavy and rolling, full of hard consonants that bounce off the tongue — lots of k's, g's, and shushing sibilants. Vowels are broad and open, almost songlike, and every word seems to end with a crunch. To an English ear it might sound like Russian spoken through gravel, with a rhythm that lurches and surges. The stress always falls on the second-to-last syllable, giving every word a distinctive loping feel.\",\n  \"categories\": {\n    \"C\": \"k g h ch sh zh t d s z r n m l f v\",\n    \"V\": \"a o u y i e\",\n    \"CC\": \"kr kl kn gr gn tr dr st sk zhk chv\",\n    \"CV\": \"ka ko ku ky ke ki go gu gy ge gi da do du dy de di ta to tu ty te ti na no nu ny ne ni ma mo mu my me mi sa so su sy se si ra ro ru ry re ri\",\n    \"CVC\": \"kab kos kud kyn tet dos zhy ryn\",\n    \"SUFFIX_MASC\": \"ov ik ay shch\",\n    \"SUFFIX_FEM\": \"a ov yna\",\n    \"SUFFIX_PL\": \"i yi\",\n    \"PRE_F\": \"vz- ot- pre- za-\",\n    \"THEME\": \"mir dor ves okh rat slu bog krov zol mor\",\n    \"CONSONANT_CLUSTER\": \"sk zhk chn stv brk\",\n    \"VOWEL_SEQ\": \"ya ey io ua\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"Person Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"[CV(C)|CCV]C(SUFFIX_MASC)* * (SUFFIX_PL)*\",\n        \"[CV(C)|CCV](SUFFIX_FEM)* * (SUFFIX_PL)*\",\n        \"THEME (SUFFIX_MASC)*\",\n        \"THEME (SUFFIX_FEM)*\",\n        \"[CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)] [CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)]\",\n        \"CVC(SUFFIX_MASC)*\",\n        \"CVC(SUFFIX_FEM)*\",\n        \"[CVC(SUFFIX_MASC)|CVC(SUFFIX_FEM)]-son\"\n      ],\n      \"reject\": [\".{1,2}$\", \"^[aouyie]$\"],\n      \"min_length\": 3,\n      \"max_length\": 20\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"THEME-grad\",\n        \"THEME-vech\",\n        \"THEME-ka\",\n        \"THEME-ka [CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)]\",\n        \"[THEME][THEME]\",\n        \"PRE_F THEME\",\n        \"[CVC] THEME\",\n        \"THEME [CVC]\",\n        \"THEME-ovo\",\n        \"THEME-zhye\"\n      ],\n      \"reject\": [\".{1,3}$\", \"^[aouyie]-\", \"-$\"],\n      \"min_length\": 4,\n      \"max_length\": 25\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Object Names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"[CV(C)|CCV]C\",\n        \"[CV(C)|CCV]C(SUFFIX_MASC)*\",\n        \"THEME\",\n        \"THEME-(SUFFIX_MASC)*\",\n        \"[CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)] [CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)]\",\n        \"CVC(SUFFIX_MASC)*\",\n        \"CVC(SUFFIX_FEM)*\",\n        \"[CVC] THEME\",\n        \"THEME [CVC]\",\n        \"[CVC]-nitsa\"\n      ],\n      \"reject\": [\".{1,2}$\", \"^[aouyie]$\"],\n      \"min_length\": 3,\n      \"max_length\": 20\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"mir\", \"meaning\": \"world, peace\"},\n    {\"word\": \"ves\", \"meaning\": \"weight, seriousness\"},\n    {\"word\": \"krov\", \"meaning\": \"blood\"},\n    {\"word\": \"dor\", \"meaning\": \"road, journey\"},\n    {\"word\": \"vesn\", \"meaning\": \"spring (season)\"},\n    {\"word\": \"mrak\", \"meaning\": \"darkness\"},\n    {\"word\": \"slu\", \"meaning\": \"hear, listen\"},\n    {\"word\": \"okh\", \"meaning\": \"oh, alas\"},\n    {\"word\": \"bog\", \"meaning\": \"god\"},\n    {\"word\": \"rat\", \"meaning\": \"council, order\"},\n    {\"word\": \"knyaz\", \"meaning\": \"prince, lord\"},\n    {\"word\": \"chudo\", \"meaning\": \"miracle\"},\n    {\"word\": \"golod\", \"meaning\": \"hunger\"},\n    {\"word\": \"zol\", \"meaning\": \"gold\"},\n    {\"word\": \"mor\", \"meaning\": \"sea\"},\n    {\"word\": \"dusha\", \"meaning\": \"soul\"},\n    {\"word\": \"kamen\", \"meaning\": \"stone\"},\n    {\"word\": \"zima\", \"meaning\": \"winter\"},\n    {\"word\": \"vesna\", \"meaning\": \"spring\"},\n    {\"word\": \"leto\", \"meaning\": \"summer\"},\n    {\"word\": \"osyen\", \"meaning\": \"autumn\"},\n    {\"word\": \"otets\", \"meaning\": \"father\"},\n    {\"word\": \"mat\", \"meaning\": \"mother\"},\n    {\"word\": \"syn\", \"meaning\": \"son\"},\n    {\"word\": \"doch\", \"meaning\": \"daughter\"},\n    {\"word\": \"brat\", \"meaning\": \"brother\"},\n    {\"word\": \"sestra\", \"meaning\": \"sister\"},\n    {\"word\": \"dom\", \"meaning\": \"house, home\"},\n    {\"word\": \"mest\", \"meaning\": \"place\"},\n    {\"word\": \"sila\", \"meaning\": \"strength, power\"}\n  ],\n  \"phrases\": [\n    {\n      \"id\": \"1\",\n      \"category\": \"curse\",\n      \"original\": \"Chert vozyal!\",\n      \"translation\": \"May the devil take you!\"\n    },\n    {\n      \"id\": \"2\",\n      \"category\": \"curse\",\n      \"original\": \"Na krov tvoikh predkov!\",\n      \"translation\": \"Upon the blood of your ancestors!\"\n    },\n    {\n      \"id\": \"3\",\n      \"category\": \"saying\",\n      \"original\": \"Dor dolg, a vesn krasn.\",\n      \"translation\": \"The road is long, but the spring is beautiful.\"\n    },\n    {\n      \"id\": \"4\",\n      \"category\": \"saying\",\n      \"original\": \"Knyaz bez krov — pustaя korona.\",\n      \"translation\": \"A prince without blood — an empty crown.\"\n    },\n    {\n      \"id\": \"5\",\n      \"category\": \"greeting\",\n      \"original\": \"Zdrav budi, brat.\",\n      \"translation\": \"Be well, brother.\"\n    },\n    {\n      \"id\": \"6\",\n      \"category\": \"greeting\",\n      \"original\": \"Mir vam, gost.\",\n      \"translation\": \"Peace to you, guest.\"\n    },\n    {\n      \"id\": \"7\",\n      \"category\": \"blessing\",\n      \"original\": \"Da bog khrani dushu tvoyu.\",\n      \"translation\": \"May God guard your soul.\"\n    },\n    {\n      \"id\": \"8\",\n      \"category\": \"saying\",\n      \"original\": \"Vesn ne sproshish — priyidet sama.\",\n      \"translation\": \"You don't ask spring to come — it arrives on its own.\"\n    }\n  ]\n}\n```",
+      "language": {
+       "name": "Drevnik",
+       "level": "full",
+       "sound": "Drevnik sounds heavy and rolling, full of hard consonants that bounce off the tongue — lots of k's, g's, and shushing sibilants. Vowels are broad and open, almost songlike, and every word seems to end with a crunch. To an English ear it might sound like Russian spoken through gravel, with a rhythm that lurches and surges. The stress always falls on the second-to-last syllable, giving every word a distinctive loping feel.",
+       "categories": {
+        "C": "k g h ch sh zh t d s z r n m l f v",
+        "V": "a o u y i e",
+        "CC": "kr kl kn gr gn tr dr st sk zhk chv",
+        "CV": "ka ko ku ky ke ki go gu gy ge gi da do du dy de di ta to tu ty te ti na no nu ny ne ni ma mo mu my me mi sa so su sy se si ra ro ru ry re ri",
+        "CVC": "kab kos kud kyn tet dos zhy ryn",
+        "SUFFIX_MASC": "ov ik ay shch",
+        "SUFFIX_FEM": "a ov yna",
+        "SUFFIX_PL": "i yi",
+        "PRE_F": "vz- ot- pre- za-",
+        "THEME": "mir dor ves okh rat slu bog krov zol mor",
+        "CONSONANT_CLUSTER": "sk zhk chn stv brk",
+        "VOWEL_SEQ": "ya ey io ua"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "Person Names",
+         "use": "people",
+         "patterns": [
+          "[CV(C)|CCV]C(SUFFIX_MASC)* * (SUFFIX_PL)*",
+          "[CV(C)|CCV](SUFFIX_FEM)* * (SUFFIX_PL)*",
+          "THEME (SUFFIX_MASC)*",
+          "THEME (SUFFIX_FEM)*",
+          "[CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)] [CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)]",
+          "CVC(SUFFIX_MASC)*",
+          "CVC(SUFFIX_FEM)*",
+          "[CVC(SUFFIX_MASC)|CVC(SUFFIX_FEM)]-son"
+         ],
+         "reject": [
+          ".{1,2}$",
+          "^[aouyie]$"
+         ],
+         "min_length": 3,
+         "max_length": 20
+        },
+        {
+         "id": "places",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "THEME-grad",
+          "THEME-vech",
+          "THEME-ka",
+          "THEME-ka [CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)]",
+          "[THEME][THEME]",
+          "PRE_F THEME",
+          "[CVC] THEME",
+          "THEME [CVC]",
+          "THEME-ovo",
+          "THEME-zhye"
+         ],
+         "reject": [
+          ".{1,3}$",
+          "^[aouyie]-",
+          "-$"
+         ],
+         "min_length": 4,
+         "max_length": 25
+        },
+        {
+         "id": "things",
+         "name": "Object Names",
+         "use": "things",
+         "patterns": [
+          "[CV(C)|CCV]C",
+          "[CV(C)|CCV]C(SUFFIX_MASC)*",
+          "THEME",
+          "THEME-(SUFFIX_MASC)*",
+          "[CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)] [CCV(SUFFIX_MASC)|CV(SUFFIX_FEM)]",
+          "CVC(SUFFIX_MASC)*",
+          "CVC(SUFFIX_FEM)*",
+          "[CVC] THEME",
+          "THEME [CVC]",
+          "[CVC]-nitsa"
+         ],
+         "reject": [
+          ".{1,2}$",
+          "^[aouyie]$"
+         ],
+         "min_length": 3,
+         "max_length": 20
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "mir",
+         "meaning": "world, peace"
+        },
+        {
+         "word": "ves",
+         "meaning": "weight, seriousness"
+        },
+        {
+         "word": "krov",
+         "meaning": "blood"
+        },
+        {
+         "word": "dor",
+         "meaning": "road, journey"
+        },
+        {
+         "word": "vesn",
+         "meaning": "spring (season)"
+        },
+        {
+         "word": "mrak",
+         "meaning": "darkness"
+        },
+        {
+         "word": "slu",
+         "meaning": "hear, listen"
+        },
+        {
+         "word": "okh",
+         "meaning": "oh, alas"
+        },
+        {
+         "word": "bog",
+         "meaning": "god"
+        },
+        {
+         "word": "rat",
+         "meaning": "council, order"
+        },
+        {
+         "word": "knyaz",
+         "meaning": "prince, lord"
+        },
+        {
+         "word": "chudo",
+         "meaning": "miracle"
+        },
+        {
+         "word": "golod",
+         "meaning": "hunger"
+        },
+        {
+         "word": "zol",
+         "meaning": "gold"
+        },
+        {
+         "word": "mor",
+         "meaning": "sea"
+        },
+        {
+         "word": "dusha",
+         "meaning": "soul"
+        },
+        {
+         "word": "kamen",
+         "meaning": "stone"
+        },
+        {
+         "word": "zima",
+         "meaning": "winter"
+        },
+        {
+         "word": "vesna",
+         "meaning": "spring"
+        },
+        {
+         "word": "leto",
+         "meaning": "summer"
+        },
+        {
+         "word": "osyen",
+         "meaning": "autumn"
+        },
+        {
+         "word": "otets",
+         "meaning": "father"
+        },
+        {
+         "word": "mat",
+         "meaning": "mother"
+        },
+        {
+         "word": "syn",
+         "meaning": "son"
+        },
+        {
+         "word": "doch",
+         "meaning": "daughter"
+        },
+        {
+         "word": "brat",
+         "meaning": "brother"
+        },
+        {
+         "word": "sestra",
+         "meaning": "sister"
+        },
+        {
+         "word": "dom",
+         "meaning": "house, home"
+        },
+        {
+         "word": "mest",
+         "meaning": "place"
+        },
+        {
+         "word": "sila",
+         "meaning": "strength, power"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "curse",
+         "original": "Chert vozyal!",
+         "translation": "May the devil take you!"
+        },
+        {
+         "id": "2",
+         "category": "curse",
+         "original": "Na krov tvoikh predkov!",
+         "translation": "Upon the blood of your ancestors!"
+        },
+        {
+         "id": "3",
+         "category": "saying",
+         "original": "Dor dolg, a vesn krasn.",
+         "translation": "The road is long, but the spring is beautiful."
+        },
+        {
+         "id": "4",
+         "category": "saying",
+         "original": "Knyaz bez krov — pustaя korona.",
+         "translation": "A prince without blood — an empty crown."
+        },
+        {
+         "id": "5",
+         "category": "greeting",
+         "original": "Zdrav budi, brat.",
+         "translation": "Be well, brother."
+        },
+        {
+         "id": "6",
+         "category": "greeting",
+         "original": "Mir vam, gost.",
+         "translation": "Peace to you, guest."
+        },
+        {
+         "id": "7",
+         "category": "blessing",
+         "original": "Da bog khrani dushu tvoyu.",
+         "translation": "May God guard your soul."
+        },
+        {
+         "id": "8",
+         "category": "saying",
+         "original": "Vesn ne sproshish — priyidet sama.",
+         "translation": "You don't ask spring to come — it arrives on its own."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [],
+        "places": [],
+        "things": []
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": [
+        "mir",
+        "vesn",
+        "bog",
+        "knyaz",
+        "mor",
+        "zima",
+        "vesna",
+        "leto",
+        "otets",
+        "mat",
+        "syn",
+        "doch",
+        "brat",
+        "sestra",
+        "dom"
+       ]
+      },
+      "jargon_in_language": [
+       "sibilant"
+      ]
+     }
+    ],
+    "compound-desc": [
+     {
+      "version": 1,
+      "seconds": 62.3,
+      "reply": "{\"name\": \"Oldmarkish\",\n \"level\": \"naming\",\n \"sound\": \"Names in Oldmarkish are built from English word parts stitched together, so they feel instantly recognizable yet faintly strange. They sound like place names you might find on a crumbling medieval map — earthy, old-fashioned, and rooted in nature. The compounds blend words for landscapes, plants, weather, and creatures into single names that evoke a specific image or feeling.\",\n \"categories\": {\n   \"A\": \"dusk thorn ash raven bramble frost wick dawn oak moor\",\n   \"B\": \"hollow field mere ford wick brook mere fen\",\n   \"C\": \"stone iron bone silver root clay\",\n   \"D\": \"ward keeper guard sentinel watcher\",\n   \"E\": \"down hill mere vale copse\",\n   \"F\": \"black grey white red green\",\n   \"G\": \"cross ford bridge pass\",\n   \"H\": \"thornwick ravenmere oakfield\",\n   \"I\": \"blood bone ash dust\",\n   \"J\": \"singers talekeepers\",\n   \"K\": \"fell down mere\",\n   \"L\": \"thornfield ashwick\"\n },\n \"generators\": [\n   {\n     \"id\": \"people_first\",\n     \"name\": \"First names (Oldmarkish style)\",\n     \"use\": \"people\",\n     \"patterns\": [\"[A|C|F] [D|A] *n\",\n                  \"[F] [A] *n\",\n                  \"[A] [F] *n\",\n                  \"[D] [F] [A] *n\",\n                  \"[A] [C] *n\"],\n     \"reject\": [\"^(.*) (.*) \\\\1$\"],\n     \"min_length\": 3,\n     \"max_length\": 25\n   },\n   {\n     \"id\": \"people_last\",\n     \"name\": \"Last names (Oldmarkish style)\",\n     \"use\": \"people\",\n     \"patterns\": [\"[A][B] *n\",\n                  \"[F][A][B] *n\",\n                  \"[C][A][B] *n\",\n                  \"[A][G][A] *n\",\n                  \"[D][A][B] *n\"],\n     \"reject\": [\"^(.*) (.*) \\\\1$\"],\n     \"min_length\": 5,\n     \"max_length\": 30\n   },\n   {\n     \"id\": \"places\",\n     \"name\": \"Place names (Oldmarkish style)\",\n     \"use\": \"places\",\n     \"patterns\": [\"[A][B] *n\",\n                  \"[F][A][B] *n\",\n                  \"[A][E] *n\",\n                  \"[C][G][A] *n\",\n                  \"[A][K] *n\",\n                  \"[L] *n\",\n                  \"[H] *n\"],\n     \"reject\": [\"^(.*) (.*) \\\\1$\"],\n     \"min_length\": 5,\n     \"max_length\": 30\n   },\n   {\n     \"id\": \"places_short\",\n     \"name\": \"Short place names (Oldmarkish style)\",\n     \"use\": \"places\",\n     \"patterns\": [\"[A] *n\",\n                  \"[B] *n\",\n                  \"[E] *n\",\n                  \"[G] *n\",\n                  \"[A|C|F] *n\"],\n     \"reject\": [\"^(.*) (.*) \\\\1$\"],\n     \"min_length\": 3,\n     \"max_length\": 12\n   },\n   {\n     \"id\": \"things\",\n     \"name\": \"Thing names (Oldmarkish style)\",\n     \"use\": \"things\",\n     \"patterns\": [\"[C][I] *n\",\n                  \"[F][C] *n\",\n                  \"[I][C] *n\",\n                  \"[A][C] *n\",\n                  \"[D][C] *n\"],\n     \"reject\": [\"^(.*) (.*) \\\\1$\"],\n     \"min_length\": 4,\n     \"max_length\": 15\n   }\n ],\n \"dictionary\": [\n   {\"word\": \"dusk\", \"meaning\": \"twilight, the fading of light\"},\n   {\"word\": \"thorn\", \"meaning\": \"a sharp, pointed projection; danger or pain\"},\n   {\"word\": \"ash\", \"meaning\": \"remnants after fire; grey and desolate\"},\n   {\"word\": \"raven\", \"meaning\": \"a large black bird; associated with death and mystery\"},\n   {\"word\": \"bramble\", \"meaning\": \"a thorny, tangled shrub; obstacles and hardship\"},\n   {\"word\": \"frost\", \"meaning\": \"ice crystals forming in cold weather; cold and harsh conditions\"},\n   {\"word\": \"wick\", \"meaning\": \"the cord in a candle; a small settlement or village\"},\n   {\"word\": \"dawn\", \"meaning\": \"the first light of day; new beginnings\"},\n   {\"word\": \"oak\", \"meaning\": \"a large, strong, long-lived tree; endurance and strength\"},\n   {\"word\": \"moor\", \"meaning\": \"a wide, open, boggy area of land; wilderness and solitude\"},\n   {\"word\": \"hollow\", \"meaning\": \"a depression in the ground; emptiness or a hidden interior\"},\n   {\"word\": \"field\", \"meaning\": \"an open area of land used for growing crops; open space\"},\n   {\"word\": \"mere\", \"meaning\": \"a lake, usually small; still, quiet water\"},\n   {\"word\": \"ford\", \"meaning\": \"a shallow crossing point in a river; a way through\"},\n   {\"word\": \"brook\", \"meaning\": \"a small stream; flowing water\"},\n   {\"word\": \"fen\", \"meaning\": \"a marshy, wetland area; damp, misty ground\"},\n   {\"word\": \"stone\", \"meaning\": \"rock; solidity and permanence\"},\n   {\"word\": \"iron\", \"meaning\": \"a strong, hard metal; strength and resilience\"},\n   {\"word\": \"bone\", \"meaning\": \"the hard structure inside a body; what remains after flesh\"},\n   {\"word\": \"silver\", \"meaning\": \"a precious, shiny metal; value and purity\"},\n   {\"word\": \"root\", \"meaning\": \"the underground part of a plant; origin and foundation\"},\n   {\"word\": \"clay\", \"meaning\": \"soft, sticky earth; something moldable and humble\"},\n   {\"word\": \"ward\", \"meaning\": \"protection or guardianship; a district under watch\"},\n   {\"word\": \"keeper\", \"meaning\": \"one who guards or maintains; a caretaker\"},\n   {\"word\": \"guard\", \"meaning\": \"one who protects; protection itself\"},\n   {\"word\": \"sentinel\", \"meaning\": \"a watchman; someone who stands vigil\"},\n   {\"word\": \"watcher\", \"meaning\": \"one who observes; a silent observer\"},\n   {\"word\": \"down\", \"meaning\": \"a slope or valley; a low-lying area\"},\n   {\"word\": \"hill\", \"meaning\": \"a raised area of land; a modest elevation\"},\n   {\"word\": \"vale\", \"meaning\": \"a valley; a sheltered, green lowland\"},\n   {\"word\": \"copse\", \"meaning\": \"a small group of trees; a dense thicket\"},\n   {\"word\": \"black\", \"meaning\": \"the darkest color; darkness and mystery\"},\n   {\"word\": \"grey\", \"meaning\": \"a dull, neutral color; gloom and ambiguity\"},\n   {\"word\": \"white\", \"meaning\": \"the brightest color; purity and cold\"},\n   {\"word\": \"red\", \"meaning\": \"a vivid, warm color; blood, fire, and passion\"},\n   {\"word\": \"green\", \"meaning\": \"the color of growing things; nature and life\"},\n   {\"word\": \"cross\", \"meaning\": \"an intersection or meeting point; a cruciform shape\"},\n   {\"word\": \"bridge\", \"meaning\": \"a structure spanning a gap; a connection between two places\"},\n   {\"word\": \"pass\", \"meaning\": \"a narrow way through mountains; a route through obstacles\"},\n   {\"word\": \"fell\", \"meaning\": \"a high, barren hilltop; a desolate peak\"},\n   {\"word\": \"blood\", \"meaning\": \"the red fluid in living bodies; life force and violence\"},\n   {\"word\": \"dust\", \"meaning\": \"tiny particles; the remains of the dead; insignificance\"},\n   {\"word\": \"singers\", \"meaning\": \"those who sing; bards and storytellers\"},\n   {\"word\": \"talekeepers\", \"meaning\": \"those who preserve stories; oral historians\"}\n ],\n \"phrases\": [\n   {\"id\": \"1\", \"category\": \"saying\", \"original\": \"Ash to ash and field to field.\",\n   \"translation\": \"Everything returns to the earth from which it came.\"},\n   {\"id\": \"2\", \"category\": \"saying\", \"original\": \"The raven knows what the oak has forgotten.\",\n   \"translation\": \"The young remember what the old have lost.\"},\n   {\"id\": \"3\", \"category\": \"saying\", \"original\": \"A thorn in the hand is a thorn in the heart.\",\n   \"translation\": \"Pain felt in the body cannot be separated from pain felt within.\"},\n   {\"id\": \"4\", \"category\": \"greeting\", \"original\": \"May your ford be shallow and your bridge be strong.\",\n   \"translation\": \"May your journeys be easy and your paths secure.\"},\n   {\"id\": \"5\", \"category\": \"blessing\", \"original\": \"Let silver root and iron oak guard your door.\",\n   \"translation\": \"May strength and value protect your home.\"},\n   {\"id\": \"6\", \"category\": \"curse\", \"original\": \"May frost take your field and dust take your name.\",\n   \"translation\": \"May ruin destroy your livelihood and death erase your memory.\"},\n   {\"id\": \"7\", \"category\": \"saying\", \"original\": \"The mere does not judge what falls into it.\",\n   \"translation\": \"Still water accepts all things without prejudice.\"},\n   {\"id\": \"8\", \"category\": \"blessing\", \"original\": \"Dawn comes even after the longest thorn-night.\",\n   \"translation\": \"Hope returns after the worst suffering.\"}\n ]\n}",
+      "language": {
+       "name": "Oldmarkish",
+       "level": "naming",
+       "sound": "Names in Oldmarkish are built from English word parts stitched together, so they feel instantly recognizable yet faintly strange. They sound like place names you might find on a crumbling medieval map — earthy, old-fashioned, and rooted in nature. The compounds blend words for landscapes, plants, weather, and creatures into single names that evoke a specific image or feeling.",
+       "categories": {
+        "A": "dusk thorn ash raven bramble frost wick dawn oak moor",
+        "B": "hollow field mere ford wick brook mere fen",
+        "C": "stone iron bone silver root clay",
+        "D": "ward keeper guard sentinel watcher",
+        "E": "down hill mere vale copse",
+        "F": "black grey white red green",
+        "G": "cross ford bridge pass",
+        "H": "thornwick ravenmere oakfield",
+        "I": "blood bone ash dust",
+        "J": "singers talekeepers",
+        "K": "fell down mere",
+        "L": "thornfield ashwick"
+       },
+       "generators": [
+        {
+         "id": "people_first",
+         "name": "First names (Oldmarkish style)",
+         "use": "people",
+         "patterns": [
+          "[A|C|F] [D|A] *n",
+          "[F] [A] *n",
+          "[A] [F] *n",
+          "[D] [F] [A] *n",
+          "[A] [C] *n"
+         ],
+         "reject": [
+          "^(.*) (.*) \\1$"
+         ],
+         "min_length": 3,
+         "max_length": 25
+        },
+        {
+         "id": "people_last",
+         "name": "Last names (Oldmarkish style)",
+         "use": "people",
+         "patterns": [
+          "[A][B] *n",
+          "[F][A][B] *n",
+          "[C][A][B] *n",
+          "[A][G][A] *n",
+          "[D][A][B] *n"
+         ],
+         "reject": [
+          "^(.*) (.*) \\1$"
+         ],
+         "min_length": 5,
+         "max_length": 30
+        },
+        {
+         "id": "places",
+         "name": "Place names (Oldmarkish style)",
+         "use": "places",
+         "patterns": [
+          "[A][B] *n",
+          "[F][A][B] *n",
+          "[A][E] *n",
+          "[C][G][A] *n",
+          "[A][K] *n",
+          "[L] *n",
+          "[H] *n"
+         ],
+         "reject": [
+          "^(.*) (.*) \\1$"
+         ],
+         "min_length": 5,
+         "max_length": 30
+        },
+        {
+         "id": "places_short",
+         "name": "Short place names (Oldmarkish style)",
+         "use": "places",
+         "patterns": [
+          "[A] *n",
+          "[B] *n",
+          "[E] *n",
+          "[G] *n",
+          "[A|C|F] *n"
+         ],
+         "reject": [
+          "^(.*) (.*) \\1$"
+         ],
+         "min_length": 3,
+         "max_length": 12
+        },
+        {
+         "id": "things",
+         "name": "Thing names (Oldmarkish style)",
+         "use": "things",
+         "patterns": [
+          "[C][I] *n",
+          "[F][C] *n",
+          "[I][C] *n",
+          "[A][C] *n",
+          "[D][C] *n"
+         ],
+         "reject": [
+          "^(.*) (.*) \\1$"
+         ],
+         "min_length": 4,
+         "max_length": 15
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "twilight, the fading of light"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp, pointed projection; danger or pain"
+        },
+        {
+         "word": "ash",
+         "meaning": "remnants after fire; grey and desolate"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird; associated with death and mystery"
+        },
+        {
+         "word": "bramble",
+         "meaning": "a thorny, tangled shrub; obstacles and hardship"
+        },
+        {
+         "word": "frost",
+         "meaning": "ice crystals forming in cold weather; cold and harsh conditions"
+        },
+        {
+         "word": "wick",
+         "meaning": "the cord in a candle; a small settlement or village"
+        },
+        {
+         "word": "dawn",
+         "meaning": "the first light of day; new beginnings"
+        },
+        {
+         "word": "oak",
+         "meaning": "a large, strong, long-lived tree; endurance and strength"
+        },
+        {
+         "word": "moor",
+         "meaning": "a wide, open, boggy area of land; wilderness and solitude"
+        },
+        {
+         "word": "hollow",
+         "meaning": "a depression in the ground; emptiness or a hidden interior"
+        },
+        {
+         "word": "field",
+         "meaning": "an open area of land used for growing crops; open space"
+        },
+        {
+         "word": "mere",
+         "meaning": "a lake, usually small; still, quiet water"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow crossing point in a river; a way through"
+        },
+        {
+         "word": "brook",
+         "meaning": "a small stream; flowing water"
+        },
+        {
+         "word": "fen",
+         "meaning": "a marshy, wetland area; damp, misty ground"
+        },
+        {
+         "word": "stone",
+         "meaning": "rock; solidity and permanence"
+        },
+        {
+         "word": "iron",
+         "meaning": "a strong, hard metal; strength and resilience"
+        },
+        {
+         "word": "bone",
+         "meaning": "the hard structure inside a body; what remains after flesh"
+        },
+        {
+         "word": "silver",
+         "meaning": "a precious, shiny metal; value and purity"
+        },
+        {
+         "word": "root",
+         "meaning": "the underground part of a plant; origin and foundation"
+        },
+        {
+         "word": "clay",
+         "meaning": "soft, sticky earth; something moldable and humble"
+        },
+        {
+         "word": "ward",
+         "meaning": "protection or guardianship; a district under watch"
+        },
+        {
+         "word": "keeper",
+         "meaning": "one who guards or maintains; a caretaker"
+        },
+        {
+         "word": "guard",
+         "meaning": "one who protects; protection itself"
+        },
+        {
+         "word": "sentinel",
+         "meaning": "a watchman; someone who stands vigil"
+        },
+        {
+         "word": "watcher",
+         "meaning": "one who observes; a silent observer"
+        },
+        {
+         "word": "down",
+         "meaning": "a slope or valley; a low-lying area"
+        },
+        {
+         "word": "hill",
+         "meaning": "a raised area of land; a modest elevation"
+        },
+        {
+         "word": "vale",
+         "meaning": "a valley; a sheltered, green lowland"
+        },
+        {
+         "word": "copse",
+         "meaning": "a small group of trees; a dense thicket"
+        },
+        {
+         "word": "black",
+         "meaning": "the darkest color; darkness and mystery"
+        },
+        {
+         "word": "grey",
+         "meaning": "a dull, neutral color; gloom and ambiguity"
+        },
+        {
+         "word": "white",
+         "meaning": "the brightest color; purity and cold"
+        },
+        {
+         "word": "red",
+         "meaning": "a vivid, warm color; blood, fire, and passion"
+        },
+        {
+         "word": "green",
+         "meaning": "the color of growing things; nature and life"
+        },
+        {
+         "word": "cross",
+         "meaning": "an intersection or meeting point; a cruciform shape"
+        },
+        {
+         "word": "bridge",
+         "meaning": "a structure spanning a gap; a connection between two places"
+        },
+        {
+         "word": "pass",
+         "meaning": "a narrow way through mountains; a route through obstacles"
+        },
+        {
+         "word": "fell",
+         "meaning": "a high, barren hilltop; a desolate peak"
+        },
+        {
+         "word": "blood",
+         "meaning": "the red fluid in living bodies; life force and violence"
+        },
+        {
+         "word": "dust",
+         "meaning": "tiny particles; the remains of the dead; insignificance"
+        },
+        {
+         "word": "singers",
+         "meaning": "those who sing; bards and storytellers"
+        },
+        {
+         "word": "talekeepers",
+         "meaning": "those who preserve stories; oral historians"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "saying",
+         "original": "Ash to ash and field to field.",
+         "translation": "Everything returns to the earth from which it came."
+        },
+        {
+         "id": "2",
+         "category": "saying",
+         "original": "The raven knows what the oak has forgotten.",
+         "translation": "The young remember what the old have lost."
+        },
+        {
+         "id": "3",
+         "category": "saying",
+         "original": "A thorn in the hand is a thorn in the heart.",
+         "translation": "Pain felt in the body cannot be separated from pain felt within."
+        },
+        {
+         "id": "4",
+         "category": "greeting",
+         "original": "May your ford be shallow and your bridge be strong.",
+         "translation": "May your journeys be easy and your paths secure."
+        },
+        {
+         "id": "5",
+         "category": "blessing",
+         "original": "Let silver root and iron oak guard your door.",
+         "translation": "May strength and value protect your home."
+        },
+        {
+         "id": "6",
+         "category": "curse",
+         "original": "May frost take your field and dust take your name.",
+         "translation": "May ruin destroy your livelihood and death erase your memory."
+        },
+        {
+         "id": "7",
+         "category": "saying",
+         "original": "The mere does not judge what falls into it.",
+         "translation": "Still water accepts all things without prejudice."
+        },
+        {
+         "id": "8",
+         "category": "blessing",
+         "original": "Dawn comes even after the longest thorn-night.",
+         "translation": "Hope returns after the worst suffering."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people_first": [
+         "Ash Dawn *n",
+         "Dawn White *n",
+         "Bramble Root *n",
+         "White Moor *n",
+         "Wick Watcher *n",
+         "Green Frost *n",
+         "Guard Grey Dawn *n",
+         "Bramble Iron *n",
+         "Thorn Clay *n",
+         "Frost Iron *n",
+         "Oak White *n",
+         "Dawn Bramble *n",
+         "Green Dusk *n",
+         "Sentinel Grey Bramble *n",
+         "Red Frost *n",
+         "Frost Bone *n",
+         "White Wick *n",
+         "Keeper White Bramble *n",
+         "Silver Watcher *n",
+         "Bramble White *n",
+         "Guard Green Frost *n",
+         "Dawn Dusk *n",
+         "Dusk Bone *n",
+         "Keeper Red Raven *n",
+         "Ash Sentinel *n",
+         "Guard White Dusk *n",
+         "Red Thorn *n",
+         "Moor Root *n",
+         "Raven Sentinel *n",
+         "White Frost *n",
+         "Grey Raven *n",
+         "Wick Black *n",
+         "Root Frost *n",
+         "Green Guard *n",
+         "Black Raven *n",
+         "Ash Black *n",
+         "Watcher Black Oak *n",
+         "Raven Grey *n",
+         "Clay Moor *n",
+         "Dawn Stone *n",
+         "Thorn Keeper *n",
+         "Grey Thorn *n",
+         "Oak Green *n",
+         "Black Frost *n",
+         "Oak Bone *n",
+         "Green Wick *n",
+         "Stone Ward *n",
+         "Ward Black Thorn *n",
+         "Frost Grey *n",
+         "Black Dawn *n"
+        ],
+        "people_last": [
+         "Guardravenfen *n",
+         "Warddawnbrook *n",
+         "Greyravenhollow *n",
+         "Wickpassmoor *n",
+         "Ravenfield *n",
+         "Ashmere *n",
+         "Silverdawnbrook *n",
+         "Whitethornhollow *n",
+         "Wardmoormere *n",
+         "Thorncrossdawn *n",
+         "Wardfrostbrook *n",
+         "Dawnpassfrost *n",
+         "Wardthornhollow *n",
+         "Moorcrossfrost *n",
+         "Ironravenfield *n",
+         "Duskwick *n",
+         "Moorcrosswick *n",
+         "Keepermoorhollow *n",
+         "Thornmere *n",
+         "Thornbridgeoak *n",
+         "Wardbrambleford *n",
+         "Greyfrostwick *n",
+         "Wickbrook *n",
+         "Moorford *n",
+         "Watcherravenford *n",
+         "Moorfordmoor *n",
+         "Ashpassfrost *n",
+         "Oakfield *n",
+         "Silverbramblemere *n",
+         "Ironmoorhollow *n",
+         "Redduskbrook *n",
+         "Greythornford *n",
+         "Silvermoorwick *n",
+         "Rootwickmere *n",
+         "Frostmere *n",
+         "Bramblebridgewick *n",
+         "Silverdawnmere *n",
+         "Keeperdawnmere *n",
+         "Bonebramblewick *n",
+         "Greyashmere *n",
+         "Bramblefield *n",
+         "Ravenfordthorn *n",
+         "Dawnpassoak *n",
+         "Ravenfen *n",
+         "Blackoakwick *n",
+         "Sentinelbramblefield *n",
+         "Duskfordmoor *n",
+         "Wardoakbrook *n",
+         "Bonethornhollow *n",
+         "Whitemoormere *n"
+        ],
+        "places": [
+         "Ironfordmoor *n",
+         "Thornwick *n",
+         "Ravenmere *n",
+         "Ravenvale *n",
+         "Whitemoorwick *n",
+         "Stonepassdusk *n",
+         "Dawnbrook *n",
+         "Moorhill *n",
+         "Rootpassdawn *n",
+         "Thornfield *n",
+         "Greenwickwick *n",
+         "Duskford *n",
+         "Dawnhollow *n",
+         "Ironcrossoak *n",
+         "Oakdown *n",
+         "Moordown *n",
+         "Frostmere *n",
+         "Ashwick *n",
+         "Whitebramblewick *n",
+         "Bramblemere *n",
+         "Frosthill *n",
+         "Bonepassoak *n",
+         "Rootfordbramble *n",
+         "Silvercrosswick *n",
+         "Ironpassoak *n",
+         "Oakfield *n",
+         "Redoakbrook *n",
+         "Blackmoorbrook *n",
+         "Frosthollow *n",
+         "Duskfell *n",
+         "Silverbridgebramble *n",
+         "Dawnmere *n",
+         "Oakcopse *n",
+         "Ashvale *n",
+         "Moormere *n",
+         "Rootfordash *n",
+         "Ashfield *n",
+         "Thornford *n",
+         "Frostdown *n",
+         "Moorfell *n",
+         "Oakmere *n",
+         "Moorvale *n",
+         "Bonecrossbramble *n",
+         "Moorhollow *n",
+         "Dawnfell *n",
+         "Whiteashwick *n",
+         "Redbramblemere *n",
+         "Ironbridgefrost *n",
+         "Frostbrook *n",
+         "Stonebridgedusk *n"
+        ],
+        "places_short": [
+         "Mere *n",
+         "Bridge *n",
+         "Oak *n",
+         "Dusk *n",
+         "Cross *n",
+         "Hollow *n",
+         "Wick *n",
+         "Iron *n",
+         "Raven *n",
+         "Red *n",
+         "Bramble *n",
+         "Hill *n",
+         "Thorn *n",
+         "Moor *n",
+         "Ford *n",
+         "Silver *n",
+         "White *n",
+         "Bone *n",
+         "Ash *n",
+         "Dawn *n",
+         "Pass *n",
+         "Black *n",
+         "Root *n",
+         "Grey *n",
+         "Fen *n",
+         "Frost *n",
+         "Down *n",
+         "Copse *n",
+         "Vale *n",
+         "Green *n",
+         "Brook *n",
+         "Field *n",
+         "Stone *n",
+         "Clay *n"
+        ],
+        "things": [
+         "Greyclay *n",
+         "Wickbone *n",
+         "Blackstone *n",
+         "Bloodclay *n",
+         "Duststone *n",
+         "Whiteclay *n",
+         "Wardiron *n",
+         "Whitebone *n",
+         "Dustbone *n",
+         "Ashclay *n",
+         "Dawnroot *n",
+         "Silverblood *n",
+         "Frostroot *n",
+         "Ironblood *n",
+         "Whiteiron *n",
+         "Bonebone *n",
+         "Greenstone *n",
+         "Claybone *n",
+         "Thornclay *n",
+         "Boneblood *n",
+         "Stonedust *n",
+         "Ashroot *n",
+         "Greenroot *n",
+         "Sentineliron *n",
+         "Silverbone *n",
+         "Rediron *n",
+         "Dustclay *n",
+         "Dawnclay *n",
+         "Boneroot *n",
+         "Oakclay *n",
+         "Keepersilver *n",
+         "Guardsilver *n",
+         "Bloodstone *n",
+         "Stoneash *n",
+         "Irondust *n",
+         "Bonesilver *n",
+         "Moorclay *n",
+         "Frostsilver *n",
+         "Ashstone *n",
+         "Watchersilver *n",
+         "Greysilver *n",
+         "Stoneblood *n",
+         "Wardroot *n",
+         "Whitestone *n",
+         "Frostbone *n",
+         "Whiteroot *n",
+         "Greyroot *n",
+         "Silverdust *n",
+         "Ashiron *n",
+         "Claydust *n"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 74.2,
+      "reply": "{\"name\": \"Oldwood Naming\",\n \"level\": \"naming\",\n \"sound\": \"Names sound like they belong to a rustic, ancient land full of forests and moors. They're built from English word parts you might recognize — things like 'thorn', 'mere', 'wick', 'ash' — strung together into compound names that feel old and grounded. Think of place names like 'Ashwick Ford' or 'Ravenhollow Field', or a person called 'Thornmere'. Every part has a specific meaning, so the names carry little stories about the land or the person.\",\n \"categories\": {\n   \"A\": \"dusk thorn ash raven black willow birch elder rowan\",\n   \"B\": \"hollow field mere ford wick stream grove copse heath\",\n   \"C\": \"stone iron bone oak yew silver gold copper\",\n   \"D\": \"cross gate bridge wall keep tower barrow\",\n   \"E\": \"under over by at on near far\",\n   \"S\": \"man woman child hunter ward keeper lord lady\",\n   \"F\": \"bright dark grey pale red green\",\n   \"G\": \"river valley hill mount fen bog\"\n },\n \"generators\": [\n   {\"id\": \"people\",\n    \"name\": \"Person names\",\n    \"use\": \"people\",\n    \"patterns\": [\n      \"[A|F]S\",\n      \"S[A|F]\",\n      \"[A|F][E][A|F]S\",\n      \"S[A|F][E][A|F]\"\n    ],\n    \"reject\": [],\n    \"min_length\": 4,\n    \"max_length\": 15\n   },\n   {\"id\": \"places\",\n    \"use\": \"places\",\n    \"name\": \"Place names\",\n    \"patterns\": [\n      \"A[E]B\",\n      \"B[A|F]\",\n      \"[A|F]B\",\n      \"[A|F][E][A|F]B\",\n      \"B[E][A|F]\",\n      \"D[A|F]\",\n      \"[A|F]D\",\n      \"G[A|F]\",\n      \"[A|F]G\",\n      \"A[E]C\",\n      \"C[A|F]\",\n      \"A[E]D\",\n      \"D[A|F]\"\n    ],\n    \"reject\": [],\n    \"min_length\": 4,\n    \"max_length\": 18\n   },\n   {\"id\": \"things\",\n    \"use\": \"things\",\n    \"name\": \"Object and feature names\",\n    \"patterns\": [\n      \"C[A|F]\",\n      \"[A|F]C\",\n      \"A[E]C\",\n      \"C[E][A|F]\",\n      \"[F]C\",\n      \"C[F]\"\n    ],\n    \"reject\": [],\n    \"min_length\": 4,\n    \"max_length\": 12\n   }\n ],\n \"dictionary\": [\n   {\"word\": \"dusk\", \"meaning\": \"the fading light of evening, or something associated with twilight\"},\n   {\"word\": \"thorn\", \"meaning\": \"a sharp point or prickly plant, often symbolizing hardship or danger\"},\n   {\"word\": \"ash\", \"meaning\": \"remnants after fire, or the grey-white tree; suggests destruction or purity\"},\n   {\"word\": \"raven\", \"meaning\": \"a large black bird, associated with mystery, death, or intelligence\"},\n   {\"word\": \"black\", \"meaning\": \"the color of darkness, night, or shadow\"},\n   {\"word\": \"willow\", \"meaning\": \"a graceful tree that grows near water, symbolizing sorrow or patience\"},\n   {\"word\": \"birch\", \"meaning\": \"a slender pale tree common in cold forests, symbolizing new beginnings\"},\n   {\"word\": \"elder\", \"meaning\": \"an older person or a plant used in folk medicine; suggests wisdom or age\"},\n   {\"word\": \"rowan\", \"meaning\": \"a red-berried tree in northern folklore, believed to ward off evil\"},\n   {\"word\": \"hollow\", \"meaning\": \"an empty space inside something, or a valley; suggests depth or secrecy\"},\n   {\"word\": \"field\", \"meaning\": \"an open area of land used for farming or grazing\"},\n   {\"word\": \"mere\", \"meaning\": \"a lake, especially a still and dark one in a moorland setting\"},\n   {\"word\": \"ford\", \"meaning\": \"a shallow place in a river where one can cross on foot\"},\n   {\"word\": \"wick\", \"meaning\": \"a small village or hamlet, often isolated; can also mean a candle's wick\"},\n   {\"word\": \"stream\", \"meaning\": \"a small flowing body of water\"},\n   {\"word\": \"grove\", \"meaning\": \"a small group of trees, often sacred or ancient\"},\n   {\"word\": \"copse\", \"meaning\": \"a small dense thicket of trees or shrubs\"},\n   {\"word\": \"heath\", \"meaning\": \"open land covered with shrubs and coarse grass, typical of moorlands\"},\n   {\"word\": \"stone\", \"meaning\": \"rock or a monument made of rock; suggests permanence or strength\"},\n   {\"word\": \"iron\", \"meaning\": \"a strong metal, or something hard and unyielding\"},\n   {\"word\": \"bone\", \"meaning\": \"the hard framework inside a body; suggests mortality or resilience\"},\n   {\"word\": \"oak\", \"meaning\": \"a large, strong, long-lived tree; symbolizes endurance and power\"},\n   {\"word\": \"yew\", \"meaning\": \"a dark, slow-growing tree associated with death and long life\"},\n   {\"word\": \"silver\", \"meaning\": \"a precious grey-white metal; suggests value or cold beauty\"},\n   {\"word\": \"gold\", \"meaning\": \"a precious yellow metal; suggests wealth or divinity\"},\n   {\"word\": \"copper\", \"meaning\": \"a reddish metal; suggests humility or common strength\"},\n   {\"word\": \"cross\", \"meaning\": \"a structure of intersecting lines, often a crossroads or memorial\"},\n   {\"word\": \"gate\", \"meaning\": \"an opening in a wall or fence; a passage or border\"},\n   {\"word\": \"bridge\", \"meaning\": \"a structure spanning a gap, allowing passage over water or terrain\"},\n   {\"word\": \"wall\", \"meaning\": \"a solid barrier of stone or earth; suggests protection or imprisonment\"},\n   {\"word\": \"keep\", \"meaning\": \"the strongest part of a castle; a fortified tower\"},\n   {\"word\": \"tower\", \"meaning\": \"a tall, narrow structure; suggests watchfulness or isolation\"},\n   {\"word\": \"barrow\", \"meaning\": \"a mound of earth over a burial; an ancient grave or burial site\"},\n   {\"word\": \"under\", \"meaning\": \"below or beneath; suggesting something hidden or foundational\"},\n   {\"word\": \"over\", \"meaning\": \"above; suggesting something that looms or governs\"},\n   {\"word\": \"by\", \"meaning\": \"near or beside; suggesting proximity or association\"},\n   {\"word\": \"at\", \"meaning\": \"in the location of; indicating a specific site\"},\n   {\"word\": \"on\", \"meaning\": \"resting upon or situated on; suggesting something built or placed\"},\n   {\"word\": \"near\", \"meaning\": \"close to; suggesting something adjacent or related\"},\n   {\"word\": \"far\", \"meaning\": \"distant; suggesting something remote or isolated\"},\n   {\"word\": \"man\", \"meaning\": \"a male human, or a person in general\"},\n   {\"word\": \"woman\", \"meaning\": \"a female human\"},\n   {\"word\": \"child\", \"meaning\": \"a young human, not yet grown\"},\n   {\"word\": \"hunter\", \"meaning\": \"one who pursues and kills game; a skilled tracker\"},\n   {\"word\": \"ward\", \"meaning\": \"a guardian or protector; one who watches over\"},\n   {\"word\": \"keeper\", \"meaning\": \"one who maintains or guards something\"},\n   {\"word\": \"lord\", \"meaning\": \"a ruler or nobleman with authority over land and people\"},\n   {\"word\": \"lady\", \"meaning\": \"a noblewoman or woman of high rank\"},\n   {\"word\": \"bright\", \"meaning\": \"shining or vivid; suggesting clarity, joy, or prominence\"},\n   {\"word\": \"dark\", \"meaning\": \"lacking light; suggesting mystery, sorrow, or evil\"},\n   {\"word\": \"grey\", \"meaning\": \"the color between black and white; suggesting neutrality, age, or gloom\"},\n   {\"word\": \"pale\", \"meaning\": \"light in color, almost white; suggesting fragility or ghostliness\"},\n   {\"word\": \"red\", \"meaning\": \"the color of blood and fire; suggesting passion, danger, or courage\"},\n   {\"word\": \"green\", \"meaning\": \"the color of growing things; suggesting life, nature, or inexperience\"},\n   {\"word\": \"river\", \"meaning\": \"a large, flowing body of water\"},\n   {\"word\": \"valley\", \"meaning\": \"a low area between hills or mountains\"},\n   {\"word\": \"hill\", \"meaning\": \"a raised area of land, not as tall as a mountain\"},\n   {\"word\": \"mount\", \"meaning\": \"a high peak or elevation; a mountain\"},\n   {\"word\": \"fen\", \"meaning\": \"a low, wet, marshy area; boggy ground\"},\n   {\"word\": \"bog\", \"meaning\": \"soft, wet ground that can trap you; a marsh\"}\n ],\n \"phrases\": [\n   {\"id\": \"01\",\n    \"category\": \"saying\",\n    \"original\": \"Thorn that bends does not break.\",\n    \"translation\": \"One who yields to hardship survives it.\"\n   },\n   {\"id\": \"02\",\n    \"category\": \"saying\",\n    \"original\": \"The mere gives what the field cannot.\",\n    \"translation\": \"Still waters offer what fertile land does not — depth, mystery, hidden things.\"\n   },\n   {\"id\": \"03\",\n    \"category\": \"saying\",\n    \"original\": \"A raven's eye sees the road before the feet find it.\",\n    \"translation\": \"Wisdom perceives the path before action takes it.\"\n   },\n   {\"id\": \"04\",\n    \"category\": \"saying\",\n    \"original\": \"Iron roots hold when oak roots rot.\",\n    \"translation\": \"What appears strong may fail; what appears humble may endure.\"\n   },\n   {\"id\": \"05\",\n    \"category\": \"saying\",\n    \"original\": \"By the cross, all roads speak truth.\",\n    \"translation\": \"At a crossroads, one must choose honestly.\"\n   },\n   {\"id\": \"06\",\n    \"category\": \"saying\",\n    \"original\": \"The ward who sleeps with the yew does not wake to the dawn.\",\n    \"translation\": \"A guardian who neglects vigilance will be caught unaware.\"\n   },\n   {\"id\": \"07\",\n    \"category\": \"greeting\",\n    \"original\": \"Walk well by the willow.\",\n    \"translation\": \"Travel safely and with grace.\"\n   },\n   {\"id\": \"08\",\n    \"category\": \"greeting\",\n    \"original\": \"May your ford be shallow and your bridge be strong.\",\n    \"translation\": \"May your obstacles be small and your support be reliable.\"\n   },\n   {\"id\": \"09\",\n    \"category\": \"blessing\",\n    \"original\": \"Let the ash remember you with kindness.\",\n    \"translation\": \"May your past treat you gently.\"\n   },\n   {\"id\": \"10\",\n    \"category\": \"blessing\",\n    \"original\": \"Silver light on your road, gold light at your door.\",\n    \"translation\": \"May you have enough in your journey and abundance at home.\"\n   },\n   {\"id\": \"11\",\n    \"category\": \"curse\",\n    \"original\": \"May the bog swallow your name and the barrow forget your face.\",\n    \"translation\": \"May you be utterly erased from memory.\"\n   },\n   {\"id\": \"12\",\n    \"category\": \"curse\",\n    \"original\": \"Black bone on you — brittle when you need to be iron.\",\n    \"translation\": \"May you be weak exactly when you need to be strong.\"\n   }\n ]}",
+      "language": {
+       "name": "Oldwood Naming",
+       "level": "naming",
+       "sound": "Names sound like they belong to a rustic, ancient land full of forests and moors. They're built from English word parts you might recognize — things like 'thorn', 'mere', 'wick', 'ash' — strung together into compound names that feel old and grounded. Think of place names like 'Ashwick Ford' or 'Ravenhollow Field', or a person called 'Thornmere'. Every part has a specific meaning, so the names carry little stories about the land or the person.",
+       "categories": {
+        "A": "dusk thorn ash raven black willow birch elder rowan",
+        "B": "hollow field mere ford wick stream grove copse heath",
+        "C": "stone iron bone oak yew silver gold copper",
+        "D": "cross gate bridge wall keep tower barrow",
+        "E": "under over by at on near far",
+        "S": "man woman child hunter ward keeper lord lady",
+        "F": "bright dark grey pale red green",
+        "G": "river valley hill mount fen bog"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "Person names",
+         "use": "people",
+         "patterns": [
+          "[A|F]S",
+          "S[A|F]",
+          "[A|F][E][A|F]S",
+          "S[A|F][E][A|F]"
+         ],
+         "reject": [],
+         "min_length": 4,
+         "max_length": 15
+        },
+        {
+         "id": "places",
+         "use": "places",
+         "name": "Place names",
+         "patterns": [
+          "A[E]B",
+          "B[A|F]",
+          "[A|F]B",
+          "[A|F][E][A|F]B",
+          "B[E][A|F]",
+          "D[A|F]",
+          "[A|F]D",
+          "G[A|F]",
+          "[A|F]G",
+          "A[E]C",
+          "C[A|F]",
+          "A[E]D",
+          "D[A|F]"
+         ],
+         "reject": [],
+         "min_length": 4,
+         "max_length": 18
+        },
+        {
+         "id": "things",
+         "use": "things",
+         "name": "Object and feature names",
+         "patterns": [
+          "C[A|F]",
+          "[A|F]C",
+          "A[E]C",
+          "C[E][A|F]",
+          "[F]C",
+          "C[F]"
+         ],
+         "reject": [],
+         "min_length": 4,
+         "max_length": 12
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "the fading light of evening, or something associated with twilight"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp point or prickly plant, often symbolizing hardship or danger"
+        },
+        {
+         "word": "ash",
+         "meaning": "remnants after fire, or the grey-white tree; suggests destruction or purity"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird, associated with mystery, death, or intelligence"
+        },
+        {
+         "word": "black",
+         "meaning": "the color of darkness, night, or shadow"
+        },
+        {
+         "word": "willow",
+         "meaning": "a graceful tree that grows near water, symbolizing sorrow or patience"
+        },
+        {
+         "word": "birch",
+         "meaning": "a slender pale tree common in cold forests, symbolizing new beginnings"
+        },
+        {
+         "word": "elder",
+         "meaning": "an older person or a plant used in folk medicine; suggests wisdom or age"
+        },
+        {
+         "word": "rowan",
+         "meaning": "a red-berried tree in northern folklore, believed to ward off evil"
+        },
+        {
+         "word": "hollow",
+         "meaning": "an empty space inside something, or a valley; suggests depth or secrecy"
+        },
+        {
+         "word": "field",
+         "meaning": "an open area of land used for farming or grazing"
+        },
+        {
+         "word": "mere",
+         "meaning": "a lake, especially a still and dark one in a moorland setting"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow place in a river where one can cross on foot"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small village or hamlet, often isolated; can also mean a candle's wick"
+        },
+        {
+         "word": "stream",
+         "meaning": "a small flowing body of water"
+        },
+        {
+         "word": "grove",
+         "meaning": "a small group of trees, often sacred or ancient"
+        },
+        {
+         "word": "copse",
+         "meaning": "a small dense thicket of trees or shrubs"
+        },
+        {
+         "word": "heath",
+         "meaning": "open land covered with shrubs and coarse grass, typical of moorlands"
+        },
+        {
+         "word": "stone",
+         "meaning": "rock or a monument made of rock; suggests permanence or strength"
+        },
+        {
+         "word": "iron",
+         "meaning": "a strong metal, or something hard and unyielding"
+        },
+        {
+         "word": "bone",
+         "meaning": "the hard framework inside a body; suggests mortality or resilience"
+        },
+        {
+         "word": "oak",
+         "meaning": "a large, strong, long-lived tree; symbolizes endurance and power"
+        },
+        {
+         "word": "yew",
+         "meaning": "a dark, slow-growing tree associated with death and long life"
+        },
+        {
+         "word": "silver",
+         "meaning": "a precious grey-white metal; suggests value or cold beauty"
+        },
+        {
+         "word": "gold",
+         "meaning": "a precious yellow metal; suggests wealth or divinity"
+        },
+        {
+         "word": "copper",
+         "meaning": "a reddish metal; suggests humility or common strength"
+        },
+        {
+         "word": "cross",
+         "meaning": "a structure of intersecting lines, often a crossroads or memorial"
+        },
+        {
+         "word": "gate",
+         "meaning": "an opening in a wall or fence; a passage or border"
+        },
+        {
+         "word": "bridge",
+         "meaning": "a structure spanning a gap, allowing passage over water or terrain"
+        },
+        {
+         "word": "wall",
+         "meaning": "a solid barrier of stone or earth; suggests protection or imprisonment"
+        },
+        {
+         "word": "keep",
+         "meaning": "the strongest part of a castle; a fortified tower"
+        },
+        {
+         "word": "tower",
+         "meaning": "a tall, narrow structure; suggests watchfulness or isolation"
+        },
+        {
+         "word": "barrow",
+         "meaning": "a mound of earth over a burial; an ancient grave or burial site"
+        },
+        {
+         "word": "under",
+         "meaning": "below or beneath; suggesting something hidden or foundational"
+        },
+        {
+         "word": "over",
+         "meaning": "above; suggesting something that looms or governs"
+        },
+        {
+         "word": "by",
+         "meaning": "near or beside; suggesting proximity or association"
+        },
+        {
+         "word": "at",
+         "meaning": "in the location of; indicating a specific site"
+        },
+        {
+         "word": "on",
+         "meaning": "resting upon or situated on; suggesting something built or placed"
+        },
+        {
+         "word": "near",
+         "meaning": "close to; suggesting something adjacent or related"
+        },
+        {
+         "word": "far",
+         "meaning": "distant; suggesting something remote or isolated"
+        },
+        {
+         "word": "man",
+         "meaning": "a male human, or a person in general"
+        },
+        {
+         "word": "woman",
+         "meaning": "a female human"
+        },
+        {
+         "word": "child",
+         "meaning": "a young human, not yet grown"
+        },
+        {
+         "word": "hunter",
+         "meaning": "one who pursues and kills game; a skilled tracker"
+        },
+        {
+         "word": "ward",
+         "meaning": "a guardian or protector; one who watches over"
+        },
+        {
+         "word": "keeper",
+         "meaning": "one who maintains or guards something"
+        },
+        {
+         "word": "lord",
+         "meaning": "a ruler or nobleman with authority over land and people"
+        },
+        {
+         "word": "lady",
+         "meaning": "a noblewoman or woman of high rank"
+        },
+        {
+         "word": "bright",
+         "meaning": "shining or vivid; suggesting clarity, joy, or prominence"
+        },
+        {
+         "word": "dark",
+         "meaning": "lacking light; suggesting mystery, sorrow, or evil"
+        },
+        {
+         "word": "grey",
+         "meaning": "the color between black and white; suggesting neutrality, age, or gloom"
+        },
+        {
+         "word": "pale",
+         "meaning": "light in color, almost white; suggesting fragility or ghostliness"
+        },
+        {
+         "word": "red",
+         "meaning": "the color of blood and fire; suggesting passion, danger, or courage"
+        },
+        {
+         "word": "green",
+         "meaning": "the color of growing things; suggesting life, nature, or inexperience"
+        },
+        {
+         "word": "river",
+         "meaning": "a large, flowing body of water"
+        },
+        {
+         "word": "valley",
+         "meaning": "a low area between hills or mountains"
+        },
+        {
+         "word": "hill",
+         "meaning": "a raised area of land, not as tall as a mountain"
+        },
+        {
+         "word": "mount",
+         "meaning": "a high peak or elevation; a mountain"
+        },
+        {
+         "word": "fen",
+         "meaning": "a low, wet, marshy area; boggy ground"
+        },
+        {
+         "word": "bog",
+         "meaning": "soft, wet ground that can trap you; a marsh"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "01",
+         "category": "saying",
+         "original": "Thorn that bends does not break.",
+         "translation": "One who yields to hardship survives it."
+        },
+        {
+         "id": "02",
+         "category": "saying",
+         "original": "The mere gives what the field cannot.",
+         "translation": "Still waters offer what fertile land does not — depth, mystery, hidden things."
+        },
+        {
+         "id": "03",
+         "category": "saying",
+         "original": "A raven's eye sees the road before the feet find it.",
+         "translation": "Wisdom perceives the path before action takes it."
+        },
+        {
+         "id": "04",
+         "category": "saying",
+         "original": "Iron roots hold when oak roots rot.",
+         "translation": "What appears strong may fail; what appears humble may endure."
+        },
+        {
+         "id": "05",
+         "category": "saying",
+         "original": "By the cross, all roads speak truth.",
+         "translation": "At a crossroads, one must choose honestly."
+        },
+        {
+         "id": "06",
+         "category": "saying",
+         "original": "The ward who sleeps with the yew does not wake to the dawn.",
+         "translation": "A guardian who neglects vigilance will be caught unaware."
+        },
+        {
+         "id": "07",
+         "category": "greeting",
+         "original": "Walk well by the willow.",
+         "translation": "Travel safely and with grace."
+        },
+        {
+         "id": "08",
+         "category": "greeting",
+         "original": "May your ford be shallow and your bridge be strong.",
+         "translation": "May your obstacles be small and your support be reliable."
+        },
+        {
+         "id": "09",
+         "category": "blessing",
+         "original": "Let the ash remember you with kindness.",
+         "translation": "May your past treat you gently."
+        },
+        {
+         "id": "10",
+         "category": "blessing",
+         "original": "Silver light on your road, gold light at your door.",
+         "translation": "May you have enough in your journey and abundance at home."
+        },
+        {
+         "id": "11",
+         "category": "curse",
+         "original": "May the bog swallow your name and the barrow forget your face.",
+         "translation": "May you be utterly erased from memory."
+        },
+        {
+         "id": "12",
+         "category": "curse",
+         "original": "Black bone on you — brittle when you need to be iron.",
+         "translation": "May you be weak exactly when you need to be strong."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Willowwoman",
+         "Hunterpale",
+         "Childelder",
+         "Ladygrey",
+         "Greenward",
+         "Redlord",
+         "Warddarkbyblack",
+         "Keeperelder",
+         "Manrowan",
+         "Ashwoman",
+         "Ravenwoman",
+         "Greenkeeper",
+         "Greybyrowanlord",
+         "Blacklord",
+         "Childdark",
+         "Blacklady",
+         "Womanash",
+         "Birchman",
+         "Greyward",
+         "Keeperbirch",
+         "Wardelder",
+         "Ladydark",
+         "Womandusk",
+         "Greenman",
+         "Thornward",
+         "Hunterbirch",
+         "Redkeeper",
+         "Childbright",
+         "Hunterred",
+         "Keeperwillow",
+         "Redbyredlady",
+         "Blackwoman",
+         "Hunterashondusk",
+         "Childash",
+         "Manblack",
+         "Huntergrey",
+         "Brightlord",
+         "Keeperpale",
+         "Lordblack",
+         "Elderkeeper",
+         "Womanpale",
+         "Childrowan",
+         "Keeperdark",
+         "Childredatraven",
+         "Womangrey",
+         "Ashhunter",
+         "Elderchild",
+         "Darkchild",
+         "Childraven",
+         "Warddarkbygrey"
+        ],
+        "places": [
+         "Blackonwall",
+         "Barrowdark",
+         "Wallblack",
+         "Riverdusk",
+         "Ashoverthorngrove",
+         "Heathbright",
+         "Ashundercross",
+         "Blackovercopper",
+         "Yewthorn",
+         "Blackgate",
+         "Willowkeep",
+         "Streamfarblack",
+         "Ironthorn",
+         "Greyford",
+         "Towerwillow",
+         "Palewall",
+         "Redunderthornford",
+         "Thornneargrove",
+         "Birchbarrow",
+         "Willowhollow",
+         "Thorngrove",
+         "Birchfarbarrow",
+         "Greengate",
+         "Copsebyred",
+         "Ashongrove",
+         "Crossdark",
+         "Paletower",
+         "Ravenontower",
+         "Wallgrey",
+         "Mountgrey",
+         "Elderbyiron",
+         "Bogbirch",
+         "Birchvalley",
+         "Brightcopse",
+         "Rowanbymere",
+         "Ravenunderoak",
+         "Ashoveriron",
+         "Silvergreen",
+         "Greyfen",
+         "Greenoverpalegrove",
+         "Willowwall",
+         "Thornnearrowanford",
+         "Darkgate",
+         "Blackonwick",
+         "Ravenbywick",
+         "Wickpale",
+         "Birchoverstone",
+         "Willowbywick",
+         "Greenriver",
+         "Riverraven"
+        ],
+        "things": [
+         "Bonegrey",
+         "Bonered",
+         "Silvergreen",
+         "Silverelder",
+         "Yewgrey",
+         "Thornstone",
+         "Coppergrey",
+         "Stonedark",
+         "Greygold",
+         "Ironbright",
+         "Irongreen",
+         "Bonerowan",
+         "Yewfargrey",
+         "Ashbysilver",
+         "Oakraven",
+         "Stonepale",
+         "Greyoak",
+         "Yewatblack",
+         "Goldbright",
+         "Redsilver",
+         "Greenyew",
+         "Ironraven",
+         "Oakonraven",
+         "Oakdusk",
+         "Redyew",
+         "Stonebright",
+         "Darkoak",
+         "Copperpale",
+         "Ironoverred",
+         "Willowatbone",
+         "Yewbygreen",
+         "Blacksilver",
+         "Ironoverpale",
+         "Ironnearpale",
+         "Greencopper",
+         "Copperbright",
+         "Ravenfariron",
+         "Greensilver",
+         "Palecopper",
+         "Silverdark",
+         "Copperdusk",
+         "Irongrey",
+         "Birchoak",
+         "Greeniron",
+         "Duskbycopper",
+         "Darkgold",
+         "Palesilver",
+         "Goldgreen",
+         "Ravenatbone",
+         "Silverdusk"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": [
+        "bog"
+       ]
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "compound-examples": [
+     {
+      "version": 1,
+      "seconds": 26.9,
+      "reply": "{\"name\": \"Oldmere English\",\n \"level\": \"naming\",\n \"sound\": \"The names read like classic English place names — two or three old-fashioned words stitched together, each one evoking nature, weather, or rural life. They feel like villages you might find on a medieval map, with a heavy earthy tone. The first part usually describes something natural, and the second part describes a feature of land or a settlement.\",\n \"categories\": {\n   \"A\": \"dusk thorn ash raven briar frost wind cinder ember grey\",\n   \"B\": \"hollow field mere ford wick haven dale croft grove thornwood\",\n   \"C\": \"thorn ash raven briar frost wind cinder\",\n   \"D\": \"hollow field mere ford wick haven dale croft grove\"\n },\n \"generators\": [\n   {\"id\": \"places\",\n    \"name\": \"Oldmere Place Names\",\n    \"use\": \"places\",\n    \"patterns\": [\"A-B*2\", \"C-D*3\", \"A-C\"],\n    \"reject\": [\".{15,}\"],\n    \"min_length\": 5,\n    \"max_length\": 14}\n ],\n \"dictionary\": [\n   {\"word\": \"dusk\", \"meaning\": \"twilight, the fading of light\"},\n   {\"word\": \"thorn\", \"meaning\": \"a sharp, pointed plant or bramble\"},\n   {\"word\": \"ash\", \"meaning\": \"volcanic remains, grey residue, or the ash tree\"},\n   {\"word\": \"raven\", \"meaning\": \"a large black bird, symbol of mystery\"},\n   {\"word\": \"briar\", \"meaning\": \"a tangled, thorny patch of vegetation\"},\n   {\"word\": \"frost\", \"meaning\": \"ice crystals forming on cold surfaces\"},\n   {\"word\": \"wind\", \"meaning\": \"moving air, a gust or breeze\"},\n   {\"word\": \"cinder\", \"meaning\": \"a small piece of burned material, volcanic slag\"},\n   {\"word\": \"ember\", \"meaning\": \"a glowing, hot coal\"},\n   {\"word\": \"grey\", \"meaning\": \"the color of ash or overcast skies\"},\n   {\"word\": \"hollow\", \"meaning\": \"a valley or depression in the land\"},\n   {\"word\": \"field\", \"meaning\": \"an open area of land used for farming\"},\n   {\"word\": \"mere\", \"meaning\": \"a lake, especially a small one\"},\n   {\"word\": \"ford\", \"meaning\": \"a shallow place where a river can be crossed\"},\n   {\"word\": \"wick\", \"meaning\": \"a small village or settlement\"},\n   {\"word\": \"haven\", \"meaning\": \"a safe harbor or sheltered place\"},\n   {\"word\": \"dale\", \"meaning\": \"a valley, especially in hilly country\"},\n   {\"word\": \"croft\", \"meaning\": \"a small farm or plot of enclosed land\"},\n   {\"word\": \"grove\", \"meaning\": \"a group of trees, especially oaks\"},\n   {\"word\": \"thornwood\", \"meaning\": \"a wood or forest full of thorny plants\"}\n ],\n \"phrases\": [\n   {\"id\": \"1\", \"category\": \"saying\",\n    \"original\": \"The thorn grows where the raven lands.\",\n    \"translation\": \"Trouble finds the places that look abandoned.\"},\n   {\"id\": \"2\", \"category\": \"saying\",\n    \"original\": \"Ashmere remembers what the fire forgot.\",\n    \"translation\": \"The ruins of a place hold more truth than the stories told about it.\"},\n   {\"id\": \"3\", \"category\": \"greeting\",\n    \"original\": \"Welcome to Briarwick, where the path is never straight.\",\n    \"translation\": \"A friendly but honest greeting in a place where things are complicated.\"},\n   {\"id\": \"4\", \"category\": \"curse\",\n    \"original\": \"May your name be forgotten faster than Duskhollow at dawn.\",\n    \"translation\": \"A curse wishing someone's reputation to vanish quickly.\"},\n   {\"id\": \"5\", \"category\": \"blessing\",\n    \"original\": \"May your settlement stand as long as Ravenford's stones.\",\n    \"translation\": \"A blessing for enduring strength and stability.\"},\n   {\"id\": \"6\", \"category\": \"saying\",\n    \"original\": \"The wind carries the name of the place it passes through.\",\n    \"translation\": \"Every land shapes the people who live there.\"}\n ]}",
+      "language": {
+       "name": "Oldmere English",
+       "level": "naming",
+       "sound": "The names read like classic English place names — two or three old-fashioned words stitched together, each one evoking nature, weather, or rural life. They feel like villages you might find on a medieval map, with a heavy earthy tone. The first part usually describes something natural, and the second part describes a feature of land or a settlement.",
+       "categories": {
+        "A": "dusk thorn ash raven briar frost wind cinder ember grey",
+        "B": "hollow field mere ford wick haven dale croft grove thornwood",
+        "C": "thorn ash raven briar frost wind cinder",
+        "D": "hollow field mere ford wick haven dale croft grove"
+       },
+       "generators": [
+        {
+         "id": "places",
+         "name": "Oldmere Place Names",
+         "use": "places",
+         "patterns": [
+          "A-B*2",
+          "C-D*3",
+          "A-C"
+         ],
+         "reject": [
+          ".{15,}"
+         ],
+         "min_length": 5,
+         "max_length": 14
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "twilight, the fading of light"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp, pointed plant or bramble"
+        },
+        {
+         "word": "ash",
+         "meaning": "volcanic remains, grey residue, or the ash tree"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird, symbol of mystery"
+        },
+        {
+         "word": "briar",
+         "meaning": "a tangled, thorny patch of vegetation"
+        },
+        {
+         "word": "frost",
+         "meaning": "ice crystals forming on cold surfaces"
+        },
+        {
+         "word": "wind",
+         "meaning": "moving air, a gust or breeze"
+        },
+        {
+         "word": "cinder",
+         "meaning": "a small piece of burned material, volcanic slag"
+        },
+        {
+         "word": "ember",
+         "meaning": "a glowing, hot coal"
+        },
+        {
+         "word": "grey",
+         "meaning": "the color of ash or overcast skies"
+        },
+        {
+         "word": "hollow",
+         "meaning": "a valley or depression in the land"
+        },
+        {
+         "word": "field",
+         "meaning": "an open area of land used for farming"
+        },
+        {
+         "word": "mere",
+         "meaning": "a lake, especially a small one"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow place where a river can be crossed"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small village or settlement"
+        },
+        {
+         "word": "haven",
+         "meaning": "a safe harbor or sheltered place"
+        },
+        {
+         "word": "dale",
+         "meaning": "a valley, especially in hilly country"
+        },
+        {
+         "word": "croft",
+         "meaning": "a small farm or plot of enclosed land"
+        },
+        {
+         "word": "grove",
+         "meaning": "a group of trees, especially oaks"
+        },
+        {
+         "word": "thornwood",
+         "meaning": "a wood or forest full of thorny plants"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "saying",
+         "original": "The thorn grows where the raven lands.",
+         "translation": "Trouble finds the places that look abandoned."
+        },
+        {
+         "id": "2",
+         "category": "saying",
+         "original": "Ashmere remembers what the fire forgot.",
+         "translation": "The ruins of a place hold more truth than the stories told about it."
+        },
+        {
+         "id": "3",
+         "category": "greeting",
+         "original": "Welcome to Briarwick, where the path is never straight.",
+         "translation": "A friendly but honest greeting in a place where things are complicated."
+        },
+        {
+         "id": "4",
+         "category": "curse",
+         "original": "May your name be forgotten faster than Duskhollow at dawn.",
+         "translation": "A curse wishing someone's reputation to vanish quickly."
+        },
+        {
+         "id": "5",
+         "category": "blessing",
+         "original": "May your settlement stand as long as Ravenford's stones.",
+         "translation": "A blessing for enduring strength and stability."
+        },
+        {
+         "id": "6",
+         "category": "saying",
+         "original": "The wind carries the name of the place it passes through.",
+         "translation": "Every land shapes the people who live there."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "places": [
+         "Ember-croft",
+         "Briar-wick",
+         "Wind-hollow",
+         "Ember-wick",
+         "Thorn-wick",
+         "Ash-grove",
+         "Dusk-thorn",
+         "Cinder-ford",
+         "Briar-hollow",
+         "Ash-mere",
+         "Raven-hollow",
+         "Frost-frost",
+         "Grey-grove",
+         "Raven-croft",
+         "Frost-mere",
+         "Cinder-croft",
+         "Frost-hollow",
+         "Cinder-wick",
+         "Frost-croft",
+         "Raven-ford",
+         "Wind-wick",
+         "Raven-field",
+         "Cinder-dale",
+         "Cinder-mere",
+         "Cinder-haven",
+         "Ash-wick",
+         "Dusk-wind",
+         "Briar-haven",
+         "Thorn-croft",
+         "Frost-haven",
+         "Thorn-mere",
+         "Frost-grove",
+         "Wind-croft",
+         "Ember-dale",
+         "Dusk-hollow",
+         "Ash-hollow",
+         "Frost-field",
+         "Ember-haven",
+         "Wind-grove",
+         "Dusk-field",
+         "Ash-dale",
+         "Briar-field",
+         "Cinder-briar",
+         "Wind-ford",
+         "Raven-haven",
+         "Ash-thornwood",
+         "Raven-cinder",
+         "Grey-croft",
+         "Frost-ash",
+         "Grey-frost"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 26.1,
+      "reply": "{\"name\": \"Oldfield Naming\",\n \"level\": \"naming\",\n \"sound\": \"This naming style reads like English place names you might already know — two-part names where the first piece evokes an image or feeling (like 'dusk' or 'thorn') and the second piece names a feature of the land (like 'hollow' or 'mere'). It sounds earthy, historical, and grounded, as if these places have existed for centuries and earned their names through weather and wear.\",\n \"categories\": {\"A\": \"dusk thorn ash raven briar frost iron stone creek silver moon wolf\",\n                \"B\": \"hollow field mere ford wick valley grove dale heath barrow down hill\"},\n \"generators\": [{\"id\": \"places\",\n                 \"name\": \"Settlement Names\",\n                 \"use\": \"places\",\n                 \"patterns\": [\"AB\"],\n                 \"reject\": [],\n                 \"min_length\": 8,\n                 \"max_length\": 14}],\n \"dictionary\": [{\"word\": \"dusk\", \"meaning\": \"the fading of light at day's end\"},\n                {\"word\": \"thorn\", \"meaning\": \"a sharp, prickly plant\"},\n                {\"word\": \"ash\", \"meaning\": \"remnants after fire, or grey tree\"},\n                {\"word\": \"raven\", \"meaning\": \"a large black bird\"},\n                {\"word\": \"briar\", \"meaning\": \"a tangled, thorny vine\"},\n                {\"word\": \"frost\", \"meaning\": \"ice crystals that form in cold\"},\n                {\"word\": \"iron\", \"meaning\": \"a strong, dark metal\"},\n                {\"word\": \"stone\", \"meaning\": \"hard rock\"},\n                {\"word\": \"creek\", \"meaning\": \"a small stream\"},\n                {\"word\": \"silver\", \"meaning\": \"a shiny, pale metal\"},\n                {\"word\": \"moon\", \"meaning\": \"Earth's natural satellite\"},\n                {\"word\": \"wolf\", \"meaning\": \"a large wild canine\"},\n                {\"word\": \"hollow\", \"meaning\": \"a depression in the land\"},\n                {\"word\": \"field\", \"meaning\": \"an open, flat area of land\"},\n                {\"word\": \"mere\", \"meaning\": \"a lake\"},\n                {\"word\": \"ford\", \"meaning\": \"a shallow crossing of water\"},\n                {\"word\": \"wick\", \"meaning\": \"a small settlement or village\"},\n                {\"word\": \"valley\", \"meaning\": \"a low area between hills\"},\n                {\"word\": \"grove\", \"meaning\": \"a small group of trees\"},\n                {\"word\": \"dale\", \"meaning\": \"a valley, often narrow\"},\n                {\"word\": \"heath\", \"meaning\": \"open, rolling land with rough grass\"},\n                {\"word\": \"barrow\", \"meaning\": \"a mound of earth over a burial\"},\n                {\"word\": \"down\", \"meaning\": \"a hill or ridge\"},\n                {\"word\": \"hill\", \"meaning\": \"a raised area of land\"}],\n \"phrases\": [{\"id\": \"1\",\n              \"category\": \"saying\",\n              \"original\": \"Ashmere remembers what the river forgets.\",\n              \"translation\": \"The past lingers in quiet places.\"},\n             {\"id\": \"2\",\n              \"category\": \"saying\",\n              \"original\": \"A raven's cry at Thornfield means the old stones are listening.\",\n              \"translation\": \"Superstition says the dead hear you at certain places.\"},\n             {\"id\": \"3\",\n              \"category\": \"greeting\",\n              \"original\": \"Welcome to Briarwick, where the thorns keep honest company.\",\n              \"translation\": \"A warm but cautious welcome to a rough village.\"},\n             {\"id\": \"4\",\n              \"category\": \"blessing\",\n              \"original\": \"May your path carry you to a silver creek before the frost comes.\",\n              \"translation\": \"May you find comfort before hardship.\"},\n             {\"id\": \"5\",\n              \"category\": \"curse\",\n              \"original\": \"May your name be scratched from the stones of Ironbarrow.\",\n              \"translation\": \"May you be forgotten entirely.\"},\n             {\"id\": \"6\",\n              \"category\": \"saying\",\n              \"original\": \"The wolves know the way to Moonwick before the moon does.\",\n              \"translation\": \"The wild things always find their way home.\"}]}",
+      "language": {
+       "name": "Oldfield Naming",
+       "level": "naming",
+       "sound": "This naming style reads like English place names you might already know — two-part names where the first piece evokes an image or feeling (like 'dusk' or 'thorn') and the second piece names a feature of the land (like 'hollow' or 'mere'). It sounds earthy, historical, and grounded, as if these places have existed for centuries and earned their names through weather and wear.",
+       "categories": {
+        "A": "dusk thorn ash raven briar frost iron stone creek silver moon wolf",
+        "B": "hollow field mere ford wick valley grove dale heath barrow down hill"
+       },
+       "generators": [
+        {
+         "id": "places",
+         "name": "Settlement Names",
+         "use": "places",
+         "patterns": [
+          "AB"
+         ],
+         "reject": [],
+         "min_length": 8,
+         "max_length": 14
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "dusk",
+         "meaning": "the fading of light at day's end"
+        },
+        {
+         "word": "thorn",
+         "meaning": "a sharp, prickly plant"
+        },
+        {
+         "word": "ash",
+         "meaning": "remnants after fire, or grey tree"
+        },
+        {
+         "word": "raven",
+         "meaning": "a large black bird"
+        },
+        {
+         "word": "briar",
+         "meaning": "a tangled, thorny vine"
+        },
+        {
+         "word": "frost",
+         "meaning": "ice crystals that form in cold"
+        },
+        {
+         "word": "iron",
+         "meaning": "a strong, dark metal"
+        },
+        {
+         "word": "stone",
+         "meaning": "hard rock"
+        },
+        {
+         "word": "creek",
+         "meaning": "a small stream"
+        },
+        {
+         "word": "silver",
+         "meaning": "a shiny, pale metal"
+        },
+        {
+         "word": "moon",
+         "meaning": "Earth's natural satellite"
+        },
+        {
+         "word": "wolf",
+         "meaning": "a large wild canine"
+        },
+        {
+         "word": "hollow",
+         "meaning": "a depression in the land"
+        },
+        {
+         "word": "field",
+         "meaning": "an open, flat area of land"
+        },
+        {
+         "word": "mere",
+         "meaning": "a lake"
+        },
+        {
+         "word": "ford",
+         "meaning": "a shallow crossing of water"
+        },
+        {
+         "word": "wick",
+         "meaning": "a small settlement or village"
+        },
+        {
+         "word": "valley",
+         "meaning": "a low area between hills"
+        },
+        {
+         "word": "grove",
+         "meaning": "a small group of trees"
+        },
+        {
+         "word": "dale",
+         "meaning": "a valley, often narrow"
+        },
+        {
+         "word": "heath",
+         "meaning": "open, rolling land with rough grass"
+        },
+        {
+         "word": "barrow",
+         "meaning": "a mound of earth over a burial"
+        },
+        {
+         "word": "down",
+         "meaning": "a hill or ridge"
+        },
+        {
+         "word": "hill",
+         "meaning": "a raised area of land"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "saying",
+         "original": "Ashmere remembers what the river forgets.",
+         "translation": "The past lingers in quiet places."
+        },
+        {
+         "id": "2",
+         "category": "saying",
+         "original": "A raven's cry at Thornfield means the old stones are listening.",
+         "translation": "Superstition says the dead hear you at certain places."
+        },
+        {
+         "id": "3",
+         "category": "greeting",
+         "original": "Welcome to Briarwick, where the thorns keep honest company.",
+         "translation": "A warm but cautious welcome to a rough village."
+        },
+        {
+         "id": "4",
+         "category": "blessing",
+         "original": "May your path carry you to a silver creek before the frost comes.",
+         "translation": "May you find comfort before hardship."
+        },
+        {
+         "id": "5",
+         "category": "curse",
+         "original": "May your name be scratched from the stones of Ironbarrow.",
+         "translation": "May you be forgotten entirely."
+        },
+        {
+         "id": "6",
+         "category": "saying",
+         "original": "The wolves know the way to Moonwick before the moon does.",
+         "translation": "The wild things always find their way home."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "places": [
+         "Wolfhollow",
+         "Moonheath",
+         "Ravendale",
+         "Ironfield",
+         "Briarheath",
+         "Wolfgrove",
+         "Ravenhollow",
+         "Frostford",
+         "Moongrove",
+         "Ashhollow",
+         "Thorngrove",
+         "Creekmere",
+         "Silverheath",
+         "Silverbarrow",
+         "Wolfhill",
+         "Ironvalley",
+         "Ironbarrow",
+         "Moondown",
+         "Ironhill",
+         "Frostmere",
+         "Creekfield",
+         "Ravendown",
+         "Wolfheath",
+         "Irondale",
+         "Ravenmere",
+         "Wolfdale",
+         "Ashheath",
+         "Stoneford",
+         "Moonfield",
+         "Moonmere",
+         "Moonvalley",
+         "Duskwick",
+         "Creekhollow",
+         "Duskheath",
+         "Ravenbarrow",
+         "Duskhill",
+         "Duskvalley",
+         "Creekdown",
+         "Thornvalley",
+         "Thorndale",
+         "Duskgrove",
+         "Duskhollow",
+         "Ashvalley",
+         "Stonedale",
+         "Creekford",
+         "Ironhollow",
+         "Briarfield",
+         "Ashfield",
+         "Creekvalley",
+         "Ironmere"
+        ]
+       },
+       "dictionary_fit": 0.0,
+       "real_hits": []
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "daughter": [
+     {
+      "version": 1,
+      "seconds": 63.2,
+      "reply": "```json\n{\n  \"name\": \"Gornik\",\n  \"level\": \"full\",\n  \"sound\": \"Gornik sounds like Ruskalan spoken by someone who has lived alone in the mountains for centuries — the hard consonants are even harder now, the vowels have drifted toward something flatter and more closed, and the words have grown longer and more guttural. The rolling R's are still there, but they're deeper, almost growling. To an English ear, it sounds like Russian filtered through a cave: echoing, ancient, and strangely intimate, as if the language itself has been shaped by wind and stone.\",\n  \"categories\": {\n    \"C\": \"k g kh t d th r*3 s z sh zh ch j v f m n l*2\",\n    \"V\": \"a e o u i y*2\",\n    \"S\": \"sk sl sn st kn gr dr br kr\",\n    \"F\": \"ov ev iv av un in om\",\n    \"E\": \"ts dz ch sh zh\",\n    \"T\": \"ol or el ir on um an im\",\n    \"Q\": \"khn ghr skh\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"People names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CVCVC*3\",\n        \"CVCVCC\",\n        \"[C|CC]VCV(C)*3\",\n        \"CVCV-FVC*3\",\n        \"CVCV-T*3\",\n        \"Q-VCVC*2\"\n      ],\n      \"reject\": [\n        \"^.*[aeiou]{3,}.*$\",\n        \"^.*[kgh]{4,}.*$\",\n        \"^[aeiou].*$\"\n      ],\n      \"min_length\": 6,\n      \"max_length\": 16\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CVCCV-CVCC\",\n        \"S-CVCCV*3\",\n        \"CVCC-T*3\",\n        \"F-CVCCV*3\",\n        \"[C|CC]VCCV-CVCC*3\",\n        \"E-VCCV-CVCC*2\",\n        \"Q-VCCV-CVCC*2\"\n      ],\n      \"reject\": [\n        \"^.*[aeiou]{4,}.*$\",\n        \"^[aeiou].*$\"\n      ],\n      \"min_length\": 8,\n      \"max_length\": 20\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Thing names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"CVC-CVC\",\n        \"CVCCV-CV\",\n        \"S-CVC*3\",\n        \"F-CVC*3\",\n        \"[C|CC]VCC-VCC*2\",\n        \"Q-VC-VC*2\"\n      ],\n      \"reject\": [\n        \"^.*[aeiou]{4,}.*$\"\n      ],\n      \"min_length\": 7,\n      \"max_length\": 16\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"volkosh\", \"meaning\": \"wolf\"},\n    {\"word\": \"domara\", \"meaning\": \"house\"},\n    {\"word\": \"materya\", \"meaning\": \"mother\"},\n    {\"word\": \"otets\", \"meaning\": \"father\"},\n    {\"word\": \"synok\", \"meaning\": \"son\"},\n    {\"word\": \"doshka\", \"meaning\": \"table\"},\n    {\"word\": \"okno\", \"meaning\": \"window\"},\n    {\"word\": \"voda\", \"meaning\": \"water\"},\n    {\"word\": \"ogon\", \"meaning\": \"fire\"},\n    {\"word\": \"zemlya\", \"meaning\": \"earth/land\"},\n    {\"word\": \"solntse\", \"meaning\": \"sun\"},\n    {\"word\": \"mesyats\", \"meaning\": \"moon\"},\n    {\"word\": \"derevo\", \"meaning\": \"tree\"},\n    {\"word\": \"kamen\", \"meaning\": \"stone\"},\n    {\"word\": \"krov\", \"meaning\": \"blood\"},\n    {\"word\": \"sneg\", \"meaning\": \"snow\"},\n    {\"word\": \"khleb\", \"meaning\": \"bread\"},\n    {\"word\": \"moloko\", \"meaning\": \"milk\"},\n    {\"word\": \"noshcha\", \"meaning\": \"knife\"},\n    {\"word\": \"topor\", \"meaning\": \"axe\"},\n    {\"word\": \"shal\", \"meaning\": \"coat\"},\n    {\"word\": \"sapogi\", \"meaning\": \"boots\"},\n    {\"word\": \"knyaga\", \"meaning\": \"book\"},\n    {\"word\": \"svet\", \"meaning\": \"light\"},\n    {\"word\": \"tma\", \"meaning\": \"darkness\"},\n    {\"word\": \"dusha\", \"meaning\": \"soul\"},\n    {\"word\": \"govoor\", \"meaning\": \"voice/speech\"},\n    {\"word\": \"gora\", \"meaning\": \"mountain\"},\n    {\"word\": \"khram\", \"meaning\": \"temple/shrine\"},\n    {\"word\": \"yedya\", \"meaning\": \"food\"},\n    {\"word\": \"nochev\", \"meaning\": \"night\"},\n    {\"word\": \"starik\", \"meaning\": \"old man/ancestor\"},\n    {\"word\": \"dusha-gora\", \"meaning\": \"the mountain soul (spirit of the mountain)\"},\n    {\"word\": \"lednik\", \"meaning\": \"glacier\"},\n    {\"word\": \"smert\", \"meaning\": \"death\"},\n    {\"word\": \"zhizn\", \"meaning\": \"life\"}\n  ],\n  \"phrases\": [\n    {\"id\": \"1\", \"category\": \"greeting\", \"original\": \"Zdravstvuy, brat!\", \"translation\": \"Hello, brother!\"},\n    {\"id\": \"2\", \"category\": \"greeting\", \"original\": \"Kak dyela, tovarishch?\", \"translation\": \"How are you, comrade?\"},\n    {\"id\": \"3\", \"category\": \"blessing\", \"original\": \"Khranit tebya Bog i sveta!\", \"translation\": \"May God and light protect you!\"},\n    {\"id\": \"4\", \"category\": \"blessing\", \"original\": \"Pust' tvoya dusha budet chista!\", \"translation\": \"May your soul be pure!\"},\n    {\"id\": \"5\", \"category\": \"curse\", \"original\": \"K chortu ty i tvoya rodina!\", \"translation\": \"To hell with you and your homeland!\"},\n    {\"id\": \"6\", \"category\": \"curse\", \"original\": \"Pozhalko, gnusnaya svinya!\", \"translation\": \"Damn you, filthy pig!\"},\n    {\"id\": \"7\", \"category\": \"saying\", \"original\": \"Kotoryy ranny, totu i pishch.\", \"translation\": \"The early bird gets the worm.\"},\n    {\"id\": \"8\", \"category\": \"saying\", \"original\": \"Ne v sily bogatyr, a v umy.\", \"translation\": \"A hero's strength is not in his muscles, but in his mind.\"},\n    {\"id\": \"9\", \"category\": \"greeting\", \"original\": \"Zdravstvuy, gornik!\", \"translation\": \"Hello, mountaineer!\"},\n    {\"id\": \"10\", \"category\": \"blessing\", \"original\": \"Pust' gora khranit tebya!\", \"translation\": \"May the mountain protect you!\"},\n    {\"id\": \"11\", \"category\": \"saying\", \"original\": \"Gora ne spishch, a chelovek spishch.\", \"translation\": \"The mountain doesn't sleep, but man does.\"},\n    {\"id\": \"12\", \"category\": \"saying\", \"original\": \"Kto zhivet na gore, totu i vidit dal' shey.\", \"translation\": \"He who lives on the mountain sees further.\"}\n  ]\n}\n```\n\n**How Gornik differs from its parent Ruskalan:**\n\nThe isolation in the mountains has pushed the language in a few clear directions:\n\n1. **Vowels have tightened.** The old Ruskalan \"a e o u i y\" are still there, but \"y\" is now twice as common — it's crept into words as an unstressed glide, softening consonants in ways the ancestors never used. Words that once had open, round vowels now feel pinched and closed, as if the air at high altitude makes the mouth smaller.\n\n2. **Consonants have hardened.** The new \"Q\" category (khn, ghr, skh) represents a set of aspirated or pharyngealized consonants that don't exist in lowland Ruskalan — sounds born from speaking into cold, thin air. The letter \"r\" is now three times as likely to appear, because the mountain dialect has kept the old, hard, trilled R that the parent language was already rolling but never quite this aggressively.\n\n3. **Words are longer and heavier.** Generators across the board push for extra syllables. A Gornik name or place name is almost always at least one syllable longer than its Ruskalan cousin, reflecting a culture that values elaborate, unhurried speech — there's no one around to interrupt you.\n\n4. **Mountain-specific vocabulary.** Words like \"gora\" (mountain), \"lednik\" (glacier), \"dusha-gora\" (the mountain soul), and \"starik\" (old man/ancestor) reflect a people who have turned inward toward their ancestors and their landscape. The old Ruskalan words remain, but new compounds have grown around them like moss on stone.\n\n5. **The feel.** A Ruskalan sentence sounds like a conversation in a crowded market. A Gornik sentence sounds like someone talking to you across a frozen lake — every word lands with weight, the consonants bite, and the vowels echo off distant rock.",
+      "language": {
+       "name": "Gornik",
+       "level": "full",
+       "sound": "Gornik sounds like Ruskalan spoken by someone who has lived alone in the mountains for centuries — the hard consonants are even harder now, the vowels have drifted toward something flatter and more closed, and the words have grown longer and more guttural. The rolling R's are still there, but they're deeper, almost growling. To an English ear, it sounds like Russian filtered through a cave: echoing, ancient, and strangely intimate, as if the language itself has been shaped by wind and stone.",
+       "categories": {
+        "C": "k g kh t d th r*3 s z sh zh ch j v f m n l*2",
+        "V": "a e o u i y*2",
+        "S": "sk sl sn st kn gr dr br kr",
+        "F": "ov ev iv av un in om",
+        "E": "ts dz ch sh zh",
+        "T": "ol or el ir on um an im",
+        "Q": "khn ghr skh"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "People names",
+         "use": "people",
+         "patterns": [
+          "CVCVC*3",
+          "CVCVCC",
+          "[C|CC]VCV(C)*3",
+          "CVCV-FVC*3",
+          "CVCV-T*3",
+          "Q-VCVC*2"
+         ],
+         "reject": [
+          "^.*[aeiou]{3,}.*$",
+          "^.*[kgh]{4,}.*$",
+          "^[aeiou].*$"
+         ],
+         "min_length": 6,
+         "max_length": 16
+        },
+        {
+         "id": "places",
+         "name": "Place names",
+         "use": "places",
+         "patterns": [
+          "CVCCV-CVCC",
+          "S-CVCCV*3",
+          "CVCC-T*3",
+          "F-CVCCV*3",
+          "[C|CC]VCCV-CVCC*3",
+          "E-VCCV-CVCC*2",
+          "Q-VCCV-CVCC*2"
+         ],
+         "reject": [
+          "^.*[aeiou]{4,}.*$",
+          "^[aeiou].*$"
+         ],
+         "min_length": 8,
+         "max_length": 20
+        },
+        {
+         "id": "things",
+         "name": "Thing names",
+         "use": "things",
+         "patterns": [
+          "CVC-CVC",
+          "CVCCV-CV",
+          "S-CVC*3",
+          "F-CVC*3",
+          "[C|CC]VCC-VCC*2",
+          "Q-VC-VC*2"
+         ],
+         "reject": [
+          "^.*[aeiou]{4,}.*$"
+         ],
+         "min_length": 7,
+         "max_length": 16
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "volkosh",
+         "meaning": "wolf"
+        },
+        {
+         "word": "domara",
+         "meaning": "house"
+        },
+        {
+         "word": "materya",
+         "meaning": "mother"
+        },
+        {
+         "word": "otets",
+         "meaning": "father"
+        },
+        {
+         "word": "synok",
+         "meaning": "son"
+        },
+        {
+         "word": "doshka",
+         "meaning": "table"
+        },
+        {
+         "word": "okno",
+         "meaning": "window"
+        },
+        {
+         "word": "voda",
+         "meaning": "water"
+        },
+        {
+         "word": "ogon",
+         "meaning": "fire"
+        },
+        {
+         "word": "zemlya",
+         "meaning": "earth/land"
+        },
+        {
+         "word": "solntse",
+         "meaning": "sun"
+        },
+        {
+         "word": "mesyats",
+         "meaning": "moon"
+        },
+        {
+         "word": "derevo",
+         "meaning": "tree"
+        },
+        {
+         "word": "kamen",
+         "meaning": "stone"
+        },
+        {
+         "word": "krov",
+         "meaning": "blood"
+        },
+        {
+         "word": "sneg",
+         "meaning": "snow"
+        },
+        {
+         "word": "khleb",
+         "meaning": "bread"
+        },
+        {
+         "word": "moloko",
+         "meaning": "milk"
+        },
+        {
+         "word": "noshcha",
+         "meaning": "knife"
+        },
+        {
+         "word": "topor",
+         "meaning": "axe"
+        },
+        {
+         "word": "shal",
+         "meaning": "coat"
+        },
+        {
+         "word": "sapogi",
+         "meaning": "boots"
+        },
+        {
+         "word": "knyaga",
+         "meaning": "book"
+        },
+        {
+         "word": "svet",
+         "meaning": "light"
+        },
+        {
+         "word": "tma",
+         "meaning": "darkness"
+        },
+        {
+         "word": "dusha",
+         "meaning": "soul"
+        },
+        {
+         "word": "govoor",
+         "meaning": "voice/speech"
+        },
+        {
+         "word": "gora",
+         "meaning": "mountain"
+        },
+        {
+         "word": "khram",
+         "meaning": "temple/shrine"
+        },
+        {
+         "word": "yedya",
+         "meaning": "food"
+        },
+        {
+         "word": "nochev",
+         "meaning": "night"
+        },
+        {
+         "word": "starik",
+         "meaning": "old man/ancestor"
+        },
+        {
+         "word": "dusha-gora",
+         "meaning": "the mountain soul (spirit of the mountain)"
+        },
+        {
+         "word": "lednik",
+         "meaning": "glacier"
+        },
+        {
+         "word": "smert",
+         "meaning": "death"
+        },
+        {
+         "word": "zhizn",
+         "meaning": "life"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "greeting",
+         "original": "Zdravstvuy, brat!",
+         "translation": "Hello, brother!"
+        },
+        {
+         "id": "2",
+         "category": "greeting",
+         "original": "Kak dyela, tovarishch?",
+         "translation": "How are you, comrade?"
+        },
+        {
+         "id": "3",
+         "category": "blessing",
+         "original": "Khranit tebya Bog i sveta!",
+         "translation": "May God and light protect you!"
+        },
+        {
+         "id": "4",
+         "category": "blessing",
+         "original": "Pust' tvoya dusha budet chista!",
+         "translation": "May your soul be pure!"
+        },
+        {
+         "id": "5",
+         "category": "curse",
+         "original": "K chortu ty i tvoya rodina!",
+         "translation": "To hell with you and your homeland!"
+        },
+        {
+         "id": "6",
+         "category": "curse",
+         "original": "Pozhalko, gnusnaya svinya!",
+         "translation": "Damn you, filthy pig!"
+        },
+        {
+         "id": "7",
+         "category": "saying",
+         "original": "Kotoryy ranny, totu i pishch.",
+         "translation": "The early bird gets the worm."
+        },
+        {
+         "id": "8",
+         "category": "saying",
+         "original": "Ne v sily bogatyr, a v umy.",
+         "translation": "A hero's strength is not in his muscles, but in his mind."
+        },
+        {
+         "id": "9",
+         "category": "greeting",
+         "original": "Zdravstvuy, gornik!",
+         "translation": "Hello, mountaineer!"
+        },
+        {
+         "id": "10",
+         "category": "blessing",
+         "original": "Pust' gora khranit tebya!",
+         "translation": "May the mountain protect you!"
+        },
+        {
+         "id": "11",
+         "category": "saying",
+         "original": "Gora ne spishch, a chelovek spishch.",
+         "translation": "The mountain doesn't sleep, but man does."
+        },
+        {
+         "id": "12",
+         "category": "saying",
+         "original": "Kto zhivet na gore, totu i vidit dal' shey.",
+         "translation": "He who lives on the mountain sees further."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Mythus",
+         "Faky-avyk",
+         "Nilysh",
+         "Luri-an",
+         "Skh-olykh",
+         "Vovy-omul",
+         "Lethy-avyr",
+         "Zyri-el",
+         "Skh-ygikh",
+         "Zhiche-or",
+         "Dyshor",
+         "Rychi-um",
+         "Duzo-ivuch",
+         "Sade-unyf",
+         "Memi-ol",
+         "Kythach",
+         "Zkhoryth",
+         "Lysy-or",
+         "Lyzechr",
+         "Rigo-omyr",
+         "Ryvo-el",
+         "Namysh",
+         "Zhyzhu",
+         "Kzhothe",
+         "Shase-ol",
+         "Lmufuk",
+         "Tuthoz",
+         "Radyfv",
+         "Zhyro-ivyt",
+         "Khilash",
+         "Loru-ovykh",
+         "Tyzhe-ir",
+         "Tysy-an",
+         "Mujo-evok",
+         "Lyro-ir",
+         "Nyso-or",
+         "Domavg",
+         "Rela-evyzh",
+         "Khn-azhyg",
+         "Fothyvk",
+         "Vosykh",
+         "Ruche-or",
+         "Nojyzh",
+         "July-evosh",
+         "Shmurok",
+         "Rugo-ovath",
+         "Rozhe-ol",
+         "Zisi-inez",
+         "Doshy-omech",
+         "Khn-imoj"
+        ],
+        "places": [
+         "Mylshe-theshv",
+         "Jyrze-valf",
+         "Vgylzhy-jamth",
+         "Zh-yrlu-chuds",
+         "Ts-orkhe-nemn",
+         "Sharjy-charf",
+         "Ghr-uljy-jujd",
+         "Zychchi-richl",
+         "Zh-ymzho-thinsh",
+         "Rylsho-vorz",
+         "Zhythzh-or",
+         "Rsyfti-tysl",
+         "Stynso-radj",
+         "Vizshy-nuchth",
+         "Gozre-dyszh",
+         "Zh-orzhy-ryvt",
+         "Khn-echgo-khuml",
+         "Gyktha-gachv",
+         "Chochli-thalzh",
+         "Thytly-magm",
+         "Ts-arvo-khyfm",
+         "Zh-ikhchu-lymj",
+         "St-zhamcho",
+         "Skh-ymly-fazzh",
+         "Skh-ivry-chosl",
+         "Vakhsh-el",
+         "Sn-chuggy",
+         "Zuzhnu-fedz",
+         "Khn-urle-zaml",
+         "Kmutri-karn",
+         "Shshylri-rozzh",
+         "Skh-osfo-vurs",
+         "St-ratthy",
+         "Lryrre-rydm",
+         "Ghr-ogde-vatf",
+         "Sh-yjty-jadch",
+         "Ts-ujzo-zhutzh",
+         "Zonlo-zyshd",
+         "Nkhyvry-jachr",
+         "Khn-uththe-thochn",
+         "Multhu-ruzzh",
+         "Kn-shavle",
+         "Rkhathgu-jujd",
+         "Vechne-vokhr",
+         "Skh-alfy-khythg",
+         "Khikhth-im",
+         "Gloshfu-zhiskh",
+         "Khn-ojchy-shamkh",
+         "Syzhry-rigs",
+         "Jakkha-zothl"
+        ],
+        "things": [
+         "Ghr-ym-ef",
+         "Khn-yr-il",
+         "Zhorv-ofd",
+         "Lurz-ylt",
+         "Shokf-ylch",
+         "Skh-ij-ish",
+         "Loth-ril",
+         "Fchyfsh-ijf",
+         "Skh-eg-izh",
+         "Chafg-yrj",
+         "Ov-shath",
+         "Khn-ir-ug",
+         "Jafch-ars",
+         "Skh-as-iv",
+         "Ghr-um-iv",
+         "Luchsh-ekt",
+         "Myfr-ekhm",
+         "Shukdy-shy",
+         "Khn-ik-os",
+         "Ghr-ez-ud",
+         "Ghr-yt-el",
+         "Ghr-ozh-ot",
+         "Rzazhk-ukhr",
+         "Skh-ar-an",
+         "Sholshy-lo",
+         "Zhirno-ro",
+         "Shzhigt-ythg",
+         "Dr-theth",
+         "Shorz-amf",
+         "Lot-shij",
+         "Lryvd-ykl",
+         "Thuk-fam",
+         "Sher-zor",
+         "Ghr-uk-akh",
+         "Skh-ush-uz",
+         "Zhtemr-yrsh",
+         "Khn-yg-an",
+         "Khn-ug-or",
+         "Rrylm-ylr",
+         "Lurfu-la",
+         "Khdichl-ysf",
+         "Zhut-ran",
+         "Kof-zhus",
+         "Ggedt-agv",
+         "Fylju-ny",
+         "Rofl-yrj",
+         "Lyzre-che",
+         "Nshylv-osr",
+         "Ghr-yn-ych",
+         "Khn-or-al"
+        ]
+       },
+       "dictionary_fit": 0.19444444444444445,
+       "real_hits": [
+        "Rigo-omyr",
+        "otets",
+        "voda",
+        "ogon",
+        "zemlya",
+        "solntse",
+        "sneg",
+        "khleb",
+        "gora",
+        "dusha-gora",
+        "smert",
+        "zhizn"
+       ]
+      },
+      "jargon_in_language": []
+     },
+     {
+      "version": 2,
+      "seconds": 45.9,
+      "reply": "{\"name\": \"Mountain Ruskalan\",\n \"level\": \"full\",\n \"sound\": \"Mountain Ruskalan sounds like its lowland cousin, but stretched and deepened, as though the words had to travel further through cold air to reach you. The rolling R's are harder, almost grinding. The vowels have shifted further — open, round sounds have closed up, and the 'a' that once lived in the middle of the mouth has crept toward the back. Where lowland Ruskalan says 'volkosh' for wolf, the mountain folk say something that sounds almost like 'fulkush' — not wrong, just different enough that a traveler from the valley would have to listen carefully. The stress has slid even further back in most words, so the rhythm feels slower, more deliberate, like people who have all the time in the world because the mountains don't go anywhere.\",\n \"categories\": {\"C\": \"k g kh t d th r*2 s z sh zh ch j v f m n l*2 r\",\n               \"V\": \"o e u i y*2 a\",\n               \"S\": \"sk sl sn st kn gr dr br kr\",\n               \"F\": \"ov ev iv av un in om\",\n               \"E\": \"ts dz ch sh zh\",\n               \"T\": \"ol or el ir on um an im\"},\n \"generators\": [{\"id\": \"people\",\n                 \"name\": \"People names\",\n                 \"use\": \"people\",\n                 \"patterns\": [\"CVCVC*2\", \"CVCVCC\", \"[C|CC]VCCV(C)*2\", \"CVCV-FVC*2\", \"CVCV-T*2\"],\n                 \"reject\": [\"^.*[oeui]{3,}.*$\", \"^.*[kgh]{3,}.*$\"],\n                 \"min_length\": 5,\n                 \"max_length\": 14},\n                {\"id\": \"places\",\n                 \"name\": \"Place names\",\n                 \"use\": \"places\",\n                 \"patterns\": [\"CVCCV-CVCC\", \"S-CVCCV*2\", \"CVCC-T*2\", \"F-CVCCV*2\", \"[C|CC]VCCV-CVCC*2\", \"E-VCCV-CVCC*2\"],\n                 \"reject\": [\"^.*[oeui]{4,}.*$\", \"^[oeui].*$\"],\n                 \"min_length\": 7,\n                 \"max_length\": 18},\n                {\"id\": \"things\",\n                 \"name\": \"Thing names\",\n                 \"use\": \"things\",\n                 \"patterns\": [\"CVC-CVC\", \"CVCCV-CV\", \"S-CVC*2\", \"F-CVC*2\", \"[C|CC]VCC-VCC*2\"],\n                 \"reject\": [\"^.*[oeui]{4,}.*$\"],\n                 \"min_length\": 6,\n                 \"max_length\": 14}],\n \"dictionary\": [{\"word\": \"fulkush\", \"meaning\": \"wolf\"},\n                {\"word\": \"domara\", \"meaning\": \"house\"},\n                {\"word\": \"matyera\", \"meaning\": \"mother\"},\n                {\"word\": \"otets\", \"meaning\": \"father\"},\n                {\"word\": \"synok\", \"meaning\": \"son\"},\n                {\"word\": \"doshka\", \"meaning\": \"table\"},\n                {\"word\": \"okno\", \"meaning\": \"window\"},\n                {\"word\": \"voda\", \"meaning\": \"water\"},\n                {\"word\": \"ogon\", \"meaning\": \"fire\"},\n                {\"word\": \"zemlya\", \"meaning\": \"earth/land\"},\n                {\"word\": \"solnse\", \"meaning\": \"sun\"},\n                {\"word\": \"mesyats\", \"meaning\": \"moon\"},\n                {\"word\": \"deryevo\", \"meaning\": \"tree\"},\n                {\"word\": \"kamen\", \"meaning\": \"stone\"},\n                {\"word\": \"krov\", \"meaning\": \"blood\"},\n                {\"word\": \"sneg\", \"meaning\": \"snow\"},\n                {\"word\": \"khleb\", \"meaning\": \"bread\"},\n                {\"word\": \"moloko\", \"meaning\": \"milk\"},\n                {\"word\": \"noshcha\", \"meaning\": \"knife\"},\n                {\"word\": \"topor\", \"meaning\": \"axe\"},\n                {\"word\": \"shal\", \"meaning\": \"coat\"},\n                {\"word\": \"sapogi\", \"meaning\": \"boots\"},\n                {\"word\": \"knyaga\", \"meaning\": \"book\"},\n                {\"word\": \"svet\", \"meaning\": \"light\"},\n                {\"word\": \"tma\", \"meaning\": \"darkness\"},\n                {\"word\": \"dusha\", \"meaning\": \"soul\"},\n                {\"word\": \"govoor\", \"meaning\": \"voice/speech\"},\n                {\"word\": \"led\", \"meaning\": \"ice\"},\n                {\"word\": \"vyeatra\", \"meaning\": \"wind\"},\n                {\"word\": \"gor\", \"meaning\": \"mountain\"},\n                {\"word\": \"pust\", \"meaning\": \"empty/desolate\"},\n                {\"word\": \"stara\", \"meaning\": \"old\"},\n                {\"word\": \"nov\", \"meaning\": \"new\"},\n                {\"word\": \"zhizn\", \"meaning\": \"life\"},\n                {\"word\": \"smert\", \"meaning\": \"death\"}],\n \"phrases\": [{\"id\": \"1\",\n              \"category\": \"greeting\",\n              \"original\": \"Zdravstvuy, brat!\",\n              \"translation\": \"Hello, brother!\"},\n             {\"id\": \"2\",\n              \"category\": \"greeting\",\n              \"original\": \"Kak dyela, tovarishch?\",\n              \"translation\": \"How are you, comrade?\"},\n             {\"id\": \"3\",\n              \"category\": \"blessing\",\n              \"original\": \"Khranit tebya Bog i sveta!\",\n              \"translation\": \"May God and light protect you!\"},\n             {\"id\": \"4\",\n              \"category\": \"blessing\",\n              \"original\": \"Pust' tvoya dusha budet chista!\",\n              \"translation\": \"May your soul be pure!\"},\n             {\"id\": \"5\",\n              \"category\": \"curse\",\n              \"original\": \"K chortu ty i tvoya rodina!\",\n              \"translation\": \"To hell with you and your homeland!\"},\n             {\"id\": \"6\",\n              \"category\": \"curse\",\n              \"original\": \"Pozhalko, gnusnaya svinya!\",\n              \"translation\": \"Damn you, filthy pig!\"},\n             {\"id\": \"7\",\n              \"category\": \"saying\",\n              \"original\": \"Kotoryy ranny, totu i pishch.\",\n              \"translation\": \"The early bird gets the worm.\"},\n             {\"id\": \"8\",\n              \"category\": \"saying\",\n              \"original\": \"Ne v sily bogatyr, a v umy.\",\n              \"translation\": \"A hero's strength is not in his muscles, but in his mind.\"},\n             {\"id\": \"9\",\n              \"category\": \"saying\",\n              \"original\": \"Gor ne peryodit, a chelovek peryodit.\",\n              \"translation\": \"The mountain doesn't move, but the man does.\"},\n             {\"id\": \"10\",\n              \"category\": \"greeting\",\n              \"original\": \"Mir tebe, putnik!\",\n              \"translation\": \"Peace to you, traveler!\"}]}",
+      "language": {
+       "name": "Mountain Ruskalan",
+       "level": "full",
+       "sound": "Mountain Ruskalan sounds like its lowland cousin, but stretched and deepened, as though the words had to travel further through cold air to reach you. The rolling R's are harder, almost grinding. The vowels have shifted further — open, round sounds have closed up, and the 'a' that once lived in the middle of the mouth has crept toward the back. Where lowland Ruskalan says 'volkosh' for wolf, the mountain folk say something that sounds almost like 'fulkush' — not wrong, just different enough that a traveler from the valley would have to listen carefully. The stress has slid even further back in most words, so the rhythm feels slower, more deliberate, like people who have all the time in the world because the mountains don't go anywhere.",
+       "categories": {
+        "C": "k g kh t d th r*2 s z sh zh ch j v f m n l*2 r",
+        "V": "o e u i y*2 a",
+        "S": "sk sl sn st kn gr dr br kr",
+        "F": "ov ev iv av un in om",
+        "E": "ts dz ch sh zh",
+        "T": "ol or el ir on um an im"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "People names",
+         "use": "people",
+         "patterns": [
+          "CVCVC*2",
+          "CVCVCC",
+          "[C|CC]VCCV(C)*2",
+          "CVCV-FVC*2",
+          "CVCV-T*2"
+         ],
+         "reject": [
+          "^.*[oeui]{3,}.*$",
+          "^.*[kgh]{3,}.*$"
+         ],
+         "min_length": 5,
+         "max_length": 14
+        },
+        {
+         "id": "places",
+         "name": "Place names",
+         "use": "places",
+         "patterns": [
+          "CVCCV-CVCC",
+          "S-CVCCV*2",
+          "CVCC-T*2",
+          "F-CVCCV*2",
+          "[C|CC]VCCV-CVCC*2",
+          "E-VCCV-CVCC*2"
+         ],
+         "reject": [
+          "^.*[oeui]{4,}.*$",
+          "^[oeui].*$"
+         ],
+         "min_length": 7,
+         "max_length": 18
+        },
+        {
+         "id": "things",
+         "name": "Thing names",
+         "use": "things",
+         "patterns": [
+          "CVC-CVC",
+          "CVCCV-CV",
+          "S-CVC*2",
+          "F-CVC*2",
+          "[C|CC]VCC-VCC*2"
+         ],
+         "reject": [
+          "^.*[oeui]{4,}.*$"
+         ],
+         "min_length": 6,
+         "max_length": 14
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "fulkush",
+         "meaning": "wolf"
+        },
+        {
+         "word": "domara",
+         "meaning": "house"
+        },
+        {
+         "word": "matyera",
+         "meaning": "mother"
+        },
+        {
+         "word": "otets",
+         "meaning": "father"
+        },
+        {
+         "word": "synok",
+         "meaning": "son"
+        },
+        {
+         "word": "doshka",
+         "meaning": "table"
+        },
+        {
+         "word": "okno",
+         "meaning": "window"
+        },
+        {
+         "word": "voda",
+         "meaning": "water"
+        },
+        {
+         "word": "ogon",
+         "meaning": "fire"
+        },
+        {
+         "word": "zemlya",
+         "meaning": "earth/land"
+        },
+        {
+         "word": "solnse",
+         "meaning": "sun"
+        },
+        {
+         "word": "mesyats",
+         "meaning": "moon"
+        },
+        {
+         "word": "deryevo",
+         "meaning": "tree"
+        },
+        {
+         "word": "kamen",
+         "meaning": "stone"
+        },
+        {
+         "word": "krov",
+         "meaning": "blood"
+        },
+        {
+         "word": "sneg",
+         "meaning": "snow"
+        },
+        {
+         "word": "khleb",
+         "meaning": "bread"
+        },
+        {
+         "word": "moloko",
+         "meaning": "milk"
+        },
+        {
+         "word": "noshcha",
+         "meaning": "knife"
+        },
+        {
+         "word": "topor",
+         "meaning": "axe"
+        },
+        {
+         "word": "shal",
+         "meaning": "coat"
+        },
+        {
+         "word": "sapogi",
+         "meaning": "boots"
+        },
+        {
+         "word": "knyaga",
+         "meaning": "book"
+        },
+        {
+         "word": "svet",
+         "meaning": "light"
+        },
+        {
+         "word": "tma",
+         "meaning": "darkness"
+        },
+        {
+         "word": "dusha",
+         "meaning": "soul"
+        },
+        {
+         "word": "govoor",
+         "meaning": "voice/speech"
+        },
+        {
+         "word": "led",
+         "meaning": "ice"
+        },
+        {
+         "word": "vyeatra",
+         "meaning": "wind"
+        },
+        {
+         "word": "gor",
+         "meaning": "mountain"
+        },
+        {
+         "word": "pust",
+         "meaning": "empty/desolate"
+        },
+        {
+         "word": "stara",
+         "meaning": "old"
+        },
+        {
+         "word": "nov",
+         "meaning": "new"
+        },
+        {
+         "word": "zhizn",
+         "meaning": "life"
+        },
+        {
+         "word": "smert",
+         "meaning": "death"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "greeting",
+         "original": "Zdravstvuy, brat!",
+         "translation": "Hello, brother!"
+        },
+        {
+         "id": "2",
+         "category": "greeting",
+         "original": "Kak dyela, tovarishch?",
+         "translation": "How are you, comrade?"
+        },
+        {
+         "id": "3",
+         "category": "blessing",
+         "original": "Khranit tebya Bog i sveta!",
+         "translation": "May God and light protect you!"
+        },
+        {
+         "id": "4",
+         "category": "blessing",
+         "original": "Pust' tvoya dusha budet chista!",
+         "translation": "May your soul be pure!"
+        },
+        {
+         "id": "5",
+         "category": "curse",
+         "original": "K chortu ty i tvoya rodina!",
+         "translation": "To hell with you and your homeland!"
+        },
+        {
+         "id": "6",
+         "category": "curse",
+         "original": "Pozhalko, gnusnaya svinya!",
+         "translation": "Damn you, filthy pig!"
+        },
+        {
+         "id": "7",
+         "category": "saying",
+         "original": "Kotoryy ranny, totu i pishch.",
+         "translation": "The early bird gets the worm."
+        },
+        {
+         "id": "8",
+         "category": "saying",
+         "original": "Ne v sily bogatyr, a v umy.",
+         "translation": "A hero's strength is not in his muscles, but in his mind."
+        },
+        {
+         "id": "9",
+         "category": "saying",
+         "original": "Gor ne peryodit, a chelovek peryodit.",
+         "translation": "The mountain doesn't move, but the man does."
+        },
+        {
+         "id": "10",
+         "category": "greeting",
+         "original": "Mir tebe, putnik!",
+         "translation": "Peace to you, traveler!"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Logy-um",
+         "Rychy-evis",
+         "Razhi-evok",
+         "Lsattet",
+         "Rvelmy",
+         "Mura-evyf",
+         "Shashnu",
+         "Zily-ir",
+         "Rytath",
+         "Ravi-on",
+         "Chudi-omyg",
+         "Fady-ol",
+         "Thelo-avyth",
+         "Lufor",
+         "Vorof",
+         "Thytev",
+         "Merka",
+         "Riri-unoth",
+         "Zejrol",
+         "Chusher",
+         "Tojir",
+         "Reze-on",
+         "Mythu-avok",
+         "Ziry-inem",
+         "Choszhem",
+         "Churro",
+         "Ryvoz",
+         "Zlykku",
+         "Shorykh",
+         "Thochrukh",
+         "Zovu-omor",
+         "Ffushvuch",
+         "Chykhras",
+         "Garykh",
+         "Khshythli",
+         "Mchezky",
+         "Shisyl",
+         "Zary-unyn",
+         "Juvajk",
+         "Jnolfy",
+         "Khyme-um",
+         "Dykhy-avezh",
+         "Ryrli",
+         "Chalil",
+         "Chuflaj",
+         "Fosha-um",
+         "Thikon",
+         "Dysho-unyr",
+         "Rulujsh",
+         "Shechy-or"
+        ],
+        "places": [
+         "Dr-mydru",
+         "Shazkh-um",
+         "Dz-etli-fytkh",
+         "Sn-zhumfe",
+         "Ffalfa-ryvr",
+         "Tarsh-im",
+         "Kr-khorra",
+         "Sh-izhdy-sejt",
+         "Lokhd-el",
+         "Thuthth-on",
+         "Moshn-el",
+         "Dgyshli-joshj",
+         "Cholsh-or",
+         "Zythv-or",
+         "Sarni-ligkh",
+         "Vigzho-nuzhth",
+         "Kithz-an",
+         "Shytre-dutkh",
+         "Rokhth-on",
+         "Dyjjy-vigm",
+         "Zh-ykdo-jitr",
+         "Zh-irdy-velzh",
+         "Lkuthfy-fazkh",
+         "Br-laschy",
+         "Av-fyrgu",
+         "Av-mychkha",
+         "Ch-ykhmo-rozhm",
+         "Gzythche-tyfj",
+         "Thoshm-or",
+         "Sh-ykhzu-rethg",
+         "Sn-rulsho",
+         "Sk-tumji",
+         "Zorji-lurl",
+         "Ch-akry-kyrf",
+         "Ts-ichzu-mekch",
+         "Zh-yrlo-thyls",
+         "Ts-ygde-kushth",
+         "Zhalsy-tofg",
+         "Ts-ylchy-lishr",
+         "Ts-ettu-jazt",
+         "Ch-akli-thezz",
+         "Dz-ovtha-juzz",
+         "Tdatzy-fethr",
+         "Dz-yrthu-kydkh",
+         "Nursy-lyzhsh",
+         "Rilra-jydch",
+         "Sn-nifze",
+         "Disthe-lomf",
+         "Fytsho-fard",
+         "Av-jythcho"
+        ],
+        "things": [
+         "Zel-maj",
+         "Br-zhal",
+         "Iv-lizh",
+         "Ler-lav",
+         "Dr-khen",
+         "Rergy-na",
+         "Ov-khuf",
+         "Zhor-shur",
+         "Gol-vam",
+         "Om-khad",
+         "Kn-zhazh",
+         "Lol-tyf",
+         "Un-vosh",
+         "Lod-vyz",
+         "Sk-khokh",
+         "Zhrekhr-ant",
+         "Khusku-vy",
+         "Kyrre-the",
+         "Sn-shyr",
+         "Muchzhy-ro",
+         "Laz-gysh",
+         "Shyvdy-ki",
+         "Dtudl-erd",
+         "Chtyrsh-ygsh",
+         "Kn-thyk",
+         "Jems-yrch",
+         "Raj-fil",
+         "Khkefn-ylk",
+         "Thoch-lakh",
+         "Zhkethth-evv",
+         "Lorchy-thy",
+         "Jirr-uvd",
+         "Rikhzh-uls",
+         "Kushsho-lo",
+         "St-them",
+         "Kegz-idth",
+         "Kus-lush",
+         "Lokh-led",
+         "Shzhemm-yrf",
+         "Vok-khyr",
+         "Gr-chyr",
+         "Vthymr-org",
+         "Nrejl-uchd",
+         "Khsafg-ozl",
+         "Mujl-ojzh",
+         "Lekhk-ikhl",
+         "Nathm-eshr",
+         "Zin-khuk",
+         "Thyldi-shi",
+         "Kuzhj-inkh"
+        ]
+       },
+       "dictionary_fit": 0.14285714285714285,
+       "real_hits": [
+        "otets",
+        "voda",
+        "ogon",
+        "zemlya",
+        "sneg",
+        "khleb",
+        "gor",
+        "zhizn",
+        "smert"
+       ]
+      },
+      "jargon_in_language": []
+     }
+    ],
+    "ask-russian": [
+     {
+      "version": 1,
+      "questions": "Here are my questions:\n\n1. How \"Russian-sounding\" do you want it to be? Should a Russian speaker recognize the flavor, or should it just feel Slavic/foreign?\n2. Do you want it to sound noble and grand, or rough and earthy?\n3. Should it have a lot of unusual or invented words, or should it mostly be recognizable roots with tweaked spellings?\n4. Do you want it to have its own writing script, or use the Latin alphabet with diacritics?",
+      "jargon": [],
+      "seconds": 54.2,
+      "reply": "```json\n{\n  \"name\": \"Korvanski\",\n  \"level\": \"full\",\n  \"sound\": \"Korvanski sounds guttural and heavy, with lots of hard consonants and rounded vowels. Words are long and complicated-sounding, especially for places, but personal names are short and punchy. It has a raw, almost aggressive rhythm to it, like stones being dragged across gravel. Consonant clusters pile up in the middle of words, and the language rarely lets you rest on a single easy syllable.\",\n  \"categories\": {\n    \"C\": \"k g kh t ch sh zh r*2 s z v f m n*2 l*2\",\n    \"V\": \"a o u i e\",\n    \"S\": \"sk sl sn st kn gn kr gr\",\n    \"D\": \"ov ev iv an en in un\",\n    \"H\": \"'\",\n    \"L\": \"a-ya o-yo u-yu i-yi e-ye\",\n    \"P\": \"b d v f m n p r s t k g l h ch sh zh\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people\",\n      \"name\": \"Personal Names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CVC*2\",\n        \"CVCC\",\n        \"CVC(C)*2\",\n        \"CH*2\",\n        \"CVCV*2\"\n      ],\n      \"reject\": [\"^[aeiou].*$\", \".*[aeiou]{3,}.*$\"],\n      \"min_length\": 3,\n      \"max_length\": 7\n    },\n    {\n      \"id\": \"places\",\n      \"name\": \"Place Names\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"[C|CC]VCV(D)(S)(C|CC)(D)*n\",\n        \"[C|CC]V(S)(C|CC)V(D)(S)(C|CC)*n\",\n        \"(H)[C|CC]V(S)(C|CC)V(D)(S)(C|CC)*n\",\n        \"[C|CC]V(D)(S)(C|CC)V(D)(S)(C|CC)*n\",\n        \"(H)[C|CC]V(D)(S)(C|CC)V(S)(C|CC)(D)*n\"\n      ],\n      \"reject\": [],\n      \"min_length\": 9,\n      \"max_length\": 22\n    },\n    {\n      \"id\": \"things\",\n      \"name\": \"Object/Thing Names\",\n      \"use\": \"things\",\n      \"patterns\": [\n        \"[C|CC]V(S)(C|CC)(D)*n\",\n        \"CVCV(S)(C|CC)(D)*n\",\n        \"[C|CC]V(D)(S)(C|CC)*n\",\n        \"CVC(S)(C|CC)V(D)*n\"\n      ],\n      \"reject\": [],\n      \"min_length\": 5,\n      \"max_length\": 14\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"khram\", \"meaning\": \"temple\"},\n    {\"word\": \"volkha\", \"meaning\": \"wolf\"},\n    {\"word\": \"mertva\", \"meaning\": \"dead\"},\n    {\"word\": \"zima\", \"meaning\": \"winter\"},\n    {\"word\": \"ogn\", \"meaning\": \"fire\"},\n    {\"word\": \"rodna\", \"meaning\": \"mother\"},\n    {\"word\": \"syn\", \"meaning\": \"son\"},\n    {\"word\": \"kamen\", \"meaning\": \"stone\"},\n    {\"word\": \"dush\", \"meaning\": \"soul\"},\n    {\"word\": \"gory\", \"meaning\": \"mountains\"},\n    {\"word\": \"reka\", \"meaning\": \"river\"},\n    {\"word\": \"les\", \"meaning\": \"forest\"},\n    {\"word\": \"dom\", \"meaning\": \"house\"},\n    {\"word\": \"mokr\", \"meaning\": \"wet\"},\n    {\"word\": \"svetl\", \"meaning\": \"light\"},\n    {\"word\": \"temn\", \"meaning\": \"dark\"},\n    {\"word\": \"krov\", \"meaning\": \"blood\"},\n    {\"word\": \"dolg\", \"meaning\": \"long/debt\"},\n    {\"word\": \"krasn\", \"meaning\": \"beautiful/red\"},\n    {\"word\": \"grust\", \"meaning\": \"sorrow\"},\n    {\"word\": \"radost\", \"meaning\": \"joy\"},\n    {\"word\": \"stara\", \"meaning\": \"old\"},\n    {\"word\": \"nova\", \"meaning\": \"new\"},\n    {\"word\": \"siln\", \"meaning\": \"strong\"},\n    {\"word\": \"slab\", \"meaning\": \"weak\"},\n    {\"word\": \"dost\", \"meaning\": \"friend\"},\n    {\"word\": \"vrag\", \"meaning\": \"enemy\"},\n    {\"word\": \"tsar\", \"meaning\": \"king/tsar\"},\n    {\"word\": \"zhela\", \"meaning\": \"want\"},\n    {\"word\": \"dela\", \"meaning\": \"do/make\"},\n    {\"word\": \"gova\", \"meaning\": \"speak/tell\"},\n    {\"word\": \"vid\", \"meaning\": \"see\"},\n    {\"word\": \"slush\", \"meaning\": \"listen/hear\"},\n    {\"word\": \"id\", \"meaning\": \"go\"},\n    {\"word\": \"sto\", \"meaning\": \"stand\"},\n    {\"word\": \"sed\", \"meaning\": \"sit\"},\n    {\"word\": \"sp\", \"meaning\": \"sleep\"}\n  ],\n  \"phrases\": [\n    {\"id\": \"1\", \"category\": \"greeting\", \"original\": \"Zdrav, brato!\", \"translation\": \"Hello, brother!\"},\n    {\"id\": \"2\", \"category\": \"greeting\", \"original\": \"Krasn den' ti, dost!\", \"translation\": \"Good day to you, friend!\"},\n    {\"id\": \"3\", \"category\": \"blessing\", \"original\": \"Dush ti svetla, khram ti chitaet!\", \"translation\": \"May your soul be bright, may the temple read you well!\"},\n    {\"id\": \"4\", \"category\": \"blessing\", \"original\": \"Krasn rodna, krasn syn!\", \"translation\": \"Blessed mother, blessed son!\"},\n    {\"id\": \"5\", \"category\": \"curse\", \"original\": \"Khram na teb'! Merty volkha gnaet dush!\", \"translation\": \"Damn you! A dead wolf gnaws at your soul!\"},\n    {\"id\": \"6\", \"category\": \"curse\", \"original\": \"Id v zima! Id v temn les!\", \"translation\": \"Go into the winter! Go into the dark forest!\"},\n    {\"id\": \"7\", \"category\": \"saying\", \"original\": \"Kamen dolg, no krasn zima prostaet.\", \"translation\": \"The stone is heavy, but the beautiful winter passes.\"},\n    {\"id\": \"8\", \"category\": \"saying\", \"original\": \"Siln dush ne boitsya ogn.\", \"translation\": \"A strong soul is not afraid of fire.\"}\n  ]\n}\n```\n\n**Notes on design choices:**\n\n- **People names** are kept short and sharp (3–7 letters): *Khram, Volkha, Mertva, Zima, Ogn* — easy to shout, easy to remember, fitting the \"short everyday names\" request.\n- **Place names** are deliberately bloated and formal, sometimes stretching past 20 characters: *Khramovolsk, Gorylesk, Temnreknadol* — the kind of names that take three breaths to say, sounding ancient and imposing.\n- The **sound** leans into hard consonants (kh, ch, zh, sh) with rounded vowels (a, o, u) and avoids any softness. Words pile consonants together in the middle — *khram*, *volkha*, *mertva* — so they feel heavy in the mouth.\n- **Slavic roots** are woven in (*tsar, krasn, zima, les, reka, dom, dost*) so a Slavic speaker would feel a familiar pull, but the words are twisted enough to feel like a separate tongue.",
+      "language": {
+       "name": "Korvanski",
+       "level": "full",
+       "sound": "Korvanski sounds guttural and heavy, with lots of hard consonants and rounded vowels. Words are long and complicated-sounding, especially for places, but personal names are short and punchy. It has a raw, almost aggressive rhythm to it, like stones being dragged across gravel. Consonant clusters pile up in the middle of words, and the language rarely lets you rest on a single easy syllable.",
+       "categories": {
+        "C": "k g kh t ch sh zh r*2 s z v f m n*2 l*2",
+        "V": "a o u i e",
+        "S": "sk sl sn st kn gn kr gr",
+        "D": "ov ev iv an en in un",
+        "H": "'",
+        "L": "a-ya o-yo u-yu i-yi e-ye",
+        "P": "b d v f m n p r s t k g l h ch sh zh"
+       },
+       "generators": [
+        {
+         "id": "people",
+         "name": "Personal Names",
+         "use": "people",
+         "patterns": [
+          "CVC*2",
+          "CVCC",
+          "CVC(C)*2",
+          "CH*2",
+          "CVCV*2"
+         ],
+         "reject": [
+          "^[aeiou].*$",
+          ".*[aeiou]{3,}.*$"
+         ],
+         "min_length": 3,
+         "max_length": 7
+        },
+        {
+         "id": "places",
+         "name": "Place Names",
+         "use": "places",
+         "patterns": [
+          "[C|CC]VCV(D)(S)(C|CC)(D)*n",
+          "[C|CC]V(S)(C|CC)V(D)(S)(C|CC)*n",
+          "(H)[C|CC]V(S)(C|CC)V(D)(S)(C|CC)*n",
+          "[C|CC]V(D)(S)(C|CC)V(D)(S)(C|CC)*n",
+          "(H)[C|CC]V(D)(S)(C|CC)V(S)(C|CC)(D)*n"
+         ],
+         "reject": [],
+         "min_length": 9,
+         "max_length": 22
+        },
+        {
+         "id": "things",
+         "name": "Object/Thing Names",
+         "use": "things",
+         "patterns": [
+          "[C|CC]V(S)(C|CC)(D)*n",
+          "CVCV(S)(C|CC)(D)*n",
+          "[C|CC]V(D)(S)(C|CC)*n",
+          "CVC(S)(C|CC)V(D)*n"
+         ],
+         "reject": [],
+         "min_length": 5,
+         "max_length": 14
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "khram",
+         "meaning": "temple"
+        },
+        {
+         "word": "volkha",
+         "meaning": "wolf"
+        },
+        {
+         "word": "mertva",
+         "meaning": "dead"
+        },
+        {
+         "word": "zima",
+         "meaning": "winter"
+        },
+        {
+         "word": "ogn",
+         "meaning": "fire"
+        },
+        {
+         "word": "rodna",
+         "meaning": "mother"
+        },
+        {
+         "word": "syn",
+         "meaning": "son"
+        },
+        {
+         "word": "kamen",
+         "meaning": "stone"
+        },
+        {
+         "word": "dush",
+         "meaning": "soul"
+        },
+        {
+         "word": "gory",
+         "meaning": "mountains"
+        },
+        {
+         "word": "reka",
+         "meaning": "river"
+        },
+        {
+         "word": "les",
+         "meaning": "forest"
+        },
+        {
+         "word": "dom",
+         "meaning": "house"
+        },
+        {
+         "word": "mokr",
+         "meaning": "wet"
+        },
+        {
+         "word": "svetl",
+         "meaning": "light"
+        },
+        {
+         "word": "temn",
+         "meaning": "dark"
+        },
+        {
+         "word": "krov",
+         "meaning": "blood"
+        },
+        {
+         "word": "dolg",
+         "meaning": "long/debt"
+        },
+        {
+         "word": "krasn",
+         "meaning": "beautiful/red"
+        },
+        {
+         "word": "grust",
+         "meaning": "sorrow"
+        },
+        {
+         "word": "radost",
+         "meaning": "joy"
+        },
+        {
+         "word": "stara",
+         "meaning": "old"
+        },
+        {
+         "word": "nova",
+         "meaning": "new"
+        },
+        {
+         "word": "siln",
+         "meaning": "strong"
+        },
+        {
+         "word": "slab",
+         "meaning": "weak"
+        },
+        {
+         "word": "dost",
+         "meaning": "friend"
+        },
+        {
+         "word": "vrag",
+         "meaning": "enemy"
+        },
+        {
+         "word": "tsar",
+         "meaning": "king/tsar"
+        },
+        {
+         "word": "zhela",
+         "meaning": "want"
+        },
+        {
+         "word": "dela",
+         "meaning": "do/make"
+        },
+        {
+         "word": "gova",
+         "meaning": "speak/tell"
+        },
+        {
+         "word": "vid",
+         "meaning": "see"
+        },
+        {
+         "word": "slush",
+         "meaning": "listen/hear"
+        },
+        {
+         "word": "id",
+         "meaning": "go"
+        },
+        {
+         "word": "sto",
+         "meaning": "stand"
+        },
+        {
+         "word": "sed",
+         "meaning": "sit"
+        },
+        {
+         "word": "sp",
+         "meaning": "sleep"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "greeting",
+         "original": "Zdrav, brato!",
+         "translation": "Hello, brother!"
+        },
+        {
+         "id": "2",
+         "category": "greeting",
+         "original": "Krasn den' ti, dost!",
+         "translation": "Good day to you, friend!"
+        },
+        {
+         "id": "3",
+         "category": "blessing",
+         "original": "Dush ti svetla, khram ti chitaet!",
+         "translation": "May your soul be bright, may the temple read you well!"
+        },
+        {
+         "id": "4",
+         "category": "blessing",
+         "original": "Krasn rodna, krasn syn!",
+         "translation": "Blessed mother, blessed son!"
+        },
+        {
+         "id": "5",
+         "category": "curse",
+         "original": "Khram na teb'! Merty volkha gnaet dush!",
+         "translation": "Damn you! A dead wolf gnaws at your soul!"
+        },
+        {
+         "id": "6",
+         "category": "curse",
+         "original": "Id v zima! Id v temn les!",
+         "translation": "Go into the winter! Go into the dark forest!"
+        },
+        {
+         "id": "7",
+         "category": "saying",
+         "original": "Kamen dolg, no krasn zima prostaet.",
+         "translation": "The stone is heavy, but the beautiful winter passes."
+        },
+        {
+         "id": "8",
+         "category": "saying",
+         "original": "Siln dush ne boitsya ogn.",
+         "translation": "A strong soul is not afraid of fire."
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people": [
+         "Nich",
+         "Rink",
+         "Riku",
+         "Kase",
+         "Tukr",
+         "Chotsh",
+         "Nuv",
+         "Lekh",
+         "Filr",
+         "Foze",
+         "Suko",
+         "Rasi",
+         "Nurk",
+         "Fez",
+         "Tul",
+         "Nos",
+         "Lan",
+         "Mesu",
+         "Gezs",
+         "Zhos",
+         "Tunn",
+         "Noni",
+         "Kam",
+         "Gizhg",
+         "Sach",
+         "Korg",
+         "Soze",
+         "Kaf",
+         "Fis",
+         "Lis",
+         "Vozsh",
+         "Nono",
+         "Mucha",
+         "Kelu",
+         "Nef",
+         "Zhot",
+         "Tavr",
+         "Nekt",
+         "Lizht",
+         "Nir",
+         "Matl",
+         "Min",
+         "Zhon",
+         "Nasa",
+         "Gen",
+         "Zhino",
+         "Lulr",
+         "Nekf",
+         "Khek",
+         "Lukht"
+        ],
+        "places": [
+         "Mshoovknch|nnesnt|tzh*n",
+         "'visnsh|nlokn*n",
+         "Nukrainst*n",
+         "Shuunkruevknn|tr*n",
+         "Lkil|chzaansn*n",
+         "Chuevknegng|snin*n",
+         "'khfuovost*n",
+         "Ffognl|nvom|nv*n",
+         "Nchel|rvuan*n",
+         "Chmaangneevz|chf*n",
+         "Suoovm|sl*n",
+         "Gognoinknm|zkh*n",
+         "Vsoivstu*n",
+         "Lnustt|schaskkh|fkh*n",
+         "Ztonoins|mt*n",
+         "Zhmoanknogn*n",
+         "'nagrl|mzokh|fzh*n",
+         "Fostg|tkusk*n",
+         "Zhnastzh|tcheknf|shz*n",
+         "'shzhugrakh|vgov*n",
+         "Kach|khga*n",
+         "Shchoknagn*n",
+         "Fusneslg|tren*n",
+         "Gshaenegnch|shsh*n",
+         "Shkhineivknzh|nl*n",
+         "Szezuuniv*n",
+         "Zhzaoivgn*n",
+         "'nzustm|zhlaskn|chch*n",
+         "'rrekh|fzeivg|sch*n",
+         "Gziniinz|lr*n",
+         "Kugrv|szuungr*n",
+         "Rkhukroivr|shv*n",
+         "Lestosnkh|zhr*n",
+         "Nokhigrr|chzh*n",
+         "Lruslm|gkhienskl|kt*n",
+         "Fariann|gzh*n",
+         "Rnestuinstl|vl*n",
+         "'shlaslch|rvekr*n",
+         "Fchostz|tnisn*n",
+         "Shuovsns|fziev*n",
+         "'ntignoskkh|lkh*n",
+         "'shog|lzhisnn|lkh*n",
+         "Zeenul|vsan*n",
+         "Snifaengrn|tn*n",
+         "Lizhukrun*n",
+         "Nzeaniunk|fr*n",
+         "Vliansnu*n",
+         "Lavuenl|zhnin*n",
+         "Lshofieniv*n",
+         "Lnazhaovkr*n"
+        ],
+        "things": [
+         "Khenest*n",
+         "Soke*n",
+         "Chileknin*n",
+         "Mifo*n",
+         "Zhul|chk*n",
+         "Shuzes|rsev*n",
+         "Ronokn*n",
+         "Zhkhoevslch|tn*n",
+         "Siovgnl|khf*n",
+         "Zhfuknch|zhsh*n",
+         "Zhechs|gnoiv*n",
+         "Zimsko*n",
+         "Vant|skhe*n",
+         "Zhekhk|khtian*n",
+         "Ktistv|rr*n",
+         "Tast*n",
+         "Zhogeev*n",
+         "Reslov*n",
+         "Grusnl|kl*n",
+         "Komu*n",
+         "Rliz|kliv*n",
+         "Zrikn*n",
+         "Loknun*n",
+         "Zhochoin*n",
+         "Rongneov*n",
+         "Chgian*n",
+         "Soknn|nk*n",
+         "Khufiun*n",
+         "Lun|zhr*n",
+         "Tlasn*n",
+         "Sar|chsun*n",
+         "Revu*n",
+         "Zmech|nsh*n",
+         "Ruchkruan*n",
+         "Lfistin*n",
+         "Shakn*n",
+         "Shin|shrov*n",
+         "Mizh|ll*n",
+         "Nerskch|fzhi*n",
+         "Fofisll|rzh*n",
+         "Laven|mvev*n",
+         "Rnash|kn*n",
+         "Riskzh|nv*n",
+         "Chusestl|fkov*n",
+         "Mounkr*n",
+         "Khkoknn|vkhin*n",
+         "Falesnv|chmev*n",
+         "Lonusn*n",
+         "Shokhuv|khkh*n",
+         "Kalil|zhn*n"
+        ]
+       },
+       "dictionary_fit": 0.24324324324324326,
+       "real_hits": [
+        "Tul",
+        "Kam",
+        "Lis",
+        "Lun|zhr*n",
+        "zima",
+        "syn",
+        "gory",
+        "reka",
+        "les",
+        "dom",
+        "krasn",
+        "tsar"
+       ]
+      },
+      "jargon_in_language": [
+       "consonant cluster"
+      ]
+     },
+     {
+      "version": 2,
+      "questions": "Here are my questions:\n\n1. How different from real Russian should this language sound? Should someone who knows Russian recognize it, or should it be a completely separate invention?\n\n2. What kind of feeling or vibe do you want it to have? (For example: ancient and mystical, modern and gritty, noble and formal, rough and warrior-like, etc.)\n\n3. Should it use the Cyrillic alphabet, or a different writing system?\n\n4. Do you want me to focus more on creating vocabulary and phrases, or more on grammar rules and sentence structure?",
+      "jargon": [],
+      "seconds": 72.0,
+      "reply": "```json\n{\n  \"name\": \"Korvash\",\n  \"level\": \"full\",\n  \"sound\": \"Korvash sounds heavy and guttural, with a lot of hard consonants hitting your teeth. Words are short and clipped for everyday use but stretch out into long, imposing chains of syllables when talking about important places or old traditions. It has that unmistakable Slavic weight — think of Russian spoken through a stone wall — but with its own sharp twists. Vowels are short and tense, consonants pile up in ways that make you want to clear your throat, and every word feels like it could be the name of a weapon or a scar.\",\n  \"categories\": {\n    \"C\": \"k kh g ch sh t d v b f r*2 m n*2 l s z j\",\n    \"V\": \"a e i o u y\",\n    \"L\": \"a e i o u y o*2 i*2\",\n    \"H\": \"kh ch sh\",\n    \"S\": \"s z r l m n v b\",\n    \"D\": \"a i u o e\",\n    \"F\": \"k g t d b f v m n l r s z ch kh sh j\",\n    \"W\": \"o u a e i\",\n    \"T\": \"t d k g\",\n    \"N\": \"n m l r\"\n  },\n  \"generators\": [\n    {\n      \"id\": \"people-first\",\n      \"name\": \"First names (short form)\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CVC*1\",\n        \"CV*1\",\n        \"C*1\",\n        \"CV(C)*1\"\n      ],\n      \"reject\": [\"^[aeiouy]$\", \"^[khchsh]$\", \"^[a-z]{1}$\"],\n      \"min_length\": 2,\n      \"max_length\": 5\n    },\n    {\n      \"id\": \"people-nickname\",\n      \"name\": \"Nicknames / diminutives\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"CVCVC*1\",\n        \"[C|CC]V(C)*1\",\n        \"CVC*1\",\n        \"CV(C)*1\"\n      ],\n      \"reject\": [\"^[aeiouy]$\", \"^[khchsh]$\", \"^[a-z]{1,2}$\"],\n      \"min_length\": 3,\n      \"max_length\": 7\n    },\n    {\n      \"id\": \"people-full\",\n      \"name\": \"Full formal names\",\n      \"use\": \"people\",\n      \"patterns\": [\n        \"[C|CC]V(C)[C|CC]V(C)*1\",\n        \"[C|CC]V(C)[C|CC]V(C)[C|CC]V*1\",\n        \"CVCVCVC*1\"\n      ],\n      \"reject\": [\"^[aeiouy]$\", \"^[khchsh]$\", \"^[a-z]{1,4}$\"],\n      \"min_length\": 5,\n      \"max_length\": 11\n    },\n    {\n      \"id\": \"place-short\",\n      \"name\": \"Short place names (villages, streams)\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"CV*1\",\n        \"CVC*1\",\n        \"CV(C)*1\",\n        \"C*1\"\n      ],\n      \"reject\": [\"^[aeiouy]$\", \"^[khchsh]$\", \"^[a-z]{1}$\"],\n      \"min_length\": 2,\n      \"max_length\": 5\n    },\n    {\n      \"id\": \"place-medium\",\n      \"name\": \"Medium place names (towns, forests, rivers)\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"[C|CC]V(C)[C|CC]V*1\",\n        \"CVCVC*1\",\n        \"[C|CC]V(C)[C|CC]V(C)*1\"\n      ],\n      \"reject\": [\"^[aeiouy]$\", \"^[khchsh]$\", \"^[a-z]{1,4}$\"],\n      \"min_length\": 4,\n      \"max_length\": 9\n    },\n    {\n      \"id\": \"place-long\",\n      \"name\": \"Long formal place names (cities, provinces, historical sites)\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"[C|CC]V(C)[C|CC]V(C)[C|CC]V(C)*1\",\n        \"[C|CC]V(C)[C|CC]V(C)[C|CC]V(C)[C|CC]V*1\",\n        \"CVCVCVCVC*1\"\n      ],\n      \"reject\": [\"^[aeiouy]$\", \"^[khchsh]$\", \"^[a-z]{1,6}$\"],\n      \"min_length\": 7,\n      \"max_length\": 15\n    },\n    {\n      \"id\": \"place-suffix\",\n      \"name\": \"Place name suffixes ( appended to short names)\",\n      \"use\": \"places\",\n      \"patterns\": [\n        \"-grad\",\n        \"-khol\",\n        \"-mir\",\n        \"-noye\",\n        \"-vost\",\n        \"-sk\",\n        \"-grad*2\",\n        \"-mir*2\"\n      ],\n      \"reject\": [],\n      \"min_length\": 3,\n      \"max_length\": 7\n    }\n  ],\n  \"dictionary\": [\n    {\"word\": \"khol\", \"meaning\": \"cold, frost\"},\n    {\"word\": \"grad\", \"meaning\": \"city, stone settlement\"},\n    {\"word\": \"mir\", \"meaning\": \"peace, world, community\"},\n    {\"word\": \"vost\", \"meaning\": \"east, dawn\"},\n    {\"word\": \"sk\", \"meaning\": \"belonging to, of\"},\n    {\"word\": \"noye\", \"meaning\": \"new\"},\n    {\"word\": \"star\", \"meaning\": \"old\"},\n    {\"word\": \"mokr\", \"meaning\": \"wet, damp\"},\n    {\"word\": \"gory\", \"meaning\": \"mountain\"},\n    {\"word\": \"dol\", \"meaning\": \"valley, lowland\"},\n    {\"word\": \"rech\", \"meaning\": \"river\"},\n    {\"word\": \"les\", \"meaning\": \"forest\"},\n    {\"word\": \"pol\", \"meaning\": \"field, open land\"},\n    {\"word\": \"kam\", \"meaning\": \"stone\"},\n    {\"word\": \"zhem\", \"meaning\": \"house, home\"},\n    {\"word\": \"otets\", \"meaning\": \"father\"},\n    {\"word\": \"mat\", \"meaning\": \"mother\"},\n    {\"word\": \"syn\", \"meaning\": \"son\"},\n    {\"word\": \"doch\", \"meaning\": \"daughter\"},\n    {\"word\": \"brat\", \"meaning\": \"brother\"},\n    {\"word\": \"sestra\", \"meaning\": \"sister\"},\n    {\"word\": \"starik\", \"meaning\": \"old man, elder\"},\n    {\"word\": \"bab\", \"meaning\": \"grandmother\"},\n    {\"word\": \"moy\", \"meaning\": \"my, mine\"},\n    {\"word\": \"tvo\", \"meaning\": \"your\"},\n    {\"word\": \"yest\", \"meaning\": \"he/she/it is\"},\n    {\"word\": \"bud\", \"meaning\": \"be, become\"},\n    {\"word\": \"shol\", \"meaning\": \"went\"},\n    {\"word\": \"davno\", \"meaning\": \"long ago, once\"},\n    {\"word\": \"sil\", \"meaning\": \"silence\"},\n    {\"word\": \"grom\", \"meaning\": \"thunder\"},\n    {\"word\": \"krov\", \"meaning\": \"blood\"},\n    {\"word\": \"dush\", \"meaning\": \"soul, spirit\"},\n    {\"word\": \"volk\", \"meaning\": \"wolf\"},\n    {\"word\": \"medv\", \"meaning\": \"bear\"},\n    {\"word\": \"sokol\", \"meaning\": \"falcon\"},\n    {\"word\": \"zima\", \"meaning\": \"winter\"},\n    {\"word\": \"leto\", \"meaning\": \"summer\"},\n    {\"word\": \"boya\", \"meaning\": \"battle, fight\"},\n    {\"word\": \"mest\", \"meaning\": \"place\"},\n    {\"word\": \"chest\", \"meaning\": \"honor, glory\"},\n    {\"word\": \"gnev\", \"meaning\": \"anger, wrath\"},\n    {\"word\": \"lyubov\", \"meaning\": \"love\"},\n    {\"word\": \"smer\", \"meaning\": \"death\"}\n  ],\n  \"phrases\": [\n    {\"id\": \"1\", \"category\": \"greeting\", \"original\": \"Zdrav, brat!\", \"translation\": \"Hello, brother!\"},\n    {\"id\": \"2\", \"category\": \"greeting\", \"original\": \"Mir tebe, syn moy\", \"translation\": \"Peace be with you, my son\"},\n    {\"id\": \"3\", \"category\": \"blessing\", \"original\": \"Dush tvoya svyetla budet\", \"translation\": \"Your soul shall be bright\"},\n    {\"id\": \"4\", \"category\": \"blessing\", \"original\": \"Chest vechnyy na tebya\", \"translation\": \"Eternal glory upon you\"},\n    {\"id\": \"5\", \"category\": \"curse\", \"original\": \"Krov' tvoya po zhemy razlyetsya!\", \"translation\": \"May your blood scatter across the earth!\"},\n    {\"id\": \"6\", \"category\": \"curse\", \"original\": \"Smer' khol'naya tebya naydyt!\", \"translation\": \"May cold death find you!\"},\n    {\"id\": \"7\", \"category\": \"saying\", \"original\": \"Gory ne idut k volku\", \"translation\": \"The mountains don't come to the wolf\"},\n    {\"id\": \"8\", \"category\": \"saying\", \"original\": \"Starik zhemy poznaet\", \"translation\": \"The old man knows the land\"},\n    {\"id\": \"9\", \"category\": \"saying\", \"original\": \"Boya otkrovet yest' ili nest'\", \"translation\": \"Battle reveals what is or isn't\"},\n    {\"id\": \"10\", \"category\": \"saying\", \"original\": \"Davno zima, no leto vernetsya\", \"translation\": \"Winter has been long, but summer will return\"}\n  ]\n}\n```\n\n**How it works:**\n\nPeople get short, punchy names like **Khris**, **Dav**, **Gor**, or **Shol**. But when you want to be formal — for a full name, a title, or an important figure — you add syllables until it sounds like a name carved into a monument: **Khristofor**, **Davnikolai**, **Gorvashil**.\n\nPlaces work the same way. A little creek might be called **Rech** or **Dol**. But that same creek, if it's ancient or sacred or governs a whole province, becomes **Rech-Dolskoye** or **Mokr-Gorygrad**. The suffixes (-grad, -mir, -noye, -vost) tack onto the short name to formalize it.",
+      "language": {
+       "name": "Korvash",
+       "level": "full",
+       "sound": "Korvash sounds heavy and guttural, with a lot of hard consonants hitting your teeth. Words are short and clipped for everyday use but stretch out into long, imposing chains of syllables when talking about important places or old traditions. It has that unmistakable Slavic weight — think of Russian spoken through a stone wall — but with its own sharp twists. Vowels are short and tense, consonants pile up in ways that make you want to clear your throat, and every word feels like it could be the name of a weapon or a scar.",
+       "categories": {
+        "C": "k kh g ch sh t d v b f r*2 m n*2 l s z j",
+        "V": "a e i o u y",
+        "L": "a e i o u y o*2 i*2",
+        "H": "kh ch sh",
+        "S": "s z r l m n v b",
+        "D": "a i u o e",
+        "F": "k g t d b f v m n l r s z ch kh sh j",
+        "W": "o u a e i",
+        "T": "t d k g",
+        "N": "n m l r"
+       },
+       "generators": [
+        {
+         "id": "people-first",
+         "name": "First names (short form)",
+         "use": "people",
+         "patterns": [
+          "CVC*1",
+          "CV*1",
+          "C*1",
+          "CV(C)*1"
+         ],
+         "reject": [
+          "^[aeiouy]$",
+          "^[khchsh]$",
+          "^[a-z]{1}$"
+         ],
+         "min_length": 2,
+         "max_length": 5
+        },
+        {
+         "id": "people-nickname",
+         "name": "Nicknames / diminutives",
+         "use": "people",
+         "patterns": [
+          "CVCVC*1",
+          "[C|CC]V(C)*1",
+          "CVC*1",
+          "CV(C)*1"
+         ],
+         "reject": [
+          "^[aeiouy]$",
+          "^[khchsh]$",
+          "^[a-z]{1,2}$"
+         ],
+         "min_length": 3,
+         "max_length": 7
+        },
+        {
+         "id": "people-full",
+         "name": "Full formal names",
+         "use": "people",
+         "patterns": [
+          "[C|CC]V(C)[C|CC]V(C)*1",
+          "[C|CC]V(C)[C|CC]V(C)[C|CC]V*1",
+          "CVCVCVC*1"
+         ],
+         "reject": [
+          "^[aeiouy]$",
+          "^[khchsh]$",
+          "^[a-z]{1,4}$"
+         ],
+         "min_length": 5,
+         "max_length": 11
+        },
+        {
+         "id": "place-short",
+         "name": "Short place names (villages, streams)",
+         "use": "places",
+         "patterns": [
+          "CV*1",
+          "CVC*1",
+          "CV(C)*1",
+          "C*1"
+         ],
+         "reject": [
+          "^[aeiouy]$",
+          "^[khchsh]$",
+          "^[a-z]{1}$"
+         ],
+         "min_length": 2,
+         "max_length": 5
+        },
+        {
+         "id": "place-medium",
+         "name": "Medium place names (towns, forests, rivers)",
+         "use": "places",
+         "patterns": [
+          "[C|CC]V(C)[C|CC]V*1",
+          "CVCVC*1",
+          "[C|CC]V(C)[C|CC]V(C)*1"
+         ],
+         "reject": [
+          "^[aeiouy]$",
+          "^[khchsh]$",
+          "^[a-z]{1,4}$"
+         ],
+         "min_length": 4,
+         "max_length": 9
+        },
+        {
+         "id": "place-long",
+         "name": "Long formal place names (cities, provinces, historical sites)",
+         "use": "places",
+         "patterns": [
+          "[C|CC]V(C)[C|CC]V(C)[C|CC]V(C)*1",
+          "[C|CC]V(C)[C|CC]V(C)[C|CC]V(C)[C|CC]V*1",
+          "CVCVCVCVC*1"
+         ],
+         "reject": [
+          "^[aeiouy]$",
+          "^[khchsh]$",
+          "^[a-z]{1,6}$"
+         ],
+         "min_length": 7,
+         "max_length": 15
+        },
+        {
+         "id": "place-suffix",
+         "name": "Place name suffixes ( appended to short names)",
+         "use": "places",
+         "patterns": [
+          "-grad",
+          "-khol",
+          "-mir",
+          "-noye",
+          "-vost",
+          "-sk",
+          "-grad*2",
+          "-mir*2"
+         ],
+         "reject": [],
+         "min_length": 3,
+         "max_length": 7
+        }
+       ],
+       "dictionary": [
+        {
+         "word": "khol",
+         "meaning": "cold, frost"
+        },
+        {
+         "word": "grad",
+         "meaning": "city, stone settlement"
+        },
+        {
+         "word": "mir",
+         "meaning": "peace, world, community"
+        },
+        {
+         "word": "vost",
+         "meaning": "east, dawn"
+        },
+        {
+         "word": "sk",
+         "meaning": "belonging to, of"
+        },
+        {
+         "word": "noye",
+         "meaning": "new"
+        },
+        {
+         "word": "star",
+         "meaning": "old"
+        },
+        {
+         "word": "mokr",
+         "meaning": "wet, damp"
+        },
+        {
+         "word": "gory",
+         "meaning": "mountain"
+        },
+        {
+         "word": "dol",
+         "meaning": "valley, lowland"
+        },
+        {
+         "word": "rech",
+         "meaning": "river"
+        },
+        {
+         "word": "les",
+         "meaning": "forest"
+        },
+        {
+         "word": "pol",
+         "meaning": "field, open land"
+        },
+        {
+         "word": "kam",
+         "meaning": "stone"
+        },
+        {
+         "word": "zhem",
+         "meaning": "house, home"
+        },
+        {
+         "word": "otets",
+         "meaning": "father"
+        },
+        {
+         "word": "mat",
+         "meaning": "mother"
+        },
+        {
+         "word": "syn",
+         "meaning": "son"
+        },
+        {
+         "word": "doch",
+         "meaning": "daughter"
+        },
+        {
+         "word": "brat",
+         "meaning": "brother"
+        },
+        {
+         "word": "sestra",
+         "meaning": "sister"
+        },
+        {
+         "word": "starik",
+         "meaning": "old man, elder"
+        },
+        {
+         "word": "bab",
+         "meaning": "grandmother"
+        },
+        {
+         "word": "moy",
+         "meaning": "my, mine"
+        },
+        {
+         "word": "tvo",
+         "meaning": "your"
+        },
+        {
+         "word": "yest",
+         "meaning": "he/she/it is"
+        },
+        {
+         "word": "bud",
+         "meaning": "be, become"
+        },
+        {
+         "word": "shol",
+         "meaning": "went"
+        },
+        {
+         "word": "davno",
+         "meaning": "long ago, once"
+        },
+        {
+         "word": "sil",
+         "meaning": "silence"
+        },
+        {
+         "word": "grom",
+         "meaning": "thunder"
+        },
+        {
+         "word": "krov",
+         "meaning": "blood"
+        },
+        {
+         "word": "dush",
+         "meaning": "soul, spirit"
+        },
+        {
+         "word": "volk",
+         "meaning": "wolf"
+        },
+        {
+         "word": "medv",
+         "meaning": "bear"
+        },
+        {
+         "word": "sokol",
+         "meaning": "falcon"
+        },
+        {
+         "word": "zima",
+         "meaning": "winter"
+        },
+        {
+         "word": "leto",
+         "meaning": "summer"
+        },
+        {
+         "word": "boya",
+         "meaning": "battle, fight"
+        },
+        {
+         "word": "mest",
+         "meaning": "place"
+        },
+        {
+         "word": "chest",
+         "meaning": "honor, glory"
+        },
+        {
+         "word": "gnev",
+         "meaning": "anger, wrath"
+        },
+        {
+         "word": "lyubov",
+         "meaning": "love"
+        },
+        {
+         "word": "smer",
+         "meaning": "death"
+        }
+       ],
+       "phrases": [
+        {
+         "id": "1",
+         "category": "greeting",
+         "original": "Zdrav, brat!",
+         "translation": "Hello, brother!"
+        },
+        {
+         "id": "2",
+         "category": "greeting",
+         "original": "Mir tebe, syn moy",
+         "translation": "Peace be with you, my son"
+        },
+        {
+         "id": "3",
+         "category": "blessing",
+         "original": "Dush tvoya svyetla budet",
+         "translation": "Your soul shall be bright"
+        },
+        {
+         "id": "4",
+         "category": "blessing",
+         "original": "Chest vechnyy na tebya",
+         "translation": "Eternal glory upon you"
+        },
+        {
+         "id": "5",
+         "category": "curse",
+         "original": "Krov' tvoya po zhemy razlyetsya!",
+         "translation": "May your blood scatter across the earth!"
+        },
+        {
+         "id": "6",
+         "category": "curse",
+         "original": "Smer' khol'naya tebya naydyt!",
+         "translation": "May cold death find you!"
+        },
+        {
+         "id": "7",
+         "category": "saying",
+         "original": "Gory ne idut k volku",
+         "translation": "The mountains don't come to the wolf"
+        },
+        {
+         "id": "8",
+         "category": "saying",
+         "original": "Starik zhemy poznaet",
+         "translation": "The old man knows the land"
+        },
+        {
+         "id": "9",
+         "category": "saying",
+         "original": "Boya otkrovet yest' ili nest'",
+         "translation": "Battle reveals what is or isn't"
+        },
+        {
+         "id": "10",
+         "category": "saying",
+         "original": "Davno zima, no leto vernetsya",
+         "translation": "Winter has been long, but summer will return"
+        }
+       ]
+      },
+      "checks": {
+       "valid": true,
+       "error": null,
+       "samples": {
+        "people-first": [
+         "Jal",
+         "Ro",
+         "Ch",
+         "Vu",
+         "Jot",
+         "Kid",
+         "So",
+         "Sh",
+         "Daf",
+         "Me",
+         "Ny",
+         "Dy",
+         "Nub",
+         "Fus",
+         "Bo",
+         "Duch",
+         "Tyj",
+         "Fyr",
+         "Luz",
+         "Nam",
+         "Shy",
+         "Fysh",
+         "Sin",
+         "Dem",
+         "Jan",
+         "Shug",
+         "Nik",
+         "Gar",
+         "Ki",
+         "Nim",
+         "Khi",
+         "Gof",
+         "Jer",
+         "Ko",
+         "Khach",
+         "Moj",
+         "Jesh",
+         "Nef",
+         "Kig",
+         "Chesh",
+         "Juf",
+         "Fe",
+         "Lif",
+         "Re",
+         "Ku",
+         "Tym",
+         "Bif",
+         "Rat",
+         "Za",
+         "Chob"
+        ],
+        "people-nickname": [
+         "Vakh",
+         "Munid",
+         "Tfi",
+         "Zysh",
+         "Rnun",
+         "Kher",
+         "Laj",
+         "Bfa",
+         "Shyb",
+         "Vyn",
+         "Gik",
+         "Sef",
+         "Shni",
+         "Nza",
+         "Rel",
+         "Rys",
+         "Luchur",
+         "Larish",
+         "Bej",
+         "Kilon",
+         "Bsi",
+         "Duz",
+         "Sho",
+         "Khij",
+         "Geb",
+         "Kyrem",
+         "Lemum",
+         "Gok",
+         "Rog",
+         "Nysh",
+         "Bchis",
+         "Chat",
+         "Vun",
+         "Nny",
+         "Dich",
+         "Jakid",
+         "Sur",
+         "Litog",
+         "Khgev",
+         "Chnuz",
+         "Rych",
+         "Bedog",
+         "Nisor",
+         "Fofin",
+         "Visir",
+         "Zochib",
+         "Shush",
+         "Bydub",
+         "Fak",
+         "Rar"
+        ],
+        "people-full": [
+         "Msagshi",
+         "Dmifujve",
+         "Gtekhtnynko",
+         "Vaknfa",
+         "Lokegor",
+         "Jytge",
+         "Fazukes",
+         "Zkinbasjvo",
+         "Bnykhrseme",
+         "Khnade",
+         "Zatyzen",
+         "Rufesham",
+         "Lgijshsho",
+         "Khufdi",
+         "Nukkmekmy",
+         "Matoz",
+         "Nkhidjofja",
+         "Dysabshe",
+         "Rytyshvy",
+         "Shonfe",
+         "Bnanjo",
+         "Rlyfsachmo",
+         "Bchinju",
+         "Zkyshshni",
+         "Rojvfygro",
+         "Bzuchshybvy",
+         "Tnytvagddi",
+         "Zurires",
+         "Kfudmrazsho",
+         "Nvonfos",
+         "Chelushosh",
+         "Rochibich",
+         "Sozyr",
+         "Nekyrvkhi",
+         "Zmezy",
+         "Rozrik",
+         "Gelmyzde",
+         "Fydytu",
+         "Dakhokyf",
+         "Ftakasju",
+         "Zajenul",
+         "Suchokyb",
+         "Zraninmo",
+         "Gorochym",
+         "Gshugshir",
+         "Shodegyz",
+         "Chakhebab",
+         "Lekuveg",
+         "Lrytvi",
+         "Jeleror"
+        ],
+        "place-short": [
+         "Khaz",
+         "Lo",
+         "Mash",
+         "Sal",
+         "Fu",
+         "Shur",
+         "Jul",
+         "Lot",
+         "Kov",
+         "Ch",
+         "Tym",
+         "Chad",
+         "Sav",
+         "Vu",
+         "Ne",
+         "Chul",
+         "Dy",
+         "Ni",
+         "Khan",
+         "Sha",
+         "Zym",
+         "Mis",
+         "Kesh",
+         "Mu",
+         "Za",
+         "Tu",
+         "Gu",
+         "Gi",
+         "She",
+         "Khim",
+         "Kho",
+         "Ra",
+         "Rig",
+         "Vo",
+         "Chit",
+         "Ri",
+         "Kyk",
+         "La",
+         "Go",
+         "Ry",
+         "Chy",
+         "Kh",
+         "Fon",
+         "Nam",
+         "Ka",
+         "Ji",
+         "Ly",
+         "Khyt",
+         "Chi",
+         "Si"
+        ],
+        "place-medium": [
+         "Bfolkby",
+         "Tnyse",
+         "Tubma",
+         "Khelysh",
+         "Gyjrash",
+         "Nashun",
+         "Bnaslal",
+         "Rodror",
+         "Nkhurda",
+         "Rnodkhyf",
+         "Bnesvi",
+         "Vzajshja",
+         "Zigut",
+         "Shitdu",
+         "Lakhyg",
+         "Nmabzji",
+         "Livur",
+         "Lelmu",
+         "Sholev",
+         "Chtedrnu",
+         "Kaggchis",
+         "Khbavnu",
+         "Shyfem",
+         "Kryrkkhe",
+         "Lechykh",
+         "Rinysh",
+         "Nbuzba",
+         "Resof",
+         "Zischi",
+         "Rimne",
+         "Kokry",
+         "Chchovro",
+         "Zzishash",
+         "Shimas",
+         "Shutbo",
+         "Koshshi",
+         "Gekor",
+         "Djarrkiv",
+         "Khijul",
+         "Ronub",
+         "Nguzek",
+         "Vuchin",
+         "Rchoge",
+         "Dufda",
+         "Jekfe",
+         "Zerak",
+         "Narkhba",
+         "Shabyr",
+         "Naroz",
+         "Sasyn"
+        ],
+        "place-long": [
+         "Nchyrjlagus",
+         "Ruvutoluz",
+         "Vechjizzsaf",
+         "Migortyn",
+         "Ginyridyd",
+         "Tkhuglaslrug",
+         "Nsemorle",
+         "Fnashsobnorshki",
+         "Bundbultnyk",
+         "Fnimkhyrrkhotmu",
+         "Jytyrynan",
+         "Nychjysjvashne",
+         "Byruchyjar",
+         "Znitetkav",
+         "Nynunenom",
+         "Snebzattchomku",
+         "Mozvfojzi",
+         "Fbevkhuvrgo",
+         "Jovyjyguch",
+         "Sofnfebnur",
+         "Nykhevijyl",
+         "Shrybgziklerra",
+         "Fakhuzzech",
+         "Bjulnjunchuvza",
+         "Makhrelse",
+         "Rurukhebud",
+         "Reranchyd",
+         "Geshelmfonme",
+         "Ttatsijnyt",
+         "Fgerbavir",
+         "Djosnismnenjy",
+         "Fedoribab",
+         "Nekhenorim",
+         "Jilychevyv",
+         "Rujchzenobno",
+         "Zrybdnuvfavi",
+         "Nkejzetrygu",
+         "Barilosyz",
+         "Lochimon",
+         "Shibukhazuv",
+         "Bivjenof",
+         "Zdizlydib",
+         "Chchenyfnig",
+         "Sherydediz",
+         "Rshunrikhdruz",
+         "Memchambos",
+         "Khtavbovkykte",
+         "Sijijejon",
+         "Mvyksarmvodrfu",
+         "Moralra"
+        ],
+        "place-suffix": [
+         "-grad",
+         "-mir",
+         "-noye",
+         "-vost",
+         "-khol"
+        ]
+       },
+       "dictionary_fit": 0.5909090909090909,
+       "real_hits": [
+        "Rig",
+        "-mir",
+        "mir",
+        "gory",
+        "les",
+        "pol",
+        "kam",
+        "otets",
+        "mat",
+        "syn",
+        "doch",
+        "brat",
+        "sestra",
+        "volk",
+        "sokol",
+        "zima",
+        "leto",
+        "lyubov"
+       ]
+      },
+      "jargon_in_language": []
+     }
+    ]
+   },
+   "calls": 15,
+   "small_jobs": {
+    "definitions": {
+     "names": [
+      "Tugzh-el",
+      "Shazga-sikhd",
+      "Mzyrthe-marsh",
+      "Zugsh-or",
+      "Rromga-thigf",
+      "Chizf-im",
+      "Lochsh-or",
+      "Folsh-or",
+      "Thazzh-um",
+      "Sh-odga-jant"
+     ],
+     "reply": {
+      "definitions": {
+       "Tugzh-el": "Named after the ancient Ruskalan word 'tugzh,' meaning 'iron,' and 'el,' meaning 'river' — literally 'Iron River,' the name of a man said to have lived along the frozen waterway where iron ore was first smelted in the northern provinces.",
+       "Shazga-sikhd": "Built from 'shazga,' meaning 'hawk,' and 'sikhd,' meaning 'stone-cutter' — a surname meaning 'hawk stone-cutter,' traditionally given to families of skilled masons who carved the great granite monuments of old Ruskalan.",
+       "Mzyrthe-marsh": "Derived from 'mzyr,' meaning 'marshland,' and 'the,' an archaic possessive particle — a name meaning 'of the marsh,' originally given to those born or raised in the boggy lowlands south of the Greylake region.",
+       "Zugsh-or": "Composed of 'zugsh,' meaning 'gray,' and 'or,' meaning 'mountain' — literally 'Gray Mountain,' a name given to settlers who were among the first to build homes on the slopes of Mount Ashkara, whose peaks are perpetually shrouded in mist.",
+       "Rromga-thigf": "From 'rromga,' meaning 'journey' or 'road,' and 'thigf,' meaning 'keeper' or 'warden' — a name meaning 'road keeper,' traditionally held by families responsible for maintaining the old trade routes through the mountain passes.",
+       "Chizf-im": "Built from 'chizf,' meaning 'sharp' or 'keen,' and 'im,' an honorific particle meaning 'the one who' — a name meaning 'the one who is sharp,' given to warriors or strategists renowned for their cunning and precision in battle.",
+       "Lochsh-or": "Derived from 'lochsh,' meaning 'silence' or 'stillness,' and 'or,' meaning 'mountain' — literally 'Silence Mountain,' a name given to a hermit who withdrew to live alone on a remote peak and was said to never speak a word for ten years.",
+       "Folsh-or": "From 'folsh,' meaning 'deep' or 'profound,' and 'or,' meaning 'mountain' — literally 'Deep Mountain,' a name given to miners who ventured into the deepest caverns beneath Mount Kordal, where the tunnels were said to reach the bones of the earth.",
+       "Thazzh-um": "Composed of 'thazzh,' meaning 'wrath' or 'fury,' and 'um,' meaning 'son' or 'child' — a name meaning 'son of fury,' given to a warrior born during a great battle and believed to carry the spirit of vengeance from his mother's side.",
+       "Sh-odga-jant": "Built from 'sh,' meaning 'the,' 'odga,' meaning 'sword,' and 'jant,' meaning 'bearer' or 'carrier' — a name meaning 'the sword-bearer,' an honorific title given to the chief knight or champion of a Ruskalan lord, passed down through generations."
+      }
+     }
+    },
+    "pick": {
+     "names": [
+      "Tuchr-or",
+      "Zh-ufzy-lizhs",
+      "Shodr-ir",
+      "Gr-khuzhlu",
+      "Dojru-zashr",
+      "Jansh-im",
+      "Dushj-on",
+      "Mifdu-rakth",
+      "Dr-rolry",
+      "Zh-ojma-jymf",
+      "Litkh-or",
+      "Zh-anru-rukhk",
+      "Sh-ulzy-nethr",
+      "Gr-thokhlo",
+      "Gr-themshu",
+      "Zushshi-zushl",
+      "Llezso-risd",
+      "Khilj-el",
+      "Sl-zigla",
+      "Toshre-rikzh"
+     ],
+     "reply": {
+      "pick": "Dushj-on",
+      "why": "It has the familiar Ruskalan pattern of hard consonants and shifted vowels, and 'Dush' echoes the word 'dusha' (soul) from the dictionary, fitting a grand capital city that would carry deep cultural and spiritual significance in a northern tsardom."
+     },
+     "pick_in_candidates": true
+    },
+    "coin": {
+     "reply": {
+      "name": "Svobodnaya Provinciya",
+      "words": [
+       {
+        "word": "Svobodnaya",
+        "meaning": "Free (feminine form, adjective)"
+       },
+       {
+        "word": "Provinciya",
+        "meaning": "Province"
+       }
+      ]
+     },
+     "coined_fit": {
+      "Svobodnaya": false,
+      "Provinciya": false
+     }
+    }
+   }
+  }
+ }
+}

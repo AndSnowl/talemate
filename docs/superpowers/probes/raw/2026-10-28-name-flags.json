@@ -1,0 +1,802 @@
+{
+ "runs": {
+  "skyfall": {
+   "model": "koboldcpp/Skyfall-31B-v4.2-i1-Q4_K_M",
+   "baseline_model": "Skyfall-31B-v4.2-i1-Q4_K_M",
+   "baseline_calls": [
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nTsardom of Moscavia, a cold northern tsardom of owl-folk\n\nPrompt hint, picked by the owner: For a nation, consider its rulers and how it is governed, its laws, its military, its regions, cities and borders, and its history. Write what fits the prompt and the world; leave out what doesn't.\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"name\": \"Tsardom of Moscavia\", \"aka\": [{\"name\": \"Moscavia\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"tsardom\", \"facts\": [{\"category\": \"description\", \"text\": \"A vast northern kingdom ruled by owl-folk, stretching across frozen forests, wind-swept tundra, and the shores of the Grey Sea.\"}, {\"category\": \"description\", \"text\": \"Its landscape is dominated by boreal forests of black spruce and birch, frozen rivers, and permafrost that begins barely a foot beneath the soil in the northern reaches.\"}, {\"category\": \"law\", \"text\": \"The Tsar rules by divine right conferred by the Church of the Pale Light, which teaches that the owl-folk were chosen by the Eternal Frost to govern the northern lands.\"}, {\"category\": \"law\", \"text\": \"All citizens, including non-owl-folk subjects, must observe the Night Vigils — prayers held during the longest winter darkness — or face fines up to six months' wages.\"}, {\"category\": \"general\", \"text\": \"The capital city is Velikograd, built on a series of low granite hills along the River Kholoda, where the river does not freeze solid even in the harshest winters due to geothermal springs.\"}, {\"category\": \"general\", \"text\": \"The military is organized into the Frost Guard, a professional army of owl-folk soldiers trained from childhood, supplemented by levies from subject human and beast-folk provinces.\"}, {\"category\": \"general\", \"text\": \"The Frost Guard numbers approximately twelve thousand year-round, with another eight thousand available as seasonal levies.\"}, {\"category\": \"history\", \"text\": \"The tsardom was founded in the year 412 when Tsar Ihor I united the warring owl-kins of the north under a single banner after the Battle of Ashfall Plain.\"}, {\"category\": \"history\", \"text\": \"In the year 783, the Second Tsar Dmitr the Ironwroth expanded Moscavia's borders southward to the Amber Line, conquering human settlements and absorbing their populations as subjects.\"}, {\"category\": \"history\", \"text\": \"The current Tsar, Aleksandr III, ascended the throne in the year 987 following the sudden death of his predecessor, Tsar Volodymyr II, under circumstances that remain officially unexplained.\"}, {\"category\": \"general\", \"text\": \"The economy relies on fur trading, iron smithing, and the cultivation of hardy grains like winter rye and buckwheat in the southern farming belt.\"}, {\"category\": \"general\", \"text\": \"Owl-folk in Moscavia are divided into the Highborn — those of pure owl descent — and the Mixedblood, who have owl and human ancestry; Mixedblood citizens face restrictions on land ownership and military rank.\"}], \"names\": [{\"name\": \"Velikograd\", \"kind\": \"place\", \"tag\": \"city\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"River Kholoda\", \"kind\": \"place\", \"tag\": \"river\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Frost Guard\", \"kind\": \"item\", \"tag\": \"military\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Church of the Pale Light\", \"kind\": \"lore\", \"tag\": \"faith\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Eternal Frost\", \"kind\": \"lore\", \"tag\": \"deity\", \"in\": \"Church of the Pale Light\", \"aka\": []}, {\"name\": \"Ihor I\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Battle of Ashfall Plain\", \"kind\": \"event\", \"tag\": \"historical\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Dmitr the Ironwroth\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Amber Line\", \"kind\": \"place\", \"tag\": \"border\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Aleksandr III\", \"kind\": \"character\", \"tag\": \"ruler\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Volodymyr II\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Highborn\", \"kind\": \"lore\", \"tag\": \"social class\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}, {\"name\": \"Mixedblood\", \"kind\": \"lore\", \"tag\": \"social class\", \"in\": \"Tsardom of Moscavia\", \"aka\": []}]}",
+     "seconds": 32.7
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nTsardom of Moscavia, a cold northern tsardom of owl-folk\n\nPrompt hint, picked by the owner: For a nation, consider its rulers and how it is governed, its laws, its military, its regions, cities and borders, and its history. Write what fits the prompt and the world; leave out what doesn't.\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": "   \"name\": \"Tsardom of Moscavia\",\n    \"aka\": [\n        {\"name\": \"Moscavia\", \"tag\": \"common\", \"everyday\": true},\n        {\"name\": \"The Northern Throne\", \"tag\": \"common\", \"everyday\": false}\n    ],\n    \"tag\": \"nation\",\n    \"facts\": [\n        {\"category\": \"description\", \"text\": \"The Tsardom of Moscavia is a northern kingdom ruled by owl-folk, a civilization that rose to dominance through its mastery of cold-weather warfare and deep-forest diplomacy.\", \"since\": null},\n        {\"category\": \"general\", \"text\": \"The owl-folk of Moscavia are tall, broad-shouldered humanoids with large, forward-facing eyes and feathered head-tufts that distinguish their clans.\"},\n        {\"category\": \"general\", \"text\": \"Moscavia's territory stretches from the frozen coast of the Northern Sea inland to the Great Pine Forest, with borders contested by the neighboring Kingdom of Valdmark to the west and the free city-states of the Amber Coast to the south.\"},\n        {\"category\": \"law\", \"text\": \"The Tsardom is governed under the *Zakonnik*, the Code of Feathers, a legal tradition dating to the founding of the first owl-folk settlements around 500.\"},\n        {\"category\": \"law\", \"text\": \"Under the Zakonnik, all citizens must present their clan-feather token when entering a town or market, and those who cannot are deemed 'unclanned' — a status that strips them of most legal rights.\"},\n        {\"category\": \"history\", \"text\": \"The current ruling dynasty, House Vostrik, seized the throne in 942 after the Battle of Frosthollow, in which Tsarina Yelena Vostrik personally led a cavalry charge that shattered the old aristocratic guard.\"},\n        {\"category\": \"history\", \"text\": \"Moscavia's capital, Velikgrad, sits on a series of terraced hills overlooking the River Kholodnaya, its stone towers wrapped in seasonal frost for half the year.\"},\n        {\"category\": \"military\", \"text\": \"The Moscavian military is built around the *Sokoly* (Falcons), elite heavy cavalry riders who train from childhood and wear armor fashioned from hardened owl-bone plates.\"},\n        {\"category\": \"military\", \"text\": \"The standing army numbers roughly 12,000 in peacetime, supplemented in winter campaigns by levied militia from the forest settlements, who know the frozen terrain intimately.\"},\n        {\"category\": \"general\", \"text\": \"The economy depends on fur trading, iron mining from the mountains of the northern interior, and the cultivation of hardy grain varieties in the southern river valleys.\"},\n        {\"category\": \"general\", \"text\": \"Owl-folk society is organized into clan-nests, each led by an elder called a *gnezdo-vozhd* (nest-lord), who holds judicial authority over domestic disputes within the clan.\"},\n        {\"category\": \"history\", \"text\": \"In the year 1000, Moscavia faces a fragile peace with Valdmark following the Treaty of Ashfield, signed only two years prior, though border skirmishes continue along the frozen river passes.\"}\n    ],\n    \"names\": [\n        {\"name\": \"Yelena Vostrik\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"Tsardom of Moscavia\", \"aka\": [\"Yelena the Iron\", \"Tsarina Yelena\"]},\n        {\"name\": \"House Vostrik\", \"kind\": \"lore\", \"tag\": \"dynasty\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n        {\"name\": \"Zakonnik\", \"kind\": \"lore\", \"tag\": \"law\", \"in\": \"Tsardom of Moscavia\", \"aka\": [\"Code of Feathers\"]},\n        {\"name\": \"Velikgrad\", \"kind\": \"place\", \"tag\": \"city\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n        {\"name\": \"River Kholodnaya\", \"kind\": \"place\", \"tag\": \"river\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n        {\"name\": \"Sokoly\", \"kind\": \"lore\", \"tag\": \"military order\", \"in\": \"Tsardom of Moscavia\", \"aka\": [\"The Falcons\"]},\n        {\"name\": \"Kingdom of Valdmark\", \"kind\": \"place\", \"tag\": \"nation\", \"in\": null, \"aka\": []},\n        {\"name\": \"Amber Coast\", \"kind\": \"place\", \"tag\": \"region\", \"in\": null, \"aka\": []},\n        {\"name\": \"Great Pine Forest\", \"kind\": \"place\", \"tag\": \"forest\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n        {\"name\": \"Treaty of Ashfield\", \"kind\": \"event\", \"tag\": \"treaty\", \"in\": \"Tsardom of Moscavia\", \"aka\": []},\n        {\"name\": \"gnezdo-vozhd\", \"kind\": \"lore\", \"tag\": \"title\", \"in\": \"Tsardom of Moscavia\", \"aka\": [\"nest-lord\"]}\n    ]\n}",
+     "seconds": 33.3
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nthe capital of a cold northern tsardom of owl-folk\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": "  \"name\": \"Vostokgrad\",  \"aka\": [{\"name\": \"Owl's Crown\", \"tag\": \"common\", \"everyday\": true}],  \"tag\": \"capital city\",  \"facts\": [    {\"category\": \"description\", \"text\": \"Vostokgrad sits at the confluence of the Shelnova River and the Frostvein, nestled between two ancient glacial ridges on the northern edge of the Tsardom of Velikhor.\", \"since\": null},    {\"category\": \"description\", \"text\": \"The city is built from pale grey stone quarried from the surrounding mountains, with rooftops of dark slate thatch and heavy timber beams blackened by centuries of wind-driven frost.\", \"since\": null},    {\"category\": \"general\", \"text\": \"Vostokgrad has a population of roughly forty thousand souls, the vast majority of whom are owl-folk — tall, sharp-featured beings with large luminous eyes adapted for the long polar twilights.\", \"since\": 1000},    {\"category\": \"general\", \"text\": \"The city is divided into seven districts arranged in concentric rings around the Tsar's palace, each district named for a constellation visible in the northern sky.\", \"since\": null},    {\"category\": \"history\", \"text\": \"Founded in the year 342 by Tsar Irina I of Velikhor, Vostokgrad replaced the older settlement of Kholodnaya as the capital after the Shelnova River froze solid for three consecutive winters, allowing year-round trade.\", \"since\": 342},    {\"category\": \"law\", \"text\": \"The Tsar's Court of Feathers governs the city, a council of twelve senior owl-folk nobles who adjudicate disputes and enforce the Code of Frost, the tsardom's legal foundation.\", \"since\": 342},    {\"category\": \"general\", \"text\": \"The Great Owl Lantern in the city's central square burns year-round with pale blue flame, a perpetual beacon visible for miles across the frozen plains — a symbol of the tsardom's vigilance.\", \"since\": 611},    {\"category\": \"general\", \"text\": \"Vostokgrad's market district, known as the Maw, is open only during daylight hours in winter and runs through the night in summer, when the sun does not set for weeks.\", \"since\": null},    {\"category\": \"history\", \"text\": \"In the year 847, the city survived the Long Siege of Vostokgrad, in which the southern kingdom of Ashenmere blockaded the Frostvein for fourteen months before retreating due to a devastating blizzard.\", \"since\": 847},    {\"category\": \"general\", \"text\": \"The city's most famous landmark is the Spire of Listening, a slender tower of white stone rising from the palace grounds, said to amplify the hearing of whoever stands at its peak.\", \"since\": null},    {\"category\": \"general\", \"text\": \"Owl-folk children in Vostokgrad begin formal education at the age of six in one of the city's nine nest-schools, where they learn reading, arithmetic, hunting lore, and the history of the tsardom.\", \"since\": 703},    {\"category\": \"general\", \"text\": \"The city's streets are narrow and winding to shelter residents from the relentless northern winds, with elevated walkways connecting the upper floors of buildings so that citizens can travel between homes without stepping outside.\", \"since\": null}  ],  \"names\": [    {\"name\": \"Tsardom of Velikhor\", \"kind\": \"place\", \"tag\": \"realm\", \"in\": null, \"aka\": []},    {\"name\": \"Shelnova River\", \"kind\": \"place\", \"tag\": \"river\", \"in\": null, \"aka\": []},    {\"name\": \"Frostvein\", \"kind\": \"place\", \"tag\": \"river\", \"in\": null, \"aka\": []},    {\"name\": \"Tsar Irina I\", \"kind\": \"character\", \"tag\": \"ruler\", \"in\": \"Tsardom of Velikhor\", \"aka\": []},    {\"name\": \"Kholodnaya\", \"kind\": \"place\", \"tag\": \"former settlement\", \"in\": null, \"aka\": []},    {\"name\": \"Tsar's Court of Feathers\", \"kind\": \"institution\", \"tag\": \"government\", \"in\": \"Vostokgrad\", \"aka\": []},    {\"name\": \"Code of Frost\", \"kind\": \"lore\", \"tag\": \"legal code\", \"in\": \"Tsardom of Velikhor\", \"aka\": []},    {\"name\": \"Great Owl Lantern\", \"kind\": \"item\", \"tag\": \"landmark\", \"in\": \"Vostokgrad\", \"aka\": []},    {\"name\": \"The Maw\", \"kind\": \"place\", \"tag\": \"market district\", \"in\": \"Vostokgrad\", \"aka\": []},    {\"name\": \"Kingdom of Ashenmere\", \"kind\": \"place\", \"tag\": \"foreign realm\", \"in\": null, \"aka\": []},    {\"name\": \"Long Siege of Vostokgrad\", \"kind\": \"event\", \"tag\": \"siege\", \"in\": \"Vostokgrad\", \"aka\": []},    {\"name\": \"Spire of Listening\", \"kind\": \"place\", \"tag\": \"landmark\", \"in\": \"Vostokgrad\", \"aka\": []},    {\"name\": \"Owl-folk\", \"kind\": \"species\", \"tag\": \"race\", \"in\": null, \"aka\": []}  ]}",
+     "seconds": 35.9
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nthe capital of a cold northern tsardom of owl-folk\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": "  \"name\": \"Velgrad\",  \"aka\": [    {\"name\": \"The Osprey's Crown\", \"tag\": \"proper\", \"everyday\": false}  ],  \"tag\": \"capital, city\",  \"facts\": [    {      \"category\": \"description\",      \"text\": \"Velgrad sits on the frozen shores of Lake Nyorova in the northernmost reaches of the Tsardom of Morvask, surrounded by boreal forests of black spruce and birch whose branches sag under the weight of perpetual frost.\",      \"since\": null    },    {      \"category\": \"description\",      \"text\": \"The city is built in concentric rings of pale grey stone, its outer districts nestled among hot springs that steam through the snow, while its inner citadel rises on a basalt outcrop above the lake, crowned by the Tsar's palace of carved ice and timber.\",      \"since\": null    },    {      \"category\": \"general\",      \"text\": \"Velgrad is the seat of Tsar Oshen III of the House of Morvask, ruler of the northern tsardom since 987, and home to the Great Parliament of Owl-Folk, which convenes in the Hall of Feathers each spring.\",      \"since\": 987    },    {      \"category\": \"general\",      \"text\": \"The city's population is roughly 40,000, making it the largest settlement in the tsardom, though it is dwarfed by the vastness of the uninhabited northern wilderness that surrounds it.\",      \"since\": 1000    },    {      \"category\": \"history\",      \"text\": \"Velgrad was founded in 612 by the first Tsar of Morvask, Aldric the Watcher, on the site of an ancient owl-folk nesting ground where great horned owls had gathered for millennia before any settlement existed.\",      \"since\": 612    },    {      \"category\": \"law\",      \"text\": \"By tsardom law, every household in Velgrad must keep a hearthfire burning at all times during winter months — January through April — as a communal measure against the lethal cold, and fire wardens patrol the streets to ensure compliance.\",      \"since\": 745    },    {      \"category\": \"general\",      \"text\": \"The streets of Velgrad are narrow and winding in the older quarters but broaden into grand avenues near the citadel, lined with torches of everburning oil shale that cast a flickering amber light over the snow-covered cobblestones.\",      \"since\": null    },    {      \"category\": \"general\",      \"text\": \"Trade in Velgrad centers on furs, salted fish, ironwork, and the tsardom's famous owl-folk glass, a crystalline and remarkably clear glassware produced from silica deposits found only in the lake's shallows.\",      \"since\": null    },    {      \"category\": \"general\",      \"text\": \"The city's most famous landmark is the Watchtower of Aldric, a 120-foot spire of black stone at the citadel's edge, from whose summit an owl can see the northern lights dancing across Lake Nyorova on clear nights.\",      \"since\": 612    },    {      \"category\": \"general\",      \"text\": \"Velgrad has no walls in the traditional sense; instead, a series of deep trenches filled with slow-moving hot water encircles the city, keeping both invaders and snow at bay, and earning the city its common nickname among southern traders: 'The Steaming Fortress.'\",      \"since\": 823    },    {      \"category\": \"custom\",      \"text\": \"On the first day of January each year, the Tsar stands at the edge of the citadel and releases a great horned owl into the winter sky as a symbol of the tsardom's vigilance, and the city observes a full day of silence afterward.\",      \"since\": 612    },    {      \"category\": \"general\",      \"text\": \"The climate of Velgrad is severe: temperatures routinely drop below -40°F in January and February, and the growing season is so short that nearly all food is stored or imported during the summer months of June through August.\",      \"since\": null    }  ],  \"names\": [    {      \"name\": \"Tsardom of Morvask\",      \"kind\": \"place\",      \"tag\": \"realm\",      \"in\": null,      \"aka\": []    },    {      \"name\": \"Lake Nyorova\",      \"kind\": \"place\",      \"tag\": \"lake\",      \"in\": null,      \"aka\": []    },    {      \"name\": \"Tsar Oshen III\",      \"kind\": \"character\",      \"tag\": \"ruler\",      \"in\": \"Tsardom of Morvask\",      \"aka\": []    },    {      \"name\": \"House of Morvask\",      \"kind\": \"lore\",      \"tag\": \"dynasty\",      \"in\": \"Tsardom of Morvask\",      \"aka\": []    },    {      \"name\": \"Great Parliament of Owl-Folk\",      \"kind\": \"lore\",      \"tag\": \"institution\",      \"in\": \"Tsardom of Morvask\",      \"aka\": [{ \"name\": \"The Parliament\", \"tag\": \"common\" }]    },    {      \"name\": \"Hall of Feathers\",      \"kind\": \"place\",      \"tag\": \"building\",      \"in\": \"Velgrad\",      \"aka\": []    },    {      \"name\": \"Tsar Aldric the Watcher\",      \"kind\": \"character\",      \"tag\": \"historical figure\",      \"in\": \"House of Morvask\",      \"aka\": [{ \"name\": \"Aldric I\", \"tag\": \"regnal name\" }]    },    {      \"name\": \"Watchtower of Aldric\",      \"kind\": \"place\",      \"tag\": \"landmark\",      \"in\": \"Velgrad\",      \"aka\": [{ \"name\": \"The Watchtower\", \"tag\": \"common\" }]    }  ]}",
+     "seconds": 38.8
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nthe countries that border a cold northern tsardom of owl-folk\n\nPrompt hint, picked by the owner: For a nation, consider its rulers and how it is governed, its laws, its military, its regions, cities and borders, and its history. Write what fits the prompt and the world; leave out what doesn't.\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"name\": \"The Tsardom of Verengrad\", \"aka\": [{\"name\": \"Verengrad\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"nation\", \"facts\": [{\"category\": \"description\", \"text\": \"The Tsardom of Verengrad is a cold northern realm ruled by the owl-folk, a tall and pale people with large, round eyes adapted to perpetual twilight and long winters.\", \"since\": null}, {\"category\": \"description\", \"text\": \"The land stretches across the frozen northern reaches of the continent, bordered by towering glaciers to the north and vast boreal forests to the south.\", \"since\": null}, {\"category\": \"description\", \"text\": \"The capital city, also called Verengrad, sits on a great river delta where the Kholova meets the Greying Sea, its stone walls draped in moss and rime.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The tsardom is governed by a hereditary tsar or tsarina who rules with the counsel of the Nocturnal Court, a gathering of noble house leaders and senior owl-elders.\", \"since\": null}, {\"category\": \"law\", \"text\": \"Verengradian law is codified in the Frostledger, a massive stone compendium kept in the capital's Great Hall, and enforces strict hierarchies among the owl-folk's clans.\", \"since\": null}, {\"category\": \"history\", \"text\": \"The tsardom was founded in the year 412 when the owl-folk united under Tsar Aldric the Pale after centuries of clan warfare across the frozen north.\", \"since\": 412}, {\"category\": \"history\", \"text\": \"For most of its existence, Verengrad has maintained a policy of isolation from the warmer southern kingdoms, trading only through tightly controlled ice-harbor ports.\", \"since\": 412}, {\"category\": \"military\", \"text\": \"The tsardom's military, known as the Frostward, consists of heavily armored infantry and elite skirmisher units called the Watching Eye, trained to navigate blizzards and darkness.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The owl-folk sustain themselves through subsistence farming, ice-fishing, and the mining of rare minerals beneath the permafrost, particularly moonstone and black iron.\", \"since\": null}, {\"category\": \"general\", \"text\": \"Religious life in Verengrad centers on the worship of Ulfren, the Great Owl of Winter, whose temples rise in every major settlement as soaring wooden spires carved with thousands of feathered eyes.\", \"since\": null}, {\"category\": \"general\", \"text\": \"In the year 1000, the current tsarina is Yelena the Watchful, a stern and long-lived ruler who has governed for forty-three years and shows no sign of yielding the throne.\", \"since\": 957}, {\"category\": \"general\", \"text\": \"Verengrad's borders have remained largely stable for two centuries, though tensions simmer with its southern and eastern neighbors over trade routes and territorial claims to the uninhabited Frostmere wastes.\", \"since\": 800}], \"names\": [{\"name\": \"The Nocturnal Court\", \"kind\": \"institution\", \"tag\": \"lore\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"The Frostledger\", \"kind\": \"item\", \"tag\": \"lore\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"The Frostward\", \"kind\": \"military unit\", \"tag\": \"military\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"The Watching Eye\", \"kind\": \"military unit\", \"tag\": \"military\", \"in\": \"The Frostward\", \"aka\": []}, {\"name\": \"Ulfren\", \"kind\": \"lore\", \"tag\": \"deity\", \"in\": null, \"aka\": []}, {\"name\": \"Yelena the Watchful\", \"kind\": \"character\", \"tag\": \"ruler\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"Aldric the Pale\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"Kholova\", \"kind\": \"place\", \"tag\": \"river\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"The Greying Sea\", \"kind\": \"place\", \"tag\": \"sea\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}, {\"name\": \"Frostmere wastes\", \"kind\": \"place\", \"tag\": \"terrain\", \"in\": \"The Tsardom of Verengrad\", \"aka\": []}] }",
+     "seconds": 31.7
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nthe countries that border a cold northern tsardom of owl-folk\n\nPrompt hint, picked by the owner: For a nation, consider its rulers and how it is governed, its laws, its military, its regions, cities and borders, and its history. Write what fits the prompt and the world; leave out what doesn't.\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"name\": \"Tsardom of the Owlfolk\", \"aka\": [], \"tag\": \"country\", \"facts\": [ { \"category\": \"description\", \"text\": \"A cold northern tsardom ruled by owl-folk, a civilization of anthropomorphic owls who govern themselves under a tsar and a council of elders called the Hooting Court.\", \"since\": \"1000\" }, { \"category\": \"general\", \"text\": \"The owl-folk are tall, feathered beings with large round eyes and sharp talons, capable of both flight and bipedal locomotion on the ground.\" }, { \"category\": \"law\", \"text\": \"The Tsardom is governed by a tsar who rules alongside the Hooting Court, a council of senior owl-folk who debate and pass laws through consensus, with the tsar holding final authority in times of dispute.\" }, { \"category\": \"history\", \"text\": \"The Tsardom was founded in 682 by the first Tsar, Voron I, who united the scattered owl clans of the northern frozen steppes into a single nation after the Battle of the Permafrost Fields.\" }, { \"category\": \"general\", \"text\": \"The military consists of the Talon Guard, an elite corps of warrior-owls trained in aerial combat and siege warfare, and the Frostwatch, a border patrol that monitors the long frontiers.\" }, { \"category\": \"general\", \"text\": \"The capital city is called Snegovorot, built on a series of cliffs overlooking the Frozen Strait, with towers and nest-halls carved into the rock face.\" }, { \"category\": \"general\", \"text\": \"The economy relies on hunting, fur trading, and the mining of rare minerals from the northern mountains, particularly moonstone and frost-iron.\" }, { \"category\": \"general\", \"text\": \"The owl-folk practice a religion called the Doctrine of the Long Night, which venerates the darkness of winter as a source of wisdom and holds that true knowledge is found only through patience and stillness.\" } ], \"names\": [ { \"name\": \"Voron I\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] }, { \"name\": \"Hooting Court\", \"kind\": \"lore\", \"tag\": \"institution\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] }, { \"name\": \"Talon Guard\", \"kind\": \"lore\", \"tag\": \"military\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] }, { \"name\": \"Frostwatch\", \"kind\": \"lore\", \"tag\": \"military\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] }, { \"name\": \"Snegovorot\", \"kind\": \"place\", \"tag\": \"city\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] }, { \"name\": \"Doctrine of the Long Night\", \"kind\": \"lore\", \"tag\": \"religion\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] }, { \"name\": \"Frozen Strait\", \"kind\": \"place\", \"tag\": \"body of water\", \"in\": \"Tsardom of the Owlfolk\", \"aka\": [] } ] }",
+     "seconds": 21.0
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new lore for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\na noble house of a cold northern tsardom of owl-folk\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"general\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the lore's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this lore itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this lore's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the lore (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this lore, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the lore.\n- \"tag\": one or two words for what the lore is, such as river, ruler, custom, institution, regiment, capital or doctrine. The tag is never the kind's own name (lore, event, place, …): say what sort of lore it is, such as custom, law, battle, festival.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"name\": \"House of Voronov\", \"aka\": [{\"name\": \"The Voronovs\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"noble house\", \"facts\": [{\"category\": \"general\", \"text\": \"The House of Voronov is a noble family of the Tsardom of Snezhana, a cold northern realm governed by owl-folk who value silence, vigilance, and the wisdom that comes from watching in darkness.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The family traces its lineage back to Aldric Voronov, a warrior-owl who led the defense of the Greymarch Pass during the Frost Rebellions of the year 743, earning his house a seat on the Tsar's Council of Feathers.\", \"since\": 743}, {\"category\": \"general\", \"text\": \"The Voronovs hold the title of Stewards of the Northern Watch, responsible for maintaining the chain of signal-tower roosts along Snezhana's border with the wild frozen wastes beyond the Ashpine Mountains.\", \"since\": 785}, {\"category\": \"general\", \"text\": \"Their ancestral seat is the fortress-hall of Kholodny Krest, built into the face of a granite cliff overlooking the frozen River Velika in the province of Morozsk.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The family crest depicts an owl in vigil atop a broken spear, with the motto 'We Do Not Sleep' inscribed beneath it in Old Snezhanian script.\", \"since\": null}, {\"category\": \"general\", \"text\": \"Voronov young are trained from infancy in the arts of long-range scouting, silent movement, and night navigation across frozen terrain, skills that set them apart from other noble houses who focus on cavalry or siegecraft.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The current head of the house is Lady Marfa Voronova, a sharp-eyed owl of sixty-three winters who earned renown during the Border Wars of 961 for holding the Velika crossing against a force three times her strength.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The Voronovs are known for their reserved and deliberate manner of speech; among owl-folk, they are considered the most measured and least inclined toward idle talk, a trait that has earned them both respect and the quiet mockery of rival houses.\", \"since\": null}, {\"category\": \"general\", \"text\": \"In the year 997, Lady Marfa negotiated a border treaty with the Free Companies of the Ashpine, securing safe passage for trade caravans through the mountains in exchange for annual tributes of iron and dried fish.\", \"since\": 997}, {\"category\": \"general\", \"text\": \"The house maintains a private library of over two hundred scrolls and bound tomes, focused on military strategy, weather-lore, and the natural history of the frozen north — one of the largest collections outside the Tsar's own archive in the capital.\", \"since\": 820}, {\"category\": \"general\", \"text\": \"Voronov owls are distinguished among their kind by their pale, almost silvery plumage, a trait that grants them natural camouflage in snow and ice, and which the family considers a mark of their ancient covenant with the winter itself.\", \"since\": null}, {\"category\": \"general\", \"text\": \"The house has a long-standing rivalry with House Solovyov, whose members contest the Voronov claim to the Northern Watch stewardship and have challenged them in council votes since the year 850 without success.\"}], \"names\": [{\"name\": \"Tsardom of Snezhana\", \"kind\": \"place\", \"tag\": \"realm\", \"in\": null, \"aka\": []}, {\"name\": \"Aldric Voronov\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"House of Voronov\", \"aka\": []}, {\"name\": \"Council of Feathers\", \"kind\": \"lore\", \"tag\": \"institution\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Greymarch Pass\", \"kind\": \"place\", \"tag\": \"pass\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Frost Rebellions\", \"kind\": \"event\", \"tag\": \"war\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Kholodny Krest\", \"kind\": \"place\", \"tag\": \"fortress\", \"in\": \"House of Voronov\", \"aka\": []}, {\"name\": \"River Velika\", \"kind\": \"place\", \"tag\": \"river\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Morozsk\", \"kind\": \"place\", \"tag\": \"province\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Ashpine Mountains\", \"kind\": \"place\", \"tag\": \"mountains\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Lady Marfa Voronova\", \"kind\": \"character\", \"tag\": \"noble\", \"in\": \"House of Voronov\", \"aka\": []}, {\"name\": \"Border Wars\", \"kind\": \"event\", \"tag\": \"war\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}, {\"name\": \"Free Companies of the Ashpine\", \"kind\": \"lore\", \"tag\": \"group\", \"in\": null, \"aka\": []}, {\"name\": \"House Solovyov\", \"kind\": \"lore\", \"tag\": \"noble house\", \"in\": \"Tsardom of Snezhana\", \"aka\": []}] }",
+     "seconds": 37.4
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new lore for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\na noble house of a cold northern tsardom of owl-folk\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"general\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the lore's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this lore itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this lore's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the lore (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this lore, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the lore.\n- \"tag\": one or two words for what the lore is, such as river, ruler, custom, institution, regiment, capital or doctrine. The tag is never the kind's own name (lore, event, place, …): say what sort of lore it is, such as custom, law, battle, festival.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": "  \n  \"name\": \"House of Voronov\",\n  \"aka\": [\n    {\n      \"name\": \"the Voronovs\",\n      \"tag\": \"common\",\n      \"everyday\": true\n    },\n    {\n      \"name\": \"the Owl House\",\n      \"tag\": \"common\",\n      \"everyday\": false\n    }\n  ],\n  \"tag\": \"noble house\",\n  \"facts\": [\n    {\n      \"category\": \"general\",\n      \"text\": \"House of Voronov is a noble house of the Tsardom of Velikhor, a cold northern realm ruled by the Tsar from the frozen capital of Novgrad.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The house takes its name from the great grey owl depicted on its shield, a bird sacred to the owl-folk of Velikhor, believed to be messengers between the living and the dead.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The Voronovs rose to prominence in the reign of Tsar Dmitri II by providing crucial military leadership during the Frostborn Campaigns against the southern Khaelid Khanate.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"Their seat is the fortress of Snegovaya Krepost, a towering stone keep built into the cliffs above the frozen river Vostok, in the northern province of Koldunya.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The current head of the house is Prince Aleksei Voronov, a shrewd diplomat and skilled warrior who serves as Lord Steward of the northern marches.\",\n      \"since\": 1000\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The Voronovs are known for their owl-folk heritage: every firstborn child of the house is said to be born with unnaturally large, luminous eyes and an intuitive sense for danger, traits they share with the owl-folk tribes of the northern wilderness.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"Their family motto is 'We Watch, We Wait, We Strike' — carved into the archway of Snegovaya Krepost above the main gate.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The Voronovs hold vast estates in Koldunya, including grain fields, hunting forests, and iron mines, making them one of the wealthiest houses in Velikhor.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"Prince Aleksei's eldest daughter, Yelena Voronova, is renowned across the tsardom for her skill in falconry and her sharp mind, and is often called 'the Owl's Eye.'\",\n      \"since\": 1000\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The house maintains a private library at Snegovaya Krepost containing rare texts on owl-folk shamanism, northern warfare, and the ancient history of Velikhor before the Tsars.\",\n      \"since\": 962\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"Every winter solstice, the Voronovs host the Pale Feast, a grand gathering where northern lords and owl-folk chieftains come together to forge alliances and settle disputes.\",\n      \"since\": 947\n    },\n    {\n      \"category\": \"general\",\n      \"text\": \"The Voronovs have a long-standing rivalry with House Chernyavsky, another powerful noble family of Velikhor, rooted in a territorial dispute over the iron mines of Koldunya that has never been fully resolved.\",\n      \"since\": 973\n    }\n  ],\n  \"names\": [\n    {\n      \"name\": \"Tsardom of Velikhor\",\n      \"kind\": \"place\",\n      \"tag\": \"tsardom\",\n      \"in\": null,\n      \"aka\": [\n        {\n          \"name\": \"Velikhor\",\n          \"tag\": \"common\",\n          \"everyday\": true\n        }\n      ]\n    },\n    {\n      \"name\": \"Novgrad\",\n      \"kind\": \"place\",\n      \"tag\": \"capital\",\n      \"in\": \"Tsardom of Velikhor\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Snegovaya Krepost\",\n      \"kind\": \"place\",\n      \"tag\": \"fortress\",\n      \"in\": \"Tsardom of Velikhor\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"River Vostok\",\n      \"kind\": \"place\",\n      \"tag\": \"river\",\n      \"in\": \"Tsardom of Velikhor\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Koldunya\",\n      \"kind\": \"place\",\n      \"tag\": \"province\",\n      \"in\": \"Tsardom of Velikhor\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Tsar Dmitri II\",\n      \"kind\": \"character\",\n      \"tag\": \"ruler\",\n      \"in\": \"Tsardom of Velikhor\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Khaelid Khanate\",\n      \"kind\": \"place\",\n      \"tag\": \"khanate\",\n      \"in\": null,\n      \"aka\": []\n    },\n    {\n      \"name\": \"Frostborn Campaigns\",\n      \"kind\": \"event\",\n      \"tag\": \"campaigns\",\n      \"in\": null,\n      \"aka\": []\n    },\n    {\n      \"name\": \"Prince Aleksei Voronov\",\n      \"kind\": \"character\",\n      \"tag\": \"nobleman\",\n      \"in\": \"House of Voronov\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Yelena Voronova\",\n      \"kind\": \"character\",\n      \"tag\": \"noblewoman\",\n      \"in\": \"House of Voronov\",\n      \"aka\": [\n        {\n          \"name\": \"the Owl's Eye\",\n          \"tag\": \"nickname\",\n          \"everyday\": false\n        }\n      ]\n    },\n    {\n      \"name\": \"House Chernyavsky\",\n      \"kind\": \"lore\",\n      \"tag\": \"noble house\",\n      \"in\": \"Tsardom of Velikhor\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Pale Feast\",\n      \"kind\": \"event\",\n      \"tag\": \"festival\",\n      \"in\": \"House of Voronov\",\n      \"aka\": []\n    },\n    {\n      \"name\": \"Owl-folk\",\n      \"kind\": \"species\",\n      \"tag\": \"race\",\n      \"in\": null,\n      \"aka\": [\n        {\n          \"name\": \"owl people\",\n          \"tag\": \"common\",\n          \"everyday\": true\n        }\n      ]\n    }\n  ]\n}",
+     "seconds": 44.6
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nthe great river that runs through a cold northern tsardom of owl-folk\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"name\": \"The Shivering Reach\", \"aka\": [{\"name\": \"Shivering Reach\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"river\", \"facts\": [{\"category\": \"description\", \"text\": \"The Shivering Reach is the great river that cuts through the heart of the Tsardom of Vostmark, flowing roughly south to north before emptying into the frozen Bay of Owls at the northern coast.\", \"since\": 1000}, {\"category\": \"general\", \"text\": \"Its waters are cold year-round, fed by snowmelt from the Greymane Mountains to the east and glacial runoff from the northern highlands, and even in midsummer the current carries enough chill to numb unprotected skin within minutes.\"}, {\"category\": \"general\", \"text\": \"The river is roughly forty leagues long within the borders of Vostmark, and its width varies from less than a league at its narrowest gorges to over three leagues at the broad Delta Marshes near its mouth.\"}, {\"category\": \"general\", \"text\": \"It serves as the primary commercial artery of the tsardom; barges and flatboats carry timber, salted fish, grain, and pelts between the interior provinces and the northern port cities.\"}, {\"category\": \"general\", \"text\": \"The river freezes over fully each winter, typically from late December through March, and during this time it becomes a road of ice used by sleighs and laden carts — a lifeline for trade when the waterway itself is impassable to boats.\"}, {\"category\": \"general\", \"text\": \"Along its banks sit the tsardom's most important settlements, including the capital city of Kholodnoye, the trading hub of Grebin, and the fortress town of Strazh on the upper reaches.\"}, {\"category\": \"general\", \"text\": \"The owl-folk of Vostmark consider the river sacred in origin, believing that the first owl-ancestor carved it into the earth with her talons during the Age of Making, and they leave offerings of dried fish at its banks during the Festival of First Frost each November.\"}, {\"category\": \"general\", \"text\": \"The river supports a unique ecology of cold-adapted creatures, including the pale-finned Shivering Reach trout, water-wolves that hunt in its icy shallows, and colonies of ice moss that glow faintly blue-green along the riverbed in winter.\"}, {\"category\": \"general\", \"text\": \"Feral otters — enormous, dark-furred beasts the size of hunting dogs — are common along the riverbanks and are both feared by fishermen and hunted for their thick pelts.\"}, {\"category\": \"general\", \"text\": \"The current of the Shivering Reach is deceptive and treacherous to navigate; the river has claimed hundreds of boats and thousands of lives over the centuries, and the owl-folk have a saying: 'The Reach gives passage to the bold and burial to the careless.'\"}, {\"category\": \"general\", \"text\": \"Bridges over the river are rare and strategically important, built primarily of stone and iron, and the tsardom maintains a garrison of bridge-wards at each crossing to prevent smuggling and unauthorized passage.\"}, {\"category\": \"general\", \"text\": \"In spring, the annual thaw causes catastrophic flooding along the lower reaches, and the owl-folk have developed an elaborate system of earthen dykes and sluice gates to manage the water, a feat of engineering overseen by the Riverwarden's Guild.\"}], \"names\": [{\"name\": \"Tsardom of Vostmark\", \"kind\": \"place\", \"tag\": \"realm\", \"in\": null, \"aka\": []}, {\"name\": \"Kholodnoye\", \"kind\": \"place\", \"tag\": \"city\", \"in\": \"Tsardom of Vostmark\", \"aka\": []}, {\"name\": \"Grebin\", \"kind\": \"place\", \"tag\": \"town\", \"in\": \"Tsardom of Vostmark\", \"aka\": []}, {\"name\": \"Strazh\", \"kind\": \"place\", \"tag\": \"town\", \"in\": \"Tsardom of Vostmark\", \"aka\": []}, {\"name\": \"Bay of Owls\", \"kind\": \"place\", \"tag\": \"bay\", \"in\": null, \"aka\": []}, {\"name\": \"Greymane Mountains\", \"kind\": \"place\", \"tag\": \"mountains\", \"in\": null, \"aka\": []}, {\"name\": \"Delta Marshes\", \"kind\": \"place\", \"tag\": \"marshes\", \"in\": \"Shivering Reach\", \"aka\": []}, {\"name\": \"Festival of First Frost\", \"kind\": \"event\", \"tag\": \"festival\", \"in\": \"Tsardom of Vostmark\", \"aka\": []}, {\"name\": \"Shivering Reach trout\", \"kind\": \"species\", \"tag\": \"fish\", \"in\": \"Shivering Reach\", \"aka\": []}, {\"name\": \"water-wolves\", \"kind\": \"species\", \"tag\": \"beast\", \"in\": \"Shivering Reach\", \"aka\": []}, {\"name\": \"ice moss\", \"kind\": \"species\", \"tag\": \"plant\", \"in\": \"Shivering Reach\", \"aka\": []}, {\"name\": \"Riverwarden's Guild\", \"kind\": \"lore\", \"tag\": \"guild\", \"in\": \"Tsardom of Vostmark\", \"aka\": []}, {\"name\": \"owl-folk\", \"kind\": \"race\", \"tag\": \"people\", \"in\": \"Tsardom of Vostmark\", \"aka\": []}, {\"name\": \"Age of Making\", \"kind\": \"lore\", \"tag\": \"era\", \"in\": null, \"aka\": []}] }",
+     "seconds": 36.6
+    },
+    {
+     "kind": "creative_instruction_3072",
+     "prompt": "## Task\nYou create a new place for a fantasy world from the owner's short prompt. Treat the prompt as intent, not a spec: invent plausible detail generously to fill it out, turning a rough idea into a fleshed-out one. Keep everything the owner wrote.\n\nKeep the facts consistent with each other and with the owner's prompt: an invented fact must never contradict the prompt or another fact.\n\nOwner's prompt:\nthe great river that runs through a cold northern tsardom of owl-folk\n\nThe world's calendar: it is now 1000, year 1000. The months are January, February, March, April, May, June, July, August, September, October, November, December.\n\n## Format\nReply with only one JSON object, shaped exactly like this example:\n{\"name\": \"...\", \"aka\": [{\"name\": \"...\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"...\", \"facts\": [{\"category\": \"description\", \"text\": \"One claim, in a full sentence.\", \"since\": \"YEAR\"}, {\"category\": \"general\", \"text\": \"Another claim.\"}], \"names\": [{\"name\": \"...\", \"kind\": \"place\", \"tag\": \"...\", \"in\": null, \"aka\": []}]}\n\n- \"name\": the place's name. Invent one if the prompt doesn't give it.\n- \"facts\": between 8 and 12 facts, one claim each. \"category\" is one of: description, history, law, general.\n- \"since\" is optional. Give it only when a fact started at a known time, and only as a year of this calendar, as a bare number no later than 1000; \"YEAR\" in the example stands for that number. Leave it out otherwise: never a phrase like \"childhood\" or \"ten years ago\".\n- Leave \"since\" out for an inherent trait that has always been true -- a species, the appearance someone is born with, a lifelong temperament -- rather than dating it to the present year.\n- \"aka\": other names for this place itself, if it has any, each {\"name\", \"tag\", \"everyday\"}. \"tag\" is \"proper\" for another formal name, or \"common\" for what people in the world actually call it day to day (a short form, a nickname). Set \"everyday\" true on the one common name people use most, false on the rest. \"name\" stays the most formal name. An empty list is fine.\n- \"names\": after the facts, every proper name your facts use, other than this place's own: people, places, peoples and species, named events, named groups and named objects, new or already in the world. Each is {\"name\", \"kind\", \"tag\", \"in\", \"aka\"}: \"name\" in full, as your facts write it; \"kind\" one of character, place, species, race, event, item, lore (a country, realm or city is a place; a faith, order, council, guild, culture, field of knowledge or magic, law, script or language is lore); \"tag\" what it is, as for the place (never \"proper\" or \"common\": those are only for other names); \"in\" the name of the entry it belongs in (this place, an entry listed above, or another of your names), or null; \"aka\" any other names your facts use for the same thing. Proper names only: never a description such as \"the postmaster\", \"a war\" or \"his mother\", nor a title on its own such as \"the Tsar\" or \"the High Bishop\", nor a people's adjective such as \"Moscavian\" on its own -- but \"Yelena\" in \"his mother Yelena\" is a name. An empty list is fine.\n- Only named things become entries. A role, rank or office (a harbour master, the keeper of the seals), a topic (grain tariffs, winter trade) or a practice without a proper name of its own (the evening bell, night sessions) is never one of the \"names\": it stays a fact of the place.\n- \"tag\": one or two words for what the place is, such as river, ruler, custom, institution, regiment, capital or doctrine.\n\nNo commentary, no markdown fences, just the JSON object.\n<|BOT|>{",
+     "response": " \"name\": \"The Shiverneck\", \"aka\": [{\"name\": \"Shiverneck River\", \"tag\": \"common\", \"everyday\": true}], \"tag\": \"river\", \"facts\": [{\"category\": \"description\", \"text\": \"The Shiverneck is the great river that bisects the northern tsardom of the Owl-folk, flowing roughly south to north through the heart of their territory before emptying into the Pale Strait.\", \"since\": 1000}, {\"category\": \"description\", \"text\": \"Its waters are frigid even in summer, fed by glacial melt from the Frostfang Mountains that form the southern border of the tsardom.\", \"since\": 1000}, {\"category\": \"description\", \"text\": \"The river is wide enough in its middle stretch to require ferries or ice bridges in winter, stretching up to a quarter mile across at its broadest point near the city of Vostrik.\", \"since\": 1000}, {\"category\": \"description\", \"text\": \"Its banks are lined with ancient black pines and moss-covered stone, giving the riverbanks a dark, solemn character that the Owl-folk consider sacred.\", \"since\": 1000}, {\"category\": \"general\", \"text\": \"The Shiverneck is the primary artery of trade and travel within the tsardom, connecting the inland mining settlements of the south to the port cities of the north.\", \"since\": 1000}, {\"category\": \"general\", \"text\": \"During the long northern winter, the river freezes solid enough to support cart traffic, and merchants set up seasonal markets directly on the ice.\", \"since\": 1000}, {\"category\": \"general\", \"text\": \"The Owl-folk believe the river was carved by the first great owl, Morovain, when he drew his talon across the land to separate the living from the frozen wastes beyond.\", \"since\": 1000}, {\"category\": \"history\", \"text\": \"The Tsardom of the Owl-folk was formally established along the Shiverneck's banks in the year 412, when the clan chieftains unified under Tsar Aldric Moonshadow and built the first stone bridge across the river at Vostrik.\", \"since\": 1000}, {\"category\": \"law\", \"text\": \"By tsardic decree, no settlement may be built within one hundred paces of the Shiverneck's banks, preserving the river corridor as a wild passage for owl-flight and spiritual observation.\", \"since\": 687}, {\"category\": \"general\", \"text\": \"The river's current is deceptively swift beneath its still surface, and drowning is the third most common cause of death among Owl-folk, after winter fever and wolf attacks.\", \"since\": 1000}, {\"category\": \"general\", \"text\": \"In autumn, the Shiverneck turns the color of dark amber as fallen pine needles and golden larch leaves collect on its surface, and the Owl-folk hold their most important harvest festival, the Burning of the Leaves, along its banks.\", \"since\": 1000}], \"names\": [{\"name\": \"Tsardom of the Owl-folk\", \"kind\": \"place\", \"tag\": \"realm\", \"in\": null, \"aka\": []}, {\"name\": \"Vostrik\", \"kind\": \"place\", \"tag\": \"city\", \"in\": \"Tsardom of the Owl-folk\", \"aka\": []}, {\"name\": \"Frostfang Mountains\", \"kind\": \"place\", \"tag\": \"mountains\", \"in\": null, \"aka\": []}, {\"name\": \"Pale Strait\", \"kind\": \"place\", \"tag\": \"waterway\", \"in\": null, \"aka\": []}, {\"name\": \"Morovain\", \"kind\": \"lore\", \"tag\": \"mythical figure\", \"in\": null, \"aka\": []}, {\"name\": \"Tsar Aldric Moonshadow\", \"kind\": \"character\", \"tag\": \"historical figure\", \"in\": \"Tsardom of the Owl-folk\", \"aka\": []}, {\"name\": \"Owl-folk\", \"kind\": \"race\", \"tag\": \"species\", \"in\": null, \"aka\": []}, {\"name\": \"Burning of the Leaves\", \"kind\": \"event\", \"tag\": \"festival\", \"in\": \"Tsardom of the Owl-folk\", \"aka\": []}] }",
+     "seconds": 28.1
+    }
+   ],
+   "baseline": [
+    {
+     "prompt": "Tsardom of Moscavia, a cold northern tsardom of owl-folk",
+     "version": 1,
+     "names": [
+      "Tsardom of Moscavia",
+      "Moscavia",
+      "Velikograd",
+      "River Kholoda",
+      "Frost Guard",
+      "Church of the Pale Light",
+      "Eternal Frost",
+      "Ihor I",
+      "Battle of Ashfall Plain",
+      "Dmitr the Ironwroth",
+      "Amber Line",
+      "Aleksandr III",
+      "Volodymyr II",
+      "Highborn",
+      "Mixedblood"
+     ],
+     "real_hits": [
+      "Dmitr the Ironwroth",
+      "Aleksandr III"
+     ]
+    },
+    {
+     "prompt": "Tsardom of Moscavia, a cold northern tsardom of owl-folk",
+     "version": 2,
+     "names": [
+      "Tsardom of Moscavia",
+      "Moscavia",
+      "The Northern Throne",
+      "Yelena Vostrik",
+      "House Vostrik",
+      "Zakonnik",
+      "Velikgrad",
+      "River Kholodnaya",
+      "Sokoly",
+      "Kingdom of Valdmark",
+      "Amber Coast",
+      "Great Pine Forest",
+      "Treaty of Ashfield"
+     ],
+     "real_hits": [
+      "Yelena Vostrik",
+      "Sokoly"
+     ]
+    },
+    {
+     "prompt": "the capital of a cold northern tsardom of owl-folk",
+     "version": 1,
+     "names": [
+      "Vostokgrad",
+      "Owl's Crown",
+      "Tsardom of Velikhor",
+      "Shelnova River",
+      "Frostvein",
+      "Tsar Irina I",
+      "Kholodnaya",
+      "Code of Frost",
+      "Great Owl Lantern",
+      "The Maw",
+      "Kingdom of Ashenmere",
+      "Long Siege of Vostokgrad",
+      "Spire of Listening",
+      "Owl-folk"
+     ],
+     "real_hits": [
+      "Tsar Irina I"
+     ]
+    },
+    {
+     "prompt": "the capital of a cold northern tsardom of owl-folk",
+     "version": 2,
+     "names": [
+      "Velgrad",
+      "The Osprey's Crown",
+      "Tsardom of Morvask",
+      "Lake Nyorova",
+      "Tsar Oshen III",
+      "House of Morvask",
+      "Great Parliament of Owl-Folk",
+      "Hall of Feathers",
+      "Tsar Aldric the Watcher",
+      "Watchtower of Aldric"
+     ],
+     "real_hits": [
+      "Tsar Oshen III",
+      "Tsar Aldric the Watcher"
+     ]
+    },
+    {
+     "prompt": "the countries that border a cold northern tsardom of owl-folk",
+     "version": 1,
+     "names": [
+      "The Tsardom of Verengrad",
+      "Verengrad",
+      "The Frostledger",
+      "Ulfren",
+      "Yelena the Watchful",
+      "Aldric the Pale",
+      "Kholova",
+      "The Greying Sea",
+      "Frostmere wastes"
+     ],
+     "real_hits": [
+      "Yelena the Watchful"
+     ]
+    },
+    {
+     "prompt": "the countries that border a cold northern tsardom of owl-folk",
+     "version": 2,
+     "names": [
+      "Tsardom of the Owlfolk",
+      "Voron I",
+      "Hooting Court",
+      "Talon Guard",
+      "Frostwatch",
+      "Snegovorot",
+      "Doctrine of the Long Night",
+      "Frozen Strait"
+     ],
+     "real_hits": [
+      "Voron I"
+     ]
+    },
+    {
+     "prompt": "a noble house of a cold northern tsardom of owl-folk",
+     "version": 1,
+     "names": [
+      "House of Voronov",
+      "The Voronovs",
+      "Tsardom of Snezhana",
+      "Aldric Voronov",
+      "Council of Feathers",
+      "Greymarch Pass",
+      "Frost Rebellions",
+      "Kholodny Krest",
+      "River Velika",
+      "Morozsk",
+      "Ashpine Mountains",
+      "Lady Marfa Voronova",
+      "Border Wars",
+      "Free Companies of the Ashpine",
+      "House Solovyov"
+     ],
+     "real_hits": [
+      "House of Voronov",
+      "Aldric Voronov"
+     ]
+    },
+    {
+     "prompt": "a noble house of a cold northern tsardom of owl-folk",
+     "version": 2,
+     "names": [
+      "House of Voronov",
+      "the Voronovs",
+      "the Owl House",
+      "Tsardom of Velikhor",
+      "Novgrad",
+      "Snegovaya Krepost",
+      "River Vostok",
+      "Koldunya",
+      "Tsar Dmitri II",
+      "Khaelid Khanate",
+      "Frostborn Campaigns",
+      "Prince Aleksei Voronov",
+      "Yelena Voronova",
+      "House Chernyavsky",
+      "Pale Feast"
+     ],
+     "real_hits": [
+      "House of Voronov",
+      "Snegovaya Krepost",
+      "Tsar Dmitri II",
+      "Prince Aleksei Voronov",
+      "Yelena Voronova"
+     ]
+    },
+    {
+     "prompt": "the great river that runs through a cold northern tsardom of owl-folk",
+     "version": 1,
+     "names": [
+      "The Shivering Reach",
+      "Tsardom of Vostmark",
+      "Kholodnoye",
+      "Grebin",
+      "Strazh",
+      "Bay of Owls",
+      "Greymane Mountains",
+      "Delta Marshes",
+      "Festival of First Frost",
+      "Shivering Reach trout",
+      "Riverwarden's Guild",
+      "Age of Making"
+     ],
+     "real_hits": []
+    },
+    {
+     "prompt": "the great river that runs through a cold northern tsardom of owl-folk",
+     "version": 2,
+     "names": [
+      "The Shiverneck",
+      "Shiverneck River",
+      "Tsardom of the Owl-folk",
+      "Vostrik",
+      "Frostfang Mountains",
+      "Pale Strait",
+      "Morovain",
+      "Tsar Aldric Moonshadow",
+      "Owl-folk",
+      "Burning of the Leaves"
+     ],
+     "real_hits": [
+      "Tsar Aldric Moonshadow"
+     ]
+    }
+   ],
+   "flag_replies": [
+    {
+     "reply": "```json\n{\n  \"names\": [\n    {\"name\": \"Moscow\", \"label\": \"real\", \"why\": \"Capital of Russia; a real-world city\"},\n    {\"name\": \"the Volga\", \"label\": \"real\", \"why\": \"Longest river in Europe; real-world river in Russia\"},\n    {\"name\": \"Novgorod\", \"label\": \"real\", \"why\": \"Historical Russian city; Veliky Novgorod\"},\n    {\"name\": \"Ivan the Terrible\", \"label\": \"real\", \"why\": \"Ivan IV of Russia, historical tsar\"},\n    {\"name\": \"the Kremlin\", \"label\": \"real\", \"why\": \"Famous fortified complex in Moscow\"},\n    {\"name\": \"the Dnieper\", \"label\": \"real\", \"why\": \"Major river flowing through Ukraine and Russia\"},\n    {\"name\": \"Kazan\", \"label\": \"real\", \"why\": \"Historical capital of Tatarstan; real-world city\"},\n    {\"name\": \"the Boyar Duma\", \"label\": \"real\", \"why\": \"Historical advisory council of the Russian tsars\"},\n    {\"name\": \"Rurik\", \"label\": \"real\", \"why\": \"Founder of the Rurikid dynasty; historical figure\"},\n    {\"name\": \"Suzdal\", \"label\": \"real\", \"why\": \"Historical Russian town known for monasteries\"},\n    {\"name\": \"Smolensk\", \"label\": \"real\", \"why\": \"Historical Russian city on the western border\"},\n    {\"name\": \"Lake Ladoga\", \"label\": \"real\", \"why\": \"Largest lake in Europe; real-world body of water\"},\n    {\"name\": \"Yaroslav the Wise\", \"label\": \"real\", \"why\": \"Yaroslav I of Kiev; historical ruler\"},\n    {\"name\": \"Pskov\", \"label\": \"real\", \"why\": \"Historical Russian city; Pskov Republic\"},\n    {\"name\": \"the Oprichnina\", \"label\": \"real\", \"why\": \"Historical institution of Ivan the Terrible's police force\"}\n  ]\n}\n```\n\nEvery single one of these names is drawn directly from Russian and East Slavic history. The Tsardom of Russia, the Rurikid dynasty, Ivan IV (\"the Terrible\"), the Boyar Duma, the Oprichnina, the Dnieper, the Volga, Moscow, Novgorod, Kazan, Pskov, Suzdal, Smolensk, Lake Ladoga, and Yaroslav the Wise — all of these are real places, people, and institutions from the actual historical record. None of them are invented names for a fantasy world.",
+     "parsed": {
+      "names": [
+       {
+        "name": "Moscow",
+        "label": "real",
+        "why": "Capital of Russia; a real-world city"
+       },
+       {
+        "name": "the Volga",
+        "label": "real",
+        "why": "Longest river in Europe; real-world river in Russia"
+       },
+       {
+        "name": "Novgorod",
+        "label": "real",
+        "why": "Historical Russian city; Veliky Novgorod"
+       },
+       {
+        "name": "Ivan the Terrible",
+        "label": "real",
+        "why": "Ivan IV of Russia, historical tsar"
+       },
+       {
+        "name": "the Kremlin",
+        "label": "real",
+        "why": "Famous fortified complex in Moscow"
+       },
+       {
+        "name": "the Dnieper",
+        "label": "real",
+        "why": "Major river flowing through Ukraine and Russia"
+       },
+       {
+        "name": "Kazan",
+        "label": "real",
+        "why": "Historical capital of Tatarstan; real-world city"
+       },
+       {
+        "name": "the Boyar Duma",
+        "label": "real",
+        "why": "Historical advisory council of the Russian tsars"
+       },
+       {
+        "name": "Rurik",
+        "label": "real",
+        "why": "Founder of the Rurikid dynasty; historical figure"
+       },
+       {
+        "name": "Suzdal",
+        "label": "real",
+        "why": "Historical Russian town known for monasteries"
+       },
+       {
+        "name": "Smolensk",
+        "label": "real",
+        "why": "Historical Russian city on the western border"
+       },
+       {
+        "name": "Lake Ladoga",
+        "label": "real",
+        "why": "Largest lake in Europe; real-world body of water"
+       },
+       {
+        "name": "Yaroslav the Wise",
+        "label": "real",
+        "why": "Yaroslav I of Kiev; historical ruler"
+       },
+       {
+        "name": "Pskov",
+        "label": "real",
+        "why": "Historical Russian city; Pskov Republic"
+       },
+       {
+        "name": "the Oprichnina",
+        "label": "real",
+        "why": "Historical institution of Ivan the Terrible's police force"
+       }
+      ]
+     }
+    },
+    {
+     "reply": "```json\n{\n  \"names\": [\n    {\"name\": \"Tver\", \"label\": \"real\", \"why\": \"Historical Russian city; tsar's rivals refers to Muscovite political conflicts\"},\n    {\"name\": \"Dmitry Donskoy\", \"label\": \"real\", \"why\": \"Dmitry Donskoy is the historical Russian Grand Prince who defeated the Mongols at the Battle of Kulikovo in 1380\"},\n    {\"name\": \"Sergius of Radonezh\", \"label\": \"real\", \"why\": \"Historical Russian Orthodox saint and monastic founder who blessed Grand Prince Dmitry's army before Kulikovo\"},\n    {\"name\": \"the Neva\", \"label\": \"real\", \"why\": \"Major Russian river flowing through St. Petersburg\"},\n    {\"name\": \"Astrakhan\", \"label\": \"real\", \"why\": \"Historical Russian city and former khanate on the Volga; known for caviar and salt trade\"},\n    {\"name\": \"Free Cities of the Southern Realms\", \"label\": \"stock-title\", \"why\": \"Generic fantasy trope: free cities in a southern region with trade relationships\"},\n    {\"name\": \"the Shadowlands\", \"label\": \"ok\", \"why\": \"Specific and evocative: a dangerous, unreturnable place with a distinct identity\"},\n    {\"name\": \"Kingdom of the North\", \"label\": \"stock-title\", \"why\": \"Generic northern kingdom with no distinguishing cultural or specific details\"},\n    {\"name\": \"the Iron Council\", \"label\": \"ok\", \"why\": \"Specific institution with a concrete role governing mining towns\"},\n    {\"name\": \"the Eastern Wastes\", \"label\": \"ok\", \"why\": \"Specific geography with defined features and purpose\"},\n    {\"name\": \"the Order of the Silver Flame\", \"label\": \"ok\", \"why\": \"Specific institution with a defined mission and identity\"},\n    {\"name\": \"the Southern Kingdoms\", \"label\": \"stock-title\", \"why\": \"Generic plural kingdom in the south; no distinguishing features\"},\n    {\"name\": \"the Frozen North\", \"label\": \"stock-title\", \"why\": \"Overused generic northern wilderness with no specific identity\"},\n    {\"name\": \"the Dark Forest\", \"label\": \"stock-title\", \"why\": \"One of the most overused fantasy tropes; no specific identity beyond generic darkness\"}\n  ]\n}\n```",
+     "parsed": {
+      "names": [
+       {
+        "name": "Tver",
+        "label": "real",
+        "why": "Historical Russian city; tsar's rivals refers to Muscovite political conflicts"
+       },
+       {
+        "name": "Dmitry Donskoy",
+        "label": "real",
+        "why": "Dmitry Donskoy is the historical Russian Grand Prince who defeated the Mongols at the Battle of Kulikovo in 1380"
+       },
+       {
+        "name": "Sergius of Radonezh",
+        "label": "real",
+        "why": "Historical Russian Orthodox saint and monastic founder who blessed Grand Prince Dmitry's army before Kulikovo"
+       },
+       {
+        "name": "the Neva",
+        "label": "real",
+        "why": "Major Russian river flowing through St. Petersburg"
+       },
+       {
+        "name": "Astrakhan",
+        "label": "real",
+        "why": "Historical Russian city and former khanate on the Volga; known for caviar and salt trade"
+       },
+       {
+        "name": "Free Cities of the Southern Realms",
+        "label": "stock-title",
+        "why": "Generic fantasy trope: free cities in a southern region with trade relationships"
+       },
+       {
+        "name": "the Shadowlands",
+        "label": "ok",
+        "why": "Specific and evocative: a dangerous, unreturnable place with a distinct identity"
+       },
+       {
+        "name": "Kingdom of the North",
+        "label": "stock-title",
+        "why": "Generic northern kingdom with no distinguishing cultural or specific details"
+       },
+       {
+        "name": "the Iron Council",
+        "label": "ok",
+        "why": "Specific institution with a concrete role governing mining towns"
+       },
+       {
+        "name": "the Eastern Wastes",
+        "label": "ok",
+        "why": "Specific geography with defined features and purpose"
+       },
+       {
+        "name": "the Order of the Silver Flame",
+        "label": "ok",
+        "why": "Specific institution with a defined mission and identity"
+       },
+       {
+        "name": "the Southern Kingdoms",
+        "label": "stock-title",
+        "why": "Generic plural kingdom in the south; no distinguishing features"
+       },
+       {
+        "name": "the Frozen North",
+        "label": "stock-title",
+        "why": "Overused generic northern wilderness with no specific identity"
+       },
+       {
+        "name": "the Dark Forest",
+        "label": "stock-title",
+        "why": "One of the most overused fantasy tropes; no specific identity beyond generic darkness"
+       }
+      ]
+     }
+    },
+    {
+     "reply": "```json\n{\n  \"names\": [\n    {\"name\": \"the Old Kingdom\", \"label\": \"stock-title\", \"why\": \"Generic fantasy trope — 'the old kingdom' is a common archetype with no specific identity.\"},\n    {\"name\": \"the Western Isles\", \"label\": \"stock-title\", \"why\": \"Generic label for a pirate haven; no distinguishing features beyond the function.\"},\n    {\"name\": \"the High Council\", \"label\": \"stock-title\", \"why\": \"Generic governing body name found in countless fantasy settings.\"},\n    {\"name\": \"the Borderlands\", \"label\": \"stock-title\", \"why\": \"Generic term for a contested frontier region; no specific flavor.\"},\n    {\"name\": \"the Crimson Brotherhood\", \"label\": \"stock-title\", \"why\": \"Overused mercenary/sellsword organization name with no unique elements.\"},\n    {\"name\": \"Velgarov\", \"label\": \"ok\", \"why\": \"Invented name with specific detail — a capital built on seven hills. The detail grounds it.\"},\n    {\"name\": \"Free Provinces of Sorau\", \"label\": \"ok\", \"why\": \"Specific political entity with a founding date (1412) and a named breakaway event. Has texture.\"},\n    {\"name\": \"Kerevask\", \"label\": \"ok\", \"why\": \"Invented fortress name with a specific geographic detail — a river bend.\"},\n    {\"name\": \"Moscavia\", \"label\": \"real\", \"why\": \"A real historical region (Muscovy/Moscow), thinly disguised with a fantasy title. Does not belong in an invented world.\"},\n    {\"name\": \"the Brannovy Reach\", \"label\": \"ok\", \"why\": \"Specific geographic feature — marsh and reed — gives it invented-world texture.\"},\n    {\"name\": \"Ostrevka\", \"label\": \"ok\", \"why\": \"Invented fishing town name with a specific location (White Lake). Feels like a real place in this world.\"},\n    {\"name\": \"the Owl Synod\", \"label\": \"ok\", \"why\": \"Unique religious institution name with a specific function (choosing a high priestess). Has personality.\"},\n    {\"name\": \"Tsar Volodar II\", \"label\": \"ok\", \"why\": \"Invented named ruler with a specific accomplishment (building a stone bridge). Feels like history.\"},\n    {\"name\": \"the Krasnel Hills\", \"label\": \"ok\", \"why\": \"Specific geographic name with a specific use (shepherding). Grounded in this invented world.\"},\n    {\"name\": \"Duskhollow\", \"label\": \"ok\", \"why\": \"Invented village name with a specific occupation (charcoal burners). Evocative and unique.\"}\n  ]\n}\n```",
+     "parsed": {
+      "names": [
+       {
+        "name": "the Old Kingdom",
+        "label": "stock-title",
+        "why": "Generic fantasy trope — 'the old kingdom' is a common archetype with no specific identity."
+       },
+       {
+        "name": "the Western Isles",
+        "label": "stock-title",
+        "why": "Generic label for a pirate haven; no distinguishing features beyond the function."
+       },
+       {
+        "name": "the High Council",
+        "label": "stock-title",
+        "why": "Generic governing body name found in countless fantasy settings."
+       },
+       {
+        "name": "the Borderlands",
+        "label": "stock-title",
+        "why": "Generic term for a contested frontier region; no specific flavor."
+       },
+       {
+        "name": "the Crimson Brotherhood",
+        "label": "stock-title",
+        "why": "Overused mercenary/sellsword organization name with no unique elements."
+       },
+       {
+        "name": "Velgarov",
+        "label": "ok",
+        "why": "Invented name with specific detail — a capital built on seven hills. The detail grounds it."
+       },
+       {
+        "name": "Free Provinces of Sorau",
+        "label": "ok",
+        "why": "Specific political entity with a founding date (1412) and a named breakaway event. Has texture."
+       },
+       {
+        "name": "Kerevask",
+        "label": "ok",
+        "why": "Invented fortress name with a specific geographic detail — a river bend."
+       },
+       {
+        "name": "Moscavia",
+        "label": "real",
+        "why": "A real historical region (Muscovy/Moscow), thinly disguised with a fantasy title. Does not belong in an invented world."
+       },
+       {
+        "name": "the Brannovy Reach",
+        "label": "ok",
+        "why": "Specific geographic feature — marsh and reed — gives it invented-world texture."
+       },
+       {
+        "name": "Ostrevka",
+        "label": "ok",
+        "why": "Invented fishing town name with a specific location (White Lake). Feels like a real place in this world."
+       },
+       {
+        "name": "the Owl Synod",
+        "label": "ok",
+        "why": "Unique religious institution name with a specific function (choosing a high priestess). Has personality."
+       },
+       {
+        "name": "Tsar Volodar II",
+        "label": "ok",
+        "why": "Invented named ruler with a specific accomplishment (building a stone bridge). Feels like history."
+       },
+       {
+        "name": "the Krasnel Hills",
+        "label": "ok",
+        "why": "Specific geographic name with a specific use (shepherding). Grounded in this invented world."
+       },
+       {
+        "name": "Duskhollow",
+        "label": "ok",
+        "why": "Invented village name with a specific occupation (charcoal burners). Evocative and unique."
+       }
+      ]
+     }
+    },
+    {
+     "reply": "```json\n{\n  \"names\": [\n    {\"name\": \"Thornfield\", \"label\": \"ok\", \"why\": \"Invented place name with a specific agricultural role tied to the court\"},\n    {\"name\": \"the League of Nine Wharves\", \"label\": \"ok\", \"why\": \"Specific number and function; invented with clear worldbuilding detail\"},\n    {\"name\": \"the Glassmakers of Ivrel\", \"label\": \"ok\", \"why\": \"Specific craft and location; invented with a trade secret\"},\n    {\"name\": \"Zorevna Sedova\", \"label\": \"ok\", \"why\": \"Invented proper name with a distinctive river-fleet role\"},\n    {\"name\": \"Holy Mother Yelvra\", \"label\": \"ok\", \"why\": \"Invented religious title with a specific ritual function\"},\n    {\"name\": \"Maren\", \"label\": \"ok\", \"why\": \"Simple but works as an innkeeper name in an invented world\"},\n    {\"name\": \"Elara\", \"label\": \"ok\", \"why\": \"Common fantasy-adjacent name, but acceptable in context\"},\n    {\"name\": \"Thornwood\", \"label\": \"ok\", \"why\": \"Invented forest name with a specific geographic relation to the capital\"},\n    {\"name\": \"Kael\", \"label\": \"ok\", \"why\": \"Simple mercenary name; works in context\"},\n    {\"name\": \"Lyra\", \"label\": \"ok\", \"why\": \"Common name used as a performer; acceptable in context\"},\n    {\"name\": \"the Vesh\", \"label\": \"ok\", \"why\": \"Invented ethnic group with a specific trade (amber)\"},\n    {\"name\": \"Starograd Ford\", \"label\": \"ok\", \"why\": \"Invented place name with a specific geographic detail (only crossing for 40 miles)\"},\n    {\"name\": \"the Sable Court\", \"label\": \"ok\", \"why\": \"Invented name for a royal council with a distinctive descriptor\"},\n    {\"name\": \"Pelinor\", \"label\": \"ok\", \"why\": \"Invented monastery name with a specific setting (sea cliff)\"},\n    {\"name\": \"the Year of Black Ice\", \"label\": \"ok\", \"why\": \"Invented historical event with a specific consequence\"}\n  ]\n}\n```",
+     "parsed": {
+      "names": [
+       {
+        "name": "Thornfield",
+        "label": "ok",
+        "why": "Invented place name with a specific agricultural role tied to the court"
+       },
+       {
+        "name": "the League of Nine Wharves",
+        "label": "ok",
+        "why": "Specific number and function; invented with clear worldbuilding detail"
+       },
+       {
+        "name": "the Glassmakers of Ivrel",
+        "label": "ok",
+        "why": "Specific craft and location; invented with a trade secret"
+       },
+       {
+        "name": "Zorevna Sedova",
+        "label": "ok",
+        "why": "Invented proper name with a distinctive river-fleet role"
+       },
+       {
+        "name": "Holy Mother Yelvra",
+        "label": "ok",
+        "why": "Invented religious title with a specific ritual function"
+       },
+       {
+        "name": "Maren",
+        "label": "ok",
+        "why": "Simple but works as an innkeeper name in an invented world"
+       },
+       {
+        "name": "Elara",
+        "label": "ok",
+        "why": "Common fantasy-adjacent name, but acceptable in context"
+       },
+       {
+        "name": "Thornwood",
+        "label": "ok",
+        "why": "Invented forest name with a specific geographic relation to the capital"
+       },
+       {
+        "name": "Kael",
+        "label": "ok",
+        "why": "Simple mercenary name; works in context"
+       },
+       {
+        "name": "Lyra",
+        "label": "ok",
+        "why": "Common name used as a performer; acceptable in context"
+       },
+       {
+        "name": "the Vesh",
+        "label": "ok",
+        "why": "Invented ethnic group with a specific trade (amber)"
+       },
+       {
+        "name": "Starograd Ford",
+        "label": "ok",
+        "why": "Invented place name with a specific geographic detail (only crossing for 40 miles)"
+       },
+       {
+        "name": "the Sable Court",
+        "label": "ok",
+        "why": "Invented name for a royal council with a distinctive descriptor"
+       },
+       {
+        "name": "Pelinor",
+        "label": "ok",
+        "why": "Invented monastery name with a specific setting (sea cliff)"
+       },
+       {
+        "name": "the Year of Black Ice",
+        "label": "ok",
+        "why": "Invented historical event with a specific consequence"
+       }
+      ]
+     }
+    }
+   ],
+   "flagged": {
+    "Moscow": "real",
+    "the Volga": "real",
+    "Novgorod": "real",
+    "Ivan the Terrible": "real",
+    "the Kremlin": "real",
+    "the Dnieper": "real",
+    "Kazan": "real",
+    "the Boyar Duma": "real",
+    "Rurik": "real",
+    "Suzdal": "real",
+    "Smolensk": "real",
+    "Lake Ladoga": "real",
+    "Yaroslav the Wise": "real",
+    "Pskov": "real",
+    "the Oprichnina": "real",
+    "Tver": "real",
+    "Dmitry Donskoy": "real",
+    "Sergius of Radonezh": "real",
+    "the Neva": "real",
+    "Astrakhan": "real",
+    "Free Cities of the Southern Realms": "stock-title",
+    "the Shadowlands": "ok",
+    "Kingdom of the North": "stock-title",
+    "the Iron Council": "ok",
+    "the Eastern Wastes": "ok",
+    "the Order of the Silver Flame": "ok",
+    "the Southern Kingdoms": "stock-title",
+    "the Frozen North": "stock-title",
+    "the Dark Forest": "stock-title",
+    "the Old Kingdom": "stock-title",
+    "the Western Isles": "stock-title",
+    "the High Council": "stock-title",
+    "the Borderlands": "stock-title",
+    "the Crimson Brotherhood": "stock-title",
+    "Velgarov": "ok",
+    "Free Provinces of Sorau": "ok",
+    "Kerevask": "ok",
+    "Moscavia": "real",
+    "the Brannovy Reach": "ok",
+    "Ostrevka": "ok",
+    "the Owl Synod": "ok",
+    "Tsar Volodar II": "ok",
+    "the Krasnel Hills": "ok",
+    "Duskhollow": "ok",
+    "Thornfield": "ok",
+    "the League of Nine Wharves": "ok",
+    "the Glassmakers of Ivrel": "ok",
+    "Zorevna Sedova": "ok",
+    "Holy Mother Yelvra": "ok",
+    "Maren": "ok",
+    "Elara": "ok",
+    "Thornwood": "ok",
+    "Kael": "ok",
+    "Lyra": "ok",
+    "the Vesh": "ok",
+    "Starograd Ford": "ok",
+    "the Sable Court": "ok",
+    "Pelinor": "ok",
+    "the Year of Black Ice": "ok"
+   },
+   "scores": {
+    "real": {
+     "precision": 0.9523809523809523,
+     "recall": 1.0
+    },
+    "stock-title": {
+     "precision": 1.0,
+     "recall": 0.6666666666666666
+    },
+    "missed": [
+     "the Shadowlands",
+     "the Iron Council",
+     "the Eastern Wastes",
+     "the Order of the Silver Flame",
+     "the Merchant Guild"
+    ],
+    "false_flags": [
+     "Moscavia"
+    ]
+   },
+   "rewrites": [
+    {
+     "original": "Free Cities of the Southern Realms",
+     "title": "The Peltspeaker Accords: Fur and Sovereignty Along the Sable Line",
+     "has_slot": false,
+     "filled": "The Peltspeaker Accords: Fur and Sovereignty Along the Sable Line",
+     "why": "Makes the trade relationship feel like a living diplomatic agreement with a specific name, while 'Sable Line' gives the border a character"
+    },
+    {
+     "original": "the Shadowlands",
+     "title": "The {Vethkari} Depths -- Where Even Light Forgets It Came",
+     "has_slot": false,
+     "filled": "The {Vethkari} Depths -- Where Even Light Forgets It Came",
+     "why": "Vethkari evokes a sense of swallowing darkness; 'where even light forgets' makes the absence more personal than 'nothing returns'"
+    },
+    {
+     "original": "Kingdom of the North",
+     "title": "{Valdremor's} Icebound Throne -- The Spring Dispatches of the Northern Reach",
+     "has_slot": false,
+     "filled": "{Valdremor's} Icebound Throne -- The Spring Dispatches of the Northern Reach",
+     "why": "Replaced the generic 'Kingdom of the North' with the invented name {Valdremor} and 'Northern Reach' to ground it in a specific place. 'Icebound Throne' gives a climate and political texture. 'Spring Dispatches' is more evocative than 'sends envoys each spring' — it sounds like a ritualized, almost ceremonial event with its own name."
+    },
+    {
+     "original": "the Iron Council",
+     "title": "The Rusted Accord of {Name}",
+     "has_slot": false,
+     "filled": "The Rusted Accord of {Name}",
+     "why": "Replaces 'Iron Council' with something more vivid and world-specific. 'Rusted' evokes decay and industry, while 'Accord' suggests it's a negotiated body rather than a dictatorship, fitting for a council of multiple mining towns."
+    },
+    {
+     "original": "the Eastern Wastes",
+     "title": "The Scorched Maw of {Aldeth'khur} — Where the Windborn Wander",
+     "has_slot": false,
+     "filled": "The Scorched Maw of {Aldeth'khur} — Where the Windborn Wander",
+     "why": "Replaces the generic 'Eastern Wastes' with a named, specific wasteland (Aldeth'khur) and renames the nomads 'Windborn' to evoke their relationship with the harsh landscape, making the title feel like it belongs to a real place with its own culture and history."
+    },
+    {
+     "original": "the Order of the Silver Flame",
+     "title": "{Name} the Flamehunters — The Silver Order",
+     "has_slot": false,
+     "filled": "{Name} the Flamehunters — The Silver Order",
+     "why": "Flamehunters makes the hunt visceral; Silver Order sounds like a noble institution that masks its violent purpose behind a polished name."
+    },
+    {
+     "original": "the Southern Kingdoms",
+     "title": "The Embered Crowns: Wars of the Southern Kingdoms (Again)",
+     "has_slot": false,
+     "filled": "The Embered Crowns: Wars of the Southern Kingdoms (Again)",
+     "why": "Adds specificity about the recurring nature of the conflict and gives the warfare a visual, branded feel."
+    },
+    {
+     "original": "the Frozen North",
+     "title": "The Howling Descent of {Vorthak}",
+     "has_slot": false,
+     "filled": "The Howling Descent of {Vorthak}",
+     "why": "Makes the threat specific and named, turning a generic region into a distinct cultural force with identity"
+    },
+    {
+     "original": "the Dark Forest",
+     "title": "{Gorthvenn} the Unlit",
+     "has_slot": false,
+     "filled": "{Gorthvenn} the Unlit",
+     "why": "Gorthvenn sounds guttural and old, suggesting deep roots. 'The Unlit' is more evocative than 'Dark' — it implies something was once lit, or something actively refuses light, making the danger feel deliberate rather than passive."
+    },
+    {
+     "original": "the Merchant Guild",
+     "title": "{name} Saltwrights' Compact",
+     "has_slot": true,
+     "filled": "Nivaka Saltwrights' Compact",
+     "why": "It makes the guild sound like a formal, binding agreement with real legal weight, rather than just a generic 'merchant guild.' The word 'saltwrights' gives them a craft-like identity tied to their most powerful commodity."
+    },
+    {
+     "original": "the Old Kingdom",
+     "title": "The Duskward Throne",
+     "has_slot": false,
+     "filled": "The Duskward Throne",
+     "why": "Replaces the generic 'Old Kingdom' with something that evokes both its former grandeur and its long-dead state—'duskward' suggesting a realm that has permanently sunk into twilight, its glory now historical legend rather than living memory."
+    },
+    {
+     "original": "the Western Isles",
+     "title": "{Name} the Gilded Teeth",
+     "has_slot": false,
+     "filled": "{Name} the Gilded Teeth",
+     "why": "Pirates aren't just raiders — they're merchants who never paid a tariff. The name makes the Isles sound like a smile full of stolen gold, and it hints at the dual nature of life there: plunder and profit intertwined."
+    },
+    {
+     "original": "the High Council",
+     "title": "The Gilded Parley of {Meraveth}",
+     "has_slot": false,
+     "filled": "The Gilded Parley of {Meraveth}",
+     "why": "Meraveth is the capital city of the league, so the council meeting place gets a specific, evocative name that suggests both grandeur and political intrigue."
+    },
+    {
+     "original": "the Borderlands",
+     "title": "{Name} the Bleeding Season",
+     "has_slot": false,
+     "filled": "{Name} the Bleeding Season",
+     "why": "Renames the Borderlands region itself to make the title feel like an event, tying the raiding to a specific time of year with visceral language."
+    },
+    {
+     "original": "the Crimson Brotherhood",
+     "title": "The Crimson Brotherhood — Sells Its Steel to Any Hand That Holds the Coin",
+     "has_slot": false,
+     "filled": "The Crimson Brotherhood — Sells Its Steel to Any Hand That Holds the Coin",
+     "why": "Makes the mercenary ethos specific: it's not just about fighting, it's about the transactional nature — any lord, any cause, as long as payment is made."
+    }
+   ]
+  }
+ }
+}

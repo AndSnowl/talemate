@@ -82,6 +82,18 @@ own name goes; the name is filled in later from the world's language. Reply
 with JSON only: {"title": "<the new title with {name}>", "why": "<a few words>"}"""
 
 
+REWRITE_SYSTEM_V2 = """\
+Rewrite a generic fantasy title into a short, specific one: at most six words,
+the same sort of thing (a league of cities stays a league of cities), no
+subtitle, no dash. Write the literal placeholder {name} where the place's or
+people's own name goes; never invent that name yourself.
+Examples:
+- "Free Cities of the Southern Realms" -> {"title": "Free Provinces of {name}"}
+- "the Dark Forest" -> {"title": "the {name} Pinewood"}
+- "the High Council" -> {"title": "the Lantern Bench of {name}"}
+Reply with JSON only: {"title": "<the new title with {name}>"}"""
+
+
 def fake_chat(messages: list[dict]) -> str:
     """Canned replies for `--fake`."""
     system = messages[0]["content"]
@@ -165,18 +177,26 @@ def flag(send: Callable, labels: dict, run: dict, save: Callable) -> None:
     save()
 
 
-def rewrite(send: Callable, labels: dict, run: dict, save: Callable) -> None:
+def rewrite(
+    send: Callable,
+    labels: dict,
+    run: dict,
+    save: Callable,
+    system: str = REWRITE_SYSTEM,
+    key: str = "rewrites",
+) -> None:
     """Stage 3: stock titles rewritten with a {name} slot, filled from the
-    test language."""
+    test language. `system` picks the prompt (`REWRITE_SYSTEM_V2` is the
+    tighter one, with examples), `key` where the rows go."""
     language = Language.model_validate(labels["test_language"])
     rng = random.Random(11)
-    rows = run.setdefault("rewrites", [])
+    rows = run.setdefault(key, [])
     for n in labels["names"]:
         if n["label"] != "stock-title":
             continue
         reply = send(
             [
-                {"role": "system", "content": REWRITE_SYSTEM},
+                {"role": "system", "content": system},
                 {"role": "user", "content": f"{n['name']} -- {n['context']}"},
             ]
         )
@@ -200,18 +220,30 @@ def main() -> None:
     parser.add_argument("out", type=Path)
     parser.add_argument("--label", required=True)
     parser.add_argument("--fake", action="store_true")
+    parser.add_argument(
+        "--rewrite-v2",
+        action="store_true",
+        help="only rerun stage 3 with REWRITE_SYSTEM_V2, into the label's run",
+    )
     args = parser.parse_args()
     out = args.out.resolve()
 
     labels = json.loads(LABELS.read_text())
     real = json.loads(REAL.read_text())["real_words"]
     results = json.loads(out.read_text()) if out.exists() else {"runs": {}}
-    run: dict[str, Any] = {}
+    run: dict[str, Any] = results["runs"].get(args.label, {}) if args.rewrite_v2 else {}
     results["runs"][args.label] = run
 
     def save() -> None:
         out.write_text(json.dumps(results, indent=1, ensure_ascii=False, default=str))
 
+    if args.rewrite_v2:
+        url = ai_helpers.koboldcpp_url()
+        send = lambda messages: chat_messages(url, messages, max_tokens=3000)  # noqa: E731
+        rewrite(send, labels, run, save, REWRITE_SYSTEM_V2, "rewrites_v2")
+        save()
+        print(f"{args.label}: rewrite v2 -> {out}")
+        return
     if args.fake:
         run["model"] = "fake"
         send = fake_chat
