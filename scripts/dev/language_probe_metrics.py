@@ -84,3 +84,33 @@ def language_checks(
     except Exception as exc:  # a model's language can be wrong in any way
         out["error"] = f"{type(exc).__name__}: {exc}"
     return out
+
+
+FLAG_CLASSES = ("real", "stock-title")
+
+
+def flag_scores(labels: dict[str, str], flagged: dict[str, str]) -> dict:
+    """Precision and recall per flag class (`real`, `stock-title`) for a
+    model's `flagged` labels against the `labels` (both name -> "real",
+    "stock-title" or "ok"; a name missing from `flagged` counts as "ok").
+    `missed`: labelled names given another class; `false_flags`: names
+    flagged with a class that isn't theirs. Precision is None when nothing
+    was flagged with that class."""
+    scores: dict = {}
+    for cls in FLAG_CLASSES:
+        said = [n for n in labels if flagged.get(n, "ok") == cls]
+        truly = [n for n in labels if labels[n] == cls]
+        right = [n for n in said if labels[n] == cls]
+        scores[cls] = {
+            "precision": len(right) / len(said) if said else None,
+            "recall": len(right) / len(truly) if truly else None,
+        }
+    scores["missed"] = [
+        n for n, cls in labels.items() if cls != "ok" and flagged.get(n, "ok") != cls
+    ]
+    scores["false_flags"] = [
+        n
+        for n, cls in labels.items()
+        if flagged.get(n, "ok") != "ok" and flagged.get(n) != cls
+    ]
+    return scores

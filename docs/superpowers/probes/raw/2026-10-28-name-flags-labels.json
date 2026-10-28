@@ -1,0 +1,349 @@
+{
+ "names": [
+  {
+   "name": "Moscow",
+   "label": "real",
+   "context": "Moscow is the seat of the Tsardom's court."
+  },
+  {
+   "name": "the Volga",
+   "label": "real",
+   "context": "Barges carry grain down the Volga to the southern markets."
+  },
+  {
+   "name": "Novgorod",
+   "label": "real",
+   "context": "Novgorod's merchants hold a charter older than the tsardom."
+  },
+  {
+   "name": "Ivan the Terrible",
+   "label": "real",
+   "context": "Ivan the Terrible is remembered for burning the boyar halls."
+  },
+  {
+   "name": "the Kremlin",
+   "label": "real",
+   "context": "The Kremlin's walls were raised in red brick."
+  },
+  {
+   "name": "the Dnieper",
+   "label": "real",
+   "context": "The Dnieper marks the western frontier."
+  },
+  {
+   "name": "Kazan",
+   "label": "real",
+   "context": "Kazan fell to the tsar's armies after a long siege."
+  },
+  {
+   "name": "the Boyar Duma",
+   "label": "real",
+   "context": "The Boyar Duma advises the tsar on matters of war."
+  },
+  {
+   "name": "Rurik",
+   "label": "real",
+   "context": "The ruling house claims descent from Rurik."
+  },
+  {
+   "name": "Suzdal",
+   "label": "real",
+   "context": "Suzdal is famed for its monasteries."
+  },
+  {
+   "name": "Smolensk",
+   "label": "real",
+   "context": "Smolensk guards the road to the west."
+  },
+  {
+   "name": "Lake Ladoga",
+   "label": "real",
+   "context": "Ice fishermen camp on Lake Ladoga each winter."
+  },
+  {
+   "name": "Yaroslav the Wise",
+   "label": "real",
+   "context": "Yaroslav the Wise wrote the first law code."
+  },
+  {
+   "name": "Pskov",
+   "label": "real",
+   "context": "Pskov's bells ring at every coronation."
+  },
+  {
+   "name": "the Oprichnina",
+   "label": "real",
+   "context": "The Oprichnina rode black horses and carried dogs' heads."
+  },
+  {
+   "name": "Tver",
+   "label": "real",
+   "context": "Tver lost its princes to the tsar's rivals."
+  },
+  {
+   "name": "Dmitry Donskoy",
+   "label": "real",
+   "context": "Dmitry Donskoy broke the horde at the river ford."
+  },
+  {
+   "name": "Sergius of Radonezh",
+   "label": "real",
+   "context": "Sergius of Radonezh blessed the army before the battle."
+  },
+  {
+   "name": "the Neva",
+   "label": "real",
+   "context": "The Neva freezes for half the year."
+  },
+  {
+   "name": "Astrakhan",
+   "label": "real",
+   "context": "Astrakhan trades salt and caviar."
+  },
+  {
+   "name": "Free Cities of the Southern Realms",
+   "label": "stock-title",
+   "context": "The Free Cities of the Southern Realms trade furs with the Tsardom."
+  },
+  {
+   "name": "the Shadowlands",
+   "label": "stock-title",
+   "context": "Nothing returns from the Shadowlands."
+  },
+  {
+   "name": "Kingdom of the North",
+   "label": "stock-title",
+   "context": "The Kingdom of the North sends envoys each spring."
+  },
+  {
+   "name": "the Iron Council",
+   "label": "stock-title",
+   "context": "The Iron Council rules the mining towns."
+  },
+  {
+   "name": "the Eastern Wastes",
+   "label": "stock-title",
+   "context": "Nomads roam the Eastern Wastes."
+  },
+  {
+   "name": "the Order of the Silver Flame",
+   "label": "stock-title",
+   "context": "The Order of the Silver Flame hunts witches."
+  },
+  {
+   "name": "the Southern Kingdoms",
+   "label": "stock-title",
+   "context": "The Southern Kingdoms are at war again."
+  },
+  {
+   "name": "the Frozen North",
+   "label": "stock-title",
+   "context": "Wolves come down from the Frozen North."
+  },
+  {
+   "name": "the Dark Forest",
+   "label": "stock-title",
+   "context": "Travellers avoid the Dark Forest at night."
+  },
+  {
+   "name": "the Merchant Guild",
+   "label": "stock-title",
+   "context": "The Merchant Guild sets the price of salt."
+  },
+  {
+   "name": "the Old Kingdom",
+   "label": "stock-title",
+   "context": "The Old Kingdom fell a thousand years ago."
+  },
+  {
+   "name": "the Western Isles",
+   "label": "stock-title",
+   "context": "Pirates sail from the Western Isles."
+  },
+  {
+   "name": "the High Council",
+   "label": "stock-title",
+   "context": "The High Council meets in the capital."
+  },
+  {
+   "name": "the Borderlands",
+   "label": "stock-title",
+   "context": "Raiders cross the Borderlands every autumn."
+  },
+  {
+   "name": "the Crimson Brotherhood",
+   "label": "stock-title",
+   "context": "The Crimson Brotherhood sells its swords to any lord."
+  },
+  {
+   "name": "Velgarov",
+   "label": "ok",
+   "context": "Velgarov is the capital, built on seven hills."
+  },
+  {
+   "name": "Free Provinces of Sorau",
+   "label": "ok",
+   "context": "The Free Provinces of Sorau broke from the Tsardom in 1412."
+  },
+  {
+   "name": "Kerevask",
+   "label": "ok",
+   "context": "Kerevask is a fortress on the river bend."
+  },
+  {
+   "name": "Moscavia",
+   "label": "ok",
+   "context": "The Tsardom of Moscavia spans the northern forests."
+  },
+  {
+   "name": "the Brannovy Reach",
+   "label": "ok",
+   "context": "The Brannovy Reach is all marsh and reed."
+  },
+  {
+   "name": "Ostrevka",
+   "label": "ok",
+   "context": "Ostrevka is a fishing town on the White Lake."
+  },
+  {
+   "name": "the Owl Synod",
+   "label": "ok",
+   "context": "The Owl Synod chooses the high priestess."
+  },
+  {
+   "name": "Tsar Volodar II",
+   "label": "ok",
+   "context": "Tsar Volodar II built the stone bridge."
+  },
+  {
+   "name": "the Krasnel Hills",
+   "label": "ok",
+   "context": "Shepherds graze the Krasnel Hills."
+  },
+  {
+   "name": "Duskhollow",
+   "label": "ok",
+   "context": "Duskhollow is a village of charcoal burners."
+  },
+  {
+   "name": "Thornfield",
+   "label": "ok",
+   "context": "Thornfield's orchards supply the court."
+  },
+  {
+   "name": "the League of Nine Wharves",
+   "label": "ok",
+   "context": "The League of Nine Wharves controls the southern ports."
+  },
+  {
+   "name": "the Glassmakers of Ivrel",
+   "label": "ok",
+   "context": "The Glassmakers of Ivrel guard their furnace secrets."
+  },
+  {
+   "name": "Zorevna Sedova",
+   "label": "ok",
+   "context": "Zorevna Sedova commands the river fleet."
+  },
+  {
+   "name": "Holy Mother Yelvra",
+   "label": "ok",
+   "context": "Holy Mother Yelvra leads the winter rites."
+  },
+  {
+   "name": "Maren",
+   "label": "ok",
+   "context": "Maren keeps the inn at the crossroads."
+  },
+  {
+   "name": "Elara",
+   "label": "ok",
+   "context": "Elara is the court healer."
+  },
+  {
+   "name": "Thornwood",
+   "label": "ok",
+   "context": "Thornwood lies east of the capital."
+  },
+  {
+   "name": "Kael",
+   "label": "ok",
+   "context": "Kael is a mercenary captain."
+  },
+  {
+   "name": "Lyra",
+   "label": "ok",
+   "context": "Lyra sings at the tsar's feasts."
+  },
+  {
+   "name": "the Vesh",
+   "label": "ok",
+   "context": "The Vesh are a river people who trade in amber."
+  },
+  {
+   "name": "Starograd Ford",
+   "label": "ok",
+   "context": "Starograd Ford is the only crossing for forty miles."
+  },
+  {
+   "name": "the Sable Court",
+   "label": "ok",
+   "context": "The Sable Court is the tsar's inner council."
+  },
+  {
+   "name": "Pelinor",
+   "label": "ok",
+   "context": "Pelinor is a monastery on a sea cliff."
+  },
+  {
+   "name": "the Year of Black Ice",
+   "label": "ok",
+   "context": "The Year of Black Ice killed the herds."
+  }
+ ],
+ "baseline_prompts": [
+  {
+   "kind": "place",
+   "hint": "nation",
+   "prompt": "Tsardom of Moscavia, a cold northern tsardom of owl-folk"
+  },
+  {
+   "kind": "place",
+   "prompt": "the capital of a cold northern tsardom of owl-folk"
+  },
+  {
+   "kind": "place",
+   "hint": "nation",
+   "prompt": "the countries that border a cold northern tsardom of owl-folk"
+  },
+  {
+   "kind": "lore",
+   "prompt": "a noble house of a cold northern tsardom of owl-folk"
+  },
+  {
+   "kind": "place",
+   "prompt": "the great river that runs through a cold northern tsardom of owl-folk"
+  }
+ ],
+ "test_language": {
+  "name": "Testish",
+  "level": "naming",
+  "categories": {
+   "C": "k s v r l n t d b",
+   "V": "a o e i u",
+   "F": "ov ka a in"
+  },
+  "generators": [
+   {
+    "id": "places",
+    "name": "Places",
+    "use": "places",
+    "patterns": [
+     "CVCVF",
+     "CVCV",
+     "CVCCVF"
+    ]
+   }
+  ]
+ }
+}

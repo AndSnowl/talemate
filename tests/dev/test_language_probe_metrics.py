@@ -81,3 +81,27 @@ def test_language_checks_reports_invalid():
         }
     )
     assert not out["valid"] and out["error"]
+
+
+def test_flag_scores():
+    labels = {
+        "Moscow": "real",
+        "Volga": "real",
+        "Free Cities of the South": "stock-title",
+        "Sorau": "ok",
+    }
+    flagged = {
+        "Moscow": "real",
+        "Sorau": "real",
+        "Free Cities of the South": "stock-title",
+    }
+    s = metrics.flag_scores(labels, flagged)
+    assert s["real"] == {"precision": 0.5, "recall": 0.5}
+    assert s["stock-title"] == {"precision": 1.0, "recall": 1.0}
+    assert s["missed"] == ["Volga"] and s["false_flags"] == ["Sorau"]
+
+
+def test_flag_scores_with_nothing_flagged():
+    s = metrics.flag_scores({"Moscow": "real"}, {})
+    assert s["real"] == {"precision": None, "recall": 0.0}
+    assert s["missed"] == ["Moscow"] and s["false_flags"] == []
