@@ -796,6 +796,113 @@
      "filled": "The Crimson Brotherhood — Sells Its Steel to Any Hand That Holds the Coin",
      "why": "Makes the mercenary ethos specific: it's not just about fighting, it's about the transactional nature — any lord, any cause, as long as payment is made."
     }
+   ],
+   "rewrites_v2": [
+    {
+     "original": "Free Cities of the Southern Realms",
+     "title": "{Name}'s Fur Market",
+     "has_slot": false,
+     "filled": "{Name}'s Fur Market",
+     "why": null
+    },
+    {
+     "original": "the Shadowlands",
+     "title": "{Name}'s Blackreach",
+     "has_slot": false,
+     "filled": "{Name}'s Blackreach",
+     "why": null
+    },
+    {
+     "original": "Kingdom of the North",
+     "title": "Spring Envoys of {name}",
+     "has_slot": true,
+     "filled": "Spring Envoys of Vadiov",
+     "why": null
+    },
+    {
+     "original": "the Iron Council",
+     "title": "the Iron Bench of {name}",
+     "has_slot": true,
+     "filled": "the Iron Bench of Binsaa",
+     "why": null
+    },
+    {
+     "original": "the Eastern Wastes",
+     "title": "{name} Dustfields",
+     "has_slot": true,
+     "filled": "Sokeka Dustfields",
+     "why": null
+    },
+    {
+     "original": "the Order of the Silver Flame",
+     "title": "the Silver Flame of {name}",
+     "has_slot": true,
+     "filled": "the Silver Flame of Lilneka",
+     "why": null
+    },
+    {
+     "original": "the Southern Kingdoms",
+     "title": "{Name} Succession Feud",
+     "has_slot": false,
+     "filled": "{Name} Succession Feud",
+     "why": null
+    },
+    {
+     "original": "the Frozen North",
+     "title": "{name} Fangs Descend",
+     "has_slot": true,
+     "filled": "Tedoin Fangs Descend",
+     "why": null
+    },
+    {
+     "original": "the Dark Forest",
+     "title": "the {name} Pinewood",
+     "has_slot": true,
+     "filled": "the Kobluka Pinewood",
+     "why": null
+    },
+    {
+     "original": "the Merchant Guild",
+     "title": "the Salt Tax of {name}",
+     "has_slot": true,
+     "filled": "the Salt Tax of Nivaka",
+     "why": null
+    },
+    {
+     "original": "the Old Kingdom",
+     "title": "{name}'s Ruined Throne",
+     "has_slot": true,
+     "filled": "Tavkain's Ruined Throne",
+     "why": null
+    },
+    {
+     "original": "the Western Isles",
+     "title": "{name} Shiver Peaks",
+     "has_slot": true,
+     "filled": "Nesiov Shiver Peaks",
+     "why": null
+    },
+    {
+     "original": "the High Council",
+     "title": "the Lantern Bench of {name}",
+     "has_slot": true,
+     "filled": "the Lantern Bench of Seso",
+     "why": null
+    },
+    {
+     "original": "the Borderlands",
+     "title": "{name} Borderlands",
+     "has_slot": true,
+     "filled": "Dodsoin Borderlands",
+     "why": null
+    },
+    {
+     "original": "the Crimson Brotherhood",
+     "title": "{name} Swordmongers",
+     "has_slot": true,
+     "filled": "Kuso Swordmongers",
+     "why": null
+    }
    ]
   }
  }
