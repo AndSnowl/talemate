@@ -199,9 +199,13 @@ async def test_language_add_word_and_name_in(plugin, client):
     assert "sorau" in words
 
     async with MockClientContext():
-        client_responses.get().extend([json.dumps({"pick": "", "why": ""})] * 3)
+        queued = client_responses.get()
+        queued.extend([json.dumps({"pick": "", "why": ""})] * 3)
         await _act(plugin, "language_name_in", thing_id=sorau, language_id=lid)
         await _drain(plugin)
+        # "Free" and "Provinces" each take a pick; don't leak the spare
+        # reply into the next test's shared queue
+        queued.clear()
     result = _last(plugin, "language_name_in")["data"]
     assert result["thing_id"] == sorau and result["result"]["name"].endswith("Sorau")
 
