@@ -10,6 +10,13 @@
     text-decoration: line-through;
 }
 
+/* an offer (a row that came unticked: "Could move here", "File into
+   this"): dimmed, never struck through, which would read as deleting
+   something (polish 5) */
+.suggestion-offer {
+    color: rgb(var(--v-theme-muted));
+}
+
 .suggestion-heading {
     font-size: 12px;
     text-transform: uppercase;

@@ -6,7 +6,7 @@
         <span class="flex-grow-1" :class="textClass">
             <LinkedText
                 class="fact-text"
-                :class="{ 'suggestion-dropped': dropped }"
+                :class="droppedClass"
                 :segments="fact.segments"
                 :text="fact.text"
                 :repoint="!draft && actions === 'full'"
@@ -99,6 +99,20 @@ export default {
     emits: ['override', 'repoint', 'select', 'edit', 'dates', 'end', 'remove', 'move', 'copy', 'held'],
     setup() {
         return { worlds: useWorldsStore() };
+    },
+    data() {
+        // how the fact came (polish 5): one that came unticked is an offer
+        return { startedDropped: this.dropped };
+    },
+    computed: {
+        // unticked: an offer is dimmed; a fact the owner unticked is struck
+        // through, as "this won't be written"
+        droppedClass() {
+            if (!this.dropped) {
+                return '';
+            }
+            return this.startedDropped ? 'suggestion-offer' : 'suggestion-dropped';
+        },
     },
     methods: { spanLabel },
 };

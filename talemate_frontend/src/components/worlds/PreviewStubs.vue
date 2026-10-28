@@ -165,9 +165,10 @@ export default {
     text-decoration: underline dashed;
 }
 
-/* unticked, the name greys and is struck through with the rest of its
-   row (no stub's dashed underline) */
-.suggestion-dropped .stub-name {
+/* unticked, the name greys with the rest of its row (struck through with
+   it once the owner dropped it; no stub's dashed underline) */
+.suggestion-dropped .stub-name,
+.suggestion-offer .stub-name {
     color: inherit;
     text-decoration: none;
 }

@@ -268,3 +268,44 @@ def test_prompt_box_survives_an_error(app, page):
     box = page.get_by_test_id("create-box").locator("textarea").first
     box.wait_for(state="visible", timeout=TIMEOUT_MS)
     assert box.bounding_box()["height"] >= 40
+
+
+def _decoration(locator) -> str:
+    return locator.evaluate("(el) => getComputedStyle(el).textDecorationLine")
+
+
+def _colour(locator) -> str:
+    return locator.evaluate("(el) => getComputedStyle(el).color")
+
+
+def test_offer_rows_dim_dropped_rows_strike(app, page, fixed_preview):
+    from e2e.worlds.test_drafts import _draft, _draft_fact, _host
+    from e2e.worlds.test_drafts import _seeded as _drafts_world
+
+    _drafts_world(app, page, "Offers")
+    fixed_preview(
+        _host(
+            "It flies at night.",
+            file_into=[{"entry": "The White Talon", "role": "regiment"}],
+        )
+    )
+    draft = _draft(page, "lore", "The Tsar's winged army.")
+
+    # an offer (it came unticked): dimmed, not struck through
+    talon = draft.get_by_test_id("file-into-row").filter(has_text="The White Talon")
+    text = talon.locator(".suggestion-text")
+    assert _decoration(text) == "none"
+    dim = _colour(text)
+    talon.get_by_role("checkbox").check()
+    expect(text).not_to_have_css("color", dim)
+    talon.get_by_role("checkbox").uncheck()
+    expect(text).to_have_css("color", dim)
+    assert _decoration(text) == "none"
+
+    # a fact that came ticked, unticked: struck through
+    fact = _draft_fact(draft, "It flies at night.")
+    fact.get_by_role("checkbox").uncheck()
+    expect(fact.locator(".fact-text").first).to_have_css(
+        "text-decoration-line", "line-through"
+    )
+    assert page.console_errors == []

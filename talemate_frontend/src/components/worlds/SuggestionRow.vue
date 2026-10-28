@@ -12,7 +12,7 @@
                 @update:model-value="$emit('tick', $event)"
             ></v-checkbox-btn>
             <div class="suggestion-body">
-                <span class="suggestion-text" :class="{ 'suggestion-dropped': isDropped }">
+                <span class="suggestion-text" :class="droppedClass">
                     <slot></slot>
                 </span>
                 <div v-if="$slots.end" class="suggestion-end d-flex align-center ga-2">
@@ -36,7 +36,8 @@ import './suggestions.css';
 // One row of a suggestions-to-tick list (plan "polish-1"): a tick
 // (`tickable`, off for a row that can't be ticked, e.g. a "same as"
 // name) that never wraps, then the text (default slot, shown with
-// `.suggestion-dropped` once `dropped`) and the category chip and date
+// dimmed, `.suggestion-offer`, while unticked if it came unticked; else
+// struck through, `.suggestion-dropped`, once `dropped`) and the category chip and date
 // right after it (`end`, which never shrinks; the text shrinks and
 // wraps first). The text and `end` share their own wrapping flex line
 // (`suggestion-body`), right of the tick: short text, `end` follows it
@@ -76,9 +77,21 @@ export default {
         fill: { type: Boolean, default: false },
     },
     emits: ['tick'],
+    data() {
+        // how the row came (polish 5): one that came unticked is an offer
+        return { startedDropped: this.dropped ?? !this.ticked };
+    },
     computed: {
         isDropped() {
             return this.dropped ?? !this.ticked;
+        },
+        // unticked: an offer (it came that way) is dimmed; a row the owner
+        // unticked is struck through, as "this won't be written"
+        droppedClass() {
+            if (!this.isDropped) {
+                return '';
+            }
+            return this.startedDropped ? 'suggestion-offer' : 'suggestion-dropped';
         },
     },
 };
