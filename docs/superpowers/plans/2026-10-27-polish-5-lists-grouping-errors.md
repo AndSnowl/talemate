@@ -95,9 +95,9 @@
     - a character: `span.from <= when`;
     - an event: `from <= when <= (until ?? from)`;
     - `span === null`: true.
-- `sideTree(things, {nest, search, folds, openPath, limit = 10}) -> [{thing, depth, folded, childCount, context, more?}]`.
+- `sideTree(things, {nest, search, opened, openPath, limit = 10}) -> [{thing, depth, folded, childCount, context, more?}]`.
   - Each thing appears once, nested by `mostPreciseHome` among same-kind things when `nest` is set. A filing loop has no top: each thing in the loop sits at the root.
-  - `folds` is a `Set` of folded ids, folded by default. `openPath` is a `Set` of ids forced open.
+  - Everything is folded by default. `opened` is a `Set` of ids the owner unfolded, and `openPath` a `Set` of ids opened because the open page sits under them.
   - With an active `search`:
     - only matches and their ancestors show, the ancestors with `context: true`;
     - everything shown is unfolded.
@@ -134,12 +134,12 @@
 
 ### Task 3: The side tree folds, and search narrows it
 
-**Files:** `talemate_frontend/src/components/worlds/WorldTab.vue`; a fold store in `worldTree.js` (`loadFolds(worldId)`, `saveFolds(worldId, folds)`); e2e in a new `tests/e2e/worlds/test_lists.py`.
+**Files:** `talemate_frontend/src/components/worlds/WorldTab.vue`; a fold store in `worldTree.js` (`loadFolds(worldId)`, `saveFolds(worldId, value)`); e2e in a new `tests/e2e/worlds/test_lists.py`.
 
 **Interfaces — Consumes:** `sideTree`, `parseSearch`, `matchesSearch` (Task 2).
 
 **Interfaces — Produces:**
-- `loadFolds(worldId) -> {kinds: Set, entries: Set}`. It returns empty sets on any storage error or bad value. `saveFolds` swallows storage errors.
+- `loadFolds(worldId) -> {kinds: Set, entries: Set}`: the kinds and entries the owner unfolded (`folded` for a path the owner folded back is a separate `Set` in the same value). It returns empty sets on any storage error or bad value. `saveFolds` swallows storage errors.
 
 - [ ] **Write the failing tests:**
   - Node check `loadFolds survives bad storage`: storage that throws, and the value `"{bad"`, both give empty sets.
