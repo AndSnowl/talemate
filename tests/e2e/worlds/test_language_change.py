@@ -169,3 +169,48 @@ def test_a_grammar_chapters_change_opens_the_panel_aimed_at_it(app, page):
     expect(request).to_have_value("Change the Verbs section: ", timeout=TIMEOUT_MS)
     expect(request).to_be_focused()
     assert request.evaluate("(el) => el.selectionStart") == len("Change the Verbs section: ")
+
+
+# --- from an entry ------------------------------------------------------------
+
+
+def _speaker_page(app, page, stem):
+    _language_page(app, page, stem, speaker=True)
+    return _open_thing(page, "Sorau")
+
+
+def test_from_an_entry_the_panel_opens_in_place(app, page):
+    sorau = _speaker_page(app, page, "Change from entry")
+    sorau.get_by_test_id("entry-change-language").click()
+    panel = page.get_by_test_id("language-change")
+    expect(panel).to_be_visible(timeout=TIMEOUT_MS)
+    expect(sorau.get_by_test_id("thing-name")).to_have_text("Sorau")
+    picked = panel.get_by_test_id("change-language").filter(has_text="Velskar")
+    expect(picked).to_have_attribute("aria-pressed", "true", timeout=TIMEOUT_MS)
+    fit = panel.get_by_test_id("change-fit").filter(has_text="Sorau")
+    expect(fit.locator("input[type=checkbox]")).to_be_checked()
+
+
+def test_the_right_click_menu_offers_it(app, page):
+    sorau = _speaker_page(app, page, "Change from menu")
+    sorau.get_by_role("button", name="Add fact", exact=True).click()
+    box = sorau.locator("textarea").first
+    box.wait_for(state="visible", timeout=TIMEOUT_MS)
+    box.fill("Traders of the river")
+    box.dispatch_event("contextmenu", {"clientX": 400, "clientY": 300, "button": 2})
+    menu = page.get_by_test_id("reference-menu")
+    menu.get_by_test_id("menu-change-language").click()
+    expect(page.get_by_test_id("language-change")).to_be_visible(timeout=TIMEOUT_MS)
+
+
+def test_the_review_comes_back_on_the_entry(app, page, fake_claude_mode):
+    fake_claude_mode("change")
+    sorau = _speaker_page(app, page, "Change on entry")
+    sorau.get_by_test_id("entry-change-language").click()
+    panel = page.get_by_test_id("language-change")
+    panel.get_by_test_id("change-request").locator("textarea").first.fill("add words for trade")
+    panel.get_by_test_id("change-start").click()
+    expect(panel.get_by_test_id("language-diff")).to_contain_text("torg", timeout=LONG_MS)
+    panel.get_by_test_id("language-accept").click()
+    expect(page.get_by_test_id("language-change")).to_have_count(0, timeout=TIMEOUT_MS)
+    expect(sorau.get_by_test_id("thing-name")).to_have_text("Sorau")

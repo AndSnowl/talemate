@@ -5,13 +5,31 @@
             <v-btn icon="mdi-close" size="x-small" variant="text" density="comfortable" class="ml-auto" aria-label="Close" @click="worlds.closeLanguageChange()"></v-btn>
         </div>
 
+        <!-- from an entry: which language, those spoken there first -->
+        <div v-if="fromEntry" class="d-flex flex-wrap align-center ga-1 mb-2" data-testid="change-languages">
+            <span class="text-caption text-muted mr-1">Language</span>
+            <v-chip
+                v-for="language in languages"
+                :key="language.id"
+                size="small"
+                :variant="language.id === targetId ? 'flat' : 'outlined'"
+                :color="language.id === targetId ? 'primary' : undefined"
+                :prepend-icon="language.inReach ? 'mdi-map-marker' : undefined"
+                :aria-pressed="String(language.id === targetId)"
+                :disabled="running"
+                data-testid="change-language"
+                @click="pickLanguage(language.id)"
+            >{{ language.name }}</v-chip>
+            <span v-if="!languages.length" class="text-body-2 text-muted">This world has no languages yet.</span>
+        </div>
+
         <!-- the change, made: review it here -->
         <template v-if="job && job.text">
             <div class="text-caption text-muted mb-1">Changed with {{ routeLabel(job.route) }}: review it.</div>
             <LanguageImport :initial-text="job.text" :target-id="job.targetId" :base="job.base" @cancel="drop" />
         </template>
 
-        <template v-else>
+        <template v-else-if="targetId">
             <div data-testid="change-request">
                 <v-textarea
                     ref="request"
@@ -95,6 +113,7 @@
 import { useWorldsStore } from '@/stores/worlds.js';
 import LanguageImport from './LanguageImport.vue';
 import LanguageRouteChoice from './LanguageRouteChoice.vue';
+import { defaultLanguageId, menuLanguages } from './languageMenu.js';
 
 const ROUTE_LABELS = { claude_code: 'Claude Code', in_app: "the Language agent's model", brief: 'the brief' };
 
@@ -123,8 +142,17 @@ export default {
         targetId() {
             return this.draft?.targetId || null;
         },
+        fromEntry() {
+            return !!this.draft?.originId;
+        },
+        // the world's languages, those in reach of the entry first
+        languages() {
+            return menuLanguages(this.worlds.languageMenu);
+        },
         languageName() {
-            return this.thing.name || 'the language';
+            if (!this.fromEntry) return this.thing.name || 'the language';
+            const picked = this.languages.find((language) => language.id === this.targetId);
+            return picked ? picked.name : 'a language';
         },
         // this panel's job: a change or fill of this language
         job() {
@@ -163,23 +191,29 @@ export default {
             for (const id of this.contextIds) {
                 if (!listed.some((entry) => entry.id === id)) {
                     const thing = this.allEntries.find((entry) => entry.value === id);
-                    if (thing) listed.push({ id, name: thing.title, why: '' });
+                    if (thing) listed.push({ id, name: thing.title, why: id === this.draft.originId ? 'this entry' : '' });
                 }
             }
             return listed;
         },
         allEntries() {
-            return Object.values(this.worlds.things || {})
+            const entries = Object.values(this.worlds.things || {})
                 .flat()
                 .filter((thing) => thing && thing.id && thing.name && thing.id !== this.targetId)
                 .map((thing) => ({ title: thing.name, value: thing.id }));
+            // the entry it was asked from, even before the lists load
+            if (this.fromEntry && !entries.some((entry) => entry.value === this.thing.id)) {
+                entries.unshift({ title: this.thing.name, value: this.thing.id });
+            }
+            return entries;
         },
         otherEntries() {
             const shown = new Set(this.fitEntries.map((entry) => entry.id));
             return this.allEntries.filter((entry) => !shown.has(entry.value));
         },
+        // on an entry's page there's no language page to read it from
         completeness() {
-            return this.thing.completeness || null;
+            return this.fromEntry ? null : this.thing.completeness || null;
         },
         stillLines() {
             const found = this.completeness;
@@ -211,6 +245,13 @@ export default {
         'worlds.languageChangeFocus'() {
             this.focusRequest();
         },
+        // from an entry, start on the language spoken there
+        'worlds.languageMenu'(menu) {
+            if (this.fromEntry && !this.targetId && menu) {
+                const first = defaultLanguageId(menu.rows) || menuLanguages(menu)[0]?.id;
+                if (first) this.pickLanguage(first);
+            }
+        },
         'worlds.languageBrief'(brief) {
             if (brief && this.copyWanted) {
                 this.copyWanted = false;
@@ -220,6 +261,7 @@ export default {
     },
     mounted() {
         this.worlds.loadLanguageMakeRoute();
+        if (this.fromEntry) this.worlds.loadLanguageMenu(this.draft.originId);
         this.focusRequest();
     },
     methods: {
@@ -270,6 +312,11 @@ export default {
             } catch {
                 this.briefFallback = brief;
             }
+        },
+        pickLanguage(id) {
+            this.draft.targetId = id;
+            this.worlds.loadLanguageRelated(id);
+            this.focusRequest();
         },
         toggleFit(id, on) {
             const ids = this.contextIds.filter((other) => other !== id);

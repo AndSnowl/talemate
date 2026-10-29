@@ -189,7 +189,7 @@
             </template>
 
             <!-- Change it… (languages 3b-2b): under the header, across the tabs -->
-            <LanguageChange v-if="isLanguage && worlds.languageChange?.targetId === thing.id" class="mt-3" :thing="thing" />
+            <LanguageChange v-if="changeHere" class="mt-3" :thing="thing" />
 
             <!-- a language's page (languages 3a): About is the entry's own
                  page (facts, connections, timeline); the others are the
@@ -311,6 +311,16 @@
                             :title="factFormOpen ? 'save or cancel the edit first' : null"
                             @click="startAdd"
                         >Add fact</v-btn>
+                        <!-- a language reworked to fit this entry (languages 3b-2b) -->
+                        <v-btn
+                            v-if="!isLanguage"
+                            variant="text"
+                            size="small"
+                            color="accent"
+                            prepend-icon="mdi-auto-fix"
+                            data-testid="entry-change-language"
+                            @click="worlds.openLanguageChange({ originId: thing.id })"
+                        >Change a language to fit this…</v-btn>
                     </div>
 
                     <div v-if="form && !form.factId && form.index == null" class="mb-2">
@@ -878,6 +888,13 @@ export default {
         };
     },
     computed: {
+        // the Change it… panel belongs on this page: its language's, or
+        // the entry it was asked from
+        changeHere() {
+            const change = this.worlds.languageChange;
+            if (!change) return false;
+            return change.originId ? change.originId === this.thing.id : this.isLanguage && change.targetId === this.thing.id;
+        },
         thing() {
             return this.draft ? this.draftThing : this.worlds.thing;
         },
