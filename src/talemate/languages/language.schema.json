@@ -89,6 +89,109 @@
       "title": "GeneratorDef",
       "type": "object"
     },
+    "GrammarExample": {
+      "description": "A worked example: the original, word by word, and its translation.",
+      "properties": {
+        "original": {
+          "title": "Original",
+          "type": "string"
+        },
+        "breakdown": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Breakdown",
+          "type": "array"
+        },
+        "translation": {
+          "default": "",
+          "title": "Translation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "original"
+      ],
+      "title": "GrammarExample",
+      "type": "object"
+    },
+    "GrammarSection": {
+      "description": "One topic of a language's grammar: plain text, tables, examples.",
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "topic": {
+          "default": "other",
+          "title": "Topic",
+          "type": "string"
+        },
+        "text": {
+          "default": "",
+          "title": "Text",
+          "type": "string"
+        },
+        "tables": {
+          "items": {
+            "$ref": "#/$defs/GrammarTable"
+          },
+          "title": "Tables",
+          "type": "array"
+        },
+        "examples": {
+          "items": {
+            "$ref": "#/$defs/GrammarExample"
+          },
+          "title": "Examples",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "GrammarSection",
+      "type": "object"
+    },
+    "GrammarTable": {
+      "description": "A table in a grammar section: a conjugation, noun endings, the\npronouns. Rows are kept as written, even when ragged.",
+      "properties": {
+        "caption": {
+          "default": "",
+          "title": "Caption",
+          "type": "string"
+        },
+        "columns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Columns",
+          "type": "array"
+        },
+        "rows": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": "Rows",
+          "type": "array"
+        }
+      },
+      "title": "GrammarTable",
+      "type": "object"
+    },
     "Language": {
       "properties": {
         "name": {
@@ -136,9 +239,11 @@
           "type": "array"
         },
         "grammar": {
-          "default": "",
+          "items": {
+            "$ref": "#/$defs/GrammarSection"
+          },
           "title": "Grammar",
-          "type": "string"
+          "type": "array"
         },
         "dictionary": {
           "items": {

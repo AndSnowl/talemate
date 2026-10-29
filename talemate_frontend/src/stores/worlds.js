@@ -700,7 +700,7 @@ export const useWorldsStore = defineStore('worlds', {
         languageMakeRoute: null,
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
-        languageMakeDraft: { text: '', contextIds: [], answers: [] },
+        languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
         languageMake: null,
         languageQuestions: null,
         languageBrief: null,
@@ -1964,7 +1964,7 @@ export const useWorldsStore = defineStore('worlds', {
         clearLanguageMake() {
             this.languageMake = null;
             this.languageQuestions = null;
-            this.languageMakeDraft = { text: '', contextIds: [], answers: [] };
+            this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
         },
 
         exportLanguage(thingId) {
@@ -2261,7 +2261,8 @@ export const useWorldsStore = defineStore('worlds', {
                     this.languagePreview = data;
                     break;
                 case 'language_make_route':
-                    this.languageMakeRoute = data.route;
+                    // {route, claude_model, sizes}: the agent's defaults
+                    this.languageMakeRoute = data;
                     break;
                 case 'language_questions':
                     this.languageQuestions = { pending: false, questions: data.questions, error: null };
@@ -2292,7 +2293,7 @@ export const useWorldsStore = defineStore('worlds', {
                     this.languagePreview = null;
                     this.languageMake = null;
                     this.languageQuestions = null;
-                    this.languageMakeDraft = { text: '', contextIds: [], answers: [] };
+                    this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
                     this.listThings('language');
                     this.listAllThings();
                     this.openThing(data.id);

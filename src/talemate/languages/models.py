@@ -11,6 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 __all__ = [
     "GENERATOR_USES",
+    "GRAMMAR_TOPICS",
+    "PARTS_OF_SPEECH",
+    "GrammarExample",
+    "GrammarSection",
+    "GrammarTable",
     "GeneratorDef",
     "Phrase",
     "DictionaryEntry",
@@ -95,6 +100,123 @@ class DictionaryEntry(BaseModel):
         return self
 
 
+# the parts of speech a dictionary word may have: id, plain label, example
+# (languages 3b-2); the owner may also type their own
+PARTS_OF_SPEECH: tuple[tuple[str, str, str], ...] = (
+    ("noun", "noun", "house"),
+    ("verb", "verb", "run"),
+    ("adjective", "adjective", "cold"),
+    ("adverb", "adverb", "quickly"),
+    ("pronoun", "pronoun", "I, they"),
+    ("article", "article", "the, a"),
+    ("preposition", "preposition", "in, with"),
+    ("conjunction", "conjunction", "and, if"),
+    ("number", "number", "two"),
+    ("question", "question word", "who, where"),
+    ("particle", "particle", "not, yes"),
+    ("exclamation", "exclamation", "alas!"),
+    ("ending", "ending", "-ov"),
+)
+
+
+# the grammar topics a full language covers, with their plain titles
+# (languages 3b-2); a section on anything else is "other"
+GRAMMAR_TOPICS: tuple[tuple[str, str], ...] = (
+    ("sounds", "Sounds and stress"),
+    ("word_order", "Word order"),
+    ("nouns", "Nouns"),
+    ("pronouns", "Pronouns"),
+    ("verbs", "Verbs"),
+    ("adjectives", "Adjectives"),
+    ("questions", 'Questions and "not"'),
+    ("numbers", "Numbers"),
+    ("word_building", "How words are built"),
+    ("names", "How names are built"),
+    ("politeness", "Politeness and registers"),
+)
+
+
+def _cell(value: object) -> str:
+    """A table cell or text as a model may write it: a number is its
+    digits, nothing is empty."""
+
+    return "" if value is None else str(value)
+
+
+class GrammarTable(BaseModel):
+    """A table in a grammar section: a conjugation, noun endings, the
+    pronouns. Rows are kept as written, even when ragged."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    caption: str = ""
+    columns: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _loose_cells(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["caption"] = _cell(data.get("caption"))
+        data["columns"] = [_cell(c) for c in data.get("columns") or []]
+        data["rows"] = [
+            [_cell(c) for c in row] if isinstance(row, list) else [_cell(row)]
+            for row in data.get("rows") or []
+        ]
+        return data
+
+
+class GrammarExample(BaseModel):
+    """A worked example: the original, word by word, and its translation."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    original: str
+    breakdown: list[tuple[str, str]] = Field(default_factory=list)
+    translation: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _loose_example(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["original"] = _cell(data.get("original"))
+        data["translation"] = _cell(data.get("translation"))
+        pairs = []
+        for pair in data.get("breakdown") or []:
+            if isinstance(pair, (list, tuple)) and pair:
+                pairs.append((_cell(pair[0]), _cell(pair[1]) if len(pair) > 1 else ""))
+        data["breakdown"] = pairs
+        return data
+
+
+class GrammarSection(BaseModel):
+    """One topic of a language's grammar: plain text, tables, examples."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    topic: str = "other"
+    text: str = ""
+    tables: list[GrammarTable] = Field(default_factory=list)
+    examples: list[GrammarExample] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _title_from_topic(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["topic"] = _cell(data.get("topic")).strip() or "other"
+        data["text"] = _cell(data.get("text"))
+        if not _cell(data.get("title")).strip():
+            data["title"] = dict(GRAMMAR_TOPICS).get(data["topic"], "Grammar")
+        return data
+
+
 class SimilarLink(BaseModel):
     """Another language this one is close to, by name (in a file; an entry
     stores the other language's id)."""
@@ -115,13 +237,23 @@ class Language(BaseModel):
     categories: dict[str, str] = Field(default_factory=dict)
     syllable_notes: list[str] = Field(default_factory=list)
     generators: list[GeneratorDef] = Field(default_factory=list)
-    grammar: str = ""
+    # sections; an older file's grammar text is read as one section
+    grammar: list[GrammarSection] = Field(default_factory=list)
     dictionary: list[DictionaryEntry] = Field(default_factory=list)
     phrases: list[Phrase] = Field(default_factory=list)
     # whose real words the real-word check looks for ("russian", "english"),
     # lower-case; "" for none
     flavour: str = ""
     similar: list[SimilarLink] = Field(default_factory=list)
+
+    @field_validator("grammar", mode="before")
+    @classmethod
+    def _text_grammar_is_one_section(cls, value: object) -> object:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [{"title": "Grammar", "topic": "other", "text": value}]
+        return value
 
     @field_validator("flavour")
     @classmethod

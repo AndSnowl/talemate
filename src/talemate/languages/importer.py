@@ -93,20 +93,36 @@ def _json_objects(text: str):
 def parse_language_text(text: str) -> LanguageFile:
     """The language in `text`: a file, or a reply with prose around it."""
 
+    problem: str | None = None
     for data in _json_objects(text):
         if not isinstance(data, dict):
             continue
         try:
             return LanguageFile.model_validate(data)
-        except ValidationError:
-            pass
+        except ValidationError as exc:
+            if "language" in data:
+                problem = problem or _where(exc)
         try:
             return LanguageFile(language=Language.model_validate(data))
-        except ValidationError:
+        except ValidationError as exc:
+            if "name" in data and "level" in data:
+                problem = problem or _where(exc)
             continue
+    if problem:
+        # a language file was there, with something that doesn't fit:
+        # say where, so whoever made it can fix it
+        raise LanguageParseError(f"The language file has a problem: {problem}")
     raise LanguageParseError(
         "There's no language in this text. Paste the whole file the assistant made."
     )
+
+
+def _where(exc: ValidationError) -> str:
+    """The first problem in `exc`, as "where: what"."""
+
+    error = exc.errors()[0]
+    where = " → ".join(str(part) for part in error.get("loc", ()))
+    return f"{where}: {error.get('msg', 'not valid')}"
 
 
 def _by_word(language: Language) -> dict[str, DictionaryEntry]:

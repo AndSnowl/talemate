@@ -442,11 +442,13 @@ from talemate.languages.lookup import (
     languages_for_scene,
 )
 from talemate.languages.brief import write_brief
+from talemate.languages.completeness import completeness as completeness_of
 from talemate.languages.making import (
     MakeError,
     MakeRequest,
     MakeSettings,
     ask_questions,
+    effective_size,
     make_language,
 )
 from talemate.languages.models import Language
@@ -2413,6 +2415,13 @@ class WorldsPlugin(Plugin):
         if state.kind == "language":
             # which of its words name something, worked out each time
             page["word_uses"] = word_uses(view, thing_id)
+            # what a full language still lacks ("Still to fill in")
+            found = (
+                completeness_of(language_of(state, view))
+                if state.fields.get("depth") == "full"
+                else None
+            )
+            page["completeness"] = found.model_dump() if found is not None else None
         if mark_own:
             _mark_own_page(page, own_alias_table(state, page["name"]))
         return page
@@ -5770,7 +5779,30 @@ class WorldsPlugin(Plugin):
         """How languages are made now, so the page offers the right
         button: answers `language_make_route {route}`."""
 
-        self._reply("language_make_route", {"route": self._make_settings().route})
+        settings = self._make_settings()
+        self._reply(
+            "language_make_route",
+            {
+                "route": settings.route,
+                "claude_model": settings.claude_model,
+                "sizes": {
+                    route: effective_size(MakeRequest(text=""), route)
+                    for route in ("claude_code", "in_app", "brief")
+                },
+            },
+        )
+
+    def _settings_for(self, request: MakeRequest) -> MakeSettings:
+        """The language agent's settings with this run's choices (the
+        dialog's) on top; the agent's own setting is left as it is."""
+
+        settings = self._make_settings()
+        update: dict[str, str] = {}
+        if request.route is not None:
+            update["route"] = request.route
+        if request.claude_model is not None:
+            update["claude_model"] = request.claude_model
+        return settings.model_copy(update=update) if update else settings
 
     async def handle_language_brief(self, data: dict):
         """The brief for any outside assistant, for the owner to copy:
@@ -5778,7 +5810,8 @@ class WorldsPlugin(Plugin):
 
         request = MakeRequest(**data)
         view = self.world.view() if self.world is not None else None
-        self._reply("language_brief", {"text": write_brief(view, request)})
+        size = effective_size(request, self._settings_for(request).route)
+        self._reply("language_brief", {"text": write_brief(view, request, size=size)})
 
     async def handle_language_make_start(self, data: dict):
         """Make a language on the language agent's route, in the
@@ -5796,7 +5829,7 @@ class WorldsPlugin(Plugin):
             self._reply("language_make_failed", {"error": "Open a world first"})
             return
         request = MakeRequest(**data)
-        settings = self._make_settings()
+        settings = self._settings_for(request)
         fixed_path = _fixed_file(FIXED_LANGUAGE_ENV)
         fixed = (
             json.loads(fixed_path.read_text(encoding="utf-8")) if fixed_path else None

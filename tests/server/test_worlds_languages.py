@@ -371,12 +371,16 @@ async def test_suggest_definition_without_a_client_is_empty(plugin):
 
 async def test_a_language_page_carries_its_words_uses_as_names(plugin):
     world, lid, sorau, town = await _sorau_world(plugin)
-    await _act(plugin, "language_add_word", language_id=lid, word="Soru", meaning="wind")
+    await _act(
+        plugin, "language_add_word", language_id=lid, word="Soru", meaning="wind"
+    )
     with world.revision(Source.manual()) as rev:
         soru = rev.create_thing("character", {"name": "Soru"})
     await _act(plugin, "get_thing", id=lid)
     page = _last(plugin, "get_thing")["data"]
-    assert page["word_uses"] == {"soru": [{"id": soru, "name": "Soru", "kind": "character"}]}
+    assert page["word_uses"] == {
+        "soru": [{"id": soru, "name": "Soru", "kind": "character"}]
+    }
 
 
 async def test_definitions_ask_the_language_agents_client(plugin):
@@ -387,7 +391,9 @@ async def test_definitions_ask_the_language_agents_client(plugin):
     try:
         async with MockClientContext():
             client_responses.get().append(json.dumps({"definitions": {"vel": "wind"}}))
-            await _act(plugin, "language_suggest_definition", language_id=lid, word="vel")
+            await _act(
+                plugin, "language_suggest_definition", language_id=lid, word="vel"
+            )
             await _drain(plugin)
     finally:
         instance.AGENTS.pop("language", None)
@@ -402,3 +408,13 @@ async def test_language_questions_replies_with_questions(plugin, client):
         await _drain(plugin)
     questions = _last(plugin, "language_questions")["data"]["questions"]
     assert questions == ["Grand or earthy?", "Old or modern?"]
+
+
+async def test_a_language_page_carries_its_completeness(plugin):
+    await _open(plugin)
+    await _act(plugin, "language_import", text=_file_text())
+    lid = _last(plugin, "language_import")["data"]["id"]
+    await _act(plugin, "get_thing", id=lid)
+    page = _last(plugin, "get_thing")["data"]
+    assert page["completeness"]["meanings_total"] > 200
+    assert "water" in page["completeness"]["meanings_missing"]

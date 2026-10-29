@@ -191,7 +191,9 @@
             >
                 <v-tab v-for="tab in LANGUAGE_TABS" :key="tab.value" :value="tab.value" :data-testid="'language-tab-' + tab.value">{{ tab.title }}</v-tab>
             </v-tabs>
-            <LanguageSections v-if="isLanguage && languageTab !== 'about'" class="mt-3" :thing="thing" :tab="languageTab" />
+            <!-- the Language tab, in chapters; the Lexicon -->
+            <LanguageBook v-if="isLanguage && languageTab === 'language'" class="mt-3" :thing="thing" />
+            <LanguageSections v-else-if="isLanguage && languageTab === 'lexicon'" class="mt-3" :thing="thing" tab="lexicon" />
 
             <div v-show="!isLanguage || languageTab === 'about'">
             <!-- 3. Facts, beside the prose -->
@@ -632,6 +634,7 @@ import {
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
 import EntryLanguages from './EntryLanguages.vue';
+import LanguageBook from './LanguageBook.vue';
 import LanguageSections from './LanguageSections.vue';
 import DraftBar from './DraftBar.vue';
 import FillStubButton from './FillStubButton.vue';
@@ -790,6 +793,7 @@ export default {
     components: {
         CreateBox,
         EntryLanguages,
+        LanguageBook,
         LanguageSections,
         DraftBar,
         FillStubButton,

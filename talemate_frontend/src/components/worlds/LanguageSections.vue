@@ -1,11 +1,11 @@
 <template>
     <div class="language-sections" :data-testid="'language-view-' + tab">
-        <!-- Language (approved mockup A): the language itself on the left,
-             its name rules on the right, in the About tab's two columns -->
-        <v-row v-if="tab === 'language'">
-            <v-col cols="12" md="6">
+        <!-- Language, one chapter at a time (the Language tab's chapters,
+             docs/superpowers/mockups/2026-10-29-languages-3b2-language-chapters.html):
+             Overview, Sounds or Names -->
+        <div v-if="tab === 'language'" class="language-chapter">
                 <!-- how it sounds, with depth, flavour and counts under it -->
-                <div class="sec">
+                <div v-if="chapter === 'overview'" class="sec">
                     <div class="sh">
                         <span class="text-overline text-muted">How it sounds</span>
                         <v-btn v-if="!editing.sound" variant="text" size="small" color="accent" prepend-icon="mdi-pencil" @click="editing.sound = true">Edit</v-btn>
@@ -47,7 +47,7 @@
                     </div>
                 </div>
 
-                <div class="sec" data-testid="language-inventory">
+                <div v-if="chapter === 'sounds'" class="sec" data-testid="language-inventory">
                     <div class="sh"><span class="text-overline text-muted">Sound inventory</span></div>
                     <div v-if="!categoryEntries.length" class="text-body-2 text-muted">No sound groups yet.</div>
                     <div v-for="cat in categoryEntries" :key="cat.key" class="d-flex align-center ga-2 mb-1">
@@ -58,7 +58,7 @@
                     </div>
                 </div>
 
-                <div class="sec">
+                <div v-if="chapter === 'sounds'" class="sec">
                     <div class="sh">
                         <span class="text-overline text-muted">Syllable notes</span>
                         <v-btn variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="addSyllableNote">Add note</v-btn>
@@ -81,22 +81,7 @@
                     </div>
                 </div>
 
-                <div class="sec">
-                    <div class="sh">
-                        <span class="text-overline text-muted">Grammar</span>
-                        <v-btn v-if="!editing.grammar" variant="text" size="small" color="accent" prepend-icon="mdi-pencil" @click="editing.grammar = true">Edit</v-btn>
-                    </div>
-                    <template v-if="editing.grammar">
-                        <v-textarea v-model="local.grammar" rows="2" auto-grow variant="outlined" density="compact" hide-details autofocus data-testid="language-grammar"></v-textarea>
-                        <div class="d-flex ga-2 mt-1">
-                            <v-btn size="small" color="accent" variant="flat" @click="saveGrammar">Save</v-btn>
-                            <v-btn size="small" variant="text" @click="cancelGrammar">Cancel</v-btn>
-                        </div>
-                    </template>
-                    <div v-else class="text-body-2">{{ local.grammar || 'No notes yet.' }}</div>
-                </div>
-
-                <div class="sec" data-testid="language-links">
+                <div v-if="chapter === 'overview'" class="sec" data-testid="language-links">
                     <div class="sh">
                         <span class="text-overline text-muted">Related languages</span>
                         <v-btn v-if="!relForm" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="relForm = { kind: 'similar', target: null, degree: 'close' }">Add</v-btn>
@@ -121,10 +106,7 @@
                     </div>
                     <div v-if="!fields.descends_from && !similar.length && !relForm" class="text-body-2 text-muted">None yet.</div>
                 </div>
-            </v-col>
-
-            <v-col cols="12" md="6">
-                <div class="sec" data-testid="language-rules">
+                <div v-if="chapter === 'names'" class="sec" data-testid="language-rules">
                     <div class="sh">
                         <span class="text-overline text-muted">Name rules</span>
                         <v-btn variant="text" size="small" color="accent" prepend-icon="mdi-dice-multiple-outline" @click="reroll()">Roll all</v-btn>
@@ -187,8 +169,7 @@
                         </div>
                     </div>
                 </div>
-            </v-col>
-        </v-row>
+        </div>
 
         <!-- Lexicon (approved mockup A): the dictionary beside the phrases,
              grouped under their category -->
@@ -209,6 +190,17 @@
                             placeholder="Word or meaning"
                             class="search-field"
                         ></v-text-field>
+                        <v-select
+                            v-model="partFilter"
+                            :items="partFilterItems"
+                            density="compact"
+                            variant="outlined"
+                            hide-details
+                            clearable
+                            label="Part"
+                            class="part-filter"
+                            data-testid="dict-part-filter"
+                        ></v-select>
                     </div>
                     <table class="dict">
                         <thead>
@@ -258,6 +250,23 @@
                                             @click.stop="editMeaning(row.index, -1)"
                                         ></v-btn>
                                     </template>
+                                    <!-- a part is picked from the list, or typed -->
+                                    <v-combobox
+                                        v-else-if="field === 'part' && editCell && editCell.index === row.index && editCell.field === 'part'"
+                                        :model-value="local.words[row.index].part"
+                                        :items="PART_ITEMS"
+                                        item-title="title"
+                                        item-value="value"
+                                        :return-object="false"
+                                        density="compact"
+                                        variant="outlined"
+                                        hide-details
+                                        autofocus
+                                        class="part-picker"
+                                        data-testid="word-part-picker"
+                                        @update:model-value="pickPart(row.index, $event)"
+                                        @keydown.esc="editCell = null"
+                                    ></v-combobox>
                                     <input
                                         v-else-if="editCell && editCell.index === row.index && editCell.field === field"
                                         v-model="local.words[row.index][field]"
@@ -267,7 +276,7 @@
                                         @keydown.enter="saveCell"
                                         @blur="saveCell"
                                     />
-                                    <span v-else>{{ local.words[row.index][field] }}</span>
+                                    <span v-else>{{ field === 'part' ? partLabel(local.words[row.index].part) : local.words[row.index][field] }}</span>
                                     <!-- the word is used as a name in the world (worked out live); the
                                          tooltip says whose, and clicking opens it -->
                                     <span
@@ -404,13 +413,33 @@ const USES = {
 
 const WORD_FIELDS = ['word', 'meanings', 'part'];
 
+// the parts of speech, with an example each (languages.models.PARTS_OF_SPEECH)
+const PARTS = [
+    ['noun', 'noun', 'house'],
+    ['verb', 'verb', 'run'],
+    ['adjective', 'adjective', 'cold'],
+    ['adverb', 'adverb', 'quickly'],
+    ['pronoun', 'pronoun', 'I, they'],
+    ['article', 'article', 'the, a'],
+    ['preposition', 'preposition', 'in, with'],
+    ['conjunction', 'conjunction', 'and, if'],
+    ['number', 'number', 'two'],
+    ['question', 'question word', 'who, where'],
+    ['particle', 'particle', 'not, yes'],
+    ['exclamation', 'exclamation', 'alas!'],
+    ['ending', 'ending', '-ov'],
+];
+const PART_ITEMS = PARTS.map(([value, label, example]) => ({ value, title: `${label} (${example})` }));
+const PART_LABELS = Object.fromEntries(PARTS.map(([value, label]) => [value, label]));
+const NO_PART = '(no part)';
+
 function plain(value) {
     return JSON.parse(JSON.stringify(value ?? null));
 }
 
 // A language page's own tabs (languages 3a), as the owner approved them
 // (docs/superpowers/mockups/2026-10-28-language-page-approved.html, A + A):
-// Language (how it sounds, sounds, syllables, grammar and related
+// Language (how it sounds, sounds, syllables and related
 // languages; the name rules beside them) and Lexicon (the dictionary
 // beside the phrases). Laid out like the About tab: section headings with
 // their buttons right after them, two columns filling the page, and text
@@ -423,16 +452,19 @@ export default {
         thing: { type: Object, required: true },
         // 'language' | 'lexicon'
         tab: { type: String, required: true },
+        // the Language tab's chapter this shows: overview, sounds or names
+        chapter: { type: String, default: 'overview' },
     },
     setup() {
-        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS };
+        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS, PART_ITEMS };
     },
     data() {
         return {
             local: this.fromThing(),
-            editing: { sound: false, grammar: false, flavour: false, note: null },
+            editing: { sound: false, flavour: false, note: null },
             importing: false,
             search: '',
+            partFilter: null,
             editCell: null,
             meaningDraft: '',
             phraseDialog: false,
@@ -476,7 +508,15 @@ export default {
             const query = (this.search || '').trim().toLowerCase();
             return this.local.words
                 .map((w, index) => ({ ...w, index }))
-                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || w.meanings.some((m) => m.toLowerCase().includes(query)));
+                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || w.meanings.some((m) => m.toLowerCase().includes(query)))
+                .filter((w) => !this.partFilter || (this.partFilter === NO_PART ? !(w.part || '').trim() : w.part === this.partFilter));
+        },
+        // the parts this dictionary uses, in the list's order, then any typed ones
+        partFilterItems() {
+            const used = new Set(this.local.words.map((w) => (w.part || '').trim()));
+            const known = PARTS.filter(([value]) => used.has(value)).map(([value]) => ({ value, title: PART_LABELS[value] }));
+            const typed = [...used].filter((p) => p && !(p in PART_LABELS)).sort().map((p) => ({ value: p, title: p }));
+            return [...known, ...typed, ...(used.has('') ? [{ value: NO_PART, title: NO_PART }] : [])];
         },
         groupedPhrases() {
             const groups = {};
@@ -537,7 +577,6 @@ export default {
             return {
                 sound: fields.sound || '',
                 flavour: fields.flavour || '',
-                grammar: rules.grammar || '',
                 syllable_notes: plain(rules.syllable_notes || []),
                 generators: plain(rules.generators || []),
                 words: plain(fields.words || []).map((w) => ({
@@ -565,22 +604,12 @@ export default {
             this.saveField('flavour', (this.local.flavour || '').trim().toLowerCase());
             this.editing.flavour = false;
         },
-        saveGrammar() {
-            this.saveRules();
-            this.editing.grammar = false;
-        },
-        cancelGrammar() {
-            this.local.grammar = this.rules.grammar || '';
-            this.editing.grammar = false;
-        },
         saveRules() {
             const rules = {
                 ...plain(this.rules),
                 generators: this.local.generators.map((g) => ({ ...g, patterns: g.patterns.filter((p) => p.trim()) })),
                 syllable_notes: this.local.syllable_notes.filter((n) => n.trim()),
-                grammar: this.local.grammar,
             };
-            if (!rules.grammar) delete rules.grammar;
             if (!rules.syllable_notes.length) delete rules.syllable_notes;
             this.saveField('rules', rules);
         },
@@ -672,6 +701,13 @@ export default {
         removeMeaning(index, m) {
             this.local.words[index].meanings.splice(m, 1);
             this.saveWords();
+        },
+        partLabel(part) {
+            return PART_LABELS[part] || part;
+        },
+        pickPart(index, value) {
+            this.local.words[index].part = (value || '').trim();
+            this.saveCell();
         },
         saveCell() {
             this.editCell = null;
@@ -878,6 +914,12 @@ export default {
     width: 24%;
     font-style: italic;
     color: rgb(var(--v-theme-foreign));
+}
+.part-filter {
+    max-width: 180px;
+}
+.part-picker {
+    min-width: 220px;
 }
 .dict .col-part {
     width: 22%;

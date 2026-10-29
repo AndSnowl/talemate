@@ -35,7 +35,9 @@ def fields_of(language: Language) -> dict[str, object]:
     if language.syllable_notes:
         rules["syllable_notes"] = list(language.syllable_notes)
     if language.grammar:
-        rules["grammar"] = language.grammar
+        rules["grammar"] = [
+            section.model_dump(mode="json") for section in language.grammar
+        ]
     if not language.writable:
         rules["writable"] = False
     return {
@@ -73,7 +75,7 @@ def language_of(state: ThingState, view: WorldView | None = None) -> Language:
         categories=dict(rules.get("categories") or {}),
         syllable_notes=list(rules.get("syllable_notes") or []),
         generators=[GeneratorDef(**g) for g in rules.get("generators") or []],
-        grammar=str(rules.get("grammar") or ""),
+        grammar=rules.get("grammar") or [],
         dictionary=[DictionaryEntry(**w) for w in fields.get("words") or []],
         phrases=[Phrase(**p) for p in fields.get("phrases") or []],
         similar=similar,

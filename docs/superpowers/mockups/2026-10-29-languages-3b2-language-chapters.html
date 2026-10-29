@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Language tab, merged</title>
+<style>
+  :root { --bg:#1d2021; --panel:#282828; --raised:#32302f; --line:#3c3836; --text:#ebdbb2; --muted:#a89984; --dim:#7c6f64; --accent:#fe8019; --link:#fabd2f; --foreign:#d3869b; --chip:#3c3836; --bad:#fb4934; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#111; color:var(--text); font-family: Roboto, ui-sans-serif, system-ui, sans-serif; font-size:15px; }
+  .intro { padding:16px 24px; color:#ddd; font-size:14px; max-width:1150px; } .intro h1 { font-size:18px; margin:0 0 6px; }
+  .option-label { padding:18px 24px 6px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#ccc; }
+  .option-label b { color:#fff; font-size:16px; }
+  .frame { width:1920px; zoom:.62; margin:0 24px 30px; border:1px solid #444; background:var(--bg); display:grid; grid-template-columns:276px 1fr 350px; min-height:860px; }
+  .side { padding:16px; } .side .box { background:var(--panel); border-radius:6px; height:820px; padding:14px; color:var(--muted); font-size:13px; }
+  .side .sel { color:var(--accent); background:#3c2a1a; padding:3px 8px; border-radius:4px; margin-top:6px; }
+  .agents { border-left:1px solid var(--line); }
+  .page { padding:22px 16px 40px; }
+  .head { display:flex; align-items:center; gap:10px; } .back { font-size:13px; letter-spacing:.08em; }
+  .title { color:var(--accent); font-size:23px; font-family:Georgia, serif; }
+  .kchip { font-size:11px; color:var(--muted); background:var(--chip); padding:2px 6px; border-radius:3px; }
+  .hbtns { margin-left:auto; display:flex; gap:8px; }
+  .hbtn { border:1px solid var(--text); padding:5px 12px; border-radius:3px; font-size:12px; letter-spacing:.08em; } .hbtn.del { border-color:var(--bad); color:var(--bad); }
+  .tabs { display:flex; gap:6px; margin-top:18px; border-bottom:1px solid var(--line); }
+  .tab { padding:10px 18px; font-size:14px; letter-spacing:.1em; } .tab.on { color:var(--accent); border-bottom:2px solid var(--accent); }
+  .gcols { display:grid; grid-template-columns:220px 1fr; gap:28px; margin-top:16px; max-width:1240px; }
+  .ov { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .toc .ov { margin:14px 0 6px; } .toc .ov:first-child { margin-top:0; }
+  .toc a { display:block; padding:5px 10px; color:var(--text); font-size:14px; border-left:2px solid var(--line); }
+  .toc a.on { color:var(--accent); border-left-color:var(--accent); }
+  .toc a.other { color:var(--link); }
+  .card { background:var(--panel); border-radius:6px; padding:14px 16px; margin-bottom:14px; }
+  .card h3 { margin:0 0 8px; font-size:16px; font-weight:500; display:flex; align-items:center; gap:10px; }
+  .act { font-size:12px; letter-spacing:.08em; color:var(--accent); text-transform:uppercase; font-weight:400; }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  .body { line-height:1.55; }
+  .inline-set { display:flex; gap:22px; margin-top:8px; font-size:13px; color:var(--muted); }
+  .inline-set b { color:var(--text); font-weight:400; border-bottom:1px dotted var(--muted); }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; } .sym { font-family:monospace; background:var(--chip); padding:2px 8px; border-radius:3px; font-size:13px; }
+  .grow { display:flex; align-items:center; gap:10px; padding:3px 0; } .grow-label { width:22px; color:var(--muted); font-family:monospace; font-size:13px; }
+  table.g { border-collapse:collapse; font-size:14px; margin:6px 0 12px; } table.g caption { text-align:left; color:var(--muted); font-size:12px; padding-bottom:4px; }
+  table.g th { font-weight:400; color:var(--muted); font-size:12px; text-align:left; padding:5px 14px 5px 0; border-bottom:1px solid var(--line); }
+  table.g td { padding:5px 14px 5px 0; border-bottom:1px solid var(--line); } table.g td.f { color:var(--foreign); font-style:italic; }
+  .rule { border-bottom:1px dashed var(--line); padding:10px 0 12px; } .rule:last-child { border-bottom:0; }
+  .names { color:var(--foreign); font-style:italic; margin:4px 0 6px; line-height:1.6; }
+  .pat { font-family:monospace; font-size:13px; border:1px solid var(--line); padding:2px 8px; border-radius:3px; }
+  .ln { color:var(--link); } .degree { font-size:11px; background:var(--chip); color:var(--muted); padding:1px 6px; border-radius:3px; }
+  .counts { display:flex; gap:24px; margin-top:10px; } .counts b { font-size:20px; font-weight:400; color:var(--text); display:block; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+</style></head>
+<body>
+<div class="intro"><h1>One Language tab, in chapters</h1>
+Tabs become <b>About · Language · Lexicon</b>. The Language tab works like the Grammar tab: a chapter list on the left, one chapter at a time. The chapters are Overview, Sounds, Names, then the grammar topics (the name rules together with "How names are built"). Three chapters are shown, using Moscavian.</div>
+
+<div class="option" data-choice="overview">
+<div class="option-label"><b>1</b> Overview (the default chapter)</div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span>
+      <span class="hbtns"><span class="hbtn">IMPORT A NEW VERSION</span><span class="hbtn">EXPORT</span><span class="hbtn del">DELETE</span></span></div>
+    <div class="tabs"><span class="tab">ABOUT</span><span class="tab on">LANGUAGE</span><span class="tab">LEXICON</span></div>
+    <div class="gcols">
+      <div class="toc">
+        <div class="ov">The language</div><a class="on">Overview</a><a>Sounds</a>
+        <div class="ov">Names</div><a>Name rules</a>
+        <div class="ov">Grammar</div><a>Word order</a><a>Nouns</a><a>Pronouns</a><a>Verbs</a><a>Adjectives</a><a>Questions and "not"</a><a>Numbers</a><a>How words are built</a><a>Politeness and registers</a>
+        <a class="other">The joined "the"</a><a class="other">Leaving out "is"</a>
+      </div>
+      <div>
+        <div class="card">
+          <h3>How it sounds <span class="act">Edit</span></h3>
+          <div class="body">Heavy, rolling words with soft y-glides (ye, yo, ya) and clusters at the front like zv-, str- and khv-. Words often end on -av, -ov or -ar, and the stress sits near the end, so speech sounds weighty and slow, like talk by a stove in a long winter.</div>
+          <div class="inline-set"><span>Depth: <b>full language</b></span><span>Sounds like: <b>russian</b></span></div>
+          <div class="counts"><span class="muted small"><b>251</b>words</span><span class="muted small"><b>27</b>phrases</span><span class="muted small"><b>6</b>name rules</span><span class="muted small"><b>13</b>grammar topics</span></div>
+        </div>
+        <div class="card">
+          <h3>Related languages <span class="act">+ Add</span></h3>
+          <div class="grow"><span class="muted small">Descends from</span> <span class="ln">Old Moscavian</span></div>
+          <div class="grow"><span class="muted small">Similar to</span> <span class="ln">Sorauan</span> <span class="degree">close</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+
+<div class="option" data-choice="sounds">
+<div class="option-label"><b>2</b> Sounds: the sound groups and the grammar's sounds and stress, together</div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span></div>
+    <div class="tabs"><span class="tab">ABOUT</span><span class="tab on">LANGUAGE</span><span class="tab">LEXICON</span></div>
+    <div class="gcols">
+      <div class="toc">
+        <div class="ov">The language</div><a>Overview</a><a class="on">Sounds</a>
+        <div class="ov">Names</div><a>Name rules</a>
+        <div class="ov">Grammar</div><a>Word order</a><a>Nouns</a><a>Pronouns</a><a>Verbs</a><a>…</a>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Sound groups <span class="act">Edit</span></h3>
+          <div class="grow"><span class="grow-label">C</span><div class="chips"><span class="sym">b</span><span class="sym">v</span><span class="sym">g</span><span class="sym">d</span><span class="sym">z</span><span class="sym">zh</span><span class="sym">k</span><span class="sym">kh</span><span class="sym">ts</span><span class="sym">ch</span><span class="sym">sh</span></div></div>
+          <div class="grow"><span class="grow-label">R</span><div class="chips"><span class="sym">str</span><span class="sym">zv</span><span class="sym">khv</span><span class="sym">gd</span><span class="sym">vs</span></div></div>
+          <div class="grow"><span class="grow-label">V</span><div class="chips"><span class="sym">a</span><span class="sym">o</span><span class="sym">e</span><span class="sym">ya</span><span class="sym">yo</span><span class="sym">yu</span></div></div>
+          <div class="ov" style="margin-top:12px">Syllable notes</div>
+          <div class="small" style="margin-top:4px">Clusters only at the start of a word. · A word never ends on a soft vowel.</div>
+        </div>
+        <div class="card">
+          <h3>Sounds and stress <span class="act">Change…</span></h3>
+          <div class="body">Five plain vowels and four y-vowels (ya, yo, yu, ye). Stress falls on the second-to-last syllable…</div>
+          <table class="g"><caption>Letters and their sounds</caption>
+            <tr><th>letter</th><th>sounds like</th></tr>
+            <tr><td class="f">zh</td><td>s in "measure"</td></tr><tr><td class="f">kh</td><td>ch in Scottish "loch"</td></tr><tr><td class="f">ts</td><td>ts in "cats"</td></tr></table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+
+<div class="option" data-choice="names">
+<div class="option-label"><b>3</b> Names: the name rules, with how names are built beside them</div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span></div>
+    <div class="tabs"><span class="tab">ABOUT</span><span class="tab on">LANGUAGE</span><span class="tab">LEXICON</span></div>
+    <div class="gcols">
+      <div class="toc">
+        <div class="ov">The language</div><a>Overview</a><a>Sounds</a>
+        <div class="ov">Names</div><a class="on">Name rules</a>
+        <div class="ov">Grammar</div><a>Word order</a><a>Nouns</a><a>…</a>
+      </div>
+      <div class="two">
+        <div class="card">
+          <h3>Name rules <span class="act">+ Add rule</span><span class="act">Roll all</span></h3>
+          <div class="rule">Characters <span class="muted small">people</span> <span class="act">⚄</span><div class="names">Zmesaslan Tvobin, Mogivik Chizhin, Zhetsyuyar Strachov, Prokyemon</div><span class="muted small">Patterns</span> <span class="pat">CVCVC</span> <span class="pat">RVCVC(ov)</span></div>
+          <div class="rule">Places <span class="muted small">places</span> <span class="act">⚄</span><div class="names">Khvonograd, Tvyovigrad, Vunisov, Nyurigrad</div><span class="muted small">Patterns</span> <span class="pat">CVCV(grad)</span></div>
+          <div class="rule">Groups <span class="muted small">groups</span> <span class="act">⚄</span><div class="names">Sobrav Bechyav, Pryusichi, Vopichi</div></div>
+          <div class="rule">People of a place <span class="muted small">demonym</span> <span class="act">⚄</span><div class="names">zdyelyevtsi, rakivtsi, dachovets</div></div>
+        </div>
+        <div class="card">
+          <h3>How names are built <span class="act">Change…</span></h3>
+          <div class="body">A person has three names: their own name, their father's name with -ovik (son of) or -ovna (daughter of), and a family name ending in -in, -ov or -evsky.</div>
+          <table class="g"><caption>Name endings</caption>
+            <tr><th>kind</th><th>endings</th><th>example</th></tr>
+            <tr><td>son of</td><td class="f">-ovik / -evik</td><td class="f">Borodovik</td></tr>
+            <tr><td>daughter of</td><td class="f">-ovna / -evna</td><td class="f">Borodovna</td></tr>
+            <tr><td>place</td><td class="f">-grad, -ovsk, -ino</td><td class="f">Velikigrad</td></tr></table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+</body></html>
