@@ -17,9 +17,22 @@ As in 3a, there are two checks. **The owner** judges whether each step looks and
 
 ## Real runs, with the owner's go-ahead
 
-- [ ] **Claude Code, for real.** On the owner's machine, with their subscription, it costs about $0.50 and 5 minutes (the spike). Run "a unique but recognizably Russian language for the Tsardom of Moscavia", taking the Tsardom into account. Import the result, then name something with it.
+- [x] **Claude Code, for real** (2026-10-29, owner's go-ahead; results below). On the owner's machine, with their subscription, it costs about $0.50 and 5 minutes (the spike). Run "a unique but recognizably Russian language for the Tsardom of Moscavia", taking the Tsardom into account. Import the result, then name something with it.
 - [ ] **Copy the brief into a chat assistant,** and import its reply.
 
 ## Results
 
-*(filled in during the walk)*
+**Claude Code, for real (2026-10-29).** The run went through the app's dialog in the isolated test app, driven by Playwright:
+- **Settings:** Language agent set to Claude Code with model `sonnet`. Request: "a unique but recognizably Russian language for the Tsardom of Moscavia". Taken into account: the Tsardom of Moscavia, with two facts (birch forests and long winters; ruled from Velikigrad by the Tsar and the boyar council).
+- **The invocation** was exactly the planned one, with the check allowed only by its full path (`Bash(/tmp/fm-check-…/check:*)`).
+- **Progress** showed "Reading brief.md" and "Reading the language guide".
+- **Time:** the review appeared after 280 s.
+- **The result:** *Moscavian*, a full language that sounds Russian, with 24 words and 4 phrases (greeting, blessing, curse and toast, tied to the shrine, elders and long winters).
+  - It has short meanings, several on some words ("wind; breath", "pillar; tower").
+  - The check found nothing to fix. 92% of the words fit the rules; two one-letter-ish words (te, ye) were flagged as a warning.
+- **Sample names:**
+  - people: Grakkrata, Kerets, Posasin, Gravetsin, Nyketsev, Tinkezdina, …
+  - places: Sokargrad, Mitrevovsk, Zhadopovsk, Kavshev, Kagrgor, Badrbab, …
+- **Afterwards:** Import opened its page. Both scratch folders were gone and no Claude Code process was left.
+- Screenshots (in the plan workspace): `real-agent.png`, `real-running.png`, `real-review.png`, `real-page.png`, `real-lexicon.png`, `real-language.png`.
+- **The owner's verdict:** *(pending)*
