@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-__all__ = ["MakeSettings"]
+__all__ = ["MakeRequest", "MakeSettings", "QuestionAnswer"]
 
 Route = Literal["claude_code", "in_app", "brief"]
 
@@ -18,3 +18,20 @@ class MakeSettings(BaseModel):
     route: Route = "claude_code"
     claude_command: str = "claude"
     claude_model: str = ""
+
+
+class QuestionAnswer(BaseModel):
+    question: str
+    answer: str
+
+
+class MakeRequest(BaseModel):
+    """What the owner asked for: their words, their answers to the
+    questions (or "decide for me"), and the entries to take into
+    account."""
+
+    kind: Literal["new"] = "new"
+    text: str
+    answers: list[QuestionAnswer] = []
+    decide_for_me: bool = False
+    context_ids: list[str] = []
