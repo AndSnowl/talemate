@@ -433,6 +433,24 @@ from talemate.world.prose import UNRENDERED_FIELDS
 from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
+from talemate.languages.check import check_language, repair_note
+from talemate.languages.entry import language_of, word_uses
+from talemate.languages.entry import languages as all_languages
+from talemate.languages.lookup import (
+    default_language,
+    languages_for,
+    languages_for_scene,
+)
+from talemate.languages.models import Language
+from talemate.languages.naming import (
+    NameInResult,
+    add_word,
+    apply_name_in,
+    name_in,
+    roll_names,
+)
+from talemate.languages.naming import define as define_names
+from talemate.languages.importer import apply_import, export_language, preview_import
 from talemate.world.store import Revision, Source, World
 from talemate.world.timeline import TimelineEntry
 from talemate.world.timelines import TimelineLine, entry_timeline
@@ -588,6 +606,9 @@ FIXED_FACTS_ENV = "TALEMATE_TEST_FIXED_FACTS"
 # and `group_add` read through their real parsing instead of asking it
 FIXED_GROUP_SYNOPSIS_ENV = "TALEMATE_TEST_FIXED_GROUP_SYNOPSIS"
 FIXED_GROUP_ADD_ENV = "TALEMATE_TEST_FIXED_GROUP_ADD"
+# browser tests: the model's reply to every language naming call
+# (definitions and picks, `languages.naming`)
+FIXED_LANGUAGE_ENV = "TALEMATE_TEST_FIXED_LANGUAGE"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -883,6 +904,47 @@ class FindMixPayload(pydantic.BaseModel):
         return value
 
 
+class LanguageTextPayload(pydantic.BaseModel):
+    """A language file's text (a file or a pasted reply), for a new
+    language or a new version of `target_id`."""
+
+    text: str
+    target_id: str | None = None
+    at: dict | None = None
+
+
+class LanguageSamplesPayload(pydantic.BaseModel):
+    thing_id: str
+    seed: int = 0
+
+
+class LanguageNamesPayload(pydantic.BaseModel):
+    language_id: str
+    # asked from a world scene's message box: the scene's world
+    scene: bool = False
+    kind: str = "place"
+    count: int = 4
+    seed: int | None = None
+    # what the names are for, given to the definitions
+    context: str = ""
+    exclude: list[str] = pydantic.Field(default_factory=list)
+
+
+class LanguageWordPayload(pydantic.BaseModel):
+    language_id: str
+    # asked from a world scene's message box: the scene's world
+    scene: bool = False
+    word: str
+    meaning: str = ""
+    context: str = ""
+    at: dict | None = None
+
+
+class LanguageNameInPayload(_ThingEdit):
+    language_id: str
+    result: dict | None = None
+
+
 class SetFieldPayload(_ThingEdit):
     field: str
     value: Any
@@ -1127,6 +1189,35 @@ class ContinueScenePayload(pydantic.BaseModel):
 class RepositionScenePayload(pydantic.BaseModel):
     scene_id: str
     start: dict
+
+
+def _has_name_rules(state: ThingState) -> bool:
+    """Whether a language entry can make names: a name rule that isn't
+    for ordinary words (a description-only language has none)."""
+
+    rules = state.fields.get("rules") or {}
+    return any(g.get("use") != "words" for g in rules.get("generators") or [])
+
+
+def _languages_page(view: WorldView, state: ThingState) -> dict:
+    """A page's Languages section (languages 3a): its own rows, each named
+    (None for a deleted language), the languages that apply to it (its own,
+    or inherited through its filings) and, when inherited, where from."""
+
+    own = []
+    for row in state.fields.get("languages") or []:
+        language = view.thing(row["language"])
+        named = language is not None and language.kind == "language"
+        own.append({**row, "name": language.fields.get("name") if named else None})
+    rows = languages_for(view, state.id)
+    source = rows[0].source_id if rows and rows[0].inherited else None
+    return {
+        "languages_own": own,
+        "languages_view": [
+            {**r.model_dump(), "source_name": view.name_of(r.source_id)} for r in rows
+        ],
+        "languages_source_name": view.name_of(source) if source else None,
+    }
 
 
 def _fixed_file(env: str) -> Path | None:
@@ -2283,6 +2374,10 @@ class WorldsPlugin(Plugin):
                 ),
             },
         }
+        page.update(_languages_page(view, state))
+        if state.kind == "language":
+            # which of its words name something, worked out each time
+            page["word_uses"] = word_uses(view, thing_id)
         if mark_own:
             _mark_own_page(page, own_alias_table(state, page["name"]))
         return page
@@ -5385,6 +5480,13 @@ class WorldsPlugin(Plugin):
                 if payload.value is not None and not isinstance(payload.value, str):
                     raise ValueError(f"{payload.field!r} must be a thing id")
                 file_by_role(rev, world, payload.thing_id, role, payload.value)
+            elif payload.value is None:
+                # a cleared field (a language's "Descends from", languages
+                # 3a): its value is removed, not set to nothing
+                if state is not None and payload.field in state.fields:
+                    rev.remove_field_value(
+                        payload.thing_id, payload.field, _date_in(payload.valid_from)
+                    )
             else:
                 rev.set_field(
                     payload.thing_id,
@@ -5397,6 +5499,305 @@ class WorldsPlugin(Plugin):
             payload.thing_id,
             _date_in(payload.at),
             prose=payload.field not in UNRENDERED_FIELDS,
+        )
+
+    # --- languages (languages 3a) -------------------------------------------
+
+    async def handle_language_preview(self, data: dict):
+        """What importing a language would give: the file, the shared check
+        and its repair note, and, for a new version, what changes."""
+
+        payload = LanguageTextPayload(**data)
+        preview = preview_import(
+            self._require_world().view(), payload.text, payload.target_id
+        )
+        self._reply(
+            "language_preview",
+            {
+                **preview.model_dump(mode="json"),
+                "ok": preview.report.ok,
+                "repair_note": repair_note(preview.report),
+                "target_id": payload.target_id,
+            },
+        )
+
+    async def handle_language_import(self, data: dict):
+        """Import a language as a new entry, or a new version onto
+        `target_id`; refused when something must be fixed first."""
+
+        payload = LanguageTextPayload(**data)
+        world = self._require_world()
+        preview = preview_import(world.view(), payload.text, payload.target_id)
+        with world.revision(Source.manual(note="import language")) as rev:
+            thing_id = apply_import(rev, world.view(), preview, payload.target_id)
+        self._edited("language_import", thing_id, _date_in(payload.at), prose=False)
+
+    async def handle_language_export(self, data: dict):
+        """The language entry as a file's text."""
+
+        thing_id = str(data.get("thing_id", ""))
+        exported = export_language(self._require_world().view(), thing_id)
+        self._reply(
+            "language_export",
+            {"thing_id": thing_id, "text": exported.model_dump_json(indent=2)},
+        )
+
+    async def handle_language_samples(self, data: dict):
+        """Sample names from each of the language's name rules."""
+
+        payload = LanguageSamplesPayload(**data)
+        state = self._require_world().view().thing(payload.thing_id)
+        if state is None or state.kind != "language":
+            raise ValueError("there's no such language")
+        report = check_language(language_of(state), seed=payload.seed)
+        self._reply(
+            "language_samples",
+            {"thing_id": payload.thing_id, "samples": report.samples},
+        )
+
+    def _language_reply(self) -> tuple[Any, str | None]:
+        fixed = _fixed_file(FIXED_LANGUAGE_ENV)
+        if fixed is not None:
+            return None, fixed.read_text(encoding="utf-8")
+        return self._client(), None
+
+    def _naming_world(self, scene: bool = False) -> World:
+        """The world naming works in: the world scene's, for the scene's
+        message box (whatever world the Worlds tab has open), else the open
+        one."""
+
+        if scene:
+            context = getattr(
+                getattr(self.websocket_handler, "scene", None), "world_context", None
+            )
+            if context is not None:
+                return context.world
+        return self._require_world()
+
+    def _language(self, view: WorldView, language_id: str) -> Language:
+        state = view.thing(language_id)
+        if state is None or state.kind != "language":
+            raise ValueError("there's no such language")
+        return language_of(state, view)
+
+    async def handle_language_menu(self, data: dict):
+        """The languages in reach of an entry for naming (`thing_id`, or
+        none for a box with no page): its rows, the default, and every
+        language in the world for the picker."""
+
+        if data.get("scene"):
+            # the scene's message box: the speaker's languages, then the
+            # scene place's; none in a scene with no world
+            context = getattr(
+                getattr(self.websocket_handler, "scene", None), "world_context", None
+            )
+            if context is None:
+                self._reply(
+                    "language_menu",
+                    {
+                        "thing_id": None,
+                        "scene": True,
+                        "rows": [],
+                        "default": None,
+                        "languages": [],
+                    },
+                )
+                return
+            view = context.world.view()
+            place = context.record.state.get("place_thing_id")
+            rows = languages_for_scene(
+                view,
+                place if isinstance(place, str) else None,
+                context.record.player_thing_id,
+            )
+            self._reply(
+                "language_menu",
+                {
+                    "thing_id": None,
+                    "scene": True,
+                    "rows": [r.model_dump() for r in rows],
+                    "default": rows[0].language_id if rows else None,
+                    "languages": [
+                        {
+                            "id": s.id,
+                            "name": s.fields.get("name", ""),
+                            "phrases": s.fields.get("phrases") or [],
+                            "has_names": _has_name_rules(s),
+                        }
+                        for s in all_languages(view)
+                    ],
+                },
+            )
+            return
+        view = self._require_world().view()
+        thing_id = data.get("thing_id")
+        rows = languages_for(view, thing_id) if thing_id else []
+        self._reply(
+            "language_menu",
+            {
+                "thing_id": thing_id,
+                "scene": False,
+                "rows": [r.model_dump() for r in rows],
+                "default": default_language(rows),
+                "languages": [
+                    {
+                        "id": s.id,
+                        "name": s.fields.get("name", ""),
+                        "phrases": s.fields.get("phrases") or [],
+                        "has_names": _has_name_rules(s),
+                    }
+                    for s in all_languages(view)
+                ],
+            },
+        )
+
+    async def handle_language_names(self, data: dict):
+        """Names rolled from the language for an entry kind, each with a
+        definition from the model, in the background: answers
+        `language_names {language_id, kind, names: [{name, definition}]}`."""
+
+        payload = LanguageNamesPayload(**data)
+        view = self._naming_world(payload.scene).view()
+        language = self._language(view, payload.language_id)
+        exclude = frozenset(payload.exclude) | frozenset(
+            str(s.fields.get("name", "")) for s in view.things(facts=False)
+        )
+        names = roll_names(
+            language,
+            payload.kind,
+            count=payload.count,
+            seed=payload.seed,
+            exclude=exclude,
+        )
+        client, reply = self._language_reply()
+
+        async def named() -> list[dict]:
+            # names are rolled from the language's rules; only their
+            # definitions need a model, so with none they come without
+            definitions: dict[str, str] = {}
+            if client is not None or reply is not None:
+                definitions = await define_names(
+                    client, language, names, payload.context, reply=reply
+                )
+            return [{"name": n, "definition": definitions.get(n, "")} for n in names]
+
+        self._spawn(
+            named(),
+            self.create_task_done_callback(
+                "language_names",
+                "language_names_failed",
+                "Error making names",
+                success_data=lambda found: {
+                    "language_id": payload.language_id,
+                    "kind": payload.kind,
+                    "names": found,
+                },
+                failure_data={"language_id": payload.language_id},
+            ),
+        )
+
+    async def handle_language_suggest_definition(self, data: dict):
+        """A suggested definition for a word the owner is adding, in the
+        background: answers `language_definition {language_id, word,
+        definition}`."""
+
+        payload = LanguageWordPayload(**data)
+        language = self._language(
+            self._naming_world(payload.scene).view(), payload.language_id
+        )
+        client, reply = self._language_reply()
+
+        async def suggested() -> str:
+            if client is None and reply is None:
+                # no model to suggest one: the owner writes it
+                return ""
+            found = await define_names(
+                client, language, [payload.word], payload.context, reply=reply
+            )
+            return found.get(payload.word, "")
+
+        self._spawn(
+            suggested(),
+            self.create_task_done_callback(
+                "language_definition",
+                "language_definition_failed",
+                "Error suggesting a definition",
+                success_data=lambda definition: {
+                    "language_id": payload.language_id,
+                    "word": payload.word,
+                    "definition": definition,
+                },
+                failure_data={"language_id": payload.language_id, "word": payload.word},
+            ),
+        )
+
+    async def handle_language_add_word(self, data: dict):
+        """Add a word with its meaning to a language (a word already used
+        as a name keeps its meaning)."""
+
+        payload = LanguageWordPayload(**data)
+        world = self._naming_world(payload.scene)
+        with world.revision(Source.manual(note="add word")) as rev:
+            add_word(
+                rev, world.view(), payload.language_id, payload.word, payload.meaning
+            )
+        if world is self.world:
+            self._edited(
+                "language_add_word",
+                payload.language_id,
+                _date_in(payload.at),
+                prose=False,
+            )
+        else:
+            # the scene's world, not the one the Worlds tab shows
+            self._reply("language_add_word", {"id": payload.language_id, "scene": True})
+
+    async def handle_language_name_in(self, data: dict):
+        """The entry's name in a language, for review, in the background:
+        answers `language_name_in {thing_id, language_id, result}`."""
+
+        payload = LanguageNameInPayload(**data)
+        view = self._require_world().view()
+        client, reply = self._language_reply()
+        self._spawn(
+            name_in(view, client, payload.thing_id, payload.language_id, reply=reply),
+            self.create_task_done_callback(
+                "language_name_in",
+                "language_name_in_failed",
+                "Error naming it in another language",
+                success_data=lambda result: {
+                    "thing_id": payload.thing_id,
+                    "language_id": payload.language_id,
+                    "result": result.model_dump(),
+                },
+                failure_data={
+                    "thing_id": payload.thing_id,
+                    "language_id": payload.language_id,
+                },
+            ),
+        )
+
+    async def handle_language_apply_name_in(self, data: dict):
+        """Keep a reviewed name in another language: an other name marked
+        with its language, and its new words."""
+
+        payload = LanguageNameInPayload(**data)
+        if payload.result is None:
+            raise ValueError("there's no name to keep")
+        world = self._require_world()
+        with world.revision(Source.manual(note="name in another language")) as rev:
+            apply_name_in(
+                rev,
+                world.view(),
+                payload.thing_id,
+                payload.language_id,
+                NameInResult(**payload.result),
+            )
+        self._edited(
+            "language_apply_name_in",
+            payload.thing_id,
+            _date_in(payload.at),
+            prose=False,
         )
 
     async def handle_override_fact(self, data: dict):

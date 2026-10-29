@@ -67,7 +67,7 @@
                         label
                         variant="outlined"
                         data-testid="thing-other-name"
-                    >{{ other.name }}</v-chip>
+                    >{{ other.name }}<span v-if="otherNameLanguage(other.index)" class="text-muted ml-1">· {{ otherNameLanguage(other.index) }}</span></v-chip>
                 </span>
                 <span v-if="thing.hint" class="text-caption text-muted" data-testid="thing-hint">· written with the prompt hint <b>{{ thing.hint }}</b></span>
                 <v-spacer></v-spacer>
@@ -178,6 +178,22 @@
                 </div>
             </template>
 
+            <!-- a language's page (languages 3a): About is the entry's own
+                 page (facts, connections, timeline); the others are the
+                 language's parts, as the old culture page showed them -->
+            <v-tabs
+                v-if="isLanguage"
+                v-model="languageTab"
+                density="compact"
+                color="primary"
+                class="mt-2 language-tabs"
+                data-testid="language-tabs"
+            >
+                <v-tab v-for="tab in LANGUAGE_TABS" :key="tab.value" :value="tab.value" :data-testid="'language-tab-' + tab.value">{{ tab.title }}</v-tab>
+            </v-tabs>
+            <LanguageSections v-if="isLanguage && languageTab !== 'about'" class="mt-3" :thing="thing" :tab="languageTab" />
+
+            <div v-show="!isLanguage || languageTab === 'about'">
             <!-- 3. Facts, beside the prose -->
             <v-row class="mt-1">
                 <v-col cols="12" md="6">
@@ -243,6 +259,7 @@
                         :aka="akaList"
                         :main-name="thing.name"
                         :busy="editorBusy"
+                        :thing-id="draft ? null : thing.id"
                         @save="saveAka"
                     />
 
@@ -256,6 +273,10 @@
                         @show-under="(key, tag) => edit(setFilingShowUnder(edited, key, tag))"
                         @remove="edit(removeFiling(edited, $event))"
                     />
+
+                    <!-- who speaks what here (languages 3a); a language's
+                         own page has none -->
+                    <EntryLanguages v-if="!draft && thing.kind !== 'language'" :thing="thing" />
 
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
                          line under the heading (a draft page's nested draft
@@ -555,6 +576,7 @@
                     <EntryAddFacts v-if="draft || !thing.stub" :thing="thing" event :on-draft="draft" />
                 </template>
             </EntryTimeline>
+            </div>
         </template>
 
         <SelectionMenu
@@ -609,6 +631,8 @@ import {
     tickMoveHere,
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
+import EntryLanguages from './EntryLanguages.vue';
+import LanguageSections from './LanguageSections.vue';
 import DraftBar from './DraftBar.vue';
 import FillStubButton from './FillStubButton.vue';
 import EntryAddFacts from './EntryAddFacts.vue';
@@ -645,6 +669,16 @@ import ThingReferencedIn from './ThingReferencedIn.vue';
 const HIDDEN_FIELDS = [
     'name', 'voice', 'color', 'lifespan', 'adult_age', 'measures',
     'agent', 'existence', 'tag', 'hint', 'filings', 'aka',
+    // languages 3a: who speaks what, and a language's own sections
+    'languages', 'depth', 'flavour', 'sound', 'rules', 'words', 'phrases',
+    'descends_from', 'similar',
+];
+
+// a language page's tabs (languages 3a): About first, the default
+const LANGUAGE_TABS = [
+    { value: 'about', title: 'About' },
+    { value: 'language', title: 'Language' },
+    { value: 'lexicon', title: 'Lexicon' },
 ];
 
 // what a being's existence means for it
@@ -755,6 +789,8 @@ export default {
     name: 'ThingPage',
     components: {
         CreateBox,
+        EntryLanguages,
+        LanguageSections,
         DraftBar,
         FillStubButton,
         EntryAddFacts,
@@ -796,6 +832,9 @@ export default {
     },
     data() {
         return {
+            LANGUAGE_TABS,
+            // a language page's open tab (languages 3a)
+            languageTab: 'about',
             asOfMenu: false,
             asOfYear: null,
             asOfMonth: null,
@@ -979,6 +1018,9 @@ export default {
         categories() {
             return this.info?.categories || [];
         },
+        isLanguage() {
+            return !this.draft && this.thing?.kind === 'language';
+        },
         isHeritage() {
             return HERITAGE_KINDS.includes(this.thing?.kind);
         },
@@ -1019,6 +1061,15 @@ export default {
         },
         otherNames() {
             return headerNames(this.thing?.aka);
+        },
+        // an other name given in one of the world's languages: that
+        // language's name (languages 3a)
+        otherNameLanguage() {
+            const languages = this.worlds.things.language || [];
+            return (index) => {
+                const id = this.thing?.aka?.[index]?.language;
+                return id ? languages.find((l) => l.id === id)?.name || '' : '';
+            };
         },
         // what the numbers and other names editors show: a draft's own
         // fields are its copy's (`thing.numbers` resolved as rendered)
@@ -1120,6 +1171,9 @@ export default {
         },
     },
     watch: {
+        'thing.id'() {
+            this.languageTab = 'about';
+        },
         formTargetGone(gone) {
             if (gone) {
                 this.form = null;

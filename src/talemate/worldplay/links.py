@@ -551,7 +551,12 @@ def clean_aka(
         tag = tag if tag in AKA_TAGS else "proper"
         is_everyday = entry.get("everyday") is True and tag == "common" and not everyday
         everyday = everyday or is_everyday
-        cleaned.append({"name": name, "tag": tag, "everyday": is_everyday})
+        clean: dict[str, object] = {"name": name, "tag": tag, "everyday": is_everyday}
+        language = entry.get("language")
+        if isinstance(language, str) and re.fullmatch(r"[0-9a-f]{32}", language):
+            # a name given in one of the world's languages (languages 3a)
+            clean["language"] = language
+        cleaned.append(clean)
     return cleaned
 
 

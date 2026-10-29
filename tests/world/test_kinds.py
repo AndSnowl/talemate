@@ -1,6 +1,14 @@
 import pytest
 
-from talemate.world.kinds import HERITAGE_KINDS, KINDS, get_kind, validate_field
+from talemate.world.dates import WorldDate
+
+from talemate.world.kinds import (
+    HERITAGE_KINDS,
+    KIND_ORDER,
+    KINDS,
+    get_kind,
+    validate_field,
+)
 from talemate.world.refs import parse_refs, ref
 
 _HERITAGE_CATEGORIES = ["origin", "physical", "instinct", "variation", "general"]
@@ -20,6 +28,7 @@ def test_kinds_table():
         "filings",
         "hint",
         "agent",
+        "languages",
     ]
     assert [f.type for f in character.fields] == [
         "text",
@@ -32,6 +41,7 @@ def test_kinds_table():
         "text",
         "json",
         "text",
+        "json",
         "json",
     ]
     assert character.categories == [
@@ -128,6 +138,7 @@ def test_species_race_mix_kinds():
         "filings",
         "hint",
         "agent",
+        "languages",
     ]
     assert [f.type for f in species.fields] == [
         "text",
@@ -140,6 +151,7 @@ def test_species_race_mix_kinds():
         "text",
         "json",
         "text",
+        "json",
         "json",
     ]
     assert species.categories == _HERITAGE_CATEGORIES
@@ -157,6 +169,7 @@ def test_species_race_mix_kinds():
         "filings",
         "hint",
         "agent",
+        "languages",
     ]
     assert [f.type for f in race.fields] == [
         "text",
@@ -169,6 +182,7 @@ def test_species_race_mix_kinds():
         "text",
         "json",
         "text",
+        "json",
         "json",
     ]
     assert race.categories == _HERITAGE_CATEGORIES
@@ -186,6 +200,7 @@ def test_species_race_mix_kinds():
         "filings",
         "hint",
         "agent",
+        "languages",
     ]
     assert [f.type for f in mix.fields] == [
         "text",
@@ -198,6 +213,7 @@ def test_species_race_mix_kinds():
         "text",
         "json",
         "text",
+        "json",
         "json",
     ]
     assert mix.categories == _HERITAGE_CATEGORIES
@@ -267,7 +283,9 @@ def test_agent_is_a_bool_field_on_every_kind():
 
 
 def test_the_old_structure_is_gone():
-    """No sphere or culture kind, and none of the fields filing replaced."""
+    """No sphere or culture kind, and none of the fields filing replaced.
+    The old single `language` field is gone too; the `language` kind and
+    the plural `languages` field (languages 3a) are new."""
 
     assert "sphere" not in KINDS
     assert "culture" not in KINDS
@@ -277,3 +295,108 @@ def test_the_old_structure_is_gone():
         assert not gone & {f.name for f in kind.fields}, kind.name
     # the tag says what a place is: no `kind` text field of its own
     assert "kind" not in {f.name for f in get_kind("place").fields}
+
+
+def test_language_kind_fields():
+    names = {f.name for f in get_kind("language").fields}
+    assert {
+        "depth",
+        "flavour",
+        "sound",
+        "rules",
+        "words",
+        "phrases",
+        "descends_from",
+        "similar",
+        "languages",
+    } <= names
+    assert "language" in KIND_ORDER
+
+
+def test_every_kind_has_languages_field():
+    for kind in KINDS.values():
+        assert "languages" in {f.name for f in kind.fields}, kind.name
+
+
+def test_languages_field_validates_rows():
+    k = get_kind("place")
+    validate_field(
+        k,
+        "languages",
+        [
+            {"language": "a" * 32, "role": "spoken", "share": 70},
+            {"language": "b" * 32, "role": "official", "since": WorldDate.of(1412)},
+        ],
+    )
+    for bad in (
+        [{"language": "x", "role": "spoken"}],
+        [{"language": "a" * 32, "role": "official", "share": 50}],
+        [{"language": "a" * 32, "role": "sung"}],
+        [{"language": "a" * 32, "role": "spoken", "share": 120}],
+        [{"language": "a" * 32, "role": "spoken", "fluency": "perfect"}],
+        [
+            {"language": "a" * 32, "role": "spoken"},
+            {"language": "a" * 32, "role": "spoken"},
+        ],
+    ):
+        with pytest.raises(ValueError):
+            validate_field(k, "languages", bad)
+
+
+def test_rules_field_rejects_bad_pattern():
+    with pytest.raises(ValueError):
+        validate_field(
+            get_kind("language"),
+            "rules",
+            {
+                "categories": {"C": "k"},
+                "generators": [
+                    {
+                        "id": "g",
+                        "name": "g",
+                        "use": "words",
+                        "patterns": ["CV"],
+                        "reject": ["("],
+                    }
+                ],
+            },
+        )
+
+
+def test_words_phrases_similar_and_depth_validate():
+    k = get_kind("language")
+    validate_field(k, "words", [{"word": "vel", "meaning": "great"}])
+    validate_field(
+        k,
+        "phrases",
+        [
+            {
+                "id": "p1",
+                "category": "curse",
+                "original": "Vel!",
+                "translation": "Great!",
+            }
+        ],
+    )
+    validate_field(k, "similar", [{"target": "a" * 32, "degree": "close"}])
+    for field, bad in (
+        ("words", [{"word": "", "meaning": "x"}]),
+        (
+            "phrases",
+            [{"id": "p1", "category": "", "original": "x", "translation": "y"}],
+        ),
+        ("similar", [{"target": "a" * 32, "degree": "kinda"}]),
+        ("depth", "deep"),
+    ):
+        with pytest.raises(ValueError):
+            validate_field(k, field, bad)
+
+
+def test_languages_rows_store_dates_as_plain_data():
+    from talemate.world.kinds import normalise_field
+
+    rows = normalise_field(
+        "languages",
+        [{"language": "a" * 32, "role": "official", "since": WorldDate.of(1412)}],
+    )
+    assert rows[0]["since"] == WorldDate.of(1412).model_dump(mode="json")

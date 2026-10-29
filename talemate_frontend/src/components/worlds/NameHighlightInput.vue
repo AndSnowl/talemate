@@ -98,6 +98,10 @@
             :target="menuTarget"
             :has-selection="selection[1] > selection[0]"
             :exclude="exclude"
+            :language-naming="languageNaming"
+            :context-thing-id="namingThingId"
+            :context-kind="namingKind"
+            :selected-text="menuOpen ? selectedText() : ''"
             @cut="cut"
             @copy="copy"
             @paste="paste"
@@ -106,6 +110,7 @@
             @redo="redo"
             @select-all="selectAll"
             @pick="addReference"
+            @insert="insertAt"
         />
     </div>
 </template>
@@ -176,6 +181,13 @@ export default {
         // false where the box's request takes no picks: names highlight,
         // with no menu to re-pick them
         pickable: { type: Boolean, default: true },
+        // right-click naming from a language (languages 3a): on by default;
+        // the page whose languages are in reach is the open one unless
+        // `contextThingId` says otherwise (null: no page, a New box), and
+        // names are rolled for `contextKind` (else the page's kind)
+        languageNaming: { type: Boolean, default: true },
+        contextThingId: { type: String, default: undefined },
+        contextKind: { type: String, default: undefined },
     },
     emits: ['update:modelValue', 'update:picks', 'update:refs', 'update:stubs', 'pick-link'],
     setup() {
@@ -193,6 +205,14 @@ export default {
         };
     },
     computed: {
+        // right-click naming's page: the open one unless the box says
+        namingThingId() {
+            return this.contextThingId === undefined ? this.worlds.selectedThingId || null : this.contextThingId;
+        },
+        namingKind() {
+            if (this.contextKind) return this.contextKind;
+            return this.namingThingId && this.worlds.thing?.id === this.namingThingId ? this.worlds.thing.kind : 'place';
+        },
         matches() {
             return this.worlds.matchesFor(this.modelValue, this.at);
         },

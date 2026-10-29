@@ -44,6 +44,7 @@ from e2e.seed import (
     FIXED_FACTS_FILE,
     FIXED_GROUP_ADD_FILE,
     FIXED_GROUP_SYNOPSIS_FILE,
+    FIXED_LANGUAGE_FILE,
     FIXED_PREVIEW_FILE,
     FIXED_SETUP_FILE,
     SOCKET_HOOK_JS,
@@ -121,6 +122,7 @@ def app(tmp_path_factory, chromium_path):
             "TALEMATE_TEST_FIXED_GROUP_SYNOPSIS", str(root / FIXED_GROUP_SYNOPSIS_FILE)
         )
         mp.setenv("TALEMATE_TEST_FIXED_GROUP_ADD", str(root / FIXED_GROUP_ADD_FILE))
+        mp.setenv("TALEMATE_TEST_FIXED_LANGUAGE", str(root / FIXED_LANGUAGE_FILE))
         info = talemate_app.start(root=root)
     try:
         yield info
@@ -164,6 +166,7 @@ def _fixed_reply_fixture(file_name: str):
 fixed_facts = _fixed_reply_fixture(FIXED_FACTS_FILE)
 fixed_group_synopsis = _fixed_reply_fixture(FIXED_GROUP_SYNOPSIS_FILE)
 fixed_group_add = _fixed_reply_fixture(FIXED_GROUP_ADD_FILE)
+fixed_language = _fixed_reply_fixture(FIXED_LANGUAGE_FILE)
 
 
 @pytest.fixture()

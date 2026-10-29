@@ -691,6 +691,18 @@ const renderTimers = new WeakMap();
 
 export const useWorldsStore = defineStore('worlds', {
     state: () => ({
+        // languages 3a: the import box's preview (`language_preview`), the
+        // sample names per language page, and an exported file's text
+        languagePreview: null,
+        languageSamples: {},
+        languageExport: null,
+        // right-click naming: the languages in reach of a box's page
+        // (`language_menu`), rolled names with definitions, a suggested
+        // definition, and a name in another language for review
+        languageMenu: null,
+        languageNames: null,
+        languageDefinition: null,
+        nameInResult: null,
         connected: false,
         worlds: [],
         currentWorld: null,
@@ -1895,6 +1907,66 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('find_mix', { parents });
         },
 
+        // --- languages (languages 3a) -------------------------------------
+
+        previewLanguage(text, targetId = null) {
+            this.languagePreview = null;
+            this.pending = { ...this.pending, language_preview: true };
+            this.request('language_preview', { text, target_id: targetId });
+        },
+
+        importLanguage(text, targetId = null) {
+            this.pending = { ...this.pending, language_import: true };
+            this.request('language_import', { text, target_id: targetId, at: this.thingAt });
+        },
+
+        clearLanguagePreview() {
+            this.languagePreview = null;
+        },
+
+        exportLanguage(thingId) {
+            this.languageExport = null;
+            this.request('language_export', { thing_id: thingId });
+        },
+
+        loadLanguageMenu(thingId = null, scene = false) {
+            this.languageMenu = null;
+            this.request('language_menu', scene ? { scene: true } : thingId ? { thing_id: thingId } : {});
+        },
+
+        // `scene`: asked from a world scene's message box (the scene's world)
+        requestLanguageNames(languageId, kind, seed = null, context = '', scene = false) {
+            this.languageNames = { language_id: languageId, kind, pending: true, names: [], error: null };
+            this.request('language_names', { language_id: languageId, kind, count: 4, seed, context, scene });
+        },
+
+        addLanguageWord(languageId, word, meaning, scene = false) {
+            this.request('language_add_word', { language_id: languageId, word, meaning, at: this.thingAt, scene });
+        },
+
+        suggestDefinition(languageId, word, context = '', scene = false) {
+            this.languageDefinition = { language_id: languageId, word, pending: true, definition: '' };
+            this.request('language_suggest_definition', { language_id: languageId, word, context, scene });
+        },
+
+        nameIn(thingId, languageId) {
+            this.nameInResult = { thing_id: thingId, language_id: languageId, pending: true, result: null, error: null };
+            this.request('language_name_in', { thing_id: thingId, language_id: languageId });
+        },
+
+        applyNameIn(thingId, languageId, result) {
+            this.nameInResult = null;
+            this.request('language_apply_name_in', { thing_id: thingId, language_id: languageId, result, at: this.thingAt });
+        },
+
+        clearNameIn() {
+            this.nameInResult = null;
+        },
+
+        rollLanguageSamples(thingId, seed = 0) {
+            this.request('language_samples', { thing_id: thingId, seed });
+        },
+
         // --- edits (each answers with the thing as of `thingAt`) -----------
 
         edit(action, data) {
@@ -2138,6 +2210,56 @@ export const useWorldsStore = defineStore('worlds', {
                     // every page with that tag reads its new one
                     this.refreshThing();
                     this.listAllThings();
+                    break;
+                case 'language_preview':
+                    this.languagePreview = data;
+                    break;
+                case 'language_import':
+                    this.languagePreview = null;
+                    this.listThings('language');
+                    this.listAllThings();
+                    this.openThing(data.id);
+                    break;
+                case 'language_export':
+                    this.languageExport = data;
+                    break;
+                case 'language_menu':
+                    this.languageMenu = data;
+                    break;
+                case 'language_names':
+                    if (this.languageNames?.language_id === data.language_id) {
+                        this.languageNames = { ...this.languageNames, pending: false, names: data.names };
+                    }
+                    break;
+                case 'language_names_failed':
+                    if (this.languageNames) {
+                        this.languageNames = { ...this.languageNames, pending: false, error: message.message || 'No names came back.' };
+                    }
+                    break;
+                case 'language_definition':
+                case 'language_definition_failed':
+                    if (this.languageDefinition?.word === data?.word) {
+                        this.languageDefinition = { ...this.languageDefinition, pending: false, definition: data.definition || '' };
+                    }
+                    break;
+                case 'language_name_in':
+                    if (this.nameInResult?.thing_id === data.thing_id) {
+                        this.nameInResult = { ...this.nameInResult, pending: false, result: data.result };
+                    }
+                    break;
+                case 'language_name_in_failed':
+                    if (this.nameInResult) {
+                        this.nameInResult = { ...this.nameInResult, pending: false, error: message.message || 'It could not be named.' };
+                    }
+                    break;
+                case 'language_add_word':
+                case 'language_apply_name_in':
+                    if (data.id === this.selectedThingId) {
+                        this.thing = data;
+                    }
+                    break;
+                case 'language_samples':
+                    this.languageSamples = { ...this.languageSamples, [data.thing_id]: data.samples };
                     break;
                 case 'group_synopsis':
                 case 'group_synopsis_failed': {
@@ -2457,6 +2579,17 @@ export const useWorldsStore = defineStore('worlds', {
                         this.nameLookups = {};
                         this.mixLookup = null;
                         this.acceptOpens = true;
+                        // or a naming request refused before it went out
+                        // (languages 3a)
+                        if (this.languageNames?.pending) {
+                            this.languageNames = { ...this.languageNames, pending: false, error: message.error.message };
+                        }
+                        if (this.languageDefinition?.pending) {
+                            this.languageDefinition = { ...this.languageDefinition, pending: false };
+                        }
+                        if (this.nameInResult?.pending) {
+                            this.nameInResult = { ...this.nameInResult, pending: false, error: message.error.message };
+                        }
                         // or a merge's preview
                         if (this.merge?.pending) {
                             this.merge = { ...this.merge, pending: false };

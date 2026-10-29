@@ -2,7 +2,7 @@
 
 This is the pattern language used by `Language.categories` and a
 generator's `patterns`/`reject`. It is faithfully copied from the
-module docstring of `src/talemate/cultures/generator.py` — the importer
+module docstring of `src/talemate/languages/generator.py` — the importer
 parses exactly this syntax, so do not invent variations on it.
 
 ## Categories
@@ -80,14 +80,11 @@ two-word name; another generator's reject rules don't count). A
 language with no generators always "fits" — nothing to check against.
 
 Use this when hand-writing a name (a protagonist, a landmark) that
-should read as native to the culture: if it doesn't fit, either adjust
-the name or treat it as a foreign name and add a `foreign_renderings`
-entry instead.
+should read as native to the language: if it doesn't fit, adjust the
+name, or add it to the dictionary as a word with its meaning (a word made
+of two or more of the language's own fitting words counts as fitting).
 
-Because `fits` only checks a name against a language's *own*
-generators, `cli sample`'s ✓ mark on a name it just rolled from that
-same language is close to a tautology — it will almost always be ✓, so
-it says nothing about quality. `fits` is far more useful pointed at a
-*different* language: roll names from the one you're building and
-check them against each neighbour's `fits` to see whether the two
-read as distinct (aim for close to none fitting the neighbour).
+`python -m talemate.languages check FILE` reports the share of the
+dictionary that fits the `words` generator. To see whether two languages
+read as distinct, roll names from one and check them against the other's
+rules: aim for close to none fitting the neighbour.
