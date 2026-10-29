@@ -148,3 +148,24 @@ def test_fill_in_next_copies_its_brief_on_the_brief_route(app, page):
     expect(panel.get_by_test_id("change-copied")).to_be_visible(timeout=TIMEOUT_MS)
     copied = page.evaluate("() => navigator.clipboard.readText()")
     assert "## What to add" in copied
+
+
+def test_a_grammar_chapters_change_opens_the_panel_aimed_at_it(app, page):
+    fields = _language_fields()
+    fields["rules"] = {
+        **fields["rules"],
+        "grammar": [{"title": "Verbs", "topic": "verbs", "text": "Verbs change for who acts."}],
+    }
+    name = _world_name("Change chapter")
+    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-language").click()
+    thing.get_by_test_id("language-chapters").get_by_test_id("language-chapter").filter(has_text="Verbs").click()
+    thing.get_by_test_id("grammar-section").get_by_test_id("grammar-change").click()
+    panel = page.get_by_test_id("language-change")
+    request = panel.get_by_test_id("change-request").locator("textarea").first
+    expect(request).to_have_value("Change the Verbs section: ", timeout=TIMEOUT_MS)
+    expect(request).to_be_focused()
+    assert request.evaluate("(el) => el.selectionStart") == len("Change the Verbs section: ")

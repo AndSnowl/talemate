@@ -707,6 +707,8 @@ export const useWorldsStore = defineStore('worlds', {
         languageChange: null,
         // the entries a change should fit (`language_related`)
         languageRelated: null,
+        // bumped each time the panel is opened or aimed (it focuses then)
+        languageChangeFocus: 0,
         // an Accept of a change is on its way: stay on the page
         acceptingChange: false,
         languageMake: null,
@@ -1984,6 +1986,8 @@ export const useWorldsStore = defineStore('worlds', {
                 ? { ...this.languageChange, text: prefill || this.languageChange.text }
                 : { targetId, originId, text: prefill, contextIds: originId ? [originId] : null, route: null, claudeModel: null };
             if (targetId) this.loadLanguageRelated(targetId);
+            // the panel puts the cursor at the end of its request
+            this.languageChangeFocus += 1;
         },
 
         closeLanguageChange() {

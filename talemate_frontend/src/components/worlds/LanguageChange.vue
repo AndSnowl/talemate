@@ -14,6 +14,7 @@
         <template v-else>
             <div data-testid="change-request">
                 <v-textarea
+                    ref="request"
                     v-model="draft.text"
                     placeholder="What should change? For example: they're traders, not warriors: redo the curses"
                     rows="2"
@@ -22,7 +23,6 @@
                     variant="outlined"
                     hide-details
                     :disabled="running"
-                    :autofocus="!!draft.text"
                 ></v-textarea>
             </div>
 
@@ -208,6 +208,9 @@ export default {
         },
     },
     watch: {
+        'worlds.languageChangeFocus'() {
+            this.focusRequest();
+        },
         'worlds.languageBrief'(brief) {
             if (brief && this.copyWanted) {
                 this.copyWanted = false;
@@ -217,8 +220,18 @@ export default {
     },
     mounted() {
         this.worlds.loadLanguageMakeRoute();
+        this.focusRequest();
     },
     methods: {
+        // the cursor at the end of the request, ready to finish it
+        focusRequest() {
+            this.$nextTick(() => {
+                const el = this.$refs.request?.$el?.querySelector('textarea');
+                if (!el) return;
+                el.focus();
+                el.setSelectionRange(el.value.length, el.value.length);
+            });
+        },
         routeLabel(route) {
             return ROUTE_LABELS[route] || 'the assistant';
         },
