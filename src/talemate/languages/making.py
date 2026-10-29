@@ -2,7 +2,6 @@
 settings, and the job that runs a route."""
 
 import re
-import shutil
 from collections.abc import Awaitable, Callable
 from typing import Literal
 
@@ -188,23 +187,22 @@ async def make_language(
         text = await make_in_app(client, brief, reply=fixed_reply)
         return await _repaired(text, in_app_again, on_progress)
 
-    folder = claude_code.prepare_folder(
-        write_brief(view, request, check_command="./check")
-    )
+    scratch = claude_code.prepare_scratch()
+    scratch.write_brief(write_brief(view, request, check_command=str(scratch.check)))
 
     async def claude_again(problems: str, previous: str) -> str:
         prompt = REPAIR_PROMPT + problems
         result = await claude_code.run_claude_code(
-            folder, settings, prompt, on_progress
+            scratch, settings, prompt, on_progress
         )
         return result.text
 
     try:
         result = await claude_code.run_claude_code(
-            folder, settings, FIRST_PROMPT, on_progress
+            scratch, settings, FIRST_PROMPT, on_progress
         )
         return await _repaired(result.text, claude_again, on_progress)
     except claude_code.ClaudeCodeError as exc:
         raise MakeError(str(exc)) from exc
     finally:
-        shutil.rmtree(folder, ignore_errors=True)
+        scratch.remove()

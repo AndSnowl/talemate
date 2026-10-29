@@ -103,11 +103,11 @@ from `talemate.languages.models.LanguageFile`). The shape:
 
 Run the app's check on the file, and fix it until it passes.
 
-If the folder you're working in has a `check` command (the app puts one
-there when it runs you), use it, on its own line with no other commands:
+If your brief names a check command (the app gives one when it runs
+you), run exactly that, on its own line with no other commands:
 
 ```bash
-./check NAME.language.json
+/the/path/from/the/brief/check NAME.language.json
 ```
 
 Otherwise, from the app's folder:

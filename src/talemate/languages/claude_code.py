@@ -17,6 +17,7 @@ import signal
 import sys
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import structlog
@@ -32,7 +33,8 @@ __all__ = [
     "ClaudeCodeResult",
     "claude_args",
     "find_language_text",
-    "prepare_folder",
+    "Scratch",
+    "prepare_scratch",
     "progress_line",
     "run_claude_code",
 ]
@@ -59,49 +61,88 @@ class ClaudeCodeResult(BaseModel):
     cost_usd: float | None = None
 
 
-def _check_wrapper(folder: Path) -> None:
+_CHECK_SCRIPT = """\
+# The app's language check for one scratch folder (languages 3b). It
+# lives outside the folder Claude Code works in, so Claude Code can't
+# rewrite it; it runs with -P, so nothing in that folder is imported; and
+# it reads only language files inside that folder.
+import sys
+from pathlib import Path
+
+FOLDER = Path({folder!r}).resolve()
+paths = sys.argv[1:]
+if not paths or any(not (FOLDER / p).resolve().is_relative_to(FOLDER) for p in paths):
+    print("The check only reads language files in its own folder.")
+    sys.exit(2)
+
+from talemate.languages.__main__ import main
+
+sys.exit(main(["check", *paths]))
+"""
+
+
+@dataclass
+class Scratch:
+    """Where Claude Code works (`folder`: the skill, the brief, the file it
+    writes) and the check it may run (`check`, kept in a folder of its
+    own)."""
+
+    folder: Path
+    check: Path
+
+    def write_brief(self, brief: str) -> None:
+        (self.folder / BRIEF_FILE_NAME).write_text(brief, encoding="utf-8")
+
+    def remove(self) -> None:
+        shutil.rmtree(self.folder, ignore_errors=True)
+        shutil.rmtree(self.check.parent, ignore_errors=True)
+
+
+def _write_check(check_dir: Path, folder: Path) -> Path:
+    script = check_dir / "check.py"
+    script.write_text(_CHECK_SCRIPT.format(folder=str(folder)), encoding="utf-8")
     if sys.platform == "win32":
-        (folder / "check.cmd").write_text(
-            f'@"{sys.executable}" -m talemate.languages check %*\r\n'
-        )
-        return
-    wrapper = folder / "check"
-    wrapper.write_text(
-        "#!/bin/sh\n"
-        "# the app's language check, for this folder only\n"
-        f'exec "{sys.executable}" -m talemate.languages check "$@"\n'
-    )
+        wrapper = check_dir / "check.cmd"
+        wrapper.write_text(f'@"{sys.executable}" -P "{script}" %*\r\n')
+        return wrapper
+    wrapper = check_dir / "check"
+    wrapper.write_text(f'#!/bin/sh\nexec "{sys.executable}" -P "{script}" "$@"\n')
     wrapper.chmod(0o755)
+    return wrapper
 
 
-def prepare_folder(brief: str) -> Path:
-    """A fresh scratch folder (in the system temp folder, never under
-    `~/.claude`, which Claude Code won't write in) holding the skill, the
-    check command and the brief."""
+def prepare_scratch() -> Scratch:
+    """Two fresh folders in the system temp folder (never under
+    `~/.claude`, which Claude Code won't write in): one for Claude Code to
+    work in, holding the skill, and one for the check."""
 
-    folder = Path(tempfile.mkdtemp(prefix="fm-language-"))
+    folder = Path(tempfile.mkdtemp(prefix="fm-language-")).resolve()
     if SKILL_SOURCE.is_dir():
         shutil.copytree(SKILL_SOURCE, folder / ".claude" / "skills" / "language-design")
     else:
         log.warning("language-design skill not found", path=str(SKILL_SOURCE))
-    _check_wrapper(folder)
-    (folder / BRIEF_FILE_NAME).write_text(brief, encoding="utf-8")
-    return folder
+    check_dir = Path(tempfile.mkdtemp(prefix="fm-check-")).resolve()
+    return Scratch(folder=folder, check=_write_check(check_dir, folder))
 
 
-def _check_rule() -> str:
-    return "Bash(./check.cmd:*)" if sys.platform == "win32" else "Bash(./check:*)"
+def _forget_settings(folder: Path) -> None:
+    """Settings a run left in the folder: a next run there (a repair)
+    loads project settings, so they could widen what it may do."""
+
+    for path in (folder / ".claude").glob("settings*.json"):
+        path.unlink(missing_ok=True)
 
 
-def claude_args(settings: MakeSettings, prompt: str) -> list[str]:
+def claude_args(settings: MakeSettings, prompt: str, check: str) -> list[str]:
     """The spike's invocation: project settings only, the five tools, the
-    check the only command allowed, edits only inside the folder."""
+    check (by its full path) the only command allowed, edits only inside
+    the folder."""
 
     args = [
         "-p", prompt,
         "--setting-sources", "project",
         "--tools", "Read,Write,Edit,Bash,Skill",
-        "--allowedTools", f"Skill,{_check_rule()}",
+        "--allowedTools", f"Skill,Bash({check}:*)",
         "--disallowedTools", "Bash(git:*)",
         "--permission-mode", "acceptEdits",
         "--output-format", "stream-json",
@@ -133,7 +174,8 @@ def progress_line(event: dict) -> str | None:
             return f"Writing {_file_name(tool_input)}"
         if name == "Read":
             return f"Reading {_file_name(tool_input)}"
-        if name == "Bash" and str(tool_input.get("command", "")).startswith("./check"):
+        command = str(tool_input.get("command", "")).split()
+        if name == "Bash" and command and Path(command[0]).stem == "check":
             return "Running the check"
     return None
 
@@ -179,18 +221,20 @@ async def _kill_tree(proc: asyncio.subprocess.Process) -> None:
 
 
 async def run_claude_code(
-    folder: Path,
+    scratch: Scratch,
     settings: MakeSettings,
     prompt: str,
     on_progress: Callable[[str], None],
 ) -> ClaudeCodeResult:
-    """Run Claude Code in `folder` with `prompt`, reporting plain progress
-    lines, and return the language it made. Cancelling kills it."""
+    """Run Claude Code in the scratch folder with `prompt`, reporting plain
+    progress lines, and return the language it made. Cancelling kills it."""
 
+    folder = scratch.folder
+    _forget_settings(folder)
     try:
         proc = await asyncio.create_subprocess_exec(
             settings.claude_command,
-            *claude_args(settings, prompt),
+            *claude_args(settings, prompt, str(scratch.check)),
             cwd=folder,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,

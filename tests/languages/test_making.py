@@ -81,14 +81,14 @@ async def test_a_reply_with_no_language_is_sent_back():
 
 async def test_the_claude_code_route_runs_the_fake(monkeypatch):
     monkeypatch.setenv("FAKE_CLAUDE_MODE", "ok")
-    folders = []
-    real = claude_code.prepare_folder
+    made = []
+    real = claude_code.prepare_scratch
 
-    def spy(brief):
-        folders.append(real(brief))
-        return folders[-1]
+    def spy():
+        made.append(real())
+        return made[-1]
 
-    monkeypatch.setattr(claude_code, "prepare_folder", spy)
+    monkeypatch.setattr(claude_code, "prepare_scratch", spy)
     lines = []
     text = await make_language(
         None,
@@ -99,7 +99,8 @@ async def test_the_claude_code_route_runs_the_fake(monkeypatch):
     )
     assert parse_language_text(text).language.name
     assert "Running the check" in lines
-    assert folders and not folders[0].exists()
+    # both scratch folders, the work and the check's, are gone afterwards
+    assert made and not made[0].folder.exists() and not made[0].check.exists()
 
 
 async def test_a_claude_code_failure_becomes_a_make_error():
