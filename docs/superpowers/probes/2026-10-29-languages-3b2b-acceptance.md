@@ -19,11 +19,36 @@ As before, there are two checks. **The owner** judges whether each step looks an
 
 Use the saved Moscavian (`.superpowers/saved/2026-10-29-moscavian/moscavian.language.json`), imported into a fresh test world with an Owl Synod religion entry.
 
-- [ ] From the Owl Synod entry: "redo the blessings and farewells around the Owl Synod".
-- [ ] From Moscavian's page: "they're traders: add words for trade and the river market".
+- [x] From the Owl Synod entry: "redo the blessings and farewells around the Owl Synod".
+- [x] From Moscavian's page: "they're traders: add words for trade and the river market".
 
 Record what changed, what was kept, and how long each took.
 
 ## Results
 
-*(filled in during the walk)*
+**The real runs: Claude Code, Opus (2026-10-29).** They ran through the panel in a fresh test app. Moscavian came from the saved 3b-2a file, with the Tsardom of Moscavia speaking it (official) and an Owl Synod lore entry with three belief facts.
+
+1. **From the Owl Synod entry.** Request: "Redo the blessings and the farewells around the Owl Synod and the owl's watchful eye; add words for the Synod's ranks and rites".
+   - The language picked itself, and the review came back on the entry after **170 s**.
+   - New words (17): *sovyar* (owl), *sovyarsobrav*, *sovyarsvyatar*, *krylar*, *operyenka*, …
+   - Phrases: 6 new, 6 removed (the old blessings and farewells redone).
+   - A new grammar section, "The Owl Synod's ranks and rites".
+   - Accepted.
+   - Blessings: *Glazov dye sovyar pon tyev.* "The owl's eye on you."; *Sovyarot glyedi tyev vu nochav.* "May the owl watch over you in the night."
+   - Farewells: *Tishavi kryletsy!* "Silent wings!"; *Sovyarot bryemi tyev.* "May the owl carry you."
+2. **From Moscavian's page.** Request: "They're traders as much as warriors: add words for trade, money, debt and the river market, and redo the curses and oaths around debts and broken bargains".
+   - The review came after **225 s**.
+   - New words (34): *zvyenta*, *kolyesh* (coin), *trezhar* (bargain-breaker), *ryechavslodar*, …
+   - Phrases: 8 new, 6 removed.
+   - A new grammar section, "Trade, debts and bargains".
+   - Accepted.
+   - Curses: *Kolyeshy dye tyev — pyeplov!* "Your coins are ash!"; *Rukva dye tyev gnilava, trezhar!* "Rot to your hand, bargain-breaker!"
+   - Oaths: *Vyerzhav dye yaz — kruvya dye yaz.* "My debt is my blood."; *Pon rukva ye solyar.* "By hand and salt."
+
+After both runs, Moscavian has 302 words and four unusual grammar sections. The real runs left no scratch folders behind.
+
+**Found:**
+- **The review shows changed phrases as counts** ("6 new, 6 removed") instead of before and after, side by side, as the approved mockup did.
+- **My server tests left scratch folders** in the system temp folder. That's fixed (d0676d4e). About 67 old folders from earlier test runs remain in `/tmp` (`fm-check-*`, `fm-language-*`); removing them was refused as a shared `/tmp` sweep, so they're the owner's to remove.
+
+**The owner's verdict:** *(pending: the owner will look in the test app, including where the entry panel sits)*
