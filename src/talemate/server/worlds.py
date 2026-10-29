@@ -5766,6 +5766,12 @@ class WorldsPlugin(Plugin):
             settings = settings.model_copy(update={"claude_command": command})
         return settings
 
+    async def handle_language_make_route(self, data: dict):
+        """How languages are made now, so the page offers the right
+        button: answers `language_make_route {route}`."""
+
+        self._reply("language_make_route", {"route": self._make_settings().route})
+
     async def handle_language_brief(self, data: dict):
         """The brief for any outside assistant, for the owner to copy:
         answers `language_brief {text}`."""

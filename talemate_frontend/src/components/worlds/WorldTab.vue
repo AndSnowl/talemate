@@ -136,8 +136,13 @@
             <TagsTab v-else-if="kind === tagsTab.kind" />
             <CurationSettings v-else-if="kind === settingsTab.kind" />
             <template v-else-if="info">
-                <!-- a language is imported, never written from a prompt -->
-                <LanguageImport v-if="kind === 'language'" />
+                <!-- a language is made (outside, or by a strong model) or
+                     imported, never written from a prompt; what's made
+                     lands in the import review -->
+                <template v-if="kind === 'language'">
+                    <LanguageMake />
+                    <LanguageImport :initial-text="worlds.languageMake?.text || null" />
+                </template>
                 <CreateBox v-else :kind="kind" :key="kind" />
                 <KindList v-if="!worlds.draft" :kind="kind" :query="query || ''" />
             </template>
@@ -151,6 +156,7 @@ import { homesAbove, loadFolds, parseSearch, saveFolds, searchContext, searching
 import { SETTINGS_TAB, STUBS_TAB, TAGS_TAB, TOP_KINDS, kindInfo } from './worldKinds.js';
 import CreateBox from './CreateBox.vue';
 import LanguageImport from './LanguageImport.vue';
+import LanguageMake from './LanguageMake.vue';
 import CurationSettings from './CurationSettings.vue';
 import ExpandAskDialog from './ExpandAskDialog.vue';
 import KindList from './KindList.vue';
@@ -171,7 +177,7 @@ import ThingPage from './ThingPage.vue';
 // dimmed as context. Stubs, Tags and Settings sit at the bottom.
 export default {
     name: 'WorldTab',
-    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, LanguageImport, StubsTab, TagsTab, ThingPage },
+    components: { CreateBox, CurationSettings, ExpandAskDialog, KindList, LanguageImport, LanguageMake, StubsTab, TagsTab, ThingPage },
     setup() {
         return { worlds: useWorldsStore() };
     },

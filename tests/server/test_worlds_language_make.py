@@ -162,3 +162,8 @@ async def test_disconnecting_stops_the_job(plugin, monkeypatch):
     plugin.disconnect()
     await asyncio.gather(task, return_exceptions=True)
     assert task.cancelled()
+
+
+async def test_the_route_is_told_before_anything_starts(plugin):
+    await _act(plugin, "language_make_route")
+    assert _replies(plugin, "language_make_route")[-1]["route"] == "claude_code"
