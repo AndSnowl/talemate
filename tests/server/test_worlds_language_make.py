@@ -167,3 +167,85 @@ async def test_disconnecting_stops_the_job(plugin, monkeypatch):
 async def test_the_route_is_told_before_anything_starts(plugin):
     await _act(plugin, "language_make_route")
     assert _replies(plugin, "language_make_route")[-1]["route"] == "claude_code"
+
+
+# --- 3b-2a: the route, model and size chosen per run ------------------------
+
+
+async def test_a_run_can_choose_its_route(plugin, tmp_path, monkeypatch):
+    import json
+
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    fixed = tmp_path / "fixed-language.json"
+    fixed.write_text(json.dumps({"language_file": sample}))
+    monkeypatch.setenv(FIXED_LANGUAGE_ENV, str(fixed))
+    await _open(plugin)
+    await _act(plugin, "language_make_start", text=REQUEST, route="in_app")
+    await _drain(plugin)
+    assert _replies(plugin, "language_make_started")[-1]["route"] == "in_app"
+    assert _replies(plugin, "language_make_progress")[0]["line"] == "Asking the model"
+
+
+def _keep_scratch(monkeypatch):
+    import talemate.languages.claude_code as claude_code
+
+    made = []
+    real = claude_code.prepare_scratch
+
+    def spy():
+        made.append(real())
+        return made[-1]
+
+    monkeypatch.setattr(claude_code, "prepare_scratch", spy)
+    monkeypatch.setattr(claude_code.Scratch, "remove", lambda self: None)
+    return made
+
+
+async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch):
+    import json
+
+    made = _keep_scratch(monkeypatch)
+    await _open(plugin)
+    await _act(plugin, "language_make_start", text=REQUEST, claude_model="opus")
+    await _drain(plugin)
+    args = json.loads((made[0].folder / "args.json").read_text())
+    assert args[args.index("--model") + 1] == "opus"
+
+
+async def test_a_run_writes_the_brief_at_its_size(plugin, monkeypatch):
+    made = _keep_scratch(monkeypatch)
+    await _open(plugin)
+    await _act(plugin, "language_make_start", text=REQUEST, size="quick")
+    await _drain(plugin)
+    assert "fill in the rest later" in (made[0].folder / "brief.md").read_text()
+
+
+async def test_the_agents_setting_is_unchanged_after_a_run(plugin, monkeypatch):
+    await _open(plugin)
+    await _act(
+        plugin,
+        "language_make_start",
+        text=REQUEST,
+        route="claude_code",
+        claude_model="opus",
+    )
+    await _drain(plugin)
+    settings = instance.AGENTS["language"].make_settings()
+    assert (settings.route, settings.claude_model) == ("claude_code", "")
+
+
+async def test_the_route_reply_gives_the_default_sizes(plugin):
+    await _act(plugin, "language_make_route")
+    data = _replies(plugin, "language_make_route")[-1]
+    assert data == {
+        "route": "claude_code",
+        "claude_model": "",
+        "sizes": {"claude_code": "full", "in_app": "quick", "brief": "full"},
+    }
+
+
+async def test_the_copied_brief_follows_its_size(plugin):
+    await _act(plugin, "language_brief", text=REQUEST, size="quick")
+    assert "fill in the rest later" in _replies(plugin, "language_brief")[-1]["text"]
+    await _act(plugin, "language_brief", text=REQUEST, route="in_app")
+    assert "fill in the rest later" in _replies(plugin, "language_brief")[-1]["text"]

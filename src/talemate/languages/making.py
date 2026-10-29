@@ -187,9 +187,10 @@ async def make_language(
 
     if settings.route == "brief":
         raise MakeError("This route only copies the brief")
+    size = effective_size(request, settings.route)
 
     if settings.route == "in_app":
-        brief = write_brief(view, request)
+        brief = write_brief(view, request, size=size)
         fixed_reply = (fixed or {}).get("language_file")
 
         async def in_app_again(problems: str, previous: str) -> str:
@@ -202,7 +203,9 @@ async def make_language(
         return await _repaired(text, in_app_again, on_progress)
 
     scratch = claude_code.prepare_scratch()
-    scratch.write_brief(write_brief(view, request, check_command=str(scratch.check)))
+    scratch.write_brief(
+        write_brief(view, request, check_command=str(scratch.check), size=size)
+    )
 
     async def claude_again(problems: str, previous: str) -> str:
         prompt = REPAIR_PROMPT + problems
