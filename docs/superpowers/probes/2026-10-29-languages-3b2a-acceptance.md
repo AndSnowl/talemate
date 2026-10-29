@@ -15,7 +15,7 @@ As in 3b-1, there are two checks. **The owner** judges whether each step looks a
 
 ## Real run, with the owner's go-ahead
 
-- [ ] **Full on Opus via Claude Code** (on the owner's subscription; probably 10–15 minutes). Make "a unique but recognizably Russian language for the Tsardom of Moscavia", taking the Tsardom into account. Record:
+- [x] **Full on Opus via Claude Code** (2026-10-29, owner's go-ahead; results below) (on the owner's subscription; probably 10–15 minutes). Make "a unique but recognizably Russian language for the Tsardom of Moscavia", taking the Tsardom into account. Record:
   - words, and Still to fill in;
   - grammar sections and tables;
   - phrases per category;
@@ -25,4 +25,28 @@ As in 3b-1, there are two checks. **The owner** judges whether each step looks a
 
 ## Results
 
-*(filled in during the walk)*
+**The real run: Full, Opus, Claude Code (2026-10-29).** It was driven through the dialog in a fresh test app. Request: "a unique but recognizably Russian language for the Tsardom of Moscavia", taking the Tsardom into account (two facts).
+- **Time:** the review appeared after 440 s. Both scratch folders were removed afterwards, and no process was left running.
+- **Moscavian** came back with 251 words and 27 phrases: 3 in each of the nine categories.
+  - Rule sets: words, characters, places, items, groups, and people of a place.
+  - Sound groups: five, including consonant clusters and endings.
+- **Still to fill in:** nothing. 0 of 229 core meanings missing, no phrase categories, no grammar topics.
+- **Grammar:** 13 sections, the 11 standard topics plus two unusual ones ("The joined 'the'", "Leaving out 'is'"), with 14 tables and 24 examples. It includes:
+  - conjugation tables for to speak, to be and to have;
+  - noun endings by gender;
+  - a pronoun grid;
+  - counting to 100;
+  - word-building endings;
+  - name structure (given, father's, family);
+  - "ty" vs "vy".
+- **The check:** 94% of words fit the rules (16 flagged, a warning); no real-word hits.
+- **Sample names:**
+  - characters: Zmesaslan Tvobin, Mogivik Chizhin, Zhetsyuyar Strachov;
+  - places: Khvonograd, Tvyovigrad, Vunisov;
+  - groups: Sobrav Bechyav, Pryusichi.
+- **Found:**
+  - **Real Russian roots slip through.** *glazov* (eye; Russian *glaz*), *bolsh*, *dolgav*, *muzhets*, *kholdov*, *znavati*, *stoyti*. The check's Russian list has only about 250 words and misses common roots. This matters given the owner's "no real words" rule.
+  - A word-rule sample came out as "Glory", an English word, by chance.
+  - Claude Code wrote a helper `build.py` along the way. It can't run it (the boundary held); harmless.
+- Screenshots (in the plan workspace): `real-dialog.png`, `real-review.png`, `real-language.png`, `real-grammar.png`, `real-lexicon.png`.
+- **The owner's verdict:** *(pending)*
