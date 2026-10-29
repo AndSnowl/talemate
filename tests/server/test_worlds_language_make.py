@@ -249,3 +249,14 @@ async def test_the_copied_brief_follows_its_size(plugin):
     assert "fill in the rest later" in _replies(plugin, "language_brief")[-1]["text"]
     await _act(plugin, "language_brief", text=REQUEST, route="in_app")
     assert "fill in the rest later" in _replies(plugin, "language_brief")[-1]["text"]
+
+
+async def test_a_model_name_is_trimmed(plugin, monkeypatch):
+    import json
+
+    made = _keep_scratch(monkeypatch)
+    await _open(plugin)
+    await _act(plugin, "language_make_start", text=REQUEST, claude_model=" opus ")
+    await _drain(plugin)
+    args = json.loads((made[0].folder / "args.json").read_text())
+    assert args[args.index("--model") + 1] == "opus"

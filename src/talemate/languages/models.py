@@ -116,6 +116,13 @@ GRAMMAR_TOPICS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _cell(value: object) -> str:
+    """A table cell or text as a model may write it: a number is its
+    digits, nothing is empty."""
+
+    return "" if value is None else str(value)
+
+
 class GrammarTable(BaseModel):
     """A table in a grammar section: a conjugation, noun endings, the
     pronouns. Rows are kept as written, even when ragged."""
@@ -126,6 +133,20 @@ class GrammarTable(BaseModel):
     columns: list[str] = Field(default_factory=list)
     rows: list[list[str]] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _loose_cells(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["caption"] = _cell(data.get("caption"))
+        data["columns"] = [_cell(c) for c in data.get("columns") or []]
+        data["rows"] = [
+            [_cell(c) for c in row] if isinstance(row, list) else [_cell(row)]
+            for row in data.get("rows") or []
+        ]
+        return data
+
 
 class GrammarExample(BaseModel):
     """A worked example: the original, word by word, and its translation."""
@@ -135,6 +156,21 @@ class GrammarExample(BaseModel):
     original: str
     breakdown: list[tuple[str, str]] = Field(default_factory=list)
     translation: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _loose_example(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["original"] = _cell(data.get("original"))
+        data["translation"] = _cell(data.get("translation"))
+        pairs = []
+        for pair in data.get("breakdown") or []:
+            if isinstance(pair, (list, tuple)) and pair:
+                pairs.append((_cell(pair[0]), _cell(pair[1]) if len(pair) > 1 else ""))
+        data["breakdown"] = pairs
+        return data
 
 
 class GrammarSection(BaseModel):
@@ -147,6 +183,18 @@ class GrammarSection(BaseModel):
     text: str = ""
     tables: list[GrammarTable] = Field(default_factory=list)
     examples: list[GrammarExample] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _title_from_topic(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        data["topic"] = _cell(data.get("topic")).strip() or "other"
+        data["text"] = _cell(data.get("text"))
+        if not _cell(data.get("title")).strip():
+            data["title"] = dict(GRAMMAR_TOPICS).get(data["topic"], "Grammar")
+        return data
 
 
 class SimilarLink(BaseModel):

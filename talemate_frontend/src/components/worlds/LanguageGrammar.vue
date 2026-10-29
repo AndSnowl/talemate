@@ -40,7 +40,7 @@
                 >
                     <div class="d-flex align-center ga-2">
                         <span class="text-subtitle-1">{{ entry.section.title }}</span>
-                        <span class="topic-chip">{{ topicLabel(entry.section.topic) }}</span>
+                        <span v-if="!isPlain(entry.section)" class="topic-chip">{{ topicLabel(entry.section.topic) }}</span>
                         <v-btn
                             v-if="editing !== entry.index"
                             icon="mdi-pencil"
@@ -144,13 +144,18 @@ export default {
                 .sort((a, b) => (ORDER[a.section.topic] ?? 99) - (ORDER[b.section.topic] ?? 99) || a.index - b.index);
         },
         standard() {
-            return this.ordered.filter((entry) => entry.section.topic in ORDER);
+            return this.ordered.filter((entry) => entry.section.topic in ORDER || this.isPlain(entry.section));
         },
         unusual() {
-            return this.ordered.filter((entry) => !(entry.section.topic in ORDER));
+            return this.ordered.filter((entry) => !(entry.section.topic in ORDER) && !this.isPlain(entry.section));
         },
     },
     methods: {
+        // an older language's grammar text: one plain "Grammar" section,
+        // not something unusual
+        isPlain(section) {
+            return section.topic === 'other' && section.title === 'Grammar';
+        },
         topicLabel(topic) {
             return TITLES[topic] ? topic.replace('_', ' ') : 'unusual';
         },

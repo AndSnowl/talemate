@@ -83,6 +83,9 @@ def test_an_old_text_grammar_shows_as_one_card_and_can_be_edited(app, page):
     card = thing.get_by_test_id("grammar-section")
     expect(card).to_have_count(1, timeout=TIMEOUT_MS)
     expect(card).to_contain_text("Verbs come last.")
+    # an older language's grammar isn't "unusual": it's just its grammar
+    expect(card).not_to_contain_text("unusual")
+    expect(thing.get_by_test_id("grammar-topics")).not_to_contain_text("Unusual")
     card.get_by_test_id("grammar-edit-text").click()
     card.locator("textarea").first.fill("Verbs come last, always.")
     card.get_by_role("button", name="Save").click()

@@ -111,3 +111,43 @@ def test_a_full_size_language_checks_quickly():
     started = time.monotonic()
     check_language(lang)
     assert time.monotonic() - started < 2.0
+
+
+# --- final review fixes ------------------------------------------------------
+
+from talemate.languages.brief import write_brief  # noqa: E402
+from talemate.languages.making import MakeRequest  # noqa: E402
+
+BASICS = ("water", "fire", "sun", "eat", "drink", "see", "come")
+
+
+def test_the_quick_core_has_the_basics():
+    quick = CORE_MEANINGS["everyday"][:40]
+    assert all(b in quick for b in BASICS)
+    brief = write_brief(None, MakeRequest(text="x"), size="quick")
+    part = brief.split("## What to make", 1)[1].split("\n## ", 1)[0]
+    assert all(f" {b}," in part or f" {b}\n" in part for b in BASICS)
+
+
+def test_a_note_in_brackets_is_ignored():
+    got = completeness(_language(words=[("ty", ["you (singular)"]), ("ogn", ["fire (n.)"])]))
+    assert "you" not in got.meanings_missing and "fire" not in got.meanings_missing
+
+
+def test_forms_of_be_and_have_are_not_words_of_their_own():
+    for form in ("am", "are", "is", "was", "were", "has", "had"):
+        assert form not in CORE_MEANINGS["structural"]
+    assert {"be", "have"} <= set(CORE_MEANINGS["structural"])
+
+
+def test_the_and_a_are_covered_by_a_nouns_section():
+    # "the" as an ending on the noun: the nouns section says how
+    got = completeness(_language(grammar=[GrammarSection(title="Nouns", topic="nouns")]))
+    assert "the" not in got.meanings_missing and "a" not in got.meanings_missing
+    assert "the" in completeness(_language()).meanings_missing
+
+
+def test_the_brief_says_forms_live_in_the_grammar():
+    brief = write_brief(None, MakeRequest(text="x"), size="full")
+    assert "forms of be and have" in brief
+    assert '"the" and "a"' in brief

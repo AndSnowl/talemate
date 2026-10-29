@@ -11,7 +11,7 @@ As in 3b-1, there are two checks. **The owner** judges whether each step looks a
 | **Make it with.** The dialog shows Claude Code (with a model box), the agent's model (marked API tokens) or Copy the brief, for that run only. The Language agent's setting is unchanged. | — | `test_the_dialog_offers_route_model_and_size`, `test_a_chosen_route_is_used_for_the_run`; `tests/server/test_worlds_language_make.py` |
 | **How much.** Full: everything in one go, or Quick, then fill in. Full is the default on Claude Code; Quick on the agent's model. A note says what each means and costs. | Is the note clear? | `test_choosing_the_agents_model_switches_to_quick`, `test_the_copied_brief_follows_how_much` |
 | **The brief asks for a full language:** every core meaning (the structural words and the everyday list), at least 3 phrases in each of nine categories, all eleven grammar topics with tables, and name rules for characters, places, items, groups and a demonym. A Quick brief keeps to a core. | — | `tests/languages/test_brief.py` |
-| **Still to fill in** in the review: words missing out of 236, phrase categories missing, grammar topics not written. It's information, never a problem, and never sends the language back. | — | `test_the_review_shows_still_to_fill_in`; `tests/languages/test_completeness.py` |
+| **Still to fill in** in the review: words missing out of 229, phrase categories missing, grammar topics not written. It's information, never a problem, and never sends the language back. | — | `test_the_review_shows_still_to_fill_in`; `tests/languages/test_completeness.py` |
 
 ## Real run, with the owner's go-ahead
 

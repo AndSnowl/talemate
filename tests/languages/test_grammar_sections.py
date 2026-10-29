@@ -101,3 +101,43 @@ def test_the_schema_has_grammar_sections():
     grammar = schema["$defs"]["Language"]["properties"]["grammar"]
     assert grammar["type"] == "array"
     assert grammar["items"]["$ref"].endswith("/GrammarSection")
+
+
+# --- final review fixes ------------------------------------------------------
+
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from talemate.languages.importer import parse_language_text  # noqa: E402
+
+
+def test_the_briefs_example_uses_grammar_sections():
+    example = json.loads(Path("src/talemate/languages/data/example.language.json").read_text())
+    grammar = example["language"]["grammar"]
+    assert isinstance(grammar, list) and len(grammar) >= 2
+    assert any(section.get("tables") for section in grammar)
+    assert any(section.get("examples") for section in grammar)
+
+
+def test_loosely_typed_grammar_still_loads():
+    section = {
+        "topic": "numbers",
+        "tables": [{"caption": "counting", "columns": ["", "word"], "rows": [[1, "un"], [2, None]]}],
+        "examples": [{"original": "Un dov", "breakdown": [["un", "one"]], "translation": None}],
+    }
+    lang = _language(grammar=[section])
+    assert lang.grammar[0].title == "Numbers"
+    assert lang.grammar[0].tables[0].rows == [["1", "un"], ["2", ""]]
+    assert lang.grammar[0].examples[0].translation == ""
+
+
+def test_a_bad_file_says_where_it_went_wrong():
+    text = json.dumps(
+        {"language": {"name": "X", "level": "full", "grammar": [{"title": "N", "tables": "oops"}]}}
+    )
+    try:
+        parse_language_text(text)
+    except ValueError as exc:
+        assert "grammar" in str(exc)
+    else:
+        raise AssertionError("expected a ValueError")

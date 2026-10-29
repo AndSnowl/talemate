@@ -67,8 +67,18 @@ def _topics() -> str:
     return "; ".join(f"`{topic}` ({title})" for topic, title in GRAMMAR_TOPICS)
 
 
+_FORMS_NOTE = (
+    "The forms of be and have (am, is, was; has, had) belong in the `verbs` "
+    'section\'s table, not as words of their own. If the language shows "the" '
+    'and "a" by changing the noun, say how in the `nouns` section instead of '
+    "making words for them."
+)
+
+
 def _sections() -> list[str]:
     return [
+        _FORMS_NOTE,
+        "",
         "The grammar is a list of sections. Each has a `title`, a `topic` "
         "(one of the ids below, or `other`), plain `text`, `tables` (each a "
         "`caption`, `columns` and `rows` of cells) and `examples` (each an "

@@ -1,19 +1,15 @@
 # The core meanings a full language covers (languages 3b-2): the words
 # that hold sentences together, then everyday meanings from the Swadesh
 # list (public domain), minus those already above. One per line.
+# The forms of be and have (am, is, was; has, had) live in the verbs
+# grammar section, not as words. The first 40 everyday meanings are the
+# basics a quick core gets.
 
 # structural
 the
 a
 be
-am
-are
-is
-was
-were
 have
-has
-had
 with
 of
 in
@@ -62,25 +58,58 @@ twenty
 hundred
 
 # everyday
+water
+fire
+sun
+moon
+star
+sky
+earth
+stone
+tree
+river
+rain
+wind
+snow
+night
+day
+man
+woman
+child
+mother
+father
+hand
+eye
+head
+heart
+blood
+eat
+drink
+see
+hear
+come
+give
+die
+sleep
+good
+bad
+big
+small
+old
+new
+name
 few
 other
-big
 long
 wide
 thick
 heavy
-small
 short
 narrow
 thin
-woman
-man
 person
-child
 wife
 husband
-mother
-father
 animal
 fish
 bird
@@ -88,7 +117,6 @@ dog
 louse
 snake
 worm
-tree
 forest
 stick
 fruit
@@ -101,7 +129,6 @@ grass
 rope
 skin
 meat
-blood
 bone
 fat
 egg
@@ -109,9 +136,7 @@ horn
 tail
 feather
 hair
-head
 ear
-eye
 nose
 mouth
 tooth
@@ -120,17 +145,13 @@ fingernail
 foot
 leg
 knee
-hand
 wing
 belly
 guts
 neck
 back
 breast
-heart
 liver
-drink
-eat
 bite
 suck
 spit
@@ -138,15 +159,11 @@ vomit
 blow
 breathe
 laugh
-see
-hear
 know
 think
 smell
 fear
-sleep
 live
-die
 kill
 fight
 hunt
@@ -159,13 +176,11 @@ dig
 swim
 fly
 walk
-come
 lie
 sit
 stand
 turn
 fall
-give
 hold
 squeeze
 rub
@@ -184,27 +199,15 @@ float
 flow
 freeze
 swell
-sun
-moon
-star
-water
-rain
-river
 lake
 sea
 salt
-stone
 sand
 dust
-earth
 cloud
 fog
-sky
-wind
-snow
 ice
 smoke
-fire
 ash
 burn
 road
@@ -214,16 +217,10 @@ green
 yellow
 white
 black
-night
-day
 year
 warm
 cold
 full
-new
-old
-good
-bad
 rotten
 dirty
 straight
@@ -240,4 +237,3 @@ right
 left
 if
 because
-name

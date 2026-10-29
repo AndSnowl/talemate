@@ -4,6 +4,7 @@ never blocks and never sends a language back for repair."""
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -23,6 +24,11 @@ PHRASE_CATEGORIES: tuple[str, ...] = (
     "insult",
     "endearment",
 )
+
+# a note in brackets after a meaning: "you (singular)", "fire (n.)"
+_NOTE = re.compile(r"\s*\([^)]*\)\s*$")
+# meanings a language may show by how its nouns change, not as words
+_NOUN_FORMS = ("the", "a")
 
 _CORE_FILE = Path(__file__).resolve().parent / "data" / "core_meanings.txt"
 
@@ -55,7 +61,7 @@ def _key(meaning: str) -> str:
     """A meaning as compared: lower case, a leading "to " dropped ("to be"
     is "be")."""
 
-    key = " ".join(meaning.lower().split())
+    key = " ".join(_NOTE.sub("", meaning).lower().split())
     return key[3:] if key.startswith("to ") else key
 
 
@@ -65,6 +71,9 @@ def completeness(language: Language) -> Completeness:
     dictionary meaning is exactly it ("great fort" isn't "fort")."""
 
     have = {_key(m) for entry in language.dictionary for m in entry.meanings}
+    if any(section.topic == "nouns" for section in language.grammar):
+        # "the" and "a" may be endings: the nouns section says how
+        have.update(_NOUN_FORMS)
     structural = [m for m in CORE_MEANINGS["structural"] if _key(m) not in have]
     everyday = [m for m in CORE_MEANINGS["everyday"] if _key(m) not in have]
     categories = {p.category.strip().lower() for p in language.phrases}
