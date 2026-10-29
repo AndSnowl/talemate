@@ -441,6 +441,7 @@ from talemate.languages.lookup import (
     languages_for,
     languages_for_scene,
 )
+from talemate.languages.making import ask_questions
 from talemate.languages.models import Language
 from talemate.languages.naming import (
     NameInResult,
@@ -902,6 +903,12 @@ class FindMixPayload(pydantic.BaseModel):
         if len(value) != 2:
             raise ValueError("a mix has two parents")
         return value
+
+
+class LanguageQuestionsPayload(pydantic.BaseModel):
+    """What the owner asked for, before a language is made."""
+
+    text: str
 
 
 class LanguageTextPayload(pydantic.BaseModel):
@@ -5703,6 +5710,28 @@ class WorldsPlugin(Plugin):
                     "names": found,
                 },
                 failure_data={"language_id": payload.language_id},
+            ),
+        )
+
+    async def handle_language_questions(self, data: dict):
+        """Plain questions about what the owner wants a new language to
+        sound and feel like, in the background: answers
+        `language_questions {questions}` (none without a model)."""
+
+        payload = LanguageQuestionsPayload(**data)
+        client, fixed = self._language_reply()
+        reply = None
+        if fixed is not None:
+            # the browser tests' fixed file: its "questions" text, if any
+            reply = str(json.loads(fixed).get("questions", ""))
+
+        self._spawn(
+            ask_questions(client, payload.text, reply=reply),
+            self.create_task_done_callback(
+                "language_questions",
+                "language_questions_failed",
+                "Error asking questions",
+                success_data=lambda questions: {"questions": questions},
             ),
         )
 

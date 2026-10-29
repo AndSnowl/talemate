@@ -392,3 +392,13 @@ async def test_definitions_ask_the_language_agents_client(plugin):
     finally:
         instance.AGENTS.pop("language", None)
     assert _last(plugin, "language_definition")["data"]["definition"] == "wind"
+
+
+async def test_language_questions_replies_with_questions(plugin, client):
+    await _open(plugin)
+    async with MockClientContext():
+        client_responses.get().append("1. Grand or earthy?\n2. Old or modern?")
+        await _act(plugin, "language_questions", text="a Russian-sounding language")
+        await _drain(plugin)
+    questions = _last(plugin, "language_questions")["data"]["questions"]
+    assert questions == ["Grand or earthy?", "Old or modern?"]
