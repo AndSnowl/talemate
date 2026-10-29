@@ -194,6 +194,17 @@
                             placeholder="Word or meaning"
                             class="search-field"
                         ></v-text-field>
+                        <v-select
+                            v-model="partFilter"
+                            :items="partFilterItems"
+                            density="compact"
+                            variant="outlined"
+                            hide-details
+                            clearable
+                            label="Part"
+                            class="part-filter"
+                            data-testid="dict-part-filter"
+                        ></v-select>
                     </div>
                     <table class="dict">
                         <thead>
@@ -243,6 +254,23 @@
                                             @click.stop="editMeaning(row.index, -1)"
                                         ></v-btn>
                                     </template>
+                                    <!-- a part is picked from the list, or typed -->
+                                    <v-combobox
+                                        v-else-if="field === 'part' && editCell && editCell.index === row.index && editCell.field === 'part'"
+                                        :model-value="local.words[row.index].part"
+                                        :items="PART_ITEMS"
+                                        item-title="title"
+                                        item-value="value"
+                                        :return-object="false"
+                                        density="compact"
+                                        variant="outlined"
+                                        hide-details
+                                        autofocus
+                                        class="part-picker"
+                                        data-testid="word-part-picker"
+                                        @update:model-value="pickPart(row.index, $event)"
+                                        @keydown.esc="editCell = null"
+                                    ></v-combobox>
                                     <input
                                         v-else-if="editCell && editCell.index === row.index && editCell.field === field"
                                         v-model="local.words[row.index][field]"
@@ -252,7 +280,7 @@
                                         @keydown.enter="saveCell"
                                         @blur="saveCell"
                                     />
-                                    <span v-else>{{ local.words[row.index][field] }}</span>
+                                    <span v-else>{{ field === 'part' ? partLabel(local.words[row.index].part) : local.words[row.index][field] }}</span>
                                     <!-- the word is used as a name in the world (worked out live); the
                                          tooltip says whose, and clicking opens it -->
                                     <span
@@ -389,6 +417,26 @@ const USES = {
 
 const WORD_FIELDS = ['word', 'meanings', 'part'];
 
+// the parts of speech, with an example each (languages.models.PARTS_OF_SPEECH)
+const PARTS = [
+    ['noun', 'noun', 'house'],
+    ['verb', 'verb', 'run'],
+    ['adjective', 'adjective', 'cold'],
+    ['adverb', 'adverb', 'quickly'],
+    ['pronoun', 'pronoun', 'I, they'],
+    ['article', 'article', 'the, a'],
+    ['preposition', 'preposition', 'in, with'],
+    ['conjunction', 'conjunction', 'and, if'],
+    ['number', 'number', 'two'],
+    ['question', 'question word', 'who, where'],
+    ['particle', 'particle', 'not, yes'],
+    ['exclamation', 'exclamation', 'alas!'],
+    ['ending', 'ending', '-ov'],
+];
+const PART_ITEMS = PARTS.map(([value, label, example]) => ({ value, title: `${label} (${example})` }));
+const PART_LABELS = Object.fromEntries(PARTS.map(([value, label]) => [value, label]));
+const NO_PART = '(no part)';
+
 function plain(value) {
     return JSON.parse(JSON.stringify(value ?? null));
 }
@@ -410,7 +458,7 @@ export default {
         tab: { type: String, required: true },
     },
     setup() {
-        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS };
+        return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS, PART_ITEMS };
     },
     data() {
         return {
@@ -418,6 +466,7 @@ export default {
             editing: { sound: false, flavour: false, note: null },
             importing: false,
             search: '',
+            partFilter: null,
             editCell: null,
             meaningDraft: '',
             phraseDialog: false,
@@ -461,7 +510,15 @@ export default {
             const query = (this.search || '').trim().toLowerCase();
             return this.local.words
                 .map((w, index) => ({ ...w, index }))
-                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || w.meanings.some((m) => m.toLowerCase().includes(query)));
+                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || w.meanings.some((m) => m.toLowerCase().includes(query)))
+                .filter((w) => !this.partFilter || (this.partFilter === NO_PART ? !(w.part || '').trim() : w.part === this.partFilter));
+        },
+        // the parts this dictionary uses, in the list's order, then any typed ones
+        partFilterItems() {
+            const used = new Set(this.local.words.map((w) => (w.part || '').trim()));
+            const known = PARTS.filter(([value]) => used.has(value)).map(([value]) => ({ value, title: PART_LABELS[value] }));
+            const typed = [...used].filter((p) => p && !(p in PART_LABELS)).sort().map((p) => ({ value: p, title: p }));
+            return [...known, ...typed, ...(used.has('') ? [{ value: NO_PART, title: NO_PART }] : [])];
         },
         groupedPhrases() {
             const groups = {};
@@ -646,6 +703,13 @@ export default {
         removeMeaning(index, m) {
             this.local.words[index].meanings.splice(m, 1);
             this.saveWords();
+        },
+        partLabel(part) {
+            return PART_LABELS[part] || part;
+        },
+        pickPart(index, value) {
+            this.local.words[index].part = (value || '').trim();
+            this.saveCell();
         },
         saveCell() {
             this.editCell = null;
@@ -852,6 +916,12 @@ export default {
     width: 24%;
     font-style: italic;
     color: rgb(var(--v-theme-foreign));
+}
+.part-filter {
+    max-width: 180px;
+}
+.part-picker {
+    min-width: 220px;
 }
 .dict .col-part {
     width: 22%;

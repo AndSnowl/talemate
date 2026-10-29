@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -232,3 +233,48 @@ def test_a_rule_sets_roll_rolls_only_its_own_names(app, page):
     )
     page.wait_for_timeout(500)
     assert cards.nth(1).get_by_test_id("language-samples").inner_text() == second_before
+
+
+def _lexicon_with_parts(app, page, stem):
+    fields = _language_fields()
+    fields["words"] = [
+        {"word": "kor", "meanings": ["river"], "part": "noun"},
+        {"word": "rudun", "meanings": ["run"], "part": "verb"},
+        {"word": "ve", "meanings": ["in"]},
+    ]
+    name = _world_name(stem)
+    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-lexicon").click()
+    return thing
+
+
+def test_a_words_part_is_picked_from_the_list(app, page):
+    thing = _lexicon_with_parts(app, page, "Lang part pick")
+    def word_row(word):
+        cell = page.locator("td.col-word", has_text=re.compile(rf"^\s*{word}\s*$"))
+        return thing.get_by_test_id("language-word").filter(has=cell).first
+
+    row = word_row("ve")
+    row.locator("td.col-part").click()
+    picker = row.get_by_test_id("word-part-picker")
+    expect(picker).to_be_visible(timeout=TIMEOUT_MS)
+    picker.click()
+    page.get_by_role("option", name="preposition (in, with)").click()
+    expect(row.locator("td.col-part")).to_have_text("preposition", timeout=TIMEOUT_MS)
+    # kept: the page reads it back after leaving the tab
+    thing.get_by_test_id("language-tab-about").click()
+    thing.get_by_test_id("language-tab-lexicon").click()
+    expect(word_row("ve").locator("td.col-part")).to_have_text("preposition", timeout=TIMEOUT_MS)
+
+
+def test_the_dictionary_filters_by_part(app, page):
+    thing = _lexicon_with_parts(app, page, "Lang part filter")
+    words = thing.get_by_test_id("language-word")
+    expect(words).to_have_count(3, timeout=TIMEOUT_MS)
+    thing.get_by_test_id("dict-part-filter").click()
+    page.get_by_role("option", name="verb").click()
+    expect(words).to_have_count(1)
+    expect(words.first).to_contain_text("rudun")

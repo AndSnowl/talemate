@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 __all__ = [
     "GENERATOR_USES",
     "GRAMMAR_TOPICS",
+    "PARTS_OF_SPEECH",
     "GrammarExample",
     "GrammarSection",
     "GrammarTable",
@@ -97,6 +98,25 @@ class DictionaryEntry(BaseModel):
         self.meaning = ""
         self.meanings = [m.strip() for m in self.meanings if m.strip()]
         return self
+
+
+# the parts of speech a dictionary word may have: id, plain label, example
+# (languages 3b-2); the owner may also type their own
+PARTS_OF_SPEECH: tuple[tuple[str, str, str], ...] = (
+    ("noun", "noun", "house"),
+    ("verb", "verb", "run"),
+    ("adjective", "adjective", "cold"),
+    ("adverb", "adverb", "quickly"),
+    ("pronoun", "pronoun", "I, they"),
+    ("article", "article", "the, a"),
+    ("preposition", "preposition", "in, with"),
+    ("conjunction", "conjunction", "and, if"),
+    ("number", "number", "two"),
+    ("question", "question word", "who, where"),
+    ("particle", "particle", "not, yes"),
+    ("exclamation", "exclamation", "alas!"),
+    ("ending", "ending", "-ov"),
+)
 
 
 # the grammar topics a full language covers, with their plain titles

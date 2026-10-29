@@ -135,3 +135,12 @@ def test_a_full_brief_still_has_no_jargon():
     prose = re.sub(r"```json\n.*?\n```", "", brief, flags=re.S)
     found = [j for j in jargon if re.search(rf"\b{re.escape(j)}\b", prose, re.I)]
     assert found == []
+
+
+def test_the_brief_asks_for_a_part_on_every_word():
+    from talemate.languages.models import PARTS_OF_SPEECH
+
+    brief = write_brief(None, MakeRequest(text=REQUEST), size="full")
+    assert "every word a `part`" in brief
+    for part, _label, _example in PARTS_OF_SPEECH:
+        assert f"`{part}`" in brief

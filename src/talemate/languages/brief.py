@@ -6,7 +6,7 @@ from pathlib import Path
 
 from talemate.languages.completeness import CORE_MEANINGS, PHRASE_CATEGORIES
 from talemate.languages.making import MakeRequest
-from talemate.languages.models import GRAMMAR_TOPICS
+from talemate.languages.models import GRAMMAR_TOPICS, PARTS_OF_SPEECH
 from talemate.world.view import WorldView
 
 __all__ = ["BRIEF_FILE_NAME", "write_brief"]
@@ -75,8 +75,21 @@ _FORMS_NOTE = (
 )
 
 
+def _parts() -> str:
+    listed = "; ".join(
+        f"`{part}` ({example})" for part, _label, example in PARTS_OF_SPEECH
+    )
+    return (
+        "Give every word a `part`, one of: "
+        f'{listed}. Small words have parts too: "in" is a `preposition`, '
+        '"and" a `conjunction`.'
+    )
+
+
 def _sections() -> list[str]:
     return [
+        _parts(),
+        "",
         _FORMS_NOTE,
         "",
         "The grammar is a list of sections. Each has a `title`, a `topic` "
