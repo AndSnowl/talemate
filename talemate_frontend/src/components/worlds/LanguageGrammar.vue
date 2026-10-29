@@ -1,38 +1,7 @@
 <template>
-    <div class="language-grammar" data-testid="language-grammar-tab">
-        <div v-if="!sections.length" class="text-body-2 text-muted mt-2">
-            No grammar yet. Making the language (or filling it in) writes it.
-        </div>
-        <div v-else class="grammar-cols">
-            <!-- the topics pick which card shows: the standard ones, then the unusual -->
-            <nav class="topics" data-testid="grammar-topics">
-                <div class="text-overline text-muted">Topics</div>
-                <a
-                    v-for="entry in standard"
-                    :key="entry.index"
-                    href="#"
-                    class="topic"
-                    :class="{ on: entry.index === shown }"
-                    data-testid="grammar-topic"
-                    @click.prevent="current = entry.index"
-                >{{ entry.section.title }}</a>
-                <template v-if="unusual.length">
-                    <div class="text-overline text-muted mt-3">Unusual</div>
-                    <a
-                        v-for="entry in unusual"
-                        :key="entry.index"
-                        href="#"
-                        class="topic other"
-                        :class="{ on: entry.index === shown }"
-                        data-testid="grammar-topic"
-                        @click.prevent="current = entry.index"
-                    >{{ entry.section.title }}</a>
-                </template>
-            </nav>
-
-            <div class="cards">
+    <div class="language-grammar">
                 <section
-                    v-for="entry in visible"
+                    v-for="entry in shownCards"
                     :key="entry.index"
                     class="card"
                     data-testid="grammar-section"
@@ -86,85 +55,47 @@
                         <div v-if="example.translation" class="text-body-2">{{ example.translation }}</div>
                     </div>
                 </section>
-            </div>
-        </div>
     </div>
 </template>
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
+import { TOPIC_TITLES, grammarSections, isPlainGrammar } from './languageTopics.js';
 
-// the standard topics and their plain titles, in the brief's order
-// (talemate.languages.models.GRAMMAR_TOPICS)
-const TOPICS = [
-    ['sounds', 'Sounds and stress'],
-    ['word_order', 'Word order'],
-    ['nouns', 'Nouns'],
-    ['pronouns', 'Pronouns'],
-    ['verbs', 'Verbs'],
-    ['adjectives', 'Adjectives'],
-    ['questions', 'Questions and "not"'],
-    ['numbers', 'Numbers'],
-    ['word_building', 'How words are built'],
-    ['names', 'How names are built'],
-    ['politeness', 'Politeness and registers'],
-];
-const ORDER = Object.fromEntries(TOPICS.map(([id], i) => [id, i]));
-const TITLES = Object.fromEntries(TOPICS);
-
-// A language's grammar (languages 3b-2): the topics beside one card at a
-// time, the picked topic's, with its text, tables and examples word over
-// meaning. An older language's grammar text is one card.
+// A language's grammar sections as cards (languages 3b-2): text, tables,
+// and examples word over meaning, for the sections the Language tab's
+// chapter asks for (LanguageBook). An older language's grammar text is one
+// plain section. An older language's grammar text is one card.
 export default {
     name: 'LanguageGrammar',
     props: {
         thing: { type: Object, required: true },
+        // which sections to show, by their place in the grammar list
+        only: { type: Array, required: true },
     },
     setup() {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { current: null, editing: null, draft: '' };
+        return { editing: null, draft: '' };
     },
     computed: {
         rules() {
             return this.thing.fields?.rules || {};
         },
         sections() {
-            const grammar = this.rules.grammar;
-            if (!grammar) return [];
-            if (typeof grammar === 'string') return [{ title: 'Grammar', topic: 'other', text: grammar }];
-            return grammar;
+            return grammarSections(this.rules);
         },
-        // the standard topics first, in their order, then the rest as written
-        ordered() {
-            return this.sections
-                .map((section, index) => ({ section, index }))
-                .sort((a, b) => (ORDER[a.section.topic] ?? 99) - (ORDER[b.section.topic] ?? 99) || a.index - b.index);
-        },
-        // the picked topic's section, else the first in topic order
-        shown() {
-            const picked = this.ordered.find((entry) => entry.index === this.current);
-            return picked ? picked.index : this.ordered[0]?.index;
-        },
-        visible() {
-            return this.ordered.filter((entry) => entry.index === this.shown);
-        },
-        standard() {
-            return this.ordered.filter((entry) => entry.section.topic in ORDER || this.isPlain(entry.section));
-        },
-        unusual() {
-            return this.ordered.filter((entry) => !(entry.section.topic in ORDER) && !this.isPlain(entry.section));
+        shownCards() {
+            return this.only.map((index) => ({ section: this.sections[index], index })).filter((entry) => entry.section);
         },
     },
     methods: {
-        // an older language's grammar text: one plain "Grammar" section,
-        // not something unusual
         isPlain(section) {
-            return section.topic === 'other' && section.title === 'Grammar';
+            return isPlainGrammar(section);
         },
         topicLabel(topic) {
-            return TITLES[topic] ? topic.replace('_', ' ') : 'unusual';
+            return TOPIC_TITLES[topic] ? topic.replace('_', ' ') : 'unusual';
         },
         width(table) {
             const rows = table.rows || [];
@@ -185,32 +116,6 @@ export default {
 </script>
 
 <style scoped>
-.grammar-cols {
-    display: grid;
-    grid-template-columns: 220px 1fr;
-    gap: 28px;
-    max-width: 1240px;
-    margin-top: 8px;
-}
-.topics {
-    position: sticky;
-    top: 8px;
-    align-self: start;
-}
-.topic {
-    display: block;
-    padding: 5px 10px;
-    color: rgb(var(--v-theme-on-surface));
-    text-decoration: none;
-    border-left: 2px solid rgba(var(--v-theme-on-surface), 0.15);
-}
-.topic.on {
-    color: rgb(var(--v-theme-accent));
-    border-left-color: rgb(var(--v-theme-accent));
-}
-.topic.other {
-    color: rgb(var(--v-theme-link, var(--v-theme-primary)));
-}
 .card {
     background: rgba(var(--v-theme-on-surface), 0.04);
     border-radius: 6px;

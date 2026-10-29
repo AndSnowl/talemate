@@ -111,11 +111,14 @@ def test_new_version_shows_kept_used_words(app, page):
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
     thing.get_by_test_id("language-tab-language").click()
+    _chapter(thing, "Name rules")
     expect(thing.get_by_test_id("language-generator").first).to_contain_text(
         "Words", timeout=TIMEOUT_MS
     )
-    thing.get_by_test_id("language-tab-language").click()
+    _chapter(thing, "Sounds")
     expect(thing.get_by_test_id("language-inventory")).to_contain_text("C")
+    # the import box sits in the Overview chapter
+    _chapter(thing, "Overview")
 
     data = json.loads(SAMPLE.read_text())
     data["language"]["dictionary"] = [
@@ -221,6 +224,7 @@ def test_a_rule_sets_roll_rolls_only_its_own_names(app, page):
     _world_tab(page)
     thing = _open_thing(page, "Velskar")
     thing.get_by_test_id("language-tab-language").click()
+    _chapter(thing, "Name rules")
     cards = thing.get_by_test_id("language-generator")
     expect(cards.first.get_by_test_id("language-samples")).not_to_have_text(
         "Roll to see names.", timeout=TIMEOUT_MS
@@ -233,6 +237,11 @@ def test_a_rule_sets_roll_rolls_only_its_own_names(app, page):
     )
     page.wait_for_timeout(500)
     assert cards.nth(1).get_by_test_id("language-samples").inner_text() == second_before
+
+
+def _chapter(thing, title):
+    chapters = thing.get_by_test_id("language-chapters")
+    chapters.get_by_test_id("language-chapter").filter(has_text=title).first.click()
 
 
 def _lexicon_with_parts(app, page, stem):

@@ -1,11 +1,11 @@
 <template>
     <div class="language-sections" :data-testid="'language-view-' + tab">
-        <!-- Language (approved mockup A): the language itself on the left,
-             its name rules on the right, in the About tab's two columns -->
-        <v-row v-if="tab === 'language'">
-            <v-col cols="12" md="6">
+        <!-- Language, one chapter at a time (the Language tab's chapters,
+             docs/superpowers/mockups/2026-10-29-languages-3b2-language-chapters.html):
+             Overview, Sounds or Names -->
+        <div v-if="tab === 'language'" class="language-chapter">
                 <!-- how it sounds, with depth, flavour and counts under it -->
-                <div class="sec">
+                <div v-if="chapter === 'overview'" class="sec">
                     <div class="sh">
                         <span class="text-overline text-muted">How it sounds</span>
                         <v-btn v-if="!editing.sound" variant="text" size="small" color="accent" prepend-icon="mdi-pencil" @click="editing.sound = true">Edit</v-btn>
@@ -47,7 +47,7 @@
                     </div>
                 </div>
 
-                <div class="sec" data-testid="language-inventory">
+                <div v-if="chapter === 'sounds'" class="sec" data-testid="language-inventory">
                     <div class="sh"><span class="text-overline text-muted">Sound inventory</span></div>
                     <div v-if="!categoryEntries.length" class="text-body-2 text-muted">No sound groups yet.</div>
                     <div v-for="cat in categoryEntries" :key="cat.key" class="d-flex align-center ga-2 mb-1">
@@ -58,7 +58,7 @@
                     </div>
                 </div>
 
-                <div class="sec">
+                <div v-if="chapter === 'sounds'" class="sec">
                     <div class="sh">
                         <span class="text-overline text-muted">Syllable notes</span>
                         <v-btn variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="addSyllableNote">Add note</v-btn>
@@ -81,7 +81,7 @@
                     </div>
                 </div>
 
-                <div class="sec" data-testid="language-links">
+                <div v-if="chapter === 'overview'" class="sec" data-testid="language-links">
                     <div class="sh">
                         <span class="text-overline text-muted">Related languages</span>
                         <v-btn v-if="!relForm" variant="text" size="small" color="accent" prepend-icon="mdi-plus" @click="relForm = { kind: 'similar', target: null, degree: 'close' }">Add</v-btn>
@@ -106,10 +106,7 @@
                     </div>
                     <div v-if="!fields.descends_from && !similar.length && !relForm" class="text-body-2 text-muted">None yet.</div>
                 </div>
-            </v-col>
-
-            <v-col cols="12" md="6">
-                <div class="sec" data-testid="language-rules">
+                <div v-if="chapter === 'names'" class="sec" data-testid="language-rules">
                     <div class="sh">
                         <span class="text-overline text-muted">Name rules</span>
                         <v-btn variant="text" size="small" color="accent" prepend-icon="mdi-dice-multiple-outline" @click="reroll()">Roll all</v-btn>
@@ -172,8 +169,7 @@
                         </div>
                     </div>
                 </div>
-            </v-col>
-        </v-row>
+        </div>
 
         <!-- Lexicon (approved mockup A): the dictionary beside the phrases,
              grouped under their category -->
@@ -456,6 +452,8 @@ export default {
         thing: { type: Object, required: true },
         // 'language' | 'lexicon'
         tab: { type: String, required: true },
+        // the Language tab's chapter this shows: overview, sounds or names
+        chapter: { type: String, default: 'overview' },
     },
     setup() {
         return { worlds: useWorldsStore(), DEPTHS, DEGREES, DEGREE_LABELS, REL_KINDS, WORD_FIELDS, PART_ITEMS };
