@@ -4,7 +4,7 @@
             No grammar yet. Making the language (or filling it in) writes it.
         </div>
         <div v-else class="grammar-cols">
-            <!-- the topics, as a contents list: the standard ones, then the unusual -->
+            <!-- the topics pick which card shows: the standard ones, then the unusual -->
             <nav class="topics" data-testid="grammar-topics">
                 <div class="text-overline text-muted">Topics</div>
                 <a
@@ -12,9 +12,9 @@
                     :key="entry.index"
                     href="#"
                     class="topic"
-                    :class="{ on: entry.index === current }"
+                    :class="{ on: entry.index === shown }"
                     data-testid="grammar-topic"
-                    @click.prevent="show(entry.index)"
+                    @click.prevent="current = entry.index"
                 >{{ entry.section.title }}</a>
                 <template v-if="unusual.length">
                     <div class="text-overline text-muted mt-3">Unusual</div>
@@ -23,18 +23,17 @@
                         :key="entry.index"
                         href="#"
                         class="topic other"
-                        :class="{ on: entry.index === current }"
+                        :class="{ on: entry.index === shown }"
                         data-testid="grammar-topic"
-                        @click.prevent="show(entry.index)"
+                        @click.prevent="current = entry.index"
                     >{{ entry.section.title }}</a>
                 </template>
             </nav>
 
             <div class="cards">
                 <section
-                    v-for="entry in ordered"
+                    v-for="entry in visible"
                     :key="entry.index"
-                    :ref="(el) => (cardEls[entry.index] = el)"
                     class="card"
                     data-testid="grammar-section"
                 >
@@ -113,9 +112,9 @@ const TOPICS = [
 const ORDER = Object.fromEntries(TOPICS.map(([id], i) => [id, i]));
 const TITLES = Object.fromEntries(TOPICS);
 
-// A language's grammar (languages 3b-2): a card per section, with its
-// text, tables and examples word over meaning, and the topics as a
-// contents list beside them. An older language's grammar text is one card.
+// A language's grammar (languages 3b-2): the topics beside one card at a
+// time, the picked topic's, with its text, tables and examples word over
+// meaning. An older language's grammar text is one card.
 export default {
     name: 'LanguageGrammar',
     props: {
@@ -125,7 +124,7 @@ export default {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { current: null, editing: null, draft: '', cardEls: {} };
+        return { current: null, editing: null, draft: '' };
     },
     computed: {
         rules() {
@@ -142,6 +141,14 @@ export default {
             return this.sections
                 .map((section, index) => ({ section, index }))
                 .sort((a, b) => (ORDER[a.section.topic] ?? 99) - (ORDER[b.section.topic] ?? 99) || a.index - b.index);
+        },
+        // the picked topic's section, else the first in topic order
+        shown() {
+            const picked = this.ordered.find((entry) => entry.index === this.current);
+            return picked ? picked.index : this.ordered[0]?.index;
+        },
+        visible() {
+            return this.ordered.filter((entry) => entry.index === this.shown);
         },
         standard() {
             return this.ordered.filter((entry) => entry.section.topic in ORDER || this.isPlain(entry.section));
@@ -162,10 +169,6 @@ export default {
         width(table) {
             const rows = table.rows || [];
             return Math.max((table.columns || []).length, ...rows.map((row) => row.length), 0);
-        },
-        show(index) {
-            this.current = index;
-            this.cardEls[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         },
         startEdit(index) {
             this.editing = index;

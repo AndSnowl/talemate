@@ -56,10 +56,17 @@ def _grammar_tab(app, page, stem, grammar):
 
 def test_the_grammar_tab_lists_topics_and_cards(app, page):
     thing = _grammar_tab(app, page, "Grammar tab", SECTIONS)
-    expect(thing.get_by_test_id("grammar-section")).to_have_count(2, timeout=TIMEOUT_MS)
     topics = thing.get_by_test_id("grammar-topics")
-    expect(topics).to_contain_text("Nouns")
+    expect(topics).to_contain_text("Nouns", timeout=TIMEOUT_MS)
     expect(topics).to_contain_text("Articles live on the noun")
+    # one topic at a time: the first is shown, and picking another shows it
+    cards = thing.get_by_test_id("grammar-section")
+    expect(cards).to_have_count(1)
+    expect(cards).to_contain_text("Nouns are masculine or feminine.")
+    topics.get_by_test_id("grammar-topic").filter(has_text="Articles live on the noun").click()
+    expect(cards).to_have_count(1)
+    expect(cards).to_contain_text("There's no word for 'the'.", timeout=TIMEOUT_MS)
+    expect(cards).not_to_contain_text("Nouns are masculine")
 
 
 def test_a_table_with_a_ragged_row_renders(app, page):
