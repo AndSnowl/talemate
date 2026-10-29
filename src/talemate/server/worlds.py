@@ -2185,6 +2185,16 @@ class WorldsPlugin(Plugin):
     def _client(self) -> Any:
         return instance.get_agent("creator").client
 
+    def _language_client(self) -> Any:
+        """The language agent's client, for naming and meanings; the
+        creator's when the language agent has none."""
+
+        try:
+            client = instance.get_agent("language").client
+        except KeyError:
+            client = None
+        return client if client is not None else self._client()
+
     def _fixed_setup(self) -> dict | None:
         """The browser tests' fixed scene-setup reply, or `None` normally."""
 
@@ -5559,7 +5569,7 @@ class WorldsPlugin(Plugin):
         fixed = _fixed_file(FIXED_LANGUAGE_ENV)
         if fixed is not None:
             return None, fixed.read_text(encoding="utf-8")
-        return self._client(), None
+        return self._language_client(), None
 
     def _naming_world(self, scene: bool = False) -> World:
         """The world naming works in: the world scene's, for the scene's
