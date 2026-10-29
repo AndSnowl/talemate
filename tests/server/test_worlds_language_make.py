@@ -188,11 +188,16 @@ async def test_a_run_can_choose_its_route(plugin, tmp_path, monkeypatch):
     assert _replies(plugin, "language_make_progress")[0]["line"] == "Asking the model"
 
 
-def _keep_scratch(monkeypatch):
+@pytest.fixture
+def kept_scratch(monkeypatch):
+    """The scratch folders a run made, kept for the test to read, and
+    removed after it (they live in the system temp folder)."""
+
     import talemate.languages.claude_code as claude_code
 
     made = []
     real = claude_code.prepare_scratch
+    remove = claude_code.Scratch.remove
 
     def spy():
         made.append(real())
@@ -200,13 +205,15 @@ def _keep_scratch(monkeypatch):
 
     monkeypatch.setattr(claude_code, "prepare_scratch", spy)
     monkeypatch.setattr(claude_code.Scratch, "remove", lambda self: None)
-    return made
+    yield made
+    for scratch in made:
+        remove(scratch)
 
 
-async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch):
+async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch, kept_scratch):
     import json
 
-    made = _keep_scratch(monkeypatch)
+    made = kept_scratch
     await _open(plugin)
     await _act(plugin, "language_make_start", text=REQUEST, claude_model="opus")
     await _drain(plugin)
@@ -214,8 +221,8 @@ async def test_a_run_can_choose_its_claude_model(plugin, monkeypatch):
     assert args[args.index("--model") + 1] == "opus"
 
 
-async def test_a_run_writes_the_brief_at_its_size(plugin, monkeypatch):
-    made = _keep_scratch(monkeypatch)
+async def test_a_run_writes_the_brief_at_its_size(plugin, monkeypatch, kept_scratch):
+    made = kept_scratch
     await _open(plugin)
     await _act(plugin, "language_make_start", text=REQUEST, size="quick")
     await _drain(plugin)
@@ -253,10 +260,10 @@ async def test_the_copied_brief_follows_its_size(plugin):
     assert "fill in the rest later" in _replies(plugin, "language_brief")[-1]["text"]
 
 
-async def test_a_model_name_is_trimmed(plugin, monkeypatch):
+async def test_a_model_name_is_trimmed(plugin, monkeypatch, kept_scratch):
     import json
 
-    made = _keep_scratch(monkeypatch)
+    made = kept_scratch
     await _open(plugin)
     await _act(plugin, "language_make_start", text=REQUEST, claude_model=" opus ")
     await _drain(plugin)
@@ -330,10 +337,10 @@ async def test_a_change_for_a_gone_language_fails_plainly(plugin):
     assert error == "The language this was for is gone"
 
 
-async def test_a_change_with_claude_code_edits_the_file_in_place(plugin, monkeypatch):
+async def test_a_change_with_claude_code_edits_the_file_in_place(plugin, monkeypatch, kept_scratch):
     import json
 
-    made = _keep_scratch(monkeypatch)
+    made = kept_scratch
     lid = await _imported(plugin)
     await _act(plugin, "language_make_start", kind="change", target_id=lid, text="more")
     await _drain(plugin)
