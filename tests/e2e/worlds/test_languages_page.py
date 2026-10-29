@@ -168,5 +168,28 @@ def test_a_word_shows_its_meanings_and_what_it_names(app, page):
     thing = _open_thing(page, "Velskar")
     thing.get_by_test_id("language-tab-lexicon").click()
     row = thing.get_by_test_id("language-word").filter(has_text="soru")
-    expect(row).to_contain_text("wind; breath", timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "breath"], timeout=TIMEOUT_MS)
     expect(row.get_by_test_id("word-names")).to_contain_text("name of Soru")
+
+    # + adds a meaning beside the others
+    row.get_by_test_id("add-meaning").click()
+    row.get_by_label("new meaning").fill("gale")
+    row.get_by_label("new meaning").press("Enter")
+    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "breath", "gale"], timeout=TIMEOUT_MS)
+
+    # × removes one
+    row.get_by_label("Remove meaning breath").click()
+    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "gale"], timeout=TIMEOUT_MS)
+
+    # clicking a meaning edits it
+    row.get_by_test_id("word-meaning").filter(has_text="gale").click()
+    row.get_by_label("meaning", exact=True).fill("storm")
+    row.get_by_label("meaning", exact=True).press("Enter")
+    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "storm"], timeout=TIMEOUT_MS)
+
+    # and it's saved: leaving the page and coming back rebuilds it from the store
+    _open_thing(page, "Soru")
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-lexicon").click()
+    row = thing.get_by_test_id("language-word").filter(has_text="soru")
+    expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "storm"], timeout=TIMEOUT_MS)

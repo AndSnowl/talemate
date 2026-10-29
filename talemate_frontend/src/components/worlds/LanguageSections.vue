@@ -216,9 +216,50 @@
                         </thead>
                         <tbody>
                             <tr v-for="row in filteredWords" :key="row.index" data-testid="language-word">
-                                <td v-for="field in WORD_FIELDS" :key="field" :class="'col-' + field" @click="editCell = { index: row.index, field }">
+                                <td v-for="field in WORD_FIELDS" :key="field" :class="'col-' + field" @click="field !== 'meanings' && (editCell = { index: row.index, field })">
+                                    <!-- one chip per meaning: click to edit, × to remove, + to add -->
+                                    <template v-if="field === 'meanings'">
+                                        <template v-for="(meaning, m) in local.words[row.index].meanings" :key="m">
+                                            <input
+                                                v-if="isMeaningEdit(row.index, m)"
+                                                v-model="meaningDraft"
+                                                class="cell-input meaning-input"
+                                                aria-label="meaning"
+                                                @vue:mounted="({ el }) => el.focus()"
+                                                @keydown.enter="saveMeaning"
+                                                @keydown.esc="editCell = null"
+                                                @blur="saveMeaning"
+                                            />
+                                            <span v-else class="meaning-chip" data-testid="word-meaning" title="Click to edit" @click.stop="editMeaning(row.index, m)">
+                                                {{ meaning }}
+                                                <v-icon icon="mdi-close" size="x-small" class="meaning-x" :aria-label="'Remove meaning ' + meaning" @click.stop="removeMeaning(row.index, m)"></v-icon>
+                                            </span>
+                                        </template>
+                                        <input
+                                            v-if="isMeaningEdit(row.index, -1)"
+                                            v-model="meaningDraft"
+                                            class="cell-input meaning-input"
+                                            aria-label="new meaning"
+                                            placeholder="meaning"
+                                            @vue:mounted="({ el }) => el.focus()"
+                                            @keydown.enter="saveMeaning"
+                                            @keydown.esc="editCell = null"
+                                            @blur="saveMeaning"
+                                        />
+                                        <v-btn
+                                            v-else
+                                            icon="mdi-plus"
+                                            size="x-small"
+                                            variant="text"
+                                            density="compact"
+                                            color="accent"
+                                            data-testid="add-meaning"
+                                            :aria-label="'Add a meaning to ' + local.words[row.index].word"
+                                            @click.stop="editMeaning(row.index, -1)"
+                                        ></v-btn>
+                                    </template>
                                     <input
-                                        v-if="editCell && editCell.index === row.index && editCell.field === field"
+                                        v-else-if="editCell && editCell.index === row.index && editCell.field === field"
                                         v-model="local.words[row.index][field]"
                                         class="cell-input"
                                         :aria-label="field"
@@ -342,7 +383,6 @@ const USES = {
     demonym: 'peoples',
 };
 
-// a word's meanings edit as one text, "wind; breath"
 const WORD_FIELDS = ['word', 'meanings', 'part'];
 
 function plain(value) {
@@ -375,6 +415,7 @@ export default {
             importing: false,
             search: '',
             editCell: null,
+            meaningDraft: '',
             phraseDialog: false,
             phraseForm: { id: null, category: '', original: '', translation: '', usage: '', breakdown: [] },
             relForm: null,
@@ -416,7 +457,7 @@ export default {
             const query = (this.search || '').trim().toLowerCase();
             return this.local.words
                 .map((w, index) => ({ ...w, index }))
-                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || (w.meanings || '').toLowerCase().includes(query));
+                .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || w.meanings.some((m) => m.toLowerCase().includes(query)));
         },
         groupedPhrases() {
             const groups = {};
@@ -482,7 +523,7 @@ export default {
                 generators: plain(rules.generators || []),
                 words: plain(fields.words || []).map((w) => ({
                     word: w.word,
-                    meanings: (w.meanings || (w.meaning ? [w.meaning] : [])).join('; '),
+                    meanings: [...(w.meanings || (w.meaning ? [w.meaning] : []))],
                     part: w.part || '',
                     notes: w.notes,
                 })),
@@ -581,6 +622,37 @@ export default {
             this.local.generators[g].patterns.splice(i, 1);
             this.saveRules();
         },
+        isMeaningEdit(index, m) {
+            const cell = this.editCell;
+            return !!cell && cell.index === index && cell.field === 'meanings' && cell.m === m;
+        },
+        // m is the meaning's place, or -1 for a new one
+        editMeaning(index, m) {
+            this.meaningDraft = m >= 0 ? this.local.words[index].meanings[m] : '';
+            this.editCell = { index, field: 'meanings', m };
+        },
+        saveMeaning() {
+            const cell = this.editCell;
+            if (!cell || cell.field !== 'meanings') return;
+            this.editCell = null;
+            const text = this.meaningDraft.trim();
+            const meanings = this.local.words[cell.index].meanings;
+            if (cell.m < 0) {
+                if (!text) return;
+                meanings.push(text);
+            } else if (text === meanings[cell.m]) {
+                return;
+            } else if (text) {
+                meanings[cell.m] = text;
+            } else {
+                meanings.splice(cell.m, 1);
+            }
+            this.saveWords();
+        },
+        removeMeaning(index, m) {
+            this.local.words[index].meanings.splice(m, 1);
+            this.saveWords();
+        },
         saveCell() {
             this.editCell = null;
             this.saveWords();
@@ -589,7 +661,7 @@ export default {
             const words = this.local.words
                 .filter((w) => (w.word || '').trim())
                 .map((w) => {
-                    const meanings = (w.meanings || '').split(';').map((m) => m.trim()).filter(Boolean);
+                    const meanings = w.meanings.map((m) => m.trim()).filter(Boolean);
                     const row = { word: w.word.trim(), meanings };
                     if ((w.part || '').trim()) row.part = w.part.trim();
                     if (w.notes) row.notes = w.notes;
@@ -599,7 +671,7 @@ export default {
         },
         addWord() {
             this.search = '';
-            this.local.words.unshift({ word: '', meanings: '', part: '' });
+            this.local.words.unshift({ word: '', meanings: [], part: '' });
             this.editCell = { index: 0, field: 'word' };
         },
         removeWord(index) {
@@ -802,6 +874,34 @@ export default {
     outline: 1px solid rgb(var(--v-theme-accent, var(--v-theme-primary)));
     border-radius: 2px;
     padding: 0 2px;
+}
+.meaning-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 0 4px 0 8px;
+    margin: 1px 4px 1px 0;
+    border-radius: 10px;
+    background: rgba(var(--v-theme-on-surface), 0.08);
+    cursor: pointer;
+}
+.dict [data-testid='add-meaning'] {
+    opacity: 0.45;
+}
+.dict tr:hover [data-testid='add-meaning'],
+.dict [data-testid='add-meaning']:focus-visible {
+    opacity: 1;
+}
+.meaning-x {
+    opacity: 0.5;
+}
+.meaning-x:hover {
+    opacity: 1;
+    color: rgb(var(--v-theme-delete));
+}
+.cell-input.meaning-input {
+    width: 9em;
+    margin-right: 4px;
 }
 .word-names {
     margin-left: 8px;
