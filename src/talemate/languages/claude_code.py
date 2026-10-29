@@ -49,6 +49,7 @@ NOT_INSTALLED = (
     "another route in the language agent's settings"
 )
 NO_FILE = "Claude Code finished without a language file"
+TOO_LONG = "Claude Code sent more than the app can read at once"
 
 
 class ClaudeCodeError(Exception):
@@ -269,9 +270,13 @@ async def run_claude_code(
                 on_progress(line)
         await proc.wait()
         await stderr_task
-    except asyncio.CancelledError:
+    except BaseException as exc:
+        # cancelled, or anything else that stops the reading: Claude Code
+        # must not be left running (and billing) on its own
         await asyncio.shield(_kill_tree(proc))
         stderr_task.cancel()
+        if isinstance(exc, ValueError) and "limit" in str(exc):
+            raise ClaudeCodeError(TOO_LONG) from exc
         raise
 
     reply = str((final or {}).get("result") or "")

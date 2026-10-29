@@ -196,3 +196,30 @@ async def test_cancelling_kills_the_process(scratch, folder, monkeypatch):
     await asyncio.sleep(0.2)
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+async def test_an_unreadable_stream_stops_claude_code(scratch, monkeypatch):
+    # a line past the read limit: a plain error, and Claude Code isn't left
+    # running (and billing) on its own
+    import talemate.languages.claude_code as runner
+
+    monkeypatch.setattr(runner, "STREAM_LIMIT", 1000)
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "ok")
+    with pytest.raises(ClaudeCodeError, match="more than the app can read"):
+        await run_claude_code(scratch, _settings(), "x", lambda line: None)
+    pid = int((scratch.folder / "pid").read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+async def test_a_failing_progress_report_stops_claude_code(scratch, monkeypatch):
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "slow")
+
+    def broken(line):
+        raise RuntimeError("the page went away")
+
+    with pytest.raises(RuntimeError):
+        await run_claude_code(scratch, _settings(), "x", broken)
+    pid = int((scratch.folder / "pid").read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
