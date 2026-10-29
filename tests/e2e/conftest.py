@@ -54,6 +54,10 @@ from e2e.seed import (
     set_fixed_setup,
 )
 
+# the stand-in for Claude Code (languages 3b-1), and the file its mode is in
+FAKE_CLAUDE = Path(__file__).resolve().parents[1] / "languages" / "data" / "fake-claude"
+FAKE_CLAUDE_MODE_FILE = "e2e-fake-claude-mode"
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ARTIFACTS_DIR = REPO_ROOT / ".test-artifacts"
 LOG_TAIL_LINES = 200
@@ -123,6 +127,10 @@ def app(tmp_path_factory, chromium_path):
         )
         mp.setenv("TALEMATE_TEST_FIXED_GROUP_ADD", str(root / FIXED_GROUP_ADD_FILE))
         mp.setenv("TALEMATE_TEST_FIXED_LANGUAGE", str(root / FIXED_LANGUAGE_FILE))
+        # Claude Code is a fake that writes the sample language; its mode per
+        # test comes from a file (`fake_claude_mode`)
+        mp.setenv("TALEMATE_TEST_CLAUDE_COMMAND", str(FAKE_CLAUDE))
+        mp.setenv("FAKE_CLAUDE_MODE_FILE", str(root / FAKE_CLAUDE_MODE_FILE))
         info = talemate_app.start(root=root)
     try:
         yield info
@@ -167,6 +175,18 @@ fixed_facts = _fixed_reply_fixture(FIXED_FACTS_FILE)
 fixed_group_synopsis = _fixed_reply_fixture(FIXED_GROUP_SYNOPSIS_FILE)
 fixed_group_add = _fixed_reply_fixture(FIXED_GROUP_ADD_FILE)
 fixed_language = _fixed_reply_fixture(FIXED_LANGUAGE_FILE)
+
+
+@pytest.fixture()
+def fake_claude_mode(app):
+    """Sets the fake Claude Code's mode (`ok`, `reply-only`, `error`,
+    `slow`) for this test; `ok` again after it."""
+
+    path = Path(app.root) / FAKE_CLAUDE_MODE_FILE
+    try:
+        yield lambda mode: path.write_text(mode)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 @pytest.fixture()

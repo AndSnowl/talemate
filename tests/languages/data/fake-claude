@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""A stand-in for Claude Code in tests (languages 3b-1): prints stream-json
+events shaped like the spike's, and writes the sample language.
+
+Its mode comes from the file named by FAKE_CLAUDE_MODE_FILE, else
+FAKE_CLAUDE_MODE, else "ok":
+- ok: writes moscavian.language.json and finishes;
+- reply-only: writes no file; the language is in the final reply;
+- error: finishes with an error result and exit 1;
+- not-logged-in: finishes as Claude Code does when nobody's signed in;
+- slow: prints its first event, then sleeps (for cancelling).
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+SAMPLE = Path(__file__).with_name("sample.language.json")
+
+
+def mode() -> str:
+    path = os.environ.get("FAKE_CLAUDE_MODE_FILE")
+    if path and Path(path).exists():
+        return Path(path).read_text().strip() or "ok"
+    return os.environ.get("FAKE_CLAUDE_MODE", "ok")
+
+
+def emit(event: dict) -> None:
+    print(json.dumps(event), flush=True)
+
+
+def tool(name: str, **tool_input) -> None:
+    emit(
+        {
+            "type": "assistant",
+            "message": {"content": [{"type": "tool_use", "name": name, "input": tool_input}]},
+        }
+    )
+
+
+def result(text: str, *, error: bool = False) -> None:
+    emit(
+        {
+            "type": "result",
+            "subtype": "error" if error else "success",
+            "is_error": error,
+            "result": text,
+            "total_cost_usd": 0.01,
+        }
+    )
+
+
+def main() -> int:
+    Path("pid").write_text(str(os.getpid()))
+    Path("args.json").write_text(json.dumps(sys.argv[1:]))
+    how = mode()
+    emit({"type": "system", "subtype": "init"})
+    tool("Skill", skill="language-design")
+    if how == "slow":
+        time.sleep(60)
+    if how == "error":
+        result("You've hit your usage limit.", error=True)
+        return 1
+    if how == "not-logged-in":
+        result("Not logged in · Please run /login", error=True)
+        return 1
+    text = SAMPLE.read_text()
+    target = Path("moscavian.language.json").resolve()
+    tool("Write", file_path=str(target), content=text)
+    tool("Bash", command="./check moscavian.language.json")
+    if how == "reply-only":
+        result("Here it is:\n\n```json\n" + text + "\n```\n\nDONE")
+        return 0
+    target.write_text(text)
+    result("DONE moscavian.language.json")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -382,7 +382,8 @@ export default {
       handler(newVal) {
         this.localDialog = newVal;
         if (newVal) {
-          this.selectedClient = typeof(this.agent.client) === 'object' && this.agent.client.client ? this.agent.client.client.value : this.agent.client;
+          // an agent with no client yet has `client: null` (typeof null is 'object')
+          this.selectedClient = this.agent.client && typeof(this.agent.client) === 'object' && this.agent.client.client ? this.agent.client.client.value : this.agent.client;
         }
       }
     },
@@ -470,7 +471,7 @@ export default {
     save(finalize = false) {
       if (finalize) { this.finalizeSave(); return; }
       if (this.selectedClient != null) {
-        if (typeof this.agent.client === 'object') {
+        if (this.agent.client && typeof this.agent.client === 'object') {
           if (this.agent.client.client != null) {
             this.agent.client.client.value = this.selectedClient;
           }

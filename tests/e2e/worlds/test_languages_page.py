@@ -209,3 +209,26 @@ def test_a_word_shows_its_meanings_and_what_it_names(app, page):
     thing.get_by_test_id("language-tab-lexicon").click()
     row = thing.get_by_test_id("language-word").filter(has_text="soru")
     expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "storm"], timeout=TIMEOUT_MS)
+
+
+def test_a_rule_sets_roll_rolls_only_its_own_names(app, page):
+    name = _world_name("Lang roll one")
+    seed_fm_world(
+        app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": _language_fields()}]
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-language").click()
+    cards = thing.get_by_test_id("language-generator")
+    expect(cards.first.get_by_test_id("language-samples")).not_to_have_text(
+        "Roll to see names.", timeout=TIMEOUT_MS
+    )
+    first_before = cards.nth(0).get_by_test_id("language-samples").inner_text()
+    second_before = cards.nth(1).get_by_test_id("language-samples").inner_text()
+    cards.nth(0).get_by_role("button", name="Roll").click()
+    expect(cards.nth(0).get_by_test_id("language-samples")).not_to_have_text(
+        first_before, timeout=TIMEOUT_MS
+    )
+    page.wait_for_timeout(500)
+    assert cards.nth(1).get_by_test_id("language-samples").inner_text() == second_before

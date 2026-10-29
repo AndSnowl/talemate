@@ -1,0 +1,32 @@
+{
+  "format": "fantasymate.language",
+  "version": 1,
+  "description": "A small sample language for tests, made by following the language-design skill.",
+  "language": {
+    "name": "Velskar",
+    "level": "full",
+    "flavour": "",
+    "sound": "Short, firm words that end on a hard stop, with open vowels in between. It sounds like people talking over cold wind.",
+    "categories": {"C": "k v r s t n l d", "V": "a o e u"},
+    "generators": [
+      {"id": "words", "name": "Words", "use": "words", "patterns": ["CVC", "CVCVC"]},
+      {"id": "people", "name": "People", "use": "people", "patterns": ["CVCVC", "CVCV"]},
+      {"id": "places", "name": "Places", "use": "places", "patterns": ["CVCVC", "CVCVCVC"]}
+    ],
+    "grammar": "Describing words come before the thing they describe.",
+    "dictionary": [
+      {"word": "vel", "meaning": "great"},
+      {"word": "kor", "meaning": "river"},
+      {"word": "tasun", "meaning": "fort"},
+      {"word": "der", "meaning": "cold"},
+      {"word": "nolok", "meaning": "hill"},
+      {"word": "sel", "meaning": "free"},
+      {"word": "ruk", "meaning": "hand"},
+      {"word": "veltasun", "meaning": "the great fort"}
+    ],
+    "phrases": [
+      {"id": "greet", "category": "greeting", "original": "Der kor, sel ruk.", "translation": "Cold river, free hand."},
+      {"id": "curse", "category": "curse", "original": "Kor vel!", "translation": "The great river take you!"}
+    ]
+  }
+}

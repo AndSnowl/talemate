@@ -4,7 +4,12 @@
             <span class="text-subtitle-2">{{ targetId ? 'Import a new version' : 'Import a language' }}</span>
             <span class="text-caption text-muted">paste what the assistant made, or choose its file</span>
         </div>
-        <div data-testid="language-paste">
+        <!-- a file made for the owner folds away: the review below is what matters -->
+        <div v-if="fileFolded" class="text-caption text-muted">
+            The made file is filled in.
+            <a href="#" data-testid="language-show-file" @click.prevent="fileFolded = false">Show the file</a>
+        </div>
+        <div v-show="!fileFolded" data-testid="language-paste">
             <v-textarea
                 v-model="text"
                 label="The language file, or the assistant's whole reply"
@@ -17,7 +22,7 @@
                 :disabled="busy"
             ></v-textarea>
         </div>
-        <div class="d-flex align-center flex-wrap ga-2 mt-2">
+        <div v-if="!fileFolded" class="d-flex align-center flex-wrap ga-2 mt-2">
             <v-btn size="small" color="primary" variant="tonal" :disabled="!text.trim() || busy" :loading="checking" @click="check">Check</v-btn>
             <v-btn size="small" variant="text" prepend-icon="mdi-file-upload-outline" :disabled="busy" @click="$refs.file.click()">Choose a file…</v-btn>
             <input ref="file" type="file" accept=".json,.txt,application/json,text/plain" class="d-none" @change="readFile" />
@@ -74,13 +79,15 @@ export default {
     props: {
         // a language entry to import a new version onto; null for a new one
         targetId: { type: String, default: null },
+        // a file made for the owner (languages 3b): filled in and checked
+        initialText: { type: String, default: null },
     },
     emits: ['cancel'],
     setup() {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { text: '' };
+        return { text: '', fileFolded: false };
     },
     computed: {
         preview() {
@@ -112,6 +119,22 @@ export default {
         },
         busy() {
             return this.checking || this.importing;
+        },
+    },
+    watch: {
+        initialText: {
+            immediate: true,
+            handler(text) {
+                if (text) {
+                    this.text = text;
+                    this.fileFolded = true;
+                    this.check();
+                } else if (this.fileFolded) {
+                    // "Make another": the made file goes with it
+                    this.text = '';
+                    this.fileFolded = false;
+                }
+            },
         },
     },
     beforeUnmount() {

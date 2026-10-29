@@ -694,7 +694,19 @@ export const useWorldsStore = defineStore('worlds', {
         // languages 3a: the import box's preview (`language_preview`), the
         // sample names per language page, and an exported file's text
         languagePreview: null,
+        // languages 3b: making one. The route (`language_make_route`), the
+        // job `{running, route, lines, text, error}`, the questions asked
+        // `{pending, questions, error}`, and the brief to copy (its text)
+        languageMakeRoute: null,
+        // what the owner is asking for, kept while they look elsewhere
+        // until they Discard it or the language is imported
+        languageMakeDraft: { text: '', contextIds: [], answers: [] },
+        languageMake: null,
+        languageQuestions: null,
+        languageBrief: null,
         languageSamples: {},
+        // which rule set a page's last Roll was for (null: all of them)
+        languageSamplesFor: {},
         languageExport: null,
         // right-click naming: the languages in reach of a box's page
         // (`language_menu`), rolled names with definitions, a suggested
@@ -1924,6 +1936,37 @@ export const useWorldsStore = defineStore('worlds', {
             this.languagePreview = null;
         },
 
+        // --- making a language (languages 3b) -----------------------------
+
+        loadLanguageMakeRoute() {
+            this.request('language_make_route', {});
+        },
+
+        askLanguageQuestions(text) {
+            this.languageQuestions = { pending: true, questions: [], error: null };
+            this.request('language_questions', { text });
+        },
+
+        requestLanguageBrief(request) {
+            this.languageBrief = null;
+            this.request('language_brief', request);
+        },
+
+        startLanguageMake(request) {
+            this.languageMake = { running: true, route: null, lines: [], text: null, error: null };
+            this.request('language_make_start', request);
+        },
+
+        cancelLanguageMake() {
+            this.request('language_make_cancel', {});
+        },
+
+        clearLanguageMake() {
+            this.languageMake = null;
+            this.languageQuestions = null;
+            this.languageMakeDraft = { text: '', contextIds: [], answers: [] };
+        },
+
         exportLanguage(thingId) {
             this.languageExport = null;
             this.request('language_export', { thing_id: thingId });
@@ -1963,7 +2006,10 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameInResult = null;
         },
 
-        rollLanguageSamples(thingId, seed = 0) {
+        // `generatorId`: roll just that rule set's names (a card's Roll);
+        // none rolls them all
+        rollLanguageSamples(thingId, seed = 0, generatorId = null) {
+            this.languageSamplesFor = { ...this.languageSamplesFor, [thingId]: generatorId };
             this.request('language_samples', { thing_id: thingId, seed });
         },
 
@@ -2214,8 +2260,39 @@ export const useWorldsStore = defineStore('worlds', {
                 case 'language_preview':
                     this.languagePreview = data;
                     break;
+                case 'language_make_route':
+                    this.languageMakeRoute = data.route;
+                    break;
+                case 'language_questions':
+                    this.languageQuestions = { pending: false, questions: data.questions, error: null };
+                    break;
+                case 'language_questions_failed':
+                    this.languageQuestions = { pending: false, questions: [], error: message.message || 'No questions came back.' };
+                    break;
+                case 'language_brief':
+                    this.languageBrief = data.text;
+                    break;
+                case 'language_make_started':
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, route: data.route };
+                    break;
+                case 'language_make_progress':
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, lines: [...this.languageMake.lines, data.line] };
+                    break;
+                case 'language_make_done':
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, running: false, text: data.text };
+                    break;
+                case 'language_make_failed':
+                    // (the page never starts a second job while one runs)
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, running: false, error: data.error };
+                    break;
+                case 'language_make_cancelled':
+                    this.languageMake = null;
+                    break;
                 case 'language_import':
                     this.languagePreview = null;
+                    this.languageMake = null;
+                    this.languageQuestions = null;
+                    this.languageMakeDraft = { text: '', contextIds: [], answers: [] };
                     this.listThings('language');
                     this.listAllThings();
                     this.openThing(data.id);
@@ -2258,9 +2335,14 @@ export const useWorldsStore = defineStore('worlds', {
                         this.thing = data;
                     }
                     break;
-                case 'language_samples':
-                    this.languageSamples = { ...this.languageSamples, [data.thing_id]: data.samples };
+                case 'language_samples': {
+                    const only = this.languageSamplesFor[data.thing_id];
+                    const samples = only
+                        ? { ...(this.languageSamples[data.thing_id] || {}), [only]: data.samples[only] || [] }
+                        : data.samples;
+                    this.languageSamples = { ...this.languageSamples, [data.thing_id]: samples };
                     break;
+                }
                 case 'group_synopsis':
                 case 'group_synopsis_failed': {
                     const key = groupKey(data?.thing_id, data?.tag);

@@ -101,7 +101,16 @@ from `talemate.languages.models.LanguageFile`). The shape:
 
 ## Check before handing it over
 
-Run the app's check on the file, and fix it until it passes:
+Run the app's check on the file, and fix it until it passes.
+
+If your brief names a check command (the app gives one when it runs
+you), run exactly that, on its own line with no other commands:
+
+```bash
+/the/path/from/the/brief/check NAME.language.json
+```
+
+Otherwise, from the app's folder:
 
 ```bash
 guix shell -m manifest.scm -- uv run --no-sync python -m talemate.languages check NAME.language.json
