@@ -434,7 +434,7 @@ from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
-from talemate.languages.entry import language_of, used_words, word_uses
+from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
     default_language,
@@ -933,6 +933,9 @@ class LanguageTextPayload(pydantic.BaseModel):
     text: str
     target_id: str | None = None
     at: dict | None = None
+    # for a change: the version it was briefed on (merged onto the
+    # language as it is now, keeping the owner's edits)
+    base: str | None = None
 
 
 class LanguageSamplesPayload(pydantic.BaseModel):
@@ -1240,6 +1243,13 @@ def _languages_page(view: WorldView, state: ThingState) -> dict:
         ],
         "languages_source_name": view.name_of(source) if source else None,
     }
+
+
+def _same_language(old: Language, new: Language) -> bool:
+    """Whether importing `new` onto `old` would change nothing it stores
+    (the name stays the entry's own either way)."""
+
+    return fields_of(old) == fields_of(new)
 
 
 def _fixed_file(env: str) -> Path | None:
@@ -5556,9 +5566,9 @@ class WorldsPlugin(Plugin):
         and its repair note, and, for a new version, what changes."""
 
         payload = LanguageTextPayload(**data)
-        preview = preview_import(
-            self._require_world().view(), payload.text, payload.target_id
-        )
+        view = self._require_world().view()
+        self._require_target(view, payload)
+        preview = preview_import(view, payload.text, payload.target_id, payload.base)
         self._reply(
             "language_preview",
             {
@@ -5575,10 +5585,27 @@ class WorldsPlugin(Plugin):
 
         payload = LanguageTextPayload(**data)
         world = self._require_world()
-        preview = preview_import(world.view(), payload.text, payload.target_id)
-        with world.revision(Source.manual(note="import language")) as rev:
-            thing_id = apply_import(rev, world.view(), preview, payload.target_id)
+        view = world.view()
+        self._require_target(view, payload)
+        preview = preview_import(view, payload.text, payload.target_id, payload.base)
+        if payload.target_id is not None and _same_language(
+            language_of(view.thing(payload.target_id), view), preview.file.language
+        ):
+            # nothing would change (a second Accept): write nothing
+            thing_id = payload.target_id
+        else:
+            with world.revision(Source.manual(note="import language")) as rev:
+                thing_id = apply_import(rev, world.view(), preview, payload.target_id)
         self._edited("language_import", thing_id, _date_in(payload.at), prose=False)
+
+    def _require_target(self, view: WorldView, payload: LanguageTextPayload) -> None:
+        """A new version or change needs its language still there."""
+
+        if payload.target_id is None:
+            return
+        state = view.thing(payload.target_id)
+        if state is None or state.kind != "language":
+            raise ValueError(LANGUAGE_GONE)
 
     async def handle_language_export(self, data: dict):
         """The language entry as a file's text."""

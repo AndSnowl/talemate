@@ -1921,15 +1921,16 @@ export const useWorldsStore = defineStore('worlds', {
 
         // --- languages (languages 3a) -------------------------------------
 
-        previewLanguage(text, targetId = null) {
+        // `base`: for a change, the version it was briefed on
+        previewLanguage(text, targetId = null, base = null) {
             this.languagePreview = null;
             this.pending = { ...this.pending, language_preview: true };
-            this.request('language_preview', { text, target_id: targetId });
+            this.request('language_preview', { text, target_id: targetId, base });
         },
 
-        importLanguage(text, targetId = null) {
+        importLanguage(text, targetId = null, base = null) {
             this.pending = { ...this.pending, language_import: true };
-            this.request('language_import', { text, target_id: targetId, at: this.thingAt });
+            this.request('language_import', { text, target_id: targetId, base, at: this.thingAt });
         },
 
         clearLanguagePreview() {

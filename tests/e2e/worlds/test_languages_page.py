@@ -130,7 +130,7 @@ def test_new_version_shows_kept_used_words(app, page):
     box.get_by_test_id("language-paste").locator("textarea").first.fill(json.dumps(data))
     box.get_by_role("button", name="Check").click()
     expect(box.get_by_test_id("language-diff")).to_contain_text("veltasun", timeout=TIMEOUT_MS)
-    expect(box.get_by_test_id("language-diff")).to_contain_text("kept because")
+    expect(box.get_by_test_id("change-kept")).to_contain_text("Kept as they are: veltasun")
 
     # importing it keeps the word the world uses, with its meaning
     box.get_by_role("button", name="Import").click()
