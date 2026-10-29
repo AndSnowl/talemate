@@ -158,7 +158,12 @@ def _check_real(language: Language, report: CheckReport) -> None:
             return any(w.lower() in exact or stem(w) in stems for w in _words_of(text))
 
         words = [entry.word for entry in language.dictionary]
-        hits = [text for text in words + samples if is_real(text)]
+        examples = [
+            example.original
+            for section in language.grammar
+            for example in section.examples
+        ]
+        hits = [text for text in words + examples + samples if is_real(text)]
         what = "words or sample names are real"
     report.real_hits = list(dict.fromkeys(hits))
     if report.real_hits:

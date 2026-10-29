@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 __all__ = [
     "GENERATOR_USES",
+    "GRAMMAR_TOPICS",
+    "GrammarExample",
+    "GrammarSection",
+    "GrammarTable",
     "GeneratorDef",
     "Phrase",
     "DictionaryEntry",
@@ -95,6 +99,56 @@ class DictionaryEntry(BaseModel):
         return self
 
 
+# the grammar topics a full language covers, with their plain titles
+# (languages 3b-2); a section on anything else is "other"
+GRAMMAR_TOPICS: tuple[tuple[str, str], ...] = (
+    ("sounds", "Sounds and stress"),
+    ("word_order", "Word order"),
+    ("nouns", "Nouns"),
+    ("pronouns", "Pronouns"),
+    ("verbs", "Verbs"),
+    ("adjectives", "Adjectives"),
+    ("questions", 'Questions and "not"'),
+    ("numbers", "Numbers"),
+    ("word_building", "How words are built"),
+    ("names", "How names are built"),
+    ("politeness", "Politeness and registers"),
+)
+
+
+class GrammarTable(BaseModel):
+    """A table in a grammar section: a conjugation, noun endings, the
+    pronouns. Rows are kept as written, even when ragged."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    caption: str = ""
+    columns: list[str] = Field(default_factory=list)
+    rows: list[list[str]] = Field(default_factory=list)
+
+
+class GrammarExample(BaseModel):
+    """A worked example: the original, word by word, and its translation."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    original: str
+    breakdown: list[tuple[str, str]] = Field(default_factory=list)
+    translation: str = ""
+
+
+class GrammarSection(BaseModel):
+    """One topic of a language's grammar: plain text, tables, examples."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    topic: str = "other"
+    text: str = ""
+    tables: list[GrammarTable] = Field(default_factory=list)
+    examples: list[GrammarExample] = Field(default_factory=list)
+
+
 class SimilarLink(BaseModel):
     """Another language this one is close to, by name (in a file; an entry
     stores the other language's id)."""
@@ -115,13 +169,23 @@ class Language(BaseModel):
     categories: dict[str, str] = Field(default_factory=dict)
     syllable_notes: list[str] = Field(default_factory=list)
     generators: list[GeneratorDef] = Field(default_factory=list)
-    grammar: str = ""
+    # sections; an older file's grammar text is read as one section
+    grammar: list[GrammarSection] = Field(default_factory=list)
     dictionary: list[DictionaryEntry] = Field(default_factory=list)
     phrases: list[Phrase] = Field(default_factory=list)
     # whose real words the real-word check looks for ("russian", "english"),
     # lower-case; "" for none
     flavour: str = ""
     similar: list[SimilarLink] = Field(default_factory=list)
+
+    @field_validator("grammar", mode="before")
+    @classmethod
+    def _text_grammar_is_one_section(cls, value: object) -> object:
+        if value is None or value == "":
+            return []
+        if isinstance(value, str):
+            return [{"title": "Grammar", "topic": "other", "text": value}]
+        return value
 
     @field_validator("flavour")
     @classmethod

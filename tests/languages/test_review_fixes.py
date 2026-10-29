@@ -33,4 +33,5 @@ def test_flavour_is_lower_cased():
 
 def test_parse_accepts_raw_line_breaks_in_strings():
     text = '{"language": {"name": "Velskar", "level": "full", "grammar": "line one\nline two"}}'
-    assert parse_language_text(text).language.grammar == "line one\nline two"
+    # an older file's grammar text: one section, its line break kept
+    assert parse_language_text(text).language.grammar[0].text == "line one\nline two"
