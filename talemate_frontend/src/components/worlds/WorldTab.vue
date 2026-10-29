@@ -373,13 +373,16 @@ export default {
     min-height: 100%;
 }
 
+/* the window's height, whatever the page beside it: a flex child would
+   otherwise stretch to the page and grow and shrink with it */
 .world-list {
     width: 260px;
     flex: none;
+    align-self: flex-start;
     background: rgb(var(--v-theme-surface));
     border-radius: 6px;
     overflow-y: auto;
-    max-height: calc(100vh - 120px);
+    height: calc(100vh - 120px);
     position: sticky;
     top: 0;
 }

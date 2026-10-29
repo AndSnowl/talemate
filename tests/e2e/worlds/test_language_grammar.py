@@ -110,3 +110,19 @@ def test_the_language_tab_no_longer_shows_grammar_notes(app, page):
     thing.get_by_test_id("language-tab-language").click()
     expect(thing.get_by_test_id("language-grammar")).to_have_count(0)
     expect(thing.get_by_text("Nouns are masculine or feminine.")).to_have_count(0)
+
+
+def test_the_side_column_keeps_its_height_whatever_the_page(app, page):
+    long_text = "A long explanation. " * 300
+    sections = [
+        {"title": "Nouns", "topic": "nouns", "text": "Short."},
+        {"title": "Verbs", "topic": "verbs", "text": long_text},
+    ]
+    thing = _grammar_tab(app, page, "Grammar height", sections)
+    side = page.get_by_test_id("world-list")
+    expect(thing.get_by_test_id("grammar-section")).to_contain_text("Short.", timeout=TIMEOUT_MS)
+    short = side.bounding_box()["height"]
+    thing.get_by_test_id("grammar-topic").filter(has_text="Verbs").click()
+    expect(thing.get_by_test_id("grammar-section")).to_contain_text("A long explanation.")
+    page.wait_for_timeout(300)
+    assert side.bounding_box()["height"] == short
