@@ -15,6 +15,13 @@
         <div v-if="!report.blocking.length && !report.warnings.length" class="text-body-2 text-success mb-2">
             No problems found.
         </div>
+        <!-- what a full language still lacks: information, never a problem -->
+        <div v-if="stillToFill.length" class="mb-2" data-testid="check-still-to-fill">
+            <div class="text-subtitle-2">Still to fill in</div>
+            <ul class="report-list text-body-2">
+                <li v-for="(line, index) in stillToFill" :key="'s' + index">{{ line }}</li>
+            </ul>
+        </div>
         <div class="text-caption text-muted">
             <span v-if="report.fit_share != null">{{ fitPercent }}% of the words follow the language's own word rules.</span>
             <span v-else-if="report.fit_skipped_reason">Word rules not checked: {{ report.fit_skipped_reason }}.</span>
@@ -37,13 +44,26 @@ export default {
         report: { type: Object, required: true },
         repairNote: { type: String, default: '' },
     },
-    data() {
-        return { copied: false };
-    },
     computed: {
         fitPercent() {
             return Math.round((this.report.fit_share || 0) * 100);
         },
+        stillToFill() {
+            const found = this.report.completeness;
+            if (!found) return [];
+            const lines = [];
+            const missing = found.meanings_missing || [];
+            if (missing.length) {
+                const shown = missing.slice(0, 8).join(', ') + (missing.length > 8 ? ', …' : '');
+                lines.push(`Words: ${missing.length} of ${found.meanings_total} missing (${shown})`);
+            }
+            if ((found.phrase_categories_missing || []).length) lines.push(`Phrases: no ${found.phrase_categories_missing.join(', ')}`);
+            if ((found.grammar_topics_missing || []).length) lines.push(`Grammar: ${found.grammar_topics_missing.join(', ')} not written`);
+            return lines;
+        },
+    },
+    data() {
+        return { copied: false };
     },
     methods: {
         async copyNote() {

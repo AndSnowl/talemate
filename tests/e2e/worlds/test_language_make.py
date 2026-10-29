@@ -4,6 +4,8 @@ result landing in the import review."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import expect
 
@@ -121,3 +123,64 @@ def test_the_draft_stays_until_discarded(app, page, fixed_language):
     box.get_by_test_id("make-discard").click()
     expect(request).to_have_value("")
     expect(box.get_by_test_id("make-answer")).to_have_count(0)
+
+
+# --- 3b-2a: route, model and size in the dialog -----------------------------
+
+
+def test_the_dialog_offers_route_model_and_size(app, page):
+    box = _make_box(app, page, "Make choices")
+    route = box.get_by_test_id("make-route")
+    expect(route.get_by_test_id("make-route-claude_code")).to_have_attribute(
+        "aria-pressed", "true", timeout=TIMEOUT_MS
+    )
+    expect(box.get_by_test_id("make-model")).to_be_visible()
+    expect(box.get_by_test_id("make-size-full")).to_have_attribute("aria-pressed", "true")
+    expect(box.get_by_test_id("make-size-note")).to_contain_text("subscription")
+
+
+def test_choosing_the_agents_model_switches_to_quick(app, page):
+    box = _make_box(app, page, "Make quick")
+    box.get_by_test_id("make-route-in_app").click()
+    expect(box.get_by_test_id("make-size-quick")).to_have_attribute(
+        "aria-pressed", "true", timeout=TIMEOUT_MS
+    )
+    expect(box.get_by_test_id("make-model")).to_have_count(0)
+    expect(box.get_by_test_id("make-size-note")).to_contain_text("API tokens")
+
+
+def test_a_chosen_route_is_used_for_the_run(app, page, fixed_language):
+    sample = (Path(__file__).resolve().parents[2] / "languages/data/sample.language.json").read_text()
+    fixed_language({"language_file": sample})
+    box = _make_box(app, page, "Make in app")
+    box.get_by_test_id("make-route-in_app").click()
+    box.get_by_test_id("make-start").click()
+    expect(page.get_by_test_id("language-preview")).to_contain_text("Velskar", timeout=TIMEOUT_MS)
+    expect(box.get_by_test_id("make-done")).to_contain_text("Language agent's model")
+
+
+def test_copy_the_brief_route_makes_copy_the_main_button(app, page):
+    box = _make_box(app, page, "Make brief route")
+    box.get_by_test_id("make-route-brief").click()
+    expect(box.get_by_test_id("make-start")).to_have_count(0, timeout=TIMEOUT_MS)
+    expect(box.get_by_test_id("make-copy-brief")).to_be_visible()
+    box.get_by_test_id("make-route-claude_code").click()
+    expect(box.get_by_test_id("make-start")).to_be_visible(timeout=TIMEOUT_MS)
+
+
+def test_the_copied_brief_follows_how_much(app, page):
+    page.context.grant_permissions(["clipboard-read", "clipboard-write"])
+    box = _make_box(app, page, "Make brief size")
+    box.get_by_test_id("make-size-quick").click()
+    box.get_by_test_id("make-copy-brief").click()
+    expect(box.get_by_test_id("make-copied")).to_be_visible(timeout=TIMEOUT_MS)
+    assert "fill in the rest later" in page.evaluate("() => navigator.clipboard.readText()")
+
+
+def test_the_review_shows_still_to_fill_in(app, page, fake_claude_mode):
+    fake_claude_mode("ok")
+    box = _make_box(app, page, "Make still")
+    box.get_by_test_id("make-start").click()
+    still = page.get_by_test_id("check-still-to-fill")
+    expect(still).to_contain_text("missing", timeout=TIMEOUT_MS)
+    expect(still).to_contain_text("Phrases")
