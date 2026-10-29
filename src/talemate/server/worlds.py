@@ -441,7 +441,14 @@ from talemate.languages.lookup import (
     languages_for,
     languages_for_scene,
 )
-from talemate.languages.making import ask_questions
+from talemate.languages.brief import write_brief
+from talemate.languages.making import (
+    MakeError,
+    MakeRequest,
+    MakeSettings,
+    ask_questions,
+    make_language,
+)
 from talemate.languages.models import Language
 from talemate.languages.naming import (
     NameInResult,
@@ -610,6 +617,8 @@ FIXED_GROUP_ADD_ENV = "TALEMATE_TEST_FIXED_GROUP_ADD"
 # browser tests: the model's reply to every language naming call
 # (definitions and picks, `languages.naming`)
 FIXED_LANGUAGE_ENV = "TALEMATE_TEST_FIXED_LANGUAGE"
+# the browser tests' stand-in for Claude Code (a fake `claude` script)
+CLAUDE_COMMAND_ENV = "TALEMATE_TEST_CLAUDE_COMMAND"
 
 
 class CreateWorldPayload(pydantic.BaseModel):
@@ -2140,6 +2149,8 @@ class WorldsPlugin(Plugin):
     def connect(self):
         # background tasks, kept referenced until they finish
         self.tasks: set[asyncio.Task] = set()
+        # the language being made (one at a time), for cancelling
+        self._make_task: asyncio.Task | None = None
         # one lock per thing id, so its prose tasks run in order
         self._prose_locks: dict[str, asyncio.Lock] = {}
         # the drafts of this session: draft key -> its versions, oldest
@@ -2156,6 +2167,10 @@ class WorldsPlugin(Plugin):
         self._previews_out: Counter[str] = Counter()
 
     def disconnect(self):
+        # nobody is left to review a language being made: stop it too
+        if self._make_task is not None:
+            self._make_task.cancel()
+            self._make_task = None
         self._set_world(None)
 
     # --- the open world ---------------------------------------------------
@@ -2175,7 +2190,10 @@ class WorldsPlugin(Plugin):
         old = self.world
         if old is not None and old is not world:
             for task in list(self.tasks):
-                task.cancel()
+                # a language being made read the world only to start: its
+                # file still comes to the review, against the world open then
+                if task is not self._make_task:
+                    task.cancel()
             old.close()
             # a draft belongs to the world it was made in
             self._drafts.clear()
@@ -5734,6 +5752,87 @@ class WorldsPlugin(Plugin):
                 success_data=lambda questions: {"questions": questions},
             ),
         )
+
+    def _make_settings(self) -> MakeSettings:
+        """How languages are made, from the language agent's settings; the
+        browser tests swap in their fake Claude Code."""
+
+        try:
+            settings = instance.get_agent("language").make_settings()
+        except KeyError:
+            settings = MakeSettings()
+        command = os.environ.get(CLAUDE_COMMAND_ENV)
+        if command:
+            settings = settings.model_copy(update={"claude_command": command})
+        return settings
+
+    async def handle_language_brief(self, data: dict):
+        """The brief for any outside assistant, for the owner to copy:
+        answers `language_brief {text}`."""
+
+        request = MakeRequest(**data)
+        view = self.world.view() if self.world is not None else None
+        self._reply("language_brief", {"text": write_brief(view, request)})
+
+    async def handle_language_make_start(self, data: dict):
+        """Make a language on the language agent's route, in the
+        background: `language_make_started {route}`, then
+        `language_make_progress {line}` as it goes, and
+        `language_make_done {text}` (the file, for the import review) or
+        `language_make_failed {error}`. One job at a time."""
+
+        if self._make_task is not None and not self._make_task.done():
+            self._reply(
+                "language_make_failed", {"error": "A language is already being made"}
+            )
+            return
+        if self.world is None:
+            self._reply("language_make_failed", {"error": "Open a world first"})
+            return
+        request = MakeRequest(**data)
+        settings = self._make_settings()
+        fixed_path = _fixed_file(FIXED_LANGUAGE_ENV)
+        fixed = (
+            json.loads(fixed_path.read_text(encoding="utf-8")) if fixed_path else None
+        )
+        client = None if fixed else self._language_client()
+
+        def progress(line: str) -> None:
+            self._reply("language_make_progress", {"line": line})
+
+        def done(task: asyncio.Task) -> None:
+            if self._make_task is task:
+                self._make_task = None
+            if task.cancelled():
+                # the owner cancelled: `language_make_cancelled` said so
+                return
+            exc = task.exception()
+            if exc is None:
+                self._reply("language_make_done", {"text": task.result()})
+            elif isinstance(exc, MakeError):
+                self._reply("language_make_failed", {"error": str(exc)})
+            else:
+                log.error("worlds.language_make_failed", error=str(exc))
+                self._reply(
+                    "language_make_failed",
+                    {"error": f"Something went wrong making the language: {exc}"},
+                )
+
+        self._reply("language_make_started", {"route": settings.route})
+        self._make_task = self._spawn(
+            make_language(
+                self.world.view(), request, settings, client, progress, fixed=fixed
+            ),
+            done,
+        )
+
+    async def handle_language_make_cancel(self, data: dict):
+        """Stop the language being made; nothing more comes from it."""
+
+        task, self._make_task = self._make_task, None
+        if task is not None and not task.done():
+            task.cancel()
+        self._reply("language_make_cancelled", {})
 
     async def handle_language_suggest_definition(self, data: dict):
         """A suggested definition for a word the owner is adding, in the
