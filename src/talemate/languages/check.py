@@ -27,6 +27,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from talemate.languages.completeness import Completeness, completeness
 from talemate.languages.generator import fits, roll, validate_language
 from talemate.languages.models import Language
 
@@ -54,6 +55,8 @@ class CheckReport(BaseModel):
     unfit_words: list[str] = Field(default_factory=list)
     dictionary_size: int = 0
     samples: dict[str, list[str]] = Field(default_factory=dict)
+    # what a full language is still missing (never blocks or repairs)
+    completeness: Completeness | None = None
 
     @property
     def ok(self) -> bool:
@@ -198,6 +201,8 @@ def check_language(
         return report
     _check_fit(language, report)
     _check_real(language, report)
+    if language.level == "full":
+        report.completeness = completeness(language)
     return report
 
 
@@ -225,4 +230,25 @@ def repair_note(report: CheckReport) -> str:
         lines += [f"- {warning}" for warning in report.warnings]
     if not lines:
         lines.append("No problems found.")
+    lines += _still_to_fill_in(report.completeness)
     return "\n".join(lines)
+
+
+def _still_to_fill_in(found: Completeness | None) -> list[str]:
+    if found is None:
+        return []
+    parts = []
+    if found.meanings_missing:
+        shown = ", ".join(found.meanings_missing[:12])
+        more = " …" if len(found.meanings_missing) > 12 else ""
+        parts.append(
+            f"- Everyday and structural words: {len(found.meanings_missing)} of "
+            f"{found.meanings_total} missing ({shown}{more})"
+        )
+    if found.phrase_categories_missing:
+        parts.append(f"- Phrases: no {', '.join(found.phrase_categories_missing)}")
+    if found.grammar_topics_missing:
+        parts.append(
+            f"- Grammar: {', '.join(found.grammar_topics_missing)} not written"
+        )
+    return ["", "Still to fill in:", *parts] if parts else []
