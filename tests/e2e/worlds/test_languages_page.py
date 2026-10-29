@@ -162,7 +162,12 @@ def test_phrases_tab_shows_breakdown_and_adds_a_phrase(app, page):
 def test_a_word_shows_its_meanings_and_what_it_names(app, page):
     name = _world_name("Lang meanings")
     fields = _language_fields()
-    fields["words"] = [*fields["words"], {"word": "soru", "meanings": ["wind", "breath"]}]
+    fields["words"] = [
+        *fields["words"],
+        {"word": "soru", "meanings": ["wind", "breath"]},
+        # an older row carrying both keys: the old meaning still shows
+        {"word": "brin", "meanings": [], "meaning": "stone"},
+    ]
     seed_fm_world(
         app.root,
         name,
@@ -179,6 +184,8 @@ def test_a_word_shows_its_meanings_and_what_it_names(app, page):
     expect(row.get_by_test_id("word-meaning")).to_have_text(["wind", "breath"], timeout=TIMEOUT_MS)
     expect(row.get_by_test_id("word-names")).to_have_text("name")
     expect(row.get_by_test_id("word-names")).to_have_attribute("title", "Soru (character)")
+    brin = thing.get_by_test_id("language-word").filter(has_text="brin")
+    expect(brin.get_by_test_id("word-meaning")).to_have_text(["stone"])
 
     # + adds a meaning beside the others
     row.get_by_test_id("add-meaning").click()

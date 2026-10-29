@@ -542,7 +542,8 @@ export default {
                 generators: plain(rules.generators || []),
                 words: plain(fields.words || []).map((w) => ({
                     word: w.word,
-                    meanings: [...(w.meanings || (w.meaning ? [w.meaning] : []))],
+                    // an older row's single meaning counts when it has no list (as the backend reads it)
+                    meanings: [...(w.meanings?.length ? w.meanings : w.meaning ? [w.meaning] : [])],
                     part: w.part || '',
                     notes: w.notes,
                 })),

@@ -113,6 +113,12 @@ def _by_word(language: Language) -> dict[str, DictionaryEntry]:
     return {e.word.lower(): e for e in language.dictionary}
 
 
+def _meaning_keys(entry: DictionaryEntry) -> set[str]:
+    """A word's meanings as compared: order and case don't count."""
+
+    return {m.lower() for m in entry.meanings}
+
+
 def _diff(old: Language, new: Language, kept: list[str]) -> LanguageDiff:
     old_words, new_words = _by_word(old), _by_word(new)
     old_phrases = {p.id: p for p in old.phrases}
@@ -129,7 +135,8 @@ def _diff(old: Language, new: Language, kept: list[str]) -> LanguageDiff:
         words_changed=[
             w
             for w in new_words
-            if w in old_words and new_words[w].meanings != old_words[w].meanings
+            if w in old_words
+            and _meaning_keys(new_words[w]) != _meaning_keys(old_words[w])
         ],
         phrases_added=[i for i in new_phrases if i not in old_phrases],
         phrases_removed=[i for i in old_phrases if i not in new_phrases],
@@ -148,19 +155,40 @@ def _diff(old: Language, new: Language, kept: list[str]) -> LanguageDiff:
 def _keep_used(
     old: Language, new: Language, used: set[str]
 ) -> tuple[Language, list[str]]:
-    """`new` with every used word's old entry put back; and which ones."""
+    """`new` with every used word's old meanings kept: a word the new
+    version drops is put back, and one it redefines keeps its old meanings
+    first, then the new ones (adding a meaning never replaces one). Also
+    which words lost something and were kept."""
 
     old_words, new_words = _by_word(old), _by_word(new)
-    kept = [
-        w
-        for w in sorted(used)
-        if w in old_words
-        and (w not in new_words or new_words[w].meanings != old_words[w].meanings)
-    ]
-    if not kept:
+    kept: list[str] = []
+    merged: dict[str, DictionaryEntry] = {}
+    for w in sorted(used):
+        if w not in old_words:
+            continue
+        before = old_words[w]
+        after = new_words.get(w)
+        if after is None:
+            kept.append(w)
+            merged[w] = before
+            continue
+        if not _meaning_keys(before) <= _meaning_keys(after):
+            kept.append(w)
+        have = _meaning_keys(before)
+        merged[w] = after.model_copy(
+            update={
+                "meanings": [
+                    *before.meanings,
+                    *(m for m in after.meanings if m.lower() not in have),
+                ],
+                "part": before.part or after.part,
+                "notes": before.notes or after.notes,
+            }
+        )
+    if not merged:
         return new, []
-    dictionary = [e for e in new.dictionary if e.word.lower() not in kept]
-    dictionary += [old_words[w] for w in kept]
+    dictionary = [merged.pop(e.word.lower(), e) for e in new.dictionary]
+    dictionary += list(merged.values())
     return new.model_copy(update={"dictionary": dictionary}), kept
 
 
