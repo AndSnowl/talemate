@@ -1,0 +1,19 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+{{ brief }}
+<|CLOSE_SECTION|>
+{% if repair -%}
+<|SECTION:YOUR LAST FILE|>
+{{ previous }}
+<|CLOSE_SECTION|>
+<|SECTION:WHAT THE CHECK FOUND|>
+{{ repair }}
+
+Fix these problems and return the whole file again.
+<|CLOSE_SECTION|>
+{%- endif %}
+<|SECTION:FORMAT|>
+Reply with the whole language file in one ```json code block.
+<|CLOSE_SECTION|>
