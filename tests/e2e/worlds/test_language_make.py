@@ -101,3 +101,23 @@ def test_a_failed_run_shows_why(app, page, fake_claude_mode):
         "Claude Code stopped", timeout=TIMEOUT_MS
     )
     expect(box.get_by_test_id("make-copy-brief")).to_be_visible()
+
+
+def test_the_draft_stays_until_discarded(app, page, fixed_language):
+    fixed_language({"questions": "1. Grand or earthy?"})
+    box = _make_box(app, page, "Make draft")
+    box.get_by_test_id("make-ask").click()
+    expect(box.get_by_test_id("make-answer")).to_have_count(1, timeout=TIMEOUT_MS)
+    box.get_by_test_id("make-answer").locator("input").fill("Grand")
+
+    # away to Places and back: the request, questions and answers are kept
+    page.get_by_test_id("kind-place").click()
+    page.get_by_test_id("kind-language").click()
+    box = page.get_by_test_id("language-make")
+    request = box.get_by_test_id("make-request").locator("textarea").first
+    expect(request).to_have_value(REQUEST, timeout=TIMEOUT_MS)
+    expect(box.get_by_test_id("make-answer").locator("input")).to_have_value("Grand")
+
+    box.get_by_test_id("make-discard").click()
+    expect(request).to_have_value("")
+    expect(box.get_by_test_id("make-answer")).to_have_count(0)

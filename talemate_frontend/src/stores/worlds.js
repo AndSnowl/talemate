@@ -698,6 +698,9 @@ export const useWorldsStore = defineStore('worlds', {
         // job `{running, route, lines, text, error}`, the questions asked
         // `{pending, questions, error}`, and the brief to copy (its text)
         languageMakeRoute: null,
+        // what the owner is asking for, kept while they look elsewhere
+        // until they Discard it or the language is imported
+        languageMakeDraft: { text: '', contextIds: [], answers: [] },
         languageMake: null,
         languageQuestions: null,
         languageBrief: null,
@@ -1961,6 +1964,7 @@ export const useWorldsStore = defineStore('worlds', {
         clearLanguageMake() {
             this.languageMake = null;
             this.languageQuestions = null;
+            this.languageMakeDraft = { text: '', contextIds: [], answers: [] };
         },
 
         exportLanguage(thingId) {
@@ -2288,6 +2292,7 @@ export const useWorldsStore = defineStore('worlds', {
                     this.languagePreview = null;
                     this.languageMake = null;
                     this.languageQuestions = null;
+                    this.languageMakeDraft = { text: '', contextIds: [], answers: [] };
                     this.listThings('language');
                     this.listAllThings();
                     this.openThing(data.id);

@@ -5,7 +5,7 @@
         <template v-if="!made">
             <div data-testid="make-request">
                 <v-textarea
-                    v-model="text"
+                    v-model="draft.text"
                     placeholder="What should it be like? For example: a unique but recognizably Russian language"
                     rows="2"
                     auto-grow
@@ -13,10 +13,11 @@
                     variant="outlined"
                     hide-details
                     :disabled="running"
+                    @focus="worlds.loadLanguageMakeRoute()"
                 ></v-textarea>
             </div>
             <v-autocomplete
-                v-model="contextIds"
+                v-model="draft.contextIds"
                 :items="entries"
                 label="Take into account (optional)"
                 multiple
@@ -35,7 +36,7 @@
                 <div v-for="(question, index) in questions" :key="index" class="mb-2">
                     <div class="text-body-2 mb-1">{{ question }}</div>
                     <v-text-field
-                        v-model="answers[index]"
+                        v-model="draft.answers[index]"
                         placeholder="Your answer, or leave it to decide"
                         density="compact"
                         variant="outlined"
@@ -54,6 +55,7 @@
                     <v-btn v-else size="small" variant="text" :disabled="!canStart" :loading="asking" data-testid="make-ask" @click="ask">Ask me questions</v-btn>
                 </template>
                 <v-btn size="small" :variant="briefOnly ? 'tonal' : 'text'" :color="briefOnly ? 'primary' : undefined" :disabled="!text.trim()" prepend-icon="mdi-content-copy" data-testid="make-copy-brief" @click="copyBrief">Copy the brief</v-btn>
+                <v-btn v-if="hasDraft && !running" size="small" variant="text" color="delete" data-testid="make-discard" @click="again">Discard</v-btn>
                 <span v-if="copied" class="text-caption text-success" data-testid="make-copied">Copied</span>
             </div>
             <div class="text-caption text-muted mt-1">
@@ -114,9 +116,20 @@ export default {
         return { worlds: useWorldsStore() };
     },
     data() {
-        return { text: '', contextIds: [], answers: [], copyWanted: false, copied: false, briefFallback: '' };
+        return { copyWanted: false, copied: false, briefFallback: '' };
     },
     computed: {
+        // the request, its entries and answers live in the store, so they
+        // stay while the owner looks elsewhere
+        draft() {
+            return this.worlds.languageMakeDraft;
+        },
+        text() {
+            return this.draft.text || '';
+        },
+        hasDraft() {
+            return !!this.text.trim() || this.draft.contextIds.length > 0 || this.questions.length > 0 || !!this.job?.error;
+        },
         job() {
             return this.worlds.languageMake;
         },
@@ -172,13 +185,13 @@ export default {
         request(decideForMe) {
             return {
                 text: this.text.trim(),
-                answers: this.questions.map((question, index) => ({ question, answer: this.answers[index] || '' })),
+                answers: this.questions.map((question, index) => ({ question, answer: this.draft.answers[index] || '' })),
                 decide_for_me: decideForMe,
-                context_ids: this.contextIds,
+                context_ids: this.draft.contextIds,
             };
         },
         ask() {
-            this.answers = [];
+            this.draft.answers = [];
             this.worlds.askLanguageQuestions(this.text.trim());
         },
         start(decideForMe) {
@@ -203,7 +216,9 @@ export default {
                 this.briefFallback = brief;
             }
         },
+        // Discard, or Make another: the request, answers and result go
         again() {
+            this.briefFallback = '';
             this.worlds.clearLanguageMake();
             this.worlds.clearLanguagePreview();
         },
