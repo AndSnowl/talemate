@@ -81,21 +81,6 @@
                     </div>
                 </div>
 
-                <div class="sec">
-                    <div class="sh">
-                        <span class="text-overline text-muted">Grammar</span>
-                        <v-btn v-if="!editing.grammar" variant="text" size="small" color="accent" prepend-icon="mdi-pencil" @click="editing.grammar = true">Edit</v-btn>
-                    </div>
-                    <template v-if="editing.grammar">
-                        <v-textarea v-model="local.grammar" rows="2" auto-grow variant="outlined" density="compact" hide-details autofocus data-testid="language-grammar"></v-textarea>
-                        <div class="d-flex ga-2 mt-1">
-                            <v-btn size="small" color="accent" variant="flat" @click="saveGrammar">Save</v-btn>
-                            <v-btn size="small" variant="text" @click="cancelGrammar">Cancel</v-btn>
-                        </div>
-                    </template>
-                    <div v-else class="text-body-2">{{ local.grammar || 'No notes yet.' }}</div>
-                </div>
-
                 <div class="sec" data-testid="language-links">
                     <div class="sh">
                         <span class="text-overline text-muted">Related languages</span>
@@ -410,7 +395,7 @@ function plain(value) {
 
 // A language page's own tabs (languages 3a), as the owner approved them
 // (docs/superpowers/mockups/2026-10-28-language-page-approved.html, A + A):
-// Language (how it sounds, sounds, syllables, grammar and related
+// Language (how it sounds, sounds, syllables and related
 // languages; the name rules beside them) and Lexicon (the dictionary
 // beside the phrases). Laid out like the About tab: section headings with
 // their buttons right after them, two columns filling the page, and text
@@ -430,7 +415,7 @@ export default {
     data() {
         return {
             local: this.fromThing(),
-            editing: { sound: false, grammar: false, flavour: false, note: null },
+            editing: { sound: false, flavour: false, note: null },
             importing: false,
             search: '',
             editCell: null,
@@ -537,7 +522,6 @@ export default {
             return {
                 sound: fields.sound || '',
                 flavour: fields.flavour || '',
-                grammar: rules.grammar || '',
                 syllable_notes: plain(rules.syllable_notes || []),
                 generators: plain(rules.generators || []),
                 words: plain(fields.words || []).map((w) => ({
@@ -565,22 +549,12 @@ export default {
             this.saveField('flavour', (this.local.flavour || '').trim().toLowerCase());
             this.editing.flavour = false;
         },
-        saveGrammar() {
-            this.saveRules();
-            this.editing.grammar = false;
-        },
-        cancelGrammar() {
-            this.local.grammar = this.rules.grammar || '';
-            this.editing.grammar = false;
-        },
         saveRules() {
             const rules = {
                 ...plain(this.rules),
                 generators: this.local.generators.map((g) => ({ ...g, patterns: g.patterns.filter((p) => p.trim()) })),
                 syllable_notes: this.local.syllable_notes.filter((n) => n.trim()),
-                grammar: this.local.grammar,
             };
-            if (!rules.grammar) delete rules.grammar;
             if (!rules.syllable_notes.length) delete rules.syllable_notes;
             this.saveField('rules', rules);
         },

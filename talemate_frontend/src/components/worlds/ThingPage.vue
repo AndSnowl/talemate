@@ -191,7 +191,8 @@
             >
                 <v-tab v-for="tab in LANGUAGE_TABS" :key="tab.value" :value="tab.value" :data-testid="'language-tab-' + tab.value">{{ tab.title }}</v-tab>
             </v-tabs>
-            <LanguageSections v-if="isLanguage && languageTab !== 'about'" class="mt-3" :thing="thing" :tab="languageTab" />
+            <LanguageGrammar v-if="isLanguage && languageTab === 'grammar'" class="mt-3" :thing="thing" />
+            <LanguageSections v-else-if="isLanguage && languageTab !== 'about'" class="mt-3" :thing="thing" :tab="languageTab" />
 
             <div v-show="!isLanguage || languageTab === 'about'">
             <!-- 3. Facts, beside the prose -->
@@ -632,6 +633,7 @@ import {
 } from './draftPage.js';
 import CreateBox from './CreateBox.vue';
 import EntryLanguages from './EntryLanguages.vue';
+import LanguageGrammar from './LanguageGrammar.vue';
 import LanguageSections from './LanguageSections.vue';
 import DraftBar from './DraftBar.vue';
 import FillStubButton from './FillStubButton.vue';
@@ -678,6 +680,7 @@ const HIDDEN_FIELDS = [
 const LANGUAGE_TABS = [
     { value: 'about', title: 'About' },
     { value: 'language', title: 'Language' },
+    { value: 'grammar', title: 'Grammar' },
     { value: 'lexicon', title: 'Lexicon' },
 ];
 
@@ -790,6 +793,7 @@ export default {
     components: {
         CreateBox,
         EntryLanguages,
+        LanguageGrammar,
         LanguageSections,
         DraftBar,
         FillStubButton,
