@@ -1,8 +1,8 @@
 <template>
     <v-card variant="flat" class="language-import pa-3 mb-4" data-testid="language-import">
         <div class="d-flex align-center ga-2 mb-2">
-            <span class="text-subtitle-2">{{ targetId ? 'Import a new version' : 'Import a language' }}</span>
-            <span class="text-caption text-muted">paste what the assistant made, or choose its file</span>
+            <span class="text-subtitle-2">{{ base ? 'The change' : targetId ? 'Import a new version' : 'Import a language' }}</span>
+            <span v-if="!base" class="text-caption text-muted">paste what the assistant made, or choose its file</span>
         </div>
         <!-- a file made for the owner folds away: the review below is what matters -->
         <div v-if="fileFolded" class="text-caption text-muted">

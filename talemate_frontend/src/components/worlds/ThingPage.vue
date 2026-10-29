@@ -92,6 +92,16 @@
                         </v-card>
                     </v-menu>
 
+                    <!-- a language's page: ask for a change in plain words -->
+                    <v-btn
+                        v-if="isLanguage"
+                        variant="outlined"
+                        size="small"
+                        prepend-icon="mdi-auto-fix"
+                        data-testid="language-change-open"
+                        @click="worlds.openLanguageChange({ targetId: thing.id })"
+                    >Change it…</v-btn>
+
                     <v-btn
                         v-if="!thing.stub"
                         variant="outlined"
@@ -177,6 +187,9 @@
                     <v-chip size="small" :variant="thing.at ? 'outlined' : 'tonal'" color="date" @click="viewAt(null)">latest</v-chip>
                 </div>
             </template>
+
+            <!-- Change it… (languages 3b-2b): under the header, across the tabs -->
+            <LanguageChange v-if="isLanguage && worlds.languageChange?.targetId === thing.id" class="mt-3" :thing="thing" />
 
             <!-- a language's page (languages 3a): About is the entry's own
                  page (facts, connections, timeline); the others are the
@@ -635,6 +648,7 @@ import {
 import CreateBox from './CreateBox.vue';
 import EntryLanguages from './EntryLanguages.vue';
 import LanguageBook from './LanguageBook.vue';
+import LanguageChange from './LanguageChange.vue';
 import LanguageSections from './LanguageSections.vue';
 import DraftBar from './DraftBar.vue';
 import FillStubButton from './FillStubButton.vue';
@@ -794,6 +808,7 @@ export default {
         CreateBox,
         EntryLanguages,
         LanguageBook,
+        LanguageChange,
         LanguageSections,
         DraftBar,
         FillStubButton,

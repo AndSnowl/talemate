@@ -701,6 +701,14 @@ export const useWorldsStore = defineStore('worlds', {
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
+        // languages 3b-2b: the Change it… panel, open on a language page
+        // (`targetId`) or an entry's (`originId`): the request, the entries
+        // to fit, and the route; kept while it runs and after a Drop
+        languageChange: null,
+        // the entries a change should fit (`language_related`)
+        languageRelated: null,
+        // an Accept of a change is on its way: stay on the page
+        acceptingChange: false,
         languageMake: null,
         languageQuestions: null,
         languageBrief: null,
@@ -1930,6 +1938,7 @@ export const useWorldsStore = defineStore('worlds', {
 
         importLanguage(text, targetId = null, base = null) {
             this.pending = { ...this.pending, language_import: true };
+            this.acceptingChange = !!base;
             this.request('language_import', { text, target_id: targetId, base, at: this.thingAt });
         },
 
@@ -1954,8 +1963,37 @@ export const useWorldsStore = defineStore('worlds', {
         },
 
         startLanguageMake(request) {
-            this.languageMake = { running: true, route: null, lines: [], text: null, error: null };
+            this.languageMake = {
+                running: true,
+                route: null,
+                lines: [],
+                text: null,
+                error: null,
+                kind: request.kind || 'new',
+                targetId: request.target_id || null,
+                base: null,
+            };
             this.request('language_make_start', request);
+        },
+
+        // the Change it… panel, on a language's page or an entry's; `prefill`
+        // starts the request ("Change the Verbs section: ")
+        openLanguageChange({ targetId = null, originId = null, prefill = '' } = {}) {
+            const same = this.languageChange && this.languageChange.targetId === targetId && this.languageChange.originId === originId;
+            this.languageChange = same
+                ? { ...this.languageChange, text: prefill || this.languageChange.text }
+                : { targetId, originId, text: prefill, contextIds: originId ? [originId] : null, route: null, claudeModel: null };
+            if (targetId) this.loadLanguageRelated(targetId);
+        },
+
+        closeLanguageChange() {
+            this.languageChange = null;
+            if (this.languageMake && this.languageMake.kind !== 'new' && !this.languageMake.running) this.languageMake = null;
+        },
+
+        loadLanguageRelated(languageId) {
+            this.languageRelated = null;
+            this.request('language_related', { language_id: languageId });
         },
 
         cancelLanguageMake() {
@@ -2275,13 +2313,16 @@ export const useWorldsStore = defineStore('worlds', {
                     this.languageBrief = data.text;
                     break;
                 case 'language_make_started':
-                    if (this.languageMake) this.languageMake = { ...this.languageMake, route: data.route };
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, route: data.route, kind: data.kind || 'new', targetId: data.target_id || null };
+                    break;
+                case 'language_related':
+                    this.languageRelated = data;
                     break;
                 case 'language_make_progress':
                     if (this.languageMake) this.languageMake = { ...this.languageMake, lines: [...this.languageMake.lines, data.line] };
                     break;
                 case 'language_make_done':
-                    if (this.languageMake) this.languageMake = { ...this.languageMake, running: false, text: data.text };
+                    if (this.languageMake) this.languageMake = { ...this.languageMake, running: false, text: data.text, base: data.base || null };
                     break;
                 case 'language_make_failed':
                     // (the page never starts a second job while one runs)
@@ -2292,6 +2333,14 @@ export const useWorldsStore = defineStore('worlds', {
                     break;
                 case 'language_import':
                     this.languagePreview = null;
+                    if (this.acceptingChange) {
+                        // a change accepted: the panel closes, the page stays
+                        this.acceptingChange = false;
+                        this.languageMake = null;
+                        this.languageChange = null;
+                        this.refreshThing();
+                        break;
+                    }
                     this.languageMake = null;
                     this.languageQuestions = null;
                     this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
