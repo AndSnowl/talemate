@@ -17,6 +17,7 @@ __all__ = [
     "MakeSettings",
     "QuestionAnswer",
     "ask_questions",
+    "effective_size",
     "make_in_app",
     "make_language",
 ]
@@ -64,6 +65,19 @@ class MakeRequest(BaseModel):
     answers: list[QuestionAnswer] = []
     decide_for_me: bool = False
     context_ids: list[str] = []
+    # this run's choices (the dialog's); None: the language agent's
+    size: Literal["full", "quick"] | None = None
+    route: Route | None = None
+    claude_model: str | None = None
+
+
+def effective_size(request: MakeRequest, route: Route) -> Literal["full", "quick"]:
+    """How much the first run makes: the request's choice, else everything
+    in one go, except on the agent's model (it spends API tokens)."""
+
+    if request.size is not None:
+        return request.size
+    return "quick" if route == "in_app" else "full"
 
 
 def _questions(reply: str) -> list[str]:

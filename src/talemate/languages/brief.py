@@ -4,7 +4,9 @@ computer, or any chat assistant the owner pastes it into."""
 
 from pathlib import Path
 
+from talemate.languages.completeness import CORE_MEANINGS, PHRASE_CATEGORIES
 from talemate.languages.making import MakeRequest
+from talemate.languages.models import GRAMMAR_TOPICS
 from talemate.world.view import WorldView
 
 __all__ = ["BRIEF_FILE_NAME", "write_brief"]
@@ -56,6 +58,66 @@ def _world(view: WorldView | None, request: MakeRequest) -> list[str]:
     ]
 
 
+QUICK_EVERYDAY = 40
+# topics whose forms a table shows
+_TABLE_TOPICS = ("nouns", "pronouns", "verbs", "adjectives", "numbers")
+
+
+def _topics() -> str:
+    return "; ".join(f"`{topic}` ({title})" for topic, title in GRAMMAR_TOPICS)
+
+
+def _sections() -> list[str]:
+    return [
+        "The grammar is a list of sections. Each has a `title`, a `topic` "
+        "(one of the ids below, or `other`), plain `text`, `tables` (each a "
+        "`caption`, `columns` and `rows` of cells) and `examples` (each an "
+        "`original`, a word-by-word `breakdown` of [word, meaning] pairs, and "
+        "a `translation`). Explain everything plainly: whenever you use a "
+        "grammar term, say what it means in everyday words.",
+        "",
+        f"The topics: {_topics()}.",
+    ]
+
+
+def _what(size: str) -> list[str]:
+    structural = ", ".join(CORE_MEANINGS["structural"])
+    if size == "quick":
+        everyday = ", ".join(CORE_MEANINGS["everyday"][:QUICK_EVERYDAY])
+        return [
+            "## What to make",
+            "",
+            "A quick core. The owner will fill in the rest later, so keep to this:",
+            f"- a word for each of these structural meanings: {structural}",
+            f"- a word for each of these everyday meanings: {everyday}",
+            "- one phrase each for greeting, farewell, blessing and curse",
+            "- a short grammar section for each topic below, with tables only "
+            "for `pronouns` and `verbs`",
+            "- name rules for characters and places",
+            "",
+            *_sections(),
+        ]
+    everyday = ", ".join(CORE_MEANINGS["everyday"])
+    tables = ", ".join(f"`{t}`" for t in _TABLE_TOPICS)
+    return [
+        "## What to make",
+        "",
+        "A full language, complete enough to use and to read:",
+        f"- a word for each of these structural meanings: {structural}",
+        f"- a word for each of these everyday meanings: {everyday}",
+        "- words for the places and peoples in The world, if any",
+        f"- at least 3 phrases in each category: {', '.join(PHRASE_CATEGORIES)}",
+        "- a grammar section for every topic below, each with at least one "
+        f"example, and a table where the topic has forms ({tables})",
+        "- more sections (topic `other`) for anything unusual this language "
+        'does, such as "the" joined onto the end of a noun',
+        "- name rules for characters, places, items and groups, and one for "
+        "what its people are called (a demonym rule)",
+        "",
+        *_sections(),
+    ]
+
+
 def _file() -> list[str]:
     return [
         "## The file",
@@ -99,7 +161,11 @@ def _check(check_command: str | None) -> list[str]:
 
 
 def write_brief(
-    view: WorldView | None, request: MakeRequest, *, check_command: str | None = None
+    view: WorldView | None,
+    request: MakeRequest,
+    *,
+    check_command: str | None = None,
+    size: str = "full",
 ) -> str:
     """The brief for `request`: what was asked, the world it's for (the
     chosen entries' facts), the file format, and how to check it (with
@@ -112,6 +178,8 @@ def write_brief(
         "their app can import: its sounds, words, phrases and naming rules.",
         "",
         *_asked(request),
+        "",
+        *_what(size),
         "",
         *_world(view, request),
         *_file(),

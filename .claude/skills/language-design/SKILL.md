@@ -69,7 +69,14 @@ from `talemate.languages.models.LanguageFile`). The shape:
       {"id": "people", "name": "People", "use": "character", "patterns": ["CVCVC"]},
       {"id": "places", "name": "Places", "use": "place", "patterns": ["CVCVC(ov)"]}
     ],
-    "grammar": "A short plain paragraph, for a full language.",
+    "grammar": [
+      {"title": "Nouns", "topic": "nouns",
+       "text": "Plain words on how nouns work: gender, plurals, how 'the' is shown.",
+       "tables": [{"caption": "dov (shrine)", "columns": ["", "one", "more than one"],
+                   "rows": [["a", "dov", "dovy"], ["the", "doven", "dovyen"]]}],
+       "examples": [{"original": "Zorin doven stoi", "translation": "The bright shrine stands.",
+                     "breakdown": [["zorin", "bright"], ["doven", "shrine-the"], ["stoi", "stands"]]}]}
+    ],
     "dictionary": [{"word": "vel", "meanings": ["great"]}, {"word": "soru", "meanings": ["wind", "breath"]}],
     "phrases": [{"id": "curse-rot", "category": "curse", "original": "Vel kar!", "translation": "Great rot!"}],
     "similar": [{"name": "Sorauan", "degree": "close"}]
@@ -81,6 +88,21 @@ from `talemate.languages.models.LanguageFile`). The shape:
   written), `naming` (enough to make names), or `full` (names, words,
   phrases).
 - **Meanings are short**, as a dictionary gives them: one to three words ("wind", "great fort"), never a sentence. A word can have several meanings; a word made only to be a name can have none. Never write "used as a name" as a meaning: the app shows which words name something.
+- **Grammar is a list of sections**, each with a `title`, a `topic`, plain
+  `text`, `tables` (caption, columns, rows) and `examples` (original,
+  word-by-word breakdown, translation). The topics: `sounds`,
+  `word_order`, `nouns`, `pronouns`, `verbs`, `adjectives`, `questions`,
+  `numbers`, `word_building`, `names`, `politeness`; anything unusual the
+  language does gets sections of topic `other`. Explain plainly: follow
+  any grammar term with what it means.
+- **How much to make:** the brief says. A full language has a word for
+  every core meaning the brief lists (the structural words such as the,
+  a, be, have, with, and the everyday list), at least 3 phrases in each
+  category (greeting, farewell, blessing, curse, oath, saying, toast,
+  insult, endearment), every grammar topic with tables where it has
+  forms, and name rules for characters, places, items, groups and a
+  demonym. A quick core keeps to what the brief lists. The app's check
+  says what's "still to fill in".
 - **A full language must have a `words` generator** (`"use": "words"`):
   the rules ordinary words follow. Every dictionary word should fit it
   (or be made of two or more words that do); the app rolls new words for

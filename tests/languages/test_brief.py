@@ -85,3 +85,53 @@ def test_the_brief_has_no_jargon():
     prose = re.sub(r"```json\n.*?\n```", "", brief, flags=re.S)
     found = [j for j in jargon if re.search(rf"\b{re.escape(j)}\b", prose, re.I)]
     assert found == []
+
+
+# --- 3b-2a: a full language, or a quick core -------------------------------
+
+from talemate.languages.completeness import CORE_MEANINGS  # noqa: E402
+from talemate.languages.making import effective_size  # noqa: E402
+from talemate.languages.models import GRAMMAR_TOPICS  # noqa: E402
+
+
+def _what_to_make(brief):
+    return brief.split("## What to make", 1)[1].split("\n## ", 1)[0]
+
+
+def test_a_full_brief_lists_every_core_meaning():
+    part = _what_to_make(write_brief(None, MakeRequest(text=REQUEST), size="full"))
+    for meaning in CORE_MEANINGS["structural"] + CORE_MEANINGS["everyday"]:
+        assert re.search(rf"(^|[ ,]){re.escape(meaning)}(,|$|\n)", part, re.M), meaning
+    assert "at least 3" in part
+
+
+def test_a_quick_brief_keeps_to_the_core():
+    part = _what_to_make(write_brief(None, MakeRequest(text=REQUEST), size="quick"))
+    for meaning in CORE_MEANINGS["structural"]:
+        assert meaning in part
+    everyday = [m for m in CORE_MEANINGS["everyday"] if re.search(rf"[ ,]{m}(,|\n|$)", part)]
+    assert len(everyday) <= 40
+    assert "fill in the rest later" in part
+
+
+def test_both_briefs_describe_grammar_sections_and_topics():
+    for size in ("full", "quick"):
+        brief = write_brief(None, MakeRequest(text=REQUEST), size=size)
+        for topic, _title in GRAMMAR_TOPICS:
+            assert f"`{topic}`" in brief, (size, topic)
+        assert "tables" in brief and "examples" in brief
+
+
+def test_effective_size_follows_the_route():
+    assert effective_size(MakeRequest(text="x"), "claude_code") == "full"
+    assert effective_size(MakeRequest(text="x"), "brief") == "full"
+    assert effective_size(MakeRequest(text="x"), "in_app") == "quick"
+    assert effective_size(MakeRequest(text="x", size="full"), "in_app") == "full"
+
+
+def test_a_full_brief_still_has_no_jargon():
+    jargon = json.loads(LABELS.read_text())["jargon"]
+    brief = write_brief(None, MakeRequest(text=REQUEST), size="full")
+    prose = re.sub(r"```json\n.*?\n```", "", brief, flags=re.S)
+    found = [j for j in jargon if re.search(rf"\b{re.escape(j)}\b", prose, re.I)]
+    assert found == []
