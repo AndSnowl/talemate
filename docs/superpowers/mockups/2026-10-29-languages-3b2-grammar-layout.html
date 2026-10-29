@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Grammar sections</title>
+<style>
+  :root { --bg:#1d2021; --panel:#282828; --raised:#32302f; --line:#3c3836; --text:#ebdbb2; --muted:#a89984; --dim:#7c6f64; --accent:#fe8019; --link:#fabd2f; --foreign:#d3869b; --chip:#3c3836; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#111; color:var(--text); font-family: Roboto, ui-sans-serif, system-ui, sans-serif; font-size:15px; }
+  .intro { padding:16px 24px; color:#ddd; font-size:14px; max-width:1100px; } .intro h1 { font-size:18px; margin:0 0 6px; }
+  .option-label { padding:18px 24px 6px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#ccc; display:flex; align-items:center; gap:12px; }
+  .option-label b { color:#fff; font-size:16px; }
+  .pick { margin-left:auto; padding:4px 12px; border:1px solid #666; border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; }
+  .option.selected .pick { background:var(--accent); color:#1d2021; border-color:var(--accent); }
+  .frame { width:1920px; zoom:.62; margin:0 24px 30px; border:1px solid #444; background:var(--bg); display:grid; grid-template-columns:276px 1fr 350px; min-height:1000px; }
+  .side { padding:16px; } .side .box { background:var(--panel); border-radius:6px; height:600px; padding:14px; color:var(--muted); font-size:13px; }
+  .side .sel { color:var(--accent); background:#3c2a1a; padding:3px 8px; border-radius:4px; margin-top:6px; }
+  .agents { border-left:1px solid var(--line); }
+  .page { padding:22px 16px 40px; }
+  .head { display:flex; align-items:center; gap:10px; } .back { font-size:13px; letter-spacing:.08em; }
+  .title { color:var(--accent); font-size:23px; font-family:Georgia, serif; }
+  .kchip { font-size:11px; color:var(--muted); background:var(--chip); padding:2px 6px; border-radius:3px; }
+  .tabs { display:flex; gap:6px; margin-top:18px; border-bottom:1px solid var(--line); }
+  .tab { padding:10px 18px; font-size:14px; letter-spacing:.1em; } .tab.on { color:var(--accent); border-bottom:2px solid var(--accent); }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:28px; margin-top:8px; }
+  .gcols { display:grid; grid-template-columns:220px 1fr; gap:28px; margin-top:16px; max-width:1240px; }
+  .ov { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .act { font-size:12px; letter-spacing:.08em; color:var(--accent); text-transform:uppercase; }
+  .sh { display:flex; align-items:center; gap:14px; margin:22px 0 8px; }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  .toc a { display:block; padding:5px 10px; color:var(--text); text-decoration:none; font-size:14px; border-left:2px solid var(--line); }
+  .toc a.on { color:var(--accent); border-left-color:var(--accent); }
+  .toc a.other { color:var(--link); }
+  .card { background:var(--panel); border-radius:6px; padding:14px 16px; margin-bottom:14px; }
+  .card h3 { margin:0 0 2px; font-size:16px; font-weight:500; display:flex; align-items:center; gap:10px; }
+  .card h3 .topic { font-size:11px; color:var(--muted); background:var(--chip); padding:1px 6px; border-radius:3px; font-weight:400; }
+  .card h3 .edit { margin-left:auto; font-size:12px; color:var(--accent); letter-spacing:.06em; text-transform:uppercase; font-weight:400; }
+  .card p { margin:6px 0 10px; line-height:1.55; }
+  table.g { border-collapse:collapse; font-size:14px; margin:6px 0 12px; }
+  table.g caption { text-align:left; color:var(--muted); font-size:12px; padding-bottom:4px; }
+  table.g th { font-weight:400; color:var(--muted); font-size:12px; text-align:left; padding:5px 14px 5px 0; border-bottom:1px solid var(--line); }
+  table.g td { padding:5px 14px 5px 0; border-bottom:1px solid var(--line); }
+  table.g td.f { color:var(--foreign); font-style:italic; }
+  .ex { margin:8px 0 4px; }
+  .ex .gloss { display:flex; gap:16px; }
+  .ex .w { display:flex; flex-direction:column; }
+  .ex .w .o { color:var(--foreign); font-style:italic; font-size:16px; }
+  .ex .w .m { color:var(--muted); font-size:12px; }
+  .ex .t { margin-top:3px; font-size:14px; }
+  .rule { border-bottom:1px dashed var(--line); padding:8px 0; } .names { color:var(--foreign); font-style:italic; margin:3px 0; }
+  .sym { font-family:monospace; background:var(--chip); padding:2px 8px; border-radius:3px; font-size:13px; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; }
+  .body { line-height:1.55; }
+</style></head>
+<body>
+<div class="intro"><h1>Grammar as sections with tables</h1>
+Moscavian's grammar written the new way: a card per topic, each with plain text, tables, and examples laid out word over meaning. Two places it could live. Words here are invented for the mockup.</div>
+
+<!-- OPTION A: its own tab -->
+<div class="option" data-choice="a" onclick="toggleSelect(this)">
+<div class="option-label"><b>A</b> Grammar gets its own tab, with a topic list beside the cards <span class="pick">Pick A</span></div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span></div>
+    <div class="tabs"><span class="tab">ABOUT</span><span class="tab">LANGUAGE</span><span class="tab on">GRAMMAR</span><span class="tab">LEXICON</span></div>
+    <div class="gcols">
+      <div class="toc">
+        <div class="ov" style="margin-bottom:8px">Topics</div>
+        <a>Sounds and stress</a><a>Word order</a><a class="on">Nouns</a><a>Pronouns</a><a>Verbs</a><a>Adjectives</a><a>Questions and "not"</a><a>Numbers</a><a>Building words</a><a>Names</a><a>Politeness</a>
+        <div class="ov" style="margin:14px 0 8px">Unusual</div>
+        <a class="other">Articles live on the noun</a>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Nouns <span class="topic">nouns</span><span class="edit">Change…</span></h3>
+          <p>Nouns are masculine or feminine; you can usually tell by the ending: words ending in <i>-a</i> or <i>-ya</i> are feminine, the rest masculine. Adjectives and the word for "the" follow the noun's gender. There's no separate word for "the": it's an ending added to the noun (see <span style="color:var(--link)">Articles live on the noun</span>).</p>
+          <table class="g"><caption>How a noun changes: dov (shrine), masculine</caption>
+            <tr><th></th><th>one</th><th>more than one</th></tr>
+            <tr><th>a / some</th><td class="f">dov</td><td class="f">dovy</td></tr>
+            <tr><th>the</th><td class="f">doven</td><td class="f">dovyen</td></tr>
+            <tr><th>of the</th><td class="f">dovena</td><td class="f">dovyena</td></tr>
+          </table>
+          <table class="g"><caption>Feminine: vola (river)</caption>
+            <tr><th></th><th>one</th><th>more than one</th></tr>
+            <tr><th>a / some</th><td class="f">vola</td><td class="f">voly</td></tr>
+            <tr><th>the</th><td class="f">volaya</td><td class="f">volyaya</td></tr>
+          </table>
+          <div class="ex"><div class="gloss">
+            <div class="w"><span class="o">Zorin</span><span class="m">bright</span></div>
+            <div class="w"><span class="o">doven</span><span class="m">shrine-the</span></div>
+            <div class="w"><span class="o">volaya</span><span class="m">river-the</span></div>
+            <div class="w"><span class="o">stoi</span><span class="m">stands.by</span></div></div>
+            <div class="t">The bright shrine stands by the river.</div></div>
+        </div>
+        <div class="card">
+          <h3>Verbs <span class="topic">verbs</span><span class="edit">Change…</span></h3>
+          <p>Verbs change for who is acting and when. "To be" is left out in the present ("I cold" means "I am cold") but has past and future forms.</p>
+          <table class="g"><caption>govor- (to speak), now</caption>
+            <tr><th></th><th>one</th><th>more than one</th></tr>
+            <tr><th>I / we</th><td class="f">govoru</td><td class="f">govorem</td></tr>
+            <tr><th>you</th><td class="f">govorish</td><td class="f">govorete</td></tr>
+            <tr><th>he, she / they</th><td class="f">govorit</td><td class="f">govoryat</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+
+<!-- OPTION B: inside the Language tab -->
+<div class="option" data-choice="b" onclick="toggleSelect(this)">
+<div class="option-label"><b>B</b> Grammar cards sit in the Language tab's left column, under the sounds <span class="pick">Pick B</span></div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span></div>
+    <div class="tabs"><span class="tab">ABOUT</span><span class="tab on">LANGUAGE</span><span class="tab">LEXICON</span></div>
+    <div class="cols">
+      <div>
+        <div class="sh"><span class="ov">The language</span></div>
+        <div class="body">Short, weighty words with hard clusters at the front and a vowel to close them off, like boots on packed snow.</div>
+        <div class="sh"><span class="ov">Sounds</span></div>
+        <div class="chips"><span class="sym">k</span><span class="sym">v</span><span class="sym">zh</span><span class="sym">r</span><span class="sym">s</span><span class="sym">a</span><span class="sym">o</span><span class="sym">y</span></div>
+        <div class="sh"><span class="ov">Grammar</span><span class="small muted">Sounds · Word order · <b style="color:var(--accent)">Nouns</b> · Pronouns · Verbs · Adjectives · Questions · Numbers · Building words · Names · Politeness · Articles live on the noun</span></div>
+        <div class="card">
+          <h3>Nouns <span class="topic">nouns</span><span class="edit">Change…</span></h3>
+          <p>Nouns are masculine or feminine… There's no separate word for "the": it's an ending added to the noun.</p>
+          <table class="g"><caption>dov (shrine)</caption>
+            <tr><th></th><th>one</th><th>more than one</th></tr>
+            <tr><th>a / some</th><td class="f">dov</td><td class="f">dovy</td></tr>
+            <tr><th>the</th><td class="f">doven</td><td class="f">dovyen</td></tr></table>
+          <div class="ex"><div class="gloss">
+            <div class="w"><span class="o">Zorin</span><span class="m">bright</span></div>
+            <div class="w"><span class="o">doven</span><span class="m">shrine-the</span></div>
+            <div class="w"><span class="o">stoi</span><span class="m">stands</span></div></div>
+            <div class="t">The bright shrine stands.</div></div>
+        </div>
+      </div>
+      <div>
+        <div class="sh"><span class="ov">Name rules</span><span class="act">+ Add rule</span></div>
+        <div class="rule">Characters <span class="muted small">people</span><div class="names">Nyketsev, Gravetsin, Posasin, Kerets</div></div>
+        <div class="rule">Places <span class="muted small">places</span><div class="names">Sokargrad, Mitrevovsk, Zhadopovsk</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+</body></html>

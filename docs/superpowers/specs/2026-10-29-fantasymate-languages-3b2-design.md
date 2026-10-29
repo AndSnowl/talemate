@@ -1,6 +1,6 @@
 # Fantasymate languages 3b-2: fuller languages, and changing them as the world grows
 
-Date: 2026-10-29. Status: design, awaiting the owner's approval.
+Date: 2026-10-29. Status: approved by the owner, with mockups approved (below).
 
 This follows 3b-1, which is merged (66af7745): making a language from inside the app, by three routes.
 - Background reading:
@@ -162,7 +162,11 @@ So this round is about two things:
   - each card has its text, then its tables (real tables), then its examples word by word;
   - the topic list works as a table of contents.
 - **How it sounds:** the existing sound groups stay, and each sound gets a plain description where one helps (*my call*; for example "zh: like the s in measure"). This is part of the brief's sounds-and-stress section; no audio this round.
-- **The new screens get mockups before any code,** following the owner's design-phase preference from 3a:
+- **Approved mockups (owner, 2026-10-29)**, the model for the build:
+  - `docs/superpowers/mockups/2026-10-29-languages-3b2-grammar-layout.html`, option **A**: Grammar gets **its own tab** (About · Language · Grammar · Lexicon), with a topic list beside the cards; each card has a Change… link for that section;
+  - `…-change-it.html`: **Change it…** in the language page's header opens a panel under it (request, suggested "Fit it to" entries with why, route, Change it / Copy the brief / Discard, and Still to fill in with Fill in next); the review shows what changed by part, before/after, and a "kept" note;
+  - `…-make-and-entry.html`: Make a language gains **Make it with** and **How much** rows; on an entry, **Change a language to fit this…** sits beside "+ Add fact" and in the right-click menu, and opens the same panel in place.
+- **The new screens got mockups before any code,** following the owner's design-phase preference from 3a:
   - the Language tab's grammar cards;
   - the Change it… box and the entry's "Change a language to fit this…";
   - the bigger review;

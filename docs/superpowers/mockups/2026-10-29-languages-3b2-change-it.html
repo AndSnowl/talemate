@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Change it</title>
+<style>
+  :root { --bg:#1d2021; --panel:#282828; --raised:#32302f; --line:#3c3836; --text:#ebdbb2; --muted:#a89984; --dim:#7c6f64; --accent:#fe8019; --link:#fabd2f; --foreign:#d3869b; --chip:#3c3836; --good:#b8bb26; --warn:#fabd2f; --bad:#fb4934; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#111; color:var(--text); font-family: Roboto, ui-sans-serif, system-ui, sans-serif; font-size:15px; }
+  .intro { padding:16px 24px; color:#ddd; font-size:14px; max-width:1150px; } .intro h1 { font-size:18px; margin:0 0 6px; }
+  .option-label { padding:18px 24px 6px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#ccc; display:flex; align-items:center; gap:12px; }
+  .option-label b { color:#fff; font-size:16px; }
+  .pick { margin-left:auto; padding:4px 12px; border:1px solid #666; border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; }
+  .option.selected .pick { background:var(--accent); color:#1d2021; border-color:var(--accent); }
+  .frame { width:1920px; zoom:.62; margin:0 24px 30px; border:1px solid #444; background:var(--bg); display:grid; grid-template-columns:276px 1fr 350px; min-height:900px; }
+  .side { padding:16px; } .side .box { background:var(--panel); border-radius:6px; height:600px; padding:14px; color:var(--muted); font-size:13px; }
+  .side .sel { color:var(--accent); background:#3c2a1a; padding:3px 8px; border-radius:4px; margin-top:6px; }
+  .agents { border-left:1px solid var(--line); }
+  .page { padding:22px 16px 40px; }
+  .head { display:flex; align-items:center; gap:10px; } .back { font-size:13px; letter-spacing:.08em; }
+  .title { color:var(--accent); font-size:23px; font-family:Georgia, serif; }
+  .kchip { font-size:11px; color:var(--muted); background:var(--chip); padding:2px 6px; border-radius:3px; }
+  .hbtns { margin-left:auto; display:flex; gap:8px; }
+  .hbtn { border:1px solid var(--text); padding:5px 12px; border-radius:3px; font-size:12px; letter-spacing:.08em; }
+  .hbtn.on { border-color:var(--accent); color:var(--accent); }
+  .hbtn.del { border-color:var(--bad); color:var(--bad); }
+  .tabs { display:flex; gap:6px; margin-top:18px; border-bottom:1px solid var(--line); }
+  .tab { padding:10px 18px; font-size:14px; letter-spacing:.1em; } .tab.on { color:var(--accent); border-bottom:2px solid var(--accent); }
+  .panel { background:var(--panel); border-radius:6px; padding:14px 16px; margin-top:14px; max-width:1240px; }
+  .ov { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  .field { border:1px solid #5a524c; border-radius:4px; padding:10px 12px; margin:8px 0; color:var(--text); }
+  .field.ph { color:var(--dim); }
+  .btns { display:flex; align-items:center; gap:14px; margin-top:10px; flex-wrap:wrap; }
+  .btn { font-size:12px; letter-spacing:.08em; text-transform:uppercase; padding:6px 12px; border-radius:3px; }
+  .btn.main { background:#4a3420; color:var(--accent); } .btn.text { color:var(--text); } .btn.del { color:var(--bad); }
+  .route { display:flex; gap:6px; align-items:center; flex-wrap:wrap; font-size:13px; }
+  .seg { border:1px solid var(--line); padding:4px 10px; border-radius:14px; } .seg.on { border-color:var(--accent); color:var(--accent); }
+  .tick { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:14px; }
+  .box { width:15px; height:15px; border:1px solid var(--muted); border-radius:2px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+  .box.on { background:var(--accent); border-color:var(--accent); color:#1d2021; }
+  .why { color:var(--dim); font-size:12px; }
+  .fill { display:flex; gap:24px; align-items:flex-start; }
+  .gap { font-size:14px; padding:2px 0; } .gap b { font-weight:500; }
+  .dl { display:grid; grid-template-columns:150px 1fr; gap:6px 16px; font-size:14px; margin-top:8px; }
+  .dl .k { color:var(--muted); font-size:12px; letter-spacing:.08em; text-transform:uppercase; padding-top:2px; }
+  .new { color:var(--good); } .chg { color:var(--warn); } .rem { color:var(--bad); }
+  .f { color:var(--foreign); font-style:italic; }
+  .ba { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px; }
+  .ba .side2 { background:var(--raised); border-radius:4px; padding:8px 10px; font-size:13px; line-height:1.5; }
+  .kept { background:#3a3420; border-radius:4px; padding:8px 12px; margin-top:10px; font-size:14px; }
+  .names { color:var(--foreign); font-style:italic; }
+</style></head>
+<body>
+<div class="intro"><h1>Changing a language from its page</h1>
+<b>Change it…</b> sits in the page header, since it acts on the whole language. It opens a panel under the header that stays open across tabs while it runs. <b>Still to fill in</b> lives in the same panel. The second frame is the review that comes back.</div>
+
+<div class="option" data-choice="ask">
+<div class="option-label"><b>1</b> Asking for a change, with Still to fill in</div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span>
+      <span class="hbtns"><span class="hbtn on">CHANGE IT…</span><span class="hbtn">IMPORT A NEW VERSION</span><span class="hbtn">EXPORT</span><span class="hbtn del">DELETE</span></span></div>
+    <div class="panel">
+      <div class="ov">Change Moscavian</div>
+      <div class="field">They're traders more than warriors: redo the curses and oaths around debts and broken bargains, and add words for trade and the river market.</div>
+      <div class="ov" style="margin-top:12px">Fit it to</div>
+      <div class="tick"><span class="box on">✓</span>Tsardom of Moscavia <span class="why">speaks it (official)</span></div>
+      <div class="tick"><span class="box on">✓</span>Velikigrad River Market <span class="why">filed in the Tsardom</span></div>
+      <div class="tick"><span class="box"></span>The Owl Synod <span class="why">its facts use "dov", "zorin"</span></div>
+      <div class="tick muted small">+ Add another entry…</div>
+      <div class="btns">
+        <span class="route">Make it with <span class="seg on">Claude Code</span><span class="seg">the agent's model <span class="muted">(API tokens)</span></span><span class="seg">Copy the brief</span> &nbsp; model <span class="field" style="margin:0;padding:3px 10px">opus</span></span>
+      </div>
+      <div class="btns"><span class="btn main">Change it</span><span class="btn text">⧉ Copy the brief</span><span class="btn del">Discard</span></div>
+      <div style="border-top:1px solid var(--line); margin-top:16px; padding-top:12px">
+        <div class="ov">Still to fill in <span class="muted small" style="text-transform:none;letter-spacing:0">· what the check finds missing</span></div>
+        <div class="fill" style="margin-top:6px">
+          <div>
+            <div class="gap"><b>Everyday words:</b> 118 of 200 missing <span class="why">(water, hand, tree, red, sleep …)</span></div>
+            <div class="gap"><b>Phrases:</b> no oaths, insults or endearments</div>
+            <div class="gap"><b>Grammar:</b> Numbers, Politeness not written yet</div>
+          </div>
+          <span class="btn main">Fill in next: everyday words</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+
+<div class="option" data-choice="review">
+<div class="option-label"><b>2</b> The change came back: review it</div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br><br>Languages<div class="sel">Moscavian</div></div></div>
+  <div class="page">
+    <div class="head"><span class="back">← BACK</span><span class="title">Moscavian</span><span class="kchip">language</span>
+      <span class="hbtns"><span class="hbtn on">CHANGE IT…</span><span class="hbtn">IMPORT A NEW VERSION</span><span class="hbtn">EXPORT</span><span class="hbtn del">DELETE</span></span></div>
+    <div class="panel">
+      <div class="ov">Changed with Claude Code · review it</div>
+      <div class="muted small" style="margin-top:4px">"They're traders more than warriors: redo the curses and oaths…"</div>
+      <div class="dl">
+        <span class="k">Words</span><span><span class="new">+14 new:</span> <span class="f">torg</span> trade, market · <span class="f">dolg</span> debt · <span class="f">vesy</span> scales · <span class="f">kupets</span> merchant … <a style="color:var(--link)">all 14</a><br>
+          <span class="chg">1 meaning added:</span> <span class="f">vol</span> river → river, river road</span>
+        <span class="k">Phrases</span><span><span class="new">+3 new</span> oaths · <span class="chg">2 changed</span> curses · <span class="rem">1 removed</span> "Fierce shadow upon you!"</span>
+        <span class="k">Grammar</span><span><span class="new">+ Trade talk</span> (a new section) · <span class="chg">Politeness changed</span></span>
+        <span class="k">Name rules</span><span class="muted">unchanged</span>
+      </div>
+      <div class="ov" style="margin-top:14px">Curses, before and after</div>
+      <div class="ba">
+        <div class="side2"><span class="f">Zelgor nirosh te!</span> Fierce shadow upon you!<br><span class="f">Kol ye zor!</span> Frost and star!</div>
+        <div class="side2"><span class="f">Dolg tvoi v reke!</span> Your debt in the river!<br><span class="f">Vesy tvoi krivy!</span> May your scales be crooked!</div>
+      </div>
+      <div class="kept">
+        <b>Kept as they are:</b> <span class="f">soru</span> (it names Soru, a character); the change wanted it to mean "debt".<br>
+        <b>Kept your edit:</b> you changed the toast while this ran; your version stays.
+      </div>
+      <div class="btns"><span class="btn main">Accept the change</span><span class="btn text">Drop it</span><span class="muted small">Undo works on it like any edit.</span></div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div></div>
+</body></html>
