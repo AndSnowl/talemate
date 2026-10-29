@@ -702,6 +702,8 @@ export const useWorldsStore = defineStore('worlds', {
         languageQuestions: null,
         languageBrief: null,
         languageSamples: {},
+        // which rule set a page's last Roll was for (null: all of them)
+        languageSamplesFor: {},
         languageExport: null,
         // right-click naming: the languages in reach of a box's page
         // (`language_menu`), rolled names with definitions, a suggested
@@ -2000,7 +2002,10 @@ export const useWorldsStore = defineStore('worlds', {
             this.nameInResult = null;
         },
 
-        rollLanguageSamples(thingId, seed = 0) {
+        // `generatorId`: roll just that rule set's names (a card's Roll);
+        // none rolls them all
+        rollLanguageSamples(thingId, seed = 0, generatorId = null) {
+            this.languageSamplesFor = { ...this.languageSamplesFor, [thingId]: generatorId };
             this.request('language_samples', { thing_id: thingId, seed });
         },
 
@@ -2325,9 +2330,14 @@ export const useWorldsStore = defineStore('worlds', {
                         this.thing = data;
                     }
                     break;
-                case 'language_samples':
-                    this.languageSamples = { ...this.languageSamples, [data.thing_id]: data.samples };
+                case 'language_samples': {
+                    const only = this.languageSamplesFor[data.thing_id];
+                    const samples = only
+                        ? { ...(this.languageSamples[data.thing_id] || {}), [only]: data.samples[only] || [] }
+                        : data.samples;
+                    this.languageSamples = { ...this.languageSamples, [data.thing_id]: samples };
                     break;
+                }
                 case 'group_synopsis':
                 case 'group_synopsis_failed': {
                     const key = groupKey(data?.thing_id, data?.tag);

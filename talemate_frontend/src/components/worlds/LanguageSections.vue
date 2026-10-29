@@ -150,7 +150,7 @@
                         <div class="d-flex align-center ga-2">
                             <span class="text-body-1">{{ gen.name }}</span>
                             <span class="text-caption text-muted">{{ useLabel(gen.use) }}</span>
-                            <v-btn icon="mdi-dice-multiple-outline" size="x-small" variant="text" density="comfortable" color="accent" aria-label="Roll" title="Roll new sample names" @click="reroll()"></v-btn>
+                            <v-btn icon="mdi-dice-multiple-outline" size="x-small" variant="text" density="comfortable" color="accent" aria-label="Roll" title="Roll new sample names" @click="reroll(null, gen.id)"></v-btn>
                         </div>
                         <div class="names" data-testid="language-samples">{{ (samples[gen.id] || []).slice(0, 12).join(', ') || 'Roll to see names.' }}</div>
                         <div class="d-flex align-center flex-wrap ga-2">
@@ -724,9 +724,10 @@ export default {
         removePhrase(phrase) {
             this.saveField('phrases', this.phrases.filter((p) => p.id !== phrase.id));
         },
-        reroll(seed) {
+        // a card's Roll passes its rule set; Roll all passes none
+        reroll(seed, generatorId = null) {
             this.seed = typeof seed === 'number' ? seed : this.seed + 1;
-            this.worlds.rollLanguageSamples(this.thing.id, this.seed);
+            this.worlds.rollLanguageSamples(this.thing.id, this.seed, generatorId);
         },
         useLabel(use) {
             return USES[use] || use;
