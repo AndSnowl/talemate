@@ -92,3 +92,48 @@ def test_character_fluency(app, page):
     section = mira.get_by_test_id("entry-languages")
     _add_row(page, section, "Sorauan", "spoken", fluency="native")
     expect(section.get_by_test_id("languages-row")).to_contain_text("native", timeout=TIMEOUT_MS)
+
+
+def test_a_character_takes_its_places_everyday_languages(app, page):
+    from talemate.world.store import Source, World
+
+    name = _world_name("Lang inherit")
+    seeded = seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {"kind": "language", "name": "Sorauan", "fields": _language_fields()},
+            {"kind": "language", "name": "Moscavian", "fields": _language_fields()},
+            {"kind": "language", "name": "Old Moscavian", "fields": _language_fields()},
+            {"kind": "place", "name": "Free Provinces of Sorau"},
+            {
+                "kind": "character",
+                "name": "Mira",
+                "born": 990,
+                "filings": [{"target": "Free Provinces of Sorau"}],
+            },
+        ],
+    )
+    ids = seeded.things
+    world = World.open(seeded.path)
+    with world.revision(Source.manual(note="rows")) as rev:
+        rev.set_field(
+            ids["Free Provinces of Sorau"],
+            "languages",
+            [
+                {"language": ids["Sorauan"], "role": "official"},
+                {"language": ids["Moscavian"], "role": "spoken", "share": 25},
+                {"language": ids["Old Moscavian"], "role": "liturgical"},
+            ],
+            None,
+        )
+    world.close()
+
+    _open_world(page, name)
+    _world_tab(page)
+    mira = _open_thing(page, "Mira")
+    inherited = mira.get_by_test_id("entry-languages").get_by_test_id("languages-inherited")
+    expect(inherited).to_contain_text("From Free Provinces of Sorau", timeout=TIMEOUT_MS)
+    expect(inherited).to_contain_text("Sorauan")
+    expect(inherited).to_contain_text("Moscavian")
+    expect(inherited).not_to_contain_text("Old Moscavian")

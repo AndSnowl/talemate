@@ -128,6 +128,14 @@ def test_new_version_shows_kept_used_words(app, page):
     expect(box.get_by_test_id("language-diff")).to_contain_text("veltasun", timeout=TIMEOUT_MS)
     expect(box.get_by_test_id("language-diff")).to_contain_text("kept because")
 
+    # importing it keeps the word the world uses, with its meaning
+    box.get_by_role("button", name="Import").click()
+    expect(thing.get_by_test_id("language-import")).to_have_count(0, timeout=TIMEOUT_MS)
+    thing.get_by_test_id("language-tab-lexicon").click()
+    row = thing.get_by_test_id("language-word").filter(has_text="veltasun")
+    expect(row.get_by_test_id("word-meaning")).to_have_text(["the great fort"], timeout=TIMEOUT_MS)
+    expect(row.get_by_test_id("word-names")).to_have_text("name")
+
 
 def test_phrases_tab_shows_breakdown_and_adds_a_phrase(app, page):
     name = _world_name("Lang phrases")

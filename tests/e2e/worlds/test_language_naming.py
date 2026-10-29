@@ -136,6 +136,27 @@ def test_name_it_in_other_language(app, page, fixed_language):
 
 
 
+def test_add_a_word_with_no_meaning(app, page, fixed_language):
+    # a word made only to be a name has no meaning, and that's allowed
+    fixed_language({"definitions": {"Moscavia": ""}})
+    name = _seed(app, "Name bare")
+    _open_world(page, name)
+    _world_tab(page)
+    box = _place_box(page)
+    box.fill("Tsardom of Moscavia")
+    _right_click(box, 11, 19)
+    menu = page.get_by_test_id("reference-menu")
+    menu.get_by_text('Add "Moscavia" to a language…').click()
+    _pick_language(page, menu)
+    meaning = menu.get_by_test_id("language-word-meaning").locator("input")
+    expect(meaning).to_have_attribute("placeholder", "leave blank if it is only a name", timeout=TIMEOUT_MS)
+    expect(meaning).to_have_value("")
+    menu.get_by_role("button", name="Save").click()
+    assert "Moscavia" in _words(page, "Sorauan")
+    row = page.get_by_test_id("language-word").filter(has_text="Moscavia")
+    expect(row.get_by_test_id("word-meaning")).to_have_count(0)
+
+
 def test_make_a_phrase_inserts_once_and_closes(app, page):
     name = _seed(app, "Name phrase")
     _open_world(page, name)

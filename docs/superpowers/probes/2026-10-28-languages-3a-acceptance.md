@@ -12,11 +12,9 @@ The tests passed on this branch:
 - [ ] **Make a language with the skill.** In Claude Code, ask for "a unique but recognizably Russian language" (the `language-design` skill). It asks a few plain questions, or decides if you say so, then writes `<name>.language.json` and runs the check until it passes.
 - [ ] **Import it by pasting.** In the World tab, open Languages and paste the file, or the assistant's whole reply with its chat text around it. Press Check: you see the name, depth, counts, how it sounds, sample names per rule set, and the check's report in plain words. Import opens its page.
 - [ ] **A broken file.** Paste one with a broken rule: the report says what must be fixed, Import stays disabled, and "Copy note" copies the note to paste back to the assistant.
-- [ ] **The language's page.** About (facts, connections, timeline) opens by default. The other tabs:
-  - **Language:** how it sounds, depth and "Sounds like", counts, the sound inventory, syllable notes, related languages (descends from, similar to) and grammar notes;
-  - **Dictionary:** words, meanings and parts, editable in place, with search;
-  - **Phrases:** by category, with word-by-word breakdowns; add and edit;
-  - **Name rules:** a card per rule set with sample names and editable patterns.
+- [ ] **The language's page.** About (facts, connections, timeline) opens by default. The other tabs, each in two columns (mockups Language A and Lexicon A):
+  - **Language:** how it sounds, depth and "Sounds like", the sound inventory, syllable notes, related languages and grammar notes; beside them, a card per name rule set with sample names and editable patterns;
+  - **Lexicon:** the dictionary (words, meanings as chips you add, edit and remove, parts, and a "name" tag on words the world uses as names; search) beside the phrases by category, with word-by-word breakdowns.
 
   Check it at a full-size window as well as a small one: nothing should be stretched far apart.
 - [ ] **Sorau's Languages section.** On a place, "+ Add" rows such as Sorauan *official* and Moscavian *spoken* 25%. They show with a role chip and a share bar.
@@ -31,4 +29,27 @@ The tests passed on this branch:
 
 ## Results
 
-*(filled in during the walk)*
+The owner can't import a language of their own until languages can be made
+(plan 3b), so the walk splits: **the owner** judges whether it looks and
+feels right, and **Playwright** proves each step does what it should. Every
+step below has an e2e test that drives the real app (no model; fixed
+replies), and all pass.
+
+| Step | Proven by (tests/e2e/worlds/) |
+|---|---|
+| Import by pasting, its page opens | `test_languages_page.py::test_import_pasted_language_and_see_its_page` |
+| A broken file: report, Import disabled, Copy note | `test_languages_page.py::test_blocking_problem_disables_import` |
+| The page's tabs; meanings, chips, "name" tag | `test_languages_page.py` (page, phrases, `test_a_word_shows_its_meanings_and_what_it_names`) |
+| Sorau's rows, Thornfield inheriting, Set its own | `test_languages_section.py::test_add_rows_then_inherit_and_set_its_own` |
+| A character's own rows (fluency) | `test_languages_section.py::test_character_fluency` |
+| A character takes its place's spoken and official languages, never a liturgical one | `test_languages_section.py::test_a_character_takes_its_places_everyday_languages` |
+| "Tsardom of" → Make a name, saved to the Lexicon | `test_language_naming.py::test_make_a_name_inserts_and_saves_word` |
+| Add Moscavia as a word, with a suggested meaning or none | `test_language_naming.py::test_add_selected_word_with_definition`, `test_add_a_word_with_no_meaning` |
+| Reroll this part | `test_language_naming.py::test_reroll_this_part` |
+| Name it in…, or type it yourself | `test_language_naming.py::test_name_it_in_other_language`, `test_name_it_in_lets_the_owner_type_the_name` |
+| A new version keeps used words, with their meaning | `test_languages_page.py::test_new_version_shows_kept_used_words` |
+| The scene's message box: Make a name (speaker's languages first, then the place's), Make a phrase, no Add reference | `test_scene_languages.py` |
+
+The owner's look-and-feel verdicts:
+- The language page: rebuilt after a design phase; mockups Language A + Lexicon A approved.
+- Make a name in free text: worked; led to short meanings, several per word, and the "name" tag (approved).
