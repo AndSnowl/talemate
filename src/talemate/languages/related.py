@@ -14,6 +14,8 @@ from talemate.world.view import WorldView
 
 __all__ = ["RelatedEntry", "related_entries"]
 
+# a word in a fact's text (a language's words may hold ' or -)
+_WORD = re.compile(r"[^\W\d_](?:[\w'’-]*\w)?")
 # a dictionary word shorter than this matches too much English ("on")
 MIN_WORD = 3
 
@@ -70,7 +72,9 @@ def related_entries(
             if state.id in found or state.id == language_id:
                 continue
             text = " ".join(view.render(fact.text) for fact in state.facts).lower()
-            used = [w for w in sorted(words) if re.search(rf"\b{re.escape(w)}\b", text)]
+            # the text's words once, against the dictionary: one pass, not
+            # a search per word (a big language would stall the app)
+            used = sorted(words & set(_WORD.findall(text)))
             if used:
                 shown = ", ".join(f'"{w}"' for w in used[:3])
                 add(state, f"its facts use {shown}")

@@ -214,3 +214,64 @@ def test_the_review_comes_back_on_the_entry(app, page, fake_claude_mode):
     panel.get_by_test_id("language-accept").click()
     expect(page.get_by_test_id("language-change")).to_have_count(0, timeout=TIMEOUT_MS)
     expect(sorau.get_by_test_id("thing-name")).to_have_text("Sorau")
+
+
+# --- final review: one job, many places --------------------------------------
+
+
+def test_discarding_in_make_leaves_a_running_change_alone(app, page, fake_claude_mode):
+    fake_claude_mode("change:8")
+    thing = _language_page(app, page, "Change vs make")
+    panel = _open_panel(page, thing)
+    panel.get_by_test_id("change-request").locator("textarea").first.fill("more")
+    panel.get_by_test_id("change-start").click()
+    expect(panel.get_by_test_id("change-progress")).to_be_visible(timeout=TIMEOUT_MS)
+    page.get_by_test_id("kind-language").click()
+    make = page.get_by_test_id("language-make")
+    make.get_by_test_id("make-request").locator("textarea").first.fill("another language")
+    make.get_by_test_id("make-discard").click()
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-change-open").click()
+    panel = page.get_by_test_id("language-change")
+    expect(panel.get_by_test_id("language-diff")).to_contain_text("torg", timeout=LONG_MS)
+
+
+def test_the_busy_note_can_cancel_the_running_job(app, page, fake_claude_mode):
+    fake_claude_mode("change:30")
+    thing = _language_page(app, page, "Change busy")
+    panel = _open_panel(page, thing)
+    panel.get_by_test_id("change-request").locator("textarea").first.fill("more")
+    panel.get_by_test_id("change-start").click()
+    expect(panel.get_by_test_id("change-progress")).to_be_visible(timeout=TIMEOUT_MS)
+    page.get_by_test_id("kind-language").click()
+    make = page.get_by_test_id("language-make")
+    make.get_by_test_id("make-busy-cancel").click()
+    expect(make.get_by_test_id("make-busy")).to_have_count(0, timeout=TIMEOUT_MS)
+
+
+def test_closing_another_languages_panel_keeps_a_finished_change(app, page, fake_claude_mode):
+    fake_claude_mode("change")
+    fields = _language_fields()
+    name = _world_name("Change two")
+    seed_fm_world(
+        app.root,
+        name,
+        things=[
+            {"kind": "language", "name": "Velskar", "fields": fields},
+            {"kind": "language", "name": "Sorauan", "fields": _language_fields()},
+        ],
+    )
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    panel = _open_panel(page, thing)
+    panel.get_by_test_id("change-request").locator("textarea").first.fill("more")
+    panel.get_by_test_id("change-start").click()
+    expect(panel.get_by_test_id("language-diff")).to_contain_text("torg", timeout=LONG_MS)
+    other = _open_thing(page, "Sorauan")
+    _open_panel(page, other).get_by_role("button", name="Close").click()
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-change-open").click()
+    expect(page.get_by_test_id("language-change").get_by_test_id("language-diff")).to_contain_text(
+        "torg", timeout=TIMEOUT_MS
+    )

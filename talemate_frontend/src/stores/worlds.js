@@ -878,7 +878,11 @@ export const useWorldsStore = defineStore('worlds', {
         // a world switch cancels the backend's preview without a reply, so
         // nothing of the old world may wait for one
         resetWorld() {
+            // a language still being made or changed carries on (the server
+            // keeps running it): keep it, so it can be cancelled
+            const job = this.languageMake?.running ? this.languageMake : null;
             Object.assign(this, worldState());
+            if (job) this.languageMake = job;
         },
 
         // `get_present` along with them: a scene that started, continued or
@@ -1990,9 +1994,12 @@ export const useWorldsStore = defineStore('worlds', {
             this.languageChangeFocus += 1;
         },
 
+        // closing the panel drops its own finished change, no other
         closeLanguageChange() {
+            const target = this.languageChange?.targetId;
             this.languageChange = null;
-            if (this.languageMake && this.languageMake.kind !== 'new' && !this.languageMake.running) this.languageMake = null;
+            const job = this.languageMake;
+            if (job && job.kind !== 'new' && !job.running && job.targetId === target) this.languageMake = null;
         },
 
         loadLanguageRelated(languageId) {
@@ -2004,8 +2011,9 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('language_make_cancel', {});
         },
 
+        // Make's Discard: only Make's own job goes (a change runs on)
         clearLanguageMake() {
-            this.languageMake = null;
+            if (this.languageMake && (this.languageMake.kind || 'new') === 'new') this.languageMake = null;
             this.languageQuestions = null;
             this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
         },
@@ -2345,7 +2353,8 @@ export const useWorldsStore = defineStore('worlds', {
                         this.refreshThing();
                         break;
                     }
-                    this.languageMake = null;
+                    // an import ends Make's job, never a change's
+                    if (this.languageMake && (this.languageMake.kind || 'new') === 'new') this.languageMake = null;
                     this.languageQuestions = null;
                     this.languageMakeDraft = { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null };
                     this.listThings('language');

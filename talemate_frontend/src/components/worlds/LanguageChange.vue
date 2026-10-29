@@ -79,7 +79,10 @@
                 <span v-if="copied" class="text-caption text-success" data-testid="change-copied">Copied</span>
                 <v-btn v-if="!running" size="small" variant="text" color="delete" data-testid="change-discard" @click="discard">Discard</v-btn>
             </div>
-            <div v-if="otherBusy" class="text-caption text-muted mt-1">Something else is being made or changed; wait for it or cancel it.</div>
+            <div v-if="otherBusy" class="d-flex align-center ga-2 text-caption text-muted mt-1" data-testid="change-busy">
+                Something else is being made or changed; wait for it or cancel it.
+                <v-btn size="x-small" variant="text" color="delete" data-testid="change-busy-cancel" @click="worlds.cancelLanguageMake()">Cancel it</v-btn>
+            </div>
             <v-textarea v-if="briefFallback" :model-value="briefFallback" readonly rows="6" density="compact" variant="outlined" hide-details class="mt-2" label="The brief: select it all and copy"></v-textarea>
 
             <!-- while it runs -->

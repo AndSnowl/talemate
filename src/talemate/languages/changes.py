@@ -43,6 +43,22 @@ def _pick(base: Any, change: Any, current: Any) -> tuple[Any, bool]:
     return current, True
 
 
+def _keyed(
+    items: Iterable[Any], key: Callable[[Any], str]
+) -> dict[tuple[str, int], Any]:
+    """`items` by (key, occurrence): two words spelled alike, or two
+    sections with one title, are the first and the second, each merged
+    with its counterpart, so neither is lost."""
+
+    seen: dict[str, int] = {}
+    keyed = {}
+    for item in items:
+        k = key(item)
+        keyed[(k, seen.get(k, 0))] = item
+        seen[k] = seen.get(k, 0) + 1
+    return keyed
+
+
 def _merge_keyed(
     base: Iterable[Any],
     change: Iterable[Any],
@@ -51,15 +67,13 @@ def _merge_keyed(
     label: Callable[[str], str],
     kept: list[str],
 ) -> list[Any]:
-    b = {key(x): x for x in base}
-    c = {key(x): x for x in change}
-    u = {key(x): x for x in current}
+    b, c, u = _keyed(base, key), _keyed(change, key), _keyed(current, key)
     order = list(u) + [k for k in c if k not in u]
     merged = []
     for k in order:
         value, kept_edit = _pick(b.get(k), c.get(k), u.get(k))
         if kept_edit:
-            kept.append(label(k))
+            kept.append(label(k[0]))
         if value is not None:
             merged.append(value)
     return merged

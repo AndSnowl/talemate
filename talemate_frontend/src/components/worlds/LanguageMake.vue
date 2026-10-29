@@ -76,7 +76,10 @@
                 <v-btn v-if="hasDraft && !running" size="small" variant="text" color="delete" data-testid="make-discard" @click="again">Discard</v-btn>
                 <span v-if="copied" class="text-caption text-success" data-testid="make-copied">Copied</span>
             </div>
-            <div v-if="otherBusy" class="text-caption text-muted mt-1" data-testid="make-busy">Something else is being made or changed; wait for it or cancel it.</div>
+            <div v-if="otherBusy" class="d-flex align-center ga-2 text-caption text-muted mt-1" data-testid="make-busy">
+                Something else is being made or changed; wait for it or cancel it.
+                <v-btn size="x-small" variant="text" color="delete" data-testid="make-busy-cancel" @click="worlds.cancelLanguageMake()">Cancel it</v-btn>
+            </div>
             <div v-if="briefOnly" class="text-caption text-muted mt-1">Paste what your assistant returns into Import a language below.</div>
             <v-textarea
                 v-if="briefFallback"

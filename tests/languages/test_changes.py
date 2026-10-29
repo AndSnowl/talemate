@@ -169,3 +169,25 @@ def test_used_words_still_win_over_a_change(world):
     preview = preview_import(world.view(), _text(change), lid, base_text=_text(base))
     assert _words(preview.file.language)["dov"][0] == "shrine"
     assert preview.diff.kept_used == ["dov"]
+
+
+def test_duplicate_words_and_titles_survive_a_change():
+    base = _lang(
+        words=(("kor", ["stone"]), ("kor", ["strike"]), ("tal", ["night"])),
+        grammar=[
+            GrammarSection(title="Notes", text="One."),
+            GrammarSection(title="Notes", text="Two."),
+        ],
+    )
+    change = _lang(
+        words=(("kor", ["stone"]), ("kor", ["strike"]), ("tal", ["night", "day"])),
+        grammar=[
+            GrammarSection(title="Notes", text="One."),
+            GrammarSection(title="Notes", text="Two."),
+        ],
+    )
+    got = merge_change(base, change, base).language
+    assert [(e.word, e.meanings) for e in got.dictionary] == [
+        ("kor", ["stone"]), ("kor", ["strike"]), ("tal", ["night", "day"]),
+    ]  # fmt: skip
+    assert [s.text for s in got.grammar] == ["One.", "Two."]

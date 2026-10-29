@@ -116,7 +116,9 @@ def test_a_new_version_adds_a_meaning_to_a_used_word(world):
     lid = _store(world, [("soru", ["wind"])])
     _named_soru(world)
     preview = _new_version(
-        world, lid, DictionaryEntry(word="soru", meanings=["wind", "breath"], part="noun")
+        world,
+        lid,
+        DictionaryEntry(word="soru", meanings=["wind", "breath"], part="noun"),
     )
     soru = preview.file.language.dictionary[0]
     assert soru.meanings == ["wind", "breath"]
@@ -128,7 +130,9 @@ def test_a_new_version_adds_a_meaning_to_a_used_word(world):
 def test_a_used_word_keeps_the_meanings_a_new_version_drops(world):
     lid = _store(world, [("soru", ["wind"])])
     _named_soru(world)
-    preview = _new_version(world, lid, DictionaryEntry(word="soru", meanings=["breath"]))
+    preview = _new_version(
+        world, lid, DictionaryEntry(word="soru", meanings=["breath"])
+    )
     assert preview.file.language.dictionary[0].meanings == ["wind", "breath"]
     assert preview.diff.kept_used == ["soru"]
 

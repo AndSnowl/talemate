@@ -62,3 +62,35 @@ def test_each_entry_once_and_at_most_the_limit(world):
     assert len({e.id for e in related_entries(world.view(), lid)}) == len(
         related_entries(world.view(), lid)
     )
+
+
+def test_related_is_quick_on_a_large_world(world):
+    import time
+
+    words = [
+        DictionaryEntry(
+            word=f"w{chr(97 + i % 26)}{chr(97 + i // 26 % 26)}x", meanings=["m"]
+        )
+        for i in range(700)
+    ]
+    lang = Language(
+        name="Big",
+        level="full",
+        categories={"C": "k d", "V": "a"},
+        generators=[
+            GeneratorDef(id="words", name="Words", use="words", patterns=["CV"])
+        ],
+        dictionary=words,
+    )
+    with world.revision(Source.manual()) as rev:
+        lid = rev.create_thing("language", {"name": lang.name, **fields_of(lang)})
+        for n in range(300):
+            place = rev.create_thing("place", {"name": f"Place {n}"})
+            rev.add_fact(
+                place,
+                "description",
+                f"A quiet town by the river, number {n}, with old walls.",
+            )
+    started = time.monotonic()
+    related_entries(world.view(), lid)
+    assert time.monotonic() - started < 1.0
