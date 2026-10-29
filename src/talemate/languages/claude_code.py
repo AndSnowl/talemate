@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import signal
 import sys
@@ -50,6 +51,16 @@ NOT_INSTALLED = (
 )
 NO_FILE = "Claude Code finished without a language file"
 TOO_LONG = "Claude Code sent more than the app can read at once"
+NOT_SIGNED_IN = (
+    "Claude Code isn't signed in: run `claude` once in a terminal to sign in, "
+    "or copy the brief instead"
+)
+CANT_RUN = (
+    "Claude Code can't be run with the command in the language agent's "
+    "settings: check it, or copy the brief instead"
+)
+# how Claude Code says nobody's signed in
+_SIGNED_OUT = re.compile(r"not logged in|/login|log ?in again|authenticat", re.I)
 
 
 class ClaudeCodeError(Exception):
@@ -245,6 +256,8 @@ async def run_claude_code(
         )
     except FileNotFoundError:
         raise ClaudeCodeError(NOT_INSTALLED)
+    except PermissionError:
+        raise ClaudeCodeError(CANT_RUN)
 
     stderr_lines: list[str] = []
 
@@ -282,6 +295,8 @@ async def run_claude_code(
     reply = str((final or {}).get("result") or "")
     if final is None or final.get("is_error"):
         why = reply or next((s for s in reversed(stderr_lines) if s.strip()), "")
+        if _SIGNED_OUT.search(why):
+            raise ClaudeCodeError(NOT_SIGNED_IN)
         raise ClaudeCodeError(f"Claude Code stopped: {why or 'no reply'}")
     return ClaudeCodeResult(
         text=find_language_text(folder, reply),

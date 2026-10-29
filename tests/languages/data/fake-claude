@@ -7,6 +7,7 @@ FAKE_CLAUDE_MODE, else "ok":
 - ok: writes moscavian.language.json and finishes;
 - reply-only: writes no file; the language is in the final reply;
 - error: finishes with an error result and exit 1;
+- not-logged-in: finishes as Claude Code does when nobody's signed in;
 - slow: prints its first event, then sleeps (for cancelling).
 """
 
@@ -61,6 +62,9 @@ def main() -> int:
         time.sleep(60)
     if how == "error":
         result("You've hit your usage limit.", error=True)
+        return 1
+    if how == "not-logged-in":
+        result("Not logged in · Please run /login", error=True)
         return 1
     text = SAMPLE.read_text()
     target = Path("moscavian.language.json").resolve()

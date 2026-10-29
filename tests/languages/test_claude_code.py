@@ -223,3 +223,20 @@ async def test_a_failing_progress_report_stops_claude_code(scratch, monkeypatch)
     pid = int((scratch.folder / "pid").read_text())
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+async def test_a_signed_out_claude_code_says_so_plainly(scratch, monkeypatch):
+    with pytest.raises(ClaudeCodeError) as caught:
+        await _run(scratch, monkeypatch, "not-logged-in")
+    assert str(caught.value) == (
+        "Claude Code isn't signed in: run `claude` once in a terminal to sign "
+        "in, or copy the brief instead"
+    )
+
+
+async def test_a_command_that_cant_be_run_says_so_plainly(scratch, tmp_path):
+    not_runnable = tmp_path / "claude"
+    not_runnable.write_text("not a program")
+    settings = MakeSettings(claude_command=str(not_runnable))
+    with pytest.raises(ClaudeCodeError, match="can't be run with the command"):
+        await run_claude_code(scratch, settings, "x", lambda line: None)
