@@ -260,3 +260,26 @@ async def test_a_model_name_is_trimmed(plugin, monkeypatch):
     await _drain(plugin)
     args = json.loads((made[0].folder / "args.json").read_text())
     assert args[args.index("--model") + 1] == "opus"
+
+
+async def test_language_related_replies_with_entries(plugin):
+    from talemate.languages.importer import parse_language_text  # noqa: F401
+
+    await _open(plugin)
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    await _act(plugin, "language_import", text=sample)
+    lid = _replies(plugin, "language_import")[-1]["id"]
+    from talemate.world.store import Source
+
+    with plugin.world.revision(Source.manual()) as rev:
+        rev.create_thing(
+            "place",
+            {"name": "Sorau", "languages": [{"language": lid, "role": "spoken"}]},
+        )
+    await _act(plugin, "language_related", language_id=lid)
+    data = _replies(plugin, "language_related")[-1]
+    assert data["language_id"] == lid
+    assert (
+        data["entries"][0]["name"] == "Sorau"
+        and data["entries"][0]["why"] == "speaks it (spoken)"
+    )

@@ -442,6 +442,7 @@ from talemate.languages.lookup import (
     languages_for_scene,
 )
 from talemate.languages.brief import write_brief
+from talemate.languages.related import related_entries
 from talemate.languages.completeness import completeness as completeness_of
 from talemate.languages.making import (
     MakeError,
@@ -5774,6 +5775,17 @@ class WorldsPlugin(Plugin):
         if command:
             settings = settings.model_copy(update={"claude_command": command})
         return settings
+
+    async def handle_language_related(self, data: dict):
+        """Entries a change to a language should fit, each with why:
+        answers `language_related {language_id, entries}`."""
+
+        language_id = str(data.get("language_id") or "")
+        entries = related_entries(self._require_world().view(), language_id)
+        self._reply(
+            "language_related",
+            {"language_id": language_id, "entries": [e.model_dump() for e in entries]},
+        )
 
     async def handle_language_make_route(self, data: dict):
         """How languages are made now, so the page offers the right
