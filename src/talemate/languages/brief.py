@@ -70,7 +70,7 @@ def _file() -> list[str]:
         _json_block(EXAMPLE_FILE.read_text(encoding="utf-8")),
         "",
         "The rules:",
-        "- A meaning is 1–3 words, as in a dictionary (\"wind\", \"great fort\"), "
+        '- A meaning is 1–3 words, as in a dictionary ("wind", "great fort"), '
         "never a sentence. A word can have several meanings.",
         "- A word made only to be a name may have no meaning.",
         "- Use no real words or names from the language it sounds like "
