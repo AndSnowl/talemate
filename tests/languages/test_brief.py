@@ -24,7 +24,9 @@ def test_the_brief_file_name():
 def test_a_brief_carries_the_request_and_answers():
     request = MakeRequest(
         text=REQUEST,
-        answers=[QuestionAnswer(question="How Russian should it sound?", answer="Very")],
+        answers=[
+            QuestionAnswer(question="How Russian should it sound?", answer="Very")
+        ],
     )
     brief = write_brief(None, request)
     assert brief.startswith("# Make a language for a fantasy world")
@@ -109,7 +111,9 @@ def test_a_quick_brief_keeps_to_the_core():
     part = _what_to_make(write_brief(None, MakeRequest(text=REQUEST), size="quick"))
     for meaning in CORE_MEANINGS["structural"]:
         assert meaning in part
-    everyday = [m for m in CORE_MEANINGS["everyday"] if re.search(rf"[ ,]{m}(,|\n|$)", part)]
+    everyday = [
+        m for m in CORE_MEANINGS["everyday"] if re.search(rf"[ ,]{m}(,|\n|$)", part)
+    ]
     assert len(everyday) <= 40
     assert "fill in the rest later" in part
 
@@ -144,3 +148,53 @@ def test_the_brief_asks_for_a_part_on_every_word():
     assert "every word a `part`" in brief
     for part, _label, _example in PARTS_OF_SPEECH:
         assert f"`{part}`" in brief
+
+
+# --- 3b-2b: change and fill briefs -------------------------------------------
+
+from talemate.languages.completeness import fill_step  # noqa: E402
+from talemate.languages.models import LanguageFile  # noqa: E402
+
+SAMPLE_FILE = LanguageFile.model_validate(
+    json.loads(Path("tests/languages/data/sample.language.json").read_text())
+)
+
+
+def test_a_change_brief_carries_the_language_and_the_request():
+    request = MakeRequest(
+        kind="change", target_id="x", text="redo the curses around debts"
+    )
+    brief = write_brief(None, request, current=SAMPLE_FILE)
+    assert brief.startswith("# Change a language for a fantasy world")
+    assert "## What to change" in brief and "redo the curses around debts" in brief
+    assert "## The language now" in brief
+    blocks = _blocks(brief)
+    assert any(
+        json.loads(b).get("language", {}).get("name") == "Velskar" for b in blocks
+    )
+    assert "Return the whole file with your changes" in brief
+    assert "Keep the language's name" in brief
+
+
+def test_a_change_brief_lists_the_used_words():
+    request = MakeRequest(kind="change", target_id="x", text="more words")
+    brief = write_brief(None, request, current=SAMPLE_FILE, used=["veltasun", "kor"])
+    assert "keep them exactly as they are: veltasun, kor" in brief
+
+
+def test_a_fill_brief_lists_what_is_missing():
+    from talemate.languages.completeness import completeness
+
+    request = MakeRequest(kind="fill", target_id="x", text="")
+    brief = write_brief(None, request, current=SAMPLE_FILE)
+    assert "## What to add" in brief
+    for meaning in completeness(SAMPLE_FILE.language).meanings_missing:
+        assert meaning in brief
+    assert "Keep everything else as it is" in brief
+
+
+def test_fill_step_order_and_none_when_complete():
+    from talemate.languages.models import Language
+
+    assert fill_step(SAMPLE_FILE.language) == "words"
+    assert fill_step(Language(name="x", level="naming")) is None

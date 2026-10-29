@@ -106,7 +106,9 @@ async def test_a_second_make_is_refused_while_one_runs(plugin, monkeypatch):
     await asyncio.sleep(0.5)
     await _act(plugin, "language_make_start", text=REQUEST)
     failed = _replies(plugin, "language_make_failed")
-    assert failed and failed[-1]["error"] == "A language is already being made"
+    assert failed and failed[-1]["error"] == (
+        "Something else is being made or changed; wait for it or cancel it"
+    )
     assert plugin._make_task is not None and not plugin._make_task.done()
     await _act(plugin, "language_make_cancel")
     await _drain(plugin)
@@ -283,3 +285,57 @@ async def test_language_related_replies_with_entries(plugin):
         data["entries"][0]["name"] == "Sorau"
         and data["entries"][0]["why"] == "speaks it (spoken)"
     )
+
+
+# --- 3b-2b: changing and filling in ------------------------------------------
+
+
+async def _imported(plugin):
+    await _open(plugin)
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    await _act(plugin, "language_import", text=sample)
+    return _replies(plugin, "language_import")[-1]["id"]
+
+
+async def test_a_change_job_returns_its_base(plugin, tmp_path, monkeypatch):
+    import json
+
+    lid = await _imported(plugin)
+    sample = Path("tests/languages/data/sample.language.json").read_text()
+    fixed = tmp_path / "fixed-language.json"
+    fixed.write_text(json.dumps({"language_file": sample}))
+    monkeypatch.setenv(FIXED_LANGUAGE_ENV, str(fixed))
+    await _act(
+        plugin,
+        "language_make_start",
+        kind="change",
+        target_id=lid,
+        text="more",
+        route="in_app",
+    )
+    await _drain(plugin)
+    started = _replies(plugin, "language_make_started")[-1]
+    assert (started["kind"], started["target_id"]) == ("change", lid)
+    done = _replies(plugin, "language_make_done")[-1]
+    assert (done["kind"], done["target_id"]) == ("change", lid)
+    assert json.loads(done["base"])["language"]["name"] == "Velskar"
+
+
+async def test_a_change_for_a_gone_language_fails_plainly(plugin):
+    await _open(plugin)
+    await _act(
+        plugin, "language_make_start", kind="change", target_id="nope", text="more"
+    )
+    error = _replies(plugin, "language_make_failed")[-1]["error"]
+    assert error == "The language this was for is gone"
+
+
+async def test_a_change_with_claude_code_edits_the_file_in_place(plugin, monkeypatch):
+    import json
+
+    made = _keep_scratch(monkeypatch)
+    lid = await _imported(plugin)
+    await _act(plugin, "language_make_start", kind="change", target_id=lid, text="more")
+    await _drain(plugin)
+    seen = json.loads((made[0].folder / "seen.json").read_text())
+    assert "velskar.language.json" in seen

@@ -53,6 +53,8 @@ def result(text: str, *, error: bool = False) -> None:
 
 
 def main() -> int:
+    # what was in the folder when it started (a change's current file)
+    Path("seen.json").write_text(json.dumps(sorted(p.name for p in Path(".").iterdir())))
     Path("pid").write_text(str(os.getpid()))
     Path("args.json").write_text(json.dumps(sys.argv[1:]))
     how = mode()

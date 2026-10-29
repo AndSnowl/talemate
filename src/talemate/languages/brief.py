@@ -183,26 +183,98 @@ def _check(check_command: str | None) -> list[str]:
     ]
 
 
+def _change(request: MakeRequest, current, used) -> list[str]:
+    lines = ["## What to change", "", f"> {request.text.strip()}", ""]
+    lines += _change_rules(used)
+    return [*lines, "", *_now(current)]
+
+
+def _change_rules(used) -> list[str]:
+    lines = [
+        "- Return the whole file with your changes, not just the changed parts.",
+        "- Keep the language's name.",
+        "- Keep everything the request doesn't ask you to change as it is.",
+    ]
+    if used:
+        lines.append(
+            "- These words name things in the world: keep them exactly as they "
+            f"are: {', '.join(used)}"
+        )
+    return lines
+
+
+def _now(current) -> list[str]:
+    return [
+        "## The language now",
+        "",
+        _json_block(current.model_dump_json(indent=2)),
+    ]
+
+
+def _fill(current, used) -> list[str]:
+    from talemate.languages.completeness import completeness, fill_step
+
+    step = fill_step(current.language)
+    found = completeness(current.language)
+    lines = ["## What to add", ""]
+    if step == "words":
+        lines.append(
+            "Add a word (with its `part`) for each of these meanings: "
+            f"{', '.join(found.meanings_missing)}"
+        )
+    elif step == "phrases":
+        lines.append(
+            "Add at least 3 phrases in each of these categories: "
+            f"{', '.join(found.phrase_categories_missing)}"
+        )
+    elif step == "grammar":
+        lines.append(
+            "Write a grammar section for each of these topics, with a table "
+            f"where it has forms: {', '.join(found.grammar_topics_missing)}"
+        )
+    else:
+        lines.append("Nothing is missing: make no changes.")
+    lines += ["", "Keep everything else as it is.", *_change_rules(used)]
+    return [*lines, "", *_now(current)]
+
+
 def write_brief(
     view: WorldView | None,
     request: MakeRequest,
     *,
     check_command: str | None = None,
     size: str = "full",
+    current=None,
+    used=(),
 ) -> str:
     """The brief for `request`: what was asked, the world it's for (the
     chosen entries' facts), the file format, and how to check it (with
     `check_command` where the assistant can run the app's check)."""
 
+    if request.kind in ("change", "fill") and current is not None:
+        body = (
+            _change(request, current, used)
+            if request.kind == "change"
+            else _fill(current, used)
+        )
+        head = [
+            "# Change a language for a fantasy world",
+            "",
+            "The owner of a fantasy world wants a change to one of its "
+            "languages. The language is below, as the file their app imports.",
+        ]
+    else:
+        body = [*_asked(request), "", *_what(size)]
+        head = [
+            "# Make a language for a fantasy world",
+            "",
+            "The owner of a fantasy world wants a language for it, as a file "
+            "their app can import: its sounds, words, phrases and naming rules.",
+        ]
     lines = [
-        "# Make a language for a fantasy world",
+        *head,
         "",
-        "The owner of a fantasy world wants a language for it, as a file "
-        "their app can import: its sounds, words, phrases and naming rules.",
-        "",
-        *_asked(request),
-        "",
-        *_what(size),
+        *body,
         "",
         *_world(view, request),
         *_file(),
