@@ -268,15 +268,34 @@
                                         @blur="saveCell"
                                     />
                                     <span v-else>{{ local.words[row.index][field] }}</span>
-                                    <!-- what the word names in the world, worked out live -->
-                                    <span v-if="field === 'meanings' && usesOf(row.word).length" class="word-names" data-testid="word-names">
+                                    <!-- the word is used as a name in the world (worked out live); the
+                                         tooltip says whose, and clicking opens it -->
+                                    <span
+                                        v-if="field === 'meanings' && usesOf(row.word).length"
+                                        class="word-names"
+                                        data-testid="word-names"
+                                        :title="usesOf(row.word).map((u) => `${u.name} (${u.kind})`).join(', ')"
+                                    >
                                         <a
-                                            v-for="use in usesOf(row.word)"
-                                            :key="use.id"
+                                            v-if="usesOf(row.word).length === 1"
                                             href="#"
                                             class="name-use"
-                                            @click.prevent.stop="worlds.openThing(use.id)"
-                                        >name of {{ use.name }} ({{ use.kind }})</a>
+                                            @click.prevent.stop="worlds.openThing(usesOf(row.word)[0].id)"
+                                        >name</a>
+                                        <v-menu v-else location="bottom start">
+                                            <template #activator="{ props: menu }">
+                                                <a href="#" class="name-use" v-bind="menu" @click.prevent.stop>name</a>
+                                            </template>
+                                            <v-list density="compact">
+                                                <v-list-item
+                                                    v-for="use in usesOf(row.word)"
+                                                    :key="use.id"
+                                                    :title="use.name"
+                                                    :subtitle="use.kind"
+                                                    @click="worlds.openThing(use.id)"
+                                                ></v-list-item>
+                                            </v-list>
+                                        </v-menu>
                                     </span>
                                 </td>
                                 <td class="col-x">
@@ -904,13 +923,16 @@ export default {
     margin-right: 4px;
 }
 .word-names {
-    margin-left: 8px;
+    margin-left: 4px;
 }
 .name-use {
-    font-size: 0.75rem;
-    margin-right: 6px;
-    color: rgb(var(--v-theme-link, var(--v-theme-primary)));
+    font-size: 0.7rem;
+    padding: 0 6px;
+    border: 1px solid rgba(var(--v-theme-accent), 0.6);
+    border-radius: 10px;
+    color: rgb(var(--v-theme-accent));
     text-decoration: none;
+    white-space: nowrap;
 }
 .category {
     margin: 10px 0 2px;
