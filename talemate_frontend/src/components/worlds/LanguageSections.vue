@@ -483,7 +483,9 @@ export default {
             search: '',
             partFilter: null,
             // the dictionary's sort ('word', 'meaning' or none) and page
-            sortBy: null,
+            sortBy: 'word',
+            // a word just added stays on top while it's written
+            pinnedRow: null,
             sortDesc: false,
             page: 1,
             editCell: null,
@@ -538,7 +540,10 @@ export default {
             if (!this.sortBy) return words;
             const keyOf = (w) => (this.sortBy === 'word' ? w.word || '' : w.meanings[0] || '\uffff').toLowerCase();
             const sorted = [...words].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
-            return this.sortDesc ? sorted.reverse() : sorted;
+            if (this.sortDesc) sorted.reverse();
+            const pinned = sorted.findIndex((w) => this.local.words[w.index] === this.pinnedRow);
+            if (pinned > 0) sorted.unshift(...sorted.splice(pinned, 1));
+            return sorted;
         },
         pageCount() {
             return Math.max(1, Math.ceil(this.sortedWords.length / WORDS_PER_PAGE));
@@ -746,6 +751,7 @@ export default {
             this.saveWords();
         },
         sortOn(field) {
+            this.pinnedRow = null;
             if (this.sortBy === field) this.sortDesc = !this.sortDesc;
             else {
                 this.sortBy = field;
@@ -778,10 +784,11 @@ export default {
         },
         addWord() {
             this.search = '';
-            // the new row heads the list: unsorted, first page
-            this.sortBy = null;
+            // the new row heads the list, on the first page, until it's re-sorted
             this.page = 1;
-            this.local.words.unshift({ word: '', meanings: [], part: '' });
+            const row = { word: '', meanings: [], part: '' };
+            this.local.words.unshift(row);
+            this.pinnedRow = row;
             this.editCell = { index: 0, field: 'word' };
         },
         removeWord(index) {

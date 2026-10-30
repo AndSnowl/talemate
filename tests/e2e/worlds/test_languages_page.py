@@ -330,3 +330,24 @@ def test_the_dictionary_sorts_by_word_or_first_meaning(app, page):
     assert _first_words(thing) == ["w000", "w001", "w002"]
     thing.get_by_test_id("dict-sort-word").click()
     expect(thing.get_by_test_id("language-word").first.locator("td.col-word")).to_have_text("w119", timeout=TIMEOUT_MS)
+
+
+def test_the_dictionary_opens_sorted_by_word(app, page):
+    fields = _language_fields()
+    fields["words"] = [{"word": w, "meanings": [m]} for w, m in (("zor", "star"), ("ark", "bow"), ("mol", "hill"))]
+    name = _world_name("Lang word sort")
+    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-lexicon").click()
+    expect(thing.get_by_test_id("language-word")).to_have_count(3, timeout=TIMEOUT_MS)
+    assert _first_words(thing) == ["ark", "mol", "zor"]
+    expect(thing.get_by_test_id("dict-sort-word").locator(".v-icon")).to_have_count(1)
+    # a word being added stays on top while it's typed, though "zz" sorts last
+    thing.get_by_role("button", name="Add word", exact=True).click()
+    word = thing.get_by_label("word", exact=True)
+    word.press_sequentially("zz")
+    expect(thing.get_by_test_id("language-word").first.get_by_label("word", exact=True)).to_have_value("zz")
+    word.press("Enter")
+    expect(thing.get_by_test_id("language-word")).to_have_count(4, timeout=TIMEOUT_MS)

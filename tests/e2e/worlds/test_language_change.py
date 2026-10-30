@@ -5,6 +5,8 @@ finds: one more meaning on the first word, and the word "torg")."""
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from playwright.sync_api import expect
 
@@ -80,9 +82,10 @@ def test_the_owners_edit_during_a_change_is_kept(app, page, fake_claude_mode):
     panel.get_by_test_id("change-request").locator("textarea").first.fill("more")
     panel.get_by_test_id("change-start").click()
     expect(panel.get_by_test_id("change-progress")).to_be_visible(timeout=TIMEOUT_MS)
-    # while it runs, the owner adds a meaning to the same first word
+    # while it runs, the owner adds a meaning to the word the change edits
     thing.get_by_test_id("language-tab-lexicon").click()
-    row = thing.get_by_test_id("language-word").first
+    vel = page.locator("td.col-word", has_text=re.compile(r"^\s*vel\s*$"))
+    row = thing.get_by_test_id("language-word").filter(has=vel)
     row.get_by_test_id("add-meaning").click()
     row.get_by_label("new meaning").fill("mighty")
     row.get_by_label("new meaning").press("Enter")
