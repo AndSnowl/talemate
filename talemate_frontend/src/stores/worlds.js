@@ -185,6 +185,7 @@ import { toRaw } from 'vue';
 import { formatDate } from '../components/worlds/worldDates.js';
 import { groupKey } from '../components/worlds/entryPage.js';
 import { acceptable, akaAdded, akaChanged, akaEveryday, akaRemoved, nameKey, previewSegments, rebaseDraft } from '../components/worlds/draftPage.js';
+import { markEdit } from '../components/worlds/nameMarks.js';
 import {
     factsKey,
     groupDraftKey,
@@ -698,6 +699,9 @@ export const useWorldsStore = defineStore('worlds', {
         // job `{running, route, lines, text, error}`, the questions asked
         // `{pending, questions, error}`, and the brief to copy (its text)
         languageMakeRoute: null,
+        // languages 4a: the name lists' rows (`{name, kind, scope, off}`),
+        // the app's and this world's, for the Names page
+        nameLists: [],
         // what the owner is asking for, kept while they look elsewhere
         // until they Discard it or the language is imported
         languageMakeDraft: { text: '', contextIds: [], answers: [], route: null, claudeModel: null, size: null },
@@ -1260,6 +1264,40 @@ export const useWorldsStore = defineStore('worlds', {
             this.request('draft_render', { draft_key: draft.key, seq, preview: acceptable(draft.edited) });
         },
 
+        // languages 4a: a mark's action on the open draft (`nameMarks.
+        // markEdit`), and the name kept from now on, if it says so
+        markAction(markId, action) {
+            const result = markEdit(this.draft?.edited, markId, action);
+            if (!result) {
+                return;
+            }
+            this.editDraft(result.changes);
+            if (result.keep) {
+                this.nameListEdit('add', 'keep', result.keep);
+            }
+        },
+
+        // the draft's Languages rows changed: cleaned again with them
+        draftLanguages(rows) {
+            const draft = this.draft;
+            if (!draft) {
+                return;
+            }
+            this.pending = { ...this.pending, draft_languages: true };
+            this.request('draft_languages', { draft_key: draft.key, preview: acceptable(draft.edited), rows });
+        },
+
+        loadNameLists() {
+            this.request('get_name_lists', {});
+        },
+
+        // one change to the name lists (`edit`: add, remove, make_global,
+        // turn_off, turn_on, remove_everywhere; `kind`: real, cliche,
+        // title, keep)
+        nameListEdit(edit, kind, name) {
+            this.request('name_list_edit', { edit, kind, name });
+        },
+
         // a selection in the draft's fact `index` (the server's), as
         // "Make a stub" (`kind`, `tag`) or "Link to…" (`targetId`)
         draftSelection(action, index, start, end, data) {
@@ -1297,6 +1335,10 @@ export const useWorldsStore = defineStore('worlds', {
                         edited = rebaseDraft(before.base, before.edited, preview);
                     }
                 }
+            } else if (how === 'replace') {
+                // the server's copy is the owner's own, cleaned again
+                // (languages 4a, `draft_languages`): nothing to rebase
+                edited = preview;
             } else if (how === 'restore') {
                 const kept = this.draftEdits[key]?.[version];
                 edited = kept ? rebaseDraft(kept.base, kept.edited, preview) : preview;
@@ -2562,6 +2604,16 @@ export const useWorldsStore = defineStore('worlds', {
                     }
                     break;
                 case 'discard_preview':
+                    break;
+                case 'draft_languages':
+                    this.pending = { ...this.pending, draft_languages: false };
+                    if (this.draft?.key === data.draft_key) {
+                        this.draftTaken(data, 'replace');
+                    }
+                    break;
+                case 'get_name_lists':
+                case 'name_list_edit':
+                    this.nameLists = data.rows || [];
                     break;
                 case 'draft_render':
                     if (this.draft?.key === data.draft_key && this.draft.renderSeq === data.seq) {

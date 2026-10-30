@@ -292,6 +292,15 @@
                     <!-- who speaks what here (languages 3a); a language's
                          own page has none -->
                     <EntryLanguages v-if="!draft && thing.kind !== 'language'" :thing="thing" />
+                    <!-- a draft's, found from the owner's words (languages
+                         4a); none in a world without languages -->
+                    <EntryLanguages
+                        v-else-if="draft && thing.kind !== 'language'"
+                        :thing="thing"
+                        draft
+                        :rows="edited?.languages || []"
+                        @change="worlds.draftLanguages($event)"
+                    />
 
                     <!-- "+ Add facts…"'s form and draft wrap onto their own
                          line under the heading (a draft page's nested draft

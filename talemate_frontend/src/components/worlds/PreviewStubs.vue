@@ -13,6 +13,8 @@
             @tick="change(row, { ticked: $event })"
         >
             <span class="stub-name">{{ row.name }}</span>
+            <!-- a name cleaning gave it (languages 4a) -->
+            <span v-if="row.replaced" class="text-caption text-muted ml-2" data-testid="new-name-replaced">replaced {{ row.replaced }}</span>
             <template v-if="!plain(row) && !row.same_target_id" #end>
                 <v-select
                     :model-value="row.kind"

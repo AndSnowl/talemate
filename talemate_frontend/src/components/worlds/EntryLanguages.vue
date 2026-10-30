@@ -1,5 +1,5 @@
 <template>
-    <div class="entry-languages" data-testid="entry-languages">
+    <div v-if="!draft || languageItems.length" class="entry-languages" data-testid="entry-languages">
         <!-- a section like In: its heading muted, "+ Add" at its right
              (the column is half the page wide) -->
         <div class="d-flex align-center mt-4 mb-1" data-testid="languages-heading">
@@ -73,6 +73,7 @@
             <a v-if="row.name" class="languages-name" href="#" @click.prevent="worlds.openThing(row.language)">{{ row.name }}</a>
             <span v-else class="text-muted font-italic">(deleted language)</span>
             <v-chip size="x-small" label variant="tonal">{{ row.role }}</v-chip>
+            <span v-if="row.from_words" class="text-caption text-muted" data-testid="languages-from-words">from your words</span>
             <template v-if="row.role === 'spoken' && row.share != null">
                 <span class="share-bar" :style="{ width: Math.max(2, row.share) * 0.8 + 'px' }"></span>
                 <span class="text-caption">{{ row.share }}%</span>
@@ -91,7 +92,12 @@
             </template>
             <v-btn size="x-small" variant="text" class="ml-1" :disabled="busy" @click="setItsOwn">Set its own</v-btn>
         </div>
-        <div v-if="!own.length && !inherited.length && !form" class="text-body-2 text-muted">None yet.</div>
+        <!-- a draft with no language: cleaning waits for one (languages 4a) -->
+        <div v-if="draft && !own.length && !form" class="d-flex align-center flex-wrap ga-2 text-body-2 text-muted">
+            No language picked: real names in this draft are only marked.
+            <v-btn size="small" variant="outlined" color="accent" prepend-icon="mdi-translate" data-testid="draft-pick-language" @click="startAdd('official')">Pick a language for this draft</v-btn>
+        </div>
+        <div v-else-if="!own.length && !inherited.length && !form" class="text-body-2 text-muted">None yet.</div>
     </div>
 </template>
 
@@ -108,12 +114,20 @@ function yearOf(date) {
 
 // A page's Languages section (languages 3a): its own rows (language, role,
 // a share for a spoken one, a character's fluency, dates), or the languages
-// it takes from what it's filed in, with "Set its own" to copy them in.
+// it takes from what it's filed in, with "Set its own" to copy them in. On a
+// draft (`draft`, languages 4a) the draft's rows, those found from the
+// owner's words marked so; a change cleans the draft again, and with none,
+// "Pick a language for this draft".
 export default {
     name: 'EntryLanguages',
     props: {
         thing: { type: Object, required: true },
+        // a draft's rows (languages 4a): shown and changed here, and
+        // emitted as `change(rows)` instead of saved
+        draft: { type: Boolean, default: false },
+        rows: { type: Array, default: () => [] },
     },
+    emits: ['change'],
     setup() {
         return { worlds: useWorldsStore(), ROLES, FLUENCIES };
     },
@@ -122,10 +136,14 @@ export default {
     },
     computed: {
         own() {
+            if (this.draft) {
+                const names = new Map((this.worlds.things.language || []).map((t) => [t.id, t.name]));
+                return this.rows.map((row) => ({ ...row, name: names.get(row.language) || '' }));
+            }
             return this.thing.languages_own || [];
         },
         inherited() {
-            return (this.thing.languages_view || []).filter((r) => r.inherited);
+            return this.draft ? [] : (this.thing.languages_view || []).filter((r) => r.inherited);
         },
         inheritedGroups() {
             const groups = [];
@@ -150,7 +168,7 @@ export default {
             return !(f.since && f.until && f.until <= f.since);
         },
         busy() {
-            return !!this.worlds.pending.set_field;
+            return !!this.worlds.pending.set_field || (this.draft && !!this.worlds.pending.draft_languages);
         },
     },
     mounted() {
@@ -168,8 +186,16 @@ export default {
             if (until) return `until ${until}`;
             return '';
         },
-        startAdd() {
-            this.form = { index: null, language: null, role: 'spoken', share: null, fluency: null, since: null, until: null };
+        startAdd(role = 'spoken') {
+            this.form = { index: null, language: null, role: typeof role === 'string' ? role : 'spoken', share: null, fluency: null, since: null, until: null };
+        },
+        // the rows saved: on a page, its field; on a draft, back to it
+        write(rows) {
+            if (this.draft) {
+                this.$emit('change', rows);
+            } else {
+                this.worlds.setField('languages', rows);
+            }
         },
         startEdit(index) {
             const row = this.own[index];
@@ -205,17 +231,14 @@ export default {
             const rows = this.own.map(this.stored);
             if (f.index == null) rows.push(row);
             else rows[f.index] = row;
-            this.worlds.setField('languages', rows);
+            this.write(rows);
             this.form = null;
         },
         remove(index) {
-            this.worlds.setField('languages', this.own.filter((_, i) => i !== index).map(this.stored));
+            this.write(this.own.filter((_, i) => i !== index).map(this.stored));
         },
         setItsOwn() {
-            this.worlds.setField(
-                'languages',
-                this.inherited.map((r) => this.stored({ language: r.language_id, role: r.role, share: r.share })),
-            );
+            this.write(this.inherited.map((r) => this.stored({ language: r.language_id, role: r.role, share: r.share })));
         },
     },
 };

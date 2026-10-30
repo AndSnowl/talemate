@@ -49,6 +49,23 @@
             <v-btn v-if="repoint" variant="outlined" size="small" prepend-icon="mdi-swap-horizontal" @click="startRepoint(index, $event)">Re-point…</v-btn>
             <StubRepointButton v-else-if="repointStub && !stubOf(segment).ignored" :stub="stubOf(segment)" />
         </StubCard>
+    </v-menu><v-menu
+        v-else-if="segment.mark"
+        :model-value="openCard === index"
+        open-on-hover
+        :open-delay="250"
+        :close-delay="200"
+        :close-on-content-click="false"
+        location="bottom start"
+        @update:model-value="setCard(index, $event)"
+    >
+        <template #activator="{ props }"><span
+            v-bind="props"
+            class="name-mark"
+            :class="segment.markKind"
+            data-testid="name-mark"
+        >{{ segment.text }}</span></template>
+        <NameMarkCard :mark-id="segment.mark" @done="setCard(index, false)" />
     </v-menu><span
         v-else-if="segment.fresh"
         class="linked-stub fresh"
@@ -82,6 +99,7 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import { canExpand } from './worldKinds.js';
+import NameMarkCard from './NameMarkCard.vue';
 import NameModeMenu from './NameModeMenu.vue';
 import ReferenceMenu from './ReferenceMenu.vue';
 import StubCard from './StubCard.vue';
@@ -95,7 +113,9 @@ import StubRepointButton from './StubRepointButton.vue';
 // race or mix stub, which can't be expanded here, opens its page). A `fresh` run is a name a preview invents: stub-styled, with no card, since the stub is
 // only made on accept. A `self` run is the page's own name (ruling H7):
 // in the link colour, titled "this page", not clickable, since it links
-// nothing. With no segments, `text` shows as it is.
+// nothing. A `mark` run is a name cleaning replaced (dotted) or found
+// suspect (wavy), with its card on hover (`NameMarkCard`, languages 4a).
+// With no segments, `text` shows as it is.
 //
 // With `repoint` (an own fact on its thing's page), an entry link gets a
 // hover card too, and both cards offer "Re-point…": a search
@@ -117,7 +137,7 @@ import StubRepointButton from './StubRepointButton.vue';
 // row (its fact menu).
 export default {
     name: 'LinkedText',
-    components: { NameModeMenu, ReferenceMenu, StubCard, StubRepointButton },
+    components: { NameMarkCard, NameModeMenu, ReferenceMenu, StubCard, StubRepointButton },
     props: {
         segments: { type: Array, default: null },
         text: { type: String, default: '' },
@@ -247,6 +267,18 @@ export default {
 
 .linked-stub.fresh {
     cursor: help;
+}
+
+.name-mark {
+    text-decoration: underline dotted rgb(var(--v-theme-link));
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    cursor: help;
+}
+
+.name-mark.suspect {
+    text-decoration: underline wavy rgb(var(--v-theme-warning));
+    text-decoration-thickness: 1px;
 }
 
 .link-card {

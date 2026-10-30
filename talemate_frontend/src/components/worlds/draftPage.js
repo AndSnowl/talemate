@@ -20,6 +20,7 @@
 // selection names, `index`) hold.
 
 import { kindInfo } from './worldKinds.js';
+import { markSegments } from './nameMarks.js';
 
 // the articles a name may lead with (`talemate.world.names.ARTICLES`)
 const ARTICLES = ['the', 'a', 'an'];
@@ -133,12 +134,12 @@ export function factDraftSegments(segments, newNames = []) {
 // (`rendered`, the draft's `elsewhere`: `[{index, text, segments}]`) when
 // it rendered these words, else its new names highlighted here
 // (`previewSegments`).
-export function elsewhereSegments(row, index, rendered = [], newNames = []) {
+export function elsewhereSegments(row, index, rendered = [], newNames = [], marks = []) {
     const found = (rendered || []).find((entry) => entry.index === index);
     if (found && found.text === row.text) {
-        return found.segments;
+        return markSegments(found.segments, marks);
     }
-    return previewSegments(row.text || '', newNames);
+    return markSegments(previewSegments(row.text || '', newNames), marks);
 }
 
 function same(a, b) {
@@ -269,7 +270,8 @@ export function draftFactRows(page, edited, rendered = null) {
             edited: rewritten,
             // what a selection names: the server's fact, as the server has it
             serverIndex: rewritten ? null : index,
-            segments,
+            // the names cleaning replaced or found suspect (languages 4a)
+            segments: markSegments(segments, edited?.marks),
         }];
     });
 }
