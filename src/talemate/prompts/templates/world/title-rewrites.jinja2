@@ -1,0 +1,22 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+Rewrite each generic fantasy title below into a short, specific one: at most six words, the same sort of thing (a league of cities stays a league of cities, a council stays a council), no subtitle, no dash. Write the literal placeholder {name} where the place's or people's own name goes; never invent that name yourself.
+Examples:
+- "Free Cities of the Southern Realms" -> "Free Provinces of {name}"
+- "the Dark Forest" -> "the {name} Pinewood"
+- "the High Council" -> "the Lantern Bench of {name}"
+
+The titles:
+{% for item in items -%}
+{{ item.n }}. {{ item.title }}
+{% endfor %}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"titles": [{"n": 1, "title": "Free Provinces of {name}"}]}
+
+One entry per title. No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}
