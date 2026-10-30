@@ -204,10 +204,15 @@
                     </div>
                     <table class="dict">
                         <thead>
-                            <tr><th>Word</th><th>Meanings</th><th>Part</th><th></th></tr>
+                            <!-- click to sort (again to reverse); a word sorts by its first meaning -->
+                            <tr>
+                                <th class="sortable" data-testid="dict-sort-word" @click="sortOn('word')">Word<v-icon v-if="sortBy === 'word'" size="x-small" class="ml-1">{{ sortDesc ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon></th>
+                                <th class="sortable" data-testid="dict-sort-meaning" @click="sortOn('meaning')">Meanings<v-icon v-if="sortBy === 'meaning'" size="x-small" class="ml-1">{{ sortDesc ? 'mdi-arrow-down' : 'mdi-arrow-up' }}</v-icon></th>
+                                <th>Part</th><th></th>
+                            </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="row in filteredWords" :key="row.index" data-testid="language-word">
+                            <tr v-for="row in pageWords" :key="row.index" data-testid="language-word">
                                 <td v-for="field in WORD_FIELDS" :key="field" :class="'col-' + field" @click="field !== 'meanings' && (editCell = { index: row.index, field })">
                                     <!-- one chip per meaning: click to edit, × to remove, + to add -->
                                     <template v-if="field === 'meanings'">
@@ -316,6 +321,17 @@
                             </tr>
                         </tbody>
                     </table>
+                    <!-- a page at a time: a big dictionary opens quickly -->
+                    <v-pagination
+                        v-if="pageCount > 1"
+                        v-model="page"
+                        :length="pageCount"
+                        :total-visible="7"
+                        density="compact"
+                        size="small"
+                        class="mt-2"
+                        data-testid="dict-pages"
+                    ></v-pagination>
                 </div>
             </v-col>
 
@@ -432,6 +448,7 @@ const PARTS = [
 const PART_ITEMS = PARTS.map(([value, label, example]) => ({ value, title: `${label} (${example})` }));
 const PART_LABELS = Object.fromEntries(PARTS.map(([value, label]) => [value, label]));
 const NO_PART = '(no part)';
+const WORDS_PER_PAGE = 50;
 
 function plain(value) {
     return JSON.parse(JSON.stringify(value ?? null));
@@ -465,6 +482,10 @@ export default {
             importing: false,
             search: '',
             partFilter: null,
+            // the dictionary's sort ('word', 'meaning' or none) and page
+            sortBy: null,
+            sortDesc: false,
+            page: 1,
             editCell: null,
             meaningDraft: '',
             phraseDialog: false,
@@ -511,6 +532,21 @@ export default {
                 .filter((w) => !query || (w.word || '').toLowerCase().includes(query) || w.meanings.some((m) => m.toLowerCase().includes(query)))
                 .filter((w) => !this.partFilter || (this.partFilter === NO_PART ? !(w.part || '').trim() : w.part === this.partFilter));
         },
+        // sorted by word, or by first meaning (words with none last)
+        sortedWords() {
+            const words = this.filteredWords;
+            if (!this.sortBy) return words;
+            const keyOf = (w) => (this.sortBy === 'word' ? w.word || '' : w.meanings[0] || '\uffff').toLowerCase();
+            const sorted = [...words].sort((a, b) => keyOf(a).localeCompare(keyOf(b)));
+            return this.sortDesc ? sorted.reverse() : sorted;
+        },
+        pageCount() {
+            return Math.max(1, Math.ceil(this.sortedWords.length / WORDS_PER_PAGE));
+        },
+        pageWords() {
+            const start = (Math.min(this.page, this.pageCount) - 1) * WORDS_PER_PAGE;
+            return this.sortedWords.slice(start, start + WORDS_PER_PAGE);
+        },
         // the parts this dictionary uses, in the list's order, then any typed ones
         partFilterItems() {
             const used = new Set(this.local.words.map((w) => (w.part || '').trim()));
@@ -551,6 +587,13 @@ export default {
         },
     },
     watch: {
+        // a new search or Part starts on the first page
+        search() {
+            this.page = 1;
+        },
+        partFilter() {
+            this.page = 1;
+        },
         // a save answers with the thing: take its values back in
         fields() {
             this.local = this.fromThing();
@@ -702,6 +745,14 @@ export default {
             this.local.words[index].meanings.splice(m, 1);
             this.saveWords();
         },
+        sortOn(field) {
+            if (this.sortBy === field) this.sortDesc = !this.sortDesc;
+            else {
+                this.sortBy = field;
+                this.sortDesc = false;
+            }
+            this.page = 1;
+        },
         partLabel(part) {
             return PART_LABELS[part] || part;
         },
@@ -727,6 +778,9 @@ export default {
         },
         addWord() {
             this.search = '';
+            // the new row heads the list: unsorted, first page
+            this.sortBy = null;
+            this.page = 1;
             this.local.words.unshift({ word: '', meanings: [], part: '' });
             this.editCell = { index: 0, field: 'word' };
         },
@@ -914,6 +968,10 @@ export default {
     width: 24%;
     font-style: italic;
     color: rgb(var(--v-theme-foreign));
+}
+.dict th.sortable {
+    cursor: pointer;
+    user-select: none;
 }
 .part-filter {
     max-width: 180px;

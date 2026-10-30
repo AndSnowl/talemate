@@ -287,3 +287,46 @@ def test_the_dictionary_filters_by_part(app, page):
     page.get_by_role("option", name="verb").click()
     expect(words).to_have_count(1)
     expect(words.first).to_contain_text("rudun")
+
+
+def _big_lexicon(app, page, stem):
+    fields = _language_fields()
+    # 120 words; the meanings run backwards to the words' order
+    fields["words"] = [
+        {"word": f"w{n:03d}", "meanings": [f"m{119 - n:03d}", "zz"]} for n in range(120)
+    ]
+    name = _world_name(stem)
+    seed_fm_world(app.root, name, things=[{"kind": "language", "name": "Velskar", "fields": fields}])
+    _open_world(page, name)
+    _world_tab(page)
+    thing = _open_thing(page, "Velskar")
+    thing.get_by_test_id("language-tab-lexicon").click()
+    return thing
+
+
+def _first_words(thing, n=3):
+    rows = thing.get_by_test_id("language-word")
+    return [rows.nth(i).locator("td.col-word").inner_text().strip() for i in range(n)]
+
+
+def test_the_dictionary_is_paged(app, page):
+    thing = _big_lexicon(app, page, "Lang paged")
+    rows = thing.get_by_test_id("language-word")
+    expect(rows).to_have_count(50, timeout=TIMEOUT_MS)
+    pages = thing.get_by_test_id("dict-pages")
+    pages.get_by_role("button", name="Next page").click()
+    expect(rows.first.locator("td.col-word")).to_have_text("w050", timeout=TIMEOUT_MS)
+    # a search starts again from the first page
+    thing.get_by_placeholder("Word or meaning").fill("w11")
+    expect(rows).to_have_count(10, timeout=TIMEOUT_MS)
+
+
+def test_the_dictionary_sorts_by_word_or_first_meaning(app, page):
+    thing = _big_lexicon(app, page, "Lang sorted")
+    expect(thing.get_by_test_id("language-word")).to_have_count(50, timeout=TIMEOUT_MS)
+    thing.get_by_test_id("dict-sort-meaning").click()
+    expect(thing.get_by_test_id("language-word").first.locator("td.col-word")).to_have_text("w119", timeout=TIMEOUT_MS)
+    thing.get_by_test_id("dict-sort-word").click()
+    assert _first_words(thing) == ["w000", "w001", "w002"]
+    thing.get_by_test_id("dict-sort-word").click()
+    expect(thing.get_by_test_id("language-word").first.locator("td.col-word")).to_have_text("w119", timeout=TIMEOUT_MS)
