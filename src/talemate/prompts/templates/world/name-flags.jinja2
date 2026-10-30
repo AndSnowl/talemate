@@ -1,0 +1,21 @@
+{#- Extractors:
+  - response: AsIsExtractor()
+-#}
+<|SECTION:TASK|>
+You check names written for an invented fantasy world. The world must not use real-world names. For each name, say which it is:
+- "real": a real-world place, person, river or institution; OR a real word of a real language used as a name (a Russian word like "Kholodnaya", 'cold', or a city name built from real words like "Velikograd", 'great city'); OR a real given name or surname (Dmitri, Yelena, Ivanov);
+- "stock-title": a generic, overused fantasy title anyone could have written;
+- "ok": an invented name that isn't any of the above.
+
+The names, each with where it was written:
+{% for spot in spots -%}
+- {{ spot.name }} -- {{ spot.context }}
+{% endfor %}
+<|CLOSE_SECTION|>
+<|SECTION:FORMAT|>
+Reply with only one JSON object, shaped exactly like this example:
+{"names": [{"name": "<as given>", "label": "real", "why": "<a few words>"}]}
+
+One entry per name; label is "real", "stock-title" or "ok". No commentary, no markdown fences, just the JSON object.
+<|CLOSE_SECTION|>
+{{ set_prepared_response('{') }}
