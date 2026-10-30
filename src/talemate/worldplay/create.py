@@ -3631,6 +3631,10 @@ def _accept_new(
     rev = before if stale else None
     if moved and prose is not None and thing_id not in prose:
         prose.append(thing_id)
+    # languages 4a: a draft has no description (a page may send its
+    # sections back blank); it's written now
+    if not any(preview.prose.values()) and prose is not None and thing_id not in prose:
+        prose.append(thing_id)
     for section in prose_gen.sections_for(preview.kind):
         if section in preview.prose:
             cache.put(thing_id, section, start, end, preview.prose[section], rev=rev)
@@ -3925,6 +3929,23 @@ def _write_preview(
         )
         removed = removed + write_elsewhere_repeats(rev, world, view, elsewhere, notes)
         _teach_pick_names(rev, world, preview, picks, linked, thing_id)
+        # languages 4a: the draft's Languages rows, and each new name
+        # cleaning gave it saved to its language as a word
+        if preview.languages and "languages" not in preview.fields:
+            rows = [
+                {k: v for k, v in r.items() if k != "from_words"}
+                for r in preview.languages
+            ]
+            rev.set_field(thing_id, "languages", rows, None)
+        if preview.marks:
+            from talemate.languages.cleaning.replace import save_mark_words
+
+            save_mark_words(
+                rev,
+                view,
+                preview.marks,
+                [preview.name, *(f.text for f in preview.facts if f.ticked)],
+            )
         orphans = {
             stub_id
             for stub_id in made.values()

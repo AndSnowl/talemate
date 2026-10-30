@@ -441,8 +441,9 @@ async def test_heritage_end_to_end(plugin, client, loadable):
         "creative_instruction_3072": 3,
         # the scene's plan
         "creative_instruction_2048": 1,
-        # none at creation (a draft writes no prose): the species after
-        # the ruff, Eira's two at 499
-        "analyze": 3,
+        # after each accept (a draft writes none, languages 4a): the
+        # species, the race and Eira's two; then the species after the
+        # ruff, and Eira's two at 499
+        "analyze": 7,
         "conversation": 3,
     }

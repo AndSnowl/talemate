@@ -406,9 +406,9 @@ async def test_connections_end_to_end(plugin, client, loadable):
     town = await _accept(plugin, preview)
     assert _linked(town, TOWN_FACT)[0] == ("Moscavian Owls", owl_folk["id"], False)
     assert sorted(await _stubs(plugin)) == ["Aldric", "Kalmara"]
-    # the lookups were code: the create's call only (a draft writes no
-    # prose)
-    assert len(client.prompt_history) - before == 1
+    # the lookups were code: the create's call, then its description,
+    # written after accept (a draft writes no prose, languages 4a)
+    assert len(client.prompt_history) - before == 2
 
     # 5. a scene with Vasha in Kalmara: the setup names Kalmara and Aldric
     # (from Vasha's relationship fact); each stub gets a preview at
@@ -491,7 +491,9 @@ async def test_connections_end_to_end(plugin, client, loadable):
         # the scene's plan
         "creative_instruction_2048": 1,
         # one section each, two for Vasha (her species' instincts give her
-        # a personality); none at start, the previews' prose is current
+        # a personality), written after each accept; the stubs filled at
+        # start (Aldric, Kalmara) get theirs then (drafts have none,
+        # languages 4a)
         "analyze": 7,
         "conversation": 1,
     }

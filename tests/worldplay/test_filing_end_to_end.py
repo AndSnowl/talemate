@@ -1068,6 +1068,7 @@ async def test_filing_end_to_end(plugin, client, loadable):
     ]
     row["ticked"] = True
     vasha = await _accept(plugin, draft)
+
     vasha_id = vasha["id"]
 
     # the scene: Vasha brings a sealed letter to the Chief Scribe at the
@@ -1089,8 +1090,13 @@ async def test_filing_end_to_end(plugin, client, loadable):
     assert setup["player"] == {"thing_id": vasha_id, "local": None}
     before = len(client.prompt_history)
     started = await _send(plugin, "start_scene", setup=setup)
-    # the characters' prose was written with their drafts: nothing to ask
-    assert len(client.prompt_history) == before
+    # a draft has no prose (languages 4a) and this test only records the
+    # prose accept schedules: the player's two sections are written at
+    # start
+    assert [c["prompt"].uid for c in client.prompt_history[before:]] == [
+        "world.thing-prose",
+        "world.thing-prose",
+    ]
     record = world.scenes().get(started["scene_id"])
     block = world_context_block(world, record, WorldDate.of(PRESENT))
     touched = _touched(block)
@@ -1177,12 +1183,13 @@ async def test_filing_end_to_end(plugin, client, loadable):
 # the fifteen drafts (the owl-folk, the Tsardom, Velikoye, the Khorol,
 # the Night Court, Runic Magic, the Order, the Academy, the White Talon,
 # the Host, Plumage Signaling, two Wattles versions, the Chief Scribe,
-# Vasha); their prose (one section each, two for a character); the White
-# Talon's verdict; the synopsis (asked once: then cached); the plan; the
-# narrator's turn
+# Vasha); Vasha's prose, written at the scene's start (drafts have none
+# since languages 4a, and this test only records the prose accept
+# schedules); the White Talon's verdict; the synopsis (asked once: then
+# cached); the plan; the narrator's turn
 ASKED = {
     "world.create-thing": 15,
-    "world.thing-prose": 17,
+    "world.thing-prose": 2,
     "world.same-thing": 1,
     "world.group-synopsis": 1,
     "world.scene-setup": 1,

@@ -756,11 +756,12 @@ async def test_curation_end_to_end(plugin, client, loadable):
 
 # species, the Tsardom, the Church, the Divine Right, Runeweaving,
 # Ashenmere, the Codex, the Galleries, the Hollows and the Cathedral's stub
-# preview at planning (a draft writes no prose); the Hollows' verdict; the
-# plan; the narrator's turn
+# preview at planning (a draft writes no prose); the Hollows' verdict and
+# the Cathedral's description, written as the scene's start fills its stub
+# (languages 4a); the plan; the narrator's turn
 KINDS_ASKED = {
     "creative_instruction_3072": 10,
     "creative_instruction_2048": 1,
-    "analyze": 1,
+    "analyze": 2,
     "narrate_512": 1,
 }

@@ -670,8 +670,14 @@ async def test_preview_then_accept(plugin, client):
     accepted = _last(plugin, "accept_preview")["data"]
     assert world.head_rev() == head + 1
     assert accepted["name"] == "Lowmere"
-    assert accepted["prose"]["description"]["text"] == "Lowmere is half under water."
-    assert accepted["prose"]["description"]["stale"] is False
+
+    # the draft had no description: it's written after accept (4a)
+    async with MockClientContext():
+        client_responses.get().append("Lowmere is half under water.")
+        await _drain(plugin)
+    assert _last(plugin, "prose_updated")["data"]["id"] == accepted["id"]
+    cached = world.prose().get(accepted["id"], "description", None)
+    assert cached is not None and cached.text == "Lowmere is half under water."
 
 
 async def test_preview_failure_is_reported(plugin, client):
@@ -2616,6 +2622,8 @@ async def test_preview_with_stub_id_and_accept_into_stub(plugin, client):
     assert accepted["id"] == s.tsardom
     assert accepted["stub"] is None
     assert accepted["aka"] == [_aka("Moscavia", everyday=True)]
+    # its description is written after accept (languages 4a)
+    await _drain(plugin)
 
     # a preview made without a stub fills one with `into_stub`
     lore_reply = json.dumps(
@@ -2687,17 +2695,21 @@ async def test_preview_names_treated_as_new(plugin, client):
             # the facts, and no prose (a draft writes none; the second
             # time, the first Ilse is a same-thing candidate with facts:
             # its verdict is asked after them)
+            # (the first Ilse's description, written after its accept,
+            # doesn't count either)
             asked = [
                 p
                 for p in client.prompt_history
-                if p["prompt"].uid != "world.same-thing"
+                if p["prompt"].uid not in ("world.same-thing", "world.thing-prose")
             ]
-            assert len(asked) == 1 and client.prompt_history[:1] == asked
+            assert [p["prompt"].uid for p in asked] == ["world.create-thing"]
             preview = _last(plugin, "preview_thing")["data"]["preview"]
-            prompt = str(client.prompt_history[0]["prompt"])
+            prompt = str(asked[0]["prompt"])
         await plugin.handle(
             {"type": "worlds", "action": "accept_preview", "preview": preview}
         )
+        # its description is written after accept (languages 4a)
+        await _drain(plugin)
         return preview, prompt, _last(plugin, "accept_preview")["data"]
 
     preview, prompt, accepted = await preview_and_accept(reply)
@@ -3964,7 +3976,9 @@ async def test_accepts_schedule_prose_for_elsewhere_targets(plugin, monkeypatch)
         preview=_ember_preview(s).model_dump(mode="json"),
     )
     assert not _errors(plugin)
-    assert scheduled == [s.vasha]
+    # the new entry's own description first (a draft has none, 4a)
+    accepted = _last(plugin, "accept_preview")["data"]["id"]
+    assert scheduled == [accepted, s.vasha]
 
 
 def _elsewhere_repeat(fact_id, owner_id, owner_name, text):
@@ -8701,60 +8715,6 @@ async def test_draft_timeline_follows_edits(plugin, client):
     assert s.velikoye in [seg["ref"] for seg in lines[0]["segments"]]
     assert all(line["here"] for line in lines)
     assert s.world.head_rev() == head
-
-
-async def test_renamed_draft_prose_stale(plugin, client):
-    """P7: the prose was written under the draft's name; accepted under
-    another (the owner renamed it on the draft), it's cached as stale, so
-    the page offers to write it again. Accepted under the same name, it's
-    fresh."""
-
-    s = await _open_filing_world(plugin)
-    draft = await _preview(
-        plugin, client, _draft_reply("Frostwing Host", "It flies."), prompt="a host"
-    )
-    await _act(
-        plugin,
-        "accept_preview",
-        preview={**draft["preview"], "name": "Frostwing Guard"},
-        draft_key=draft["draft_key"],
-    )
-    guard = _last(plugin, "accept_preview")["data"]
-    assert guard["name"] == "Frostwing Guard"
-    assert "The prose." in guard["prose"]["description"]["text"]
-    assert guard["prose"]["description"]["stale"] is True
-
-    draft = await _preview(
-        plugin, client, _draft_reply("Ashen Watch", "It watches."), prompt="a watch"
-    )
-    await _act(
-        plugin,
-        "accept_preview",
-        preview=draft["preview"],
-        draft_key=draft["draft_key"],
-    )
-    watch = _last(plugin, "accept_preview")["data"]
-    assert watch["prose"]["description"]["stale"] is False
-    assert s.world.head_rev() > 0
-
-    # M4: renamed and the prose edited too, no held version has that
-    # prose: it was still written under the held draft's name, so stale
-    draft = await _preview(
-        plugin, client, _draft_reply("Iron Choir", "It sings."), prompt="a choir"
-    )
-    await _act(
-        plugin,
-        "accept_preview",
-        preview={
-            **draft["preview"],
-            "name": "Iron Chorus",
-            "prose": {"description": "The prose, edited by hand."},
-        },
-        draft_key=draft["draft_key"],
-    )
-    chorus = _last(plugin, "accept_preview")["data"]
-    assert chorus["name"] == "Iron Chorus"
-    assert chorus["prose"]["description"]["stale"] is True
 
 
 async def test_keep_new_drops_existing_checked(plugin, tmp_path, monkeypatch):

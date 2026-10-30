@@ -24,12 +24,12 @@ from talemate.languages.cleaning.lists import NameLists
 from talemate.languages.cleaning.marks import Mark
 from talemate.languages.entry import language_of
 from talemate.languages.entry import languages as all_languages
-from talemate.languages.models import Language
+from talemate.languages.models import DictionaryEntry, Language
 from talemate.languages.naming import roll_names
 from talemate.world.view import WorldView
 from talemate.worldplay.create import json_objects
 
-__all__ = ["Cleaned", "Mark", "apply_mark", "clean_texts"]
+__all__ = ["Cleaned", "Mark", "apply_mark", "clean_texts", "save_mark_words"]
 
 log = structlog.get_logger("talemate.languages.cleaning")
 
@@ -312,3 +312,52 @@ async def clean_texts(
                 )  # fmt: skip
             )
     return Cleaned(texts=texts, marks=marks)
+
+
+def save_mark_words(rev, view: WorldView, marks: list[Mark], texts: list[str]) -> None:
+    """Save each replaced name still in the accepted `texts` to its
+    language as a word, with its meaning, in `rev` (one write per
+    language, so several words land together). A word the language has
+    gains the meaning; nothing is replaced."""
+
+    by_language: dict[str, list[Mark]] = {}
+    for mark in marks:
+        if mark.kind != "replaced" or not mark.language_id:
+            continue
+        if not any(_swap([t], mark.name, "\0")[0] != t for t in texts):
+            continue
+        by_language.setdefault(mark.language_id, []).append(mark)
+    for lid, found in by_language.items():
+        state = view.thing(lid)
+        if state is None or state.kind != "language":
+            continue
+        words = [
+            {
+                **DictionaryEntry.model_validate(w).model_dump(exclude_defaults=True),
+                "meanings": list(DictionaryEntry.model_validate(w).meanings),
+            }
+            for w in state.fields.get("words") or []
+        ]
+        changed = False
+        for mark in found:
+            meaning = " ".join(mark.meaning.split())
+            existing = next(
+                (
+                    w
+                    for w in words
+                    if str(w.get("word", "")).lower() == mark.name.lower()
+                ),
+                None,
+            )
+            if existing is None:
+                words.append(
+                    {"word": mark.name, "meanings": [meaning] if meaning else []}
+                )
+                changed = True
+            elif meaning and meaning.lower() not in {
+                m.lower() for m in existing["meanings"]
+            }:
+                existing["meanings"] = [*existing["meanings"], meaning]
+                changed = True
+        if changed:
+            rev.set_field(lid, "words", words, None)

@@ -160,3 +160,55 @@ async def test_unclean_puts_back_every_old_name(world, moscavian):
     back = unclean_preview(preview)
     assert back.facts[0].text == "Fur caravans trade with Novgorod."
     assert back.marks == [] and back.new_names == []
+
+
+# --- accepting (Task 6) ------------------------------------------------------
+
+from talemate.languages.entry import language_of  # noqa: E402
+from talemate.worldplay.create import accept_preview  # noqa: E402
+
+
+async def _cleaned(world):
+    preview, _ = await _preview(
+        world, "Tsardom of Moscavia, a cold realm", ROLES, PICKS
+    )
+    return preview
+
+
+def _words(world, lid):
+    return {e.word: e.meanings for e in language_of(world.view().thing(lid)).dictionary}
+
+
+async def test_accept_writes_the_drafts_languages(world, moscavian):
+    thing_id = accept_preview(world, await _cleaned(world))
+    rows = world.view().thing(thing_id).fields["languages"]
+    assert [(r["language"], r["role"]) for r in rows] == [(moscavian, "official")]
+    assert "from_words" not in rows[0]
+
+
+async def test_accept_saves_each_new_name_as_a_word(world, moscavian):
+    accept_preview(world, await _cleaned(world))
+    assert _words(world, moscavian) == {"Sovyetsk": ["owl town"]}
+
+
+async def test_a_name_edited_out_before_accept_is_not_saved(world, moscavian):
+    preview = await _cleaned(world)
+    facts = [
+        f.model_copy(update={"text": "Fur caravans trade widely."})
+        for f in preview.facts
+    ]
+    preview = preview.model_copy(update={"facts": facts, "new_names": []})
+    accept_preview(world, preview)
+    assert _words(world, moscavian) == {}
+
+
+async def test_the_description_is_scheduled_on_accept(world, moscavian):
+    prose: list[str] = []
+    thing_id = accept_preview(world, await _cleaned(world), prose=prose)
+    assert prose == [thing_id]
+
+
+async def test_accept_is_one_revision(world, moscavian):
+    head = world.head_rev()
+    accept_preview(world, await _cleaned(world))
+    assert world.head_rev() == head + 1
