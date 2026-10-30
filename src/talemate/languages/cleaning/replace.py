@@ -275,17 +275,25 @@ async def clean_texts(
                 else ""
             )
             picked.add(name.lower())
-            texts = _swap(texts, v.spot.name, name)
+            # a place found without its kind or frame words ("White" of
+            # "White Sea") is swapped in its whole written form only, so
+            # "the White Light" elsewhere stays (real runs); a person's
+            # part is swapped wherever it stands (it's the same person)
+            was, form = v.spot.name, lambda c: c
+            if v.spot.kind not in PERSON_KINDS and _whole(v.spot) != v.spot.name:
+                was = _whole(v.spot)
+                form = lambda c, old=was, part=v.spot.name: _swap([old], part, c)[0]  # noqa: E731
+            texts = _swap(texts, was, form(name))
             marks.append(
                 Mark(
                     id=_new_id(),
                     kind="replaced",
-                    name=name,
-                    was=v.spot.name,
+                    name=form(name),
+                    was=was,
                     why=v.why,
                     meaning=meaning,
                     language_id=lid,
-                    spares=[c for c in free if c != name],
+                    spares=[form(c) for c in free if c != name],
                     entry_kind=v.spot.kind,
                 )  # fmt: skip
             )

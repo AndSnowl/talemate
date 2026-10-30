@@ -10,7 +10,7 @@ import structlog
 from pydantic import BaseModel
 
 from talemate.languages.check import _real_words, stem
-from talemate.languages.cleaning.model import ask
+from talemate.languages.cleaning.model import LONG_KIND, ask
 from talemate.languages.cleaning.languages import named_languages
 from talemate.languages.cleaning.lists import NameLists, match
 from talemate.languages.generator import name_fits
@@ -27,15 +27,21 @@ PERSON_KINDS = {"character"}
 # words naming what a place is ("the River X"); they stay as written
 KIND_WORDS = set(
     "river lake mountains mountain sea coast isles isle island forest marsh "
-    "marshes steppe pass bay gulf hills hill valley plains strait straits".split()
+    "marshes steppe pass bay gulf hills hill valley plains strait straits "
+    "council court guild assembly duma senate hall palace".split()
 )
 # words framing a place's or group's name ("the Kingdom of X", "House
 # of X"): they stay as written and only X is judged (final review I3)
 FRAME_WORDS = set(
     "kingdom kingdoms republic empire tsardom duchy grand principality realm "
     "house city cities free province provinces county barony land lands "
-    "order church khanate dominion march marches state states league".split()
+    "order church khanate dominion march marches state states league "
+    "palace hall castle fortress keep tower temple cathedral monastery abbey "
+    "gate bridge market square court council guild brotherhood sisterhood "
+    "academy library school college".split()
 )
+# names judged in one flag call, as probe 4 did (`BATCH`)
+FLAG_BATCH = 14
 # a person's name stops at these: what follows is an epithet or an origin
 NAME_STOPS = {"the", "of", "from"}
 MIN_PART = 3
@@ -59,6 +65,9 @@ class Spot(BaseModel):
     person: Literal["man", "woman", ""] = ""
     part: Literal["whole", "given", "family"] = "whole"
     texts: list[int] = []
+    # whether the draft's reply listed it (a name the text only uses, or
+    # an epithet, isn't rewritten as a stock title)
+    listed: bool = False
 
 
 class Verdict(BaseModel):
@@ -116,6 +125,8 @@ def _parts(full: str, kind: str) -> list[tuple[str, str]]:
             words = words[cut + 1 :]
             while words and words[0].lower() == "the":
                 words = words[1:]
+    # title words and numerals are never judged ("Tsar", "II")
+    words = [w for w in words if w.lower() not in TITLE_WORDS and not _NUMERAL.match(w)]
     name = " ".join(words)
     return [(name, "whole")] if name else []
 
@@ -160,7 +171,7 @@ def spots(
 
     found: dict[str, Spot] = {}
 
-    def add(full: str, kind: str, own: bool) -> None:
+    def add(full: str, kind: str, own: bool, listed_name: bool = False) -> None:
         for name, part in _parts(full, kind):
             key = name.lower()
             if key in protected or full.lower() in protected:
@@ -181,11 +192,12 @@ def spots(
                 person=_person_of(full, texts, own) if kind in PERSON_KINDS else "",
                 part=part,
                 texts=hits,
+                listed=listed_name,
             )
 
     listed_keys = set()
     for n, (full, kind) in enumerate(listed):
-        add(full, kind, n == 0)
+        add(full, kind, n == 0, True)
         listed_keys.add(full.lower())
     for text in texts:
         for unknown in unknown_proper_phrases(view, text):
@@ -228,13 +240,26 @@ def _real_hit(language: Language, name: str) -> bool:
 async def _flags(
     client, found: list[Spot], texts: list[str]
 ) -> dict[str, tuple[str, str]]:
-    """The model's label and why per spot name; {} when the call fails."""
+    """The model's label and why per spot name, asked `FLAG_BATCH` at a
+    time; a batch whose call fails adds nothing."""
 
+    flags: dict[str, tuple[str, str]] = {}
+    for start in range(0, len(found), FLAG_BATCH):
+        flags.update(
+            await _flag_batch(client, found[start : start + FLAG_BATCH], texts)
+        )
+    return flags
+
+
+async def _flag_batch(
+    client, found: list[Spot], texts: list[str]
+) -> dict[str, tuple[str, str]]:
     try:
         reply = await ask(
             client,
             "name-flags",
             {"spots": [{"name": s.name, "context": _context(s, texts)} for s in found]},
+            kind=LONG_KIND,
         )
         objects = json_objects(reply)
         rows = objects[0].get("names") if objects else None
@@ -298,8 +323,15 @@ async def judge(
                 Verdict(spot=spot, action="replace", why=why or "a real name")
             )
         elif label == "stock-title":
+            # only a name the reply listed (not a person's) is rewritten; an
+            # epithet or a name the text only uses is marked (real runs)
+            rewrite = spot.listed and spot.kind not in PERSON_KINDS
             verdicts.append(
-                Verdict(spot=spot, action="rewrite", why=why or "a stock title")
+                Verdict(
+                    spot=spot,
+                    action="rewrite" if rewrite else "suspect",
+                    why=why or "a stock title",
+                )
             )
         elif _real_hit(language, spot.name):
             verdicts.append(

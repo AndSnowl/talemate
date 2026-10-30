@@ -324,3 +324,22 @@ async def test_a_framed_stock_title_is_rewritten_whole(world, moscavia):
     assert mark.was == "Free Cities of the Southern Coast"
     assert cleaned.texts == [f"The {mark.name} trade salt."]
     assert mark.name.startswith("Free Provinces of ")
+
+
+async def test_a_name_without_its_kind_word_is_swapped_only_in_its_place(
+    world, moscavia
+):
+    """Real run: "White Sea" was found as "White", and "the White Light"
+    elsewhere was swapped too."""
+
+    cleaned = await _clean(
+        world, moscavia, ["The shores of the White Sea freeze.", "The Church of the White Light preaches."],
+        replies=[_picks(("Sovyetsk", ""))], lists=NameLists(real=["White Sea"]),
+    )  # fmt: skip
+    assert cleaned.texts == [
+        "The shores of the Sovyetsk Sea freeze.",
+        "The Church of the White Light preaches.",
+    ]
+    [mark] = [m for m in cleaned.marks if m.kind == "replaced"]
+    assert (mark.was, mark.name) == ("White Sea", "Sovyetsk Sea")
+    assert all(s.endswith(" Sea") for s in mark.spares)

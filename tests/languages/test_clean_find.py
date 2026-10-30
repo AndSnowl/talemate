@@ -114,7 +114,8 @@ async def test_a_title_on_the_list_is_rewritten(world):
             MockClient("t"), found, NameLists(title=["Iron Council"]), MOSCAVIAN
         )
         client_responses.get().clear()
-    assert [(v.spot.name, v.action) for v in verdicts] == [("Iron Council", "rewrite")]
+    # "Council" is a kind word: the spot is "Iron", the title its whole
+    assert [(v.spot.full, v.action) for v in verdicts] == [("Iron Council", "rewrite")]
 
 
 async def test_the_flag_call_replaces_with_its_reason(world):
@@ -195,3 +196,74 @@ async def test_no_language_makes_everything_suspect_without_a_call(world):
         verdicts = await judge(client, found, NameLists(real=["Novgorod"]), None)
         assert client.prompt_history == []
     assert [(v.action, v.why) for v in verdicts] == [("suspect", "no language picked")]
+
+
+# --- acceptance fixes (real runs, 2026-10-30) ---------------------------------
+
+
+def test_a_title_word_is_never_a_spot(world):
+    """Real run: "Tsar" became "Tsemasha" everywhere."""
+
+    found = spots(
+        world.view(), ["Each spring the Tsar rides out, and the Boyar too."], [], set()
+    )
+    assert _names(found) == []
+
+
+def test_a_roman_numeral_is_never_a_spot(world):
+    found = spots(world.view(), ["Bogdan II rules, as did Bogdan III."], [], set())
+    assert "II" not in _names(found) and "III" not in _names(found)
+
+
+def test_institution_and_building_words_frame_a_name(world):
+    """Real run: "Grand Palace of Velikigrad" and "Boyar Council" lost
+    their frame words."""
+
+    texts = ["The Grand Palace of Velikigrad and the Boyar Council."]
+    found = spots(
+        world.view(),
+        texts,
+        [("Grand Palace of Velikigrad", "place"), ("Boyar Council", "lore")],
+        set(),
+    )
+    assert _names(found) == ["Velikigrad"]
+
+
+async def test_many_names_are_flagged_in_batches(world):
+    """Real run: about forty names in one flag call overran the reply."""
+
+    names = [f"Vel{chr(97 + i)}grad" for i in range(20)]
+    found = spots(
+        world.view(),
+        ["Roads to " + ", ".join(names) + "."],
+        [(n, "place") for n in names],
+        set(),
+    )
+    first = {"names": [{"name": n, "label": "real", "why": "x"} for n in names[:14]]}
+    second = {"names": [{"name": n, "label": "real", "why": "x"} for n in names[14:]]}
+    client = MockClient("t")
+    async with MockClientContext():
+        client_responses.get().append(json.dumps(first))
+        client_responses.get().append(json.dumps(second))
+        verdicts = await judge(client, found, NameLists(), MOSCAVIAN)
+    assert len(client.prompt_history) == 2
+    assert {v.spot.name for v in verdicts if v.action == "replace"} == set(names)
+
+
+async def test_a_stock_title_label_on_an_epithet_is_only_suspect(world):
+    """Real run: "known as 'The Watchful'" became "'The Tsozyegorsk Watch'"."""
+
+    found = spots(
+        world.view(), ["Zvubisha II, known as 'The Watchful,' rules."], [], set()
+    )
+    reply = {
+        "names": [
+            {"name": "Watchful", "label": "stock-title", "why": "a generic epithet"}
+        ]
+    }
+    async with MockClientContext():
+        client_responses.get().append(json.dumps(reply))
+        verdicts = await judge(MockClient("t"), found, NameLists(), MOSCAVIAN)
+    assert [(v.spot.name, v.action) for v in verdicts if v.spot.name == "Watchful"] == [
+        ("Watchful", "suspect")
+    ]
