@@ -434,6 +434,7 @@ from talemate.world.refs import REF_PATTERN, ref, scrub_emphasis
 from talemate.world.repeats import disagreeing_dates
 from talemate.world.scenes import SceneRecord, scene_end
 from talemate.languages.check import check_language, repair_note
+from talemate.languages.cleaning import lists as name_lists
 from talemate.languages.entry import fields_of, language_of, used_words, word_uses
 from talemate.languages.entry import languages as all_languages
 from talemate.languages.lookup import (
@@ -5547,6 +5548,32 @@ class WorldsPlugin(Plugin):
         )
         world.set_curation(settings)
         self._reply("set_curation", _settings_out(settings))
+
+    # --- name lists (languages 4a) ----------------------------------------
+
+    def _name_list_rows(self) -> dict:
+        world = self._require_world()
+        return {"rows": [r.model_dump() for r in name_lists.rows(world)]}
+
+    async def handle_get_name_lists(self, data: dict):
+        """Every row of the name lists, the app's and the world's, for the
+        Names page: `{rows: [{name, kind, scope, off}]}`."""
+
+        self._reply("get_name_lists", self._name_list_rows())
+
+    async def handle_name_list_edit(self, data: dict):
+        """One change to the name lists (`edit`: add, remove,
+        make_global, turn_off, turn_on, remove_everywhere; `kind`: real,
+        cliche, title, keep; `name`), answered as `get_name_lists`. An
+        unknown action or kind is refused, writing nothing."""
+
+        name_lists.edit(
+            self._require_world(),
+            str(data.get("edit") or ""),
+            str(data.get("kind") or ""),
+            str(data.get("name") or ""),
+        )
+        self._reply("name_list_edit", self._name_list_rows())
 
     async def handle_set_field(self, data: dict):
         """Set one field. Never `filings`, which only the filing actions

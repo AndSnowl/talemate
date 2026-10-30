@@ -712,12 +712,25 @@ class AgentActionsConfig(pydantic.BaseModel):
     overrides: Dict[str, AgentActionOverride] = pydantic.Field(default_factory=dict)
 
 
+class NameListsConfig(pydantic.BaseModel):
+    """The app's name lists for cleaning drafts (languages 4a): names to
+    replace (real, AI clichés, stock titles) and names to keep. Unset, the
+    lists shipped in `talemate/languages/data/name_lists.json` are used."""
+
+    real: list[str] = []
+    cliche: list[str] = []
+    title: list[str] = []
+    keep: list[str] = []
+
+
 class Config(pydantic.BaseModel):
     clients: Dict[str, AnnotatedClient] = {}
 
     game: Game = Game()
 
     agents: Dict[str, Agent] = {}
+
+    name_lists: NameListsConfig | None = None
 
     creator: CreatorConfig = CreatorConfig()
 
