@@ -115,10 +115,10 @@
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
 import LanguageImport from './LanguageImport.vue';
-import LanguageRouteChoice from './LanguageRouteChoice.vue';
+import LanguageRouteChoice, { inAppClientOf, inAppName } from './LanguageRouteChoice.vue';
 import { defaultLanguageId, menuLanguages } from './languageMenu.js';
 
-const ROUTE_LABELS = { claude_code: 'Claude Code', in_app: "the Language agent's model", brief: 'the brief' };
+const ROUTE_LABELS = { claude_code: 'Claude Code', brief: 'the brief' };
 
 // Change it… (languages 3b-2b; mockup 2026-10-29-languages-3b2-change-it):
 // a plain request, the entries to fit it to (suggested, with why), the
@@ -278,6 +278,7 @@ export default {
             });
         },
         routeLabel(route) {
+            if (route === 'in_app') return inAppName(inAppClientOf(this.worlds));
             return ROUTE_LABELS[route] || 'the assistant';
         },
         request(kind) {

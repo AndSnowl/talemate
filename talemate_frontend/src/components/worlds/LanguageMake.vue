@@ -118,7 +118,7 @@
 
 <script>
 import { useWorldsStore } from '@/stores/worlds.js';
-import LanguageRouteChoice from './LanguageRouteChoice.vue';
+import LanguageRouteChoice, { inAppClientOf, inAppName } from './LanguageRouteChoice.vue';
 
 
 // what a run makes, by route and how much (shown under the choices)
@@ -127,9 +127,10 @@ const SIZE_NOTES = {
         full: 'About 300 words, phrases in every category, all the grammar topics. Runs on your subscription and takes about 10–15 minutes.',
         quick: 'A core: the structural words, about 40 everyday ones, a few phrases and short grammar. Runs on your subscription; fill in the rest later.',
     },
+    // its client's cost is added below (hosted APIs spend tokens)
     in_app: {
-        full: 'Everything in one long reply: needs a model that can write a long answer, and spends API tokens.',
-        quick: 'A core in one reply, then fill in the rest later. Spends API tokens.',
+        full: 'Everything in one long reply: needs a model that can write a long answer.',
+        quick: 'A core in one reply, then fill in the rest later.',
     },
     brief: {
         full: 'The brief asks for everything: about 300 words, phrases in every category, all the grammar topics.',
@@ -139,7 +140,6 @@ const SIZE_NOTES = {
 
 const ROUTES = {
     claude_code: 'Claude Code',
-    in_app: "the Language agent's model",
     brief: 'the brief',
 };
 
@@ -206,16 +206,20 @@ export default {
             return this.draft.size || (this.defaults.sizes || {})[this.route] || (this.route === 'in_app' ? 'quick' : 'full');
         },
         sizeNote() {
-            return (SIZE_NOTES[this.route] || {})[this.size] || '';
+            const note = (SIZE_NOTES[this.route] || {})[this.size] || '';
+            if (this.route !== 'in_app') return note;
+            const client = inAppClientOf(this.worlds);
+            if (!client) return `${note} The Language agent has no client: pick one under Agents first.`;
+            return client.hosted ? `${note} Spends API tokens on ${client.name}.` : `${note} Runs on ${client.name}.`;
         },
         briefOnly() {
             return this.route === 'brief';
         },
         routeLabel() {
-            return ROUTES[this.job?.route || this.route] || '';
+            return this.routeName(this.job?.route || this.route) || '';
         },
         doneLabel() {
-            return ROUTES[this.job?.route] || 'the assistant';
+            return this.routeName(this.job?.route) || 'the assistant';
         },
         canStart() {
             return !!this.text.trim() && !this.running && !this.asking && !this.otherBusy;
@@ -239,6 +243,9 @@ export default {
         this.worlds.loadLanguageMakeRoute();
     },
     methods: {
+        routeName(route) {
+            return route === 'in_app' ? inAppName(inAppClientOf(this.worlds)) : ROUTES[route];
+        },
         request(decideForMe) {
             return {
                 text: this.text.trim(),

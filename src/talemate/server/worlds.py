@@ -2236,6 +2236,38 @@ class WorldsPlugin(Plugin):
             client = None
         return client if client is not None else self._client()
 
+    def _in_app_client(self) -> dict | None:
+        """Who "the agent's model" is, for the route buttons: the Language
+        agent's client (the Creator's when it has none), its model, and
+        whether it's a hosted API (that spends tokens) or self-hosted.
+        `None` when neither agent has a client."""
+
+        try:
+            client = instance.get_agent("language").client
+        except KeyError:
+            client = None
+        agent = "Language"
+        if client is None:
+            try:
+                client, agent = self._client(), "Creator"
+            except KeyError:
+                return None
+        if client is None:
+            return None
+        self_hosted = client.Meta().self_hosted
+        if self_hosted is None:
+            # an OpenAI-compatible endpoint: hosted unless it's this
+            # computer or the local network
+            hosted = bool(client.api_url) and client.host_is_remote(client.api_url)
+        else:
+            hosted = not self_hosted
+        return {
+            "agent": agent,
+            "name": client.name,
+            "model": client.model_name or "",
+            "hosted": hosted,
+        }
+
     def _fixed_setup(self) -> dict | None:
         """The browser tests' fixed scene-setup reply, or `None` normally."""
 
@@ -5819,7 +5851,8 @@ class WorldsPlugin(Plugin):
 
     async def handle_language_make_route(self, data: dict):
         """How languages are made now, so the page offers the right
-        button: answers `language_make_route {route}`."""
+        button: answers `language_make_route {route, claude_model, sizes,
+        in_app_client}`."""
 
         settings = self._make_settings()
         self._reply(
@@ -5831,6 +5864,7 @@ class WorldsPlugin(Plugin):
                     route: effective_size(MakeRequest(text=""), route)
                     for route in ("claude_code", "in_app", "brief")
                 },
+                "in_app_client": self._in_app_client(),
             },
         )
 

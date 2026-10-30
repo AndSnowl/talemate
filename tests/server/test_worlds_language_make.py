@@ -250,7 +250,68 @@ async def test_the_route_reply_gives_the_default_sizes(plugin):
         "route": "claude_code",
         "claude_model": "",
         "sizes": {"claude_code": "full", "in_app": "quick", "brief": "full"},
+        # no Language agent client: the Creator's (a hosted API) stands in
+        "in_app_client": {
+            "agent": "Creator",
+            "name": "test",
+            "model": "test-model",
+            "hosted": True,
+        },
     }
+
+
+class _LocalClient(MockClient):
+    class Meta(MockClient.Meta):
+        self_hosted: bool | None = True
+
+
+class _EitherClient(MockClient):
+    """Self-hosted or not, by where it points (an OpenAI-compatible one)."""
+
+    class Meta(MockClient.Meta):
+        self_hosted: bool | None = None
+
+    def __init__(self, name: str, url: str):
+        super().__init__(name)
+        self.url = url
+
+    @property
+    def api_url(self):
+        return self.url
+
+
+def _route_client(plugin):
+    return _replies(plugin, "language_make_route")[-1]["in_app_client"]
+
+
+async def test_the_route_reply_names_the_language_agents_own_client(plugin):
+    instance.AGENTS["language"].client = _LocalClient("KoboldCpp")
+    await _act(plugin, "language_make_route")
+    assert _route_client(plugin) == {
+        "agent": "Language",
+        "name": "KoboldCpp",
+        "model": "test-model",
+        "hosted": False,
+    }
+
+
+@pytest.mark.parametrize(
+    ("url", "hosted"),
+    [("http://localhost:5001/v1", False), ("http://192.168.1.4:5001/v1", False),
+     ("https://api.example.com/v1", True)],
+)  # fmt: skip
+async def test_a_client_that_can_be_either_is_hosted_by_its_address(
+    plugin, url, hosted
+):
+    instance.AGENTS["language"].client = _EitherClient("Compat", url)
+    await _act(plugin, "language_make_route")
+    assert _route_client(plugin)["hosted"] is hosted
+
+
+async def test_no_client_at_all_says_so(plugin):
+    instance.AGENTS["creator"].client = None
+    await _act(plugin, "language_make_route")
+    assert _route_client(plugin) is None
 
 
 async def test_the_copied_brief_follows_its_size(plugin):
@@ -337,7 +398,9 @@ async def test_a_change_for_a_gone_language_fails_plainly(plugin):
     assert error == "The language this was for is gone"
 
 
-async def test_a_change_with_claude_code_edits_the_file_in_place(plugin, monkeypatch, kept_scratch):
+async def test_a_change_with_claude_code_edits_the_file_in_place(
+    plugin, monkeypatch, kept_scratch
+):
     import json
 
     made = kept_scratch
