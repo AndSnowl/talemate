@@ -48,6 +48,16 @@
                 <div v-if="preview.diff.words_changed.length"><span class="text-caption text-muted">Changed meaning:</span> {{ preview.diff.words_changed.join(', ') }}</div>
                 <div v-if="preview.diff.words_removed.length"><span class="text-caption text-muted">Removed:</span> {{ preview.diff.words_removed.join(', ') }}</div>
                 <div v-if="phrasesChanged"><span class="text-caption text-muted">Phrases:</span> {{ phrasesChanged }}</div>
+                <!-- each changed category whole: as it was, and as it will be -->
+                <div v-for="change in preview.diff.phrase_changes || []" :key="change.category" class="phrase-change" data-testid="change-diff-phrases">
+                    <div class="text-caption text-muted">{{ change.category.charAt(0).toUpperCase() + change.category.slice(1) }}, before and after</div>
+                    <div class="ba">
+                        <div v-for="side in [change.before, change.after]" :key="side === change.before ? 'before' : 'after'">
+                            <div v-for="(line, i) in side" :key="i"><span class="foreign">{{ line.original }}</span> {{ line.translation }}</div>
+                            <span v-if="!side.length" class="text-muted">none</span>
+                        </div>
+                    </div>
+                </div>
                 <div v-if="grammarChanged" data-testid="change-diff-grammar"><span class="text-caption text-muted">Grammar:</span> {{ grammarChanged }}</div>
                 <div v-if="(preview.diff.rules_removed || []).length"><span class="text-caption text-muted">Name rules removed:</span> {{ preview.diff.rules_removed.join(', ') }}</div>
                 <div v-if="preview.diff.generators_changed" class="text-caption text-muted">The name rules change: compare the sample names above.</div>
@@ -192,6 +202,14 @@ export default {
     background: rgba(var(--v-theme-on-surface), 0.05);
     border-radius: 4px;
     padding: 6px 10px;
+}
+.phrase-change {
+    margin-top: 6px;
+}
+/* the language's own words, as in the Lexicon */
+.foreign {
+    font-style: italic;
+    color: rgb(var(--v-theme-foreign));
 }
 .kept {
     background: rgba(var(--v-theme-warning), 0.12);

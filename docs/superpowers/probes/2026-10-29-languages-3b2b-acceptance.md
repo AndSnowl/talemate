@@ -48,7 +48,13 @@ Record what changed, what was kept, and how long each took.
 After both runs, Moscavian has 302 words and four unusual grammar sections. The real runs left no scratch folders behind.
 
 **Found:**
-- **The review shows changed phrases as counts** ("6 new, 6 removed") instead of before and after, side by side, as the approved mockup did.
+- **The review showed changed phrases as counts** ("6 new, 6 removed") instead of before and after, side by side, as the approved mockup did. Fixed: each changed category now shows whole, before and after (`test_diff_shows_changed_phrases_before_and_after_by_category`, `test_change_it_runs_and_the_review_shows_what_changed`).
 - **My server tests left scratch folders** in the system temp folder. That's fixed (d0676d4e). About 67 old folders from earlier test runs remain in `/tmp` (`fm-check-*`, `fm-language-*`); removing them was refused as a shared `/tmp` sweep, so they're the owner's to remove.
 
-**The owner's verdict:** *(pending: the owner will look in the test app, including where the entry panel sits)*
+**The owner's verdict (2026-10-29):**
+- **The change panel on an entry stays where it is,** under the page header.
+- **Asked for, and done:**
+  - the Names chapter uses the full width;
+  - the Lexicon is paged (50 words a page) and sortable by word or by first meaning;
+  - it opens sorted by word, and a word being added stays on top while it's written;
+  - the review shows changed phrases before and after.

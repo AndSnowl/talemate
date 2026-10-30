@@ -39,6 +39,19 @@ class LanguageParseError(ValueError):
     """The text holds no language the app can read."""
 
 
+class PhraseLine(BaseModel):
+    original: str
+    translation: str
+
+
+class PhraseChange(BaseModel):
+    """One category of phrases that changed: all of it, before and after."""
+
+    category: str
+    before: list[PhraseLine] = []
+    after: list[PhraseLine] = []
+
+
 class LanguageDiff(BaseModel):
     words_added: list[str] = []
     words_removed: list[str] = []
@@ -46,6 +59,7 @@ class LanguageDiff(BaseModel):
     phrases_added: list[str] = []
     phrases_removed: list[str] = []
     phrases_changed: list[str] = []
+    phrase_changes: list[PhraseChange] = []
     generators_changed: bool = False
     # name rules the new version doesn't have (by name), never dropped
     # silently
@@ -157,6 +171,21 @@ def _diff(
     old_phrases = {p.id: p for p in old.phrases}
     new_phrases = {p.id: p for p in new.phrases}
 
+    def lines(lang: Language, category: str) -> list[PhraseLine]:
+        return [
+            PhraseLine(original=p.original, translation=p.translation)
+            for p in lang.phrases
+            if p.category == category
+        ]
+
+    touched = {
+        p.category
+        for p in [*old.phrases, *new.phrases]
+        if old_phrases.get(p.id) != new_phrases.get(p.id)
+    }
+    # in the order the language lists them, the new version's first
+    categories = list(dict.fromkeys(p.category for p in [*new.phrases, *old.phrases]))
+
     def rules(lang: Language) -> str:
         return json.dumps(
             [lang.categories, [g.model_dump() for g in lang.generators]], sort_keys=True
@@ -177,6 +206,11 @@ def _diff(
             i
             for i in new_phrases
             if i in old_phrases and new_phrases[i] != old_phrases[i]
+        ],
+        phrase_changes=[
+            PhraseChange(category=c, before=lines(old, c), after=lines(new, c))
+            for c in categories
+            if c in touched
         ],
         generators_changed=rules(old) != rules(new),
         rules_removed=[g.name for g in old.generators if g.id not in new_rules],
