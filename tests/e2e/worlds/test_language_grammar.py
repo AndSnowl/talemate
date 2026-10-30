@@ -153,3 +153,14 @@ def test_the_side_column_keeps_its_height_whatever_the_page(app, page):
     expect(thing.get_by_test_id("grammar-section")).to_contain_text("A long explanation.")
     page.wait_for_timeout(300)
     assert side.bounding_box()["height"] == short
+
+
+def test_the_names_chapter_uses_the_full_width(app, page):
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    thing = _language_tab(app, page, "Names wide", [NAMES, *SECTIONS])
+    _chapter(thing, "Name rules")
+    expect(thing.get_by_test_id("language-generator").first).to_be_visible(timeout=TIMEOUT_MS)
+    assert page.get_by_test_id("language-book").bounding_box()["width"] > 1240
+    _chapter(thing, "Overview")
+    page.wait_for_timeout(200)
+    assert page.get_by_test_id("language-book").bounding_box()["width"] <= 1240
