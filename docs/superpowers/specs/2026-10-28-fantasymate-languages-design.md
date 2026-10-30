@@ -122,6 +122,7 @@ Three degrees of bad name (owner), handled differently:
 - **No language in reach** (common early in a fresh world): *My call:* flagged names are still flagged, the draft offers "Pick a language for this draft" (the same picker as the right-click, with the offer to save it on the entry), and regeneration runs once one is picked. Until then, the originals stay.
 - **Names in reach for the generator:** *My call:* new names in a draft come from the language of the place the draft is about (the same lookup as the right-click), and the language's share weights which language names a new thing. Whether to also put candidate names into the model's context, or only fix them afterwards, is for probe 2 to inform.
 - **People's names have structure.** *My call:* a language can carry name patterns per kind of thing (for a Russian-like language: given name, patronymic, family name, with gendered endings; for places, an adjective form like "Moscavian"). Whatever the probe shows a language can hold, the generator uses.
+  - **Patterns made of other patterns** (owner idea, 2026-10-29; its scope is for part 4's brainstorm). A name rule's pattern can refer to other name rules, so a full-name generator is the composition of a few single ones. For example, "Full name" = given name + patronymic + family name, each its own rule. The AI (the language-design skill, a change) can then write a rule out of rules it already made, instead of copying their syllables into one long pattern.
 
 #### Scenes
 

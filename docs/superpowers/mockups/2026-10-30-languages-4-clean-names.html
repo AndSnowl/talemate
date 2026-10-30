@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Clean names</title>
+<style>
+  :root { --bg:#1d2021; --panel:#282828; --raised:#32302f; --line:#3c3836; --text:#ebdbb2; --muted:#a89984; --dim:#7c6f64; --accent:#fe8019; --link:#fabd2f; --foreign:#d3869b; --chip:#3c3836; --good:#b8bb26; --warn:#fabd2f; --bad:#fb4934; --aqua:#8ec07c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#111; color:var(--text); font-family: Roboto, ui-sans-serif, system-ui, sans-serif; font-size:15px; }
+  .intro { padding:16px 24px; color:#ddd; font-size:14px; max-width:1150px; line-height:1.5; } .intro h1 { font-size:18px; margin:0 0 6px; }
+  .option-label { padding:18px 24px 6px; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#ccc; display:flex; align-items:center; gap:12px; }
+  .option-label b { color:#fff; font-size:16px; }
+  .pick { padding:4px 12px; border:1px solid #666; border-radius:4px; cursor:pointer; text-transform:none; letter-spacing:0; }
+  .option.selected .pick { background:var(--accent); color:#1d2021; border-color:var(--accent); }
+  .frame { width:1920px; zoom:.62; margin:0 24px 30px; border:1px solid #444; background:var(--bg); display:grid; grid-template-columns:276px 1fr 350px; min-height:860px; }
+  .side { padding:16px; } .side .box { background:var(--panel); border-radius:6px; height:640px; padding:14px; color:var(--muted); font-size:13px; line-height:1.9; }
+  .side .sel { color:var(--accent); background:#3c2a1a; padding:3px 8px; border-radius:4px; }
+  .agents { border-left:1px solid var(--line); }
+  .page { padding:22px 16px 40px; }
+  .head { display:flex; align-items:center; gap:10px; }
+  .title { color:var(--accent); font-size:23px; font-family:Georgia, serif; }
+  .kchip { font-size:11px; color:var(--muted); background:var(--chip); padding:2px 6px; border-radius:3px; }
+  .draftchip { font-size:11px; color:#1d2021; background:var(--warn); padding:2px 6px; border-radius:3px; }
+  .panel { background:var(--panel); border-radius:6px; padding:14px 16px; margin-top:14px; max-width:1240px; position:relative; }
+  .ov { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .muted { color:var(--muted); } .small { font-size:13px; } .dim { color:var(--dim); }
+  .fact { padding:6px 0; border-bottom:1px dashed var(--line); line-height:1.6; }
+  .swap { border-bottom:2px dotted var(--aqua); color:var(--text); cursor:help; }
+  .swap.hover { background:rgba(142,192,124,.15); }
+  .card { position:absolute; left:330px; top:118px; width:420px; background:var(--raised); border:1px solid #504945; border-radius:6px; padding:12px 14px; box-shadow:0 6px 24px #000a; font-size:14px; z-index:2; }
+  .card .was { font-size:16px; } .card s { color:var(--muted); }
+  .btns { display:flex; align-items:center; gap:14px; margin-top:10px; flex-wrap:wrap; }
+  .btn { font-size:12px; letter-spacing:.08em; text-transform:uppercase; padding:6px 0; color:var(--accent); }
+  .btn.plain { color:var(--text); }
+  .f { color:var(--foreign); font-style:italic; }
+  .tick { display:flex; align-items:center; gap:8px; padding:4px 0; font-size:14px; }
+  .box2 { width:15px; height:15px; border:1px solid var(--muted); border-radius:2px; display:inline-flex; align-items:center; justify-content:center; font-size:11px; }
+  .box2.on { background:var(--accent); border-color:var(--accent); color:#1d2021; }
+  .why { color:var(--dim); font-size:12px; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th { text-align:left; color:var(--muted); font-weight:400; font-size:12px; letter-spacing:.06em; padding:4px 8px; border-bottom:1px solid var(--line); }
+  td { padding:5px 8px; border-bottom:1px solid #322f2d; }
+  .scope { font-size:11px; padding:2px 6px; border-radius:3px; background:var(--chip); color:var(--muted); }
+  .scope.g { color:var(--link); }
+  .tabs { display:flex; gap:6px; margin-top:8px; border-bottom:1px solid var(--line); }
+  .tab { padding:8px 16px; font-size:13px; letter-spacing:.1em; } .tab.on { color:var(--accent); border-bottom:2px solid var(--accent); }
+  .add { color:var(--accent); font-size:12px; letter-spacing:.08em; text-transform:uppercase; margin-left:12px; }
+  .field { border:1px solid #5a524c; border-radius:4px; padding:7px 10px; color:var(--dim); width:260px; display:inline-block; font-size:13px; }
+  .note { font-size:13px; color:var(--muted); margin-top:6px; }
+</style></head>
+<body>
+<div class="intro"><h1>Clean names in drafts, and one place for the lists</h1>
+Frame 1 is a draft of the Tsardom, with names already replaced. The hover card shows what changed and why. Frames 2A and 2B are two places for the lists. Click <b>Pick</b> on the one you prefer, then say what's wrong in the terminal.</div>
+
+<div class="option" data-choice="draft">
+<div class="option-label"><b>1</b> A draft arrives clean</div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br>Places<br>Languages<br>&nbsp;&nbsp;Moscavian<br><span class="sel">New: Tsardom of Moscavia</span><br>…<br>Settings</div></div>
+  <div class="page">
+    <div class="head"><span class="title">Tsardom of Moscavia</span><span class="kchip">place</span><span class="draftchip">draft</span></div>
+    <div class="note">Made from: "The Tsardom of Moscavia, a cold northern realm of fur traders and river forts". Moscavian picked from your words.</div>
+
+    <div class="panel">
+      <div class="ov">Facts</div>
+      <div class="fact">The tsars rule from <span class="swap">Velikorsk</span>, a walled city on the frozen bend of the river.</div>
+      <div class="fact">Fur caravans trade south with <span class="swap hover">Sovyetsk</span> and the salt marshes beyond.</div>
+      <div class="fact">Tsar <span class="swap">Dorovan Kolvesky</span> took the throne after the winter of the three claimants.</div>
+      <div class="fact">The <span class="swap">Zhuvra Belovtsi</span> keeps the old river shrines.</div>
+      <div class="card">
+        <div class="was"><span class="f">Sovyetsk</span> · was <s>Novgorod</s></div>
+        <div class="why" style="font-size:13px;margin-top:3px">A real city (Real places, all worlds). Rolled from Moscavian: <i>sovy</i> "owl" + -etsk.</div>
+        <div class="btns">
+          <span class="btn">Reroll</span>
+          <span class="btn plain">Keep Novgorod here</span>
+          <span class="btn plain">Never replace Novgorod in this world</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <div class="panel">
+        <div class="ov">Languages</div>
+        <div class="tick" style="margin-top:6px"><span class="f">Moscavian</span> <span class="kchip">official</span> <span class="why">from your words</span></div>
+      </div>
+      <div class="panel">
+        <div class="ov">New stubs</div>
+        <div class="tick"><span class="box2 on">✓</span> Velikorsk <span class="kchip">place</span> <span class="why">replaced Moscow</span></div>
+        <div class="tick"><span class="box2 on">✓</span> Sovyetsk <span class="kchip">place</span> <span class="why">replaced Novgorod</span></div>
+        <div class="tick"><span class="box2 on">✓</span> Dorovan Kolvesky <span class="kchip">character</span> <span class="why">replaced Dmitri Voronov</span></div>
+        <div class="tick"><span class="box2"></span> Kolvey <span class="kchip">character</span> <span class="why">father of Dorovan (from his name)</span></div>
+        <div class="tick"><span class="box2 on">✓</span> Zhuvra Belovtsi <span class="kchip">group</span> <span class="why">replaced the Order of the Silver Flame (a stock title)</span></div>
+      </div>
+    </div>
+    <div class="btns" style="margin-top:14px"><span class="btn" style="background:#4a3420;padding:6px 12px">Accept</span><span class="btn plain">Discard</span><span class="muted small">Accepting keeps only the new names; the old ones are forgotten.</span></div>
+  </div>
+  <div class="agents"></div>
+</div>
+</div>
+
+<div class="option" data-choice="a">
+<div class="option-label"><b>2A</b> One Names page in the world's Settings, both levels together <span class="pick" onclick="toggleSelect(this.closest('.option'))">Pick</span></div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br>Places<br>Languages<br>…<br><span class="sel">Settings</span></div></div>
+  <div class="page">
+    <div class="head"><span class="title">Settings</span></div>
+    <div class="tabs"><span class="tab">General</span><span class="tab on">Names</span></div>
+    <div class="note">Names a draft replaces before you see it, and the ones you keep. Rows marked <span class="scope g">all worlds</span> come with every world; <b>Make it global</b> moves a row there.</div>
+    <div class="cols">
+      <div class="panel">
+        <div class="ov">Replace <span class="add">+ Add</span></div>
+        <div class="tabs" style="margin-top:4px"><span class="tab on">Real names</span><span class="tab">AI clichés</span><span class="tab">Stock titles</span></div>
+        <table>
+          <tr><th>name</th><th>where from</th><th></th></tr>
+          <tr><td>Novgorod</td><td><span class="scope g">all worlds</span></td><td class="dim">Turn off here</td></tr>
+          <tr><td>Moscow</td><td><span class="scope g">all worlds</span></td><td class="dim">Turn off here</td></tr>
+          <tr><td>Volga</td><td><span class="scope g">all worlds</span></td><td class="dim">Turn off here</td></tr>
+          <tr><td>Yelena</td><td><span class="scope">this world</span></td><td><span class="btn">Make it global</span> · <span class="btn plain">Remove</span></td></tr>
+        </table>
+        <div class="note">The model also catches real names that aren't on any list.</div>
+      </div>
+      <div class="panel">
+        <div class="ov">Keep as they are <span class="add">+ Add</span></div>
+        <table>
+          <tr><th>name</th><th>where from</th><th></th></tr>
+          <tr><td>Kiev</td><td><span class="scope">this world</span></td><td><span class="btn">Make it global</span> · <span class="btn plain">Remove</span></td></tr>
+          <tr><td>Rus</td><td><span class="scope g">all worlds</span></td><td class="dim">Turn off here</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div>
+</div>
+
+<div class="option" data-choice="b">
+<div class="option-label"><b>2B</b> Two pages: the app's Settings for all worlds, the world's for its own <span class="pick" onclick="toggleSelect(this.closest('.option'))">Pick</span></div>
+<div class="frame">
+  <div class="side"><div class="box">MOSCAVIA<br>Places<br>Languages<br>…<br><span class="sel">Settings</span></div></div>
+  <div class="page">
+    <div class="head"><span class="title">Settings</span></div>
+    <div class="tabs"><span class="tab">General</span><span class="tab on">Names</span></div>
+    <div class="note">This world's own additions. The lists every world shares are in the app's Settings → Names (<span style="color:var(--link)">open them</span>).</div>
+    <div class="cols">
+      <div class="panel">
+        <div class="ov">Also replace here <span class="add">+ Add</span></div>
+        <table>
+          <tr><th>name</th><th>kind</th><th></th></tr>
+          <tr><td>Yelena</td><td class="muted">real name</td><td><span class="btn">Make it global</span> · <span class="btn plain">Remove</span></td></tr>
+        </table>
+      </div>
+      <div class="panel">
+        <div class="ov">Keep here <span class="add">+ Add</span></div>
+        <table>
+          <tr><th>name</th><th>kind</th><th></th></tr>
+          <tr><td>Kiev</td><td class="muted">real name</td><td><span class="btn">Make it global</span> · <span class="btn plain">Remove</span></td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="panel" style="opacity:.75">
+      <div class="ov">And in the app's Settings → Names (a separate screen)</div>
+      <div class="note">Real names · AI clichés · Stock titles, for all worlds: Novgorod, Moscow, Volga, Maren, Elara, "the Iron Council"…</div>
+    </div>
+  </div>
+  <div class="agents"></div>
+</div>
+</div>
+</body></html>
